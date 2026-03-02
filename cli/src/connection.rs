@@ -355,6 +355,17 @@ pub fn ensure_daemon(
     let exe_path = env::current_exe().map_err(|e| e.to_string())?;
     // Canonicalize to resolve symlinks (e.g., npm global bin symlink -> actual binary)
     let exe_path = exe_path.canonicalize().unwrap_or(exe_path);
+    // On Windows, canonicalize() returns \\?\ prefixed extended-length paths.
+    // Node.js cannot handle these, so strip the prefix.
+    #[cfg(windows)]
+    let exe_path = {
+        let p = exe_path.to_string_lossy();
+        if let Some(stripped) = p.strip_prefix(r"\\?\") {
+            PathBuf::from(stripped)
+        } else {
+            exe_path
+        }
+    };
     let exe_dir = exe_path.parent().unwrap();
 
     let mut daemon_paths = vec![
@@ -404,10 +415,11 @@ pub fn ensure_daemon(
     {
         use std::os::windows::process::CommandExt;
 
-        // On Windows, call node directly. Command::new handles PATH resolution (node.exe or node.cmd)
-        // and automatically quotes arguments containing spaces.
-        let mut cmd = Command::new("node");
-        cmd.arg(daemon_path);
+        // Use node.exe explicitly to avoid Git Bash/MSYS2 shell wrapper resolution
+        let mut cmd = Command::new("node.exe");
+        cmd.arg(daemon_path)
+            .env("MSYS_NO_PATHCONV", "1")
+            .env("MSYS2_ARG_CONV_EXCL", "*");
         apply_daemon_env(&mut cmd, session, opts);
 
         // CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
@@ -431,10 +443,20 @@ pub fn ensure_daemon(
         thread::sleep(Duration::from_millis(100));
     }
 
-    Err(format!(
-        "Daemon failed to start (socket: {})",
-        get_socket_dir().join(format!("{}.sock", session)).display()
-    ))
+    #[cfg(unix)]
+    let endpoint_info = format!(
+        "socket: {}",
+        get_socket_dir()
+            .join(format!("{}.sock", session))
+            .display()
+    );
+    #[cfg(windows)]
+    let endpoint_info = format!(
+        "port: 127.0.0.1:{}",
+        get_port_for_session(session)
+    );
+
+    Err(format!("Daemon failed to start ({})", endpoint_info))
 }
 
 fn connect(session: &str) -> Result<Connection, String> {

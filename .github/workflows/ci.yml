@@ -173,6 +173,23 @@ jobs:
           }
         shell: pwsh
 
+      - name: Test daemon lifecycle (open, snapshot, close)
+        run: |
+          $env:PATH = "$pwd\bin;$env:PATH"
+          Write-Host "--- Opening page ---"
+          bin/agent-browser-win32-x64.exe open https://example.com
+          if ($LASTEXITCODE -ne 0) { Write-Error "open failed"; exit 1 }
+          Write-Host "--- Taking snapshot ---"
+          $snapshot = bin/agent-browser-win32-x64.exe snapshot
+          if ($LASTEXITCODE -ne 0) { Write-Error "snapshot failed"; exit 1 }
+          Write-Host $snapshot
+          Write-Host "--- Closing browser ---"
+          bin/agent-browser-win32-x64.exe close
+          if ($LASTEXITCODE -ne 0) { Write-Error "close failed"; exit 1 }
+          Write-Host "--- Windows daemon lifecycle test passed ---"
+        shell: pwsh
+        timeout-minutes: 5
+
   serverless-chromium:
     name: Serverless Chromium (@sparticuz/chromium)
     runs-on: ubuntu-latest
