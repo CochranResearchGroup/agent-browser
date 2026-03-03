@@ -4445,12 +4445,17 @@ async fn handle_route(cmd: &Value, state: &mut DaemonState) -> Result<Value, Str
         abort,
     });
 
-    // Re-enable Fetch with all route patterns combined
-    let patterns: Vec<Value> = state
+    // Re-enable Fetch with all route patterns combined.
+    // When domain filtering is active, include a wildcard so all requests
+    // continue to be intercepted for domain checks.
+    let mut patterns: Vec<Value> = state
         .routes
         .iter()
         .map(|r| json!({ "urlPattern": r.url_pattern }))
         .collect();
+    if state.domain_filter.is_some() && !patterns.iter().any(|p| p["urlPattern"] == "*") {
+        patterns.push(json!({ "urlPattern": "*" }));
+    }
 
     mgr.client
         .send_command(
@@ -4479,9 +4484,20 @@ async fn handle_unroute(cmd: &Value, state: &mut DaemonState) -> Result<Value, S
     }
 
     if state.routes.is_empty() {
-        mgr.client
-            .send_command("Fetch.disable", None, Some(&session_id))
-            .await?;
+        if state.domain_filter.is_some() {
+            // Domain filtering still needs Fetch interception; reset to wildcard
+            mgr.client
+                .send_command(
+                    "Fetch.enable",
+                    Some(json!({ "patterns": [{ "urlPattern": "*" }] })),
+                    Some(&session_id),
+                )
+                .await?;
+        } else {
+            mgr.client
+                .send_command("Fetch.disable", None, Some(&session_id))
+                .await?;
+        }
     } else {
         let patterns: Vec<Value> = state
             .routes
@@ -4748,10 +4764,12 @@ async fn handle_confirm(_cmd: &Value, state: &mut DaemonState) -> Result<Value, 
         .take()
         .ok_or("No pending confirmation")?;
 
-    // Temporarily remove policy to avoid re-triggering confirmation
+    // Temporarily remove policy and confirm_actions to avoid re-triggering confirmation
     let policy = state.policy.take();
+    let confirm_actions = state.confirm_actions.take();
     let result = Box::pin(execute_command(&pending.cmd, state)).await;
     state.policy = policy;
+    state.confirm_actions = confirm_actions;
 
     Ok(json!({ "confirmed": true, "action": pending.action, "result": result }))
 }
