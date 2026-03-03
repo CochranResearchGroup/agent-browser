@@ -467,9 +467,17 @@ async fn test_auth_save_and_show() {
 #[tokio::test]
 async fn test_har_start_stop_without_browser() {
     let mut state = DaemonState::new();
+    // har_start requires a browser. Because execute_command auto-launches when
+    // no browser is present, the result depends on Chrome availability: success
+    // if Chrome is found (CI), failure if not. Both outcomes are valid.
     let cmd = json!({ "action": "har_start", "id": "har-1" });
     let result = execute_command(&cmd, &mut state).await;
-    assert_eq!(result["success"], false);
+    let success = result["success"].as_bool().unwrap_or(false);
+    if success {
+        assert!(state.har_recording);
+    } else {
+        assert!(result["error"].as_str().is_some());
+    }
 }
 
 #[tokio::test]
