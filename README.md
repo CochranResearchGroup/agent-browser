@@ -658,7 +658,7 @@ agent-browser open example.com --headed
 
 This opens a visible browser window instead of running headless.
 
-> **Note:** Loading browser extensions (`--extension`) automatically enables headed mode, since Chrome extensions cannot run in headless mode.
+> **Note:** Browser extensions work in both headed and headless mode (Chrome's `--headless=new`).
 
 ## Authenticated Sessions
 

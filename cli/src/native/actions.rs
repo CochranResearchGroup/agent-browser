@@ -762,11 +762,8 @@ fn launch_options_from_env() -> LaunchOptions {
             .collect()
     });
 
-    let has_extensions = extensions.as_ref().map(|e| !e.is_empty()).unwrap_or(false);
-    let headless = if has_extensions { false } else { !headed };
-
     LaunchOptions {
-        headless,
+        headless: !headed,
         executable_path: env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
         proxy: env::var("AGENT_BROWSER_PROXY").ok(),
         proxy_bypass: env::var("AGENT_BROWSER_PROXY_BYPASS").ok(),
@@ -828,7 +825,7 @@ async fn try_auto_restore_state(state: &mut DaemonState) {
 // ---------------------------------------------------------------------------
 
 async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
-    let mut headless = cmd
+    let headless = cmd
         .get("headless")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
@@ -872,10 +869,6 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
                 .collect()
         });
 
-    let has_extensions = extensions.as_ref().map(|e| !e.is_empty()).unwrap_or(false);
-    if has_extensions {
-        headless = false;
-    }
     let profile = cmd.get("profile").and_then(|v| v.as_str());
     let storage_state = cmd.get("storageState").and_then(|v| v.as_str());
     let allow_file_access = cmd
@@ -5169,14 +5162,6 @@ mod tests {
         assert!(opts.headless);
         assert!(opts.args.is_empty());
         assert!(!opts.allow_file_access);
-    }
-
-    #[test]
-    fn test_launch_options_from_env_extensions_force_headed() {
-        let _guard = EnvGuard::new(&["AGENT_BROWSER_EXTENSIONS"]);
-        env::set_var("AGENT_BROWSER_EXTENSIONS", "/path/to/ext");
-        let opts = launch_options_from_env();
-        assert!(!opts.headless, "Extensions should force headless=false");
     }
 
     #[test]

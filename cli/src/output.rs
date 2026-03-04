@@ -2479,7 +2479,7 @@ Environment:
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM state encryption
   AGENT_BROWSER_STATE_EXPIRE_DAYS Auto-delete states older than N days (default: 30)
   AGENT_BROWSER_EXECUTABLE_PATH  Custom browser executable path
-  AGENT_BROWSER_EXTENSIONS       Comma-separated browser extension paths (auto-enables headed mode)
+  AGENT_BROWSER_EXTENSIONS       Comma-separated browser extension paths
   AGENT_BROWSER_HEADED           Show browser window (not headless)
   AGENT_BROWSER_JSON             JSON output
   AGENT_BROWSER_FULL             Full page screenshot

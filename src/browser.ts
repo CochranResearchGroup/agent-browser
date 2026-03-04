@@ -1355,7 +1355,7 @@ export class BrowserManager {
       context = await launcher.launchPersistentContext(
         path.join(os.tmpdir(), `agent-browser-ext-${session}`),
         {
-          headless: false,
+          headless: options.headless ?? true,
           executablePath: options.executablePath,
           args: allArgs,
           viewport,

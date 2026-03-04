@@ -229,7 +229,7 @@ agent-browser profiler start         # Start Chrome DevTools profiling
 agent-browser profiler stop trace.json # Stop and save profile (path optional)
 ```
 
-Use `AGENT_BROWSER_HEADED=1` to enable headed mode via environment variable. Loading extensions (`--extension` or `AGENT_BROWSER_EXTENSIONS`) automatically enables headed mode, since Chrome extensions cannot run headless.
+Use `AGENT_BROWSER_HEADED=1` to enable headed mode via environment variable. Browser extensions work in both headed and headless mode.
 
 ### Local Files (PDFs, HTML)
 
