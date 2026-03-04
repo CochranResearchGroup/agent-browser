@@ -215,6 +215,7 @@ pub struct DaemonResult {
 /// The daemon only needs `confirm_actions` to gate action categories.
 pub struct DaemonOptions<'a> {
     pub headed: bool,
+    pub debug: bool,
     pub executable_path: Option<&'a str>,
     pub extensions: &'a [String],
     pub args: Option<&'a str>,
@@ -241,6 +242,9 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
 
     if opts.headed {
         cmd.env("AGENT_BROWSER_HEADED", "1");
+    }
+    if opts.debug {
+        cmd.env("AGENT_BROWSER_DEBUG", "1");
     }
     if let Some(path) = opts.executable_path {
         cmd.env("AGENT_BROWSER_EXECUTABLE_PATH", path);
@@ -365,6 +369,9 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         }
     };
 
+    #[allow(unused_assignments)]
+    let mut daemon_child: Option<std::process::Child> = None;
+
     if opts.native {
         // Native mode: spawn self as daemon (Rust/CDP, no Node.js needed)
         #[cfg(unix)]
@@ -382,11 +389,13 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                 });
             }
 
-            cmd.stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|e| format!("Failed to start native daemon: {}", e))?;
+            daemon_child = Some(
+                cmd.stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to start native daemon: {}", e))?,
+            );
         }
 
         #[cfg(windows)]
@@ -400,12 +409,14 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
             const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
             const DETACHED_PROCESS: u32 = 0x00000008;
 
-            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|e| format!("Failed to start native daemon: {}", e))?;
+            daemon_child = Some(
+                cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to start native daemon: {}", e))?,
+            );
         }
     } else {
         // Default mode: spawn Node.js daemon (Playwright)
@@ -443,11 +454,13 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                 });
             }
 
-            cmd.stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|e| format!("Failed to start daemon: {}", e))?;
+            daemon_child = Some(
+                cmd.stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to start daemon: {}", e))?,
+            );
         }
 
         #[cfg(windows)]
@@ -464,12 +477,14 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
             const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
             const DETACHED_PROCESS: u32 = 0x00000008;
 
-            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|e| format!("Failed to start daemon: {}", e))?;
+            daemon_child = Some(
+                cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to start daemon: {}", e))?,
+            );
         }
     }
 
@@ -479,6 +494,35 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                 already_running: false,
             });
         }
+
+        // Detect early daemon exit and surface the real error from stderr
+        if let Some(ref mut child) = daemon_child {
+            if let Ok(Some(_)) = child.try_wait() {
+                let mut stderr_output = String::new();
+                if let Some(mut stderr) = child.stderr.take() {
+                    let _ = stderr.read_to_string(&mut stderr_output);
+                }
+                let stderr_trimmed = stderr_output.trim();
+                if !stderr_trimmed.is_empty() {
+                    let msg = if stderr_trimmed.len() > 500 {
+                        let mut end = 500;
+                        while !stderr_trimmed.is_char_boundary(end) {
+                            end -= 1;
+                        }
+                        &stderr_trimmed[..end]
+                    } else {
+                        stderr_trimmed
+                    };
+                    return Err(format!("Daemon process exited during startup:\n{}", msg));
+                }
+                return Err(
+                    "Daemon process exited during startup with no error output. \
+                     Re-run with --debug for more details."
+                        .to_string(),
+                );
+            }
+        }
+
         thread::sleep(Duration::from_millis(100));
     }
 
