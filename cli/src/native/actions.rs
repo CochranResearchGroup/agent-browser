@@ -726,6 +726,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
 
 async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
     let options = launch_options_from_env();
+    let engine = env::var("AGENT_BROWSER_ENGINE").ok();
 
     if let Ok(cdp) = env::var("AGENT_BROWSER_CDP") {
         let mgr = BrowserManager::connect_cdp(&cdp).await?;
@@ -743,7 +744,7 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         return Ok(());
     }
 
-    let mgr = BrowserManager::launch(options).await?;
+    let mgr = BrowserManager::launch(options, engine.as_deref()).await?;
     state.browser = Some(mgr);
     state.subscribe_to_browser_events();
     try_auto_restore_state(state).await;
@@ -936,6 +937,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         }
     }
 
+    let engine = cmd
+        .get("engine")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .or_else(|| env::var("AGENT_BROWSER_ENGINE").ok());
+
     let options = LaunchOptions {
         headless,
         executable_path: cmd
@@ -1000,7 +1007,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.domain_filter = Some(DomainFilter::new(domains));
     }
 
-    state.browser = Some(BrowserManager::launch(options).await?);
+    state.browser = Some(BrowserManager::launch(options, engine.as_deref()).await?);
     state.subscribe_to_browser_events();
 
     if let Some(ref filter) = state.domain_filter {

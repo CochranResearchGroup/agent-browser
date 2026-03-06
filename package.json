@@ -36,6 +36,7 @@
     "bench": "pnpm build && tsx test/benchmarks/run.ts",
     "bench:node": "pnpm build && tsx test/benchmarks/run.ts --node-only",
     "bench:native": "pnpm build && tsx test/benchmarks/run.ts --native-only",
+    "bench:engine": "pnpm build && tsx test/benchmarks/run.ts --engine",
     "postinstall": "node scripts/postinstall.js",
     "changeset": "changeset",
     "ci:version": "changeset version && pnpm run version:sync && pnpm install --no-frozen-lockfile",

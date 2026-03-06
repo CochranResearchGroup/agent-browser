@@ -7,6 +7,7 @@ use super::cdp::chrome::{
     auto_connect_cdp, discover_cdp_url, launch_chrome, ChromeProcess, LaunchOptions,
 };
 use super::cdp::client::CdpClient;
+use super::cdp::lightpanda::{launch_lightpanda, LightpandaLaunchOptions, LightpandaProcess};
 use super::cdp::types::*;
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,34 @@ pub fn validate_launch_options(
                 );
             }
         }
+    }
+    Ok(())
+}
+
+/// Validates that Chrome-only options are not used with Lightpanda.
+fn validate_lightpanda_options(options: &LaunchOptions) -> Result<(), String> {
+    if options
+        .extensions
+        .as_ref()
+        .map(|e| !e.is_empty())
+        .unwrap_or(false)
+    {
+        return Err("Extensions are not supported with Lightpanda".to_string());
+    }
+    if options.profile.is_some() {
+        return Err("Profiles are not supported with Lightpanda".to_string());
+    }
+    if options.storage_state.is_some() {
+        return Err("Storage state is not supported with Lightpanda".to_string());
+    }
+    if options.allow_file_access {
+        return Err("File access is not supported with Lightpanda".to_string());
+    }
+    if !options.headless {
+        return Err("Headed mode is not supported with Lightpanda (headless only)".to_string());
+    }
+    if !options.args.is_empty() {
+        return Err("Custom Chrome arguments (--args) are not supported with Lightpanda".to_string());
     }
     Ok(())
 }
@@ -105,37 +134,85 @@ impl WaitUntil {
     }
 }
 
+pub enum BrowserProcess {
+    Chrome(ChromeProcess),
+    Lightpanda(LightpandaProcess),
+}
+
+impl BrowserProcess {
+    pub fn kill(&mut self) {
+        match self {
+            BrowserProcess::Chrome(p) => p.kill(),
+            BrowserProcess::Lightpanda(p) => p.kill(),
+        }
+    }
+}
+
 pub struct BrowserManager {
     pub client: CdpClient,
-    chrome_process: Option<ChromeProcess>,
+    browser_process: Option<BrowserProcess>,
     pages: Vec<PageInfo>,
     active_page_index: usize,
     default_timeout_ms: u64,
 }
 
 impl BrowserManager {
-    pub async fn launch(options: LaunchOptions) -> Result<Self, String> {
-        validate_launch_options(
-            options.extensions.as_deref(),
-            false,
-            options.profile.as_deref(),
-            options.storage_state.as_deref(),
-            options.allow_file_access,
-            options.executable_path.as_deref(),
-        )?;
+    pub async fn launch(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
+        let engine = engine.unwrap_or("chrome");
+
+        match engine {
+            "chrome" => {
+                validate_launch_options(
+                    options.extensions.as_deref(),
+                    false,
+                    options.profile.as_deref(),
+                    options.storage_state.as_deref(),
+                    options.allow_file_access,
+                    options.executable_path.as_deref(),
+                )?;
+            }
+            "lightpanda" => {
+                validate_lightpanda_options(&options)?;
+            }
+            _ => {
+                return Err(format!(
+                    "Unknown engine '{}'. Supported engines: chrome, lightpanda",
+                    engine
+                ));
+            }
+        }
 
         let ignore_https_errors = options.ignore_https_errors;
         let user_agent = options.user_agent.clone();
         let color_scheme = options.color_scheme.clone();
         let download_path = options.download_path.clone();
 
-        let chrome = launch_chrome(&options)?;
-        let ws_url = chrome.ws_url.clone();
+        let (ws_url, process) = match engine {
+            "lightpanda" => {
+                let lp_options = LightpandaLaunchOptions {
+                    executable_path: options.executable_path.clone(),
+                    proxy: options.proxy.clone(),
+                    port: None,
+                };
+                let lp = tokio::task::spawn_blocking(move || launch_lightpanda(&lp_options))
+                    .await
+                    .map_err(|e| format!("Lightpanda launch task failed: {}", e))??;
+                let url = lp.ws_url.clone();
+                (url, BrowserProcess::Lightpanda(lp))
+            }
+            _ => {
+                let chrome = tokio::task::spawn_blocking(move || launch_chrome(&options))
+                    .await
+                    .map_err(|e| format!("Chrome launch task failed: {}", e))??;
+                let url = chrome.ws_url.clone();
+                (url, BrowserProcess::Chrome(chrome))
+            }
+        };
 
         let client = CdpClient::connect(&ws_url).await?;
         let mut manager = Self {
             client,
-            chrome_process: Some(chrome),
+            browser_process: Some(process),
             pages: Vec::new(),
             active_page_index: 0,
             default_timeout_ms: 25_000,
@@ -197,7 +274,7 @@ impl BrowserManager {
         let client = CdpClient::connect(&ws_url).await?;
         let mut manager = Self {
             client,
-            chrome_process: None,
+            browser_process: None,
             pages: Vec::new(),
             active_page_index: 0,
             default_timeout_ms: 10_000,
@@ -501,15 +578,13 @@ impl BrowserManager {
     }
 
     pub async fn close(&mut self) -> Result<(), String> {
-        // Close the browser via CDP if possible
         let _ = self
             .client
             .send_command_no_params("Browser.close", None)
             .await;
 
-        // Kill Chrome process if we own it
-        if let Some(ref mut chrome) = self.chrome_process {
-            chrome.kill();
+        if let Some(ref mut process) = self.browser_process {
+            process.kill();
         }
 
         Ok(())
@@ -538,7 +613,7 @@ impl BrowserManager {
 
     /// Returns true if this manager was connected via CDP (as opposed to local launch).
     pub fn is_cdp_connection(&self) -> bool {
-        self.chrome_process.is_none()
+        self.browser_process.is_none()
     }
 
     /// Ensures the browser has at least one page. If `pages` is empty, creates a new

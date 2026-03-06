@@ -272,8 +272,12 @@ fn main() {
     }
 
     let args: Vec<String> = env::args().skip(1).collect();
-    let flags = parse_flags(&args);
+    let mut flags = parse_flags(&args);
     let clean = clean_args(&args);
+
+    if flags.engine.is_some() && !flags.native {
+        flags.native = true;
+    }
 
     let has_help = args.iter().any(|a| a == "--help" || a == "-h");
     let has_version = args.iter().any(|a| a == "--version" || a == "-V");
@@ -413,6 +417,7 @@ fn main() {
         action_policy: flags.action_policy.as_deref(),
         confirm_actions: flags.confirm_actions.as_deref(),
         native: flags.native,
+        engine: flags.engine.as_deref(),
     };
     let daemon_result = match ensure_daemon(&flags.session, &daemon_opts) {
         Ok(result) => result,
@@ -706,7 +711,8 @@ fn main() {
         || flags.user_agent.is_some()
         || flags.allow_file_access
         || flags.color_scheme.is_some()
-        || flags.download_path.is_some())
+        || flags.download_path.is_some()
+        || flags.engine.is_some())
         && flags.cdp.is_none()
         && flags.provider.is_none()
     {
@@ -778,6 +784,10 @@ fn main() {
 
         if let Some(ref domains) = flags.allowed_domains {
             launch_cmd["allowedDomains"] = json!(domains);
+        }
+
+        if let Some(ref engine) = flags.engine {
+            launch_cmd["engine"] = json!(engine);
         }
 
         match send_command(launch_cmd, &flags.session) {

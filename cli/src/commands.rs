@@ -2118,6 +2118,7 @@ mod tests {
             confirm_actions: None,
             confirm_interactive: false,
             native: false,
+            engine: None,
         }
     }
 
