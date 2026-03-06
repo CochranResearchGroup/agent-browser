@@ -79,7 +79,9 @@ fn validate_lightpanda_options(options: &LaunchOptions) -> Result<(), String> {
         return Err("Headed mode is not supported with Lightpanda (headless only)".to_string());
     }
     if !options.args.is_empty() {
-        return Err("Custom Chrome arguments (--args) are not supported with Lightpanda".to_string());
+        return Err(
+            "Custom Chrome arguments (--args) are not supported with Lightpanda".to_string(),
+        );
     }
     Ok(())
 }
@@ -307,7 +309,9 @@ impl BrowserManager {
         let page_targets: Vec<TargetInfo> = result
             .target_infos
             .into_iter()
-            .filter(|t| (t.target_type == "page" || t.target_type == "webview") && !t.url.is_empty())
+            .filter(|t| {
+                (t.target_type == "page" || t.target_type == "webview") && !t.url.is_empty()
+            })
             .collect();
 
         if page_targets.is_empty() {
