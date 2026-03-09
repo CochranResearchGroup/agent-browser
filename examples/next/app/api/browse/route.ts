@@ -4,28 +4,37 @@ import * as ab from "@/lib/agent-browser";
 /**
  * POST /api/browse
  *
- * Programmatic API route for running agent-browser commands from Vercel.
- * Forwards commands to the external agent-browser API server.
+ * Programmatic API route for browser automation.
+ * Uses @sparticuz/chromium + puppeteer-core directly in the function.
  *
- * Body: { "commands": [{ "action": "navigate", "url": "..." }, ...] }
- * Or:   { "action": "screenshot", ... }  (single command shorthand)
+ * Body: { "action": "screenshot", "url": "https://example.com" }
+ * Or:   { "action": "snapshot", "url": "https://example.com" }
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const url = body.url;
 
-    if (body.commands) {
-      const result = await ab.run(body.commands);
+    if (!url) {
+      return NextResponse.json({ error: "Provide a 'url'" }, { status: 400 });
+    }
+
+    if (body.action === "screenshot") {
+      const result = await ab.screenshotUrl(url, {
+        fullPage: body.fullPage,
+      });
       return NextResponse.json(result);
     }
 
-    if (body.action) {
-      const result = await ab.command(body);
+    if (body.action === "snapshot") {
+      const result = await ab.snapshotUrl(url, {
+        selector: body.selector,
+      });
       return NextResponse.json(result);
     }
 
     return NextResponse.json(
-      { error: "Provide 'action' or 'commands'" },
+      { error: "Provide 'action' as 'screenshot' or 'snapshot'" },
       { status: 400 },
     );
   } catch (err) {
