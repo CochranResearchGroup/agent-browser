@@ -920,9 +920,7 @@ export class BrowserManager {
     const browserbaseApiKey = process.env.BROWSERBASE_API_KEY;
 
     if (!browserbaseApiKey) {
-      throw new Error(
-        'BROWSERBASE_API_KEY is required when using browserbase as a provider'
-      );
+      throw new Error('BROWSERBASE_API_KEY is required when using browserbase as a provider');
     }
 
     const response = await fetch('https://api.browserbase.com/v1/sessions', {
