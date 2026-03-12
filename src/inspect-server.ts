@@ -135,6 +135,26 @@ export class InspectServer {
       params: { targetId: this.options.targetId, flatten: true },
     });
 
+    // Track the session ID once attach completes; closed by close/error handlers
+    // that are registered immediately (before the async attach resolves) so
+    // early disconnects still trigger cleanup.
+    let sessionId: string | null = null;
+
+    devtoolsWs.on('close', () => {
+      if (sessionId) {
+        this.sessions.delete(sessionId);
+        this.detachSession(sessionId);
+      }
+    });
+
+    devtoolsWs.on('error', () => {
+      if (sessionId) {
+        this.sessions.delete(sessionId);
+        this.detachSession(sessionId);
+      }
+      devtoolsWs.close();
+    });
+
     const attachPromise = new Promise<string | null>((resolve) => {
       this.pendingAttaches.set(attachId, resolve);
       this.chromeWs!.send(attachMsg);
@@ -146,35 +166,30 @@ export class InspectServer {
       }, 5000);
     });
 
-    attachPromise.then((sessionId) => {
-      if (!sessionId) {
+    attachPromise.then((sid) => {
+      if (!sid) {
         console.error('[inspect] Failed to attach to target');
         devtoolsWs.close();
         return;
       }
 
-      this.sessions.set(sessionId, devtoolsWs);
+      if (devtoolsWs.readyState !== WebSocket.OPEN) {
+        this.detachSession(sid);
+        return;
+      }
+
+      sessionId = sid;
+      this.sessions.set(sid, devtoolsWs);
 
       devtoolsWs.on('message', (data) => {
         if (!this.chromeWs || this.chromeWs.readyState !== WebSocket.OPEN) return;
         try {
           const msg = JSON.parse(String(data));
-          msg.sessionId = sessionId;
+          msg.sessionId = sid;
           this.chromeWs.send(JSON.stringify(msg));
         } catch (err) {
           console.error('[inspect] DevTools message forwarding error:', err);
         }
-      });
-
-      devtoolsWs.on('close', () => {
-        this.sessions.delete(sessionId);
-        this.detachSession(sessionId);
-      });
-
-      devtoolsWs.on('error', () => {
-        this.sessions.delete(sessionId);
-        this.detachSession(sessionId);
-        devtoolsWs.close();
       });
     });
   }

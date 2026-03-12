@@ -3811,4 +3811,18 @@ mod tests {
             ParseError::MissingArguments { .. }
         ));
     }
+
+    // === Inspect / CDP URL ===
+
+    #[test]
+    fn test_inspect() {
+        let cmd = parse_command(&args("inspect"), &default_flags()).unwrap();
+        assert_eq!(cmd["action"], "inspect");
+    }
+
+    #[test]
+    fn test_get_cdp_url() {
+        let cmd = parse_command(&args("get cdp-url"), &default_flags()).unwrap();
+        assert_eq!(cmd["action"], "cdp_url");
+    }
 }

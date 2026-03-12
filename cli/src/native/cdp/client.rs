@@ -78,6 +78,8 @@ impl CdpClient {
 
                 let parsed: CdpMessage = match serde_json::from_str(&msg) {
                     Ok(m) => m,
+                    // Expected for inspect proxy messages with negative IDs
+                    // (CdpMessage.id is u64); handled via raw broadcast above.
                     Err(_) => continue,
                 };
 
