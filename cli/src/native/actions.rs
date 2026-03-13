@@ -1645,6 +1645,11 @@ async fn handle_wait(cmd: &Value, state: &mut DaemonState) -> Result<Value, Stri
     let session_id = mgr.active_session_id()?.to_string();
     let timeout_ms = cmd.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30000);
 
+    if let Some(text) = cmd.get("text").and_then(|v| v.as_str()) {
+        wait_for_text(&mgr.client, &session_id, text, timeout_ms).await?;
+        return Ok(json!({ "waited": "text", "text": text }));
+    }
+
     if let Some(selector) = cmd.get("selector").and_then(|v| v.as_str()) {
         let state_str = cmd
             .get("state")
@@ -1657,11 +1662,6 @@ async fn handle_wait(cmd: &Value, state: &mut DaemonState) -> Result<Value, Stri
     if let Some(url_pattern) = cmd.get("url").and_then(|v| v.as_str()) {
         wait_for_url(&mgr.client, &session_id, url_pattern, timeout_ms).await?;
         return Ok(json!({ "waited": "url", "url": url_pattern }));
-    }
-
-    if let Some(text) = cmd.get("text").and_then(|v| v.as_str()) {
-        wait_for_text(&mgr.client, &session_id, text, timeout_ms).await?;
-        return Ok(json!({ "waited": "text", "text": text }));
     }
 
     if let Some(fn_str) = cmd.get("function").and_then(|v| v.as_str()) {

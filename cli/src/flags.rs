@@ -618,7 +618,15 @@ pub fn parse_flags(args: &[String]) -> Flags {
             "--screenshot-quality" => {
                 if let Some(s) = args.get(i + 1) {
                     if let Ok(n) = s.parse::<u32>() {
-                        flags.screenshot_quality = Some(n);
+                        if n <= 100 {
+                            flags.screenshot_quality = Some(n);
+                        } else {
+                            eprintln!(
+                                "{} --screenshot-quality must be 0-100, got {}",
+                                color::warning_indicator(),
+                                n
+                            );
+                        }
                     }
                     i += 1;
                 }
@@ -627,6 +635,12 @@ pub fn parse_flags(args: &[String]) -> Flags {
                 if let Some(s) = args.get(i + 1) {
                     if s == "png" || s == "jpeg" {
                         flags.screenshot_format = Some(s.clone());
+                    } else {
+                        eprintln!(
+                            "{} --screenshot-format must be png or jpeg, got '{}'",
+                            color::warning_indicator(),
+                            s
+                        );
                     }
                     i += 1;
                 }

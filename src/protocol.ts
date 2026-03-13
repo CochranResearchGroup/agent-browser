@@ -794,7 +794,7 @@ const screenshotSchema = baseCommandSchema.extend({
   format: z.enum(['png', 'jpeg']).optional(),
   quality: z.number().min(0).max(100).optional(),
   annotate: z.boolean().optional(),
-  screenshotDir: z.string().optional(),
+  screenshotDir: z.string().nullish(),
 });
 
 const snapshotSchema = baseCommandSchema.extend({
@@ -815,7 +815,7 @@ const evaluateSchema = baseCommandSchema.extend({
 const waitSchema = baseCommandSchema.extend({
   action: z.literal('wait'),
   selector: z.string().min(1).optional(),
-  text: z.string().min(1).optional(),
+  text: z.string().min(1).nullish(),
   timeout: z.number().positive().optional(),
   state: z.enum(['attached', 'detached', 'visible', 'hidden']).optional(),
 });
