@@ -732,7 +732,8 @@ fn main() {
         || flags.allow_file_access
         || flags.color_scheme.is_some()
         || flags.download_path.is_some()
-        || flags.engine.is_some())
+        || flags.engine.is_some()
+        || !flags.extensions.is_empty())
         && flags.cdp.is_none()
         && flags.provider.is_none()
     {
@@ -784,6 +785,10 @@ fn main() {
                 .filter(|s| !s.is_empty())
                 .collect();
             cmd_obj.insert("args".to_string(), json!(args_vec));
+        }
+
+        if !flags.extensions.is_empty() {
+            cmd_obj.insert("extensions".to_string(), json!(&flags.extensions));
         }
 
         if flags.ignore_https_errors {
