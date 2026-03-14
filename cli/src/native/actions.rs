@@ -1903,11 +1903,17 @@ async fn handle_reload(state: &mut DaemonState) -> Result<Value, String> {
 
     let mut rx = mgr.client.subscribe();
     let _ = tokio::time::timeout(tokio::time::Duration::from_secs(10), async {
-        while let Ok(event) = rx.recv().await {
-            if event.method == "Page.loadEventFired"
-                && event.session_id.as_deref() == Some(&session_id)
-            {
-                return;
+        loop {
+            match rx.recv().await {
+                Ok(event) => {
+                    if event.method == "Page.loadEventFired"
+                        && event.session_id.as_deref() == Some(&session_id)
+                    {
+                        return;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
             }
         }
     })
@@ -4165,6 +4171,7 @@ async fn handle_responsebody(cmd: &Value, state: &DaemonState) -> Result<Value, 
                     }
                 }
             }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
             Ok(Err(_)) => return Err("Event stream closed".to_string()),
             Err(_) => {
                 return Err(format!(
@@ -4203,6 +4210,7 @@ async fn handle_waitfordownload(cmd: &Value, state: &DaemonState) -> Result<Valu
                     return Ok(json!({ "path": path }));
                 }
             }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
             Ok(Err(_)) => return Err("Event stream closed".to_string()),
             Err(_) => return Err("Timeout waiting for download".to_string()),
         }
