@@ -163,39 +163,55 @@ pub async fn type_text(
         let text_str = ch.to_string();
         let (key, code, key_code) = char_to_key_info(ch);
 
-        client
-            .send_command_typed::<_, Value>(
-                "Input.dispatchKeyEvent",
-                &DispatchKeyEventParams {
-                    event_type: "keyDown".to_string(),
-                    key: Some(key.clone()),
-                    code: Some(code.clone()),
-                    text: Some(text_str.clone()),
-                    unmodified_text: Some(text_str.clone()),
-                    windows_virtual_key_code: Some(key_code),
-                    native_virtual_key_code: Some(key_code),
-                    modifiers: None,
-                },
-                Some(session_id),
-            )
-            .await?;
+        // Characters that have no US-keyboard mapping (key_code == 0 and empty
+        // code) are inserted via `Input.insertText`, matching Playwright's
+        // keyboard.type() fallback behaviour.  This handles emoji, CJK, and
+        // other characters that don't correspond to a physical key.
+        if key_code == 0 && code.is_empty() {
+            client
+                .send_command_typed::<_, Value>(
+                    "Input.insertText",
+                    &InsertTextParams {
+                        text: text_str,
+                    },
+                    Some(session_id),
+                )
+                .await?;
+        } else {
+            client
+                .send_command_typed::<_, Value>(
+                    "Input.dispatchKeyEvent",
+                    &DispatchKeyEventParams {
+                        event_type: "keyDown".to_string(),
+                        key: Some(key.clone()),
+                        code: Some(code.clone()),
+                        text: Some(text_str.clone()),
+                        unmodified_text: Some(text_str.clone()),
+                        windows_virtual_key_code: Some(key_code),
+                        native_virtual_key_code: Some(key_code),
+                        modifiers: None,
+                    },
+                    Some(session_id),
+                )
+                .await?;
 
-        client
-            .send_command_typed::<_, Value>(
-                "Input.dispatchKeyEvent",
-                &DispatchKeyEventParams {
-                    event_type: "keyUp".to_string(),
-                    key: Some(key),
-                    code: Some(code),
-                    text: None,
-                    unmodified_text: None,
-                    windows_virtual_key_code: Some(key_code),
-                    native_virtual_key_code: Some(key_code),
-                    modifiers: None,
-                },
-                Some(session_id),
-            )
-            .await?;
+            client
+                .send_command_typed::<_, Value>(
+                    "Input.dispatchKeyEvent",
+                    &DispatchKeyEventParams {
+                        event_type: "keyUp".to_string(),
+                        key: Some(key),
+                        code: Some(code),
+                        text: None,
+                        unmodified_text: None,
+                        windows_virtual_key_code: Some(key_code),
+                        native_virtual_key_code: Some(key_code),
+                        modifiers: None,
+                    },
+                    Some(session_id),
+                )
+                .await?;
+        }
 
         if delay > 0 {
             tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
@@ -682,16 +698,56 @@ fn char_to_key_info(ch: char) -> (String, String, i32) {
         ' ' => (" ".to_string(), "Space".to_string(), 32),
         _ => {
             let key = ch.to_string();
-            let code = if ch.is_ascii_alphabetic() {
-                format!("Key{}", ch.to_uppercase())
+            if ch.is_ascii_alphabetic() {
+                // For letters the Windows VK code equals the uppercase ASCII value.
+                let upper = ch.to_ascii_uppercase();
+                let code = format!("Key{}", upper);
+                let key_code = upper as i32;
+                (key, code, key_code)
             } else if ch.is_ascii_digit() {
-                format!("Digit{}", ch)
+                let code = format!("Digit{}", ch);
+                let key_code = ch as i32;
+                (key, code, key_code)
             } else {
-                String::new()
-            };
-            let key_code = ch as i32;
-            (key, code, key_code)
+                let (code, key_code) = punctuation_key_info(ch);
+                (key, code.to_string(), key_code)
+            }
         }
+    }
+}
+
+/// Return the DOM `KeyboardEvent.code` value and Windows virtual-key code for
+/// a punctuation / symbol character assuming a US keyboard layout.
+///
+/// The Windows virtual-key codes (VK_OEM_*) differ from ASCII values for
+/// punctuation.  Using the raw ASCII code would misidentify characters – e.g.
+/// '.' (ASCII 46) collides with VK_DELETE (0x2E = 46), causing the period to
+/// be swallowed.
+fn punctuation_key_info(ch: char) -> (&'static str, i32) {
+    match ch {
+        // VK_OEM_1 (0xBA = 186) — ";:" key on US layout
+        ';' | ':' => ("Semicolon", 186),
+        // VK_OEM_PLUS (0xBB = 187) — "=+" key
+        '=' | '+' => ("Equal", 187),
+        // VK_OEM_COMMA (0xBC = 188) — ",<" key
+        ',' | '<' => ("Comma", 188),
+        // VK_OEM_MINUS (0xBD = 189) — "-_" key
+        '-' | '_' => ("Minus", 189),
+        // VK_OEM_PERIOD (0xBE = 190) — ".>" key
+        '.' | '>' => ("Period", 190),
+        // VK_OEM_2 (0xBF = 191) — "/?" key
+        '/' | '?' => ("Slash", 191),
+        // VK_OEM_3 (0xC0 = 192) — "`~" key
+        '`' | '~' => ("Backquote", 192),
+        // VK_OEM_4 (0xDB = 219) — "[{" key
+        '[' | '{' => ("BracketLeft", 219),
+        // VK_OEM_5 (0xDC = 220) — "\\|" key
+        '\\' | '|' => ("Backslash", 220),
+        // VK_OEM_6 (0xDD = 221) — "]}" key
+        ']' | '}' => ("BracketRight", 221),
+        // VK_OEM_7 (0xDE = 222) — "'\""" key
+        '\'' | '"' => ("Quote", 222),
+        _ => ("", 0),
     }
 }
 
@@ -718,6 +774,108 @@ fn named_key_info(key: &str) -> (String, String, i32) {
             } else {
                 (key.to_string(), key.to_string(), 0)
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that `char_to_key_info` returns the correct (key, code,
+    /// windowsVirtualKeyCode) triple for every character in Playwright's
+    /// USKeyboardLayout.  The expected values below are taken verbatim from
+    /// playwright-core/lib/server/usKeyboardLayout.js so that any drift from
+    /// Playwright's behaviour is caught immediately.
+    #[test]
+    fn test_char_to_key_info_matches_playwright_layout() {
+        // (character, expected_code, expected_vk_code)
+        let cases: &[(char, &str, i32)] = &[
+            // Letters – VK code must equal the uppercase ASCII value.
+            ('a', "KeyA", 65),
+            ('z', "KeyZ", 90),
+            ('A', "KeyA", 65),
+            // Digits
+            ('0', "Digit0", 48),
+            ('9', "Digit9", 57),
+            // Punctuation – these are the values from Playwright's layout.
+            // The bug that prompted this test sent '.' as VK 46 (= VK_DELETE).
+            ('.', "Period", 190),
+            (',', "Comma", 188),
+            ('/', "Slash", 191),
+            (';', "Semicolon", 186),
+            ('\'', "Quote", 222),
+            ('[', "BracketLeft", 219),
+            (']', "BracketRight", 221),
+            ('\\', "Backslash", 220),
+            ('`', "Backquote", 192),
+            ('-', "Minus", 189),
+            ('=', "Equal", 187),
+            // Shifted variants produced by the same physical keys.
+            ('>', "Period", 190),
+            ('<', "Comma", 188),
+            ('?', "Slash", 191),
+            (':', "Semicolon", 186),
+            ('"', "Quote", 222),
+            ('{', "BracketLeft", 219),
+            ('}', "BracketRight", 221),
+            ('|', "Backslash", 220),
+            ('~', "Backquote", 192),
+            ('_', "Minus", 189),
+            ('+', "Equal", 187),
+            // Whitespace / control
+            (' ', "Space", 32),
+            ('\n', "Enter", 13),
+            ('\t', "Tab", 9),
+        ];
+
+        for &(ch, expected_code, expected_vk) in cases {
+            let (key, code, vk) = char_to_key_info(ch);
+            assert_eq!(
+                code, expected_code,
+                "char {:?}: expected code {:?}, got {:?}",
+                ch, expected_code, code
+            );
+            assert_eq!(
+                vk, expected_vk,
+                "char {:?}: expected VK {}, got {} (ASCII would be {})",
+                ch, expected_vk, vk, ch as i32
+            );
+            // key should be the character itself (except control chars).
+            if !ch.is_control() {
+                assert_eq!(key, ch.to_string(), "char {:?}: key mismatch", ch);
+            }
+        }
+    }
+
+    /// Regression test: period must NEVER map to VK 46 (VK_DELETE).
+    #[test]
+    fn test_period_is_not_vk_delete() {
+        let (_, _, vk) = char_to_key_info('.');
+        assert_ne!(
+            vk, 46,
+            "Period must not use VK code 46 (VK_DELETE); expected 190 (VK_OEM_PERIOD)"
+        );
+        assert_eq!(vk, 190);
+    }
+
+    /// Characters outside the US keyboard layout should return (key, "", 0)
+    /// so that `type_text` falls back to `Input.insertText`.
+    #[test]
+    fn test_unmapped_chars_return_zero_keycode() {
+        for ch in ['@', '#', '$', '%', '^', '&', '*', '(', ')', '€', '£', '你'] {
+            let (key, code, vk) = char_to_key_info(ch);
+            assert_eq!(
+                code, "",
+                "char {:?}: unmapped char should have empty code, got {:?}",
+                ch, code
+            );
+            assert_eq!(
+                vk, 0,
+                "char {:?}: unmapped char should have VK 0, got {}",
+                ch, vk
+            );
+            assert_eq!(key, ch.to_string());
         }
     }
 }

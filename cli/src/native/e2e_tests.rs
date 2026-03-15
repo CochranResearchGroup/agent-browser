@@ -406,9 +406,9 @@ async fn e2e_form_interaction() {
     assert_success(&resp);
     assert_eq!(get_data(&resp)["result"], "John Doe");
 
-    // Fill email (use fill instead of type to avoid key dispatch issues with '.')
+    // Type email – the type action now correctly handles punctuation like '.'
     let resp = execute_command(
-        &json!({ "id": "12", "action": "fill", "selector": "#email", "value": "john@example.com" }),
+        &json!({ "id": "12", "action": "type", "selector": "#email", "text": "john@example.com" }),
         &mut state,
     )
     .await;
