@@ -138,6 +138,7 @@ pub async fn resolve_element_center(
             .get(&ref_id)
             .ok_or_else(|| format!("Unknown ref: {}", ref_id))?;
 
+        // Try cached backend_node_id first (fast path)
         if let Some(backend_node_id) = entry.backend_node_id {
             let result: Result<DomGetBoxModelResult, String> = client
                 .send_command_typed(
@@ -151,16 +152,28 @@ pub async fn resolve_element_center(
                 )
                 .await;
 
-            match result {
-                Ok(r) => return Ok(box_model_center(&r.model)),
-                Err(_) => {
-                    // backend_node_id is stale (DOM changed); fall through to role/name lookup
-                }
+            if let Ok(r) = result {
+                return Ok(box_model_center(&r.model));
             }
+            // backend_node_id is stale; re-query the accessibility tree below
         }
 
-        // Fallback: use role/name to find via JS
-        return resolve_by_role_name(client, session_id, &entry.role, &entry.name, entry.nth).await;
+        // Fallback: re-query the accessibility tree to find a fresh node by role/name
+        let fresh_id =
+            find_node_id_by_role_name(client, session_id, &entry.role, &entry.name, entry.nth)
+                .await?;
+        let result: DomGetBoxModelResult = client
+            .send_command_typed(
+                "DOM.getBoxModel",
+                &DomGetBoxModelParams {
+                    backend_node_id: Some(fresh_id),
+                    node_id: None,
+                    object_id: None,
+                },
+                Some(session_id),
+            )
+            .await?;
+        return Ok(box_model_center(&result.model));
     }
 
     // CSS selector
@@ -178,6 +191,7 @@ pub async fn resolve_element_object_id(
             .get(&ref_id)
             .ok_or_else(|| format!("Unknown ref: {}", ref_id))?;
 
+        // Try cached backend_node_id first (fast path)
         if let Some(backend_node_id) = entry.backend_node_id {
             let result: Result<DomResolveNodeResult, String> = client
                 .send_command_typed(
@@ -191,28 +205,33 @@ pub async fn resolve_element_object_id(
                 )
                 .await;
 
-            match result {
-                Ok(r) => {
-                    if let Some(oid) = r.object.object_id {
-                        return Ok(oid);
-                    }
-                    // No objectId returned; fall through to role/name lookup
-                }
-                Err(_) => {
-                    // backend_node_id is stale (DOM changed); fall through to role/name lookup
+            if let Ok(r) = result {
+                if let Some(oid) = r.object.object_id {
+                    return Ok(oid);
                 }
             }
+            // backend_node_id is stale; re-query the accessibility tree below
         }
 
-        // Fallback: find by role/name via JS and return objectId
-        return resolve_object_id_by_role_name(
-            client,
-            session_id,
-            &entry.role,
-            &entry.name,
-            entry.nth,
-        )
-        .await;
+        // Fallback: re-query the accessibility tree to find a fresh node by role/name
+        let fresh_id =
+            find_node_id_by_role_name(client, session_id, &entry.role, &entry.name, entry.nth)
+                .await?;
+        let result: DomResolveNodeResult = client
+            .send_command_typed(
+                "DOM.resolveNode",
+                &DomResolveNodeParams {
+                    backend_node_id: Some(fresh_id),
+                    node_id: None,
+                    object_group: Some("agent-browser".to_string()),
+                },
+                Some(session_id),
+            )
+            .await?;
+        return result
+            .object
+            .object_id
+            .ok_or_else(|| format!("No objectId for ref {}", ref_id));
     }
 
     // CSS selector fallback
@@ -238,148 +257,63 @@ pub async fn resolve_element_object_id(
         .ok_or_else(|| format!("Element not found: {}", selector_or_ref))
 }
 
-fn role_name_match_js() -> &'static str {
-    r#"
-    function getImplicitRole(el) {
-        const tag = el.tagName.toLowerCase();
-        if (tag === 'button') return 'button';
-        if (tag === 'a' && el.hasAttribute('href')) return 'link';
-        if (tag === 'input') {
-            const t = (el.type || 'text').toLowerCase();
-            if (t === 'button' || t === 'submit' || t === 'reset' || t === 'image') return 'button';
-            if (t === 'checkbox') return 'checkbox';
-            if (t === 'radio') return 'radio';
-            if (t === 'range') return 'slider';
-            if (t === 'number') return 'spinbutton';
-            if (t === 'search') return 'searchbox';
-            return 'textbox';
+/// Re-query the accessibility tree to find a node matching role+name+nth,
+/// returning its fresh backendDOMNodeId. This uses the same data source
+/// (Accessibility.getFullAXTree) that built the ref map during snapshot,
+/// so role/name matching is guaranteed to be consistent.
+async fn find_node_id_by_role_name(
+    client: &CdpClient,
+    session_id: &str,
+    role: &str,
+    name: &str,
+    nth: Option<usize>,
+) -> Result<i64, String> {
+    let ax_tree: GetFullAXTreeResult = client
+        .send_command_typed(
+            "Accessibility.getFullAXTree",
+            &serde_json::json!({}),
+            Some(session_id),
+        )
+        .await?;
+
+    let nth_index = nth.unwrap_or(0);
+    let mut match_count: usize = 0;
+
+    for node in &ax_tree.nodes {
+        if node.ignored.unwrap_or(false) {
+            continue;
         }
-        if (tag === 'textarea') return 'textbox';
-        if (tag === 'select') return el.multiple ? 'listbox' : 'combobox';
-        if (tag === 'option') return 'option';
-        if (tag === 'img') return 'img';
-        if (tag === 'nav') return 'navigation';
-        if (tag === 'main') return 'main';
-        if (tag === 'header') return 'banner';
-        if (tag === 'footer') return 'contentinfo';
-        if (tag === 'aside') return 'complementary';
-        if (tag === 'section') return el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') ? 'region' : '';
-        if (tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' || tag === 'h5' || tag === 'h6') return 'heading';
-        if (tag === 'ul' || tag === 'ol') return 'list';
-        if (tag === 'li') return 'listitem';
-        if (tag === 'table') return 'table';
-        if (tag === 'td') return 'cell';
-        if (tag === 'th') return 'columnheader';
-        if (tag === 'summary') return 'button';
-        return '';
+        let node_role = extract_ax_string(&node.role);
+        let node_name = extract_ax_string(&node.name);
+        if node_role == role && node_name == name {
+            if match_count == nth_index {
+                return node.backend_d_o_m_node_id.ok_or_else(|| {
+                    format!(
+                        "AX node has no backendDOMNodeId for role={} name={}",
+                        role, name
+                    )
+                });
+            }
+            match_count += 1;
+        }
     }
-    function getEffectiveRole(el) {
-        return el.getAttribute('role') || getImplicitRole(el);
-    }
-    function getAccessibleName(el) {
-        return el.getAttribute('aria-label') || el.textContent.trim().slice(0, 100);
-    }
-    "#
+
+    Err(format!(
+        "Could not locate element with role={} name={}",
+        role, name
+    ))
 }
 
-async fn resolve_by_role_name(
-    client: &CdpClient,
-    session_id: &str,
-    role: &str,
-    name: &str,
-    nth: Option<usize>,
-) -> Result<(f64, f64), String> {
-    let nth_index = nth.unwrap_or(0);
-    let js = format!(
-        r#"(() => {{
-            {helpers}
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
-            const matches = [];
-            let node;
-            while (node = walker.nextNode()) {{
-                const r = getEffectiveRole(node);
-                const n = getAccessibleName(node);
-                if (r === {role} && n === {name}) matches.push(node);
-            }}
-            const el = matches[{nth}];
-            if (!el) return null;
-            const rect = el.getBoundingClientRect();
-            return {{ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }};
-        }})()"#,
-        helpers = role_name_match_js(),
-        role = serde_json::to_string(role).unwrap_or_default(),
-        name = serde_json::to_string(name).unwrap_or_default(),
-        nth = nth_index,
-    );
-
-    let result: EvaluateResult = client
-        .send_command_typed(
-            "Runtime.evaluate",
-            &EvaluateParams {
-                expression: js,
-                return_by_value: Some(true),
-                await_promise: Some(false),
-            },
-            Some(session_id),
-        )
-        .await?;
-
-    let val = result.result.value.unwrap_or(Value::Null);
-    let x = val.get("x").and_then(|v| v.as_f64());
-    let y = val.get("y").and_then(|v| v.as_f64());
-
-    match (x, y) {
-        (Some(x), Some(y)) => Ok((x, y)),
-        _ => Err(format!(
-            "Could not locate element with role={} name={}",
-            role, name
-        )),
+fn extract_ax_string(value: &Option<AXValue>) -> String {
+    match value {
+        Some(v) => match &v.value {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Number(n)) => n.to_string(),
+            Some(Value::Bool(b)) => b.to_string(),
+            _ => String::new(),
+        },
+        None => String::new(),
     }
-}
-
-async fn resolve_object_id_by_role_name(
-    client: &CdpClient,
-    session_id: &str,
-    role: &str,
-    name: &str,
-    nth: Option<usize>,
-) -> Result<String, String> {
-    let nth_index = nth.unwrap_or(0);
-    let js = format!(
-        r#"(() => {{
-            {helpers}
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
-            const matches = [];
-            let node;
-            while (node = walker.nextNode()) {{
-                const r = getEffectiveRole(node);
-                const n = getAccessibleName(node);
-                if (r === {role} && n === {name}) matches.push(node);
-            }}
-            return matches[{nth}] || null;
-        }})()"#,
-        helpers = role_name_match_js(),
-        role = serde_json::to_string(role).unwrap_or_default(),
-        name = serde_json::to_string(name).unwrap_or_default(),
-        nth = nth_index,
-    );
-
-    let result: EvaluateResult = client
-        .send_command_typed(
-            "Runtime.evaluate",
-            &EvaluateParams {
-                expression: js,
-                return_by_value: Some(false),
-                await_promise: Some(false),
-            },
-            Some(session_id),
-        )
-        .await?;
-
-    result
-        .result
-        .object_id
-        .ok_or_else(|| format!("Could not locate element with role={} name={}", role, name))
 }
 
 async fn resolve_by_selector(
