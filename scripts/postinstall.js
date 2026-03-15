@@ -128,15 +128,60 @@ async function main() {
   showInstallReminder();
 }
 
+function findSystemChrome() {
+  const os = platform();
+  if (os === 'darwin') {
+    const candidates = [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    ];
+    return candidates.find(p => existsSync(p)) || null;
+  }
+  if (os === 'linux') {
+    const names = ['google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium'];
+    for (const name of names) {
+      try {
+        const result = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf8' }).trim();
+        if (result) return result;
+      } catch {}
+    }
+    return null;
+  }
+  if (os === 'win32') {
+    const candidates = [
+      `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    ];
+    return candidates.find(p => p && existsSync(p)) || null;
+  }
+  return null;
+}
+
 function showInstallReminder() {
+  const systemChrome = findSystemChrome();
+  if (systemChrome) {
+    console.log('');
+    console.log(`  ✓ System Chrome found: ${systemChrome}`);
+    console.log('    agent-browser will use it automatically.');
+    console.log('');
+    return;
+  }
+
   console.log('');
+  console.log('  ⚠ No Chrome installation detected.');
   console.log('  To download Chrome, run:');
   console.log('');
   console.log('    agent-browser install');
+  if (platform() === 'linux') {
+    console.log('');
+    console.log('  On Linux, include system dependencies with:');
+    console.log('');
+    console.log('    agent-browser install --with-deps');
+  }
   console.log('');
-  console.log('  On Linux, include system dependencies with:');
-  console.log('');
-  console.log('    agent-browser install --with-deps');
+  console.log('  Or use --executable-path to specify a custom browser.');
   console.log('');
 }
 
