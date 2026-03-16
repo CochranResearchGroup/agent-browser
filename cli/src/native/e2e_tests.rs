@@ -1982,3 +1982,232 @@ async fn e2e_material_checkbox_check_uncheck() {
     let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
     assert_success(&resp);
 }
+
+// ---------------------------------------------------------------------------
+// Issue #841 – snapshot -C and screenshot --annotate must not hang over WSS
+// ---------------------------------------------------------------------------
+
+/// Verifies that `snapshot -C` (cursor-interactive mode) detects elements with
+/// cursor:pointer / onclick / tabindex, produces the correct v0.19.0-compatible
+/// output format, deduplicates against the ARIA tree, and completes in bounded
+/// time (no sequential CDP round-trip explosion).
+#[tokio::test]
+#[ignore]
+async fn e2e_snapshot_cursor_interactive() {
+    let mut state = DaemonState::new();
+
+    let resp = execute_command(
+        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    // Page with:
+    //  - <button> and <a> (standard interactive – ARIA tree, NOT in cursor section)
+    //  - <div cursor:pointer onclick> (clickable – cursor section)
+    //  - <div tabindex=0> (focusable – cursor section)
+    //  - <span cursor:pointer> (clickable – cursor section)
+    //  - <span cursor:pointer> child of <div cursor:pointer> (inherited – skip)
+    let html = concat!(
+        "<html><body>",
+        "<a href='#'>Link</a>",
+        "<button>Btn</button>",
+        "<div style='cursor:pointer' onclick='x()'>ClickDiv</div>",
+        "<div tabindex='0'>FocusDiv</div>",
+        "<span style='cursor:pointer'>PointerSpan</span>",
+        "<div style='cursor:pointer'><span>InheritChild</span></div>",
+        "</body></html>",
+    );
+
+    let resp = execute_command(
+        &json!({ "id": "2", "action": "setcontent", "html": html }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    // snapshot -i -C: interactive tree + cursor section
+    let start = std::time::Instant::now();
+    let resp = execute_command(
+        &json!({ "id": "3", "action": "snapshot", "interactive": true, "cursor": true }),
+        &mut state,
+    )
+    .await;
+    let elapsed = start.elapsed();
+    assert_success(&resp);
+
+    let snapshot = get_data(&resp)["snapshot"].as_str().unwrap();
+
+    // Cursor section must appear
+    assert!(
+        snapshot.contains("# Cursor-interactive elements:") || snapshot.contains("clickable"),
+        "Cursor section missing from snapshot -i -C:\n{}",
+        snapshot,
+    );
+
+    // v0.19.0 output format: role + hints
+    assert!(
+        snapshot.contains("clickable") && snapshot.contains("[cursor:pointer"),
+        "Expected v0.19.0-format cursor output with hints:\n{}",
+        snapshot,
+    );
+
+    // Role differentiation: tabindex-only → focusable
+    assert!(
+        snapshot.contains("focusable") && snapshot.contains("[tabindex]"),
+        "Expected focusable role for tabindex-only element:\n{}",
+        snapshot,
+    );
+
+    // Text dedup: "Link" and "Btn" are in the ARIA tree, so must NOT appear
+    // in the cursor section.
+    let cursor_section = snapshot
+        .split("# Cursor-interactive elements:")
+        .nth(1)
+        .unwrap_or(snapshot);
+    assert!(
+        !cursor_section.contains("\"Link\""),
+        "ARIA link text should be deduped from cursor section"
+    );
+    assert!(
+        !cursor_section.contains("\"Btn\""),
+        "ARIA button text should be deduped from cursor section"
+    );
+
+    // Must complete quickly (< 5s), not hit the 30s CDP timeout
+    assert!(
+        elapsed.as_secs() < 5,
+        "snapshot -C took {:?}, expected < 5s (Issue #841 regression)",
+        elapsed,
+    );
+
+    let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
+    assert_success(&resp);
+}
+
+/// Verifies that `screenshot --annotate` completes in bounded time even with
+/// many interactive elements. Guards against the sequential CDP round-trip
+/// regression that caused hangs over high-latency WSS (Issue #841).
+#[tokio::test]
+#[ignore]
+async fn e2e_screenshot_annotate_many_elements() {
+    let mut state = DaemonState::new();
+
+    let resp = execute_command(
+        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    // 50 buttons: old sequential code would do 50×2×200ms ≈ 20s over WSS.
+    let mut html = String::from("<html><body>");
+    for i in 1..=50 {
+        html.push_str(&format!("<button>Button {}</button>", i));
+    }
+    html.push_str("</body></html>");
+
+    let resp = execute_command(
+        &json!({ "id": "2", "action": "setcontent", "html": html }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    let start = std::time::Instant::now();
+    let resp = execute_command(
+        &json!({ "id": "3", "action": "screenshot", "annotate": true }),
+        &mut state,
+    )
+    .await;
+    let elapsed = start.elapsed();
+    assert_success(&resp);
+
+    let annotations = get_data(&resp)["annotations"]
+        .as_array()
+        .expect("Annotated screenshot should return annotations");
+
+    assert!(
+        annotations.len() >= 50,
+        "Expected at least 50 annotations, got {}",
+        annotations.len(),
+    );
+
+    // Must complete quickly (< 10s), not hit the 30s CDP timeout
+    assert!(
+        elapsed.as_secs() < 10,
+        "screenshot --annotate with 50 elements took {:?}, expected < 10s (Issue #841)",
+        elapsed,
+    );
+
+    let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
+    assert_success(&resp);
+}
+
+/// Verifies `snapshot -C` with many cursor-interactive elements completes in
+/// bounded time. Direct regression test for Issue #841's root cause: N×2
+/// sequential CDP round-trips per cursor-interactive element.
+#[tokio::test]
+#[ignore]
+async fn e2e_snapshot_cursor_many_elements() {
+    let mut state = DaemonState::new();
+
+    let resp = execute_command(
+        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    // 100 cursor-interactive divs: old code = 200 sequential CDP calls,
+    // at 200ms WSS latency = 40s timeout. New code must finish in seconds.
+    let mut html = String::from("<html><body>");
+    for i in 1..=100 {
+        html.push_str(&format!(
+            "<div style='cursor:pointer' onclick='x()'>Item {}</div>",
+            i,
+        ));
+    }
+    html.push_str("</body></html>");
+
+    let resp = execute_command(
+        &json!({ "id": "2", "action": "setcontent", "html": html }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    let start = std::time::Instant::now();
+    let resp = execute_command(
+        &json!({ "id": "3", "action": "snapshot", "interactive": true, "cursor": true }),
+        &mut state,
+    )
+    .await;
+    let elapsed = start.elapsed();
+    assert_success(&resp);
+
+    let snapshot = get_data(&resp)["snapshot"].as_str().unwrap();
+
+    // All 100 items should appear
+    assert!(
+        snapshot.contains("Item 1") && snapshot.contains("Item 100"),
+        "Expected all 100 cursor-interactive items in output",
+    );
+
+    // All should have v0.19.0-format hints
+    assert!(
+        snapshot.contains("[cursor:pointer, onclick]"),
+        "Expected v0.19.0-format hints",
+    );
+
+    // Must complete quickly
+    assert!(
+        elapsed.as_secs() < 10,
+        "snapshot -C with 100 cursor elements took {:?}, expected < 10s (Issue #841)",
+        elapsed,
+    );
+
+    let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
+    assert_success(&resp);
+}
