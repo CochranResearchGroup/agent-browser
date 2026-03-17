@@ -384,7 +384,13 @@ pub async fn take_snapshot(
                     .map(|line| format!("{}{}\n", prefix, line))
                     .collect();
 
-                output.insert_str(line_end + 1, &indented_child);
+                // Ensure there's a newline to insert after
+                if line_end == output.len() {
+                    output.push('\n');
+                    output.push_str(&indented_child);
+                } else {
+                    output.insert_str(line_end + 1, &indented_child);
+                }
             }
         }
     }

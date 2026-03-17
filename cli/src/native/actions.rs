@@ -3507,49 +3507,59 @@ async fn handle_frame(cmd: &Value, state: &mut DaemonState) -> Result<Value, Str
                 .backend_node_id
                 .ok_or_else(|| format!("Ref {} has no backend node id", ref_id))?;
 
-            // Resolve the backend node to a remote object so we can run JS on it
-            let resolve_result: Value = mgr
+            // Use DOM.describeNode to resolve the child frame ID directly.
+            // This works reliably for all iframes, including those without
+            // name, id, or src attributes.
+            let describe: Value = mgr
                 .client
                 .send_command(
-                    "DOM.resolveNode",
-                    Some(json!({ "backendNodeId": backend_node_id })),
+                    "DOM.describeNode",
+                    Some(json!({ "backendNodeId": backend_node_id, "depth": 1 })),
                     Some(&session_id),
                 )
                 .await?;
-            let object_id = resolve_result
-                .get("object")
-                .and_then(|o| o.get("objectId"))
-                .and_then(|v| v.as_str())
-                .ok_or("Could not resolve ref to DOM object")?;
 
-            let js_result: Value = mgr
-                .client
-                .send_command(
-                    "Runtime.callFunctionOn",
-                    Some(json!({
-                        "objectId": object_id,
-                        "functionDeclaration": "function() { if (this.tagName === 'IFRAME' || this.tagName === 'FRAME') { return this.name || this.id || this.src || null; } return null; }",
-                        "returnByValue": true,
-                    })),
-                    Some(&session_id),
-                )
-                .await?;
-            let frame_name = js_result
-                .get("result")
-                .and_then(|r| r.get("value"))
+            // Verify this is an iframe/frame element
+            let node_name = describe
+                .get("node")
+                .and_then(|n| n.get("nodeName"))
                 .and_then(|v| v.as_str())
-                .ok_or("Ref does not point to an iframe element")?;
+                .unwrap_or("");
+            if node_name != "IFRAME" && node_name != "FRAME" {
+                return Err("Ref does not point to an iframe element".to_string());
+            }
 
-            if let Some(frame_id) = find_frame(frame_tree, Some(frame_name), None) {
-                state.active_frame_id = Some(frame_id);
-                return Ok(json!({ "frame": frame_name }));
-            }
-            // Fall through to URL-based lookup using the frame name
-            if let Some(frame_id) = find_frame(frame_tree, None, Some(frame_name)) {
-                state.active_frame_id = Some(frame_id);
-                return Ok(json!({ "frame": frame_name }));
-            }
-            return Err("Frame not found for ref".to_string());
+            // Try contentDocument.frameId first (standard for iframes)
+            let frame_id = describe
+                .get("node")
+                .and_then(|n| n.get("contentDocument"))
+                .and_then(|cd| cd.get("frameId"))
+                .and_then(|v| v.as_str())
+                // Fallback: the node itself may carry a frameId
+                .or_else(|| {
+                    describe
+                        .get("node")
+                        .and_then(|n| n.get("frameId"))
+                        .and_then(|v| v.as_str())
+                })
+                .ok_or("Could not resolve frame ID for iframe element")?;
+
+            let label = describe
+                .get("node")
+                .and_then(|n| n.get("attributes"))
+                .and_then(|a| a.as_array())
+                .and_then(|attrs| {
+                    attrs
+                        .iter()
+                        .enumerate()
+                        .find(|(_, v)| v.as_str() == Some("name"))
+                        .and_then(|(i, _)| attrs.get(i + 1))
+                        .and_then(|v| v.as_str())
+                })
+                .unwrap_or(&ref_id);
+
+            state.active_frame_id = Some(frame_id.to_string());
+            return Ok(json!({ "frame": label }));
         }
 
         // CSS selector path

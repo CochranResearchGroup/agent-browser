@@ -36,17 +36,7 @@ impl RefMap {
         name: &str,
         nth: Option<usize>,
     ) {
-        self.map.insert(
-            ref_id,
-            RefEntry {
-                backend_node_id,
-                role: role.to_string(),
-                name: name.to_string(),
-                nth,
-                selector: None,
-                frame_id: None,
-            },
-        );
+        self.add_with_frame(ref_id, backend_node_id, role, name, nth, None);
     }
 
     pub fn add_with_frame(
