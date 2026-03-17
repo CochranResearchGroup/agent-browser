@@ -369,6 +369,26 @@ pub fn run_install(with_deps: bool) {
     }
 }
 
+fn report_install_status(status: io::Result<std::process::ExitStatus>) {
+    match status {
+        Ok(s) if s.success() => {
+            println!(
+                "{} System dependencies installed",
+                color::success_indicator()
+            )
+        }
+        Ok(_) => eprintln!(
+            "{} Failed to install some dependencies. You may need to run manually with sudo.",
+            color::warning_indicator()
+        ),
+        Err(e) => eprintln!(
+            "{} Could not run install command: {}",
+            color::warning_indicator(),
+            e
+        ),
+    }
+}
+
 fn install_linux_deps() {
     println!("{}", color::cyan("Installing system dependencies..."));
 
@@ -566,23 +586,7 @@ fn install_linux_deps() {
             .args(&deps)
             .status();
 
-        match status {
-            Ok(s) if s.success() => {
-                println!(
-                    "{} System dependencies installed",
-                    color::success_indicator()
-                )
-            }
-            Ok(_) => eprintln!(
-                "{} Failed to install some dependencies. You may need to run manually with sudo.",
-                color::warning_indicator()
-            ),
-            Err(e) => eprintln!(
-                "{} Could not run install command: {}",
-                color::warning_indicator(),
-                e
-            ),
-        }
+        report_install_status(status);
     } else {
         // dnf / yum path — these package managers do not remove packages
         // during install, so the simulate-first guard is not needed.
@@ -590,23 +594,7 @@ fn install_linux_deps() {
         println!("Running: {}", install_cmd);
         let status = Command::new("sh").arg("-c").arg(&install_cmd).status();
 
-        match status {
-            Ok(s) if s.success() => {
-                println!(
-                    "{} System dependencies installed",
-                    color::success_indicator()
-                )
-            }
-            Ok(_) => eprintln!(
-                "{} Failed to install some dependencies. You may need to run manually with sudo.",
-                color::warning_indicator()
-            ),
-            Err(e) => eprintln!(
-                "{} Could not run install command: {}",
-                color::warning_indicator(),
-                e
-            ),
-        }
+        report_install_status(status);
     }
 }
 
