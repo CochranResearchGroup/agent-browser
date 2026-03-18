@@ -133,10 +133,11 @@ fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
     // injected in headless mode).  Skip --headless when extensions are loaded.
     if options.headless && !has_extensions {
         args.push("--headless=new".to_string());
-        // Disable GPU hardware acceleration in headless mode.  This prevents
-        // silent crashes in environments where GPU drivers are missing or
-        // restricted (VMs, containers, some cloud machines).
-        args.push("--disable-gpu".to_string());
+        // Enable SwiftShader software rendering in headless mode.  This
+        // prevents silent crashes in environments where GPU drivers are
+        // missing or restricted (VMs, containers, some cloud machines)
+        // while preserving WebGL support.  Playwright uses the same flag.
+        args.push("--enable-unsafe-swiftshader".to_string());
     }
 
     if let Some(ref proxy) = options.proxy {
@@ -377,7 +378,7 @@ fn chrome_launch_error(message: &str, stderr_lines: &[String]) -> String {
     if relevant.is_empty() {
         if stderr_lines.is_empty() {
             return format!(
-                "{} (no stderr output from Chrome)\nHint: try passing --args \"--no-sandbox\" and/or --args \"--disable-gpu\" if Chrome crashes silently in your environment",
+                "{} (no stderr output from Chrome)\nHint: try passing --args \"--no-sandbox\" if Chrome crashes silently in your environment",
                 message
             );
         }
@@ -810,7 +811,7 @@ mod tests {
         let msg = chrome_launch_error("Chrome exited", &[]);
         assert!(msg.contains("no stderr output"));
         assert!(msg.contains("Hint:"));
-        assert!(msg.contains("--disable-gpu"));
+        assert!(msg.contains("--no-sandbox"));
     }
 
     #[test]
@@ -848,7 +849,10 @@ mod tests {
         };
         let result = build_chrome_args(&opts).unwrap();
         assert!(result.args.iter().any(|a| a == "--headless=new"));
-        assert!(result.args.iter().any(|a| a == "--disable-gpu"));
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == "--enable-unsafe-swiftshader"));
         assert!(result.args.iter().any(|a| a == "--window-size=1280,720"));
         // Temp dir created when no profile
         assert!(result.temp_user_data_dir.is_some());
@@ -865,7 +869,10 @@ mod tests {
         };
         let result = build_chrome_args(&opts).unwrap();
         assert!(!result.args.iter().any(|a| a.contains("--headless")));
-        assert!(!result.args.iter().any(|a| a == "--disable-gpu"));
+        assert!(!result
+            .args
+            .iter()
+            .any(|a| a == "--enable-unsafe-swiftshader"));
         assert!(!result.args.iter().any(|a| a.starts_with("--window-size=")));
         // Temp dir created when no profile
         assert!(result.temp_user_data_dir.is_some());
