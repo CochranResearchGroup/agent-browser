@@ -655,7 +655,6 @@ pub fn get_dashboard_dir() -> PathBuf {
         .join("dashboard")
 }
 
-
 const DASHBOARD_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn dashboard_download_url() -> String {
