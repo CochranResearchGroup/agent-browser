@@ -1489,14 +1489,7 @@ pub async fn run_dashboard_server(port: u16) {
         }
     };
 
-    let dashboard_dir = {
-        let dir = get_dashboard_dir();
-        if dir.join("index.html").exists() {
-            Some(Arc::from(dir))
-        } else {
-            None
-        }
-    };
+    let dashboard_dir: Arc<PathBuf> = Arc::from(get_dashboard_dir());
 
     loop {
         let Ok((stream, _addr)) = listener.accept().await else {
@@ -1511,7 +1504,7 @@ pub async fn run_dashboard_server(port: u16) {
 
 async fn handle_dashboard_connection(
     mut stream: tokio::net::TcpStream,
-    dashboard_dir: Option<Arc<PathBuf>>,
+    dashboard_dir: Arc<PathBuf>,
 ) {
     use tokio::io::AsyncReadExt;
 
@@ -1566,22 +1559,20 @@ async fn handle_dashboard_connection(
         return;
     }
 
-    let dir_ref = dashboard_dir.as_deref();
     let (status, content_type, body): (&str, &str, Vec<u8>) = if path == "/api/sessions" {
         (
             "200 OK",
             "application/json; charset=utf-8",
             discover_sessions().into_bytes(),
         )
+    } else if dashboard_dir.join("index.html").exists() {
+        serve_static_file(&dashboard_dir, path)
     } else {
-        match dir_ref {
-            Some(dir) => serve_static_file(dir, path),
-            None => (
-                "200 OK",
-                "text/html; charset=utf-8",
-                DASHBOARD_NOT_INSTALLED_HTML.as_bytes().to_vec(),
-            ),
-        }
+        (
+            "200 OK",
+            "text/html; charset=utf-8",
+            DASHBOARD_NOT_INSTALLED_HTML.as_bytes().to_vec(),
+        )
     };
 
     let response = format!(
