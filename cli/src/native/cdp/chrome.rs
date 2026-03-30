@@ -757,13 +757,15 @@ fn build_puppeteer_binary_path(version_dir: &Path) -> PathBuf {
 #[cfg(target_os = "macos")]
 fn build_puppeteer_binary_path(version_dir: &Path) -> PathBuf {
     // Puppeteer uses chrome-mac-arm64 or chrome-mac-x64 depending on arch
-    let arm = version_dir
-        .join("chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
+    let arm = version_dir.join(
+        "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    );
     if arm.exists() {
         return arm;
     }
-    version_dir
-        .join("chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")
+    version_dir.join(
+        "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    )
 }
 
 #[cfg(target_os = "windows")]
