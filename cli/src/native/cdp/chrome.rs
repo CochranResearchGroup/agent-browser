@@ -219,9 +219,17 @@ fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
 pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
-        None => {
-            find_chrome().ok_or("Chrome not found. Run `agent-browser install` to download Chrome, or use --executable-path.")?
-        }
+        None => find_chrome().ok_or_else(|| {
+            let cache_dir = crate::install::get_browsers_dir();
+            format!(
+                "Chrome not found. Checked:\n  \
+                 - agent-browser cache: {}\n  \
+                 - System Chrome installations\n  \
+                 - Playwright browser cache\n\
+                 Run `agent-browser install` to download Chrome, or use --executable-path.",
+                cache_dir.display()
+            )
+        })?,
     };
 
     let max_attempts = 3;
@@ -436,6 +444,18 @@ pub fn find_chrome() -> Option<PathBuf> {
     // 1. Check Chrome downloaded by `agent-browser install`
     if let Some(p) = crate::install::find_installed_chrome() {
         return Some(p);
+    }
+
+    // If the cache directory exists but no Chrome was found, warn -- this
+    // likely means the cache is corrupted or the directory layout is unexpected.
+    let cache_dir = crate::install::get_browsers_dir();
+    if cache_dir.exists() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "Warning: Chrome cache directory exists ({}) but no Chrome binary found inside. \
+             Falling back to system Chrome. Run `agent-browser install` to re-download.",
+            cache_dir.display()
+        );
     }
 
     // 2. Check system-installed Chrome
