@@ -22,9 +22,6 @@
     "build:docker": "docker build -t agent-browser-builder -f docker/Dockerfile.build .",
     "release": "npm run version:sync && npm run build:all-platforms && npm publish",
     "postinstall": "node scripts/postinstall.js",
-    "changeset": "changeset",
-    "ci:version": "changeset version && pnpm run version:sync && pnpm install --no-frozen-lockfile",
-    "ci:publish": "pnpm run version:sync && changeset publish",
     "build:dashboard": "cd packages/dashboard && pnpm build"
   },
   "keywords": [
@@ -45,7 +42,5 @@
     "url": "https://github.com/vercel-labs/agent-browser/issues"
   },
   "homepage": "https://agent-browser.dev",
-  "devDependencies": {
-    "@changesets/cli": "^2.29.8"
-  }
+  "devDependencies": {}
 }
