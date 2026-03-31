@@ -495,10 +495,7 @@ mod tests {
     fn test_no_waitpid_minus_one_in_daemon() {
         let source = include_str!("daemon.rs");
         // Only check production code (everything before `#[cfg(test)]`)
-        let production_code = source
-            .split("#[cfg(test)]")
-            .next()
-            .unwrap_or(source);
+        let production_code = source.split("#[cfg(test)]").next().unwrap_or(source);
         assert!(
             !production_code.contains("waitpid(-1"),
             "daemon.rs production code must not call waitpid(-1, ...). \
