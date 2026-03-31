@@ -10,6 +10,7 @@ export const PAGE_TITLES: Record<string, string> = {
   sessions: "Sessions",
   diffing: "Diffing",
   "cdp-mode": "CDP Mode",
+  dashboard: "Dashboard",
   streaming: "Streaming",
   profiler: "Profiler",
   ios: "iOS Simulator",

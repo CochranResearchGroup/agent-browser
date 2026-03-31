@@ -42,7 +42,8 @@ To prepare a release:
 2. Bump `version` in `package.json`
 3. Run `pnpm version:sync` to update `cli/Cargo.toml`, `cli/Cargo.lock`, and `packages/dashboard/package.json`
 4. Write the changelog entry in `CHANGELOG.md` at the top, under a new `## <version>` heading
-5. Open a PR and merge to `main`
+5. Add a matching entry to `docs/src/app/changelog/page.mdx` at the top (below the `# Changelog` heading)
+6. Open a PR and merge to `main`
 
 When the PR merges, CI compares `package.json` version to what's on npm. If it differs, it builds all 7 platform binaries, publishes to npm, and creates the GitHub release automatically.
 
@@ -65,6 +66,16 @@ Example:
 ```
 
 Do not prefix entries with commit hashes. Do not use the changesets `### Patch Changes` / `### Minor Changes` headings. Use descriptive section names instead.
+
+### Docs changelog
+
+The docs changelog at `docs/src/app/changelog/page.mdx` mirrors `CHANGELOG.md` but uses a slightly different format. Each entry uses:
+
+- A `v` prefix on the version (e.g. `## v0.24.0`)
+- A date line: `<p className="text-[#888] text-sm">March 2026</p>`
+- A `---` separator between entries
+
+Match the existing style in that file.
 
 ## Architecture
 
