@@ -1125,6 +1125,35 @@ mod tests {
     }
 
     #[test]
+    fn test_build_args_ignore_https_errors_includes_flag() {
+        let opts = LaunchOptions {
+            ignore_https_errors: true,
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts).unwrap();
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == "--ignore-certificate-errors"));
+        if let Some(ref dir) = result.temp_user_data_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn test_build_args_ignore_https_errors_default_no_flag() {
+        let opts = LaunchOptions::default();
+        let result = build_chrome_args(&opts).unwrap();
+        assert!(!result
+            .args
+            .iter()
+            .any(|a| a == "--ignore-certificate-errors"));
+        if let Some(ref dir) = result.temp_user_data_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
     fn test_chrome_process_drop_cleans_temp_dir() {
         let dir = std::env::temp_dir().join(format!(
             "agent-browser-chrome-drop-test-{}",
