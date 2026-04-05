@@ -1,0 +1,283 @@
+use serde_json::{json, Value};
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
+
+use crate::connection::get_socket_dir;
+use crate::install::get_dashboard_dir;
+
+use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
+use super::discovery::discover_sessions;
+use super::http::{extract_http_body, serve_static_file, CORS_HEADERS, DASHBOARD_NOT_INSTALLED_HTML};
+
+pub async fn run_dashboard_server(port: u16) {
+    let addr = format!("127.0.0.1:{}", port);
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Failed to bind dashboard server on {}: {}", addr, e);
+            return;
+        }
+    };
+
+    let dashboard_dir: Arc<PathBuf> = Arc::from(get_dashboard_dir());
+
+    loop {
+        let Ok((stream, _addr)) = listener.accept().await else {
+            break;
+        };
+        let dash_dir = dashboard_dir.clone();
+        tokio::spawn(async move {
+            handle_dashboard_connection(stream, dash_dir).await;
+        });
+    }
+}
+
+async fn handle_dashboard_connection(
+    mut stream: tokio::net::TcpStream,
+    dashboard_dir: Arc<PathBuf>,
+) {
+    use tokio::io::AsyncReadExt;
+
+    let mut buf = vec![0u8; 8192];
+    let n = match stream.read(&mut buf).await {
+        Ok(n) if n > 0 => n,
+        _ => return,
+    };
+
+    let first_line = std::str::from_utf8(&buf[..n])
+        .unwrap_or("")
+        .lines()
+        .next()
+        .unwrap_or("")
+        .to_string();
+    let method = first_line.split_whitespace().next().unwrap_or("GET");
+    let path = first_line.split_whitespace().nth(1).unwrap_or("/");
+
+    if method == "OPTIONS" {
+        let response = format!(
+            "HTTP/1.1 204 No Content\r\n{CORS_HEADERS}Access-Control-Max-Age: 86400\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        );
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+
+    if method == "POST" && path == "/api/chat" {
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        handle_chat_request(&mut stream, &body_str).await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/models" {
+        handle_models_request(&mut stream).await;
+        return;
+    }
+
+    if method == "POST" && (path == "/api/sessions" || path == "/api/exec" || path == "/api/kill") {
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        let result = if path == "/api/exec" {
+            exec_cli(&body_str).await
+        } else if path == "/api/kill" {
+            kill_session(&body_str).await
+        } else {
+            spawn_session(&body_str).await
+        };
+        let (status, resp_body) = match result {
+            Ok(msg) => ("200 OK", msg),
+            Err(e) => (
+                "400 Bad Request",
+                format!(
+                    r#"{{"success":false,"error":{}}}"#,
+                    serde_json::to_string(&e).unwrap_or_else(|_| format!("\"{}\"", e))
+                ),
+            ),
+        };
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
+            resp_body.len()
+        );
+        let _ = stream.write_all(response.as_bytes()).await;
+        let _ = stream.write_all(resp_body.as_bytes()).await;
+        return;
+    }
+
+    let (status, content_type, body): (&str, &str, Vec<u8>) = if path == "/api/sessions" {
+        (
+            "200 OK",
+            "application/json; charset=utf-8",
+            discover_sessions().into_bytes(),
+        )
+    } else if path == "/api/chat/status" {
+        (
+            "200 OK",
+            "application/json; charset=utf-8",
+            chat_status_json().into_bytes(),
+        )
+    } else if dashboard_dir.join("index.html").exists() {
+        serve_static_file(&dashboard_dir, path)
+    } else {
+        (
+            "200 OK",
+            "text/html; charset=utf-8",
+            DASHBOARD_NOT_INSTALLED_HTML.as_bytes().to_vec(),
+        )
+    };
+
+    let response = format!(
+        "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
+        status,
+        content_type,
+        body.len()
+    );
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.write_all(&body).await;
+}
+
+async fn read_post_body(stream: &mut tokio::net::TcpStream, initial: &[u8], n: usize) -> String {
+    use tokio::io::AsyncReadExt;
+    let header_str = String::from_utf8_lossy(&initial[..n]);
+    let body = extract_http_body(&header_str).unwrap_or("").to_string();
+
+    if !body.is_empty() {
+        return body;
+    }
+
+    let cl = header_str
+        .lines()
+        .find_map(|l| {
+            let lower = l.to_lowercase();
+            lower
+                .strip_prefix("content-length:")
+                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+        })
+        .unwrap_or(0);
+
+    if cl > 0 {
+        let mut remaining = vec![0u8; cl];
+        if stream.read_exact(&mut remaining).await.is_ok() {
+            return String::from_utf8_lossy(&remaining).to_string();
+        }
+    }
+
+    String::new()
+}
+
+async fn exec_cli(body: &str) -> Result<String, String> {
+    let parsed: Value = serde_json::from_str(body).map_err(|e| format!("Invalid JSON: {}", e))?;
+    let args: Vec<String> = parsed
+        .get("args")
+        .and_then(|v| v.as_array())
+        .ok_or("Missing \"args\" array")?
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+
+    if args.is_empty() {
+        return Err("Empty args array".to_string());
+    }
+
+    let exe = std::env::current_exe().map_err(|e| format!("Cannot resolve executable: {}", e))?;
+
+    let mut cmd = tokio::process::Command::new(&exe);
+    cmd.args(&args)
+        .arg("--json")
+        .env_remove("AGENT_BROWSER_DASHBOARD")
+        .env_remove("AGENT_BROWSER_DASHBOARD_PORT")
+        .env_remove("AGENT_BROWSER_STREAM_PORT");
+
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+    Ok(json!({
+        "success": output.status.success(),
+        "exit_code": output.status.code(),
+        "stdout": stdout,
+        "stderr": stderr,
+    })
+    .to_string())
+}
+
+async fn kill_session(body: &str) -> Result<String, String> {
+    let parsed: Value = serde_json::from_str(body).map_err(|e| format!("Invalid JSON: {}", e))?;
+    let session = parsed
+        .get("session")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing \"session\" field")?;
+
+    if session.is_empty() || session.len() > 64 {
+        return Err("Session name must be 1-64 characters".to_string());
+    }
+
+    let dir = get_socket_dir();
+    let pid_path = dir.join(format!("{}.pid", session));
+
+    let pid_str = std::fs::read_to_string(&pid_path)
+        .map_err(|_| format!("No PID file for session '{}'", session))?;
+    let pid: u32 = pid_str
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid PID in file: {}", pid_str.trim()))?;
+
+    #[cfg(unix)]
+    {
+        unsafe {
+            libc::kill(pid as i32, libc::SIGTERM);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if unsafe { libc::kill(pid as i32, 0) } == 0 {
+            unsafe {
+                libc::kill(pid as i32, libc::SIGKILL);
+            }
+        }
+    }
+
+    for ext in &["pid", "sock", "stream", "engine", "extensions"] {
+        let _ = std::fs::remove_file(dir.join(format!("{}.{}", session, ext)));
+    }
+
+    Ok(json!({ "success": true, "killed_pid": pid }).to_string())
+}
+
+pub(super) async fn spawn_session(body: &str) -> Result<String, String> {
+    let parsed: Value = serde_json::from_str(body).map_err(|e| format!("Invalid JSON: {}", e))?;
+    let session = parsed
+        .get("session")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing \"session\" field")?;
+
+    if session.is_empty() || session.len() > 64 {
+        return Err("Session name must be 1-64 characters".to_string());
+    }
+
+    let exe = std::env::current_exe().map_err(|e| format!("Cannot resolve executable: {}", e))?;
+
+    let mut cmd = tokio::process::Command::new(&exe);
+    cmd.arg("open")
+        .arg("about:blank")
+        .arg("--session")
+        .arg(session);
+
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::null());
+
+    let status = cmd
+        .status()
+        .await
+        .map_err(|e| format!("Failed to spawn session: {}", e))?;
+
+    if status.success() {
+        Ok(format!(
+            r#"{{"success":true,"session":{}}}"#,
+            serde_json::to_string(session).unwrap_or_default()
+        ))
+    } else {
+        Err(format!("Session process exited with {}", status))
+    }
+}
