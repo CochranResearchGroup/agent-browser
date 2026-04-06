@@ -612,7 +612,8 @@ async fn stream_gateway_response(
 
                 for tc in tcs {
                     let idx = tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
-                    if let std::collections::hash_map::Entry::Vacant(e) = tool_call_args.entry(idx) {
+                    if let std::collections::hash_map::Entry::Vacant(e) = tool_call_args.entry(idx)
+                    {
                         let id = tc
                             .get("id")
                             .and_then(|i| i.as_str())
