@@ -207,6 +207,7 @@ fn decode_pem_certificates(pem: &str) -> Result<Vec<Vec<u8>>, String> {
 }
 
 /// Decode the first certificate from a PEM file to DER bytes.
+#[cfg(test)]
 fn decode_pem_certificate(pem: &str) -> Result<Vec<u8>, String> {
     decode_pem_certificates(pem)?
         .into_iter()
