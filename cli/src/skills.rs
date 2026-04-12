@@ -129,8 +129,14 @@ fn truncate_description(desc: &str, max_len: usize) -> String {
     if desc.len() <= max_len {
         return desc.to_string();
     }
-    let truncated = &desc[..desc[..max_len].rfind(' ').unwrap_or(max_len)];
-    format!("{}...", truncated)
+    let boundary = desc
+        .char_indices()
+        .take_while(|(i, _)| *i <= max_len)
+        .last()
+        .map(|(i, _)| i)
+        .unwrap_or(max_len);
+    let end = desc[..boundary].rfind(' ').unwrap_or(boundary);
+    format!("{}...", &desc[..end])
 }
 
 /// Read the full SKILL.md content (including frontmatter).
@@ -211,16 +217,20 @@ fn run_list(skills_dir: &Path, json_mode: bool) {
     }
 }
 
-fn run_get(skills_dir: &Path, names: &[String], full: bool, json_mode: bool) {
+fn run_get(skills_dir: &Path, names: &[String], get_all: bool, full: bool, json_mode: bool) {
     let all_skills = discover_skills(skills_dir);
 
-    let get_all = names.iter().any(|n| n == "--all");
     let targets: Vec<&SkillInfo> = if get_all {
         all_skills.iter().collect()
     } else {
         let mut targets = Vec::new();
         for name in names {
             if name.starts_with('-') {
+                eprintln!(
+                    "{} Unknown flag ignored: {}",
+                    color::warning_indicator(),
+                    name
+                );
                 continue;
             }
             match all_skills.iter().find(|s| s.name == *name) {
@@ -385,7 +395,7 @@ fn run_path(skills_dir: &Path, name: Option<&str>, json_mode: bool) {
 
 pub fn run_skills(args: &[String], json_mode: bool) {
     let skills_dir = match find_skills_dir() {
-        Some(d) => d,
+        Some(d) => d.canonicalize().unwrap_or(d),
         None => {
             if json_mode {
                 println!(
@@ -411,21 +421,14 @@ pub fn run_skills(args: &[String], json_mode: bool) {
     match subcommand {
         None | Some("list") => run_list(&skills_dir, json_mode),
         Some("get") => {
-            let remaining: Vec<String> = args[2..]
+            let names: Vec<String> = args[2..]
                 .iter()
                 .filter(|a| *a != "--full" && *a != "--all")
                 .cloned()
                 .collect();
             let full = args[2..].iter().any(|a| a == "--full");
-            let has_all = args[2..].iter().any(|a| a == "--all");
-
-            if has_all {
-                let mut names = remaining;
-                names.push("--all".to_string());
-                run_get(&skills_dir, &names, full, json_mode);
-            } else {
-                run_get(&skills_dir, &remaining, full, json_mode);
-            }
+            let get_all = args[2..].iter().any(|a| a == "--all");
+            run_get(&skills_dir, &names, get_all, full, json_mode);
         }
         Some("path") => {
             let name = args.get(2).map(|s| s.as_str());
@@ -523,6 +526,14 @@ mod tests {
             truncate_description("this is a longer description that should be truncated", 20),
             "this is a longer..."
         );
+    }
+
+    #[test]
+    fn test_truncate_description_multibyte() {
+        let desc = "Browse \u{00e9}l\u{00e9}ments and \u{65e5}\u{672c}\u{8a9e} pages quickly";
+        let result = truncate_description(desc, 20);
+        assert!(result.ends_with("..."));
+        assert!(result.len() <= 30);
     }
 
     #[test]
