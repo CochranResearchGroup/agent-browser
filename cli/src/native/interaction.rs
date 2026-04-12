@@ -15,6 +15,59 @@ pub async fn click(
     click_count: i32,
     iframe_sessions: &HashMap<String, String>,
 ) -> Result<(), String> {
+    if button == "left" && click_count == 1 {
+        let (object_id, effective_session_id) = resolve_element_object_id(
+            client,
+            session_id,
+            ref_map,
+            selector_or_ref,
+            iframe_sessions,
+        )
+        .await?;
+
+        let activation_result: Value = client
+            .send_command_typed(
+                "Runtime.callFunctionOn",
+                &CallFunctionOnParams {
+                    function_declaration: r#"function() {
+                        const el = this.closest?.('a[href], button, input, [role="button"]') || this;
+                        const tag = el.tagName ? el.tagName.toUpperCase() : "";
+                        const type = el.type ? String(el.type).toLowerCase() : "";
+                        const role = el.getAttribute?.("role");
+                        const isLink = tag === "A" && !!el.href;
+                        const isDomClickTarget =
+                            tag === "BUTTON" ||
+                            (tag === "INPUT" && ["button", "submit", "reset", "checkbox", "radio"].includes(type)) ||
+                            role === "button";
+
+                        if (!isLink && !isDomClickTarget) {
+                            return null;
+                        }
+
+                        el.focus?.();
+                        el.click();
+                        return "dom-click";
+                    }"#
+                    .to_string(),
+                    object_id: Some(object_id),
+                    arguments: None,
+                    return_by_value: Some(true),
+                    await_promise: Some(false),
+                },
+                Some(&effective_session_id),
+            )
+            .await?;
+
+        let activation_mode = activation_result
+            .get("result")
+            .and_then(|v| v.get("value"))
+            .and_then(|v| v.as_str());
+
+        if activation_mode == Some("dom-click") {
+            return Ok(());
+        }
+    }
+
     let (x, y, effective_session_id) = resolve_element_center(
         client,
         session_id,

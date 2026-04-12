@@ -46,6 +46,22 @@ agent-browser open https://example.com && agent-browser screenshot
 
 **When to chain:** Use `&&` when you don't need to read the output of an intermediate command before proceeding (e.g., open + wait + screenshot). Run commands separately when you need to parse the output first (e.g., snapshot to discover refs, then interact using those refs).
 
+## Real Chrome and Anti-Bot Sites
+
+For sites that aggressively challenge automation, start with:
+
+1. `--headed`
+2. `--profile Default` or another real Chrome profile
+3. `--executable-path /usr/bin/google-chrome-stable` when you specifically want Google Chrome instead of the bundled browser
+
+Example:
+
+```bash
+agent-browser --headed --profile Default --executable-path /usr/bin/google-chrome-stable open https://www.google.com
+```
+
+This is materially more reliable than a fresh headless session for sites like Google, Gmail, and other consumer properties that react to automation signals.
+
 ## Handling Authentication
 
 When automating a site that requires login, choose the approach that fits:
@@ -69,6 +85,12 @@ agent-browser profiles
 
 # Reuse the user's existing Chrome login state
 agent-browser --profile Default open https://gmail.com
+```
+
+For anti-bot-sensitive sites, prefer the real profile plus a visible window:
+
+```bash
+agent-browser --headed --profile Default --executable-path /usr/bin/google-chrome-stable open https://www.google.com
 ```
 
 **Option 3: Persistent profile (for recurring tasks)**
@@ -231,6 +253,30 @@ agent-browser chat                                        # Interactive REPL mod
 agent-browser -q chat "summarize this page"               # Quiet (text only, no tool calls)
 agent-browser -v chat "fill in the login form"            # Verbose (show command output)
 agent-browser --model openai/gpt-4o chat "take a screenshot"  # Override model
+```
+
+## Typing Strategy
+
+Rule of thumb:
+
+- Prefer `fill` for ordinary forms.
+- Prefer `focus` + `keyboard type` + `press Enter` for search boxes, chat inputs, and sites where synthetic value injection behaves differently from human typing.
+
+Google example:
+
+```bash
+agent-browser --headed --profile Default --executable-path /usr/bin/google-chrome-stable open https://www.google.com
+agent-browser snapshot -i
+agent-browser focus @e15
+agent-browser keyboard type "Soylei"
+agent-browser press Enter
+```
+
+In live testing, this was more reliable than:
+
+```bash
+agent-browser fill @e15 "Soylei"
+agent-browser press Enter
 ```
 
 ## Streaming
