@@ -57,6 +57,55 @@ const AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS: u64 = 100;
 /// fallback selectors are allowed.
 const AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS: u64 = 5_000;
 
+fn debug_session_events_enabled() -> bool {
+    env::var("AGENT_BROWSER_DEBUG_SESSIONS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn is_stale_page_session_error(err: &str) -> bool {
+    err.contains("CDP response channel closed")
+        || err.contains("Trying to work with closed connection")
+        || err.contains("Session with given id not found")
+        || err.contains("No session with given id")
+}
+
+async fn recover_browser_command_channel(
+    mgr: &mut BrowserManager,
+    err: &str,
+) -> Result<(), String> {
+    if err.contains("Trying to work with closed connection")
+        || err.contains("CDP response channel closed")
+    {
+        mgr.reconnect_client().await
+    } else {
+        mgr.refresh_active_page_session().await.map(|_| ())
+    }
+}
+
+async fn relaunch_and_restore_page(
+    state: &mut DaemonState,
+    desired_url: Option<String>,
+) -> Result<(), String> {
+    if let Some(ref mut mgr) = state.browser {
+        let _ = mgr.close().await;
+    }
+    state.browser = None;
+    state.screencasting = false;
+    state.reset_input_state();
+    state.update_stream_client().await;
+    auto_launch(state).await?;
+
+    if let Some(url) = desired_url.as_deref() {
+        if !url.is_empty() && url != "about:blank" {
+            let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+            let _ = mgr.navigate(url, WaitUntil::Load).await?;
+        }
+    }
+
+    Ok(())
+}
+
 pub struct PendingConfirmation {
     pub action: String,
     pub cmd: Value,
@@ -160,8 +209,13 @@ struct DrainedEvents {
     new_targets: Vec<TargetCreatedEvent>,
     changed_targets: Vec<TargetInfoChangedEvent>,
     destroyed_targets: Vec<String>,
+    /// Page/webview targets can be re-attached with a new CDP session during
+    /// navigation or process swaps. Track the fresh session by target_id.
+    attached_page_sessions: Vec<(String, String)>,
     /// Cross-origin iframe (frame_id, session_id) pairs from Target.attachedToTarget.
     attached_iframe_sessions: Vec<(String, String)>,
+    /// Page/webview session IDs from Target.detachedFromTarget.
+    detached_page_sessions: Vec<String>,
     /// Session IDs from Target.detachedFromTarget.
     detached_iframe_sessions: Vec<String>,
 }
@@ -542,6 +596,23 @@ impl DaemonState {
         }
     }
 
+    async fn try_recover_browser_connection(&mut self) -> Result<bool, String> {
+        let Some(browser) = self.browser.as_mut() else {
+            return Ok(false);
+        };
+
+        if browser.has_process_exited() || browser.is_connection_alive().await {
+            return Ok(false);
+        }
+
+        browser.reconnect_client().await?;
+        self.subscribe_to_browser_events();
+        self.start_fetch_handler();
+        self.start_dialog_handler();
+        self.update_stream_client().await;
+        Ok(true)
+    }
+
     /// Spawn a background task that polls screenshots and pipes them to ffmpeg.
     async fn start_recording_task(
         &mut self,
@@ -573,6 +644,23 @@ impl DaemonState {
     }
 
     async fn apply_drained_events(&mut self, drained: DrainedEvents) {
+        if debug_session_events_enabled() {
+            if let Some(ref mgr) = self.browser {
+                eprintln!(
+                    "[agent-browser][sessions] before active={} pages={:?} attached_page={:?} detached_page={:?} changed_targets={} destroyed_targets={:?}",
+                    mgr.active_session_id().unwrap_or("<none>"),
+                    mgr.pages_list()
+                        .iter()
+                        .map(|p| format!("{} {} {}", p.target_id, p.session_id, p.url))
+                        .collect::<Vec<_>>(),
+                    drained.attached_page_sessions,
+                    drained.detached_page_sessions,
+                    drained.changed_targets.len(),
+                    drained.destroyed_targets
+                );
+            }
+        }
+
         // ACK screencast frames
         if !drained.pending_acks.is_empty() {
             if let Some(ref browser) = self.browser {
@@ -593,6 +681,22 @@ impl DaemonState {
         }
 
         // Track cross-origin iframe sessions
+        for (target_id, page_sid) in &drained.attached_page_sessions {
+            if let Some(ref mut mgr) = self.browser {
+                let should_update =
+                    mgr.page_session_for_target(target_id)
+                        .is_some_and(|current_sid| {
+                            drained
+                                .detached_page_sessions
+                                .iter()
+                                .any(|detached_sid| detached_sid == current_sid)
+                        });
+                if should_update && mgr.update_page_session(target_id, page_sid) {
+                    let _ = mgr.enable_domains_pub(page_sid).await;
+                }
+            }
+        }
+
         for (frame_id, iframe_sid) in &drained.attached_iframe_sessions {
             self.iframe_sessions
                 .insert(frame_id.clone(), iframe_sid.clone());
@@ -654,13 +758,16 @@ impl DaemonState {
                         .await;
                     }
 
-                    mgr.add_page(super::browser::PageInfo {
-                        target_id: te.target_info.target_id.clone(),
-                        session_id: attach.session_id,
-                        url: te.target_info.url.clone(),
-                        title: te.target_info.title.clone(),
-                        target_type: te.target_info.target_type.clone(),
-                    });
+                    mgr.add_page_with_activation(
+                        super::browser::PageInfo {
+                            target_id: te.target_info.target_id.clone(),
+                            session_id: attach.session_id,
+                            url: te.target_info.url.clone(),
+                            title: te.target_info.title.clone(),
+                            target_type: te.target_info.target_type.clone(),
+                        },
+                        false,
+                    );
                 }
             }
         }
@@ -669,6 +776,19 @@ impl DaemonState {
         for te in &drained.changed_targets {
             if let Some(ref mut mgr) = self.browser {
                 mgr.update_page_target_info(&te.target_info);
+            }
+        }
+
+        if debug_session_events_enabled() {
+            if let Some(ref mgr) = self.browser {
+                eprintln!(
+                    "[agent-browser][sessions] after active={} pages={:?}",
+                    mgr.active_session_id().unwrap_or("<none>"),
+                    mgr.pages_list()
+                        .iter()
+                        .map(|p| format!("{} {} {}", p.target_id, p.session_id, p.url))
+                        .collect::<Vec<_>>(),
+                );
             }
         }
     }
@@ -684,7 +804,9 @@ impl DaemonState {
         let mut new_target_ids: HashSet<String> = HashSet::new();
         let mut changed_targets: Vec<TargetInfoChangedEvent> = Vec::new();
         let mut destroyed_targets: Vec<String> = Vec::new();
+        let mut attached_page_sessions: Vec<(String, String)> = Vec::new();
         let mut attached_iframe_sessions: Vec<(String, String)> = Vec::new();
+        let mut detached_page_sessions: Vec<String> = Vec::new();
         let mut detached_iframe_sessions: Vec<String> = Vec::new();
 
         loop {
@@ -762,6 +884,13 @@ impl DaemonState {
                                         attached_iframe_sessions
                                             .push((target_id.to_string(), sid.to_string()));
                                     }
+                                } else if matches!(target_type, "page" | "webview") {
+                                    if let Some(target_id) =
+                                        target_info.get("targetId").and_then(|v| v.as_str())
+                                    {
+                                        attached_page_sessions
+                                            .push((target_id.to_string(), sid.to_string()));
+                                    }
                                 }
                             }
                             continue;
@@ -770,7 +899,14 @@ impl DaemonState {
                             if let Some(sid) =
                                 event.params.get("sessionId").and_then(|v| v.as_str())
                             {
-                                detached_iframe_sessions.push(sid.to_string());
+                                let is_page_session = self.browser.as_ref().is_some_and(|b| {
+                                    b.pages_list().iter().any(|p| p.session_id == sid)
+                                });
+                                if is_page_session {
+                                    detached_page_sessions.push(sid.to_string());
+                                } else {
+                                    detached_iframe_sessions.push(sid.to_string());
+                                }
                             }
                             continue;
                         }
@@ -1117,7 +1253,9 @@ impl DaemonState {
             new_targets,
             changed_targets,
             destroyed_targets,
+            attached_page_sessions,
             attached_iframe_sessions,
+            detached_page_sessions,
             detached_iframe_sessions,
         }
     }
@@ -1226,11 +1364,21 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         // Check if existing connection is stale and needs re-launch.
         // First do a fast, non-blocking check: did the browser process crash/exit?
         // This avoids a 3-second CDP timeout when Chrome is already dead.
-        let needs_launch = if let Some(ref mut mgr) = state.browser {
+        let mut needs_launch = if let Some(ref mut mgr) = state.browser {
             mgr.has_process_exited() || !mgr.is_connection_alive().await
         } else {
             true
         };
+
+        if needs_launch && state.browser.is_some() {
+            if state
+                .try_recover_browser_connection()
+                .await
+                .unwrap_or(false)
+            {
+                needs_launch = false;
+            }
+        }
 
         if needs_launch {
             if state.browser.is_some() {
@@ -2125,15 +2273,40 @@ async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     mgr.navigate(url, wait_until).await
 }
 
-async fn handle_url(state: &DaemonState) -> Result<Value, String> {
+async fn handle_url(state: &mut DaemonState) -> Result<Value, String> {
     if let Some(ref wb) = state.webdriver_backend {
         if state.browser.is_none() {
             let url = wb.get_url().await?;
             return Ok(json!({ "url": url }));
         }
     }
-    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    let url = mgr.get_url().await?;
+    let desired_url = state
+        .browser
+        .as_ref()
+        .and_then(|mgr| mgr.active_page_url().map(|s| s.to_string()));
+    let first_result = {
+        let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+        mgr.get_url().await
+    };
+    let url = match first_result {
+        Ok(url) => url,
+        Err(err) if is_stale_page_session_error(&err) => {
+            let recovered = {
+                let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+                recover_browser_command_channel(mgr, &err).await
+            };
+            if recovered.is_err() {
+                relaunch_and_restore_page(state, desired_url).await?;
+            }
+            state
+                .browser
+                .as_mut()
+                .ok_or("Browser not launched")?
+                .get_url()
+                .await?
+        }
+        Err(err) => return Err(err),
+    };
     Ok(json!({ "url": url }))
 }
 
@@ -2181,19 +2354,44 @@ fn open_url_in_browser(url: &str) {
     }
 }
 
-async fn handle_title(state: &DaemonState) -> Result<Value, String> {
+async fn handle_title(state: &mut DaemonState) -> Result<Value, String> {
     if let Some(ref wb) = state.webdriver_backend {
         if state.browser.is_none() {
             let title = wb.get_title().await?;
             return Ok(json!({ "title": title }));
         }
     }
-    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    let title = mgr.get_title().await?;
+    let desired_url = state
+        .browser
+        .as_ref()
+        .and_then(|mgr| mgr.active_page_url().map(|s| s.to_string()));
+    let first_result = {
+        let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+        mgr.get_title().await
+    };
+    let title = match first_result {
+        Ok(title) => title,
+        Err(err) if is_stale_page_session_error(&err) => {
+            let recovered = {
+                let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+                recover_browser_command_channel(mgr, &err).await
+            };
+            if recovered.is_err() {
+                relaunch_and_restore_page(state, desired_url).await?;
+            }
+            state
+                .browser
+                .as_mut()
+                .ok_or("Browser not launched")?
+                .get_title()
+                .await?
+        }
+        Err(err) => return Err(err),
+    };
     Ok(json!({ "title": title }))
 }
 
-async fn handle_content(state: &DaemonState) -> Result<Value, String> {
+async fn handle_content(state: &mut DaemonState) -> Result<Value, String> {
     if let Some(ref wb) = state.webdriver_backend {
         if state.browser.is_none() {
             let html = wb.get_content().await?;
@@ -2201,9 +2399,40 @@ async fn handle_content(state: &DaemonState) -> Result<Value, String> {
             return Ok(json!({ "html": html, "origin": url }));
         }
     }
-    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    let html = mgr.get_content().await?;
-    let url = mgr.get_url().await.unwrap_or_default();
+    let desired_url = state
+        .browser
+        .as_ref()
+        .and_then(|mgr| mgr.active_page_url().map(|s| s.to_string()));
+    let first_result = {
+        let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+        mgr.get_content().await
+    };
+    let html = match first_result {
+        Ok(html) => html,
+        Err(err) if is_stale_page_session_error(&err) => {
+            let recovered = {
+                let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+                recover_browser_command_channel(mgr, &err).await
+            };
+            if recovered.is_err() {
+                relaunch_and_restore_page(state, desired_url).await?;
+            }
+            state
+                .browser
+                .as_mut()
+                .ok_or("Browser not launched")?
+                .get_content()
+                .await?
+        }
+        Err(err) => return Err(err),
+    };
+    let url = state
+        .browser
+        .as_mut()
+        .ok_or("Browser not launched")?
+        .get_url()
+        .await
+        .unwrap_or_default();
     Ok(json!({ "html": html, "origin": url }))
 }
 
@@ -2433,14 +2662,43 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
         .await?;
     }
 
-    let result = screenshot::take_screenshot(
+    let result = match screenshot::take_screenshot(
         &mgr.client,
         &session_id,
         &state.ref_map,
         &options,
         &state.iframe_sessions,
     )
-    .await?;
+    .await
+    {
+        Ok(result) => result,
+        Err(err)
+            if err.contains("CDP response channel closed")
+                || err.contains("Trying to work with closed connection")
+                || err.contains("Session with given id not found")
+                || err.contains("No session with given id") =>
+        {
+            let desired_url = state
+                .browser
+                .as_ref()
+                .and_then(|mgr| mgr.active_page_url().map(|s| s.to_string()));
+            let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+            if recover_browser_command_channel(mgr, &err).await.is_err() {
+                relaunch_and_restore_page(state, desired_url).await?;
+            }
+            let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+            let fresh_session_id = mgr.active_session_id()?.to_string();
+            screenshot::take_screenshot(
+                &mgr.client,
+                &fresh_session_id,
+                &state.ref_map,
+                &options,
+                &state.iframe_sessions,
+            )
+            .await?
+        }
+        Err(err) => return Err(err),
+    };
 
     let mut response = json!({ "path": result.path });
     if !result.annotations.is_empty() {
@@ -2465,6 +2723,7 @@ async fn handle_click(cmd: &Value, state: &mut DaemonState) -> Result<Value, Str
     }
 
     let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+    let client = mgr.client.clone();
     let session_id = mgr.active_session_id()?.to_string();
 
     let new_tab = cmd.get("newTab").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -2472,7 +2731,7 @@ async fn handle_click(cmd: &Value, state: &mut DaemonState) -> Result<Value, Str
     if new_tab {
         use super::element::resolve_element_object_id;
         let (object_id, effective_session_id) = resolve_element_object_id(
-            &mgr.client,
+            &client,
             &session_id,
             &state.ref_map,
             selector,
@@ -2484,8 +2743,7 @@ async fn handle_click(cmd: &Value, state: &mut DaemonState) -> Result<Value, Str
             "functionDeclaration": "function() { var h = this.getAttribute('href'); if (!h) return null; try { return new URL(h, document.baseURI).toString(); } catch(e) { return null; } }",
             "returnByValue": true
         });
-        let call_result = mgr
-            .client
+        let call_result = client
             .send_command(
                 "Runtime.callFunctionOn",
                 Some(call_params),
@@ -2514,8 +2772,132 @@ async fn handle_click(cmd: &Value, state: &mut DaemonState) -> Result<Value, Str
     let button = cmd.get("button").and_then(|v| v.as_str()).unwrap_or("left");
     let click_count = cmd.get("clickCount").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
 
+    if button == "left" && click_count == 1 {
+        if let Some(ref_id) = super::element::parse_ref(selector) {
+            if let Some(entry) = state.ref_map.get(&ref_id) {
+                if entry.role == "link" {
+                    let nth = entry.nth.unwrap_or(0);
+                    let link_lookup: Value = client
+                        .send_command_typed(
+                            "Runtime.evaluate",
+                            &super::cdp::types::EvaluateParams {
+                                expression: format!(
+                                    r#"(function() {{
+                                        const targetName = {name};
+                                        const targetIndex = {nth};
+                                        const links = Array.from(document.querySelectorAll('a[href]'))
+                                            .filter((el) => {{
+                                                const rect = el.getBoundingClientRect();
+                                                const style = window.getComputedStyle(el);
+                                                if (rect.width <= 0 || rect.height <= 0) return false;
+                                                if (style.display === 'none' || style.visibility === 'hidden' || Number.parseFloat(style.opacity || '1') === 0) return false;
+                                                const label = (el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+                                                return label === targetName;
+                                            }});
+                                        const el = links[targetIndex];
+                                        return el ? el.href : null;
+                                    }})()"#,
+                                    name = serde_json::to_string(&entry.name).unwrap_or_else(|_| "\"\"".to_string()),
+                                    nth = nth,
+                                ),
+                                return_by_value: Some(true),
+                                await_promise: Some(true),
+                            },
+                            Some(&session_id),
+                        )
+                        .await
+                        .ok()
+                        .and_then(|r: super::cdp::types::EvaluateResult| r.result.value)
+                        .unwrap_or(Value::Null);
+
+                    if let Some(href) = link_lookup.as_str() {
+                        if let Some(mgr) = state.browser.as_mut() {
+                            mgr.set_active_page_url(href);
+                        }
+                        let _ = client
+                            .send_command_typed::<_, super::cdp::types::EvaluateResult>(
+                                "Runtime.evaluate",
+                                &super::cdp::types::EvaluateParams {
+                                    expression: format!(
+                                        "window.location.assign({});",
+                                        serde_json::to_string(href)
+                                            .unwrap_or_else(|_| "\"\"".to_string())
+                                    ),
+                                    return_by_value: Some(true),
+                                    await_promise: Some(false),
+                                },
+                                Some(&session_id),
+                            )
+                            .await;
+                        return Ok(json!({
+                            "clicked": selector,
+                            "url": href,
+                            "fallbackNavigation": true
+                        }));
+                    }
+                }
+            }
+        }
+
+        use super::element::resolve_element_object_id;
+        let (object_id, effective_session_id) = resolve_element_object_id(
+            &client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+
+        let call_result = client
+            .send_command(
+                "Runtime.callFunctionOn",
+                Some(json!({
+                    "objectId": object_id,
+                    "functionDeclaration": r#"function() {
+                        const el = this.closest?.('a[href]') || this;
+                        if (!el || !el.href) return null;
+                        const href = String(el.href);
+                        const target = el.getAttribute('target') || '';
+                        if (target && target !== '_self') return null;
+                        if (href.startsWith('javascript:')) return null;
+                        return href;
+                    }"#,
+                    "returnByValue": true
+                })),
+                Some(&effective_session_id),
+            )
+            .await?;
+
+        if let Some(href) = call_result
+            .get("result")
+            .and_then(|r| r.get("value"))
+            .and_then(|v| v.as_str())
+        {
+            interaction::focus(
+                &client,
+                &session_id,
+                &state.ref_map,
+                selector,
+                &state.iframe_sessions,
+            )
+            .await?;
+            let press_client = client.clone();
+            let press_session_id = session_id.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(75)).await;
+                let _ = interaction::press_key(&press_client, &press_session_id, "Enter").await;
+            });
+            return Ok(json!({
+                "clicked": selector,
+                "url": href,
+                "deferredActivation": true
+            }));
+        }
+    }
+
     interaction::click(
-        &mgr.client,
+        &client,
         &session_id,
         &state.ref_map,
         selector,
@@ -3872,137 +4254,145 @@ async fn handle_recording_start(cmd: &Value, state: &mut DaemonState) -> Result<
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty());
 
-    let (client, new_session_id) = {
+    let (client, recording_session_id) = {
         let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
-        let old_session_id = mgr.active_session_id()?.to_string();
-
-        // Capture current URL if no URL specified
-        let nav_url = if let Some(u) = recording_url {
-            u.to_string()
-        } else {
-            mgr.get_url()
-                .await
-                .unwrap_or_else(|_| "about:blank".to_string())
-        };
-
-        // Capture current cookies
-        let cookies_result = mgr
-            .client
-            .send_command_no_params("Network.getAllCookies", Some(&old_session_id))
+        let active_session_id = mgr.active_session_id()?.to_string();
+        let current_url = mgr
+            .get_url()
             .await
-            .ok();
+            .unwrap_or_else(|_| "about:blank".to_string());
 
-        // Create new browser context
-        let ctx_result = mgr
-            .client
-            .send_command_no_params("Target.createBrowserContext", None)
-            .await?;
-        let context_id = ctx_result
-            .get("browserContextId")
-            .and_then(|v| v.as_str())
-            .ok_or("Failed to get browserContextId")?
-            .to_string();
+        // Record the current active page in-place unless an explicit different
+        // URL was requested. Creating a fresh context here breaks the common
+        // "start recording, then interact with the current page" workflow by
+        // switching the active target and invalidating existing refs.
+        if recording_url.is_none_or(|u| u == current_url) {
+            (mgr.client.clone(), active_session_id)
+        } else {
+            let nav_url = recording_url.unwrap_or("about:blank").to_string();
 
-        // Create page in new context
-        let create_result: CreateTargetResult = mgr
-            .client
-            .send_command_typed(
-                "Target.createTarget",
-                &json!({ "url": "about:blank", "browserContextId": context_id }),
-                None,
-            )
-            .await?;
-
-        let attach_result: AttachToTargetResult = mgr
-            .client
-            .send_command_typed(
-                "Target.attachToTarget",
-                &AttachToTargetParams {
-                    target_id: create_result.target_id.clone(),
-                    flatten: true,
-                },
-                None,
-            )
-            .await?;
-
-        let new_session_id = attach_result.session_id.clone();
-        mgr.enable_domains_pub(&new_session_id).await?;
-
-        // Re-apply download behavior to the recording context.
-        // Without this, downloads in the recording context are silently dropped
-        // because Browser.setDownloadBehavior at launch only applies to the default context.
-        if let Some(ref dl_path) = mgr.download_path {
-            let _ = mgr
+            // Capture current cookies
+            let cookies_result = mgr
                 .client
-                .send_command(
-                    "Browser.setDownloadBehavior",
-                    Some(json!({
-                        "behavior": "allow",
-                        "downloadPath": dl_path,
-                        "browserContextId": context_id,
-                        "eventsEnabled": true
-                    })),
+                .send_command_no_params("Network.getAllCookies", Some(&active_session_id))
+                .await
+                .ok();
+
+            // Create new browser context only when the caller explicitly wants
+            // to record a different URL than the active page.
+            let ctx_result = mgr
+                .client
+                .send_command_no_params("Target.createBrowserContext", None)
+                .await?;
+            let context_id = ctx_result
+                .get("browserContextId")
+                .and_then(|v| v.as_str())
+                .ok_or("Failed to get browserContextId")?
+                .to_string();
+
+            // Create page in new context
+            let create_result: CreateTargetResult = mgr
+                .client
+                .send_command_typed(
+                    "Target.createTarget",
+                    &json!({ "url": "about:blank", "browserContextId": context_id }),
                     None,
                 )
-                .await;
-        }
+                .await?;
 
-        // Re-apply HTTPS error ignore to the recording context.
-        // Security.setIgnoreCertificateErrors at launch only applies to the session it was sent on.
-        if mgr.ignore_https_errors {
-            let _ = mgr
+            let attach_result: AttachToTargetResult = mgr
                 .client
-                .send_command(
-                    "Security.setIgnoreCertificateErrors",
-                    Some(json!({ "ignore": true })),
-                    Some(&new_session_id),
+                .send_command_typed(
+                    "Target.attachToTarget",
+                    &AttachToTargetParams {
+                        target_id: create_result.target_id.clone(),
+                        flatten: true,
+                    },
+                    None,
                 )
-                .await;
-        }
+                .await?;
 
-        // Transfer cookies to new context
-        if let Some(ref cr) = cookies_result {
-            if let Some(cookie_arr) = cr.get("cookies").and_then(|v| v.as_array()) {
-                if !cookie_arr.is_empty() {
-                    let _ = mgr
-                        .client
-                        .send_command(
-                            "Network.setCookies",
-                            Some(json!({ "cookies": cookie_arr })),
-                            Some(&new_session_id),
-                        )
-                        .await;
+            let new_session_id = attach_result.session_id.clone();
+            mgr.enable_domains_pub(&new_session_id).await?;
+
+            // Re-apply download behavior to the recording context.
+            // Without this, downloads in the recording context are silently dropped
+            // because Browser.setDownloadBehavior at launch only applies to the default context.
+            if let Some(ref dl_path) = mgr.download_path {
+                let _ = mgr
+                    .client
+                    .send_command(
+                        "Browser.setDownloadBehavior",
+                        Some(json!({
+                            "behavior": "allow",
+                            "downloadPath": dl_path,
+                            "browserContextId": context_id,
+                            "eventsEnabled": true
+                        })),
+                        None,
+                    )
+                    .await;
+            }
+
+            // Transfer cookies to new context
+            if let Some(ref cr) = cookies_result {
+                if let Some(cookie_arr) = cr.get("cookies").and_then(|v| v.as_array()) {
+                    if !cookie_arr.is_empty() {
+                        let _ = mgr
+                            .client
+                            .send_command(
+                                "Network.setCookies",
+                                Some(json!({ "cookies": cookie_arr })),
+                                Some(&new_session_id),
+                            )
+                            .await;
+                    }
                 }
             }
+
+            // Re-apply HTTPS error ignore to the recording context.
+            // Security.setIgnoreCertificateErrors at launch only applies to the session it was sent on.
+            if mgr.ignore_https_errors {
+                let _ = mgr
+                    .client
+                    .send_command(
+                        "Security.setIgnoreCertificateErrors",
+                        Some(json!({ "ignore": true })),
+                        Some(&new_session_id),
+                    )
+                    .await;
+            }
+
+            // Add page and switch to it
+            mgr.add_page(super::browser::PageInfo {
+                target_id: create_result.target_id,
+                session_id: new_session_id.clone(),
+                url: nav_url.clone(),
+                title: String::new(),
+                target_type: "page".to_string(),
+            });
+
+            // Navigate to URL
+            if nav_url != "about:blank" {
+                let _ = mgr
+                    .client
+                    .send_command(
+                        "Page.navigate",
+                        Some(json!({ "url": nav_url })),
+                        Some(&new_session_id),
+                    )
+                    .await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            }
+
+            (mgr.client.clone(), new_session_id)
         }
-
-        // Add page and switch to it
-        mgr.add_page(super::browser::PageInfo {
-            target_id: create_result.target_id,
-            session_id: new_session_id.clone(),
-            url: nav_url.clone(),
-            title: String::new(),
-            target_type: "page".to_string(),
-        });
-
-        // Navigate to URL
-        if nav_url != "about:blank" {
-            let _ = mgr
-                .client
-                .send_command(
-                    "Page.navigate",
-                    Some(json!({ "url": nav_url })),
-                    Some(&new_session_id),
-                )
-                .await;
-            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-        }
-
-        (mgr.client.clone(), new_session_id)
     };
 
     let result = recording::recording_start(&mut state.recording_state, path)?;
-    state.start_recording_task(client, new_session_id).await?;
+    state
+        .start_recording_task(client, recording_session_id)
+        .await?;
 
     if let Some(ref server) = state.stream_server {
         server.set_recording(true, &state.engine).await;
@@ -4494,7 +4884,25 @@ async fn handle_upload(cmd: &Value, state: &DaemonState) -> Result<Value, String
         })
         .unwrap_or_default();
 
-    mgr.upload_files(selector, &files, &state.ref_map, &state.iframe_sessions)
+    let session_id = mgr.active_session_id()?.to_string();
+    let (object_id, effective_session_id) = super::element::resolve_element_object_id(
+        &mgr.client,
+        &session_id,
+        &state.ref_map,
+        selector,
+        &state.iframe_sessions,
+    )
+    .await?;
+
+    mgr.client
+        .send_command(
+            "DOM.setFileInputFiles",
+            Some(json!({
+                "files": files,
+                "objectId": object_id,
+            })),
+            Some(&effective_session_id),
+        )
         .await?;
     Ok(json!({ "uploaded": files.len(), "selector": selector }))
 }
@@ -5812,6 +6220,13 @@ async fn handle_waitfordownload(cmd: &Value, state: &DaemonState) -> Result<Valu
     let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
     let session_id = mgr.active_session_id()?.to_string();
     let timeout_ms = state.timeout_ms(cmd);
+    let expected_path = cmd.get("path").and_then(|v| v.as_str()).map(String::from);
+
+    if let Some(ref path) = expected_path {
+        if std::path::Path::new(path).exists() {
+            return Ok(json!({ "path": path }));
+        }
+    }
 
     let mut rx = mgr.client.subscribe();
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
@@ -5833,16 +6248,19 @@ async fn handle_waitfordownload(cmd: &Value, state: &DaemonState) -> Result<Valu
                 if is_progress
                     && event.params.get("state").and_then(|v| v.as_str()) == Some("completed")
                 {
-                    let path = cmd
-                        .get("path")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("download");
+                    let path = expected_path.as_deref().unwrap_or("download");
                     return Ok(json!({ "path": path }));
                 }
             }
             Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
             Ok(Err(_)) => return Err("Event stream closed".to_string()),
             Err(_) => return Err("Timeout waiting for download".to_string()),
+        }
+
+        if let Some(ref path) = expected_path {
+            if std::path::Path::new(path).exists() {
+                return Ok(json!({ "path": path }));
+            }
         }
     }
 }

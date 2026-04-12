@@ -1,7 +1,7 @@
 ---
 name: dogfood
 description: Systematically explore and test a web application to find bugs, UX issues, and other problems. Use when asked to "dogfood", "QA", "exploratory test", "find issues", "bug hunt", "test this app/site/platform", or review the quality of a web application. Produces a structured report with full reproduction evidence -- step-by-step screenshots, repro videos, and detailed repro steps for every issue -- so findings can be handed directly to the responsible teams.
-allowed-tools: Bash(agent-browser:*), Bash(npx agent-browser:*)
+allowed-tools: Bash(agent-browser:*), Bash(mkdir:*), Bash(cp:*), Bash(sleep:*)
 ---
 
 # Dogfood
@@ -52,7 +52,15 @@ Start a named session:
 ```bash
 agent-browser --session {SESSION} open {TARGET_URL}
 agent-browser --session {SESSION} wait --load networkidle
+agent-browser --session {SESSION} get url
 ```
+
+If `get url` returns `about:blank`, the page looks empty, or `snapshot -i` returns no useful elements on a page that should be interactive, recover immediately:
+
+1. Run `agent-browser --session {SESSION} open {TARGET_URL}` again.
+2. Run `agent-browser --session {SESSION} wait --load networkidle`.
+3. Re-check with `agent-browser --session {SESSION} get url`.
+4. If the session still looks broken, close it and start a fresh session before continuing.
 
 ### 2. Authenticate
 
@@ -84,6 +92,12 @@ agent-browser --session {SESSION} screenshot --annotate {OUTPUT_DIR}/screenshots
 agent-browser --session {SESSION} snapshot -i
 ```
 
+If `snapshot -i` is empty or clearly incomplete, run plain `snapshot` to check whether the page loaded but has no interactive refs:
+
+```bash
+agent-browser --session {SESSION} snapshot
+```
+
 Identify the main navigation elements and map out the sections to visit.
 
 ### 4. Explore
@@ -108,6 +122,15 @@ agent-browser --session {SESSION} console
 ```
 
 Use your judgment on how deep to go. Spend more time on core features and less on peripheral pages. If you find a cluster of issues in one area, investigate deeper.
+
+Before any important click or form action, get a fresh `snapshot -i` and use a ref from that current snapshot. Do not rely on an older ref after navigation, scrolling, modal changes, or failed actions.
+
+If a click or fill fails with a message like `Could not locate element ...`:
+
+1. Run `snapshot -i` again.
+2. Resolve the element from the new snapshot.
+3. Retry once with the fresh ref.
+4. If the retry still fails, check `get url`, `errors`, and `console` before deciding whether you found a product bug or the browser session needs recovery.
 
 ### 5. Document Issues (Repro-First)
 
@@ -154,6 +177,14 @@ agent-browser --session {SESSION} record stop
 
 5. Write numbered repro steps in the report, each referencing its screenshot.
 
+If the browser session drops during repro with `CDP response channel closed` or an unexpected jump to `about:blank`, treat that as session recovery work first, not product evidence:
+
+1. Stop the recording if it is still running.
+2. Close the broken session.
+3. Start a fresh session and reopen the target page.
+4. Recreate the state needed for the repro.
+5. Only resume evidence capture after the browser is stable again.
+
 #### Static / visible-on-load issues (typos, placeholder text, clipped text, misalignment, console errors on load)
 
 These are visible without interaction -- a single annotated screenshot is sufficient. No video, no multi-step repro:
@@ -197,6 +228,8 @@ agent-browser --session {SESSION} close
 - **Use the right snapshot command.**
   - `snapshot -i` — for finding clickable/fillable elements (buttons, inputs, links)
   - `snapshot` (no flag) — for reading page content (text, headings, data lists)
+- **Re-snapshot before critical actions.** Refs are session-state dependent. After navigation, scrolling, modal changes, or a failed action, take a fresh `snapshot -i` and use the new ref.
+- **Recover fast from broken sessions.** If the page becomes `about:blank`, `snapshot -i` is unexpectedly empty, or you see `CDP response channel closed`, verify with `get url`, reopen the target page, and restart the session if needed before continuing.
 - **Be thorough but use judgment.** You are not following a test script -- you are exploring like a real user would. If something feels off, investigate.
 - **Write findings incrementally.** Append each issue to the report as you discover it. If the session is interrupted, findings are preserved. Never batch all issues for the end.
 - **Never delete output files.** Do not `rm` screenshots, videos, or the report mid-session. Do not close the session and restart. Work forward, not backward.

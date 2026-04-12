@@ -95,13 +95,13 @@ impl ActionPolicy {
         }
 
         if let Some(allow) = &self.allow {
-            if !allow.is_empty() && !allow.iter().any(|a| a == action) {
-                let is_default_deny = self
+            if !allow.iter().any(|a| a == action) {
+                let is_default_allow = self
                     .default
                     .as_deref()
-                    .map(|d| d.eq_ignore_ascii_case("deny"))
-                    .unwrap_or(true);
-                if is_default_deny {
+                    .map(|d| d.eq_ignore_ascii_case("allow"))
+                    .unwrap_or(allow.is_empty());
+                if !is_default_allow {
                     return PolicyResult::Deny(format!(
                         "Action '{}' is not in the allow list",
                         action
@@ -201,6 +201,13 @@ mod tests {
         let json = r#"{"default": "deny", "allow": ["click"]}"#;
         let policy: ActionPolicy = serde_json::from_str(json).unwrap();
         assert_eq!(policy.check("click"), PolicyResult::Allow);
+        assert!(matches!(policy.check("navigate"), PolicyResult::Deny(_)));
+    }
+
+    #[test]
+    fn test_policy_default_deny_with_empty_allow_denies_all() {
+        let json = r#"{"default": "deny", "allow": []}"#;
+        let policy: ActionPolicy = serde_json::from_str(json).unwrap();
         assert!(matches!(policy.check("navigate"), PolicyResult::Deny(_)));
     }
 
