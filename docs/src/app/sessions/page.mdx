@@ -54,7 +54,7 @@ If you need a different persistent profile or multiple isolated Chrome instances
 
 ## Chrome profile reuse
 
-The simplest way to reuse your existing login state: pass a Chrome profile name to `--profile`. agent-browser copies the profile to a temp directory (read-only snapshot) and launches Chrome with your existing cookies and sessions.
+The simplest way to reuse your existing Chrome profile naming is to pass a profile name to `--profile`. agent-browser stores that profile in the managed root at `~/.agent-browser/profile` using `--profile-directory`, so cookies and sessions persist across launches.
 
 ```bash
 # List available Chrome profiles
@@ -72,7 +72,7 @@ AGENT_BROWSER_PROFILE=Default agent-browser open https://app.example.com
 
 Use this for ordinary authenticated sites that just need cookies and local storage.
 
-> <strong>Important:</strong> Do not treat <code>--profile &lt;name&gt;</code> as the preferred path for Google, Gmail, or other security-sensitive consumer properties. Because agent-browser launches from a copied temp snapshot of the named Chrome profile, those sites may detect an inconsistent browser state and reject sign-in. For those sites, prefer the default managed profile at <code>~/.agent-browser/profile</code> or <code>--auto-connect</code> to a real running Chrome.
+> <strong>Important:</strong> For Chrome password-manager features and some SSO flows, prefer <code>--auto-connect</code> to a real running browser. For regular session persistence, named profiles now persist in <code>~/.agent-browser/profile</code>.
 
 <table>
   <thead>
@@ -80,10 +80,10 @@ Use this for ordinary authenticated sites that just need cookies and local stora
   </thead>
   <tbody>
     <tr><td>Supported browsers</td><td>Chrome, Chrome Canary, Chromium, Brave</td></tr>
-    <tr><td>What's copied</td><td>Cookies, local storage, extensions state (cache dirs excluded for speed)</td></tr>
-    <tr><td>Original profile</td><td>Never modified (read-only snapshot)</td></tr>
-    <tr><td>Cleanup</td><td>Temp copy deleted when browser closes</td></tr>
-    <tr><td>Windows note</td><td>Close Chrome before using <code>--profile &lt;name&gt;</code> if Chrome is running</td></tr>
+    <tr><td>What is used</td><td>Persistent managed profile under <code>~/.agent-browser/profile</code> with <code>--profile-directory</code></td></tr>
+    <tr><td>Persistence</td><td>State is saved across restarts in the managed profile namespace</td></tr>
+    <tr><td>Chrome password-store</td><td>Not required for cookie/session persistence; use <code>--auto-connect</code> for real-browser keychain flows</td></tr>
+    <tr><td>Windows note</td><td>Using <code>--profile</code> still requires Chrome not holding conflicting named profile locks</td></tr>
   </tbody>
 </table>
 

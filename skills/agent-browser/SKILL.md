@@ -75,7 +75,7 @@ agent-browser open https://gmail.com
 
 Use an explicit `--profile <path>` only when you need a separate persistent profile.
 
-**Option 3: Chrome profile reuse (zero setup from an existing browser)**
+**Option 3: Chrome profile reuse**
 
 ```bash
 # List available Chrome profiles
@@ -85,7 +85,7 @@ agent-browser profiles
 agent-browser --profile Default open https://app.example.com
 ```
 
-Use this only for ordinary authenticated sites. Do not prefer it for Google, Gmail, or other security-sensitive consumer properties, because the named-profile flow launches from a copied temp snapshot and those sites may reject the browser state. For those sites, prefer the default managed profile at `~/.agent-browser/profile` or `--auto-connect` to a real running Chrome.
+This resolves the Chrome profile name and stores state in a managed namespace under `~/.agent-browser/profile`, so sessions persist across browser restarts without ephemeral profile copies.
 
 **Option 4: Persistent profile (for a separate recurring task profile)**
 

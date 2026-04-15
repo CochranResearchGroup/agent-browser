@@ -115,8 +115,8 @@ pub struct LaunchOptions {
     /// area matches the desired viewport from the start.
     pub viewport_size: Option<(u32, u32)>,
     /// When true, omit `--password-store=basic` and `--use-mock-keychain` so
-    /// Chrome uses the real system keychain. Set automatically when launching
-    /// with a copied Chrome profile.
+    /// Chrome uses the real system keychain. Set automatically when launching with
+    /// a managed profile name.
     pub use_real_keychain: bool,
 }
 
@@ -282,26 +282,22 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     };
 
     // Profile name preprocessing: if --profile is a Chrome profile name (not a
-    // path), resolve it to a directory, copy the profile to a temp dir, and
-    // rewrite options so the retry loop uses the copied profile.
+    // path), resolve it to a managed profile directory name and rewrite options
+    // to reuse that profile under ~/.agent-browser/profile. This keeps login
+    // state persistent across runs.
     let mut resolved_options: Option<LaunchOptions> = None;
-    let mut profile_temp_dir: Option<PathBuf> = None;
 
     if let Some(ref profile) = options.profile {
         if is_chrome_profile_name(profile) {
-            let user_data_dir = find_chrome_user_data_dir().ok_or_else(|| {
-                "No Chrome user data directory found. Cannot resolve profile name.\n\
-                 If you meant a directory path, use a full path (e.g., /path/to/profile)."
-                    .to_string()
-            })?;
-            let resolved = resolve_chrome_profile(&user_data_dir, profile)?;
-            let temp_path = copy_chrome_profile(&user_data_dir, &resolved)?;
+            let managed_dir = default_managed_profile_dir()?;
+            let resolved = find_chrome_user_data_dir()
+                .and_then(|user_data_dir| resolve_chrome_profile(&user_data_dir, profile).ok())
+                .unwrap_or_else(|| profile.clone());
 
             let mut opts = options.clone();
-            opts.profile = Some(temp_path.display().to_string());
+            opts.profile = Some(managed_dir.to_string_lossy().to_string());
             opts.use_real_keychain = true;
             opts.args.push(format!("--profile-directory={}", resolved));
-            profile_temp_dir = Some(temp_path);
             resolved_options = Some(opts);
         }
     }
@@ -315,13 +311,7 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
         cleanup_stale_profile_lock(&build_chrome_args(effective_options)?.user_data_dir);
         ensure_profile_not_in_use(&build_chrome_args(effective_options)?.user_data_dir)?;
         match try_launch_chrome(&chrome_path, effective_options) {
-            Ok(mut process) => {
-                // Transfer profile temp dir ownership to ChromeProcess for cleanup on Drop.
-                // The try_launch_chrome temp_user_data_dir is None here because we set profile
-                // to the temp path (treated as a user-supplied path, no second temp dir).
-                if let Some(ref dir) = profile_temp_dir {
-                    process.temp_user_data_dir = Some(dir.clone());
-                }
+            Ok(process) => {
                 return Ok(process);
             }
             Err(e) => {
@@ -339,11 +329,6 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
                 }
             }
         }
-    }
-
-    // All retries failed: clean up profile temp dir if we created one
-    if let Some(ref dir) = profile_temp_dir {
-        let _ = std::fs::remove_dir_all(dir);
     }
 
     Err(last_err)

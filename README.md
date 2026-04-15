@@ -470,13 +470,13 @@ instances at the same time, pass `--profile <path>` explicitly.
 
 ## Chrome Profile Reuse
 
-The fastest way to use your existing login state: pass a Chrome profile name to `--profile`:
+Use a Chrome profile name to create or reuse a managed profile namespace under `~/.agent-browser/profile`:
 
 ```bash
 # List available Chrome profiles
 agent-browser profiles
 
-# Reuse your default Chrome profile's login state
+# Reuse an existing Chrome profile name in a persistent managed namespace
 agent-browser --profile Default open https://app.example.com
 
 # Use a named profile (by display name or directory name)
@@ -486,13 +486,11 @@ agent-browser --profile "Work" open https://app.example.com
 AGENT_BROWSER_PROFILE=Default agent-browser open https://app.example.com
 ```
 
-This copies your Chrome profile to a temp directory (read-only snapshot, no changes to your original profile), so the browser launches with your existing cookies and sessions.
+This resolves to a persistent profile directory under `~/.agent-browser/profile`, so login state and cookies are saved between launches.
 
 Use this for ordinary authenticated sites that just need cookies and local storage.
 
-> **Important:** Do not treat `--profile <name>` as the preferred path for Google, Gmail, or other security-sensitive consumer properties. Because agent-browser launches from a copied temp snapshot of the named Chrome profile, those sites may detect an inconsistent browser state and reject sign-in. For those sites, prefer the default managed profile at `~/.agent-browser/profile` or `--auto-connect` to a real running Chrome.
-
-> **Note:** On Windows, close Chrome before using `--profile <name>` if Chrome is running, as some profile files may be locked.
+> **Important:** If you want Chrome password-manager behavior, prefer `--auto-connect` to a real running browser. For general session persistence, `--profile <name>` and `~/.agent-browser/profile` keep cookies and local storage consistent across restarts.
 
 ## Persistent Profiles
 

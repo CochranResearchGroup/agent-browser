@@ -2871,8 +2871,9 @@ Snapshot Options:
   -s, --selector <sel>       Scope to CSS selector
 
 Authentication:
-  --profile <name|path>      Chrome profile name (e.g., Default) to reuse login state,
-                             or a directory path for a persistent custom profile
+  --profile <name|path>      Chrome profile name (e.g., Default) resolved into the
+                             managed namespace at ~/.agent-browser/profile, or
+                             a directory path for a custom persistent profile
                              (or AGENT_BROWSER_PROFILE env). If omitted, Chrome
                              uses ~/.agent-browser/profile by default
   --session-name <name>      Auto-save/restore cookies and localStorage by name
