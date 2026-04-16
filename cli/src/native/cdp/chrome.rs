@@ -353,6 +353,14 @@ fn try_launch_chrome(chrome_path: &Path, options: &LaunchOptions) -> Result<Chro
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
 
+    // In headed mode on Unix, default DISPLAY to :0.0 when it is unset so WSL
+    // and similar environments can attach to the user's primary X server
+    // without requiring explicit DISPLAY configuration.
+    #[cfg(unix)]
+    if let Some(display) = headed_display_fallback(options) {
+        cmd.env("DISPLAY", display);
+    }
+
     // Place Chrome in its own process group so we can kill the entire tree
     // (main process + GPU/renderer/utility/crashpad helpers) with a single
     // killpg(), preventing orphaned processes (issue #1113).
@@ -1236,6 +1244,15 @@ fn expand_tilde(path: &str) -> String {
     path.to_string()
 }
 
+#[cfg(unix)]
+fn headed_display_fallback(options: &LaunchOptions) -> Option<&'static str> {
+    if !options.headless && std::env::var_os("DISPLAY").is_none() {
+        Some(":0.0")
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1413,6 +1430,48 @@ mod tests {
             .args
             .iter()
             .any(|a| a == "--user-data-dir=/tmp/my-profile"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_headed_display_fallback_when_display_missing() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.remove("DISPLAY");
+
+        let opts = LaunchOptions {
+            headless: false,
+            ..Default::default()
+        };
+
+        assert_eq!(headed_display_fallback(&opts), Some(":0.0"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_headed_display_fallback_not_used_when_display_set() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.set("DISPLAY", ":9");
+
+        let opts = LaunchOptions {
+            headless: false,
+            ..Default::default()
+        };
+
+        assert_eq!(headed_display_fallback(&opts), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_headed_display_fallback_not_used_in_headless_mode() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.remove("DISPLAY");
+
+        let opts = LaunchOptions {
+            headless: true,
+            ..Default::default()
+        };
+
+        assert_eq!(headed_display_fallback(&opts), None);
     }
 
     #[test]
