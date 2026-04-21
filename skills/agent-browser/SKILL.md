@@ -47,6 +47,22 @@ agent-browser batch "open https://example.com" "screenshot"
 
 Run commands separately only when you must read intermediate output before deciding the next step, for example `snapshot -i` to discover refs. Plain shell chaining with `&&` is acceptable for human use, but it is not the preferred skill pattern for agents.
 
+## Real Chrome and Anti-Bot Sites
+
+For sites that aggressively challenge automation, start with:
+
+1. `--headed`
+2. `--profile Default` or another real Chrome profile
+3. `--executable-path /usr/bin/google-chrome-stable` when you specifically want Google Chrome instead of the bundled browser
+
+Example:
+
+```bash
+agent-browser --headed --profile Default --executable-path /usr/bin/google-chrome-stable open https://www.google.com
+```
+
+This is materially more reliable than a fresh headless session for sites like Google, Gmail, and other consumer properties that react to automation signals.
+
 ## Handling Authentication
 
 By default, agent-browser uses a stable runtime profile at `~/.agent-browser/runtime-profiles/default/user-data`. If a user signs in manually once, later runs reuse that state automatically. Use `--runtime-profile <name>` for a named managed profile, or `--profile <path>` for a custom user-data-dir path.
@@ -138,6 +154,12 @@ profile is authenticated and safe for agent browsing.
 If the first read after attachable relaunch fails but `runtime status` already
 shows a live browser, retry the read sequentially before treating the profile
 as broken.
+
+For anti-bot-sensitive sites, prefer a real profile plus a visible window:
+
+```bash
+agent-browser --headed --profile Default --executable-path /usr/bin/google-chrome-stable open https://www.google.com
+```
 
 Use `--runtime-profile <name>` when you need a separate persistent managed profile:
 
@@ -329,6 +351,30 @@ agent-browser chat                                        # Interactive REPL mod
 agent-browser -q chat "summarize this page"               # Quiet (text only, no tool calls)
 agent-browser -v chat "fill in the login form"            # Verbose (show command output)
 agent-browser --model openai/gpt-4o chat "take a screenshot"  # Override model
+```
+
+## Typing Strategy
+
+Rule of thumb:
+
+- Prefer `fill` for ordinary forms.
+- Prefer `focus` + `keyboard type` + `press Enter` for search boxes, chat inputs, and sites where synthetic value injection behaves differently from human typing.
+
+Google example:
+
+```bash
+agent-browser --headed --profile Default --executable-path /usr/bin/google-chrome-stable open https://www.google.com
+agent-browser snapshot -i
+agent-browser focus @e15
+agent-browser keyboard type "Soylei"
+agent-browser press Enter
+```
+
+In live testing, this was more reliable than:
+
+```bash
+agent-browser fill @e15 "Soylei"
+agent-browser press Enter
 ```
 
 ## Streaming

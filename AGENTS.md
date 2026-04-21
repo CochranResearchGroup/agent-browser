@@ -226,6 +226,10 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 
 This repo keeps its durable repo-local policy under `docs/dev/policies/`.
 
+Installed policy bundle:
+- `repo-policy-selector` `v0.1.8`
+- selected profile: `standalone-library`
+
 Treat the files present in that directory as the source of truth for the
 currently adopted repo-local policy. Do not rely on the bullet list below
 alone if the directory contents and this list ever drift.
@@ -246,4 +250,5 @@ Read and follow:
 
 - `AGENTS.md` includes repo-local guidance plus the policy entry section.
 - The durable policy body lives under `docs/dev/policies/`.
+- Record policy adoption and upgrade notes under `docs/dev/notes/`.
 - Keep repo-specific commands, environment details, and operational caveats in this file or adjacent local docs.

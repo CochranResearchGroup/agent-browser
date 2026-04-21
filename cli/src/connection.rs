@@ -12,6 +12,9 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
+const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
+const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
+
 #[derive(Serialize)]
 #[allow(dead_code)]
 pub struct Request {
@@ -122,12 +125,78 @@ fn get_version_path(session: &str) -> PathBuf {
     get_socket_dir().join(format!("{}.version", session))
 }
 
+fn get_auth_token_path(session: &str) -> PathBuf {
+    get_socket_dir().join(format!("{}.token", session))
+}
+
+fn set_private_file_permissions(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+fn set_private_dir_permissions(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+fn ensure_socket_dir_exists() -> Result<PathBuf, String> {
+    let socket_dir = get_socket_dir();
+    if !socket_dir.exists() {
+        fs::create_dir_all(&socket_dir)
+            .map_err(|e| format!("Failed to create socket directory: {}", e))?;
+    }
+    set_private_dir_permissions(&socket_dir)
+        .map_err(|e| format!("Failed to secure socket directory: {}", e))?;
+    Ok(socket_dir)
+}
+
+fn generate_daemon_auth_token() -> Result<String, String> {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes)
+        .map_err(|e| format!("Failed to generate auth token: {}", e))?;
+    Ok(hex::encode(bytes))
+}
+
+fn write_daemon_auth_token(session: &str, token: &str) -> Result<(), String> {
+    let path = get_auth_token_path(session);
+    fs::write(&path, token).map_err(|e| format!("Failed to write daemon auth token: {}", e))?;
+    set_private_file_permissions(&path)
+        .map_err(|e| format!("Failed to secure daemon auth token: {}", e))
+}
+
+fn load_daemon_auth_token(session: &str) -> Result<String, String> {
+    let path = get_auth_token_path(session);
+    fs::read_to_string(&path)
+        .map(|s| s.trim().to_string())
+        .map_err(|e| format!("Failed to read daemon auth token: {}", e))
+}
+
+fn attach_daemon_auth_token(cmd: &Value, session: &str) -> Result<Value, String> {
+    let token = load_daemon_auth_token(session)?;
+    let mut authenticated = cmd.clone();
+    let obj = authenticated
+        .as_object_mut()
+        .ok_or("Command payload must be a JSON object")?;
+    obj.insert(DAEMON_AUTH_FIELD.to_string(), Value::String(token));
+    Ok(authenticated)
+}
+
 /// Clean up stale socket and PID files for a session
 pub fn cleanup_stale_files(session: &str) {
     let pid_path = get_pid_path(session);
     let _ = fs::remove_file(&pid_path);
     let version_path = get_version_path(session);
     let _ = fs::remove_file(&version_path);
+    let token_path = get_auth_token_path(session);
+    let _ = fs::remove_file(&token_path);
     let stream_path = get_socket_dir().join(format!("{}.stream", session));
     let _ = fs::remove_file(&stream_path);
 
@@ -350,51 +419,16 @@ fn daemon_version_matches(session: &str) -> bool {
     }
 }
 
-/// Kill a running daemon by reading its PID file and sending a kill signal.
-fn kill_stale_daemon(session: &str) {
-    // Remove the socket first so no new connections reach the old daemon
-    #[cfg(unix)]
-    {
-        let socket_path = get_socket_path(session);
-        let _ = fs::remove_file(&socket_path);
-    }
+fn daemon_auth_token_available(session: &str) -> bool {
+    load_daemon_auth_token(session)
+        .map(|token| !token.is_empty())
+        .unwrap_or(false)
+}
 
-    let pid_path = get_pid_path(session);
-    if let Ok(pid_str) = fs::read_to_string(&pid_path) {
-        if let Ok(pid) = pid_str.trim().parse::<u32>() {
-            #[cfg(unix)]
-            {
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
-                }
-                // Wait up to 1s for graceful shutdown, then force-kill
-                for _ in 0..10 {
-                    thread::sleep(Duration::from_millis(100));
-                    if unsafe { libc::kill(pid as i32, 0) } != 0 {
-                        break;
-                    }
-                }
-                // Force-kill if still alive
-                if unsafe { libc::kill(pid as i32, 0) } == 0 {
-                    unsafe {
-                        libc::kill(pid as i32, libc::SIGKILL);
-                    }
-                    thread::sleep(Duration::from_millis(100));
-                }
-            }
-            #[cfg(windows)]
-            {
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status();
-                thread::sleep(Duration::from_millis(500));
-            }
-        }
-    }
-
-    // Clean up leftover files regardless
+/// Disconnect a stale daemon from the current session metadata without trusting
+/// the PID file. This avoids killing an unrelated process if the recorded PID
+/// has been reused by the OS.
+fn disconnect_stale_daemon(session: &str) {
     cleanup_stale_files(session);
 }
 
@@ -410,12 +444,12 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         if daemon_ready(session) {
             // Check version: if the running daemon is from a different CLI
             // version (e.g. after an upgrade), kill it and start a fresh one.
-            if !daemon_version_matches(session) {
+            if !daemon_version_matches(session) || !daemon_auth_token_available(session) {
                 eprintln!(
-                    "{} Daemon version mismatch detected, restarting...",
+                    "{} Daemon metadata mismatch detected, restarting...",
                     crate::color::warning_indicator()
                 );
-                kill_stale_daemon(session);
+                disconnect_stale_daemon(session);
                 // Fall through to spawn a new daemon below
             } else {
                 return Ok(DaemonResult {
@@ -429,11 +463,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
     cleanup_stale_files(session);
 
     // Ensure socket directory exists
-    let socket_dir = get_socket_dir();
-    if !socket_dir.exists() {
-        fs::create_dir_all(&socket_dir)
-            .map_err(|e| format!("Failed to create socket directory: {}", e))?;
-    }
+    let socket_dir = ensure_socket_dir_exists()?;
 
     // Pre-flight check: Validate socket path length (Unix limit is 104 bytes including null terminator)
     #[cfg(unix)]
@@ -468,6 +498,8 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
 
     let exe_path = env::current_exe().map_err(|e| e.to_string())?;
     let exe_path = exe_path.canonicalize().unwrap_or(exe_path);
+    let daemon_auth_token = generate_daemon_auth_token()?;
+    write_daemon_auth_token(session, &daemon_auth_token)?;
 
     #[allow(unused_assignments)]
     let mut daemon_child: Option<std::process::Child> = None;
@@ -479,6 +511,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         let mut cmd = Command::new(&exe_path);
         cmd.env("AGENT_BROWSER_DAEMON", "1");
         apply_daemon_env(&mut cmd, session, opts);
+        cmd.env(DAEMON_AUTH_TOKEN_ENV, &daemon_auth_token);
 
         unsafe {
             cmd.pre_exec(|| {
@@ -503,6 +536,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         let mut cmd = Command::new(&exe_path);
         cmd.env("AGENT_BROWSER_DAEMON", "1");
         apply_daemon_env(&mut cmd, session, opts);
+        cmd.env(DAEMON_AUTH_TOKEN_ENV, &daemon_auth_token);
 
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
         const DETACHED_PROCESS: u32 = 0x00000008;
@@ -659,7 +693,8 @@ fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
     stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
     stream.set_write_timeout(Some(Duration::from_secs(5))).ok();
 
-    let mut json_str = serde_json::to_string(cmd).map_err(|e| e.to_string())?;
+    let authenticated_cmd = attach_daemon_auth_token(cmd, session)?;
+    let mut json_str = serde_json::to_string(&authenticated_cmd).map_err(|e| e.to_string())?;
     json_str.push('\n');
 
     stream
@@ -978,5 +1013,43 @@ mod tests {
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_KEYCHAIN_PASSWORD" && v.as_deref() == Some("secret")
         }));
+    }
+
+    #[test]
+    fn test_cleanup_stale_files_removes_auth_token() {
+        let dir = std::env::temp_dir().join("ab-test-cleanup-token");
+        let _ = fs::create_dir_all(&dir);
+        let _guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
+        _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+
+        let token_path = dir.join("test-session.token");
+        let _ = fs::write(&token_path, "secret");
+        assert!(token_path.exists());
+
+        cleanup_stale_files("test-session");
+        assert!(!token_path.exists());
+
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_attach_daemon_auth_token_injects_reserved_field() {
+        let dir = std::env::temp_dir().join("ab-test-auth-token");
+        let _ = fs::create_dir_all(&dir);
+        let _guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
+        _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+
+        let token_path = dir.join("test-session.token");
+        let _ = fs::write(&token_path, "secret-token");
+
+        let cmd = serde_json::json!({ "id": "1", "action": "ping" });
+        let authenticated = attach_daemon_auth_token(&cmd, "test-session").unwrap();
+
+        assert_eq!(authenticated["id"], "1");
+        assert_eq!(authenticated["action"], "ping");
+        assert_eq!(authenticated[DAEMON_AUTH_FIELD], "secret-token");
+
+        let _ = fs::remove_file(&token_path);
+        let _ = fs::remove_dir(&dir);
     }
 }

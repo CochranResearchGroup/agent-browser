@@ -564,20 +564,32 @@ impl BrowserManager {
     }
 
     pub async fn navigate(&mut self, url: &str, wait_until: WaitUntil) -> Result<Value, String> {
-        let session_id = self.active_session_id()?.to_string();
+        let mut session_id = self.active_session_id()?.to_string();
         let mut lifecycle_rx = self.client.subscribe();
 
-        let nav_result: PageNavigateResult = self
+        let nav_params = PageNavigateParams {
+            url: url.to_string(),
+            referrer: None,
+        };
+
+        let nav_result: PageNavigateResult = match self
             .client
-            .send_command_typed(
-                "Page.navigate",
-                &PageNavigateParams {
-                    url: url.to_string(),
-                    referrer: None,
-                },
-                Some(&session_id),
-            )
-            .await?;
+            .send_command_typed("Page.navigate", &nav_params, Some(&session_id))
+            .await
+        {
+            Ok(result) => result,
+            Err(err)
+                if err.contains("CDP response channel closed")
+                    || err.contains("Session with given id not found")
+                    || err.contains("No session with given id") =>
+            {
+                session_id = self.reattach_active_page_session().await?;
+                self.client
+                    .send_command_typed("Page.navigate", &nav_params, Some(&session_id))
+                    .await?
+            }
+            Err(err) => return Err(err),
+        };
 
         if let Some(ref error_text) = nav_result.error_text {
             return Err(format!("Navigation failed: {}", error_text));
@@ -608,6 +620,48 @@ impl BrowserManager {
         }
 
         Ok(json!({ "url": page_url, "title": title }))
+    }
+
+    async fn reattach_active_page_session(&mut self) -> Result<String, String> {
+        let target_id = self.active_target_id()?.to_string();
+        let attach_result: AttachToTargetResult = self
+            .client
+            .send_command_typed(
+                "Target.attachToTarget",
+                &AttachToTargetParams {
+                    target_id: target_id.clone(),
+                    flatten: true,
+                },
+                None,
+            )
+            .await?;
+        self.update_page_session(&target_id, &attach_result.session_id);
+        self.enable_domains(&attach_result.session_id).await?;
+        Ok(attach_result.session_id)
+    }
+
+    pub async fn refresh_active_page_session(&mut self) -> Result<String, String> {
+        self.reattach_active_page_session().await
+    }
+
+    pub async fn reconnect_client(&mut self) -> Result<(), String> {
+        let previous_active_target = self.active_target_id().ok().map(|s| s.to_string());
+        let new_client = Arc::new(CdpClient::connect(&self.ws_url).await?);
+        self.client = new_client;
+        self.pages.clear();
+        self.active_page_index = 0;
+
+        self.discover_and_attach_targets().await?;
+
+        if let Some(target_id) = previous_active_target {
+            if let Some(index) = self.pages.iter().position(|p| p.target_id == target_id) {
+                self.active_page_index = index;
+                let session_id = self.pages[index].session_id.clone();
+                self.enable_domains(&session_id).await?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn wait_for_lifecycle(
@@ -806,6 +860,18 @@ impl BrowserManager {
             .get(self.active_page_index)
             .map(|p| p.target_id.as_str())
             .ok_or_else(|| "No active page".to_string())
+    }
+
+    pub fn active_page_url(&self) -> Option<&str> {
+        self.pages
+            .get(self.active_page_index)
+            .map(|p| p.url.as_str())
+    }
+
+    pub fn set_active_page_url(&mut self, url: &str) {
+        if let Some(page) = self.pages.get_mut(self.active_page_index) {
+            page.url = url.to_string();
+        }
     }
 
     /// Returns true if this manager was connected via CDP (as opposed to local launch).
@@ -1243,13 +1309,34 @@ impl BrowserManager {
     }
 
     pub fn add_page(&mut self, page: PageInfo) {
+        self.add_page_with_activation(page, true);
+    }
+
+    pub fn add_page_with_activation(&mut self, page: PageInfo, make_active: bool) {
         let index = self.pages.len();
         self.pages.push(page);
-        self.active_page_index = index;
+        if make_active {
+            self.active_page_index = index;
+        }
     }
 
     pub fn update_page_target_info(&mut self, target: &TargetInfo) -> bool {
         update_page_target_info_in_pages(&mut self.pages, target)
+    }
+
+    pub fn update_page_session(&mut self, target_id: &str, session_id: &str) -> bool {
+        if let Some(page) = self.pages.iter_mut().find(|p| p.target_id == target_id) {
+            page.session_id = session_id.to_string();
+            return true;
+        }
+        false
+    }
+
+    pub fn page_session_for_target(&self, target_id: &str) -> Option<&str> {
+        self.pages
+            .iter()
+            .find(|p| p.target_id == target_id)
+            .map(|p| p.session_id.as_str())
     }
 
     pub fn remove_page_by_target_id(&mut self, target_id: &str) {

@@ -17,11 +17,43 @@ use super::control_plane::{ControlPlaneHandle, ControlPlaneWorker};
 use super::state;
 use super::stream::StreamServer;
 
+const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
+const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
+
+fn secure_daemon_dir(path: &std::path::Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o700));
+    }
+}
+
+fn secure_daemon_file(path: &std::path::Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+}
+
 pub async fn run_daemon(session: &str) {
     let socket_dir = get_daemon_socket_dir();
     if !socket_dir.exists() {
         let _ = fs::create_dir_all(&socket_dir);
     }
+    secure_daemon_dir(&socket_dir);
+
+    let daemon_auth_token = match env::var(DAEMON_AUTH_TOKEN_ENV) {
+        Ok(token) if !token.is_empty() => Arc::new(token),
+        _ => {
+            let _ = writeln!(
+                std::io::stderr(),
+                "Missing {} for daemon session authentication",
+                DAEMON_AUTH_TOKEN_ENV
+            );
+            process::exit(1);
+        }
+    };
 
     // When debug mode is on, redirect stderr to a log file so daemon
     // output can be inspected (the daemon normally has stderr piped to its
@@ -62,9 +94,11 @@ pub async fn run_daemon(session: &str) {
 
     let pid_path = socket_dir.join(format!("{}.pid", session));
     let _ = fs::write(&pid_path, process::id().to_string());
+    secure_daemon_file(&pid_path);
 
     let version_path = socket_dir.join(format!("{}.version", session));
     let _ = fs::write(&version_path, env!("CARGO_PKG_VERSION"));
+    secure_daemon_file(&version_path);
 
     // On Unix the daemon listens on a Unix domain socket; on Windows it uses
     // TCP, so there is no .sock file — only a .port file written by the server.
@@ -105,6 +139,8 @@ pub async fn run_daemon(session: &str) {
             stream_client = Some(client_slot.clone());
             if let Err(e) = fs::write(&stream_path, stream_server.port().to_string()) {
                 let _ = writeln!(std::io::stderr(), "Failed to write .stream file: {}", e);
+            } else {
+                secure_daemon_file(&stream_path);
             }
             stream_server_instance = Some(Arc::new(stream_server));
         }
@@ -123,6 +159,7 @@ pub async fn run_daemon(session: &str) {
     let result = run_socket_server(
         &socket_path,
         session,
+        daemon_auth_token,
         stream_client,
         stream_server_instance,
         idle_timeout_ms,
@@ -154,6 +191,7 @@ pub async fn run_daemon(session: &str) {
 async fn run_socket_server(
     socket_path: &PathBuf,
     session: &str,
+    daemon_auth_token: Arc<String>,
     stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
     stream_server: Option<Arc<StreamServer>>,
     idle_timeout_ms: Option<u64>,
@@ -162,6 +200,7 @@ async fn run_socket_server(
 
     let listener =
         UnixListener::bind(socket_path).map_err(|e| format!("Failed to bind socket: {}", e))?;
+    secure_daemon_file(socket_path);
 
     let stream_file: Option<PathBuf> = if stream_server.is_some() {
         let dir = socket_path.parent().unwrap_or(std::path::Path::new("."));
@@ -193,8 +232,9 @@ async fn run_socket_server(
                         let reset_tx = reset_tx.clone();
                         let sf = stream_file.clone();
                         let cn = close_notify.clone();
+                        let auth = daemon_auth_token.clone();
                         tokio::spawn(async move {
-                            handle_connection(stream, control_plane, reset_tx, sf, cn).await;
+                            handle_connection(stream, control_plane, reset_tx, sf, cn, auth).await;
                         });
                     }
                     Err(e) => {
@@ -237,6 +277,7 @@ async fn run_socket_server(
 async fn run_socket_server(
     socket_path: &PathBuf,
     session: &str,
+    daemon_auth_token: Arc<String>,
     stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
     stream_server: Option<Arc<StreamServer>>,
     idle_timeout_ms: Option<u64>,
@@ -260,6 +301,7 @@ async fn run_socket_server(
     let socket_dir = socket_path.parent().unwrap_or(std::path::Path::new("."));
     let port_path = socket_dir.join(format!("{}.port", session));
     let _ = fs::write(&port_path, actual_port.to_string());
+    secure_daemon_file(&port_path);
 
     let stream_file: Option<PathBuf> = if stream_server.is_some() {
         Some(socket_dir.join(format!("{}.stream", session)))
@@ -287,8 +329,9 @@ async fn run_socket_server(
                         let reset_tx = reset_tx.clone();
                         let sf = stream_file.clone();
                         let cn = close_notify.clone();
+                        let auth = daemon_auth_token.clone();
                         tokio::spawn(async move {
-                            handle_connection(stream, control_plane, reset_tx, sf, cn).await;
+                            handle_connection(stream, control_plane, reset_tx, sf, cn, auth).await;
                         });
                     }
                     Err(e) => {
@@ -333,6 +376,7 @@ async fn handle_connection<S>(
     idle_reset_tx: Option<Arc<mpsc::Sender<()>>>,
     stream_file_cleanup: Option<PathBuf>,
     close_notify: Arc<Notify>,
+    daemon_auth_token: Arc<String>,
 ) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -354,7 +398,7 @@ async fn handle_connection<S>(
                     break;
                 }
 
-                let cmd: Value = match serde_json::from_str(trimmed) {
+                let mut cmd: Value = match serde_json::from_str(trimmed) {
                     Ok(v) => v,
                     Err(e) => {
                         let err = serde_json::json!({
@@ -367,6 +411,24 @@ async fn handle_connection<S>(
                         continue;
                     }
                 };
+
+                let authenticated = cmd
+                    .get(DAEMON_AUTH_FIELD)
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|token| token == daemon_auth_token.as_str());
+                if !authenticated {
+                    let err = serde_json::json!({
+                        "success": false,
+                        "error": "Unauthorized daemon command",
+                    });
+                    let mut resp = serde_json::to_string(&err).unwrap_or_default();
+                    resp.push('\n');
+                    let _ = writer.write_all(resp.as_bytes()).await;
+                    continue;
+                }
+                if let Some(obj) = cmd.as_object_mut() {
+                    obj.remove(DAEMON_AUTH_FIELD);
+                }
 
                 if let Some(ref tx) = idle_reset_tx {
                     let _ = tx.try_send(());

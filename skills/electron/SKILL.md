@@ -97,10 +97,9 @@ agent-browser tab
 
 # Switch to a specific tab by index
 agent-browser tab 2
-
-# Switch by URL pattern
-agent-browser tab --url "*settings*"
 ```
+
+If you need to switch by content rather than index, run `agent-browser tab` first, inspect the listed titles and URLs, then switch with the matching numeric index.
 
 ## Webview Support
 
