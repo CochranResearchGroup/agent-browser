@@ -163,21 +163,29 @@ pub async fn resolve_element_center(
 
         // Try cached backend_node_id first (fast path)
         if let Some(backend_node_id) = entry.backend_node_id {
-            let result: Result<DomGetBoxModelResult, String> = client
-                .send_command_typed(
-                    "DOM.getBoxModel",
-                    &DomGetBoxModelParams {
-                        backend_node_id: Some(backend_node_id),
-                        node_id: None,
-                        object_id: None,
-                    },
-                    Some(effective_session_id),
-                )
-                .await;
+            let connected =
+                backend_node_is_connected(client, effective_session_id, backend_node_id)
+                    .await
+                    .unwrap_or(true);
+            if !connected {
+                // backend_node_id is detached; re-query the accessibility tree below
+            } else {
+                let result: Result<DomGetBoxModelResult, String> = client
+                    .send_command_typed(
+                        "DOM.getBoxModel",
+                        &DomGetBoxModelParams {
+                            backend_node_id: Some(backend_node_id),
+                            node_id: None,
+                            object_id: None,
+                        },
+                        Some(effective_session_id),
+                    )
+                    .await;
 
-            if let Ok(r) = result {
-                let (x, y) = box_model_center(&r.model);
-                return Ok((x, y, effective_session_id.to_string()));
+                if let Ok(r) = result {
+                    let (x, y) = box_model_center(&r.model);
+                    return Ok((x, y, effective_session_id.to_string()));
+                }
             }
             // backend_node_id is stale; re-query the accessibility tree below
         }
@@ -230,21 +238,29 @@ pub async fn resolve_element_object_id(
 
         // Try cached backend_node_id first (fast path)
         if let Some(backend_node_id) = entry.backend_node_id {
-            let result: Result<DomResolveNodeResult, String> = client
-                .send_command_typed(
-                    "DOM.resolveNode",
-                    &DomResolveNodeParams {
-                        backend_node_id: Some(backend_node_id),
-                        node_id: None,
-                        object_group: Some("agent-browser".to_string()),
-                    },
-                    Some(effective_session_id),
-                )
-                .await;
+            let connected =
+                backend_node_is_connected(client, effective_session_id, backend_node_id)
+                    .await
+                    .unwrap_or(true);
+            if !connected {
+                // backend_node_id is detached; re-query the accessibility tree below
+            } else {
+                let result: Result<DomResolveNodeResult, String> = client
+                    .send_command_typed(
+                        "DOM.resolveNode",
+                        &DomResolveNodeParams {
+                            backend_node_id: Some(backend_node_id),
+                            node_id: None,
+                            object_group: Some("agent-browser".to_string()),
+                        },
+                        Some(effective_session_id),
+                    )
+                    .await;
 
-            if let Ok(r) = result {
-                if let Some(object_id) = r.object.object_id {
-                    return Ok((object_id, effective_session_id.to_string()));
+                if let Ok(r) = result {
+                    if let Some(object_id) = r.object.object_id {
+                        return Ok((object_id, effective_session_id.to_string()));
+                    }
                 }
             }
             // backend_node_id is stale; re-query the accessibility tree below
@@ -394,6 +410,45 @@ pub(super) fn extract_ax_string(value: &Option<AXValue>) -> String {
         },
         None => String::new(),
     }
+}
+
+async fn backend_node_is_connected(
+    client: &CdpClient,
+    session_id: &str,
+    backend_node_id: i64,
+) -> Result<bool, String> {
+    let resolved: DomResolveNodeResult = client
+        .send_command_typed(
+            "DOM.resolveNode",
+            &DomResolveNodeParams {
+                backend_node_id: Some(backend_node_id),
+                node_id: None,
+                object_group: Some("agent-browser-stale-check".to_string()),
+            },
+            Some(session_id),
+        )
+        .await?;
+    let Some(object_id) = resolved.object.object_id else {
+        return Ok(false);
+    };
+
+    let result = client
+        .send_command(
+            "Runtime.callFunctionOn",
+            Some(serde_json::json!({
+                "objectId": object_id,
+                "functionDeclaration": "function() { return !!(this && this.isConnected && this.ownerDocument && this.ownerDocument.contains(this)); }",
+                "returnByValue": true
+            })),
+            Some(session_id),
+        )
+        .await?;
+
+    Ok(result
+        .get("result")
+        .and_then(|r| r.get("value"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false))
 }
 
 /// Build a JS expression that finds a DOM element by CSS selector or XPath.

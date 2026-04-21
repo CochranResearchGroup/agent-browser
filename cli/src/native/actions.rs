@@ -364,6 +364,9 @@ pub struct DaemonState {
     pub engine: String,
     /// Default timeout for wait operations, from AGENT_BROWSER_DEFAULT_TIMEOUT env var.
     pub default_timeout_ms: u64,
+    /// Storage mutations made through agent-browser storage commands, keyed by origin.
+    /// This preserves cross-origin storage for state saves even after navigation.
+    tracked_origin_storage: HashMap<String, state::OriginStorage>,
 }
 
 impl DaemonState {
@@ -420,6 +423,7 @@ impl DaemonState {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(30_000),
+            tracked_origin_storage: HashMap::new(),
         }
     }
 
@@ -2706,6 +2710,11 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     if let Some(ref mgr) = state.browser {
         if let Some(ref session_name) = state.session_name {
             if let Ok(session_id) = mgr.active_session_id() {
+                let tracked_origins = state
+                    .tracked_origin_storage
+                    .values()
+                    .cloned()
+                    .collect::<Vec<_>>();
                 let _ = state::save_state(
                     &mgr.client,
                     session_id,
@@ -2713,6 +2722,7 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
                     Some(session_name.as_str()),
                     &state.session_id,
                     mgr.visited_origins(),
+                    &tracked_origins,
                 )
                 .await;
             }
@@ -3839,7 +3849,7 @@ async fn handle_storage_get(cmd: &Value, state: &DaemonState) -> Result<Value, S
     storage::storage_get(&mgr.client, &session_id, storage_type, key).await
 }
 
-async fn handle_storage_set(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
+async fn handle_storage_set(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
     let session_id = mgr.active_session_id()?.to_string();
     let storage_type = cmd.get("type").and_then(|v| v.as_str()).unwrap_or("local");
@@ -3852,6 +3862,33 @@ async fn handle_storage_set(cmd: &Value, state: &DaemonState) -> Result<Value, S
         .and_then(|v| v.as_str())
         .ok_or("Missing 'value' parameter")?;
     storage::storage_set(&mgr.client, &session_id, storage_type, key, value).await?;
+    let current_url = mgr.get_url().await.unwrap_or_default();
+    if let Ok(parsed) = url::Url::parse(&current_url) {
+        let origin = parsed.origin().ascii_serialization();
+        if origin != "null" {
+            let tracked = state
+                .tracked_origin_storage
+                .entry(origin.clone())
+                .or_insert_with(|| state::OriginStorage {
+                    origin,
+                    local_storage: Vec::new(),
+                    session_storage: Vec::new(),
+                });
+            let entries = if storage_type == "session" {
+                &mut tracked.session_storage
+            } else {
+                &mut tracked.local_storage
+            };
+            if let Some(existing) = entries.iter_mut().find(|entry| entry.name == key) {
+                existing.value = value.to_string();
+            } else {
+                entries.push(state::StorageEntry {
+                    name: key.to_string(),
+                    value: value.to_string(),
+                });
+            }
+        }
+    }
     Ok(json!({ "set": true }))
 }
 
@@ -3920,6 +3957,11 @@ async fn handle_state_save(cmd: &Value, state: &DaemonState) -> Result<Value, St
     let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
     let session_id = mgr.active_session_id()?.to_string();
     let path = cmd.get("path").and_then(|v| v.as_str());
+    let tracked_origins = state
+        .tracked_origin_storage
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
 
     let saved_path = state::save_state(
         &mgr.client,
@@ -3928,6 +3970,7 @@ async fn handle_state_save(cmd: &Value, state: &DaemonState) -> Result<Value, St
         state.session_name.as_deref(),
         &state.session_id,
         mgr.visited_origins(),
+        &tracked_origins,
     )
     .await?;
 

@@ -21,7 +21,7 @@ pub struct StorageState {
     pub origins: Vec<OriginStorage>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OriginStorage {
     pub origin: String,
@@ -30,7 +30,7 @@ pub struct OriginStorage {
     pub session_storage: Vec<StorageEntry>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageEntry {
     pub name: String,
@@ -138,6 +138,75 @@ async fn collect_storage_via_temp_target(
         .await;
 
     result
+}
+
+async fn collect_storage_via_dom_storage(
+    client: &CdpClient,
+    session_id: &str,
+    origins: &[String],
+) -> Result<Vec<OriginStorage>, String> {
+    let _ = client
+        .send_command_no_params("DOMStorage.enable", Some(session_id))
+        .await;
+
+    let mut results = Vec::new();
+    for origin in origins {
+        let local_storage = dom_storage_items(client, session_id, origin, true)
+            .await
+            .unwrap_or_default();
+        let session_storage = dom_storage_items(client, session_id, origin, false)
+            .await
+            .unwrap_or_default();
+
+        if !local_storage.is_empty() || !session_storage.is_empty() {
+            results.push(OriginStorage {
+                origin: origin.clone(),
+                local_storage,
+                session_storage,
+            });
+        }
+    }
+
+    Ok(results)
+}
+
+async fn dom_storage_items(
+    client: &CdpClient,
+    session_id: &str,
+    origin: &str,
+    is_local_storage: bool,
+) -> Result<Vec<StorageEntry>, String> {
+    let result = client
+        .send_command(
+            "DOMStorage.getDOMStorageItems",
+            Some(json!({
+                "storageId": {
+                    "securityOrigin": origin,
+                    "isLocalStorage": is_local_storage
+                }
+            })),
+            Some(session_id),
+        )
+        .await?;
+
+    let entries = result
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let pair = entry.as_array()?;
+            let name = pair.first()?.as_str()?.to_string();
+            let value = pair
+                .get(1)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            Some(StorageEntry { name, value })
+        })
+        .collect();
+
+    Ok(entries)
 }
 
 async fn collect_storage_in_target(
@@ -251,6 +320,7 @@ pub async fn save_state(
     session_name: Option<&str>,
     session_id_str: &str,
     visited_origins: &HashSet<String>,
+    tracked_origins: &[OriginStorage],
 ) -> Result<String, String> {
     let cookies = cookies::get_all_cookies(client, session_id).await?;
 
@@ -297,10 +367,31 @@ pub async fn save_state(
     all_origins.remove(&current_origin);
     if !all_origins.is_empty() {
         let remaining: Vec<String> = all_origins.into_iter().collect();
-        if let Ok(temp_origins) =
-            collect_storage_via_temp_target(client, &remaining, origin_js).await
+        match collect_storage_via_dom_storage(client, session_id, &remaining).await {
+            Ok(dom_origins) if !dom_origins.is_empty() => origins.extend(dom_origins),
+            _ => {
+                if let Ok(temp_origins) =
+                    collect_storage_via_temp_target(client, &remaining, origin_js).await
+                {
+                    origins.extend(temp_origins);
+                }
+            }
+        }
+    }
+
+    for tracked in tracked_origins {
+        if let Some(existing) = origins
+            .iter_mut()
+            .find(|origin| origin.origin == tracked.origin)
         {
-            origins.extend(temp_origins);
+            if !tracked.local_storage.is_empty() {
+                existing.local_storage = tracked.local_storage.clone();
+            }
+            if !tracked.session_storage.is_empty() {
+                existing.session_storage = tracked.session_storage.clone();
+            }
+        } else {
+            origins.push(tracked.clone());
         }
     }
 
