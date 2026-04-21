@@ -15,6 +15,22 @@ agent-browser close           # Close browser (aliases: quit, exit)
 agent-browser connect 9222    # Connect to browser via CDP port
 ```
 
+## Runtime Profiles
+
+```bash
+agent-browser runtime create work --set-default         # Create a named managed runtime profile
+agent-browser runtime list                              # List configured and discovered runtime profiles
+agent-browser runtime status                            # Show status for the selected runtime profile
+agent-browser --runtime-profile work runtime status     # Show status for a named runtime profile
+agent-browser runtime login https://accounts.google.com # Detached manual login on the default runtime profile
+agent-browser runtime login https://example.com --attachable   # DevTools-enabled manual login for ordinary sites
+agent-browser runtime attach work                       # Bind automation to a live runtime-profile browser
+```
+
+For Google, Gmail, and similar SSO flows, sign in first with detached
+`runtime login`, close Chrome, then relaunch the same runtime profile with
+`--attachable`. Run the first post-relaunch reads sequentially.
+
 ## Snapshot (page analysis)
 
 ```bash
@@ -248,6 +264,9 @@ agent-browser state load auth.json    # Restore saved state
 ## Global Options
 
 ```bash
+agent-browser --runtime-profile <name> ... # Managed runtime profile under ~/.agent-browser/runtime-profiles/<name>/user-data
+agent-browser --profile <path> ...         # Custom unmanaged Chrome user-data-dir path
+agent-browser --leave-open ...             # Detach on close instead of shutting down a managed runtime-profile browser
 agent-browser --session <name> ...    # Isolated browser session
 agent-browser --json ...              # JSON output for parsing
 agent-browser --headed ...            # Show browser window (not headless)

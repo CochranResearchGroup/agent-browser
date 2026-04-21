@@ -1,7 +1,13 @@
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
+
+use crate::runtime_profile::{
+    read_devtools_port as read_runtime_devtools_port, resolve_profile, write_runtime_state,
+    RuntimeState,
+};
 
 use super::discovery::discover_cdp_url;
 
@@ -17,6 +23,8 @@ pub struct ChromeProcess {
     child: Child,
     pub ws_url: String,
     temp_user_data_dir: Option<PathBuf>,
+    user_data_dir: PathBuf,
+    runtime_profile: Option<String>,
     /// On Unix, the process group ID used to kill the entire Chrome process tree.
     #[cfg(unix)]
     pgid: Option<i32>,
@@ -41,6 +49,14 @@ impl ChromeProcess {
     /// Returns the OS process ID of the Chrome child process.
     pub fn id(&self) -> u32 {
         self.child.id()
+    }
+
+    pub fn user_data_dir(&self) -> &Path {
+        &self.user_data_dir
+    }
+
+    pub fn runtime_profile(&self) -> Option<&str> {
+        self.runtime_profile.as_deref()
     }
 
     /// Non-blocking check whether Chrome has exited.
@@ -103,6 +119,7 @@ pub struct LaunchOptions {
     pub proxy_username: Option<String>,
     pub proxy_password: Option<String>,
     pub profile: Option<String>,
+    pub runtime_profile: Option<String>,
     pub args: Vec<String>,
     pub allow_file_access: bool,
     pub extensions: Option<Vec<String>>,
@@ -115,9 +132,18 @@ pub struct LaunchOptions {
     /// area matches the desired viewport from the start.
     pub viewport_size: Option<(u32, u32)>,
     /// When true, omit `--password-store=basic` and `--use-mock-keychain` so
-    /// Chrome uses the real system keychain. Set automatically when launching
-    /// with a copied Chrome profile.
+    /// Chrome uses the real system keychain. Set automatically when launching with
+    /// a managed profile name.
     pub use_real_keychain: bool,
+    /// Optional keychain password used to unlock the native credential store
+    /// before launch on supported platforms.
+    pub keychain_password: Option<String>,
+    /// When true, use minimal headed Chrome flags suitable for manual login
+    /// ceremonies before automation attaches to the profile.
+    pub manual_login: bool,
+    /// When true, keep DevTools remote debugging enabled for detached manual
+    /// launches so automation can later attach to the live browser.
+    pub attachable: bool,
 }
 
 impl Default for LaunchOptions {
@@ -130,6 +156,7 @@ impl Default for LaunchOptions {
             proxy_username: None,
             proxy_password: None,
             profile: None,
+            runtime_profile: None,
             args: Vec::new(),
             allow_file_access: false,
             extensions: None,
@@ -140,36 +167,177 @@ impl Default for LaunchOptions {
             download_path: None,
             viewport_size: None,
             use_real_keychain: false,
+            keychain_password: None,
+            manual_login: false,
+            attachable: false,
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn unlock_macos_keychain(password: Option<&str>) -> Result<(), String> {
+    let Some(password) = password else {
+        return Ok(());
+    };
+
+    let output = Command::new("security")
+        .arg("unlock-keychain")
+        .arg("-p")
+        .arg(password)
+        .output()
+        .map_err(|e| format!("Failed to run security unlock-keychain: {}", e))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let message = if stderr.is_empty() {
+        "security unlock-keychain failed".to_string()
+    } else {
+        format!("security unlock-keychain failed: {}", stderr)
+    };
+    Err(message)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn unlock_macos_keychain(_password: Option<&str>) -> Result<(), String> {
+    Ok(())
+}
+
+fn parse_keyring_env_output(stdout: &str) -> HashMap<String, String> {
+    let mut envs = HashMap::new();
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let mut candidate = trimmed;
+        if let Some((prefix, _)) = trimmed.split_once(';') {
+            candidate = prefix.trim();
+        }
+
+        let Some((key, value)) = candidate.split_once('=') else {
+            continue;
+        };
+
+        let key = key.trim();
+        if key.is_empty()
+            || !key
+                .chars()
+                .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+        {
+            continue;
+        }
+
+        let value = value.trim().trim_matches('"').trim_matches('\'');
+        envs.insert(key.to_string(), value.to_string());
+    }
+
+    envs
+}
+
+#[cfg(target_os = "linux")]
+fn unlock_linux_keyring(password: Option<&str>) -> Result<HashMap<String, String>, String> {
+    let Some(password) = password else {
+        return Ok(HashMap::new());
+    };
+
+    let mut child = Command::new("gnome-keyring-daemon")
+        .args(["--unlock", "--components=secrets"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to launch gnome-keyring-daemon: {}", e))?;
+
+    {
+        let Some(mut stdin) = child.stdin.take() else {
+            return Err("Failed to open stdin for gnome-keyring-daemon".to_string());
+        };
+        stdin
+            .write_all(password.as_bytes())
+            .and_then(|_| stdin.write_all(b"\n"))
+            .map_err(|e| format!("Failed to write keyring password: {}", e))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to wait for gnome-keyring-daemon: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Err(format!(
+            "gnome-keyring-daemon --unlock failed{}{}",
+            if stderr.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", stderr)
+            },
+            if stdout.is_empty() {
+                String::new()
+            } else {
+                format!(" (stdout: {})", stdout)
+            }
+        ));
+    }
+
+    Ok(parse_keyring_env_output(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn unlock_linux_keyring(_password: Option<&str>) -> Result<HashMap<String, String>, String> {
+    Ok(HashMap::new())
 }
 
 struct ChromeArgs {
     args: Vec<String>,
     user_data_dir: PathBuf,
     temp_user_data_dir: Option<PathBuf>,
+    runtime_profile: Option<String>,
 }
 
-fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
-    let mut args = vec![
-        "--remote-debugging-port=0".to_string(),
-        "--no-first-run".to_string(),
-        "--no-default-browser-check".to_string(),
-        "--disable-background-networking".to_string(),
-        "--disable-backgrounding-occluded-windows".to_string(),
-        "--disable-blink-features=AutomationControlled".to_string(),
-        "--disable-component-update".to_string(),
-        "--disable-default-apps".to_string(),
-        "--disable-hang-monitor".to_string(),
-        "--disable-popup-blocking".to_string(),
-        "--disable-prompt-on-repost".to_string(),
-        "--disable-sync".to_string(),
-        "--disable-features=Translate".to_string(),
-        "--enable-features=NetworkService,NetworkServiceInProcess".to_string(),
-        "--metrics-recording-only".to_string(),
-    ];
+fn build_chrome_args(
+    options: &LaunchOptions,
+    remote_debugging: bool,
+) -> Result<ChromeArgs, String> {
+    let manual_login_mode = options.manual_login && !options.headless;
+    let mut args = if manual_login_mode {
+        // Google and other security-sensitive login flows reject Chrome
+        // sessions with common automation and mock-keychain fingerprints.
+        vec![
+            "--new-window".to_string(),
+            "--hide-crash-restore-bubble".to_string(),
+        ]
+    } else {
+        vec![
+            "--no-first-run".to_string(),
+            "--no-default-browser-check".to_string(),
+            "--disable-background-networking".to_string(),
+            "--disable-backgrounding-occluded-windows".to_string(),
+            "--disable-blink-features=AutomationControlled".to_string(),
+            "--disable-component-update".to_string(),
+            "--disable-default-apps".to_string(),
+            "--disable-hang-monitor".to_string(),
+            "--disable-popup-blocking".to_string(),
+            "--disable-prompt-on-repost".to_string(),
+            "--disable-sync".to_string(),
+            "--disable-features=Translate".to_string(),
+            "--enable-features=NetworkService,NetworkServiceInProcess".to_string(),
+            "--metrics-recording-only".to_string(),
+        ]
+    };
 
-    if !options.use_real_keychain {
+    if remote_debugging {
+        args.push("--remote-debugging-port=0".to_string());
+    }
+
+    if !options.use_real_keychain && !manual_login_mode {
         args.push("--password-store=basic".to_string());
         args.push("--use-mock-keychain".to_string());
     }
@@ -198,19 +366,30 @@ fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
         args.push(format!("--proxy-bypass-list={}", bypass));
     }
 
-    let (user_data_dir, temp_user_data_dir) = if let Some(ref profile) = options.profile {
-        let expanded = expand_tilde(profile);
-        let dir = PathBuf::from(&expanded);
-        args.push(format!("--user-data-dir={}", expanded));
-        (dir, None)
-    } else {
-        let dir =
-            std::env::temp_dir().join(format!("agent-browser-chrome-{}", uuid::Uuid::new_v4()));
+    let resolved_profile = resolve_profile(
+        options.profile.as_deref(),
+        options.runtime_profile.as_deref(),
+    )?;
+
+    let (user_data_dir, temp_user_data_dir, runtime_profile) = if options.profile.is_some() {
+        let dir = resolved_profile.user_data_dir.clone();
         std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create temp profile dir: {}", e))?;
+            .map_err(|e| format!("Failed to create profile dir {}: {}", dir.display(), e))?;
         set_private_dir_permissions(&dir);
         args.push(format!("--user-data-dir={}", dir.display()));
-        (dir.clone(), Some(dir))
+        (dir, None, resolved_profile.runtime_profile)
+    } else {
+        let dir = resolved_profile.user_data_dir.clone();
+        std::fs::create_dir_all(&dir).map_err(|e| {
+            format!(
+                "Failed to create default profile dir {}: {}",
+                dir.display(),
+                e
+            )
+        })?;
+        set_private_dir_permissions(&dir);
+        args.push(format!("--user-data-dir={}", dir.display()));
+        (dir, None, resolved_profile.runtime_profile)
     };
 
     if options.ignore_https_errors {
@@ -254,6 +433,7 @@ fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
         args,
         user_data_dir,
         temp_user_data_dir,
+        runtime_profile,
     })
 }
 
@@ -274,45 +454,17 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
         })?,
     };
 
-    // Profile name preprocessing: if --profile is a Chrome profile name (not a
-    // path), resolve it to a directory, copy the profile to a temp dir, and
-    // rewrite options so the retry loop uses the copied profile.
-    let mut resolved_options: Option<LaunchOptions> = None;
-    let mut profile_temp_dir: Option<PathBuf> = None;
-
-    if let Some(ref profile) = options.profile {
-        if is_chrome_profile_name(profile) {
-            let user_data_dir = find_chrome_user_data_dir().ok_or_else(|| {
-                "No Chrome user data directory found. Cannot resolve profile name.\n\
-                 If you meant a directory path, use a full path (e.g., /path/to/profile)."
-                    .to_string()
-            })?;
-            let resolved = resolve_chrome_profile(&user_data_dir, profile)?;
-            let temp_path = copy_chrome_profile(&user_data_dir, &resolved)?;
-
-            let mut opts = options.clone();
-            opts.profile = Some(temp_path.display().to_string());
-            opts.use_real_keychain = true;
-            opts.args.push(format!("--profile-directory={}", resolved));
-            profile_temp_dir = Some(temp_path);
-            resolved_options = Some(opts);
-        }
-    }
-
-    let effective_options = resolved_options.as_ref().unwrap_or(options);
-
     let max_attempts = 3;
     let mut last_err = String::new();
 
+    unlock_macos_keychain(options.keychain_password.as_deref())?;
+    let linux_keyring_env = unlock_linux_keyring(options.keychain_password.as_deref())?;
+
     for attempt in 1..=max_attempts {
-        match try_launch_chrome(&chrome_path, effective_options) {
-            Ok(mut process) => {
-                // Transfer profile temp dir ownership to ChromeProcess for cleanup on Drop.
-                // The try_launch_chrome temp_user_data_dir is None here because we set profile
-                // to the temp path (treated as a user-supplied path, no second temp dir).
-                if let Some(ref dir) = profile_temp_dir {
-                    process.temp_user_data_dir = Some(dir.clone());
-                }
+        cleanup_stale_profile_lock(&build_chrome_args(options, true)?.user_data_dir);
+        ensure_profile_not_in_use(&build_chrome_args(options, true)?.user_data_dir)?;
+        match try_launch_chrome(&chrome_path, options, &linux_keyring_env, true) {
+            Ok(process) => {
                 return Ok(process);
             }
             Err(e) => {
@@ -332,20 +484,186 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
         }
     }
 
-    // All retries failed: clean up profile temp dir if we created one
-    if let Some(ref dir) = profile_temp_dir {
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
     Err(last_err)
 }
 
-fn try_launch_chrome(chrome_path: &Path, options: &LaunchOptions) -> Result<ChromeProcess, String> {
+pub struct ManualChromeLaunch {
+    pub pid: u32,
+    pub user_data_dir: PathBuf,
+    pub runtime_profile: Option<String>,
+    pub devtools_port: Option<u16>,
+}
+
+pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLaunch, String> {
+    let chrome_path = match &options.executable_path {
+        Some(p) => PathBuf::from(p),
+        None => find_chrome().ok_or_else(|| {
+            let cache_dir = crate::install::get_browsers_dir();
+            format!(
+                "Chrome not found. Checked:\n  \
+                 - agent-browser cache: {}\n  \
+                 - System Chrome installations\n  \
+                 - Puppeteer browser cache\n  \
+                 - Playwright browser cache\n\
+                 Run `agent-browser install` to download Chrome, or use --executable-path.",
+                cache_dir.display()
+            )
+        })?,
+    };
+
+    unlock_macos_keychain(options.keychain_password.as_deref())?;
+    let linux_keyring_env = unlock_linux_keyring(options.keychain_password.as_deref())?;
+    let ChromeArgs {
+        args,
+        user_data_dir,
+        runtime_profile,
+        ..
+    } = build_chrome_args(options, options.attachable)?;
+
+    cleanup_stale_profile_lock(&user_data_dir);
+    ensure_profile_not_in_use(&user_data_dir)?;
+    // A previous headed session can leave DevToolsActivePort behind even after
+    // Chrome exits cleanly. Remove it before spawn so attachable manual relaunch
+    // waits for the fresh port written by the new browser instance.
+    let _ = std::fs::remove_file(user_data_dir.join("DevToolsActivePort"));
+
+    let mut cmd = Command::new(chrome_path);
+    cmd.args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    for (key, value) in &linux_keyring_env {
+        cmd.env(key, value);
+    }
+
+    #[cfg(unix)]
+    if let Some(display) = headed_display_fallback(options) {
+        cmd.env("DISPLAY", display);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setpgid(0, 0);
+                Ok(())
+            });
+        }
+    }
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to launch manual Chrome at {:?}: {}", &args, e))?;
+    let pid = child.id();
+    let mut child = child;
+
+    let devtools_port = if options.attachable {
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        match wait_for_devtools_active_port(&mut child, &user_data_dir, deadline) {
+            Ok(ws_url) => {
+                ws_debug_port(&ws_url).or_else(|| read_runtime_devtools_port(&user_data_dir))
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "Manual attachable Chrome failed to expose DevTools for {}: {}",
+                    user_data_dir.display(),
+                    e
+                ));
+            }
+        }
+    } else {
+        None
+    };
+    drop(child);
+
+    if let Some(ref runtime_profile_name) = runtime_profile {
+        let _ = write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile_name.clone(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: pid,
+            headed: !options.headless,
+            launch_mode: if options.attachable {
+                "manual-attachable".to_string()
+            } else {
+                "manual".to_string()
+            },
+            devtools_port,
+            ws_url: None,
+        });
+    }
+
+    Ok(ManualChromeLaunch {
+        pid,
+        user_data_dir,
+        runtime_profile,
+        devtools_port,
+    })
+}
+
+fn ensure_profile_not_in_use(user_data_dir: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        if let Some(pid) = singleton_lock_pid(user_data_dir) {
+            if pid != std::process::id() && pid_is_running(pid) {
+                return Err(format!(
+                    "Chrome profile {} is already in use by PID {}. Close the existing browser or use --profile <path> for an isolated profile.",
+                    user_data_dir.display(),
+                    pid
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn cleanup_stale_profile_lock(user_data_dir: &Path) {
+    #[cfg(unix)]
+    {
+        if let Some(pid) = singleton_lock_pid(user_data_dir) {
+            if !pid_is_running(pid) {
+                for name in [
+                    "SingletonLock",
+                    "SingletonSocket",
+                    "SingletonCookie",
+                    "DevToolsActivePort",
+                ] {
+                    let _ = std::fs::remove_file(user_data_dir.join(name));
+                }
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+fn singleton_lock_pid(user_data_dir: &Path) -> Option<u32> {
+    let lock_path = user_data_dir.join("SingletonLock");
+    let target = std::fs::read_link(lock_path).ok()?;
+    let value = target.to_string_lossy();
+    value.rsplit('-').next()?.parse().ok()
+}
+
+#[cfg(unix)]
+fn pid_is_running(pid: u32) -> bool {
+    let rc = unsafe { libc::kill(pid as i32, 0) };
+    rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+fn try_launch_chrome(
+    chrome_path: &Path,
+    options: &LaunchOptions,
+    extra_env: &HashMap<String, String>,
+    remote_debugging: bool,
+) -> Result<ChromeProcess, String> {
     let ChromeArgs {
         args,
         user_data_dir,
         temp_user_data_dir,
-    } = build_chrome_args(options)?;
+        runtime_profile,
+    } = build_chrome_args(options, remote_debugging)?;
 
     // Mitigate stale DevToolsActivePort risk (e.g., previous crash left it behind).
     // Puppeteer does similar cleanup before spawning.
@@ -362,6 +680,17 @@ fn try_launch_chrome(chrome_path: &Path, options: &LaunchOptions) -> Result<Chro
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+    for (key, value) in extra_env {
+        cmd.env(key, value);
+    }
+
+    // In headed mode on Unix, default DISPLAY to :0.0 when it is unset so WSL
+    // and similar environments can attach to the user's primary X server
+    // without requiring explicit DISPLAY configuration.
+    #[cfg(unix)]
+    if let Some(display) = headed_display_fallback(options) {
+        cmd.env("DISPLAY", display);
+    }
 
     // Place Chrome in its own process group so we can kill the entire tree
     // (main process + GPU/renderer/utility/crashpad helpers) with a single
@@ -395,28 +724,32 @@ fn try_launch_chrome(chrome_path: &Path, options: &LaunchOptions) -> Result<Chro
     // Primary path: use DevToolsActivePort written into user-data-dir.
     // This is more reliable on Windows than scraping stderr for "DevTools listening on ...",
     // which can be missing/empty depending on how Chrome is launched.
-    let ws_url = match wait_for_devtools_active_port(&mut child, &user_data_dir, deadline) {
-        Ok(url) => url,
-        Err(primary_err) => {
-            // Fallback: scrape stderr (legacy behavior) for better diagnostics.
-            let stderr = child.stderr.take().ok_or_else(|| {
-                let _ = child.kill();
-                cleanup_temp_dir(&temp_user_data_dir);
-                "Failed to capture Chrome stderr".to_string()
-            })?;
-            let reader = BufReader::new(stderr);
-            match wait_for_ws_url_until(reader, deadline) {
-                Ok(url) => url,
-                Err(fallback_err) => {
+    let ws_url = if remote_debugging {
+        match wait_for_devtools_active_port(&mut child, &user_data_dir, deadline) {
+            Ok(url) => url,
+            Err(primary_err) => {
+                // Fallback: scrape stderr (legacy behavior) for better diagnostics.
+                let stderr = child.stderr.take().ok_or_else(|| {
                     let _ = child.kill();
                     cleanup_temp_dir(&temp_user_data_dir);
-                    return Err(format!(
-                        "{}\n(also tried parsing stderr) {}",
-                        primary_err, fallback_err
-                    ));
+                    "Failed to capture Chrome stderr".to_string()
+                })?;
+                let reader = BufReader::new(stderr);
+                match wait_for_ws_url_until(reader, deadline) {
+                    Ok(url) => url,
+                    Err(fallback_err) => {
+                        let _ = child.kill();
+                        cleanup_temp_dir(&temp_user_data_dir);
+                        return Err(format!(
+                            "{}\n(also tried parsing stderr) {}",
+                            primary_err, fallback_err
+                        ));
+                    }
                 }
             }
         }
+    } else {
+        String::new()
     };
 
     #[cfg(unix)]
@@ -427,13 +760,43 @@ fn try_launch_chrome(chrome_path: &Path, options: &LaunchOptions) -> Result<Chro
         Some(pid)
     };
 
+    if let Some(ref runtime_profile_name) = runtime_profile {
+        let _ = write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile_name.clone(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: child.id(),
+            headed: !options.headless,
+            launch_mode: if remote_debugging {
+                "automation".to_string()
+            } else {
+                "manual".to_string()
+            },
+            devtools_port: if remote_debugging {
+                ws_debug_port(&ws_url).or_else(|| read_runtime_devtools_port(&user_data_dir))
+            } else {
+                None
+            },
+            ws_url: if remote_debugging {
+                Some(ws_url.clone())
+            } else {
+                None
+            },
+        });
+    }
+
     Ok(ChromeProcess {
         child,
         ws_url,
         temp_user_data_dir,
+        user_data_dir,
+        runtime_profile,
         #[cfg(unix)]
         pgid,
     })
+}
+
+fn ws_debug_port(ws_url: &str) -> Option<u16> {
+    url::Url::parse(ws_url).ok()?.port_or_known_default()
 }
 
 fn wait_for_devtools_active_port(
@@ -458,8 +821,14 @@ fn wait_for_devtools_active_port(
         }
 
         if let Some((port, ws_path)) = read_devtools_active_port(user_data_dir) {
-            let ws_url = format!("ws://127.0.0.1:{}{}", port, ws_path);
-            return Ok(ws_url);
+            // Chrome can briefly expose a DevToolsActivePort value before the
+            // socket is actually accepting connections, and on relaunch the
+            // value can change once startup settles. Only return after the
+            // advertised port is reachable.
+            if is_port_reachable(port) {
+                let ws_url = format!("ws://127.0.0.1:{}{}", port, ws_path);
+                return Ok(ws_url);
+            }
         }
 
         std::thread::sleep(poll_interval);
@@ -1212,6 +1581,14 @@ fn expand_tilde(path: &str) -> String {
     path.to_string()
 }
 
+fn headed_display_fallback(options: &LaunchOptions) -> Option<&'static str> {
+    if !options.headless && std::env::var_os("DISPLAY").is_none() {
+        Some(":0.0")
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1221,6 +1598,17 @@ mod tests {
     fn spawn_noop_child() -> Child {
         Command::new("/bin/sh")
             .args(["-c", "exit 0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap()
+    }
+
+    #[cfg(unix)]
+    fn spawn_sleep_child() -> Child {
+        Command::new("/bin/sh")
+            .args(["-c", "sleep 30"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -1330,18 +1718,20 @@ mod tests {
             headless: true,
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(result.args.iter().any(|a| a == "--headless=new"));
         assert!(result
             .args
             .iter()
             .any(|a| a == "--enable-unsafe-swiftshader"));
         assert!(result.args.iter().any(|a| a == "--window-size=1280,720"));
-        // Temp dir created when no profile
-        assert!(result.temp_user_data_dir.is_some());
-        let dir = result.temp_user_data_dir.unwrap();
-        assert!(dir.exists());
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(result.temp_user_data_dir.is_none());
+        let default_dir = resolve_profile(None, None).unwrap().user_data_dir;
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == &format!("--user-data-dir={}", default_dir.display())));
+        assert!(default_dir.exists());
     }
 
     #[test]
@@ -1350,31 +1740,33 @@ mod tests {
             headless: false,
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(!result.args.iter().any(|a| a.contains("--headless")));
         assert!(!result
             .args
             .iter()
             .any(|a| a == "--enable-unsafe-swiftshader"));
         assert!(!result.args.iter().any(|a| a.starts_with("--window-size=")));
-        // Temp dir created when no profile
-        assert!(result.temp_user_data_dir.is_some());
-        let dir = result.temp_user_data_dir.unwrap();
-        assert!(dir.exists());
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(result.temp_user_data_dir.is_none());
+        let default_dir = resolve_profile(None, None).unwrap().user_data_dir;
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == &format!("--user-data-dir={}", default_dir.display())));
+        assert!(default_dir.exists());
     }
 
     #[test]
-    fn test_build_args_temp_user_data_dir_created() {
+    fn test_build_args_default_profile_dir_created() {
         let opts = LaunchOptions::default();
-        let result = build_chrome_args(&opts).unwrap();
-        let dir = result.temp_user_data_dir.as_ref().unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
+        let dir = resolve_profile(None, None).unwrap().user_data_dir;
+        assert!(result.temp_user_data_dir.is_none());
         assert!(dir.exists());
         assert!(result
             .args
             .iter()
-            .any(|a| a.starts_with("--user-data-dir=")));
-        let _ = std::fs::remove_dir_all(dir);
+            .any(|a| a == &format!("--user-data-dir={}", dir.display())));
     }
 
     #[test]
@@ -1383,12 +1775,111 @@ mod tests {
             profile: Some("/tmp/my-profile".to_string()),
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(result.temp_user_data_dir.is_none());
         assert!(result
             .args
             .iter()
             .any(|a| a == "--user-data-dir=/tmp/my-profile"));
+    }
+
+    #[test]
+    fn test_default_managed_profile_dir_under_agent_browser_home() {
+        let dir = resolve_profile(None, None).unwrap().user_data_dir;
+        assert!(
+            dir.ends_with(".agent-browser/profile")
+                || dir.ends_with(".agent-browser/runtime-profiles/default/user-data")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_singleton_lock_pid_parses_pid() {
+        let dir = TempDir::new("singleton-lock");
+        std::fs::create_dir_all(&*dir).unwrap();
+        std::os::unix::fs::symlink(
+            format!("host-{}", std::process::id()),
+            dir.join("SingletonLock"),
+        )
+        .unwrap();
+
+        assert_eq!(singleton_lock_pid(&dir), Some(std::process::id()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_cleanup_stale_profile_lock_removes_stale_files() {
+        let dir = TempDir::new("stale-lock");
+        std::fs::create_dir_all(&*dir).unwrap();
+        std::os::unix::fs::symlink("host-999999", dir.join("SingletonLock")).unwrap();
+        std::os::unix::fs::symlink("cookie", dir.join("SingletonCookie")).unwrap();
+        std::os::unix::fs::symlink("socket", dir.join("SingletonSocket")).unwrap();
+        std::fs::write(
+            dir.join("DevToolsActivePort"),
+            "1234\n/devtools/browser/test",
+        )
+        .unwrap();
+
+        cleanup_stale_profile_lock(&dir);
+
+        assert!(!dir.join("SingletonLock").exists());
+        assert!(!dir.join("SingletonCookie").exists());
+        assert!(!dir.join("SingletonSocket").exists());
+        assert!(!dir.join("DevToolsActivePort").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ensure_profile_not_in_use_rejects_live_lock() {
+        let dir = TempDir::new("live-lock");
+        std::fs::create_dir_all(&*dir).unwrap();
+        let mut child = spawn_sleep_child();
+        std::os::unix::fs::symlink(format!("host-{}", child.id()), dir.join("SingletonLock"))
+            .unwrap();
+
+        let err = ensure_profile_not_in_use(&dir).unwrap_err();
+        assert!(err.contains("already in use"));
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn test_headed_display_fallback_when_display_missing() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.remove("DISPLAY");
+
+        let opts = LaunchOptions {
+            headless: false,
+            ..Default::default()
+        };
+
+        assert_eq!(headed_display_fallback(&opts), Some(":0.0"));
+    }
+
+    #[test]
+    fn test_headed_display_fallback_not_used_when_display_set() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.set("DISPLAY", ":9");
+
+        let opts = LaunchOptions {
+            headless: false,
+            ..Default::default()
+        };
+
+        assert_eq!(headed_display_fallback(&opts), None);
+    }
+
+    #[test]
+    fn test_headed_display_fallback_not_used_in_headless_mode() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.remove("DISPLAY");
+
+        let opts = LaunchOptions {
+            headless: true,
+            ..Default::default()
+        };
+
+        assert_eq!(headed_display_fallback(&opts), None);
     }
 
     #[test]
@@ -1398,7 +1889,7 @@ mod tests {
             args: vec!["--window-size=1920,1080".to_string()],
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(!result.args.iter().any(|a| a == "--window-size=1280,720"));
         assert!(result.args.iter().any(|a| a == "--window-size=1920,1080"));
         if let Some(ref dir) = result.temp_user_data_dir {
@@ -1413,7 +1904,7 @@ mod tests {
             args: vec!["--start-maximized".to_string()],
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(!result.args.iter().any(|a| a == "--window-size=1280,720"));
         assert!(result.args.iter().any(|a| a == "--start-maximized"));
         if let Some(ref dir) = result.temp_user_data_dir {
@@ -1424,7 +1915,7 @@ mod tests {
     #[test]
     fn test_build_args_disables_translate() {
         let opts = LaunchOptions::default();
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(result
             .args
             .iter()
@@ -1441,7 +1932,7 @@ mod tests {
             extensions: Some(vec!["/tmp/my-ext".to_string()]),
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(
             !result.args.iter().any(|a| a.contains("--headless")),
             "headless flag should be omitted when extensions are present"
@@ -1466,7 +1957,7 @@ mod tests {
             extensions: Some(vec!["/tmp/my-ext".to_string()]),
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(
             !result.args.iter().any(|a| a.contains("--headless")),
             "headless flag should not be present in headed mode"
@@ -1486,7 +1977,7 @@ mod tests {
             ignore_https_errors: true,
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(result
             .args
             .iter()
@@ -1499,7 +1990,7 @@ mod tests {
     #[test]
     fn test_build_args_ignore_https_errors_default_no_flag() {
         let opts = LaunchOptions::default();
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(!result
             .args
             .iter()
@@ -1527,6 +2018,8 @@ mod tests {
                 child,
                 ws_url: String::new(),
                 temp_user_data_dir: Some(dir.clone()),
+                user_data_dir: dir.clone(),
+                runtime_profile: None,
                 #[cfg(unix)]
                 pgid: None,
             };
@@ -1790,7 +2283,7 @@ mod tests {
             use_real_keychain: true,
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(
             !result.args.iter().any(|a| a == "--password-store=basic"),
             "should NOT have --password-store=basic when use_real_keychain is true"
@@ -1807,7 +2300,7 @@ mod tests {
     #[test]
     fn test_build_args_use_real_keychain_false_default() {
         let opts = LaunchOptions::default();
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(
             result.args.iter().any(|a| a == "--password-store=basic"),
             "should have --password-store=basic by default"
@@ -1822,12 +2315,59 @@ mod tests {
     }
 
     #[test]
+    fn test_build_args_attachable_headed_uses_minimal_login_flags() {
+        let opts = LaunchOptions {
+            headless: false,
+            manual_login: true,
+            attachable: true,
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts, true).unwrap();
+        assert!(result.args.iter().any(|a| a == "--new-window"));
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == "--hide-crash-restore-bubble"));
+        assert!(result.args.iter().any(|a| a == "--remote-debugging-port=0"));
+        assert!(!result.args.iter().any(|a| a == "--disable-sync"));
+        assert!(!result
+            .args
+            .iter()
+            .any(|a| a == "--disable-background-networking"));
+        assert!(!result.args.iter().any(|a| a == "--password-store=basic"));
+        assert!(!result.args.iter().any(|a| a == "--use-mock-keychain"));
+    }
+
+    #[test]
+    fn test_build_args_detached_manual_login_without_devtools_uses_minimal_flags() {
+        let opts = LaunchOptions {
+            headless: false,
+            manual_login: true,
+            attachable: false,
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts, false).unwrap();
+        assert!(result.args.iter().any(|a| a == "--new-window"));
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == "--hide-crash-restore-bubble"));
+        assert!(!result
+            .args
+            .iter()
+            .any(|a| a.starts_with("--remote-debugging-port")));
+        assert!(!result.args.iter().any(|a| a == "--disable-sync"));
+        assert!(!result.args.iter().any(|a| a == "--password-store=basic"));
+        assert!(!result.args.iter().any(|a| a == "--use-mock-keychain"));
+    }
+
+    #[test]
     fn test_build_args_profile_path_preserves_keychain_flags() {
         let opts = LaunchOptions {
             profile: Some("/tmp/my-profile".to_string()),
             ..Default::default()
         };
-        let result = build_chrome_args(&opts).unwrap();
+        let result = build_chrome_args(&opts, true).unwrap();
         assert!(result
             .args
             .iter()
@@ -1836,5 +2376,37 @@ mod tests {
             result.args.iter().any(|a| a == "--password-store=basic"),
             "profile path should keep keychain flags"
         );
+    }
+
+    #[test]
+    fn test_ws_debug_port_parses_port_from_websocket_url() {
+        assert_eq!(
+            ws_debug_port("ws://127.0.0.1:37515/devtools/browser/abc"),
+            Some(37515)
+        );
+    }
+
+    #[test]
+    fn test_parse_keyring_env_output_filters_noise() {
+        let parsed = parse_keyring_env_output(
+            "GNOME_KEYRING_CONTROL=/run/user/1000/keyring\n\
+             SSH_AUTH_SOCK=/run/user/1000/keyring/ssh\n\
+             discover_other_daemon: 1\n\
+             GPG_AGENT_INFO=/tmp/socket; export GPG_AGENT_INFO;\n",
+        );
+
+        assert_eq!(
+            parsed.get("GNOME_KEYRING_CONTROL").map(String::as_str),
+            Some("/run/user/1000/keyring")
+        );
+        assert_eq!(
+            parsed.get("SSH_AUTH_SOCK").map(String::as_str),
+            Some("/run/user/1000/keyring/ssh")
+        );
+        assert_eq!(
+            parsed.get("GPG_AGENT_INFO").map(String::as_str),
+            Some("/tmp/socket")
+        );
+        assert!(!parsed.contains_key("discover_other_daemon: 1"));
     }
 }

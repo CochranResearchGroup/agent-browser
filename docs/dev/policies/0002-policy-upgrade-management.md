@@ -7,8 +7,9 @@
   - tagged releases
   - upstream commits
   - a pinned selector bundle version
+  - a checked-out local policy repo or workspace path
   - a known GitHub repository and branch or release channel
-- Record what version, tag, or commit of the shared policy library the repo last reviewed or adopted when that information materially affects reproducibility.
+- Record what version, tag, commit, bundle ref, or local policy source the repo last reviewed or adopted when that information materially affects reproducibility.
 - When upstream policy changes appear, decide explicitly whether to:
   - adopt a new module
   - upgrade an already adopted module
@@ -17,10 +18,11 @@
 - Review profile changes separately from module changes; a profile upgrade should not silently force a repo into every newly suggested module.
 - When a local repo has customized policy, prefer merge review over blind overwrite.
 - Retire superseded local policy files explicitly when a shared replacement makes them unnecessary.
+- Scope upgrades against the repo's retained module set first; a broader profile recommendation should not automatically become the new local baseline when fit review says otherwise.
 - When the policy library publishes release notes, changelog entries, or comparable upgrade summaries, use them to scope the upgrade review before patching local policy.
 - If the repo follows upstream commits directly instead of releases, define how often to check and what level of change justifies adoption.
-- Keep policy upgrade decisions durable in repo docs or notes when the rationale would otherwise be lost.
-- One dated policy adoption or upgrade note may serve as the canonical durable artifact for:
+- Keep policy upgrade decisions durable in repo docs, plans, runbooks, or notes when the rationale would otherwise be lost.
+- One dated policy adoption or upgrade artifact may serve as the canonical durable record for:
   - the upgrade decision
   - adoption feedback
   - reusable continuity notes

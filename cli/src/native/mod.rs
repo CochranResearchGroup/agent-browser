@@ -7,6 +7,8 @@ pub mod browser;
 #[allow(dead_code)]
 pub mod cdp;
 #[allow(dead_code)]
+pub mod control_plane;
+#[allow(dead_code)]
 pub mod cookies;
 #[allow(dead_code)]
 pub mod daemon;

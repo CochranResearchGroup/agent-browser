@@ -13,6 +13,8 @@
   - shared feature branch: push whenever collaborators or CI need the current state
   - protected branch: push only through the repo's documented integration path
 - Be explicit about whether end-of-day or end-of-slice pushing is expected for backup and handoff.
+- In multi-track repos, do not let unpublished local `main` become a hidden holding area for architectural work once other maintainers depend on `main` for routine maintenance or operational continuity.
+- Require handoff clarity about branch intent when different work classes coexist, for example whether a branch is maintenance-safe, migration-only, or still experimental.
 ## Adoption Notes
 
 Use this module when repos need a durable answer to "when should I commit?" and "when should I push?" across more than one maintainer or environment.
@@ -27,3 +29,7 @@ Developer-preference guidance:
 - solo maintainers can tolerate lighter push cadence if local recovery is strong, but should still push before machine risk or context switching
 - teams with active CI or review automation should push early enough for those systems to stay relevant
 - repos that value clean shared history may allow messy local checkpoints but require cleanup before integration
+
+Multi-track repo guidance:
+- when conservative maintenance and deeper platform work happen in parallel, maintenance-oriented branches should be pushed soon enough that operators are not forced to reason from stale assumptions
+- architectural branches can tolerate more local iteration, but should be published once their state is coherent enough for another operator to interpret without private chat context

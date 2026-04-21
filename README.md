@@ -379,8 +379,9 @@ agent-browser provides multiple ways to persist login sessions so you don't re-a
 
 | Approach | Best for | Flag / Env |
 |----------|----------|------------|
-| **Chrome profile reuse** | Reuse your existing Chrome login state (cookies, sessions) with zero setup | `--profile <name>` / `AGENT_BROWSER_PROFILE` |
-| **Persistent profile** | Full browser state (cookies, IndexedDB, service workers, cache) across restarts | `--profile <path>` / `AGENT_BROWSER_PROFILE` |
+| **Default runtime profile** | Stable browser state in `~/.agent-browser/runtime-profiles/default/user-data` across runs | Automatic |
+| **Named runtime profile** | Isolated persistent browser state for a specific account or workflow | `--runtime-profile <name>` / `AGENT_BROWSER_RUNTIME_PROFILE` |
+| **Persistent profile** | Full browser state in a custom directory across restarts | `--profile <path>` / `AGENT_BROWSER_PROFILE` |
 | **Session persistence** | Auto-save/restore cookies + localStorage by name | `--session-name <name>` / `AGENT_BROWSER_SESSION_NAME` |
 | **Import from your browser** | Grab auth from a Chrome session you already logged into | `--auto-connect` + `state save` |
 | **State file** | Load a previously saved state JSON on launch | `--state <path>` / `AGENT_BROWSER_STATE` |
@@ -443,27 +444,136 @@ Each session has its own:
 - Navigation history
 - Authentication state
 
-## Chrome Profile Reuse
+## Configured Runtime Profiles
 
-The fastest way to use your existing login state: pass a Chrome profile name to `--profile`:
+The config file can now define managed runtime profiles directly. This is the
+foundational model for agent-browser to become an agent-facing browser tool with
+stable per-profile defaults and service-specific login hints.
 
-```bash
-# List available Chrome profiles
-agent-browser profiles
-
-# Reuse your default Chrome profile's login state
-agent-browser --profile Default open https://gmail.com
-
-# Use a named profile (by display name or directory name)
-agent-browser --profile "Work" open https://app.example.com
-
-# Or via environment variable
-AGENT_BROWSER_PROFILE=Default agent-browser open https://gmail.com
+```json
+{
+  "defaultRuntimeProfile": "work",
+  "runtimeProfiles": {
+    "work": {
+      "userDataDir": "~/.agent-browser/runtime-profiles/work/user-data",
+      "launch": {
+        "headed": true,
+        "leaveOpen": true,
+        "proxy": "http://proxy.internal:8080"
+      },
+      "auth": {
+        "sessionName": "work-session",
+        "manualLoginPreferred": true
+      },
+      "services": {
+        "google": {
+          "manualLoginPreferred": true
+        }
+      },
+      "preferences": {
+        "defaultViewport": "960x640"
+      }
+    }
+  }
+}
 ```
 
-This copies your Chrome profile to a temp directory (read-only snapshot, no changes to your original profile), so the browser launches with your existing cookies and sessions.
+Today, agent-browser applies the selected runtime profile's `userDataDir`,
+launch settings, auth session name, and service login hints. A service with
+`manualLoginPreferred` emits an advisory warning when navigation targets known
+login hosts for that service, so agents can switch to detached `runtime login`.
+Use the attachable manual-login flow only for sites where DevTools during login
+is accepted. Set `launch.leaveOpen` or pass `--leave-open` when you want
+`close` to detach from a managed runtime-profile browser instead of shutting it
+down. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
+`960x640`, when a runtime profile should resize the browser content area after
+launch and before the requested command runs.
 
-> **Note:** On Windows, close Chrome before using `--profile <name>` if Chrome is running, as some profile files may be locked.
+You can register a runtime profile into user config explicitly:
+
+```bash
+agent-browser runtime create work --set-default
+```
+
+## Default runtime profile
+
+If you do not pass `--profile` or `--runtime-profile`, agent-browser launches Chrome with a stable
+user-data-dir at `~/.agent-browser/runtime-profiles/default/user-data`.
+
+For Google and similar SSO flows, the preferred bootstrap is a detached manual login first:
+
+```bash
+# First run: open a detached manual-login browser
+agent-browser runtime login https://accounts.google.com
+
+# Inspect the runtime profile before automation touches it
+agent-browser runtime list
+agent-browser runtime status
+
+# Later runs reuse the same browser state automatically
+agent-browser open https://gmail.com
+```
+
+If you need to bind automation to the same live browser instead of closing it first, opt into an attachable manual browser:
+
+```bash
+agent-browser runtime login https://example.com --attachable
+agent-browser runtime attach
+```
+
+Do not use `--attachable` for the initial sign-in on Google, Gmail, or similar SSO flows. Google can reject sign-in when DevTools is present during the login ceremony. Sign in with detached `runtime login`, close Chrome, then relaunch the same runtime profile with `--attachable` for automation:
+
+```bash
+agent-browser --runtime-profile google-login runtime login https://accounts.google.com
+# Sign in manually, then close Chrome
+agent-browser --runtime-profile google-login runtime login https://myaccount.google.com --attachable
+agent-browser --runtime-profile google-login runtime attach
+agent-browser --runtime-profile google-login get title
+```
+
+This default profile keeps:
+
+- Cookies and localStorage
+- IndexedDB data
+- Service workers
+- Browser cache
+- Signed-in browser sessions
+
+If you need a different persistent profile or multiple isolated Chrome
+instances at the same time, pass `--runtime-profile <name>` or `--profile <path>` explicitly.
+
+## Named runtime profiles
+
+Use a named runtime profile when you want one persistent browser/account lane per workflow:
+
+```bash
+# Create and register a dedicated runtime profile
+agent-browser runtime create work --set-default
+
+# Manual login for a dedicated runtime profile
+agent-browser --runtime-profile work runtime login https://app.example.com/login
+
+# Or keep DevTools available for a later live attach
+agent-browser --runtime-profile work runtime login https://app.example.com/login --attachable
+
+agent-browser runtime attach work
+
+# Leave the managed runtime-profile browser running when you close the session
+agent-browser --runtime-profile work --leave-open open https://app.example.com
+
+# Later automation reuses the same profile
+agent-browser --runtime-profile work open https://app.example.com
+
+# Inspect the live runtime state
+agent-browser runtime list
+agent-browser --runtime-profile work runtime status
+```
+
+This resolves to a persistent profile directory under `~/.agent-browser/runtime-profiles/<name>/user-data`, unless `runtimeProfiles.<name>.userDataDir` overrides it in config. Use `agent-browser runtime list` to inspect the merged view from config plus on-disk managed profiles.
+
+Use this for ordinary authenticated sites, multi-account setups, and headed/manual bootstrap flows.
+
+> **Important:** If you want Chrome password-manager behavior or Google sign-in, prefer `agent-browser runtime login ...` first, close Chrome after sign-in, then reuse that runtime profile for automation.
 
 ## Persistent Profiles
 
@@ -506,6 +616,18 @@ export AGENT_BROWSER_SESSION_NAME=twitter
 agent-browser open twitter.com
 ```
 
+## Inspect Runtime State
+
+Inspect the live browser process or tab-level CDP identifiers:
+
+```bash
+agent-browser get browser-pid
+agent-browser tab list
+agent-browser tab list --verbose
+```
+
+`tab list --verbose` includes each tab's `targetId` and `sessionId`, which are useful when debugging daemon, CDP, or tab-tracking issues.
+
 ### State Encryption
 
 Encrypt saved session data at rest with AES-256-GCM:
@@ -535,6 +657,19 @@ agent-browser includes security features for safe AI agent deployments. All feat
 - **Action Confirmation** -- Require explicit approval for sensitive action categories: `--confirm-actions eval,download`
 - **Output Length Limits** -- Prevent context flooding: `--max-output 50000`
 
+For unattended headed or headless runs that need the real OS credential store, agent-browser can read keychain settings from a dotenv file. Environment variables take precedence, otherwise it loads `AGENT_BROWSER_ENV_FILE`, then `~/.agent-browser/.env` if present.
+
+```bash
+cat > ~/.agent-browser/.env <<'EOF'
+AGENT_BROWSER_USE_REAL_KEYCHAIN=1
+AGENT_BROWSER_KEYCHAIN_PASSWORD='your-login-keychain-password'
+EOF
+
+agent-browser open https://example.com
+```
+
+On macOS, `AGENT_BROWSER_KEYCHAIN_PASSWORD` unlocks the login keychain before Chrome launches. On Linux, agent-browser uses the password to call `gnome-keyring-daemon --unlock --components=secrets` and passes the exported secret-service environment into Chrome. This is aimed at Ubuntu and other GNOME-keyring setups. If you only need real keychain mode without an unlock step, set `AGENT_BROWSER_USE_REAL_KEYCHAIN=1`.
+
 | Variable                            | Description                              |
 | ----------------------------------- | ---------------------------------------- |
 | `AGENT_BROWSER_CONTENT_BOUNDARIES`  | Wrap page output in boundary markers     |
@@ -543,6 +678,9 @@ agent-browser includes security features for safe AI agent deployments. All feat
 | `AGENT_BROWSER_ACTION_POLICY`       | Path to action policy JSON file          |
 | `AGENT_BROWSER_CONFIRM_ACTIONS`     | Action categories requiring confirmation |
 | `AGENT_BROWSER_CONFIRM_INTERACTIVE` | Enable interactive confirmation prompts  |
+| `AGENT_BROWSER_ENV_FILE`            | Optional dotenv file for agent-browser secrets |
+| `AGENT_BROWSER_USE_REAL_KEYCHAIN`   | Use the real OS keychain for Chrome profile launches |
+| `AGENT_BROWSER_KEYCHAIN_PASSWORD`   | Password used to unlock the macOS login keychain or Linux GNOME Keyring |
 
 See [Security documentation](https://agent-browser.dev/security) for details.
 
@@ -597,7 +735,8 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 |--------|-------------|
 | `--session <name>` | Use isolated session (or `AGENT_BROWSER_SESSION` env) |
 | `--session-name <name>` | Auto-save/restore session state (or `AGENT_BROWSER_SESSION_NAME` env) |
-| `--profile <name\|path>` | Chrome profile name or persistent directory path (or `AGENT_BROWSER_PROFILE` env) |
+| `--runtime-profile <name>` | Managed runtime profile name (or `AGENT_BROWSER_RUNTIME_PROFILE` env) |
+| `--profile <path>` | Persistent custom user-data-dir path (or `AGENT_BROWSER_PROFILE` env) |
 | `--state <path>` | Load storage state from JSON file (or `AGENT_BROWSER_STATE` env) |
 | `--headers <json>` | Set HTTP headers scoped to the URL's origin |
 | `--executable-path <path>` | Custom browser executable (or `AGENT_BROWSER_EXECUTABLE_PATH` env) |
@@ -615,7 +754,7 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--screenshot-dir <path>` | Default screenshot output directory (or `AGENT_BROWSER_SCREENSHOT_DIR` env) |
 | `--screenshot-quality <n>` | JPEG quality 0-100 (or `AGENT_BROWSER_SCREENSHOT_QUALITY` env) |
 | `--screenshot-format <fmt>` | Screenshot format: `png`, `jpeg` (or `AGENT_BROWSER_SCREENSHOT_FORMAT` env) |
-| `--headed` | Show browser window (not headless) (or `AGENT_BROWSER_HEADED` env) |
+| `--headed` | Show browser window (not headless). On Unix, agent-browser defaults `DISPLAY` to `:0.0` if `DISPLAY` is unset (or `AGENT_BROWSER_HEADED` env) |
 | `--cdp <port\|url>` | Connect via Chrome DevTools Protocol (port or WebSocket URL) |
 | `--auto-connect` | Auto-discover and connect to running Chrome (or `AGENT_BROWSER_AUTO_CONNECT` env) |
 | `--color-scheme <scheme>` | Color scheme: `dark`, `light`, `no-preference` (or `AGENT_BROWSER_COLOR_SCHEME` env) |
@@ -844,6 +983,8 @@ agent-browser open example.com --headed
 ```
 
 This opens a visible browser window instead of running headless.
+
+On Unix, if `DISPLAY` is unset, agent-browser launches headed Chrome with `DISPLAY=:0.0` by default. This matches common WSL X server setups.
 
 > **Note:** Browser extensions work in both headed and headless mode (Chrome's `--headless=new`).
 

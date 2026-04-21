@@ -334,8 +334,24 @@ agent-browser session list            # List active sessions
 ```bash
 agent-browser profiles               # List available Chrome profiles
 agent-browser profiles --json        # List profiles as JSON
-agent-browser --profile Default open https://gmail.com  # Reuse a profile's login state
+agent-browser runtime create work --set-default          # Register a named runtime profile
+agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile
+agent-browser runtime login https://example.com --attachable # Manual login with DevTools left on for later attach, not for Google sign-in
+agent-browser --runtime-profile work --leave-open open https://app.example.com  # Detach on close and leave the managed runtime browser running
+agent-browser runtime attach work                        # Bind automation to a named runtime profile
+agent-browser runtime list                               # Show configured and discovered runtime profiles
+agent-browser --runtime-profile work runtime status      # Inspect a named runtime profile
 ```
+
+When runtime-profile config marks a service with <code>manualLoginPreferred</code>,
+navigation to known login hosts for that service returns an advisory warning.
+Use that warning as the signal to run <code>runtime login</code>, or
+for ordinary sites, <code>runtime login --attachable</code> followed by
+<code>runtime attach</code>. For Google, Gmail, and similar SSO flows, sign in
+with detached <code>runtime login</code>, close Chrome, then relaunch the same
+profile with <code>--attachable</code> for automation.
+Use <code>--leave-open</code> when you want <code>close</code> to detach from a
+managed runtime-profile browser instead of shutting it down.
 
 ## Dashboard
 
@@ -398,7 +414,8 @@ agent-browser reload                  # Reload page
 --screenshot-dir <path>   # Default screenshot output directory (or AGENT_BROWSER_SCREENSHOT_DIR)
 --screenshot-quality <n>  # JPEG quality 0-100 (or AGENT_BROWSER_SCREENSHOT_QUALITY)
 --screenshot-format <fmt> # Format: png (default), jpeg (or AGENT_BROWSER_SCREENSHOT_FORMAT)
---headed                 # Show browser window (not headless)
+--headed                 # Show browser window (not headless); on Unix,
+                         # falls back to DISPLAY=:0.0 if DISPLAY is unset
 --cdp <port|url>         # Connect via Chrome DevTools Protocol (port or WebSocket URL)
 --auto-connect           # Auto-discover and connect to running Chrome
 --color-scheme <scheme>  # Color scheme: dark, light, no-preference
@@ -415,6 +432,18 @@ agent-browser reload                  # Reload page
 --config <path>          # Use a custom config file
 --debug                  # Debug output
 ```
+
+## Inspect runtime state
+
+Inspect the live browser process or tab-level CDP identifiers:
+
+```bash
+agent-browser get browser-pid
+agent-browser tab list
+agent-browser tab list --verbose
+```
+
+`tab list --verbose` includes each tab's <code>targetId</code> and <code>sessionId</code>.
 
 ## Batch execution
 

@@ -11,6 +11,7 @@ use super::cdp::discovery::discover_cdp_url;
 use super::cdp::lightpanda::{launch_lightpanda, LightpandaLaunchOptions, LightpandaProcess};
 use super::cdp::types::*;
 use super::element::{resolve_element_object_id, RefMap};
+use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // Launch validation
@@ -189,6 +190,27 @@ impl BrowserProcess {
         match self {
             BrowserProcess::Chrome(p) => p.has_exited(),
             BrowserProcess::Lightpanda(_) => false,
+        }
+    }
+
+    pub fn pid(&self) -> Option<u32> {
+        match self {
+            BrowserProcess::Chrome(p) => Some(p.id()),
+            BrowserProcess::Lightpanda(_) => None,
+        }
+    }
+
+    pub fn runtime_profile(&self) -> Option<&str> {
+        match self {
+            BrowserProcess::Chrome(p) => p.runtime_profile(),
+            BrowserProcess::Lightpanda(_) => None,
+        }
+    }
+
+    pub fn user_data_dir(&self) -> Option<&Path> {
+        match self {
+            BrowserProcess::Chrome(p) => Some(p.user_data_dir()),
+            BrowserProcess::Lightpanda(_) => None,
         }
     }
 }
@@ -465,8 +487,12 @@ impl BrowserManager {
                 });
             }
 
-            self.active_page_index = 0;
-            let session_id = self.pages[0].session_id.clone();
+            self.active_page_index = self
+                .pages
+                .iter()
+                .position(|page| page.url != "about:blank" && !page.url.is_empty())
+                .unwrap_or(0);
+            let session_id = self.pages[self.active_page_index].session_id.clone();
             self.enable_domains(&session_id).await?;
         }
 
@@ -763,6 +789,22 @@ impl BrowserManager {
         Ok(())
     }
 
+    /// Disconnect from a launched persistent runtime-profile browser without
+    /// shutting it down. This intentionally relinquishes process ownership so
+    /// the daemon can end while Chrome keeps running for later reuse.
+    pub fn detach_runtime_browser(&mut self) -> Result<(), String> {
+        let process = self
+            .browser_process
+            .take()
+            .ok_or_else(|| "No launched browser is available to detach".to_string())?;
+        if process.runtime_profile().is_none() {
+            self.browser_process = Some(process);
+            return Err("Can only leave open a launched managed runtime profile".to_string());
+        }
+        std::mem::forget(process);
+        Ok(())
+    }
+
     pub fn has_pages(&self) -> bool {
         !self.pages.is_empty()
     }
@@ -896,18 +938,30 @@ impl BrowserManager {
         }
     }
 
-    pub fn tab_list(&self) -> Vec<Value> {
+    pub fn tab_list(&self, verbose: bool) -> Vec<Value> {
         self.pages
             .iter()
             .enumerate()
             .map(|(i, p)| {
-                json!({
-                    "index": i,
-                    "title": p.title,
-                    "url": p.url,
-                    "type": p.target_type,
-                    "active": i == self.active_page_index,
-                })
+                if verbose {
+                    json!({
+                        "index": i,
+                        "title": p.title,
+                        "url": p.url,
+                        "type": p.target_type,
+                        "active": i == self.active_page_index,
+                        "targetId": p.target_id,
+                        "sessionId": p.session_id,
+                    })
+                } else {
+                    json!({
+                        "index": i,
+                        "title": p.title,
+                        "url": p.url,
+                        "type": p.target_type,
+                        "active": i == self.active_page_index,
+                    })
+                }
             })
             .collect()
     }
@@ -1302,6 +1356,25 @@ impl BrowserManager {
 
     pub fn pages_list(&self) -> Vec<PageInfo> {
         self.pages.clone()
+    }
+
+    /// Returns the local browser child PID when agent-browser launched Chrome
+    /// itself. Remote CDP and provider-backed sessions do not expose a
+    /// meaningful local browser PID here.
+    pub fn browser_pid(&self) -> Option<u32> {
+        self.browser_process.as_ref().and_then(|p| p.pid())
+    }
+
+    pub fn runtime_profile_name(&self) -> Option<&str> {
+        self.browser_process
+            .as_ref()
+            .and_then(|p| p.runtime_profile())
+    }
+
+    pub fn browser_user_data_dir(&self) -> Option<&Path> {
+        self.browser_process
+            .as_ref()
+            .and_then(|p| p.user_data_dir())
     }
 
     pub fn visited_origins(&self) -> &HashSet<String> {

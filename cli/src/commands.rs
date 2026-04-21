@@ -129,6 +129,9 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 format!("https://{}", url)
             };
             let mut nav_cmd = json!({ "id": id, "action": "navigate", "url": url });
+            if let Some(service) = manual_login_preferred_service_for_url(&url, flags) {
+                nav_cmd["manualLoginPreferredService"] = json!(service);
+            }
             if flags.provider.is_some() {
                 nav_cmd["waitUntil"] = json!("none");
             }
@@ -1018,7 +1021,11 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }
                 Ok(cmd)
             }
-            Some("list") => Ok(json!({ "id": id, "action": "tab_list" })),
+            Some("list") => Ok(json!({
+                "id": id,
+                "action": "tab_list",
+                "verbose": rest.contains(&"--verbose")
+            })),
             Some("close") => {
                 let mut cmd = json!({ "id": id, "action": "tab_close" });
                 if let Some(index) = rest.get(1).and_then(|s| s.parse::<i32>().ok()) {
@@ -1425,6 +1432,45 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
     }
 }
 
+fn manual_login_preferred_service_for_url(url: &str, flags: &Flags) -> Option<String> {
+    if flags.manual_login_preferred_services.is_empty() {
+        return None;
+    }
+
+    let parsed = url::Url::parse(url).ok()?;
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    let path = parsed.path().to_ascii_lowercase();
+
+    flags
+        .manual_login_preferred_services
+        .iter()
+        .find(|service| service_matches_host(service, &host, &path))
+        .cloned()
+}
+
+fn service_matches_host(service: &str, host: &str, path: &str) -> bool {
+    match service {
+        "google" => {
+            host == "accounts.google.com"
+                || host.ends_with(".accounts.google.com")
+                || ((host == "google.com" || host.ends_with(".google.com"))
+                    && (path.contains("signin") || path.contains("login")))
+        }
+        "github" => {
+            host == "github.com"
+                && (path == "/login" || path.starts_with("/login/") || path.contains("sessions"))
+        }
+        "microsoft" | "office365" | "azure" => {
+            matches!(
+                host,
+                "login.microsoftonline.com" | "login.live.com" | "login.microsoft.com"
+            )
+        }
+        "slack" => host == "slack.com" && path.contains("signin"),
+        other => host == other || host.ends_with(&format!(".{}", other)),
+    }
+}
+
 fn parse_diff(rest: &[&str], id: &str) -> Result<Value, ParseError> {
     const VALID: &[&str] = &["snapshot", "screenshot", "url"];
 
@@ -1700,7 +1746,17 @@ fn parse_diff(rest: &[&str], id: &str) -> Result<Value, ParseError> {
 
 fn parse_get(rest: &[&str], id: &str) -> Result<Value, ParseError> {
     const VALID: &[&str] = &[
-        "text", "html", "value", "attr", "url", "title", "count", "box", "styles", "cdp-url",
+        "text",
+        "html",
+        "value",
+        "attr",
+        "url",
+        "title",
+        "count",
+        "box",
+        "styles",
+        "cdp-url",
+        "browser-pid",
     ];
 
     match rest.first().copied() {
@@ -1738,6 +1794,7 @@ fn parse_get(rest: &[&str], id: &str) -> Result<Value, ParseError> {
         }
         Some("url") => Ok(json!({ "id": id, "action": "url" })),
         Some("cdp-url") => Ok(json!({ "id": id, "action": "cdp_url" })),
+        Some("browser-pid") => Ok(json!({ "id": id, "action": "browser_pid" })),
         Some("title") => Ok(json!({ "id": id, "action": "title" })),
         Some("count") => {
             let sel = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
@@ -1766,7 +1823,7 @@ fn parse_get(rest: &[&str], id: &str) -> Result<Value, ParseError> {
         }),
         None => Err(ParseError::MissingArguments {
             context: "get".to_string(),
-            usage: "get <text|html|value|attr|url|title|count|box|styles|cdp-url> [args...]",
+            usage: "get <text|html|value|attr|url|title|count|box|styles|cdp-url|browser-pid> [args...]",
         }),
     }
 }
@@ -2335,8 +2392,13 @@ mod tests {
     fn default_flags() -> Flags {
         Flags {
             session: "test".to_string(),
+            default_runtime_profile: None,
+            configured_runtime_profiles: std::collections::HashMap::new(),
+            manual_login_preferred_services: Vec::new(),
+            runtime_profile: None,
             json: false,
             headed: false,
+            leave_open: false,
             debug: false,
             headers: None,
             executable_path: None,
@@ -2366,6 +2428,8 @@ mod tests {
             cli_annotate: false,
             cli_download_path: false,
             cli_headed: false,
+            cli_leave_open: false,
+            cli_runtime_profile: false,
             annotate: false,
             color_scheme: None,
             download_path: None,
@@ -2383,6 +2447,7 @@ mod tests {
             default_timeout: None,
             no_auto_dialog: false,
             model: None,
+            default_viewport: None,
             verbose: false,
             quiet: false,
         }
@@ -2657,6 +2722,24 @@ mod tests {
     }
 
     #[test]
+    fn test_navigate_adds_manual_login_preferred_service_hint_for_login_host() {
+        let mut flags = default_flags();
+        flags.manual_login_preferred_services = vec!["google".to_string()];
+        let cmd = parse_command(&args("open https://accounts.google.com/"), &flags).unwrap();
+        assert_eq!(cmd["action"], "navigate");
+        assert_eq!(cmd["manualLoginPreferredService"], "google");
+    }
+
+    #[test]
+    fn test_navigate_does_not_add_manual_login_preferred_hint_for_normal_service_host() {
+        let mut flags = default_flags();
+        flags.manual_login_preferred_services = vec!["google".to_string()];
+        let cmd = parse_command(&args("open https://gmail.com/"), &flags).unwrap();
+        assert_eq!(cmd["action"], "navigate");
+        assert!(cmd.get("manualLoginPreferredService").is_none());
+    }
+
+    #[test]
     fn test_navigate_with_headers() {
         let mut flags = default_flags();
         flags.headers = Some(r#"{"Authorization": "Bearer token"}"#.to_string());
@@ -2841,6 +2924,14 @@ mod tests {
     fn test_tab_list() {
         let cmd = parse_command(&args("tab list"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "tab_list");
+        assert_eq!(cmd["verbose"], false);
+    }
+
+    #[test]
+    fn test_tab_list_verbose() {
+        let cmd = parse_command(&args("tab list --verbose"), &default_flags()).unwrap();
+        assert_eq!(cmd["action"], "tab_list");
+        assert_eq!(cmd["verbose"], true);
     }
 
     #[test]
@@ -3466,6 +3557,12 @@ mod tests {
         let err = result.unwrap_err();
         assert!(matches!(err, ParseError::MissingArguments { .. }));
         assert!(err.format().contains("get text"));
+    }
+
+    #[test]
+    fn test_get_browser_pid() {
+        let cmd = parse_command(&args("get browser-pid"), &default_flags()).unwrap();
+        assert_eq!(cmd["action"], "browser_pid");
     }
 
     // === Protocol alignment tests ===
