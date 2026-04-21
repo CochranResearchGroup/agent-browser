@@ -36,6 +36,8 @@ In the `docs/src/app/` MDX files, always use HTML `<table>` syntax for tables (n
 
 Releases are manual, single-PR affairs. There is no changesets automation. The maintainer controls the changelog voice and format.
 
+Normal project work lands in this project's `origin` repository. Do not open release or feature PRs against the original upstream repository unless a maintainer explicitly asks for an upstream contribution.
+
 To prepare a release:
 
 1. Create a branch (e.g. `prepare-v0.24.0`)
@@ -224,6 +226,10 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 
 This repo keeps its durable repo-local policy under `docs/dev/policies/`.
 
+Treat the files present in that directory as the source of truth for the
+currently adopted repo-local policy. Do not rely on the bullet list below
+alone if the directory contents and this list ever drift.
+
 Read and follow:
 - `docs/dev/policies/0001-policy-management.md`
 - `docs/dev/policies/0002-policy-upgrade-management.md`
@@ -235,7 +241,6 @@ Read and follow:
 - `docs/dev/policies/0008-versioning-and-release.md`
 - `docs/dev/policies/0009-turn-closeout.md`
 - `docs/dev/policies/0010-validation-and-handoff.md`
-- `docs/dev/policies/0011-upstream-fork-maintenance.md`
 
 ## Scope
 
