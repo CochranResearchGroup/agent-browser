@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Read, Write};
-use std::net::{Shutdown, TcpStream};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -242,10 +242,11 @@ pub fn runtime_status_with_user_data_dir(
         .unwrap_or(resolved_runtime_profile_user_data_dir(runtime_profile)?);
     let browser_pid = state.as_ref().map(|s| s.browser_pid);
     let browser_alive = browser_pid.is_some_and(pid_is_running);
-    let devtools_port = state
+    let detected_devtools_port = state
         .as_ref()
         .and_then(|s| s.devtools_port)
         .or_else(|| read_devtools_port(&user_data_dir));
+    let devtools_port = browser_alive.then_some(detected_devtools_port).flatten();
     let targets = if browser_alive {
         devtools_port
             .and_then(|port| fetch_runtime_targets(port).ok())
@@ -381,23 +382,85 @@ fn http_get_json(port: u16, path: &str) -> Result<Value, String> {
         .map_err(|e| format!("Failed to set write timeout: {}", e))?;
 
     let request = format!(
-        "GET {} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
+        "GET {} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nUser-Agent: agent-browser\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
         path, port
     );
     stream
         .write_all(request.as_bytes())
         .map_err(|e| format!("Failed to write HTTP request: {}", e))?;
-    let _ = stream.shutdown(Shutdown::Write);
 
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|e| format!("Failed to read HTTP response: {}", e))?;
-    let body = response
-        .split_once("\r\n\r\n")
-        .map(|(_, body)| body)
+    let mut bytes = Vec::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => bytes.extend_from_slice(&buffer[..n]),
+            Err(e)
+                if !bytes.is_empty()
+                    && matches!(
+                        e.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) =>
+            {
+                break;
+            }
+            Err(e) => return Err(format!("Failed to read HTTP response: {}", e)),
+        }
+    }
+    let header_end = bytes
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
         .ok_or_else(|| "Malformed HTTP response from DevTools".to_string())?;
-    serde_json::from_str(body).map_err(|e| format!("Failed to parse DevTools JSON: {}", e))
+    let header_bytes = &bytes[..header_end];
+    let body_bytes = &bytes[header_end + 4..];
+    let headers = String::from_utf8(header_bytes.to_vec())
+        .map_err(|e| format!("Failed to decode DevTools HTTP headers: {}", e))?;
+    let is_chunked = headers.lines().any(|line| {
+        line.split_once(':').is_some_and(|(name, value)| {
+            name.trim().eq_ignore_ascii_case("Transfer-Encoding")
+                && value
+                    .split(',')
+                    .any(|encoding| encoding.trim().eq_ignore_ascii_case("chunked"))
+        })
+    });
+    let body = if is_chunked {
+        decode_chunked_body(body_bytes)?
+    } else {
+        body_bytes.to_vec()
+    };
+    let body = String::from_utf8(body)
+        .map_err(|e| format!("Failed to decode DevTools JSON body: {}", e))?;
+    serde_json::from_str(&body).map_err(|e| format!("Failed to parse DevTools JSON: {}", e))
+}
+
+fn decode_chunked_body(body: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rest = body;
+    let mut decoded = Vec::new();
+
+    loop {
+        let size_line_end = rest
+            .windows(2)
+            .position(|window| window == b"\r\n")
+            .ok_or_else(|| "Malformed chunked DevTools response".to_string())?;
+        let size_line = std::str::from_utf8(&rest[..size_line_end])
+            .map_err(|e| format!("Invalid chunk header encoding in DevTools response: {}", e))?;
+        let after_size = &rest[size_line_end + 2..];
+        let size_hex = size_line.split(';').next().unwrap_or(size_line).trim();
+        let size = usize::from_str_radix(size_hex, 16)
+            .map_err(|e| format!("Invalid chunk size in DevTools response: {}", e))?;
+        if size == 0 {
+            return Ok(decoded);
+        }
+        if after_size.len() < size + 2 {
+            return Err("Truncated chunked DevTools response".to_string());
+        }
+        decoded.extend_from_slice(&after_size[..size]);
+        rest = &after_size[size..];
+        if !rest.starts_with(b"\r\n") {
+            return Err("Malformed chunk terminator in DevTools response".to_string());
+        }
+        rest = &rest[2..];
+    }
 }
 
 #[cfg(unix)]
@@ -478,6 +541,61 @@ mod tests {
 
         let json = http_get_json(port, "/json/list").unwrap();
         assert_eq!(json[0]["id"], "page-1");
+    }
+
+    #[test]
+    fn test_http_get_json_decodes_chunked_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut _buf = [0u8; 1024];
+                let _ = stream.read(&mut _buf);
+                let chunk = r#"[{"id":"page-2","type":"page","title":"Chunked","url":"https://example.com"}]"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{:x}\r\n{}\r\n0\r\n\r\n",
+                    chunk.len(),
+                    chunk
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+
+        let json = http_get_json(port, "/json/list").unwrap();
+        assert_eq!(json[0]["id"], "page-2");
+    }
+
+    #[test]
+    fn test_http_get_json_decodes_chunked_body_with_split_utf8() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut _buf = [0u8; 1024];
+                let _ = stream.read(&mut _buf);
+                let first = br#"[{"id":"page-3","type":"page","title":"caf"#;
+                let second = &[0xc3, 0xa9];
+                let third = br#"","url":"https://example.com"}]"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{:x}\r\n",
+                    first.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.write_all(first);
+                let _ = stream.write_all(b"\r\n");
+                let response = format!("{:x}\r\n", second.len());
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.write_all(second);
+                let _ = stream.write_all(b"\r\n");
+                let response = format!("{:x}\r\n", third.len());
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.write_all(third);
+                let _ = stream.write_all(b"\r\n0\r\n\r\n");
+            }
+        });
+
+        let json = http_get_json(port, "/json/list").unwrap();
+        assert_eq!(json[0]["title"], "café");
     }
 
     #[test]

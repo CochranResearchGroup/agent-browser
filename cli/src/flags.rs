@@ -56,6 +56,7 @@ fn parse_idle_timeout_value(value: Option<String>, source: &str) -> Option<Strin
 #[serde(default, rename_all = "camelCase")]
 pub struct RuntimeProfileLaunchConfig {
     pub headed: Option<bool>,
+    pub leave_open: Option<bool>,
     pub executable_path: Option<String>,
     pub extensions: Option<Vec<String>>,
     pub profile: Option<String>,
@@ -113,6 +114,7 @@ pub struct Config {
     pub runtime_profiles: Option<HashMap<String, RuntimeProfileConfig>>,
     pub service_defaults: Option<HashMap<String, RuntimeProfileServiceConfig>>,
     pub headed: Option<bool>,
+    pub leave_open: Option<bool>,
     pub json: Option<bool>,
     pub debug: Option<bool>,
     pub session: Option<String>,
@@ -149,6 +151,7 @@ pub struct Config {
     pub idle_timeout: Option<String>,
     pub no_auto_dialog: Option<bool>,
     pub model: Option<String>,
+    pub default_viewport: Option<String>,
 }
 
 impl Config {
@@ -166,6 +169,7 @@ impl Config {
                 other.service_defaults,
             ),
             headed: other.headed.or(self.headed),
+            leave_open: other.leave_open.or(self.leave_open),
             json: other.json.or(self.json),
             debug: other.debug.or(self.debug),
             session: other.session.or(self.session),
@@ -208,6 +212,7 @@ impl Config {
             idle_timeout: other.idle_timeout.or(self.idle_timeout),
             no_auto_dialog: other.no_auto_dialog.or(self.no_auto_dialog),
             model: other.model.or(self.model),
+            default_viewport: other.default_viewport.or(self.default_viewport),
         }
     }
 }
@@ -269,6 +274,7 @@ fn merge_runtime_profile_config(
             (Some(cfg), None) | (None, Some(cfg)) => Some(cfg),
             (Some(base_launch), Some(overlay_launch)) => Some(RuntimeProfileLaunchConfig {
                 headed: overlay_launch.headed.or(base_launch.headed),
+                leave_open: overlay_launch.leave_open.or(base_launch.leave_open),
                 executable_path: overlay_launch
                     .executable_path
                     .or(base_launch.executable_path),
@@ -363,6 +369,7 @@ fn apply_runtime_profile_overrides(config: &mut Config, runtime_profile_name: &s
 
     if let Some(launch) = runtime_profile.launch.as_ref() {
         config.headed = launch.headed.or(config.headed);
+        config.leave_open = launch.leave_open.or(config.leave_open);
         config.executable_path = launch
             .executable_path
             .clone()
@@ -399,6 +406,13 @@ fn apply_runtime_profile_overrides(config: &mut Config, runtime_profile_name: &s
 
     if let Some(auth) = runtime_profile.auth.as_ref() {
         config.session_name = auth.session_name.clone().or(config.session_name.take());
+    }
+
+    if let Some(preferences) = runtime_profile.preferences.as_ref() {
+        config.default_viewport = preferences
+            .default_viewport
+            .clone()
+            .or(config.default_viewport.take());
     }
 
     config.runtime_profile = Some(runtime_profile_name.to_string());
@@ -672,6 +686,7 @@ pub fn load_config(args: &[String]) -> Result<Config, String> {
 pub struct Flags {
     pub json: bool,
     pub headed: bool,
+    pub leave_open: bool,
     pub debug: bool,
     pub session: String,
     pub default_runtime_profile: Option<String>,
@@ -711,6 +726,7 @@ pub struct Flags {
     pub default_timeout: Option<u64>, // AGENT_BROWSER_DEFAULT_TIMEOUT in ms
     pub no_auto_dialog: bool,
     pub model: Option<String>,
+    pub default_viewport: Option<String>,
     pub verbose: bool,
     pub quiet: bool,
 
@@ -728,6 +744,7 @@ pub struct Flags {
     pub cli_annotate: bool,
     pub cli_download_path: bool,
     pub cli_headed: bool,
+    pub cli_leave_open: bool,
     pub cli_runtime_profile: bool,
 }
 
@@ -769,6 +786,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
     let mut flags = Flags {
         json: env_var_is_truthy("AGENT_BROWSER_JSON") || config.json.unwrap_or(false),
         headed: env_var_is_truthy("AGENT_BROWSER_HEADED") || config.headed.unwrap_or(false),
+        leave_open: config.leave_open.unwrap_or(false),
         debug: env_var_is_truthy("AGENT_BROWSER_DEBUG") || config.debug.unwrap_or(false),
         session: env::var("AGENT_BROWSER_SESSION")
             .ok()
@@ -870,6 +888,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         no_auto_dialog: env_var_is_truthy("AGENT_BROWSER_NO_AUTO_DIALOG")
             || config.no_auto_dialog.unwrap_or(false),
         model: env::var("AI_GATEWAY_MODEL").ok().or(config.model),
+        default_viewport: config.default_viewport,
         verbose: false,
         quiet: false,
         cli_executable_path: false,
@@ -884,6 +903,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         cli_annotate: false,
         cli_download_path: false,
         cli_headed: false,
+        cli_leave_open: false,
         cli_runtime_profile: false,
     };
 
@@ -901,6 +921,14 @@ pub fn parse_flags(args: &[String]) -> Flags {
                 let (val, consumed) = parse_bool_arg(args, i);
                 flags.headed = val;
                 flags.cli_headed = true;
+                if consumed {
+                    i += 1;
+                }
+            }
+            "--leave-open" => {
+                let (val, consumed) = parse_bool_arg(args, i);
+                flags.leave_open = val;
+                flags.cli_leave_open = true;
                 if consumed {
                     i += 1;
                 }
@@ -1192,6 +1220,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
     const GLOBAL_BOOL_FLAGS: &[&str] = &[
         "--json",
         "--headed",
+        "--leave-open",
         "--debug",
         "--ignore-https-errors",
         "--allow-file-access",
@@ -1506,6 +1535,9 @@ mod tests {
                         "headed": true,
                         "proxy": "http://runtime-proxy:8080"
                     },
+                    "preferences": {
+                        "defaultViewport": "960x640"
+                    },
                     "auth": {
                         "sessionName": "runtime-session"
                     }
@@ -1538,6 +1570,15 @@ mod tests {
             .runtime_profiles
             .as_ref()
             .is_some_and(|m| m.contains_key("work")));
+        assert_eq!(
+            config
+                .runtime_profiles
+                .as_ref()
+                .and_then(|m| m.get("work"))
+                .and_then(|p| p.preferences.as_ref())
+                .and_then(|p| p.default_viewport.as_deref()),
+            Some("960x640")
+        );
         assert_eq!(config.headed, Some(true));
         assert_eq!(config.json, Some(true));
         assert_eq!(config.debug, Some(true));
@@ -1646,6 +1687,7 @@ mod tests {
                     user_data_dir: Some("/tmp/work-user-data".to_string()),
                     launch: Some(RuntimeProfileLaunchConfig {
                         headed: Some(true),
+                        leave_open: Some(true),
                         proxy: Some("http://runtime-proxy:8080".to_string()),
                         ..RuntimeProfileLaunchConfig::default()
                     }),
@@ -1664,7 +1706,21 @@ mod tests {
         assert_eq!(config.profile.as_deref(), Some("/tmp/work-user-data"));
         assert_eq!(config.proxy.as_deref(), Some("http://runtime-proxy:8080"));
         assert_eq!(config.headed, Some(true));
+        assert_eq!(config.leave_open, Some(true));
         assert_eq!(config.session_name.as_deref(), Some("runtime-session"));
+    }
+
+    #[test]
+    fn test_cli_leave_open_tracking() {
+        let flags = parse_flags(&args("--leave-open snapshot"));
+        assert!(flags.cli_leave_open);
+        assert!(flags.leave_open);
+    }
+
+    #[test]
+    fn test_clean_args_removes_leave_open() {
+        let cleaned = clean_args(&args("--leave-open open example.com"));
+        assert_eq!(cleaned, args("open example.com"));
     }
 
     #[test]
@@ -1732,6 +1788,27 @@ mod tests {
             selected_runtime_profile_from_sources(&args("open"), &config).as_deref(),
             Some("legacy")
         );
+    }
+
+    #[test]
+    fn test_runtime_profile_default_viewport_applies_to_config() {
+        let mut config = Config {
+            runtime_profiles: Some(HashMap::from([(
+                "work".to_string(),
+                RuntimeProfileConfig {
+                    preferences: Some(RuntimeProfilePreferencesConfig {
+                        default_viewport: Some("960x640".to_string()),
+                        ..RuntimeProfilePreferencesConfig::default()
+                    }),
+                    ..RuntimeProfileConfig::default()
+                },
+            )])),
+            ..Config::default()
+        };
+
+        apply_runtime_profile_overrides(&mut config, "work");
+
+        assert_eq!(config.default_viewport.as_deref(), Some("960x640"));
     }
 
     #[test]

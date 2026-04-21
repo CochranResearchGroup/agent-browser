@@ -458,6 +458,7 @@ stable per-profile defaults and service-specific login hints.
       "userDataDir": "~/.agent-browser/runtime-profiles/work/user-data",
       "launch": {
         "headed": true,
+        "leaveOpen": true,
         "proxy": "http://proxy.internal:8080"
       },
       "auth": {
@@ -468,6 +469,9 @@ stable per-profile defaults and service-specific login hints.
         "google": {
           "manualLoginPreferred": true
         }
+      },
+      "preferences": {
+        "defaultViewport": "960x640"
       }
     }
   }
@@ -477,9 +481,13 @@ stable per-profile defaults and service-specific login hints.
 Today, agent-browser applies the selected runtime profile's `userDataDir`,
 launch settings, auth session name, and service login hints. A service with
 `manualLoginPreferred` emits an advisory warning when navigation targets known
-login hosts for that service, so agents can switch to `runtime login` or the
-attachable manual-login flow. The `preferences` subtree is reserved for future
-per-profile browsing preferences.
+login hosts for that service, so agents can switch to detached `runtime login`.
+Use the attachable manual-login flow only for sites where DevTools during login
+is accepted. Set `launch.leaveOpen` or pass `--leave-open` when you want
+`close` to detach from a managed runtime-profile browser instead of shutting it
+down. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
+`960x640`, when a runtime profile should resize the browser content area after
+launch and before the requested command runs.
 
 You can register a runtime profile into user config explicitly:
 
@@ -513,6 +521,16 @@ agent-browser runtime login https://example.com --attachable
 agent-browser runtime attach
 ```
 
+Do not use `--attachable` for the initial sign-in on Google, Gmail, or similar SSO flows. Google can reject sign-in when DevTools is present during the login ceremony. Sign in with detached `runtime login`, close Chrome, then relaunch the same runtime profile with `--attachable` for automation:
+
+```bash
+agent-browser --runtime-profile google-login runtime login https://accounts.google.com
+# Sign in manually, then close Chrome
+agent-browser --runtime-profile google-login runtime login https://myaccount.google.com --attachable
+agent-browser --runtime-profile google-login runtime attach
+agent-browser --runtime-profile google-login get title
+```
+
 This default profile keeps:
 
 - Cookies and localStorage
@@ -540,6 +558,9 @@ agent-browser --runtime-profile work runtime login https://app.example.com/login
 
 agent-browser runtime attach work
 
+# Leave the managed runtime-profile browser running when you close the session
+agent-browser --runtime-profile work --leave-open open https://app.example.com
+
 # Later automation reuses the same profile
 agent-browser --runtime-profile work open https://app.example.com
 
@@ -552,7 +573,7 @@ This resolves to a persistent profile directory under `~/.agent-browser/runtime-
 
 Use this for ordinary authenticated sites, multi-account setups, and headed/manual bootstrap flows.
 
-> **Important:** If you want Chrome password-manager behavior or Google sign-in without active automation attached, prefer `agent-browser runtime login ...` first, then reuse that runtime profile for automation.
+> **Important:** If you want Chrome password-manager behavior or Google sign-in, prefer `agent-browser runtime login ...` first, close Chrome after sign-in, then reuse that runtime profile for automation.
 
 ## Persistent Profiles
 

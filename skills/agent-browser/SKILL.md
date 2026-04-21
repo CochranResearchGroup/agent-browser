@@ -31,20 +31,21 @@ agent-browser snapshot -i  # Check result
 
 ## Command Chaining
 
-Commands can be chained with `&&` in a single shell invocation. The browser persists between commands via a background daemon, so chaining is safe and more efficient than separate calls.
+For agent work, prefer `agent-browser batch` for 2 or more sequential commands.
+Batch is the canonical way to run dependent browser steps in order.
 
 ```bash
-# Chain open + snapshot in one call (open already waits for page load)
-agent-browser open https://example.com && agent-browser snapshot -i
+# Run open + snapshot in one call
+agent-browser batch "open https://example.com" "snapshot -i"
 
-# Chain multiple interactions
-agent-browser fill @e1 "user@example.com" && agent-browser fill @e2 "password123" && agent-browser click @e3
+# Run multiple interactions
+agent-browser batch "fill @e1 \"user@example.com\"" "fill @e2 \"password123\"" "click @e3"
 
 # Navigate and capture
-agent-browser open https://example.com && agent-browser screenshot
+agent-browser batch "open https://example.com" "screenshot"
 ```
 
-**When to chain:** Use `&&` when you don't need to read the output of an intermediate command before proceeding (e.g., open + wait + screenshot). Run commands separately when you need to parse the output first (e.g., snapshot to discover refs, then interact using those refs).
+Run commands separately only when you must read intermediate output before deciding the next step, for example `snapshot -i` to discover refs. Plain shell chaining with `&&` is acceptable for human use, but it is not the preferred skill pattern for agents.
 
 ## Handling Authentication
 
@@ -55,15 +56,23 @@ Runtime profiles can also be declared in `agent-browser.json` via
 drive `userDataDir`, launch defaults, auth session naming, and service login
 hints. If navigation returns a warning for a service with
 `manualLoginPreferred`, switch to `runtime login` for detached manual sign-in,
-or use `runtime login <url> --attachable` followed by `runtime attach` to bind
-automation to the live manual browser. Treat `preferences` as a reserved future
-extension point unless the repo docs say otherwise.
+then relaunch the same runtime profile for automation. Use
+`runtime login <url> --attachable` followed by `runtime attach` only for sites
+where DevTools during manual login is known to be accepted. Treat
+`runtimeProfiles.<name>.preferences.defaultViewport` as a `WIDTHxHEIGHT` default
+content size, for example `960x640`. Set `runtimeProfiles.<name>.launch.leaveOpen` or pass
+`--leave-open` when you want `close` to detach from a managed runtime-profile
+browser instead of shutting it down.
 
 To create and track a managed profile explicitly, use:
 
 ```bash
 agent-browser runtime create work --set-default
 ```
+
+When automating a site that requires login, prefer managed runtime profiles for
+recurring work. Use the other options only when you specifically need portable
+state, temporary reuse, or isolated session behavior.
 
 When automating a site that requires login, choose the approach that fits:
 
@@ -100,12 +109,43 @@ agent-browser runtime login https://example.com --attachable
 agent-browser runtime attach
 ```
 
+For Google, Gmail, and similar SSO flows, do not use `--attachable` for the
+initial sign-in. Live testing showed Google can reject sign-in when DevTools is
+enabled during the login ceremony, even with otherwise minimal Chrome flags.
+Use this two-phase flow instead:
+
+```bash
+# Phase 1: user signs in without DevTools
+agent-browser --runtime-profile google-login runtime login https://accounts.google.com
+# User closes Chrome after sign-in
+
+# Phase 2: automation reuses the signed-in profile
+agent-browser --runtime-profile google-login runtime login https://myaccount.google.com --attachable
+agent-browser --runtime-profile google-login runtime status
+agent-browser --runtime-profile google-login get url
+agent-browser --runtime-profile google-login get title
+```
+
+Run those post-relaunch reads sequentially. Do not issue the first `get url`
+and `get title` in parallel immediately after the attachable relaunch, because
+live testing found a daemon-startup race in that exact pattern even when the
+profile itself was healthy.
+
+If phase 2 `runtime status` shows `Browser alive: true`, `get url` returns
+`https://myaccount.google.com/`, and `get title` returns `Google Account`, the
+profile is authenticated and safe for agent browsing.
+
+If the first read after attachable relaunch fails but `runtime status` already
+shows a live browser, retry the read sequentially before treating the profile
+as broken.
+
 Use `--runtime-profile <name>` when you need a separate persistent managed profile:
 
 ```bash
 agent-browser runtime create work --set-default
 agent-browser --runtime-profile work runtime login https://app.example.com/login
 agent-browser --runtime-profile work runtime login https://app.example.com/login --attachable
+agent-browser --runtime-profile work --leave-open open https://app.example.com
 agent-browser runtime attach work
 agent-browser runtime list
 agent-browser --runtime-profile work open https://app.example.com
@@ -293,11 +333,11 @@ agent-browser --model openai/gpt-4o chat "take a screenshot"  # Override model
 
 ## Streaming
 
-Every session automatically starts a WebSocket stream server on an OS-assigned port. Use `agent-browser stream status` to see the bound port and connection state. Use `stream disable` to tear it down, and `stream enable --port <port>` to re-enable on a specific port.
+Streaming is opt-in. Use `agent-browser stream enable` to start a runtime WebSocket stream server, then `agent-browser stream status` to inspect the bound port and connection state. Use `stream disable` to tear it down, and `stream enable --port <port>` to bind a specific port.
 
 ## Batch Execution
 
-ALWAYS use `batch` when running 2+ commands in sequence. Batch executes commands in order, so dependent commands (like navigate then screenshot) work correctly. Each quoted argument is a separate command.
+Use `batch` when running 2 or more commands in sequence. Batch executes commands in order, so dependent commands like navigate then screenshot work correctly. Each quoted argument is a separate command.
 
 ```bash
 # Navigate and take a snapshot
@@ -375,6 +415,9 @@ agent-browser auth delete github
 
 ### Authentication with State Persistence
 
+Use this when you need a portable auth snapshot. For recurring work on the same
+machine, prefer a managed runtime profile instead.
+
 ```bash
 # Login once and save state
 agent-browser batch "open https://app.example.com/login" "snapshot -i"
@@ -386,6 +429,9 @@ agent-browser batch "state load auth.json" "open https://app.example.com/dashboa
 ```
 
 ### Session Persistence
+
+Use `--session-name` for lightweight cookie and storage reuse. For browser-level
+identity and long-lived authenticated automation, prefer `--runtime-profile`.
 
 ```bash
 # Auto-save/restore cookies and localStorage across browser restarts
@@ -441,12 +487,19 @@ agent-browser get text @e1 --json
 
 ### Parallel Sessions
 
+Use `--session` for concurrency and isolation. Combine it with
+`--runtime-profile` when a concurrent workflow also needs persistent browser
+identity.
+
 ```bash
 agent-browser --session site1 open https://site-a.com
 agent-browser --session site2 open https://site-b.com
 
 agent-browser --session site1 snapshot -i
 agent-browser --session site2 snapshot -i
+
+# Or combine session isolation with named runtime profiles
+agent-browser --session reviewer-a --runtime-profile work open https://app.example.com
 
 agent-browser session list
 ```
@@ -684,12 +737,16 @@ When a dialog is pending, all command responses include a `warning` field indica
 
 ## Session Management and Cleanup
 
-When running multiple agents or automations concurrently, always use named sessions to avoid conflicts:
+When running multiple agents or automations concurrently, always use named sessions to avoid conflicts. Add `--runtime-profile` when a concurrent worker also needs a persistent signed-in browser identity:
 
 ```bash
 # Each agent gets its own isolated session
 agent-browser --session agent1 open site-a.com
 agent-browser --session agent2 open site-b.com
+
+# Each agent can also target its own runtime profile
+agent-browser --session agent1 --runtime-profile billing open https://app.example.com
+agent-browser --session agent2 --runtime-profile support open https://app.example.com
 
 # Check active sessions
 agent-browser session list

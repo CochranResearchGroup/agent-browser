@@ -10,21 +10,26 @@
 # 4. Submit and verify result
 #
 # Customize: Update the refs (@e1, @e2, etc.) based on your form's snapshot output
+# Optional: set RUNTIME_PROFILE=<name> to run against a managed runtime profile
 
 set -euo pipefail
 
 FORM_URL="${1:?Usage: $0 <form-url>}"
+RUNTIME_PROFILE="${RUNTIME_PROFILE:-}"
+AB=(agent-browser)
+if [[ -n "$RUNTIME_PROFILE" ]]; then
+    AB+=(--runtime-profile "$RUNTIME_PROFILE")
+fi
 
 echo "Form automation: $FORM_URL"
 
 # Step 1: Navigate to form
-agent-browser open "$FORM_URL"
-agent-browser wait --load networkidle
+"${AB[@]}" open "$FORM_URL"
 
 # Step 2: Snapshot to discover form elements
 echo ""
 echo "Form structure:"
-agent-browser snapshot -i
+"${AB[@]}" snapshot -i
 
 # Step 3: Fill form fields (customize these refs based on snapshot output)
 #
@@ -39,24 +44,24 @@ agent-browser snapshot -i
 #   agent-browser upload @e8 /path/to/file.pdf # File upload
 #
 # Uncomment and modify:
-# agent-browser fill @e1 "Test User"
-# agent-browser fill @e2 "test@example.com"
-# agent-browser click @e3  # Submit button
+# "${AB[@]}" fill @e1 "Test User"
+# "${AB[@]}" fill @e2 "test@example.com"
+# "${AB[@]}" click @e3  # Submit button
 
 # Step 4: Wait for submission
-# agent-browser wait --load networkidle
-# agent-browser wait --url "**/success"  # Or wait for redirect
+# "${AB[@]}" wait --url "**/success"  # Or wait for redirect
+# "${AB[@]}" wait 1000                # Optional short settle time for result UI
 
 # Step 5: Verify result
 echo ""
 echo "Result:"
-agent-browser get url
-agent-browser snapshot -i
+"${AB[@]}" get url
+"${AB[@]}" snapshot -i
 
 # Optional: Capture evidence
-agent-browser screenshot /tmp/form-result.png
+"${AB[@]}" screenshot /tmp/form-result.png
 echo "Screenshot saved: /tmp/form-result.png"
 
 # Cleanup
-agent-browser close
+"${AB[@]}" close
 echo "Done"

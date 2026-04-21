@@ -487,8 +487,12 @@ impl BrowserManager {
                 });
             }
 
-            self.active_page_index = 0;
-            let session_id = self.pages[0].session_id.clone();
+            self.active_page_index = self
+                .pages
+                .iter()
+                .position(|page| page.url != "about:blank" && !page.url.is_empty())
+                .unwrap_or(0);
+            let session_id = self.pages[self.active_page_index].session_id.clone();
             self.enable_domains(&session_id).await?;
         }
 
@@ -728,6 +732,22 @@ impl BrowserManager {
             .await;
         }
 
+        Ok(())
+    }
+
+    /// Disconnect from a launched persistent runtime-profile browser without
+    /// shutting it down. This intentionally relinquishes process ownership so
+    /// the daemon can end while Chrome keeps running for later reuse.
+    pub fn detach_runtime_browser(&mut self) -> Result<(), String> {
+        let process = self
+            .browser_process
+            .take()
+            .ok_or_else(|| "No launched browser is available to detach".to_string())?;
+        if process.runtime_profile().is_none() {
+            self.browser_process = Some(process);
+            return Err("Can only leave open a launched managed runtime profile".to_string());
+        }
+        std::mem::forget(process);
         Ok(())
     }
 

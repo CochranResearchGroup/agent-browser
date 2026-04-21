@@ -202,6 +202,7 @@ pub struct DaemonResult {
 pub struct DaemonOptions<'a> {
     pub headed: bool,
     pub debug: bool,
+    pub leave_open: bool,
     pub executable_path: Option<&'a str>,
     pub extensions: &'a [String],
     pub args: Option<&'a str>,
@@ -229,6 +230,7 @@ pub struct DaemonOptions<'a> {
     pub idle_timeout: Option<&'a str>,
     pub default_timeout: Option<u64>,
     pub cdp: Option<&'a str>,
+    pub runtime_attach_managed: bool,
     pub no_auto_dialog: bool,
 }
 
@@ -241,6 +243,9 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     }
     if opts.debug {
         cmd.env("AGENT_BROWSER_DEBUG", "1");
+    }
+    if opts.leave_open {
+        cmd.env("AGENT_BROWSER_LEAVE_OPEN", "1");
     }
     if let Some(path) = opts.executable_path {
         cmd.env("AGENT_BROWSER_EXECUTABLE_PATH", path);
@@ -322,6 +327,9 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     }
     if let Some(cdp) = opts.cdp {
         cmd.env("AGENT_BROWSER_CDP", cdp);
+    }
+    if opts.runtime_attach_managed {
+        cmd.env("AGENT_BROWSER_RUNTIME_ATTACH_MANAGED", "1");
     }
     if opts.no_auto_dialog {
         cmd.env("AGENT_BROWSER_NO_AUTO_DIALOG", "1");
@@ -921,6 +929,7 @@ mod tests {
         let opts = DaemonOptions {
             headed: false,
             debug: false,
+            leave_open: false,
             executable_path: None,
             extensions: &[],
             args: None,
@@ -948,6 +957,7 @@ mod tests {
             idle_timeout: None,
             default_timeout: None,
             cdp: None,
+            runtime_attach_managed: false,
             no_auto_dialog: false,
         };
 

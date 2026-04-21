@@ -2722,9 +2722,10 @@ Global Options:
   --json                        Output as JSON
   --runtime-profile <name>      Select runtime profile name
   --profile <path>              Use a custom persistent user-data-dir path
+  --leave-open                  Detach on close instead of shutting down a managed runtime-profile browser
   --executable-path <path>      Custom browser executable
   --headed                      Ignored for runtime login; manual login is always headed
-  --attachable                  Keep DevTools enabled for runtime login so a later runtime attach can bind to the live browser
+  --attachable                  Keep DevTools enabled for runtime login so a later runtime attach can bind to the live browser; avoid for initial Google sign-in
   --set-default                 Set a created runtime profile as default in user config
 
 Examples:
@@ -2920,6 +2921,8 @@ Authentication:
                              (or AGENT_BROWSER_PROFILE env). If omitted,
                              agent-browser uses the selected runtime profile,
                              defaulting to ~/.agent-browser/runtime-profiles/default/user-data
+  --leave-open              Detach on close instead of shutting down a managed
+                            runtime-profile browser
   --session-name <name>      Auto-save/restore cookies and localStorage by name
                              (or AGENT_BROWSER_SESSION_NAME env)
   --state <path>             Load saved auth state (cookies + storage) from JSON file
@@ -2991,9 +2994,12 @@ Configuration:
       "runtimeProfiles": {{
         "work": {{
           "userDataDir": "~/.agent-browser/runtime-profiles/work/user-data",
-          "launch": {{ "headed": true }},
+          "launch": {{ "headed": true, "leaveOpen": true }},
           "services": {{
             "google": {{ "manualLoginPreferred": true }}
+          }},
+          "preferences": {{
+            "defaultViewport": "960x640"
           }}
         }}
       }}
@@ -3001,7 +3007,12 @@ Configuration:
 
   Service hints are advisory. When a configured service marks
   manualLoginPreferred, navigation to known login hosts emits a warning that
-  points agents to `runtime login` or the attachable manual-login flow.
+  points agents to detached `runtime login`. For ordinary sites, agents can use
+  the attachable manual-login flow when DevTools during login is accepted.
+  Set `launch.leaveOpen` or pass `--leave-open` when you want `close` to
+  detach from a managed runtime-profile browser instead of shutting it down.
+  Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640
+  to resize the browser content area after launch and before the command runs.
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.
@@ -3082,7 +3093,8 @@ Examples:
   agent-browser stream status            # Inspect runtime streaming state
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile
-  agent-browser runtime login https://example.com --attachable # Manual login with DevTools enabled for later live attach
+  agent-browser runtime login https://example.com --attachable # DevTools-enabled manual login for ordinary sites
+  agent-browser --runtime-profile work --leave-open open https://app.example.com  # Leave the managed runtime browser running on close
   agent-browser runtime create work --set-default          # Register a named runtime profile in user config
   agent-browser runtime attach work                        # Bind automation to a runtime profile
   agent-browser runtime list                               # Show configured and discovered runtime profiles

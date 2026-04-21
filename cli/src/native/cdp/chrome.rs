@@ -138,6 +138,9 @@ pub struct LaunchOptions {
     /// Optional keychain password used to unlock the native credential store
     /// before launch on supported platforms.
     pub keychain_password: Option<String>,
+    /// When true, use minimal headed Chrome flags suitable for manual login
+    /// ceremonies before automation attaches to the profile.
+    pub manual_login: bool,
     /// When true, keep DevTools remote debugging enabled for detached manual
     /// launches so automation can later attach to the live browser.
     pub attachable: bool,
@@ -165,6 +168,7 @@ impl Default for LaunchOptions {
             viewport_size: None,
             use_real_keychain: false,
             keychain_password: None,
+            manual_login: false,
             attachable: false,
         }
     }
@@ -302,27 +306,37 @@ fn build_chrome_args(
     options: &LaunchOptions,
     remote_debugging: bool,
 ) -> Result<ChromeArgs, String> {
-    let mut args = vec![
-        "--no-first-run".to_string(),
-        "--no-default-browser-check".to_string(),
-        "--disable-background-networking".to_string(),
-        "--disable-backgrounding-occluded-windows".to_string(),
-        "--disable-component-update".to_string(),
-        "--disable-default-apps".to_string(),
-        "--disable-hang-monitor".to_string(),
-        "--disable-popup-blocking".to_string(),
-        "--disable-prompt-on-repost".to_string(),
-        "--disable-sync".to_string(),
-        "--disable-features=Translate".to_string(),
-        "--enable-features=NetworkService,NetworkServiceInProcess".to_string(),
-        "--metrics-recording-only".to_string(),
-    ];
+    let manual_login_mode = options.manual_login && !options.headless;
+    let mut args = if manual_login_mode {
+        // Google and other security-sensitive login flows reject Chrome
+        // sessions with common automation and mock-keychain fingerprints.
+        vec![
+            "--new-window".to_string(),
+            "--hide-crash-restore-bubble".to_string(),
+        ]
+    } else {
+        vec![
+            "--no-first-run".to_string(),
+            "--no-default-browser-check".to_string(),
+            "--disable-background-networking".to_string(),
+            "--disable-backgrounding-occluded-windows".to_string(),
+            "--disable-component-update".to_string(),
+            "--disable-default-apps".to_string(),
+            "--disable-hang-monitor".to_string(),
+            "--disable-popup-blocking".to_string(),
+            "--disable-prompt-on-repost".to_string(),
+            "--disable-sync".to_string(),
+            "--disable-features=Translate".to_string(),
+            "--enable-features=NetworkService,NetworkServiceInProcess".to_string(),
+            "--metrics-recording-only".to_string(),
+        ]
+    };
 
     if remote_debugging {
         args.push("--remote-debugging-port=0".to_string());
     }
 
-    if !options.use_real_keychain {
+    if !options.use_real_keychain && !manual_login_mode {
         args.push("--password-store=basic".to_string());
         args.push("--use-mock-keychain".to_string());
     }
@@ -507,6 +521,10 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
 
     cleanup_stale_profile_lock(&user_data_dir);
     ensure_profile_not_in_use(&user_data_dir)?;
+    // A previous headed session can leave DevToolsActivePort behind even after
+    // Chrome exits cleanly. Remove it before spawn so attachable manual relaunch
+    // waits for the fresh port written by the new browser instance.
+    let _ = std::fs::remove_file(user_data_dir.join("DevToolsActivePort"));
 
     let mut cmd = Command::new(chrome_path);
     cmd.args(&args)
@@ -542,7 +560,9 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
     let devtools_port = if options.attachable {
         let deadline = std::time::Instant::now() + Duration::from_secs(15);
         match wait_for_devtools_active_port(&mut child, &user_data_dir, deadline) {
-            Ok(_) => read_runtime_devtools_port(&user_data_dir),
+            Ok(ws_url) => {
+                ws_debug_port(&ws_url).or_else(|| read_runtime_devtools_port(&user_data_dir))
+            }
             Err(e) => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -751,7 +771,7 @@ fn try_launch_chrome(
                 "manual".to_string()
             },
             devtools_port: if remote_debugging {
-                read_runtime_devtools_port(&user_data_dir)
+                ws_debug_port(&ws_url).or_else(|| read_runtime_devtools_port(&user_data_dir))
             } else {
                 None
             },
@@ -772,6 +792,10 @@ fn try_launch_chrome(
         #[cfg(unix)]
         pgid,
     })
+}
+
+fn ws_debug_port(ws_url: &str) -> Option<u16> {
+    url::Url::parse(ws_url).ok()?.port_or_known_default()
 }
 
 fn wait_for_devtools_active_port(
@@ -796,8 +820,14 @@ fn wait_for_devtools_active_port(
         }
 
         if let Some((port, ws_path)) = read_devtools_active_port(user_data_dir) {
-            let ws_url = format!("ws://127.0.0.1:{}{}", port, ws_path);
-            return Ok(ws_url);
+            // Chrome can briefly expose a DevToolsActivePort value before the
+            // socket is actually accepting connections, and on relaunch the
+            // value can change once startup settles. Only return after the
+            // advertised port is reachable.
+            if is_port_reachable(port) {
+                let ws_url = format!("ws://127.0.0.1:{}{}", port, ws_path);
+                return Ok(ws_url);
+            }
         }
 
         std::thread::sleep(poll_interval);
@@ -2284,6 +2314,53 @@ mod tests {
     }
 
     #[test]
+    fn test_build_args_attachable_headed_uses_minimal_login_flags() {
+        let opts = LaunchOptions {
+            headless: false,
+            manual_login: true,
+            attachable: true,
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts, true).unwrap();
+        assert!(result.args.iter().any(|a| a == "--new-window"));
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == "--hide-crash-restore-bubble"));
+        assert!(result.args.iter().any(|a| a == "--remote-debugging-port=0"));
+        assert!(!result.args.iter().any(|a| a == "--disable-sync"));
+        assert!(!result
+            .args
+            .iter()
+            .any(|a| a == "--disable-background-networking"));
+        assert!(!result.args.iter().any(|a| a == "--password-store=basic"));
+        assert!(!result.args.iter().any(|a| a == "--use-mock-keychain"));
+    }
+
+    #[test]
+    fn test_build_args_detached_manual_login_without_devtools_uses_minimal_flags() {
+        let opts = LaunchOptions {
+            headless: false,
+            manual_login: true,
+            attachable: false,
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts, false).unwrap();
+        assert!(result.args.iter().any(|a| a == "--new-window"));
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == "--hide-crash-restore-bubble"));
+        assert!(!result
+            .args
+            .iter()
+            .any(|a| a.starts_with("--remote-debugging-port")));
+        assert!(!result.args.iter().any(|a| a == "--disable-sync"));
+        assert!(!result.args.iter().any(|a| a == "--password-store=basic"));
+        assert!(!result.args.iter().any(|a| a == "--use-mock-keychain"));
+    }
+
+    #[test]
     fn test_build_args_profile_path_preserves_keychain_flags() {
         let opts = LaunchOptions {
             profile: Some("/tmp/my-profile".to_string()),
@@ -2297,6 +2374,14 @@ mod tests {
         assert!(
             result.args.iter().any(|a| a == "--password-store=basic"),
             "profile path should keep keychain flags"
+        );
+    }
+
+    #[test]
+    fn test_ws_debug_port_parses_port_from_websocket_url() {
+        assert_eq!(
+            ws_debug_port("ws://127.0.0.1:37515/devtools/browser/abc"),
+            Some(37515)
         );
     }
 

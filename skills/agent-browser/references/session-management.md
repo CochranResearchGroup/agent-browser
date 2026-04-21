@@ -1,6 +1,7 @@
 # Session Management
 
-Multiple isolated browser sessions with state persistence and concurrent browsing.
+Multiple isolated browser sessions for concurrent browsing and daemon separation.
+Use runtime profiles for persistent browser identity and long-lived auth state.
 
 **Related**: [authentication.md](authentication.md) for login patterns, [SKILL.md](../SKILL.md) for quick start.
 
@@ -16,7 +17,7 @@ Multiple isolated browser sessions with state persistence and concurrent browsin
 
 ## Named Sessions
 
-Use `--session` flag to isolate browser contexts:
+Use `--session` to isolate concurrent browser sessions:
 
 ```bash
 # Session 1: Authentication flow
@@ -41,6 +42,20 @@ Each session has independent:
 - Open tabs
 
 ## Session State Persistence
+
+`--session` isolates daemons and tabs. It does not replace runtime profiles.
+If you need a browser identity that survives manual sign-in and later agent
+reuse, prefer `--runtime-profile`.
+
+### Runtime Profile Plus Session
+
+You can combine a named runtime profile with a named session when you need both
+persistent identity and daemon isolation:
+
+```bash
+agent-browser --session reviewer-a --runtime-profile work open https://app.example.com
+agent-browser --session reviewer-b --runtime-profile staging open https://staging.example.com
+```
 
 ### Save Session State
 
@@ -74,6 +89,15 @@ agent-browser open https://app.example.com/dashboard
 
 ### Authenticated Session Reuse
 
+Prefer managed runtime profiles for recurring authenticated work:
+
+```bash
+agent-browser --runtime-profile work runtime login https://app.example.com/login
+agent-browser --runtime-profile work open https://app.example.com/dashboard
+```
+
+Use state save/load when you specifically need a portable snapshot:
+
 ```bash
 #!/bin/bash
 # Save login state once, reuse many times
@@ -91,7 +115,7 @@ else
     agent-browser fill @e1 "$USERNAME"
     agent-browser fill @e2 "$PASSWORD"
     agent-browser click @e3
-    agent-browser wait --load networkidle
+    agent-browser wait --url "**/dashboard"
 
     # Save for future use
     agent-browser state save "$STATE_FILE"
@@ -190,4 +214,15 @@ rm /tmp/auth-state.json
 ```bash
 # Set timeout for automated scripts
 timeout 60 agent-browser --session long-task get text body
+```
+
+### 5. Prefer Runtime Profiles For Login-Bound Work
+
+```bash
+# Good: persistent browser identity for recurring authenticated automation
+agent-browser --runtime-profile billing runtime login https://accounts.example.com
+agent-browser --runtime-profile billing open https://app.example.com/invoices
+
+# Use --session mainly for concurrency or isolation
+agent-browser --session scrape-a open https://docs.example.com
 ```

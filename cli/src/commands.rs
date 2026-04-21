@@ -2398,6 +2398,7 @@ mod tests {
             runtime_profile: None,
             json: false,
             headed: false,
+            leave_open: false,
             debug: false,
             headers: None,
             executable_path: None,
@@ -2427,6 +2428,7 @@ mod tests {
             cli_annotate: false,
             cli_download_path: false,
             cli_headed: false,
+            cli_leave_open: false,
             cli_runtime_profile: false,
             annotate: false,
             color_scheme: None,
@@ -2445,6 +2447,7 @@ mod tests {
             default_timeout: None,
             no_auto_dialog: false,
             model: None,
+            default_viewport: None,
             verbose: false,
             quiet: false,
         }

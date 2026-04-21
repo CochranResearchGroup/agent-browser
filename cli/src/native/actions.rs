@@ -10,7 +10,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::{broadcast, oneshot, RwLock};
 
 use crate::connection::get_socket_dir;
-use crate::runtime_profile::clear_runtime_state;
+use crate::runtime_profile::{clear_runtime_state, pid_is_running, read_runtime_state};
 
 use super::auth;
 use super::browser::{should_track_target, BrowserManager, WaitUntil};
@@ -57,6 +57,18 @@ const AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS: u64 = 100;
 /// Time spent trying targeted username selectors before broad text-input
 /// fallback selectors are allowed.
 const AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS: u64 = 5_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CloseBehavior {
+    CloseBrowser,
+    Detach,
+}
+
+impl Default for CloseBehavior {
+    fn default() -> Self {
+        Self::CloseBrowser
+    }
+}
 
 pub struct PendingConfirmation {
     pub action: String,
@@ -191,6 +203,7 @@ fn launch_hash(opts: &LaunchOptions) -> u64 {
     opts.runtime_profile.hash(&mut h);
     opts.use_real_keychain.hash(&mut h);
     opts.keychain_password.hash(&mut h);
+    opts.manual_login.hash(&mut h);
     h.finish()
 }
 
@@ -209,6 +222,28 @@ fn use_real_keychain_from_env() -> bool {
 
 fn runtime_profile_from_env() -> Option<String> {
     env::var("AGENT_BROWSER_RUNTIME_PROFILE").ok()
+}
+
+fn close_behavior_for_attached_browser(
+    runtime_attach_managed: bool,
+    leave_open: bool,
+) -> CloseBehavior {
+    if runtime_attach_managed && !leave_open {
+        CloseBehavior::CloseBrowser
+    } else {
+        CloseBehavior::Detach
+    }
+}
+
+fn close_behavior_for_launched_browser(
+    runtime_profile_name: Option<&str>,
+    leave_open: bool,
+) -> CloseBehavior {
+    if leave_open && runtime_profile_name.is_some() {
+        CloseBehavior::Detach
+    } else {
+        CloseBehavior::CloseBrowser
+    }
 }
 
 pub struct DaemonState {
@@ -265,6 +300,12 @@ pub struct DaemonState {
     pub stream_server: Option<Arc<StreamServer>>,
     /// Hash of launch options used for the current browser, for relaunch detection.
     launch_hash: Option<u64>,
+    /// Runtime profile for a browser attached through CDP that this daemon owns logically.
+    attached_runtime_profile: Option<String>,
+    /// Process ID for an attached runtime-profile browser, used for explicit close.
+    attached_browser_pid: Option<u32>,
+    /// Whether closing this daemon session should shut down the browser or detach.
+    close_behavior: CloseBehavior,
     /// Browser engine name (e.g. "chrome", "lightpanda") for observability.
     pub engine: String,
     /// Default timeout for wait operations, from AGENT_BROWSER_DEFAULT_TIMEOUT env var.
@@ -317,6 +358,9 @@ impl DaemonState {
             stream_client: None,
             stream_server: None,
             launch_hash: None,
+            attached_runtime_profile: None,
+            attached_browser_pid: None,
+            close_behavior: CloseBehavior::CloseBrowser,
             engine: env::var("AGENT_BROWSER_ENGINE").unwrap_or_else(|_| "chrome".to_string()),
             default_timeout_ms: env::var("AGENT_BROWSER_DEFAULT_TIMEOUT")
                 .ok()
@@ -1144,6 +1188,48 @@ impl DaemonState {
     }
 }
 
+fn runtime_profile_pid(runtime_profile: Option<&str>) -> Option<u32> {
+    runtime_profile
+        .and_then(|name| read_runtime_state(name).ok().flatten())
+        .map(|state| state.browser_pid)
+}
+
+async fn terminate_runtime_browser(pid: u32) {
+    let _ = tokio::task::spawn_blocking(move || {
+        #[cfg(unix)]
+        {
+            for _ in 0..20 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                if !pid_is_running(pid) {
+                    return;
+                }
+            }
+            unsafe {
+                libc::kill(pid as i32, libc::SIGTERM);
+            }
+            for _ in 0..20 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                if !pid_is_running(pid) {
+                    return;
+                }
+            }
+            unsafe {
+                libc::kill(pid as i32, libc::SIGKILL);
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+    })
+    .await;
+}
+
 impl Drop for DaemonState {
     fn drop(&mut self) {
         // The background fetch handler sits in rx.recv().await indefinitely.
@@ -1523,6 +1609,10 @@ async fn connect_auto_with_fresh_tab() -> Result<BrowserManager, String> {
 
 async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
     let mut options = launch_options_from_env();
+    let leave_open = env::var("AGENT_BROWSER_LEAVE_OPEN")
+        .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""));
+    let runtime_attach_managed = env::var("AGENT_BROWSER_RUNTIME_ATTACH_MANAGED")
+        .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""));
 
     // Use the stream server's viewport dimensions for --window-size so the
     // content area matches the desired viewport from the start.
@@ -1548,6 +1638,18 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
     if let Ok(cdp) = env::var("AGENT_BROWSER_CDP") {
         let mgr = BrowserManager::connect_cdp(&cdp).await?;
         state.reset_input_state();
+        state.attached_runtime_profile = if runtime_attach_managed {
+            options.runtime_profile.clone()
+        } else {
+            None
+        };
+        state.attached_browser_pid = if runtime_attach_managed {
+            runtime_profile_pid(options.runtime_profile.as_deref())
+        } else {
+            None
+        };
+        state.close_behavior =
+            close_behavior_for_attached_browser(runtime_attach_managed, leave_open);
         state.browser = Some(mgr);
         state.subscribe_to_browser_events();
         state.start_fetch_handler();
@@ -1559,6 +1661,9 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
 
     if env::var("AGENT_BROWSER_AUTO_CONNECT").is_ok() {
         state.reset_input_state();
+        state.attached_runtime_profile = None;
+        state.attached_browser_pid = None;
+        state.close_behavior = CloseBehavior::Detach;
         state.browser = Some(connect_auto_with_fresh_tab().await?);
         state.subscribe_to_browser_events();
         state.start_fetch_handler();
@@ -1592,6 +1697,9 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
             match connect_result {
                 Ok(mgr) => {
                     state.reset_input_state();
+                    state.attached_runtime_profile = None;
+                    state.attached_browser_pid = None;
+                    state.close_behavior = CloseBehavior::CloseBrowser;
                     state.browser = Some(mgr);
                     state.subscribe_to_browser_events();
                     state.start_fetch_handler();
@@ -1614,6 +1722,10 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
     let hash = launch_hash(&options);
     let mgr = BrowserManager::launch(options, engine.as_deref()).await?;
     state.reset_input_state();
+    state.attached_runtime_profile = None;
+    state.attached_browser_pid = None;
+    state.close_behavior =
+        close_behavior_for_launched_browser(mgr.runtime_profile_name(), leave_open);
     state.browser = Some(mgr);
     state.launch_hash = Some(hash);
     state.subscribe_to_browser_events();
@@ -1677,6 +1789,7 @@ fn launch_options_from_env() -> LaunchOptions {
         viewport_size: None,
         use_real_keychain: use_real_keychain_from_env(),
         keychain_password: keychain_password_from_env(),
+        manual_login: false,
         attachable: false,
     }
 }
@@ -1710,6 +1823,19 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         .get("autoConnect")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let leave_open = cmd
+        .get("leaveOpen")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let runtime_attach_managed = cmd
+        .get("runtimeAttachManaged")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let viewport_size = cmd.get("viewport").and_then(|viewport| {
+        let width = viewport.get("width").and_then(|v| v.as_u64())?;
+        let height = viewport.get("height").and_then(|v| v.as_u64())?;
+        Some((width as u32, height as u32))
+    });
 
     let extensions: Option<Vec<String>> =
         cmd.get("extensions").and_then(|v| v.as_array()).map(|arr| {
@@ -1790,9 +1916,10 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             .get("downloadPath")
             .and_then(|v| v.as_str())
             .map(String::from),
-        viewport_size: None,
+        viewport_size,
         use_real_keychain: use_real_keychain_from_env(),
         keychain_password: keychain_password_from_env(),
+        manual_login: false,
         attachable: false,
     };
 
@@ -1818,6 +1945,9 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             b.close().await?;
             state.browser = None;
             state.launch_hash = None;
+            state.attached_runtime_profile = None;
+            state.attached_browser_pid = None;
+            state.close_behavior = CloseBehavior::CloseBrowser;
             state.screencasting = false;
             state.reset_input_state();
             state.update_stream_client().await;
@@ -1839,6 +1969,18 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
 
     if let Some(url) = cdp_url {
         state.reset_input_state();
+        state.attached_runtime_profile = if runtime_attach_managed {
+            launch_options.runtime_profile.clone()
+        } else {
+            None
+        };
+        state.attached_browser_pid = if runtime_attach_managed {
+            runtime_profile_pid(launch_options.runtime_profile.as_deref())
+        } else {
+            None
+        };
+        state.close_behavior =
+            close_behavior_for_attached_browser(runtime_attach_managed, leave_open);
         state.browser = Some(BrowserManager::connect_cdp(url).await?);
         state.subscribe_to_browser_events();
         state.start_fetch_handler();
@@ -1849,6 +1991,18 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
 
     if let Some(port) = cdp_port {
         state.reset_input_state();
+        state.attached_runtime_profile = if runtime_attach_managed {
+            launch_options.runtime_profile.clone()
+        } else {
+            None
+        };
+        state.attached_browser_pid = if runtime_attach_managed {
+            runtime_profile_pid(launch_options.runtime_profile.as_deref())
+        } else {
+            None
+        };
+        state.close_behavior =
+            close_behavior_for_attached_browser(runtime_attach_managed, leave_open);
         state.browser = Some(BrowserManager::connect_cdp(&port.to_string()).await?);
         state.subscribe_to_browser_events();
         state.start_fetch_handler();
@@ -1859,6 +2013,9 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
 
     if auto_connect {
         state.reset_input_state();
+        state.attached_runtime_profile = None;
+        state.attached_browser_pid = None;
+        state.close_behavior = CloseBehavior::Detach;
         state.browser = Some(connect_auto_with_fresh_tab().await?);
         state.subscribe_to_browser_events();
         state.start_fetch_handler();
@@ -1894,6 +2051,9 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
                 match connect_result {
                     Ok(mgr) => {
                         state.reset_input_state();
+                        state.attached_runtime_profile = None;
+                        state.attached_browser_pid = None;
+                        state.close_behavior = CloseBehavior::CloseBrowser;
                         state.browser = Some(mgr);
                         state.subscribe_to_browser_events();
                         state.start_fetch_handler();
@@ -1952,7 +2112,16 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     write_engine_file(&state.session_id, &state.engine);
     write_extensions_file(&state.session_id);
     state.reset_input_state();
+    state.attached_runtime_profile = None;
+    state.attached_browser_pid = None;
     state.browser = Some(BrowserManager::launch(launch_options, engine.as_deref()).await?);
+    state.close_behavior = close_behavior_for_launched_browser(
+        state
+            .browser
+            .as_ref()
+            .and_then(|mgr| mgr.runtime_profile_name()),
+        leave_open,
+    );
     state.launch_hash = Some(new_hash);
     state.subscribe_to_browser_events();
     state.start_fetch_handler();
@@ -2301,6 +2470,10 @@ async fn handle_evaluate(cmd: &Value, state: &DaemonState) -> Result<Value, Stri
 }
 
 async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
+    let attached_runtime_profile = state.attached_runtime_profile.take();
+    let attached_browser_pid = state.attached_browser_pid.take();
+    let close_behavior = std::mem::take(&mut state.close_behavior);
+
     if let Some(ref mgr) = state.browser {
         if let Some(ref session_name) = state.session_name {
             if let Ok(session_id) = mgr.active_session_id() {
@@ -2318,8 +2491,27 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     }
     if let Some(ref mut mgr) = state.browser {
         let runtime_profile = mgr.runtime_profile_name().map(str::to_string);
-        mgr.close().await?;
-        if let Some(runtime_profile) = runtime_profile {
+        if attached_runtime_profile.is_some() && close_behavior == CloseBehavior::CloseBrowser {
+            let _ = mgr
+                .client
+                .send_command_no_params("Browser.close", None)
+                .await;
+        }
+        if close_behavior == CloseBehavior::Detach && runtime_profile.is_some() {
+            mgr.detach_runtime_browser()?;
+        } else {
+            mgr.close().await?;
+            if let Some(runtime_profile) = runtime_profile {
+                let _ = clear_runtime_state(&runtime_profile);
+            }
+        }
+    }
+    if let Some(runtime_profile) = attached_runtime_profile {
+        if close_behavior == CloseBehavior::CloseBrowser {
+            let pid = attached_browser_pid.or_else(|| runtime_profile_pid(Some(&runtime_profile)));
+            if let Some(pid) = pid {
+                terminate_runtime_browser(pid).await;
+            }
             let _ = clear_runtime_state(&runtime_profile);
         }
     }
@@ -8714,5 +8906,49 @@ mod tests {
             let auto_handled = auto_dialog && matches!(*dialog_type, "beforeunload" | "alert");
             assert!(!auto_handled, "{dialog_type} should NOT be auto-handled");
         }
+    }
+
+    #[test]
+    fn test_close_behavior_for_attached_browser_defaults_to_detach_for_external_attach() {
+        assert_eq!(
+            close_behavior_for_attached_browser(false, false),
+            CloseBehavior::Detach
+        );
+        assert_eq!(
+            close_behavior_for_attached_browser(false, true),
+            CloseBehavior::Detach
+        );
+    }
+
+    #[test]
+    fn test_close_behavior_for_attached_browser_closes_managed_runtime_by_default() {
+        assert_eq!(
+            close_behavior_for_attached_browser(true, false),
+            CloseBehavior::CloseBrowser
+        );
+    }
+
+    #[test]
+    fn test_close_behavior_for_attached_browser_respects_leave_open_override() {
+        assert_eq!(
+            close_behavior_for_attached_browser(true, true),
+            CloseBehavior::Detach
+        );
+    }
+
+    #[test]
+    fn test_close_behavior_for_launched_browser_detaches_only_for_named_runtime_profiles() {
+        assert_eq!(
+            close_behavior_for_launched_browser(Some("google-login"), true),
+            CloseBehavior::Detach
+        );
+        assert_eq!(
+            close_behavior_for_launched_browser(Some("google-login"), false),
+            CloseBehavior::CloseBrowser
+        );
+        assert_eq!(
+            close_behavior_for_launched_browser(None, true),
+            CloseBehavior::CloseBrowser
+        );
     }
 }

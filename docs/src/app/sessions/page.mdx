@@ -65,6 +65,16 @@ agent-browser runtime login https://example.com --attachable
 agent-browser runtime attach
 ```
 
+Do not use <code>--attachable</code> for the initial sign-in on Google, Gmail, or similar SSO flows. Google can reject sign-in when DevTools is present during the login ceremony. Sign in with detached <code>runtime login</code>, close Chrome, then relaunch the same runtime profile with <code>--attachable</code> for automation:
+
+```bash
+agent-browser --runtime-profile google-login runtime login https://accounts.google.com
+# Sign in manually, then close Chrome
+agent-browser --runtime-profile google-login runtime login https://myaccount.google.com --attachable
+agent-browser --runtime-profile google-login runtime attach
+agent-browser --runtime-profile google-login get title
+```
+
 ## Named runtime profiles
 
 Use a named runtime profile when you want a dedicated persistent browser/account lane.
@@ -78,6 +88,9 @@ agent-browser --runtime-profile work runtime login https://app.example.com/login
 
 # Or keep DevTools enabled for later live attach
 agent-browser --runtime-profile work runtime login https://app.example.com/login --attachable
+
+# Or keep the managed runtime browser running when the daemon session closes
+agent-browser --runtime-profile work --leave-open open https://app.example.com
 
 # Inspect configured and discovered runtime profiles
 agent-browser runtime list
@@ -94,13 +107,15 @@ agent-browser --runtime-profile work runtime status
 
 Use this for ordinary authenticated sites, multi-account setups, and manual sign-in bootstrap flows.
 
-> <strong>Important:</strong> For Chrome password-manager features and Google sign-in, prefer <code>runtime login</code> first and then automate against the same runtime profile.
+> <strong>Important:</strong> For Chrome password-manager features and Google sign-in, prefer <code>runtime login</code> first, close Chrome after sign-in, then automate against the same runtime profile.
 
 Runtime-profile config can include service login hints. For example,
 <code>runtimeProfiles.work.services.google.manualLoginPreferred</code> tells
 agent-browser to warn when automation navigates to known Google login hosts, so
-agents can switch to <code>runtime login</code> or the attachable manual-login
-flow before continuing.
+agents can switch to detached <code>runtime login</code> before continuing.
+Use <code>--leave-open</code> or <code>runtimeProfiles.work.launch.leaveOpen</code>
+when you want <code>close</code> to detach from that managed runtime-profile browser
+instead of shutting it down.
 
 <table>
   <thead>

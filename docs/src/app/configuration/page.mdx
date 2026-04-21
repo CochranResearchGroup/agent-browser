@@ -39,6 +39,7 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
       "userDataDir": "~/.agent-browser/runtime-profiles/work/user-data",
       "launch": {
         "headed": true,
+        "leaveOpen": true,
         "proxy": "http://localhost:8080"
       },
       "auth": {
@@ -62,9 +63,14 @@ Today agent-browser applies the selected runtime profile's `userDataDir`,
 launch defaults, auth session name, and service login hints. A service with
 `manualLoginPreferred` emits an advisory warning when navigation targets known
 login hosts for that service. Use this to tell agents to prefer
-<code>runtime login</code> or the attachable manual-login flow for services such
-as Google. The nested <code>preferences</code> section is accepted as
-forward-compatible config for future profile preferences.
+detached <code>runtime login</code> for services such as Google. Use the
+attachable manual-login flow only for sites where DevTools during login is
+accepted. Set <code>launch.leaveOpen</code> or pass
+<code>--leave-open</code> when you want <code>close</code> to detach from a
+managed runtime-profile browser instead of shutting it down. Set
+<code>preferences.defaultViewport</code> to a <code>WIDTHxHEIGHT</code> value,
+such as <code>960x640</code>, when a runtime profile should resize the browser
+content area after launch and before the requested command runs.
 
 Use <code>agent-browser runtime list</code> to inspect the merged runtime-profile
 view from config plus on-disk managed profiles. If a profile sets
@@ -90,6 +96,7 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>debug</code></td><td><code>--debug</code></td><td>boolean</td></tr>
     <tr><td><code>defaultRuntimeProfile</code></td><td><code>--runtime-profile</code> fallback</td><td>string</td></tr>
     <tr><td><code>runtimeProfiles</code></td><td>managed runtime-profile map</td><td>object</td></tr>
+    <tr><td><code>leaveOpen</code></td><td><code>--leave-open</code></td><td>boolean</td></tr>
     <tr><td><code>session</code></td><td><code>--session</code></td><td>string</td></tr>
     <tr><td><code>runtimeProfile</code></td><td><code>--runtime-profile</code></td><td>string</td></tr>
     <tr><td><code>sessionName</code></td><td><code>--session-name</code></td><td>string</td></tr>

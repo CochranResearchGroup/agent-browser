@@ -53,6 +53,30 @@ fn print_json_error(message: impl AsRef<str>) {
     }));
 }
 
+fn parse_viewport_size(value: &str) -> Result<(u32, u32), String> {
+    let Some((width, height)) = value.split_once(['x', 'X', ',']) else {
+        return Err(format!(
+            "Invalid default viewport '{}'. Use WIDTHxHEIGHT, for example 960x640",
+            value
+        ));
+    };
+
+    let width = width
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| format!("Invalid viewport width in '{}'", value))?;
+    let height = height
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| format!("Invalid viewport height in '{}'", value))?;
+
+    if width == 0 || height == 0 {
+        return Err("Default viewport width and height must be greater than zero".to_string());
+    }
+
+    Ok((width, height))
+}
+
 fn print_json_error_with_type(message: impl AsRef<str>, error_type: &str) {
     print_json_value(json!({
         "success": false,
@@ -305,6 +329,17 @@ fn selected_runtime_name(clean: &[String], flags: &Flags, positional_index: usiz
         .unwrap_or_else(runtime_profile::default_runtime_profile_name)
 }
 
+fn live_runtime_status_for_flags(flags: &Flags) -> Option<RuntimeStatus> {
+    let runtime_name = flags.runtime_profile.as_ref()?;
+    let configured_user_data_dir = flags
+        .configured_runtime_profiles
+        .get(runtime_name)
+        .and_then(|path| path.as_deref())
+        .map(std::path::Path::new);
+    let status = runtime_status_with_user_data_dir(runtime_name, configured_user_data_dir).ok()?;
+    (status.browser_alive && status.devtools_port.is_some()).then_some(status)
+}
+
 fn run_runtime_command(clean: &[String], flags: &Flags) {
     match clean.get(1).map(|s| s.as_str()) {
         Some("create") => {
@@ -470,6 +505,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | "")
                 }) || env::var("AGENT_BROWSER_KEYCHAIN_PASSWORD").is_ok(),
                 keychain_password: env::var("AGENT_BROWSER_KEYCHAIN_PASSWORD").ok(),
+                manual_login: true,
                 attachable,
             };
 
@@ -563,6 +599,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
             let daemon_opts = DaemonOptions {
                 headed: flags.headed,
                 debug: flags.debug,
+                leave_open: flags.leave_open,
                 executable_path: flags.executable_path.as_deref(),
                 extensions: &flags.extensions,
                 args: flags.args.as_deref(),
@@ -594,6 +631,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 idle_timeout: flags.idle_timeout.as_deref(),
                 default_timeout: flags.default_timeout,
                 cdp: cdp_port_str.as_deref(),
+                runtime_attach_managed: attach_to_existing,
                 no_auto_dialog: flags.no_auto_dialog,
             };
 
@@ -614,6 +652,9 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     "id": gen_id(),
                     "action": "launch",
                     "cdpPort": port,
+                    "runtimeProfile": runtime_name,
+                    "runtimeAttachManaged": true,
+                    "leaveOpen": flags.leave_open,
                 })
             } else {
                 json!({
@@ -621,6 +662,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     "action": "launch",
                     "headless": !flags.headed,
                     "runtimeProfile": runtime_name,
+                    "leaveOpen": flags.leave_open,
                 })
             };
 
@@ -1329,9 +1371,19 @@ fn main() {
     let use_real_keychain = env::var("AGENT_BROWSER_USE_REAL_KEYCHAIN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""))
         || keychain_password.is_some();
+    let live_runtime_status = if flags.cdp.is_none() && flags.provider.is_none() {
+        live_runtime_status_for_flags(&flags)
+    } else {
+        None
+    };
+    let live_runtime_cdp = live_runtime_status
+        .as_ref()
+        .and_then(|status| status.devtools_port)
+        .map(|port| port.to_string());
     let daemon_opts = DaemonOptions {
         headed: flags.headed,
         debug: flags.debug,
+        leave_open: flags.leave_open,
         executable_path: flags.executable_path.as_deref(),
         extensions: &flags.extensions,
         args: flags.args.as_deref(),
@@ -1358,7 +1410,8 @@ fn main() {
         auto_connect: flags.auto_connect,
         idle_timeout: flags.idle_timeout.as_deref(),
         default_timeout: flags.default_timeout,
-        cdp: flags.cdp.as_deref(),
+        cdp: flags.cdp.as_deref().or(live_runtime_cdp.as_deref()),
+        runtime_attach_managed: live_runtime_status.is_some(),
         no_auto_dialog: flags.no_auto_dialog,
     };
 
@@ -1394,7 +1447,7 @@ fn main() {
             } else {
                 None
             },
-            if flags.cli_runtime_profile {
+            if flags.cli_runtime_profile && live_runtime_status.is_none() {
                 Some("--runtime-profile")
             } else {
                 None
@@ -1662,6 +1715,20 @@ fn main() {
         }
     }
 
+    let default_viewport = flags
+        .default_viewport
+        .as_deref()
+        .map(parse_viewport_size)
+        .transpose()
+        .unwrap_or_else(|e| {
+            if flags.json {
+                print_json_error(e);
+            } else {
+                eprintln!("{} {}", color::error_indicator(), e);
+            }
+            exit(1);
+        });
+
     // Launch headed browser or configure browser options (without CDP or provider)
     if (flags.headed
         || flags.cli_headed  // User explicitly set --headed (even if false)
@@ -1696,9 +1763,23 @@ fn main() {
             cmd_obj.insert("executablePath".to_string(), json!(exec_path));
         }
 
-        // Add profile path if specified
-        if let Some(ref profile_path) = flags.profile {
-            cmd_obj.insert("profile".to_string(), json!(profile_path));
+        if let Some(status) = live_runtime_status.as_ref() {
+            if let Some(port) = status.devtools_port {
+                cmd_obj.insert("cdpPort".to_string(), json!(port));
+                cmd_obj.insert("runtimeAttachManaged".to_string(), json!(true));
+            }
+        }
+
+        if flags.leave_open {
+            cmd_obj.insert("leaveOpen".to_string(), json!(true));
+        }
+
+        // Add profile path if specified. A live runtime profile attaches by CDP
+        // instead of reopening the locked Chrome user-data-dir.
+        if live_runtime_status.is_none() {
+            if let Some(ref profile_path) = flags.profile {
+                cmd_obj.insert("profile".to_string(), json!(profile_path));
+            }
         }
         if let Some(ref runtime_profile) = flags.runtime_profile {
             cmd_obj.insert("runtimeProfile".to_string(), json!(runtime_profile));
@@ -1766,6 +1847,13 @@ fn main() {
             launch_cmd["engine"] = json!(engine);
         }
 
+        if let Some((width, height)) = default_viewport {
+            launch_cmd["viewport"] = json!({
+                "width": width,
+                "height": height,
+            });
+        }
+
         match send_command(launch_cmd, &flags.session) {
             Ok(resp) if !resp.success => {
                 // Launch command failed (e.g., invalid state file, profile error)
@@ -1793,6 +1881,41 @@ fn main() {
             }
             Ok(_) => {
                 // Launch succeeded
+            }
+        }
+
+        if let Some((width, height)) = default_viewport {
+            let viewport_cmd = json!({
+                "id": gen_id(),
+                "action": "viewport",
+                "width": width,
+                "height": height,
+            });
+            match send_command(viewport_cmd, &flags.session) {
+                Ok(resp) if !resp.success => {
+                    let error_msg = resp
+                        .error
+                        .unwrap_or_else(|| "Failed to apply default viewport".to_string());
+                    if flags.json {
+                        print_json_error(error_msg);
+                    } else {
+                        eprintln!("{} {}", color::error_indicator(), error_msg);
+                    }
+                    exit(1);
+                }
+                Err(e) => {
+                    if flags.json {
+                        print_json_error(e);
+                    } else {
+                        eprintln!(
+                            "{} Could not apply default viewport: {}",
+                            color::error_indicator(),
+                            e
+                        );
+                    }
+                    exit(1);
+                }
+                Ok(_) => {}
             }
         }
     }

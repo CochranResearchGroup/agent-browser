@@ -6,6 +6,7 @@ Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 
 ## Contents
 
+- [Managed Runtime Profiles](#managed-runtime-profiles)
 - [Import Auth from Your Browser](#import-auth-from-your-browser)
 - [Persistent Profiles](#persistent-profiles)
 - [Session Persistence](#session-persistence)
@@ -18,6 +19,47 @@ Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 - [Cookie-Based Auth](#cookie-based-auth)
 - [Token Refresh Handling](#token-refresh-handling)
 - [Security Best Practices](#security-best-practices)
+
+## Managed Runtime Profiles
+
+Managed runtime profiles are the default long-lived authentication path for
+agent-browser. They persist a real Chrome user-data-dir under
+`~/.agent-browser/runtime-profiles/<name>/user-data` and work well for
+recurring agent tasks.
+
+```bash
+# Default runtime profile
+agent-browser runtime login https://app.example.com/login
+
+# Named runtime profile
+agent-browser --runtime-profile work runtime create work --set-default
+agent-browser --runtime-profile work runtime login https://app.example.com/login
+
+# Later automation reuses the same profile automatically
+agent-browser --runtime-profile work open https://app.example.com/dashboard
+```
+
+For Google, Gmail, and similar SSO flows, use a two-phase workflow:
+
+```bash
+# Phase 1: sign in without DevTools
+agent-browser --runtime-profile google-login runtime login https://accounts.google.com
+# User closes Chrome after sign-in
+
+# Phase 2: relaunch the same profile with DevTools for automation
+agent-browser --runtime-profile google-login runtime login https://myaccount.google.com --attachable
+agent-browser --runtime-profile google-login runtime status
+agent-browser --runtime-profile google-login get url
+agent-browser --runtime-profile google-login get title
+```
+
+Run those first post-relaunch reads sequentially. If `runtime status` shows
+`Browser alive: true` and the first read fails, retry once before treating the
+profile as broken.
+
+Use `--leave-open` or `runtimeProfiles.<name>.launch.leaveOpen` when you want
+`close` to detach from a managed runtime-profile browser instead of shutting it
+down.
 
 ## Import Auth from Your Browser
 
@@ -71,6 +113,10 @@ agent-browser --session-name myapp state load ./my-auth.json
 
 ## Persistent Profiles
 
+Use `--profile` when you need a custom unmanaged Chrome user-data-dir path.
+Prefer managed runtime profiles unless you explicitly need a path outside
+`~/.agent-browser/runtime-profiles`.
+
 Use `--profile` to point agent-browser at a Chrome user data directory. This persists everything (cookies, IndexedDB, service workers, cache) across browser restarts without explicit save/load:
 
 ```bash
@@ -98,6 +144,10 @@ agent-browser open https://app.example.com/dashboard
 
 ## Session Persistence
 
+Use `--session-name` for lightweight cookie and storage reuse. Prefer runtime
+profiles when the browser identity itself matters, especially for Google sign-in,
+password-manager behavior, service workers, or other profile-level state.
+
 Use `--session-name` to auto-save and restore cookies + localStorage by name, without managing files:
 
 ```bash
@@ -122,7 +172,6 @@ agent-browser --session-name secure open https://app.example.com
 ```bash
 # Navigate to login page
 agent-browser open https://app.example.com/login
-agent-browser wait --load networkidle
 
 # Get form elements
 agent-browser snapshot -i
@@ -134,7 +183,7 @@ agent-browser fill @e2 "password123"
 
 # Submit
 agent-browser click @e3
-agent-browser wait --load networkidle
+agent-browser wait --url "**/dashboard"
 
 # Verify login succeeded
 agent-browser get url  # Should be dashboard, not login

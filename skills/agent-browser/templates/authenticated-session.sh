@@ -1,16 +1,20 @@
 #!/bin/bash
 # Template: Authenticated Session Workflow
-# Purpose: Login once, save state, reuse for subsequent runs
-# Usage: ./authenticated-session.sh <login-url> [state-file]
+# Purpose: Login once, persist auth, reuse for subsequent runs
+# Usage: ./authenticated-session.sh <login-url> [runtime-profile]
 #
-# RECOMMENDED: Use the auth vault instead of this template:
+# RECOMMENDED default: use a managed runtime profile for recurring authenticated work:
+#   agent-browser --runtime-profile myapp runtime login <login-url>
+#   agent-browser --runtime-profile myapp open <app-url>
+#
+# Alternative: use the auth vault when credential-driven login is appropriate:
 #   echo "<pass>" | agent-browser auth save myapp --url <login-url> --username <user> --password-stdin
 #   agent-browser auth login myapp
-# The auth vault stores credentials securely and the LLM never sees passwords.
 #
 # Environment variables:
 #   APP_USERNAME - Login username/email
 #   APP_PASSWORD - Login password
+#   RUNTIME_PROFILE - Override runtime profile name
 #
 # Two modes:
 #   1. Discovery mode (default): Shows form structure so you can identify refs
@@ -24,82 +28,70 @@
 
 set -euo pipefail
 
-LOGIN_URL="${1:?Usage: $0 <login-url> [state-file]}"
-STATE_FILE="${2:-./auth-state.json}"
+LOGIN_URL="${1:?Usage: $0 <login-url> [runtime-profile]}"
+RUNTIME_PROFILE="${RUNTIME_PROFILE:-${2:-default}}"
 
 echo "Authentication workflow: $LOGIN_URL"
+echo "Runtime profile: $RUNTIME_PROFILE"
 
 # ================================================================
-# SAVED STATE: Skip login if valid saved state exists
+# RUNTIME PROFILE: Reuse existing authenticated profile when possible
 # ================================================================
-if [[ -f "$STATE_FILE" ]]; then
-    echo "Loading saved state from $STATE_FILE..."
-    if agent-browser --state "$STATE_FILE" open "$LOGIN_URL" 2>/dev/null; then
-        agent-browser wait --load networkidle
-
-        CURRENT_URL=$(agent-browser get url)
-        if [[ "$CURRENT_URL" != *"login"* ]] && [[ "$CURRENT_URL" != *"signin"* ]]; then
-            echo "Session restored successfully"
-            agent-browser snapshot -i
-            exit 0
-        fi
-        echo "Session expired, performing fresh login..."
-        agent-browser close 2>/dev/null || true
-    else
-        echo "Failed to load state, re-authenticating..."
+if agent-browser --runtime-profile "$RUNTIME_PROFILE" open "$LOGIN_URL" 2>/dev/null; then
+    CURRENT_URL=$(agent-browser --runtime-profile "$RUNTIME_PROFILE" get url)
+    if [[ "$CURRENT_URL" != *"login"* ]] && [[ "$CURRENT_URL" != *"signin"* ]]; then
+        echo "Runtime profile already appears authenticated"
+        agent-browser --runtime-profile "$RUNTIME_PROFILE" snapshot -i
+        exit 0
     fi
-    rm -f "$STATE_FILE"
+    echo "Runtime profile needs sign-in or re-authentication"
+    agent-browser --runtime-profile "$RUNTIME_PROFILE" close 2>/dev/null || true
 fi
 
 # ================================================================
 # DISCOVERY MODE: Shows form structure (delete after setup)
 # ================================================================
-echo "Opening login page..."
-agent-browser open "$LOGIN_URL"
-agent-browser wait --load networkidle
+echo "Opening login page with detached runtime login..."
+agent-browser --runtime-profile "$RUNTIME_PROFILE" runtime login "$LOGIN_URL"
 
 echo ""
 echo "Login form structure:"
 echo "---"
-agent-browser snapshot -i
+agent-browser --runtime-profile "$RUNTIME_PROFILE" runtime status
 echo "---"
 echo ""
 echo "Next steps:"
-echo "  1. Note the refs: username=@e?, password=@e?, submit=@e?"
-echo "  2. Update the LOGIN FLOW section below with your refs"
-echo "  3. Set: export APP_USERNAME='...' APP_PASSWORD='...'"
-echo "  4. Delete this DISCOVERY MODE section"
+echo "  1. Complete manual login in the opened browser window"
+echo "  2. Close the browser after sign-in"
+echo "  3. Re-run with:"
+echo "     agent-browser --runtime-profile \"$RUNTIME_PROFILE\" open <app-url>"
+echo "  4. For Google or similar SSO, relaunch with --attachable only after sign-in"
 echo ""
-agent-browser close
 exit 0
 
 # ================================================================
-# LOGIN FLOW: Uncomment and customize after discovery
+# LOGIN FLOW: Uncomment only if you intentionally want scripted credential entry
 # ================================================================
 # : "${APP_USERNAME:?Set APP_USERNAME environment variable}"
 # : "${APP_PASSWORD:?Set APP_PASSWORD environment variable}"
 #
-# agent-browser open "$LOGIN_URL"
-# agent-browser wait --load networkidle
-# agent-browser snapshot -i
+# agent-browser --runtime-profile "$RUNTIME_PROFILE" open "$LOGIN_URL"
+# agent-browser --runtime-profile "$RUNTIME_PROFILE" snapshot -i
 #
 # # Fill credentials (update refs to match your form)
-# agent-browser fill @e1 "$APP_USERNAME"
-# agent-browser fill @e2 "$APP_PASSWORD"
-# agent-browser click @e3
-# agent-browser wait --load networkidle
+# agent-browser --runtime-profile "$RUNTIME_PROFILE" fill @e1 "$APP_USERNAME"
+# agent-browser --runtime-profile "$RUNTIME_PROFILE" fill @e2 "$APP_PASSWORD"
+# agent-browser --runtime-profile "$RUNTIME_PROFILE" click @e3
+# agent-browser --runtime-profile "$RUNTIME_PROFILE" wait --url "**/dashboard"
 #
 # # Verify login succeeded
-# FINAL_URL=$(agent-browser get url)
+# FINAL_URL=$(agent-browser --runtime-profile "$RUNTIME_PROFILE" get url)
 # if [[ "$FINAL_URL" == *"login"* ]] || [[ "$FINAL_URL" == *"signin"* ]]; then
 #     echo "Login failed - still on login page"
-#     agent-browser screenshot /tmp/login-failed.png
-#     agent-browser close
+#     agent-browser --runtime-profile "$RUNTIME_PROFILE" screenshot /tmp/login-failed.png
+#     agent-browser --runtime-profile "$RUNTIME_PROFILE" close
 #     exit 1
 # fi
 #
-# # Save state for future runs
-# echo "Saving state to $STATE_FILE"
-# agent-browser state save "$STATE_FILE"
 # echo "Login successful"
-# agent-browser snapshot -i
+# agent-browser --runtime-profile "$RUNTIME_PROFILE" snapshot -i

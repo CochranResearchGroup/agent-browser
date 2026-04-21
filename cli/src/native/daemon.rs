@@ -11,8 +11,9 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::signal;
 use tokio::sync::{mpsc, Notify, RwLock};
 
-use super::actions::{execute_command, DaemonState};
+use super::actions::DaemonState;
 use super::cdp::client::CdpClient;
+use super::control_plane::{ControlPlaneHandle, ControlPlaneWorker};
 use super::state;
 use super::stream::StreamServer;
 
@@ -169,9 +170,8 @@ async fn run_socket_server(
         None
     };
 
-    let state: std::sync::Arc<tokio::sync::Mutex<DaemonState>> = std::sync::Arc::new(
-        tokio::sync::Mutex::new(DaemonState::new_with_stream(stream_client, stream_server)),
-    );
+    let control_plane =
+        ControlPlaneWorker::start(DaemonState::new_with_stream(stream_client, stream_server));
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -181,9 +181,6 @@ async fn run_socket_server(
     // destructors and can leave Chrome processes orphaned (issue #1113).
     let close_notify = Arc::new(Notify::new());
 
-    let mut drain_interval = tokio::time::interval(Duration::from_millis(100));
-    drain_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
     let idle_sleep = idle_timeout_ms.map(|ms| tokio::time::sleep(Duration::from_millis(ms)));
     let mut idle_sleep_pin = idle_sleep.map(Box::pin);
 
@@ -192,29 +189,16 @@ async fn run_socket_server(
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, _)) => {
-                        let state = state.clone();
+                        let control_plane = control_plane.clone();
                         let reset_tx = reset_tx.clone();
                         let sf = stream_file.clone();
                         let cn = close_notify.clone();
                         tokio::spawn(async move {
-                            handle_connection(stream, state, reset_tx, sf, cn).await;
+                            handle_connection(stream, control_plane, reset_tx, sf, cn).await;
                         });
                     }
                     Err(e) => {
                         let _ = writeln!(std::io::stderr(), "Accept error: {}", e);
-                    }
-                }
-            }
-            _ = drain_interval.tick() => {
-                let mut s = state.lock().await;
-                if let Some(ref mut mgr) = s.browser {
-                    if mgr.has_process_exited() {
-                        let _ = mgr.close().await;
-                        s.browser = None;
-                        s.screencasting = false;
-                        s.update_stream_client().await;
-                    } else {
-                        s.drain_cdp_events_background().await;
                     }
                 }
             }
@@ -224,10 +208,7 @@ async fn run_socket_server(
                     None => std::future::pending::<()>().await,
                 }
             }, if idle_timeout_ms.is_some() => {
-                let mut s = state.lock().await;
-                if let Some(ref mut mgr) = s.browser {
-                    let _ = mgr.close().await;
-                }
+                control_plane.shutdown().await;
                 break;
             }
             _ = reset_rx.recv(), if idle_timeout_ms.is_some() => {
@@ -239,13 +220,11 @@ async fn run_socket_server(
                 // "close" command was handled; browser already closed by
                 // handle_close(). Break to run cleanup and exit gracefully
                 // so destructors fire.
+                control_plane.shutdown().await;
                 break;
             }
             _ = shutdown_signal() => {
-                let mut s = state.lock().await;
-                if let Some(ref mut mgr) = s.browser {
-                    let _ = mgr.close().await;
-                }
+                control_plane.shutdown().await;
                 break;
             }
         }
@@ -288,9 +267,8 @@ async fn run_socket_server(
         None
     };
 
-    let state: std::sync::Arc<tokio::sync::Mutex<DaemonState>> = std::sync::Arc::new(
-        tokio::sync::Mutex::new(DaemonState::new_with_stream(stream_client, stream_server)),
-    );
+    let control_plane =
+        ControlPlaneWorker::start(DaemonState::new_with_stream(stream_client, stream_server));
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -305,12 +283,12 @@ async fn run_socket_server(
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, _)) => {
-                        let state = state.clone();
+                        let control_plane = control_plane.clone();
                         let reset_tx = reset_tx.clone();
                         let sf = stream_file.clone();
                         let cn = close_notify.clone();
                         tokio::spawn(async move {
-                            handle_connection(stream, state, reset_tx, sf, cn).await;
+                            handle_connection(stream, control_plane, reset_tx, sf, cn).await;
                         });
                     }
                     Err(e) => {
@@ -324,10 +302,7 @@ async fn run_socket_server(
                     None => std::future::pending::<()>().await,
                 }
             }, if idle_timeout_ms.is_some() => {
-                let mut s = state.lock().await;
-                if let Some(ref mut mgr) = s.browser {
-                    let _ = mgr.close().await;
-                }
+                control_plane.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
@@ -337,14 +312,12 @@ async fn run_socket_server(
                 continue;
             }
             _ = close_notify.notified() => {
+                control_plane.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
             _ = shutdown_signal() => {
-                let mut s = state.lock().await;
-                if let Some(ref mut mgr) = s.browser {
-                    let _ = mgr.close().await;
-                }
+                control_plane.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
@@ -356,7 +329,7 @@ async fn run_socket_server(
 
 async fn handle_connection<S>(
     stream: S,
-    state: std::sync::Arc<tokio::sync::Mutex<DaemonState>>,
+    control_plane: ControlPlaneHandle,
     idle_reset_tx: Option<Arc<mpsc::Sender<()>>>,
     stream_file_cleanup: Option<PathBuf>,
     close_notify: Arc<Notify>,
@@ -399,11 +372,14 @@ async fn handle_connection<S>(
                     let _ = tx.try_send(());
                 }
 
-                let is_close = cmd.get("action").and_then(|v| v.as_str()) == Some("close");
+                let action = cmd.get("action").and_then(|v| v.as_str());
+                let is_close = action == Some("close");
 
-                let response = {
-                    let mut s = state.lock().await;
-                    execute_command(&cmd, &mut s).await
+                let response = if action == Some("worker_status") {
+                    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    control_plane.status_response(id)
+                } else {
+                    control_plane.submit(cmd).await
                 };
 
                 let mut resp = serde_json::to_string(&response).unwrap_or_default();
