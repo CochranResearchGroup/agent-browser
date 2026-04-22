@@ -31,7 +31,7 @@ use super::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use super::providers;
 use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
-use super::service_health::refresh_persisted_browser_health;
+use super::service_health::reconcile_service_state;
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ServiceState,
@@ -5707,31 +5707,15 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
-    let before = service_state.clone();
-
-    refresh_persisted_browser_health(&mut service_state).await;
-
-    let changed_browsers = service_state
-        .browsers
-        .iter()
-        .filter(|(id, browser)| {
-            before
-                .browsers
-                .get(*id)
-                .map(|previous| {
-                    previous.health != browser.health || previous.last_error != browser.last_error
-                })
-                .unwrap_or(true)
-        })
-        .count();
+    let summary = reconcile_service_state(&mut service_state).await;
 
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?);
     store.save(&service_state)?;
 
     Ok(json!({
         "reconciled": true,
-        "browserCount": service_state.browsers.len(),
-        "changedBrowsers": changed_browsers,
+        "browserCount": summary.browser_count,
+        "changedBrowsers": summary.changed_browsers,
         "service_state": service_state,
     }))
 }

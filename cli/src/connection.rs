@@ -297,6 +297,7 @@ pub struct DaemonOptions<'a> {
     pub keychain_password: Option<&'a str>,
     pub auto_connect: bool,
     pub idle_timeout: Option<&'a str>,
+    pub service_reconcile_interval_ms: Option<u64>,
     pub default_timeout: Option<u64>,
     pub cdp: Option<&'a str>,
     pub runtime_attach_managed: bool,
@@ -390,6 +391,12 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     }
     if let Some(idle) = opts.idle_timeout {
         cmd.env("AGENT_BROWSER_IDLE_TIMEOUT_MS", idle);
+    }
+    if let Some(ms) = opts.service_reconcile_interval_ms {
+        cmd.env(
+            "AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS",
+            ms.to_string(),
+        );
     }
     if let Some(timeout) = opts.default_timeout {
         cmd.env("AGENT_BROWSER_DEFAULT_TIMEOUT", timeout.to_string());
@@ -990,6 +997,7 @@ mod tests {
             keychain_password: Some("secret"),
             auto_connect: false,
             idle_timeout: None,
+            service_reconcile_interval_ms: Some(1234),
             default_timeout: None,
             cdp: None,
             runtime_attach_managed: false,
@@ -1012,6 +1020,9 @@ mod tests {
             .any(|(k, v)| { k == "AGENT_BROWSER_USE_REAL_KEYCHAIN" && v.as_deref() == Some("1") }));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_KEYCHAIN_PASSWORD" && v.as_deref() == Some("secret")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS" && v.as_deref() == Some("1234")
         }));
     }
 

@@ -114,6 +114,7 @@ pub struct RuntimeProfileConfig {
 pub struct ServiceConfig {
     pub site_policies: Option<BTreeMap<String, SitePolicy>>,
     pub providers: Option<BTreeMap<String, ServiceProvider>>,
+    pub reconcile_interval_ms: Option<u64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -330,6 +331,7 @@ fn merge_service_configs(
         (Some(base), Some(overlay)) => Some(ServiceConfig {
             site_policies: merge_service_model_maps(base.site_policies, overlay.site_policies),
             providers: merge_service_model_maps(base.providers, overlay.providers),
+            reconcile_interval_ms: overlay.reconcile_interval_ms.or(base.reconcile_interval_ms),
         }),
     }
 }
@@ -787,6 +789,7 @@ pub struct Flags {
     pub configured_runtime_profiles: HashMap<String, Option<String>>,
     pub manual_login_preferred_services: Vec<String>,
     pub service_state: ServiceState,
+    pub service_reconcile_interval_ms: Option<u64>,
     pub runtime_profile: Option<String>,
     pub headers: Option<String>,
     pub executable_path: Option<String>,
@@ -862,6 +865,16 @@ pub fn parse_flags(args: &[String]) -> Flags {
         .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
     let service_state = service_state_from_store(config.service_state_snapshot());
+    let service_reconcile_interval_ms = env::var("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .or_else(|| {
+            config
+                .service
+                .as_ref()
+                .and_then(|service| service.reconcile_interval_ms)
+        })
+        .filter(|&ms| ms > 0);
 
     let extensions_env = env::var("AGENT_BROWSER_EXTENSIONS")
         .ok()
@@ -892,6 +905,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         configured_runtime_profiles,
         manual_login_preferred_services,
         service_state,
+        service_reconcile_interval_ms,
         runtime_profile: env::var("AGENT_BROWSER_RUNTIME_PROFILE")
             .ok()
             .or(config.runtime_profile),
@@ -1058,6 +1072,20 @@ pub fn parse_flags(args: &[String]) -> Flags {
                             "{} Invalid --idle-timeout: {}",
                             color::warning_indicator(),
                             e
+                        ),
+                    }
+                    i += 1;
+                }
+            }
+            "--service-reconcile-interval" => {
+                if let Some(s) = args.get(i + 1) {
+                    match s.parse::<u64>() {
+                        Ok(0) => flags.service_reconcile_interval_ms = None,
+                        Ok(ms) => flags.service_reconcile_interval_ms = Some(ms),
+                        Err(_) => eprintln!(
+                            "{} Invalid --service-reconcile-interval: expected milliseconds, got {}",
+                            color::warning_indicator(),
+                            s
                         ),
                     }
                     i += 1;
@@ -1805,6 +1833,7 @@ mod tests {
                         ..ServiceProvider::default()
                     },
                 )])),
+                reconcile_interval_ms: Some(60_000),
             }),
             ..Config::default()
         };
@@ -1843,6 +1872,7 @@ mod tests {
                     ),
                 ])),
                 providers: None,
+                reconcile_interval_ms: Some(30_000),
             }),
             ..Config::default()
         };
@@ -1874,6 +1904,7 @@ mod tests {
                 .map(|provider| provider.display_name.as_str()),
             Some("Manual")
         );
+        assert_eq!(service.reconcile_interval_ms, Some(30_000));
     }
 
     #[test]
@@ -2145,6 +2176,7 @@ mod tests {
                         ..ServiceProvider::default()
                     },
                 )])),
+                reconcile_interval_ms: Some(45_000),
             }),
             ..Config::default()
         };
@@ -2157,6 +2189,52 @@ mod tests {
         assert_eq!(state.providers["manual"].display_name, "Dashboard approval");
         assert!(state.browsers.is_empty());
         assert!(state.sessions.is_empty());
+    }
+
+    #[test]
+    fn test_parse_flags_loads_service_reconcile_interval_from_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-service-reconcile-config-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(&config_path, r#"{"service":{"reconcileIntervalMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
+
+        assert_eq!(flags.service_reconcile_interval_ms, Some(5000));
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_service_reconcile_interval_flag_overrides_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-service-reconcile-flag-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(&config_path, r#"{"service":{"reconcileIntervalMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args(&format!(
+            "--config {} --service-reconcile-interval 250 service status",
+            config_path.display()
+        )));
+
+        assert_eq!(flags.service_reconcile_interval_ms, Some(250));
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
     }
 
     #[test]

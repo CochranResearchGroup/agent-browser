@@ -2539,6 +2539,7 @@ Notes:
   - Persisted service state is loaded from ~/.agent-browser/service/state.json.
   - The current control-plane snapshot is refreshed in the persisted service state.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
+  - Set --service-reconcile-interval <ms> or service.reconcileIntervalMs to run probes in the daemon background.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 
@@ -2999,6 +3000,7 @@ Options:
   --confirm-actions <list>   Categories requiring confirmation (or AGENT_BROWSER_CONFIRM_ACTIONS)
   --confirm-interactive      Interactive confirmation prompts; auto-denies if stdin is not a TTY (or AGENT_BROWSER_CONFIRM_INTERACTIVE)
   --engine <name>            Browser engine: chrome (default), lightpanda (or AGENT_BROWSER_ENGINE)
+  --service-reconcile-interval <ms> Background service browser-health reconciliation interval; 0 disables it
   --no-auto-dialog           Disable automatic dismissal of alert/beforeunload dialogs (or AGENT_BROWSER_NO_AUTO_DIALOG)
   --model <name>             AI model for chat (or AI_GATEWAY_MODEL env)
   -v, --verbose              Show tool commands and their raw output
@@ -3037,6 +3039,9 @@ Configuration:
             "defaultViewport": "960x640"
           }}
         }}
+      }},
+      "service": {{
+        "reconcileIntervalMs": 60000
       }}
     }}
 
@@ -3048,6 +3053,8 @@ Configuration:
   detach from a managed runtime-profile browser instead of shutting it down.
   Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640
   to resize the browser content area after launch and before the command runs.
+  Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`
+  to run persisted browser-health reconciliation in the daemon background.
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.
@@ -3082,6 +3089,7 @@ Environment:
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM session encryption
   AGENT_BROWSER_STREAM_PORT      Override WebSocket streaming port (default: OS-assigned)
   AGENT_BROWSER_IDLE_TIMEOUT_MS  Auto-shutdown daemon after N ms of inactivity (disabled by default)
+  AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS Background service browser-health reconciliation interval in ms
   AGENT_BROWSER_IOS_DEVICE       Default iOS device name
   AGENT_BROWSER_IOS_UDID         Default iOS device UDID
   AGENT_BROWSER_RUNTIME_PROFILE  Managed runtime profile name

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 
 use super::actions::{execute_command, DaemonState};
-use super::service_health::refresh_persisted_browser_health;
+use super::service_health::{reconcile_persisted_service_state, refresh_persisted_browser_health};
 use super::service_model::{ControlPlaneSnapshot, ServiceState};
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
@@ -73,10 +73,30 @@ impl ControlPlaneWorker {
         Self::start_with_capacity(state, DEFAULT_QUEUE_CAPACITY)
     }
 
+    pub fn start_with_service_reconcile_interval(
+        state: DaemonState,
+        service_reconcile_interval_ms: Option<u64>,
+    ) -> ControlPlaneHandle {
+        Self::start_with_options(state, DEFAULT_QUEUE_CAPACITY, service_reconcile_interval_ms)
+    }
+
     fn start_with_capacity(state: DaemonState, capacity: usize) -> ControlPlaneHandle {
+        Self::start_with_options(state, capacity, None)
+    }
+
+    fn start_with_options(
+        state: DaemonState,
+        capacity: usize,
+        service_reconcile_interval_ms: Option<u64>,
+    ) -> ControlPlaneHandle {
         let (tx, rx) = mpsc::channel(capacity);
         let status = Arc::new(ControlPlaneStatus::new());
-        tokio::spawn(run_worker(state, rx, status.clone()));
+        tokio::spawn(run_worker(
+            state,
+            rx,
+            status.clone(),
+            service_reconcile_interval_ms,
+        ));
         ControlPlaneHandle { tx, status }
     }
 }
@@ -302,9 +322,15 @@ async fn run_worker(
     mut state: DaemonState,
     mut rx: mpsc::Receiver<WorkerMessage>,
     status: Arc<ControlPlaneStatus>,
+    service_reconcile_interval_ms: Option<u64>,
 ) {
     let mut drain_interval = tokio::time::interval(Duration::from_millis(100));
     drain_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut service_reconcile_interval = service_reconcile_interval_ms.map(|ms| {
+        let mut interval = tokio::time::interval(Duration::from_millis(ms));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval
+    });
     status.set_state(WorkerState::Ready);
 
     loop {
@@ -348,6 +374,14 @@ async fn run_worker(
                     }
                     status.set_state(WorkerState::Ready);
                 }
+            }
+            _ = async {
+                match service_reconcile_interval.as_mut() {
+                    Some(interval) => interval.tick().await,
+                    None => std::future::pending::<tokio::time::Instant>().await,
+                }
+            }, if service_reconcile_interval.is_some() => {
+                let _ = reconcile_persisted_service_state().await;
             }
         }
     }
@@ -531,6 +565,45 @@ mod tests {
         );
 
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn background_service_reconcile_updates_persisted_browser_health() {
+        let home = temp_home("control-plane-reconcile-loop");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: std::collections::BTreeMap::from([(
+                    "browser-1".to_string(),
+                    crate::native::service_model::BrowserProcess {
+                        id: "browser-1".to_string(),
+                        host: crate::native::service_model::BrowserHost::AttachedExisting,
+                        health: crate::native::service_model::BrowserHealth::Ready,
+                        cdp_endpoint: Some(
+                            "ws://127.0.0.1:9/devtools/browser/unreachable".to_string(),
+                        ),
+                        active_session_ids: vec!["reconcile-loop".to_string()],
+                        ..crate::native::service_model::BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let handle =
+            ControlPlaneWorker::start_with_service_reconcile_interval(DaemonState::new(), Some(25));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        handle.shutdown().await;
+
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers["browser-1"].health,
+            crate::native::service_model::BrowserHealth::Unreachable
+        );
+
         let _ = std::fs::remove_dir_all(&home);
     }
 

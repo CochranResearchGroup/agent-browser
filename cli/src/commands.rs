@@ -2418,6 +2418,7 @@ mod tests {
             configured_runtime_profiles: std::collections::HashMap::new(),
             manual_login_preferred_services: Vec::new(),
             service_state: crate::native::service_model::ServiceState::default(),
+            service_reconcile_interval_ms: None,
             runtime_profile: None,
             json: false,
             headed: false,

@@ -3,8 +3,47 @@
 use std::time::Duration;
 
 use super::service_model::{BrowserHealth, BrowserProcess, ServiceState};
+use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServiceReconcileSummary {
+    pub browser_count: usize,
+    pub changed_browsers: usize,
+}
+
+pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconcileSummary {
+    let before = state.clone();
+    refresh_persisted_browser_health(state).await;
+
+    let changed_browsers = state
+        .browsers
+        .iter()
+        .filter(|(id, browser)| {
+            before
+                .browsers
+                .get(*id)
+                .map(|previous| {
+                    previous.health != browser.health || previous.last_error != browser.last_error
+                })
+                .unwrap_or(true)
+        })
+        .count();
+
+    ServiceReconcileSummary {
+        browser_count: state.browsers.len(),
+        changed_browsers,
+    }
+}
+
+pub async fn reconcile_persisted_service_state() -> Result<ServiceReconcileSummary, String> {
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?);
+    let mut state = store.load()?;
+    let summary = reconcile_service_state(&mut state).await;
+    store.save(&state)?;
+    Ok(summary)
+}
 
 pub async fn refresh_persisted_browser_health(state: &mut ServiceState) {
     for browser in state.browsers.values_mut() {

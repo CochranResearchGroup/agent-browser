@@ -389,6 +389,8 @@ Use `agent-browser service status` for a service-mode snapshot. It reports worke
 
 Use `agent-browser service reconcile` to run persisted browser health probes intentionally without requesting a control-plane status snapshot. It updates `~/.agent-browser/service/state.json` and returns the reconciled service state plus total and changed browser counts.
 
+Set `service.reconcileIntervalMs` in config, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background. Unset or `0` disables the background loop.
+
 ## Batch Execution
 
 Use `batch` when running 2 or more commands in sequence. Batch executes commands in order, so dependent commands like navigate then screenshot work correctly. Each quoted argument is a separate command.
