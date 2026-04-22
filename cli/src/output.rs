@@ -2528,10 +2528,13 @@ agent-browser service - Inspect service-mode state
 
 Usage:
   agent-browser service status
+  agent-browser service status --watch [--interval <ms>] [--count <n>]
+  agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
 
 Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
+  watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
 
 Notes:
@@ -2550,6 +2553,8 @@ Global Options:
 
 Examples:
   agent-browser service status
+  agent-browser service status --watch --interval 1000
+  agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
   agent-browser --json service status
 "##
@@ -2905,6 +2910,7 @@ Streaming:
 
 Service:
   service status             Show service worker health and configured service state
+  service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
 
 Batch:
@@ -3136,6 +3142,7 @@ Examples:
   agent-browser stream enable            # Start runtime streaming on an auto-selected port
   agent-browser stream status            # Inspect runtime streaming state
   agent-browser service status           # Inspect service control-plane state
+  agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile

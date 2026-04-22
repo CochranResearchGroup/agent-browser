@@ -34,6 +34,7 @@ agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
+agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
@@ -251,12 +252,16 @@ Streaming is enabled automatically for all sessions. Use these commands to check
 
 ```bash
 agent-browser service status          # Inspect worker state, browser health, queue depth, site policies, and providers
+agent-browser service status --watch --interval 1000
+agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile       # Probe persisted browser records and update service state
 ```
 
 `service status` reports the service control-plane state, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode entities from `agent-browser.json` and `~/.agent-browser/config.json` without launching a browser. It refreshes the persisted control-plane snapshot in `state.json` and probes persisted browser records for dead PIDs and unreachable CDP endpoints. Dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Browser launch and close commands also update the active session's persisted browser health record. Configured site policies and providers override entries with the same IDs from the persisted state.
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
+
+`service status --watch` and `service watch` poll the same status path until interrupted. Use `--interval <ms>` to set the polling interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 
 `service reconcile` runs the same persisted browser health probes intentionally without requesting a control-plane status snapshot. It updates `state.json`, refreshes the `reconciliation` snapshot, and returns the reconciled service state plus counts for total and changed browser records.
 

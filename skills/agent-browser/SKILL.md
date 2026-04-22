@@ -322,6 +322,7 @@ agent-browser stream enable --port 9223  # Bind a specific localhost port
 agent-browser stream status           # Inspect enabled state, port, connection, and screencasting
 agent-browser stream disable          # Stop runtime streaming and remove the .stream metadata file
 agent-browser service status          # Inspect service control-plane and configured service entities
+agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
 
 # Clipboard
@@ -386,6 +387,8 @@ Streaming is opt-in. Use `agent-browser stream enable` to start a runtime WebSoc
 ## Service Status
 
 Use `agent-browser service status` for a service-mode snapshot. It reports worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers without launching a browser. It refreshes the persisted control-plane snapshot in `state.json` and probes persisted browser records for dead PIDs and unreachable CDP endpoints. Dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Browser launch and close commands also update the active session's persisted browser health record. Configured site policies and providers override entries with the same IDs from the persisted state.
+
+Use `agent-browser service status --watch` or `agent-browser service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. Add `--interval <ms>` to set the poll interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 
 Use `agent-browser service reconcile` to run persisted browser health probes intentionally without requesting a control-plane status snapshot. It updates `~/.agent-browser/service/state.json` and returns the reconciled service state plus total and changed browser counts. The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError`.
 

@@ -133,6 +133,7 @@ agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
+agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
@@ -1196,6 +1197,8 @@ Use `service status` to inspect the service-mode control plane and configured se
 
 ```bash
 agent-browser service status
+agent-browser service status --watch --interval 1000
+agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
 ```
 
@@ -1204,6 +1207,8 @@ The response includes worker state, browser health, queue depth, persisted servi
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 
 Use `service reconcile` to run the persisted browser health probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot.
+
+Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
 
 Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background.
 

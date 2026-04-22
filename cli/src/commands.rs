@@ -878,11 +878,68 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         // === Service status ===
         "service" => match rest.first().copied() {
-            Some("status") => Ok(json!({
-                "id": id,
-                "action": "service_status",
-                "serviceState": flags.service_state.clone(),
-            })),
+            Some("status") | Some("watch") => {
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_status",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = if rest.first().copied() == Some("watch") {
+                    cmd["watch"] = json!(true);
+                    1
+                } else {
+                    1
+                };
+                while i < rest.len() {
+                    match rest[i] {
+                        "--watch" => {
+                            cmd["watch"] = json!(true);
+                        }
+                        "--interval" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --interval".to_string(),
+                                    usage:
+                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                });
+                            };
+                            let interval =
+                                raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --interval value: {}", raw),
+                                    usage:
+                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                })?;
+                            cmd["watchIntervalMs"] = json!(interval);
+                            i += 1;
+                        }
+                        "--count" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --count".to_string(),
+                                    usage:
+                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                });
+                            };
+                            let count =
+                                raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --count value: {}", raw),
+                                    usage:
+                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                })?;
+                            cmd["watchCount"] = json!(count);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service status: {}", flag),
+                                usage: "service status [--watch] [--interval <ms>] [--count <n>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
             Some("reconcile") => Ok(json!({
                 "id": id,
                 "action": "service_reconcile",
@@ -890,11 +947,11 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             })),
             Some(sub) => Err(ParseError::UnknownSubcommand {
                 subcommand: sub.to_string(),
-                valid_options: &["status", "reconcile"],
+                valid_options: &["status", "watch", "reconcile"],
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|reconcile>",
+                usage: "service <status|watch|reconcile>",
             }),
         },
 
@@ -3989,6 +4046,29 @@ mod tests {
             cmd["serviceState"]["sitePolicies"]["google"]["manualLoginPreferred"],
             true
         );
+    }
+
+    #[test]
+    fn test_service_status_watch_options() {
+        let cmd = parse_command(
+            &args("service status --watch --interval 250 --count 2"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_status");
+        assert_eq!(cmd["watch"], true);
+        assert_eq!(cmd["watchIntervalMs"], 250);
+        assert_eq!(cmd["watchCount"], 2);
+    }
+
+    #[test]
+    fn test_service_watch_alias() {
+        let cmd = parse_command(&args("service watch --interval 1000"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_status");
+        assert_eq!(cmd["watch"], true);
+        assert_eq!(cmd["watchIntervalMs"], 1000);
     }
 
     #[test]
