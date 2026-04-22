@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-use super::service_model::{BrowserHealth, BrowserProcess, ServiceState};
+use super::service_model::{
+    BrowserHealth, BrowserProcess, ServiceReconciliationSnapshot, ServiceState,
+};
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
@@ -31,10 +33,17 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
         })
         .count();
 
-    ServiceReconcileSummary {
+    let summary = ServiceReconcileSummary {
         browser_count: state.browsers.len(),
         changed_browsers,
-    }
+    };
+    state.reconciliation = Some(ServiceReconciliationSnapshot {
+        last_reconciled_at: Some(current_timestamp()),
+        last_error: None,
+        browser_count: summary.browser_count,
+        changed_browsers: summary.changed_browsers,
+    });
+    summary
 }
 
 pub async fn reconcile_persisted_service_state() -> Result<ServiceReconcileSummary, String> {
@@ -109,6 +118,12 @@ fn cdp_version_url(endpoint: &str) -> Option<String> {
     url.set_query(None);
     url.set_fragment(None);
     Some(url.to_string())
+}
+
+fn current_timestamp() -> String {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
 }
 
 #[cfg(unix)]
@@ -195,6 +210,26 @@ mod tests {
         let browser = &state.browsers["browser-1"];
         assert_eq!(browser.health, BrowserHealth::Ready);
         assert_eq!(browser.last_error, None);
+    }
+
+    #[tokio::test]
+    async fn reconcile_records_summary_snapshot() {
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            cdp_endpoint: Some("ws://127.0.0.1:9/devtools/browser/abc".to_string()),
+            ..BrowserProcess::default()
+        });
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(summary.browser_count, 1);
+        assert_eq!(summary.changed_browsers, 1);
+        let reconciliation = state.reconciliation.as_ref().unwrap();
+        assert_eq!(reconciliation.browser_count, 1);
+        assert_eq!(reconciliation.changed_browsers, 1);
+        assert!(reconciliation.last_reconciled_at.is_some());
+        assert_eq!(reconciliation.last_error, None);
     }
 
     #[tokio::test]

@@ -1201,7 +1201,9 @@ agent-browser service reconcile
 
 The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch and close commands also update the persisted browser health records for the active session.
 
-Use `service reconcile` to run the persisted browser health probes intentionally without requesting a control-plane status snapshot. This is the command shape the future service timer can call to keep browser records fresh without depending on an operator polling status.
+The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
+
+Use `service reconcile` to run the persisted browser health probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot.
 
 Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background.
 

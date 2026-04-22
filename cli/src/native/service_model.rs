@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 #[serde(default, rename_all = "camelCase")]
 pub struct ServiceState {
     pub control_plane: Option<ControlPlaneSnapshot>,
+    pub reconciliation: Option<ServiceReconciliationSnapshot>,
     pub profiles: BTreeMap<String, BrowserProfile>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     pub sessions: BTreeMap<String, BrowserSession>,
@@ -28,6 +29,16 @@ impl ServiceState {
         self.site_policies.extend(configured.site_policies);
         self.providers.extend(configured.providers);
     }
+}
+
+/// Latest persisted service reconciliation result.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceReconciliationSnapshot {
+    pub last_reconciled_at: Option<String>,
+    pub last_error: Option<String>,
+    pub browser_count: usize,
+    pub changed_browsers: usize,
 }
 
 /// Latest persisted control-plane status snapshot.
@@ -606,6 +617,12 @@ mod tests {
                 queue_capacity: 256,
                 updated_at: Some("2026-04-22T00:00:00Z".to_string()),
             }),
+            reconciliation: Some(ServiceReconciliationSnapshot {
+                last_reconciled_at: Some("2026-04-22T00:01:00Z".to_string()),
+                last_error: None,
+                browser_count: 1,
+                changed_browsers: 0,
+            }),
             profiles: BTreeMap::from([(
                 "work".to_string(),
                 BrowserProfile {
@@ -670,6 +687,13 @@ mod tests {
                 .as_ref()
                 .map(|snapshot| snapshot.worker_state.as_str()),
             Some("Ready")
+        );
+        assert_eq!(
+            decoded
+                .reconciliation
+                .as_ref()
+                .map(|snapshot| snapshot.browser_count),
+            Some(1)
         );
         assert_eq!(decoded.browsers["browser-1"].health, BrowserHealth::Ready);
         assert_eq!(

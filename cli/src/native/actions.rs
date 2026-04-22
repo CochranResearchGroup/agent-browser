@@ -9318,6 +9318,10 @@ mod tests {
             result["data"]["service_state"]["browsers"]["browser-1"]["health"],
             "unreachable"
         );
+        assert_eq!(
+            result["data"]["service_state"]["reconciliation"]["changedBrowsers"],
+            1
+        );
         assert!(state.browser.is_none());
 
         let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
@@ -9325,6 +9329,13 @@ mod tests {
         assert_eq!(
             persisted.browsers["browser-1"].health,
             ServiceBrowserHealth::Unreachable
+        );
+        assert_eq!(
+            persisted
+                .reconciliation
+                .as_ref()
+                .map(|snapshot| snapshot.changed_browsers),
+            Some(1)
         );
 
         let _ = fs::remove_dir_all(&home);

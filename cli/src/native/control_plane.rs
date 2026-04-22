@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 
 use super::actions::{execute_command, DaemonState};
-use super::service_health::{reconcile_persisted_service_state, refresh_persisted_browser_health};
+use super::service_health::{reconcile_persisted_service_state, reconcile_service_state};
 use super::service_model::{ControlPlaneSnapshot, ServiceState};
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
@@ -114,7 +114,7 @@ impl ControlPlaneHandle {
         let mut service_state = serde_json::from_value::<ServiceState>(service_state)
             .unwrap_or_else(|_| ServiceState::default());
         service_state.control_plane = Some(self.status_snapshot());
-        refresh_persisted_browser_health(&mut service_state).await;
+        reconcile_service_state(&mut service_state).await;
         persist_service_state_snapshot(&service_state);
 
         json!({
@@ -553,6 +553,16 @@ mod tests {
                 .and_then(|v| v.as_u64()),
             Some(DEFAULT_QUEUE_CAPACITY as u64)
         );
+        assert_eq!(
+            response
+                .pointer("/data/service_state/reconciliation/browserCount")
+                .and_then(|v| v.as_u64()),
+            Some(0)
+        );
+        assert!(response
+            .pointer("/data/service_state/reconciliation/lastReconciledAt")
+            .and_then(|v| v.as_str())
+            .is_some());
 
         let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
         let persisted = store.load().unwrap();
@@ -562,6 +572,13 @@ mod tests {
                 .as_ref()
                 .map(|snapshot| snapshot.queue_capacity),
             Some(DEFAULT_QUEUE_CAPACITY)
+        );
+        assert_eq!(
+            persisted
+                .reconciliation
+                .as_ref()
+                .map(|snapshot| snapshot.browser_count),
+            Some(0)
         );
 
         handle.shutdown().await;
@@ -603,6 +620,18 @@ mod tests {
             persisted.browsers["browser-1"].health,
             crate::native::service_model::BrowserHealth::Unreachable
         );
+        assert_eq!(
+            persisted
+                .reconciliation
+                .as_ref()
+                .map(|snapshot| snapshot.browser_count),
+            Some(1)
+        );
+        assert!(persisted
+            .reconciliation
+            .as_ref()
+            .and_then(|snapshot| snapshot.last_reconciled_at.as_deref())
+            .is_some());
 
         let _ = std::fs::remove_dir_all(&home);
     }
