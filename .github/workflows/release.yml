@@ -142,12 +142,14 @@ jobs:
 
       - name: Install cross-compilation tools (Linux)
         if: runner.os == 'Linux'
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu mingw-w64
+          sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu mingw-w64
 
       - name: Install cargo-zigbuild
         if: matrix.use_zigbuild
+        timeout-minutes: 10
         run: |
           pip3 install ziglang
           cargo install cargo-zigbuild
