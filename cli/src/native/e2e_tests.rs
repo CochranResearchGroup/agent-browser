@@ -2874,14 +2874,15 @@ async fn e2e_snapshot_cursor_many_elements() {
 
     // 100 cursor-interactive divs: old code = 200 sequential CDP calls,
     // at 200ms WSS latency = 40s timeout. New code must finish in seconds.
-    let mut html = String::from("<html><body>");
+    let mut html =
+        String::from("<html><body style='margin:0'><div style='width:1280px;line-height:12px'>");
     for i in 1..=100 {
         html.push_str(&format!(
-            "<div style='cursor:pointer' onclick='x()'>Item {}</div>",
+            "<div style='cursor:pointer;display:inline-block;width:90px;height:12px;font-size:8px;padding:0;margin:0' onclick='x()'>Item {}</div>",
             i,
         ));
     }
-    html.push_str("</body></html>");
+    html.push_str("</div></body></html>");
 
     let resp = execute_command(
         &json!({ "id": "2", "action": "setcontent", "html": html }),
