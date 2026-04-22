@@ -58,16 +58,11 @@ const AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS: u64 = 100;
 /// fallback selectors are allowed.
 const AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS: u64 = 5_000;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum CloseBehavior {
+    #[default]
     CloseBrowser,
     Detach,
-}
-
-impl Default for CloseBehavior {
-    fn default() -> Self {
-        Self::CloseBrowser
-    }
 }
 
 fn debug_session_events_enabled() -> bool {
@@ -1481,14 +1476,14 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             true
         };
 
-        if needs_launch && state.browser.is_some() {
-            if state
+        if needs_launch
+            && state.browser.is_some()
+            && state
                 .try_recover_browser_connection()
                 .await
                 .unwrap_or(false)
-            {
-                needs_launch = false;
-            }
+        {
+            needs_launch = false;
         }
 
         if needs_launch {

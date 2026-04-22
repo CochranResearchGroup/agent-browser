@@ -220,8 +220,13 @@ pub fn read_devtools_port(user_data_dir: &Path) -> Option<u16> {
         user_data_dir.join("Default").join("DevToolsActivePort"),
     ] {
         let raw = fs::read_to_string(path).ok()?;
-        let port = raw.lines().next()?.trim().parse::<u16>().ok()?;
-        return Some(port);
+        if let Some(port) = raw
+            .lines()
+            .next()
+            .and_then(|line| line.trim().parse::<u16>().ok())
+        {
+            return Some(port);
+        }
     }
     None
 }
