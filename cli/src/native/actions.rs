@@ -31,6 +31,11 @@ use super::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use super::providers;
 use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
+use super::service_model::{
+    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
+    ServiceState,
+};
+use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 use super::snapshot::{self, SnapshotOptions};
 use super::state;
 use super::storage;
@@ -293,6 +298,97 @@ fn close_behavior_for_launched_browser(
     } else {
         CloseBehavior::CloseBrowser
     }
+}
+
+fn service_browser_id(session_id: &str) -> String {
+    format!("session:{}", session_id)
+}
+
+fn service_browser_host_for_launch(cmd: &Value, headless: bool) -> ServiceBrowserHost {
+    if cmd.get("provider").is_some() {
+        ServiceBrowserHost::CloudProvider
+    } else if cmd.get("cdpUrl").is_some()
+        || cmd.get("cdpPort").is_some()
+        || cmd
+            .get("autoConnect")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    {
+        ServiceBrowserHost::AttachedExisting
+    } else if headless {
+        ServiceBrowserHost::LocalHeadless
+    } else {
+        ServiceBrowserHost::LocalHeaded
+    }
+}
+
+fn persist_service_browser_record(
+    session_id: &str,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+    pid: Option<u32>,
+    cdp_endpoint: Option<String>,
+    last_error: Option<String>,
+) {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return;
+    };
+    let store = JsonServiceStateStore::new(path);
+    let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
+    let id = service_browser_id(session_id);
+    service_state.browsers.insert(
+        id.clone(),
+        BrowserProcess {
+            id,
+            profile_id: None,
+            host,
+            health,
+            pid,
+            cdp_endpoint,
+            view_streams: Vec::new(),
+            active_session_ids: vec![session_id.to_string()],
+            last_error,
+        },
+    );
+    let _ = store.save(&service_state);
+}
+
+fn persist_current_browser_health(
+    state: &DaemonState,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+) {
+    let (pid, cdp_endpoint) = state
+        .browser
+        .as_ref()
+        .map(|mgr| (mgr.browser_pid(), None))
+        .unwrap_or((None, None));
+    persist_service_browser_record(&state.session_id, host, health, pid, cdp_endpoint, None);
+}
+
+fn persist_closed_browser_health(state: &DaemonState) {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return;
+    };
+    let store = JsonServiceStateStore::new(path);
+    let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
+    let id = service_browser_id(&state.session_id);
+    let host = service_state
+        .browsers
+        .get(&id)
+        .map(|browser| browser.host)
+        .unwrap_or(ServiceBrowserHost::LocalHeaded);
+    service_state.browsers.insert(
+        id.clone(),
+        BrowserProcess {
+            id,
+            host,
+            health: ServiceBrowserHealth::NotStarted,
+            active_session_ids: vec![state.session_id.clone()],
+            ..BrowserProcess::default()
+        },
+    );
+    let _ = store.save(&service_state);
 }
 
 pub struct DaemonState {
@@ -1964,6 +2060,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         .get("headless")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
+    let service_host = service_browser_host_for_launch(cmd, headless);
     let cdp_url = cmd.get("cdpUrl").and_then(|v| v.as_str());
     let cdp_port = cmd.get("cdpPort").and_then(|v| v.as_u64());
     let auto_connect = cmd
@@ -2100,6 +2197,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             state.update_stream_client().await;
         }
     } else {
+        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
         return Ok(json!({ "launched": true, "reused": true }));
     }
     state.ref_map.clear();
@@ -2133,6 +2231,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
         return Ok(json!({ "launched": true }));
     }
 
@@ -2155,6 +2254,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
         return Ok(json!({ "launched": true }));
     }
 
@@ -2168,6 +2268,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
         return Ok(json!({ "launched": true }));
     }
 
@@ -2207,6 +2308,11 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
                         state.start_dialog_handler();
                         state.update_stream_client().await;
                         write_provider_file(&state.session_id, provider);
+                        persist_current_browser_health(
+                            state,
+                            service_host,
+                            ServiceBrowserHealth::Ready,
+                        );
 
                         if let Some(info) = providers::get_agentcore_info() {
                             return Ok(json!({
@@ -2274,6 +2380,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
+    persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
 
     // Enable Fetch interception (domain filtering and/or proxy auth).
     // Only call Fetch.enable once to avoid overwriting handleAuthRequests.
@@ -2754,6 +2861,7 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     state.screencasting = false;
     state.reset_input_state();
     state.update_stream_client().await;
+    persist_closed_browser_health(state);
 
     // Stop background Fetch handler
     if let Some(task) = state.fetch_handler_task.take() {
@@ -9151,6 +9259,60 @@ mod tests {
             "google"
         );
         assert!(state.browser.is_none());
+    }
+
+    #[test]
+    fn test_persist_service_browser_record_round_trips() {
+        let home = unique_socket_dir("service-browser-record-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        persist_service_browser_record(
+            "persist-session",
+            ServiceBrowserHost::LocalHeadless,
+            ServiceBrowserHealth::Ready,
+            Some(1234),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+        );
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let state = store.load().unwrap();
+        let browser = &state.browsers["session:persist-session"];
+
+        assert_eq!(browser.host, ServiceBrowserHost::LocalHeadless);
+        assert_eq!(browser.health, ServiceBrowserHealth::Ready);
+        assert_eq!(browser.pid, Some(1234));
+        assert_eq!(
+            browser.cdp_endpoint.as_deref(),
+            Some("http://127.0.0.1:9222")
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_close_persists_not_started_browser_health() {
+        let home = unique_socket_dir("service-browser-close-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SESSION"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_SESSION", "close-session");
+        let mut state = DaemonState::new();
+
+        let result =
+            execute_command(&json!({ "action": "close", "id": "close-1" }), &mut state).await;
+
+        assert_eq!(result["success"], true);
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers["session:close-session"].health,
+            ServiceBrowserHealth::NotStarted
+        );
+
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[tokio::test]

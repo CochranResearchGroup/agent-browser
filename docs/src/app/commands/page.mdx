@@ -252,7 +252,7 @@ Streaming is enabled automatically for all sessions. Use these commands to check
 agent-browser service status          # Inspect worker state, browser health, queue depth, site policies, and providers
 ```
 
-`service status` is read-only. It reports the service control-plane state, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode entities from `agent-browser.json` and `~/.agent-browser/config.json` without launching a browser. Configured site policies and providers override entries with the same IDs from the persisted state.
+`service status` reports the service control-plane state, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode entities from `agent-browser.json` and `~/.agent-browser/config.json` without launching a browser. It refreshes the persisted control-plane snapshot in `state.json`. Browser launch and close commands also update the active session's persisted browser health record. Configured site policies and providers override entries with the same IDs from the persisted state.
 
 ## Debug
 

@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 
 use super::actions::{execute_command, DaemonState};
+use super::service_model::{ControlPlaneSnapshot, ServiceState};
+use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
 
@@ -88,6 +90,11 @@ impl ControlPlaneHandle {
     }
 
     pub fn service_status_response(&self, id: &str, service_state: Value) -> Value {
+        let mut service_state = serde_json::from_value::<ServiceState>(service_state)
+            .unwrap_or_else(|_| ServiceState::default());
+        service_state.control_plane = Some(self.status_snapshot());
+        persist_service_state_snapshot(&service_state);
+
         json!({
             "id": id,
             "success": true,
@@ -96,6 +103,16 @@ impl ControlPlaneHandle {
                 "service_state": service_state,
             },
         })
+    }
+
+    fn status_snapshot(&self) -> ControlPlaneSnapshot {
+        ControlPlaneSnapshot {
+            worker_state: self.status.worker_state().as_str().to_string(),
+            browser_health: self.status.browser_health().as_str().to_string(),
+            queue_depth: self.status.queue_depth(),
+            queue_capacity: self.tx.max_capacity(),
+            updated_at: Some(current_timestamp()),
+        }
     }
 
     fn status_payload(&self) -> Value {
@@ -188,6 +205,20 @@ impl ControlPlaneHandle {
     fn browser_health(&self) -> BrowserHealth {
         self.status.browser_health()
     }
+}
+
+fn persist_service_state_snapshot(state: &ServiceState) {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return;
+    };
+    let store = JsonServiceStateStore::new(path);
+    let _ = store.save(state);
+}
+
+fn current_timestamp() -> String {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
 }
 
 impl ControlPlaneStatus {
@@ -359,6 +390,20 @@ async fn refresh_browser_health(state: &mut DaemonState, status: &ControlPlaneSt
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::EnvGuard;
+
+    fn temp_home(label: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "agent-browser-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
 
     #[tokio::test]
     async fn submit_returns_command_response() {
@@ -425,6 +470,9 @@ mod tests {
 
     #[tokio::test]
     async fn service_status_response_combines_worker_and_service_state() {
+        let home = temp_home("control-plane-service-status");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
         let handle = ControlPlaneWorker::start(DaemonState::new());
         let response = handle.service_status_response(
             "test-service-status",
@@ -461,8 +509,25 @@ mod tests {
                 .and_then(|v| v.as_str()),
             Some("google")
         );
+        assert_eq!(
+            response
+                .pointer("/data/service_state/controlPlane/queueCapacity")
+                .and_then(|v| v.as_u64()),
+            Some(DEFAULT_QUEUE_CAPACITY as u64)
+        );
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted
+                .control_plane
+                .as_ref()
+                .map(|snapshot| snapshot.queue_capacity),
+            Some(DEFAULT_QUEUE_CAPACITY)
+        );
 
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[tokio::test]

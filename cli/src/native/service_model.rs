@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ServiceState {
+    pub control_plane: Option<ControlPlaneSnapshot>,
     pub profiles: BTreeMap<String, BrowserProfile>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     pub sessions: BTreeMap<String, BrowserSession>,
@@ -27,6 +28,17 @@ impl ServiceState {
         self.site_policies.extend(configured.site_policies);
         self.providers.extend(configured.providers);
     }
+}
+
+/// Latest persisted control-plane status snapshot.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ControlPlaneSnapshot {
+    pub worker_state: String,
+    pub browser_health: String,
+    pub queue_depth: usize,
+    pub queue_capacity: usize,
+    pub updated_at: Option<String>,
 }
 
 /// Durable profile identity and launch policy.
@@ -587,6 +599,13 @@ mod tests {
     #[test]
     fn service_state_round_trips_nested_entities() {
         let state = ServiceState {
+            control_plane: Some(ControlPlaneSnapshot {
+                worker_state: "Ready".to_string(),
+                browser_health: "Ready".to_string(),
+                queue_depth: 0,
+                queue_capacity: 256,
+                updated_at: Some("2026-04-22T00:00:00Z".to_string()),
+            }),
             profiles: BTreeMap::from([(
                 "work".to_string(),
                 BrowserProfile {
@@ -645,6 +664,13 @@ mod tests {
         let decoded: ServiceState = serde_json::from_str(&encoded).unwrap();
 
         assert_eq!(decoded, state);
+        assert_eq!(
+            decoded
+                .control_plane
+                .as_ref()
+                .map(|snapshot| snapshot.worker_state.as_str()),
+            Some("Ready")
+        );
         assert_eq!(decoded.browsers["browser-1"].health, BrowserHealth::Ready);
         assert_eq!(
             decoded.sessions["session-1"].owner,
