@@ -883,13 +883,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "action": "service_status",
                 "serviceState": flags.service_state.clone(),
             })),
+            Some("reconcile") => Ok(json!({
+                "id": id,
+                "action": "service_reconcile",
+                "serviceState": flags.service_state.clone(),
+            })),
             Some(sub) => Err(ParseError::UnknownSubcommand {
                 subcommand: sub.to_string(),
-                valid_options: &["status"],
+                valid_options: &["status", "reconcile"],
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service status",
+                usage: "service <status|reconcile>",
             }),
         },
 
@@ -3975,6 +3980,32 @@ mod tests {
         let cmd = parse_command(&args("service status"), &flags).unwrap();
 
         assert_eq!(cmd["action"], "service_status");
+        assert_eq!(
+            cmd["serviceState"]["sitePolicies"]["google"]["id"],
+            "google"
+        );
+        assert_eq!(
+            cmd["serviceState"]["sitePolicies"]["google"]["manualLoginPreferred"],
+            true
+        );
+    }
+
+    #[test]
+    fn test_service_reconcile_includes_configured_service_state() {
+        let mut flags = default_flags();
+        flags.service_state.site_policies.insert(
+            "google".to_string(),
+            crate::native::service_model::SitePolicy {
+                id: "google".to_string(),
+                origin_pattern: "https://accounts.google.com".to_string(),
+                manual_login_preferred: true,
+                ..crate::native::service_model::SitePolicy::default()
+            },
+        );
+
+        let cmd = parse_command(&args("service reconcile"), &flags).unwrap();
+
+        assert_eq!(cmd["action"], "service_reconcile");
         assert_eq!(
             cmd["serviceState"]["sitePolicies"]["google"]["id"],
             "google"

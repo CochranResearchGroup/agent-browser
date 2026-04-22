@@ -133,6 +133,7 @@ agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
+agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 agent-browser chat "<instruction>"    # AI chat: natural language browser control (single-shot)
@@ -1190,9 +1191,12 @@ Use `service status` to inspect the service-mode control plane and configured se
 
 ```bash
 agent-browser service status
+agent-browser service reconcile
 ```
 
 The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch and close commands also update the persisted browser health records for the active session.
+
+Use `service reconcile` to run the persisted browser health probes intentionally without requesting a control-plane status snapshot. This is the command shape the future service timer can call to keep browser records fresh without depending on an operator polling status.
 
 ### WebSocket Protocol
 
