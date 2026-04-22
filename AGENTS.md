@@ -49,6 +49,8 @@ To prepare a release:
 
 When the PR merges, CI compares `package.json` version to what's on npm. If it differs, it builds all 7 platform binaries, publishes to npm, and creates the GitHub release automatically. The GitHub release body is extracted from the content between the `<!-- release:start -->` and `<!-- release:end -->` markers in `CHANGELOG.md`.
 
+To validate the release workflow without publishing, run the `Release` workflow manually from GitHub Actions with `dry_run` set to `true`. This builds the release binaries, verifies all expected artifacts, checks npm package contents with `npm pack --dry-run`, and skips npm publish plus GitHub release creation.
+
 ### Writing the changelog
 
 Review the git log since the last release and write the entry in `CHANGELOG.md`. Follow the existing format and voice. Group changes under `### New Features`, `### Bug Fixes`, `### Improvements`, etc. Bold the feature/fix name, then describe it concisely. Reference PR numbers in parentheses.
