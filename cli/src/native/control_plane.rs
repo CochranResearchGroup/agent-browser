@@ -559,6 +559,12 @@ mod tests {
                 .and_then(|v| v.as_u64()),
             Some(0)
         );
+        assert_eq!(
+            response
+                .pointer("/data/service_state/events/0/kind")
+                .and_then(|v| v.as_str()),
+            Some("reconciliation")
+        );
         assert!(response
             .pointer("/data/service_state/reconciliation/lastReconciledAt")
             .and_then(|v| v.as_str())
@@ -580,6 +586,7 @@ mod tests {
                 .map(|snapshot| snapshot.browser_count),
             Some(0)
         );
+        assert_eq!(persisted.events.len(), 1);
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
@@ -620,6 +627,10 @@ mod tests {
             persisted.browsers["browser-1"].health,
             crate::native::service_model::BrowserHealth::Unreachable
         );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == crate::native::service_model::ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some("browser-1")
+        }));
         assert_eq!(
             persisted
                 .reconciliation

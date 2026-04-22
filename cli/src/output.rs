@@ -2543,6 +2543,7 @@ Notes:
   - The current control-plane snapshot is refreshed in the persisted service state.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
+  - The bounded events log records reconciliation summaries and browser health transitions.
   - Set --service-reconcile-interval <ms> or service.reconcileIntervalMs to run probes in the daemon background.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.

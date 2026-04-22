@@ -1206,7 +1206,9 @@ The response includes worker state, browser health, queue depth, persisted servi
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 
-Use `service reconcile` to run the persisted browser health probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot.
+The persisted service state also includes a bounded `events` log with reconciliation summaries and browser health transitions. This keeps recent service behavior auditable without requiring operators to scrape logs.
+
+Use `service reconcile` to run the persisted browser health probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot and appends service events.
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
 

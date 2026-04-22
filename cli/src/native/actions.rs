@@ -9322,6 +9322,14 @@ mod tests {
             result["data"]["service_state"]["reconciliation"]["changedBrowsers"],
             1
         );
+        assert_eq!(
+            result["data"]["service_state"]["events"][0]["kind"],
+            "browser_health_changed"
+        );
+        assert_eq!(
+            result["data"]["service_state"]["events"][1]["kind"],
+            "reconciliation"
+        );
         assert!(state.browser.is_none());
 
         let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
@@ -9337,6 +9345,7 @@ mod tests {
                 .map(|snapshot| snapshot.changed_browsers),
             Some(1)
         );
+        assert_eq!(persisted.events.len(), 2);
 
         let _ = fs::remove_dir_all(&home);
     }

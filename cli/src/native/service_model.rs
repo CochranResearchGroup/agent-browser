@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 pub struct ServiceState {
     pub control_plane: Option<ControlPlaneSnapshot>,
     pub reconciliation: Option<ServiceReconciliationSnapshot>,
+    pub events: Vec<ServiceEvent>,
     pub profiles: BTreeMap<String, BrowserProfile>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     pub sessions: BTreeMap<String, BrowserSession>,
@@ -29,6 +30,29 @@ impl ServiceState {
         self.site_policies.extend(configured.site_policies);
         self.providers.extend(configured.providers);
     }
+}
+
+/// Bounded service event log entry for operator auditability.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceEvent {
+    pub id: String,
+    pub timestamp: String,
+    pub kind: ServiceEventKind,
+    pub message: String,
+    pub browser_id: Option<String>,
+    pub previous_health: Option<BrowserHealth>,
+    pub current_health: Option<BrowserHealth>,
+    pub details: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServiceEventKind {
+    #[default]
+    Reconciliation,
+    BrowserHealthChanged,
+    ReconciliationError,
 }
 
 /// Latest persisted service reconciliation result.
@@ -623,6 +647,14 @@ mod tests {
                 browser_count: 1,
                 changed_browsers: 0,
             }),
+            events: vec![ServiceEvent {
+                id: "event-1".to_string(),
+                timestamp: "2026-04-22T00:01:00Z".to_string(),
+                kind: ServiceEventKind::Reconciliation,
+                message: "Reconciled 1 browser records, 0 changed".to_string(),
+                details: Some(json!({"browserCount": 1, "changedBrowsers": 0})),
+                ..ServiceEvent::default()
+            }],
             profiles: BTreeMap::from([(
                 "work".to_string(),
                 BrowserProfile {
@@ -695,6 +727,8 @@ mod tests {
                 .map(|snapshot| snapshot.browser_count),
             Some(1)
         );
+        assert_eq!(decoded.events.len(), 1);
+        assert_eq!(decoded.events[0].kind, ServiceEventKind::Reconciliation);
         assert_eq!(decoded.browsers["browser-1"].health, BrowserHealth::Ready);
         assert_eq!(
             decoded.sessions["session-1"].owner,

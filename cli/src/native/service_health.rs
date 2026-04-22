@@ -3,11 +3,13 @@
 use std::time::Duration;
 
 use super::service_model::{
-    BrowserHealth, BrowserProcess, ServiceReconciliationSnapshot, ServiceState,
+    BrowserHealth, BrowserProcess, ServiceEvent, ServiceEventKind, ServiceReconciliationSnapshot,
+    ServiceState,
 };
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
+const MAX_SERVICE_EVENTS: usize = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServiceReconcileSummary {
@@ -43,6 +45,22 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
         browser_count: summary.browser_count,
         changed_browsers: summary.changed_browsers,
     });
+    record_health_transition_events(state, &before);
+    push_service_event(
+        state,
+        ServiceEvent {
+            kind: ServiceEventKind::Reconciliation,
+            message: format!(
+                "Reconciled {} browser records, {} changed",
+                summary.browser_count, summary.changed_browsers
+            ),
+            details: Some(serde_json::json!({
+                "browserCount": summary.browser_count,
+                "changedBrowsers": summary.changed_browsers,
+            })),
+            ..new_service_event()
+        },
+    );
     summary
 }
 
@@ -124,6 +142,53 @@ fn current_timestamp() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+fn new_service_event() -> ServiceEvent {
+    let timestamp = current_timestamp();
+    ServiceEvent {
+        id: format!("event-{}", uuid::Uuid::new_v4()),
+        timestamp,
+        ..ServiceEvent::default()
+    }
+}
+
+fn push_service_event(state: &mut ServiceState, event: ServiceEvent) {
+    state.events.push(event);
+    if state.events.len() > MAX_SERVICE_EVENTS {
+        let excess = state.events.len() - MAX_SERVICE_EVENTS;
+        state.events.drain(0..excess);
+    }
+}
+
+fn record_health_transition_events(state: &mut ServiceState, before: &ServiceState) {
+    let mut events = Vec::new();
+    for (id, browser) in &state.browsers {
+        let Some(previous) = before.browsers.get(id) else {
+            continue;
+        };
+        if previous.health == browser.health && previous.last_error == browser.last_error {
+            continue;
+        }
+        events.push(ServiceEvent {
+            kind: ServiceEventKind::BrowserHealthChanged,
+            message: format!(
+                "Browser {} health changed from {:?} to {:?}",
+                id, previous.health, browser.health
+            ),
+            browser_id: Some(id.clone()),
+            previous_health: Some(previous.health),
+            current_health: Some(browser.health),
+            details: Some(serde_json::json!({
+                "previousError": previous.last_error,
+                "currentError": browser.last_error,
+            })),
+            ..new_service_event()
+        });
+    }
+    for event in events {
+        push_service_event(state, event);
+    }
 }
 
 #[cfg(unix)]
@@ -230,6 +295,48 @@ mod tests {
         assert_eq!(reconciliation.changed_browsers, 1);
         assert!(reconciliation.last_reconciled_at.is_some());
         assert_eq!(reconciliation.last_error, None);
+        assert_eq!(state.events.len(), 2);
+        assert_eq!(state.events[0].kind, ServiceEventKind::BrowserHealthChanged);
+        assert_eq!(state.events[0].browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(state.events[0].previous_health, Some(BrowserHealth::Ready));
+        assert_eq!(
+            state.events[0].current_health,
+            Some(BrowserHealth::Unreachable)
+        );
+        assert_eq!(state.events[1].kind, ServiceEventKind::Reconciliation);
+    }
+
+    #[tokio::test]
+    async fn reconcile_event_log_is_bounded() {
+        let mut state = ServiceState {
+            events: (0..MAX_SERVICE_EVENTS)
+                .map(|i| ServiceEvent {
+                    id: format!("old-{i}"),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::Reconciliation,
+                    message: "old".to_string(),
+                    ..ServiceEvent::default()
+                })
+                .collect(),
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::NotStarted,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        reconcile_service_state(&mut state).await;
+
+        assert_eq!(state.events.len(), MAX_SERVICE_EVENTS);
+        assert_ne!(state.events[0].id, "old-0");
+        assert_eq!(
+            state.events.last().map(|event| event.kind),
+            Some(ServiceEventKind::Reconciliation)
+        );
     }
 
     #[tokio::test]
