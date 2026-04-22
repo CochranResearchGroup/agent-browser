@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 
 use super::actions::{execute_command, DaemonState};
+use super::service_health::refresh_persisted_browser_health;
 use super::service_model::{ControlPlaneSnapshot, ServiceState};
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
@@ -89,10 +90,11 @@ impl ControlPlaneHandle {
         })
     }
 
-    pub fn service_status_response(&self, id: &str, service_state: Value) -> Value {
+    pub async fn service_status_response(&self, id: &str, service_state: Value) -> Value {
         let mut service_state = serde_json::from_value::<ServiceState>(service_state)
             .unwrap_or_else(|_| ServiceState::default());
         service_state.control_plane = Some(self.status_snapshot());
+        refresh_persisted_browser_health(&mut service_state).await;
         persist_service_state_snapshot(&service_state);
 
         json!({
@@ -474,17 +476,19 @@ mod tests {
         let guard = EnvGuard::new(&["HOME"]);
         guard.set("HOME", home.to_str().unwrap());
         let handle = ControlPlaneWorker::start(DaemonState::new());
-        let response = handle.service_status_response(
-            "test-service-status",
-            json!({
-                "sitePolicies": {
-                    "google": {
-                        "id": "google",
-                        "originPattern": "https://accounts.google.com"
+        let response = handle
+            .service_status_response(
+                "test-service-status",
+                json!({
+                    "sitePolicies": {
+                        "google": {
+                            "id": "google",
+                            "originPattern": "https://accounts.google.com"
+                        }
                     }
-                }
-            }),
-        );
+                }),
+            )
+            .await;
 
         assert_eq!(
             response.get("id").and_then(|v| v.as_str()),

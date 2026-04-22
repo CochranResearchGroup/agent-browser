@@ -1192,7 +1192,7 @@ Use `service status` to inspect the service-mode control plane and configured se
 agent-browser service status
 ```
 
-The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch and close commands also update the persisted browser health records for the active session.
+The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch and close commands also update the persisted browser health records for the active session.
 
 ### WebSocket Protocol
 

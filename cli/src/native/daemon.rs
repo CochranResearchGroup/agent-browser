@@ -446,7 +446,9 @@ async fn handle_connection<S>(
                         .get("serviceState")
                         .cloned()
                         .unwrap_or_else(|| serde_json::json!({}));
-                    control_plane.service_status_response(id, service_state)
+                    control_plane
+                        .service_status_response(id, service_state)
+                        .await
                 } else {
                     control_plane.submit(cmd).await
                 };

@@ -361,7 +361,7 @@ fn persist_current_browser_health(
     let (pid, cdp_endpoint) = state
         .browser
         .as_ref()
-        .map(|mgr| (mgr.browser_pid(), None))
+        .map(|mgr| (mgr.browser_pid(), Some(mgr.get_cdp_url().to_string())))
         .unwrap_or((None, None));
     persist_service_browser_record(&state.session_id, host, health, pid, cdp_endpoint, None);
 }

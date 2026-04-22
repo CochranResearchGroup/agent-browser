@@ -384,7 +384,7 @@ Streaming is opt-in. Use `agent-browser stream enable` to start a runtime WebSoc
 
 ## Service Status
 
-Use `agent-browser service status` for a service-mode snapshot. It reports worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers without launching a browser. It refreshes the persisted control-plane snapshot in `state.json`. Browser launch and close commands also update the active session's persisted browser health record. Configured site policies and providers override entries with the same IDs from the persisted state.
+Use `agent-browser service status` for a service-mode snapshot. It reports worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers without launching a browser. It refreshes the persisted control-plane snapshot in `state.json` and probes persisted browser records for dead PIDs and unreachable CDP endpoints. Dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Browser launch and close commands also update the active session's persisted browser health record. Configured site policies and providers override entries with the same IDs from the persisted state.
 
 ## Batch Execution
 
