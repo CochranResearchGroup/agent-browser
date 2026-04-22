@@ -841,6 +841,22 @@ async fn e2e_storage() {
 #[tokio::test]
 #[ignore]
 async fn e2e_tabs() {
+    let guard = EnvGuard::new(&["AGENT_BROWSER_PROFILE", "AGENT_BROWSER_SESSION"]);
+    let profile_dir = std::env::temp_dir().join(format!(
+        "agent-browser-e2e-tabs-profile-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&profile_dir).expect("profile dir should be created");
+    guard.set(
+        "AGENT_BROWSER_PROFILE",
+        profile_dir.to_str().expect("profile dir should be utf-8"),
+    );
+    guard.set("AGENT_BROWSER_SESSION", "e2e-tabs");
+
     let mut state = DaemonState::new();
 
     let resp = execute_command(
@@ -912,6 +928,7 @@ async fn e2e_tabs() {
 
     let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
     assert_success(&resp);
+    let _ = std::fs::remove_dir_all(&profile_dir);
 }
 
 // ---------------------------------------------------------------------------
