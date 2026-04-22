@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, watch, Mutex, RwLock};
 
 use crate::native::cdp::client::CdpClient;
+use crate::native::cdp::types::{CaptureScreenshotParams, CaptureScreenshotResult};
 use crate::native::network;
 
 use super::timestamp_ms;
@@ -64,6 +65,15 @@ pub(super) async fn cdp_event_loop(
                 let supports_screencast = eng == "chrome";
 
                 if supports_screencast {
+                    broadcast_initial_screenshot(
+                        &frame_tx,
+                        &client_arc,
+                        session_id.as_deref(),
+                        vw,
+                        vh,
+                        &last_frame,
+                    )
+                    .await;
                     let _ = client_arc
                         .send_command(
                             "Page.startScreencast",
@@ -276,6 +286,54 @@ pub(super) async fn cdp_event_loop(
             drop(guard);
         }
     }
+}
+
+async fn broadcast_initial_screenshot(
+    frame_tx: &broadcast::Sender<String>,
+    client: &CdpClient,
+    session_id: Option<&str>,
+    viewport_width: u32,
+    viewport_height: u32,
+    last_frame: &Arc<RwLock<Option<String>>>,
+) {
+    let params = CaptureScreenshotParams {
+        format: Some("jpeg".to_string()),
+        quality: Some(80),
+        clip: None,
+        from_surface: Some(true),
+        capture_beyond_viewport: None,
+    };
+
+    let Ok(result) = client
+        .send_command_typed::<_, CaptureScreenshotResult>(
+            "Page.captureScreenshot",
+            &params,
+            session_id,
+        )
+        .await
+    else {
+        return;
+    };
+
+    let msg = json!({
+        "type": "frame",
+        "data": result.data,
+        "metadata": {
+            "offsetTop": 0.0,
+            "pageScaleFactor": 1.0,
+            "deviceWidth": viewport_width,
+            "deviceHeight": viewport_height,
+            "scrollOffsetX": 0.0,
+            "scrollOffsetY": 0.0,
+            "timestamp": timestamp_ms(),
+        }
+    });
+    let msg_str = msg.to_string();
+    {
+        let mut lf = last_frame.write().await;
+        *lf = Some(msg_str.clone());
+    }
+    let _ = frame_tx.send(msg_str);
 }
 
 pub async fn start_screencast(
