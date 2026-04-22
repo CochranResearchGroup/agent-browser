@@ -1,7 +1,8 @@
 use crate::color;
+use crate::native::service_model::{ServiceProvider, ServiceState, SitePolicy};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -107,12 +108,20 @@ pub struct RuntimeProfileConfig {
     pub preferences: Option<RuntimeProfilePreferencesConfig>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceConfig {
+    pub site_policies: Option<BTreeMap<String, SitePolicy>>,
+    pub providers: Option<BTreeMap<String, ServiceProvider>>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Config {
     pub default_runtime_profile: Option<String>,
     pub runtime_profiles: Option<HashMap<String, RuntimeProfileConfig>>,
     pub service_defaults: Option<HashMap<String, RuntimeProfileServiceConfig>>,
+    pub service: Option<ServiceConfig>,
     pub headed: Option<bool>,
     pub leave_open: Option<bool>,
     pub json: Option<bool>,
@@ -155,6 +164,18 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn service_state_snapshot(&self) -> ServiceState {
+        let Some(service) = self.service.as_ref() else {
+            return ServiceState::default();
+        };
+
+        ServiceState {
+            site_policies: service.site_policies.clone().unwrap_or_default(),
+            providers: service.providers.clone().unwrap_or_default(),
+            ..ServiceState::default()
+        }
+    }
+
     fn merge(self, other: Config) -> Config {
         Config {
             default_runtime_profile: other
@@ -168,6 +189,7 @@ impl Config {
                 self.service_defaults,
                 other.service_defaults,
             ),
+            service: merge_service_configs(self.service, other.service),
             headed: other.headed.or(self.headed),
             leave_open: other.leave_open.or(self.leave_open),
             json: other.json.or(self.json),
@@ -260,6 +282,34 @@ fn merge_service_config_maps(
             }
             Some(base_map)
         }
+    }
+}
+
+fn merge_service_model_maps<T>(
+    base: Option<BTreeMap<String, T>>,
+    overlay: Option<BTreeMap<String, T>>,
+) -> Option<BTreeMap<String, T>> {
+    match (base, overlay) {
+        (None, None) => None,
+        (Some(map), None) | (None, Some(map)) => Some(map),
+        (Some(mut base_map), Some(overlay_map)) => {
+            base_map.extend(overlay_map);
+            Some(base_map)
+        }
+    }
+}
+
+fn merge_service_configs(
+    base: Option<ServiceConfig>,
+    overlay: Option<ServiceConfig>,
+) -> Option<ServiceConfig> {
+    match (base, overlay) {
+        (None, None) => None,
+        (Some(config), None) | (None, Some(config)) => Some(config),
+        (Some(base), Some(overlay)) => Some(ServiceConfig {
+            site_policies: merge_service_model_maps(base.site_policies, overlay.site_policies),
+            providers: merge_service_model_maps(base.providers, overlay.providers),
+        }),
     }
 }
 
@@ -418,6 +468,28 @@ fn apply_runtime_profile_overrides(config: &mut Config, runtime_profile_name: &s
     config.runtime_profile = Some(runtime_profile_name.to_string());
 }
 
+fn normalize_service_config(config: &mut Config) {
+    let Some(service) = config.service.as_mut() else {
+        return;
+    };
+
+    if let Some(site_policies) = service.site_policies.as_mut() {
+        for (id, policy) in site_policies {
+            if policy.id.is_empty() {
+                policy.id = id.clone();
+            }
+        }
+    }
+
+    if let Some(providers) = service.providers.as_mut() {
+        for (id, provider) in providers {
+            if provider.id.is_empty() {
+                provider.id = id.clone();
+            }
+        }
+    }
+}
+
 fn manual_login_preferred_services(config: &Config) -> Vec<String> {
     let mut services = config.service_defaults.clone().unwrap_or_default();
 
@@ -455,6 +527,7 @@ fn read_config_file(path: &Path) -> Option<Config> {
                 config.idle_timeout.take(),
                 &format!("config file {}", path.display()),
             );
+            normalize_service_config(&mut config);
             Some(config)
         }
         Err(e) => {
@@ -1543,6 +1616,30 @@ mod tests {
                     }
                 }
             },
+            "service": {
+                "sitePolicies": {
+                    "google": {
+                        "originPattern": "https://accounts.google.com",
+                        "browserHost": "docker_headed",
+                        "viewStream": "virtual_display_webrtc",
+                        "controlInput": "webrtc_input",
+                        "interactionMode": "human_like_input",
+                        "manualLoginPreferred": true,
+                        "profileRequired": true,
+                        "authProviders": ["browser", "gog"],
+                        "challengePolicy": "avoid_first",
+                        "allowedChallengeProviders": ["manual"]
+                    }
+                },
+                "providers": {
+                    "manual": {
+                        "kind": "manual_approval",
+                        "displayName": "Dashboard approval",
+                        "enabled": true,
+                        "capabilities": ["human_approval"]
+                    }
+                }
+            },
             "headed": true,
             "json": true,
             "debug": true,
@@ -1578,6 +1675,29 @@ mod tests {
                 .and_then(|p| p.preferences.as_ref())
                 .and_then(|p| p.default_viewport.as_deref()),
             Some("960x640")
+        );
+        let service = config.service.as_ref().unwrap();
+        let google_policy = service
+            .site_policies
+            .as_ref()
+            .and_then(|policies| policies.get("google"))
+            .unwrap();
+        assert_eq!(
+            google_policy.browser_host,
+            Some(crate::native::service_model::BrowserHost::DockerHeaded)
+        );
+        assert_eq!(
+            google_policy.interaction_mode,
+            crate::native::service_model::InteractionMode::HumanLikeInput
+        );
+        let manual_provider = service
+            .providers
+            .as_ref()
+            .and_then(|providers| providers.get("manual"))
+            .unwrap();
+        assert_eq!(
+            manual_provider.kind,
+            crate::native::service_model::ProviderKind::ManualApproval
         );
         assert_eq!(config.headed, Some(true));
         assert_eq!(config.json, Some(true));
@@ -1643,6 +1763,25 @@ mod tests {
             headed: Some(true),
             proxy: Some("http://user-proxy:8080".to_string()),
             profile: Some("/user/profile".to_string()),
+            service: Some(ServiceConfig {
+                site_policies: Some(BTreeMap::from([(
+                    "google".to_string(),
+                    SitePolicy {
+                        id: "google".to_string(),
+                        origin_pattern: "https://accounts.google.com".to_string(),
+                        profile_required: true,
+                        ..SitePolicy::default()
+                    },
+                )])),
+                providers: Some(BTreeMap::from([(
+                    "manual".to_string(),
+                    ServiceProvider {
+                        id: "manual".to_string(),
+                        display_name: "Manual".to_string(),
+                        ..ServiceProvider::default()
+                    },
+                )])),
+            }),
             ..Config::default()
         };
         let project = Config {
@@ -1659,6 +1798,28 @@ mod tests {
             )])),
             proxy: Some("http://project-proxy:9090".to_string()),
             debug: Some(true),
+            service: Some(ServiceConfig {
+                site_policies: Some(BTreeMap::from([
+                    (
+                        "google".to_string(),
+                        SitePolicy {
+                            id: "google".to_string(),
+                            origin_pattern: "https://accounts.google.com".to_string(),
+                            manual_login_preferred: true,
+                            ..SitePolicy::default()
+                        },
+                    ),
+                    (
+                        "github".to_string(),
+                        SitePolicy {
+                            id: "github".to_string(),
+                            origin_pattern: "https://github.com".to_string(),
+                            ..SitePolicy::default()
+                        },
+                    ),
+                ])),
+                providers: None,
+            }),
             ..Config::default()
         };
         let merged = user.merge(project);
@@ -1675,6 +1836,19 @@ mod tests {
         assert_eq!(
             runtime.launch.as_ref().and_then(|l| l.proxy.as_deref()),
             Some("http://runtime-proxy:9090")
+        );
+        let service = merged.service.as_ref().unwrap();
+        let site_policies = service.site_policies.as_ref().unwrap();
+        assert_eq!(site_policies.len(), 2);
+        assert!(site_policies["google"].manual_login_preferred);
+        assert_eq!(site_policies["github"].origin_pattern, "https://github.com");
+        assert_eq!(
+            service
+                .providers
+                .as_ref()
+                .and_then(|providers| providers.get("manual"))
+                .map(|provider| provider.display_name.as_str()),
+            Some("Manual")
         );
     }
 
@@ -1865,6 +2039,100 @@ mod tests {
 
         let _ = fs::remove_file(&config_path);
         let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_load_config_normalizes_service_model_ids() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!(
+            "ab-test-service-config-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        let config_path = dir.join("service-config.json");
+        let mut f = fs::File::create(&config_path).unwrap();
+        writeln!(
+            f,
+            r#"{{
+                "service": {{
+                    "sitePolicies": {{
+                        "google": {{
+                            "originPattern": "https://accounts.google.com",
+                            "browserHost": "docker_headed"
+                        }}
+                    }},
+                    "providers": {{
+                        "manual": {{
+                            "kind": "manual_approval",
+                            "displayName": "Dashboard approval",
+                            "capabilities": ["human_approval"]
+                        }}
+                    }}
+                }}
+            }}"#
+        )
+        .unwrap();
+
+        let config = read_config_file(&config_path).unwrap();
+        let service = config.service.as_ref().unwrap();
+
+        assert_eq!(
+            service
+                .site_policies
+                .as_ref()
+                .and_then(|policies| policies.get("google"))
+                .map(|policy| policy.id.as_str()),
+            Some("google")
+        );
+        assert_eq!(
+            service
+                .providers
+                .as_ref()
+                .and_then(|providers| providers.get("manual"))
+                .map(|provider| provider.id.as_str()),
+            Some("manual")
+        );
+
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_service_state_snapshot_contains_configured_service_entities() {
+        let config = Config {
+            service: Some(ServiceConfig {
+                site_policies: Some(BTreeMap::from([(
+                    "google".to_string(),
+                    SitePolicy {
+                        id: "google".to_string(),
+                        origin_pattern: "https://accounts.google.com".to_string(),
+                        manual_login_preferred: true,
+                        ..SitePolicy::default()
+                    },
+                )])),
+                providers: Some(BTreeMap::from([(
+                    "manual".to_string(),
+                    ServiceProvider {
+                        id: "manual".to_string(),
+                        display_name: "Dashboard approval".to_string(),
+                        ..ServiceProvider::default()
+                    },
+                )])),
+            }),
+            ..Config::default()
+        };
+
+        let state = config.service_state_snapshot();
+
+        assert_eq!(state.site_policies.len(), 1);
+        assert_eq!(state.providers.len(), 1);
+        assert!(state.site_policies["google"].manual_login_preferred);
+        assert_eq!(state.providers["manual"].display_name, "Dashboard approval");
+        assert!(state.browsers.is_empty());
+        assert!(state.sessions.is_empty());
     }
 
     #[test]
