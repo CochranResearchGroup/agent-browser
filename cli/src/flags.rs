@@ -765,6 +765,7 @@ pub struct Flags {
     pub default_runtime_profile: Option<String>,
     pub configured_runtime_profiles: HashMap<String, Option<String>>,
     pub manual_login_preferred_services: Vec<String>,
+    pub service_state: ServiceState,
     pub runtime_profile: Option<String>,
     pub headers: Option<String>,
     pub executable_path: Option<String>,
@@ -839,6 +840,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         })
         .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
+    let service_state = config.service_state_snapshot();
 
     let extensions_env = env::var("AGENT_BROWSER_EXTENSIONS")
         .ok()
@@ -868,6 +870,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         default_runtime_profile,
         configured_runtime_profiles,
         manual_login_preferred_services,
+        service_state,
         runtime_profile: env::var("AGENT_BROWSER_RUNTIME_PROFILE")
             .ok()
             .or(config.runtime_profile),

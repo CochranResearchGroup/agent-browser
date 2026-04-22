@@ -1463,6 +1463,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "stream_enable"
             | "stream_disable"
             | "stream_status"
+            | "service_status"
     );
     if !skip_launch {
         // Check if existing connection is stale and needs re-launch.
@@ -1624,6 +1625,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_enable" => handle_stream_enable(cmd, state).await,
         "stream_disable" => handle_stream_disable(state).await,
         "stream_status" => handle_stream_status(state).await,
+        "service_status" => handle_service_status(cmd).await,
         "waitforurl" => handle_waitforurl(cmd, state).await,
         "waitforloadstate" => handle_waitforloadstate(cmd, state).await,
         "waitforfunction" => handle_waitforfunction(cmd, state).await,
@@ -5577,6 +5579,15 @@ async fn handle_stream_status(state: &DaemonState) -> Result<Value, String> {
     Ok(current_stream_status(state).await)
 }
 
+async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
+    Ok(json!({
+        "service_state": cmd
+            .get("serviceState")
+            .cloned()
+            .unwrap_or_else(|| json!({})),
+    }))
+}
+
 // ---------------------------------------------------------------------------
 // Screencast handlers
 // ---------------------------------------------------------------------------
@@ -9115,6 +9126,31 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
         assert_eq!(result["success"], true);
         assert!(result["data"]["files"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_service_status_via_actions_does_not_launch_browser() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_status",
+            "id": "svc1",
+            "serviceState": {
+                "sitePolicies": {
+                    "google": {
+                        "id": "google",
+                        "originPattern": "https://accounts.google.com"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(
+            result["data"]["service_state"]["sitePolicies"]["google"]["id"],
+            "google"
+        );
+        assert!(state.browser.is_none());
     }
 
     #[tokio::test]

@@ -87,6 +87,17 @@ impl ControlPlaneHandle {
         })
     }
 
+    pub fn service_status_response(&self, id: &str, service_state: Value) -> Value {
+        json!({
+            "id": id,
+            "success": true,
+            "data": {
+                "control_plane": self.status_payload(),
+                "service_state": service_state,
+            },
+        })
+    }
+
     fn status_payload(&self) -> Value {
         json!({
             "worker_state": self.status.worker_state().as_str(),
@@ -407,6 +418,48 @@ mod tests {
                 .pointer("/data/queue_depth")
                 .and_then(|v| v.as_u64()),
             Some(0)
+        );
+
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn service_status_response_combines_worker_and_service_state() {
+        let handle = ControlPlaneWorker::start(DaemonState::new());
+        let response = handle.service_status_response(
+            "test-service-status",
+            json!({
+                "sitePolicies": {
+                    "google": {
+                        "id": "google",
+                        "originPattern": "https://accounts.google.com"
+                    }
+                }
+            }),
+        );
+
+        assert_eq!(
+            response.get("id").and_then(|v| v.as_str()),
+            Some("test-service-status")
+        );
+        assert_eq!(
+            response
+                .pointer("/data/control_plane/worker_state")
+                .and_then(|v| v.as_str())
+                .is_some(),
+            true
+        );
+        assert_eq!(
+            response
+                .pointer("/data/control_plane/queue_capacity")
+                .and_then(|v| v.as_u64()),
+            Some(DEFAULT_QUEUE_CAPACITY as u64)
+        );
+        assert_eq!(
+            response
+                .pointer("/data/service_state/sitePolicies/google/id")
+                .and_then(|v| v.as_str()),
+            Some("google")
         );
 
         handle.shutdown().await;

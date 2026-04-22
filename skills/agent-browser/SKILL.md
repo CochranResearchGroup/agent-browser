@@ -321,6 +321,7 @@ agent-browser stream enable           # Start runtime WebSocket streaming on an 
 agent-browser stream enable --port 9223  # Bind a specific localhost port
 agent-browser stream status           # Inspect enabled state, port, connection, and screencasting
 agent-browser stream disable          # Stop runtime streaming and remove the .stream metadata file
+agent-browser service status          # Inspect service control-plane and configured service entities
 
 # Clipboard
 agent-browser clipboard read                      # Read text from clipboard
@@ -380,6 +381,10 @@ agent-browser press Enter
 ## Streaming
 
 Streaming is opt-in. Use `agent-browser stream enable` to start a runtime WebSocket stream server, then `agent-browser stream status` to inspect the bound port and connection state. Use `stream disable` to tear it down, and `stream enable --port <port>` to bind a specific port.
+
+## Service Status
+
+Use `agent-browser service status` for a read-only service-mode snapshot. It reports worker state, browser health, queue depth, and configured service-mode site policies and providers without launching a browser.
 
 ## Batch Execution
 

@@ -132,6 +132,7 @@ agent-browser connect <port>          # Connect to browser via CDP
 agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
+agent-browser service status          # Show service control-plane and configured service state
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 agent-browser chat "<instruction>"    # AI chat: natural language browser control (single-shot)
@@ -1182,6 +1183,16 @@ agent-browser stream disable              # Stop streaming for the session
 ```
 
 The WebSocket server streams the browser viewport and accepts input events.
+
+### Service Status
+
+Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser:
+
+```bash
+agent-browser service status
+```
+
+The response includes worker state, browser health, queue depth, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`.
 
 ### WebSocket Protocol
 

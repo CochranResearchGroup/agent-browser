@@ -876,6 +876,23 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
         },
 
+        // === Service status ===
+        "service" => match rest.first().copied() {
+            Some("status") => Ok(json!({
+                "id": id,
+                "action": "service_status",
+                "serviceState": flags.service_state.clone(),
+            })),
+            Some(sub) => Err(ParseError::UnknownSubcommand {
+                subcommand: sub.to_string(),
+                valid_options: &["status"],
+            }),
+            None => Err(ParseError::MissingArguments {
+                context: "service".to_string(),
+                usage: "service status",
+            }),
+        },
+
         // === Get ===
         "get" => parse_get(&rest, &id),
 
@@ -2395,6 +2412,7 @@ mod tests {
             default_runtime_profile: None,
             configured_runtime_profiles: std::collections::HashMap::new(),
             manual_login_preferred_services: Vec::new(),
+            service_state: crate::native::service_model::ServiceState::default(),
             runtime_profile: None,
             json: false,
             headed: false,
@@ -3939,6 +3957,32 @@ mod tests {
     fn test_stream_status() {
         let cmd = parse_command(&args("stream status"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "stream_status");
+    }
+
+    #[test]
+    fn test_service_status_includes_configured_service_state() {
+        let mut flags = default_flags();
+        flags.service_state.site_policies.insert(
+            "google".to_string(),
+            crate::native::service_model::SitePolicy {
+                id: "google".to_string(),
+                origin_pattern: "https://accounts.google.com".to_string(),
+                manual_login_preferred: true,
+                ..crate::native::service_model::SitePolicy::default()
+            },
+        );
+
+        let cmd = parse_command(&args("service status"), &flags).unwrap();
+
+        assert_eq!(cmd["action"], "service_status");
+        assert_eq!(
+            cmd["serviceState"]["sitePolicies"]["google"]["id"],
+            "google"
+        );
+        assert_eq!(
+            cmd["serviceState"]["sitePolicies"]["google"]["manualLoginPreferred"],
+            true
+        );
     }
 
     #[test]

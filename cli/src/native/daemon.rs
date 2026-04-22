@@ -440,6 +440,13 @@ async fn handle_connection<S>(
                 let response = if action == Some("worker_status") {
                     let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
                     control_plane.status_response(id)
+                } else if action == Some("service_status") {
+                    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    let service_state = cmd
+                        .get("serviceState")
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({}));
+                    control_plane.service_status_response(id, service_state)
                 } else {
                     control_plane.submit(cmd).await
                 };

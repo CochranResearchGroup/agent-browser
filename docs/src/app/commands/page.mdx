@@ -33,6 +33,7 @@ agent-browser connect <port|url>      # Connect to browser via CDP
 agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
+agent-browser service status          # Show service control-plane and configured service state
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 ```
@@ -244,6 +245,14 @@ agent-browser stream disable          # Stop runtime streaming and remove the .s
 ```
 
 Streaming is enabled automatically for all sessions. Use these commands to check status, re-enable on a specific port, or disable streaming.
+
+## Service status
+
+```bash
+agent-browser service status          # Inspect worker state, browser health, queue depth, site policies, and providers
+```
+
+`service status` is read-only. It reports the service control-plane state and configured service-mode entities from `agent-browser.json` and `~/.agent-browser/config.json` without launching a browser.
 
 ## Debug
 

@@ -2522,6 +2522,31 @@ Examples:
 "##
         }
 
+        "service" => {
+            r##"
+agent-browser service - Inspect service-mode state
+
+Usage:
+  agent-browser service status
+
+Commands:
+  status                Show worker state, browser health, queue depth, configured site policies, and providers
+
+Notes:
+  - 'service status' is read-only.
+  - It does not launch a browser.
+  - Configured service entities are loaded from agent-browser.json and ~/.agent-browser/config.json.
+
+Global Options:
+  --json               Output as JSON
+  --session <name>     Use specific session
+
+Examples:
+  agent-browser service status
+  agent-browser --json service status
+"##
+        }
+
         // === iOS Commands ===
         "tap" => {
             r##"
@@ -2870,6 +2895,9 @@ Streaming:
   stream disable             Stop runtime WebSocket streaming
   stream status              Show streaming status and active port
 
+Service:
+  service status             Show service worker health and configured service state
+
 Batch:
   batch [--bail] ["cmd" ...]  Execute multiple commands sequentially (args or stdin)
                               --bail stops on first error (default: continue all)
@@ -3091,6 +3119,7 @@ Examples:
   agent-browser --auto-connect snapshot  # Auto-discover running Chrome
   agent-browser stream enable            # Start runtime streaming on an auto-selected port
   agent-browser stream status            # Inspect runtime streaming state
+  agent-browser service status           # Inspect service control-plane state
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile
   agent-browser runtime login https://example.com --attachable # DevTools-enabled manual login for ordinary sites
