@@ -58,6 +58,10 @@ On Linux, install system dependencies:
 agent-browser install --with-deps
 ```
 
+### Maintainer Release Validation
+
+Before publishing, maintainers can validate the release workflow without side effects by manually running the `Release` GitHub Actions workflow with `dry_run` set to `true`. The dry run builds all platform binaries, verifies the expected artifacts, runs `npm pack --dry-run`, and skips npm publishing plus GitHub release creation.
+
 ### Updating
 
 Upgrade to the latest version:
