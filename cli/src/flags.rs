@@ -1,5 +1,6 @@
 use crate::color;
 use crate::native::service_model::{ServiceProvider, ServiceState, SitePolicy};
+use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -237,6 +238,26 @@ impl Config {
             default_viewport: other.default_viewport.or(self.default_viewport),
         }
     }
+}
+
+fn service_state_from_store(configured: ServiceState) -> ServiceState {
+    let store_path = match JsonServiceStateStore::default_path() {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("{} {}", color::warning_indicator(), err);
+            return configured;
+        }
+    };
+    let store = JsonServiceStateStore::new(store_path);
+    let mut state = match store.load() {
+        Ok(state) => state,
+        Err(err) => {
+            eprintln!("{} {}", color::warning_indicator(), err);
+            ServiceState::default()
+        }
+    };
+    state.overlay_configured_entities(configured);
+    state
 }
 
 fn merge_runtime_profile_maps(
@@ -840,7 +861,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         })
         .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
-    let service_state = config.service_state_snapshot();
+    let service_state = service_state_from_store(config.service_state_snapshot());
 
     let extensions_env = env::var("AGENT_BROWSER_EXTENSIONS")
         .ok()
@@ -2136,6 +2157,102 @@ mod tests {
         assert_eq!(state.providers["manual"].display_name, "Dashboard approval");
         assert!(state.browsers.is_empty());
         assert!(state.sessions.is_empty());
+    }
+
+    #[test]
+    fn test_service_state_from_store_overlays_configured_entities() {
+        let temp_home = std::env::temp_dir().join(format!(
+            "agent-browser-service-store-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        std::fs::create_dir_all(&temp_home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", temp_home.to_str().unwrap());
+
+        let persisted = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                crate::native::service_model::BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: crate::native::service_model::BrowserHealth::Ready,
+                    ..crate::native::service_model::BrowserProcess::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "persisted".to_string(),
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store.save(&persisted).unwrap();
+
+        let configured = ServiceState {
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "configured".to_string(),
+                    ..SitePolicy::default()
+                },
+            )]),
+            providers: BTreeMap::from([(
+                "manual".to_string(),
+                ServiceProvider {
+                    id: "manual".to_string(),
+                    display_name: "Manual approval".to_string(),
+                    ..ServiceProvider::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let state = service_state_from_store(configured);
+
+        assert_eq!(state.browsers["browser-1"].id, "browser-1");
+        assert_eq!(state.site_policies["google"].origin_pattern, "configured");
+        assert_eq!(state.providers["manual"].display_name, "Manual approval");
+        let _ = std::fs::remove_dir_all(&temp_home);
+    }
+
+    #[test]
+    fn test_parse_flags_loads_persisted_service_state() {
+        let temp_home = std::env::temp_dir().join(format!(
+            "agent-browser-parse-service-store-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        std::fs::create_dir_all(&temp_home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", temp_home.to_str().unwrap());
+
+        let persisted = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                crate::native::service_model::BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: crate::native::service_model::BrowserHealth::Ready,
+                    ..crate::native::service_model::BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store.save(&persisted).unwrap();
+
+        let flags = parse_flags(&args("service status"));
+
+        assert_eq!(flags.service_state.browsers["browser-1"].id, "browser-1");
+        let _ = std::fs::remove_dir_all(&temp_home);
     }
 
     #[test]

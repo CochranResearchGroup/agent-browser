@@ -33,6 +33,8 @@ pub mod screenshot;
 #[allow(dead_code)]
 pub mod service_model;
 #[allow(dead_code)]
+pub mod service_store;
+#[allow(dead_code)]
 pub mod snapshot;
 #[allow(dead_code)]
 pub mod state;

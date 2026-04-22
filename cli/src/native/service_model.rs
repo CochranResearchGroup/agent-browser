@@ -22,6 +22,13 @@ pub struct ServiceState {
     pub challenges: BTreeMap<String, Challenge>,
 }
 
+impl ServiceState {
+    pub fn overlay_configured_entities(&mut self, configured: ServiceState) {
+        self.site_policies.extend(configured.site_policies);
+        self.providers.extend(configured.providers);
+    }
+}
+
 /// Durable profile identity and launch policy.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -642,6 +649,60 @@ mod tests {
         assert_eq!(
             decoded.sessions["session-1"].owner,
             ServiceActor::Agent("codex".to_string())
+        );
+    }
+
+    #[test]
+    fn configured_entities_overlay_persisted_state() {
+        let mut persisted = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::Ready,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "persisted".to_string(),
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let configured = ServiceState {
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "configured".to_string(),
+                    ..SitePolicy::default()
+                },
+            )]),
+            providers: BTreeMap::from([(
+                "manual".to_string(),
+                ServiceProvider {
+                    id: "manual".to_string(),
+                    display_name: "Dashboard approval".to_string(),
+                    ..ServiceProvider::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        persisted.overlay_configured_entities(configured);
+
+        assert!(persisted.browsers.contains_key("browser-1"));
+        assert_eq!(
+            persisted.site_policies["google"].origin_pattern,
+            "configured"
+        );
+        assert_eq!(
+            persisted.providers["manual"].display_name,
+            "Dashboard approval"
         );
     }
 

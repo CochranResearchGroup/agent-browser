@@ -2535,7 +2535,8 @@ Commands:
 Notes:
   - 'service status' is read-only.
   - It does not launch a browser.
-  - Configured service entities are loaded from agent-browser.json and ~/.agent-browser/config.json.
+  - Persisted service state is loaded from ~/.agent-browser/service/state.json.
+  - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 
 Global Options:
   --json               Output as JSON

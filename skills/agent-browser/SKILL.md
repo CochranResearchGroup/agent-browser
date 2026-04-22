@@ -384,7 +384,7 @@ Streaming is opt-in. Use `agent-browser stream enable` to start a runtime WebSoc
 
 ## Service Status
 
-Use `agent-browser service status` for a read-only service-mode snapshot. It reports worker state, browser health, queue depth, and configured service-mode site policies and providers without launching a browser.
+Use `agent-browser service status` for a read-only service-mode snapshot. It reports worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers without launching a browser. Configured site policies and providers override entries with the same IDs from the persisted state.
 
 ## Batch Execution
 

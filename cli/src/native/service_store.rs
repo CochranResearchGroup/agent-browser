@@ -1,0 +1,190 @@
+//! Persistent service-state storage.
+//!
+//! The first service-mode store is JSON-backed and intentionally small. It gives
+//! later lifecycle work a durable contract without forcing a database choice yet.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use super::service_model::ServiceState;
+
+const SERVICE_DIR: &str = "service";
+const SERVICE_STATE_FILENAME: &str = "state.json";
+
+pub trait ServiceStateStore {
+    fn load(&self) -> Result<ServiceState, String>;
+    fn save(&self, state: &ServiceState) -> Result<(), String>;
+}
+
+#[derive(Debug, Clone)]
+pub struct JsonServiceStateStore {
+    path: PathBuf,
+}
+
+impl JsonServiceStateStore {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
+    pub fn default_path() -> Result<PathBuf, String> {
+        default_service_state_path()
+    }
+
+    #[cfg(test)]
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl ServiceStateStore for JsonServiceStateStore {
+    fn load(&self) -> Result<ServiceState, String> {
+        let raw = match fs::read_to_string(&self.path) {
+            Ok(raw) => raw,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(ServiceState::default())
+            }
+            Err(err) => {
+                return Err(format!(
+                    "Failed to read service state {}: {}",
+                    self.path.display(),
+                    err
+                ))
+            }
+        };
+
+        serde_json::from_str(&raw).map_err(|err| {
+            format!(
+                "Invalid service state JSON {}: {}",
+                self.path.display(),
+                err
+            )
+        })
+    }
+
+    fn save(&self, state: &ServiceState) -> Result<(), String> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).map_err(|err| {
+                format!(
+                    "Failed to create service state directory {}: {}",
+                    parent.display(),
+                    err
+                )
+            })?;
+        }
+
+        let serialized = serde_json::to_string_pretty(state)
+            .map_err(|err| format!("Failed to serialize service state: {}", err))?;
+        let temp_path = temp_state_path(&self.path);
+        fs::write(&temp_path, format!("{}\n", serialized)).map_err(|err| {
+            format!(
+                "Failed to write temporary service state {}: {}",
+                temp_path.display(),
+                err
+            )
+        })?;
+        fs::rename(&temp_path, &self.path).map_err(|err| {
+            let _ = fs::remove_file(&temp_path);
+            format!(
+                "Failed to replace service state {}: {}",
+                self.path.display(),
+                err
+            )
+        })?;
+
+        Ok(())
+    }
+}
+
+pub fn default_service_state_path() -> Result<PathBuf, String> {
+    let Some(home) = dirs::home_dir() else {
+        return Err("Could not determine home directory for service state".to_string());
+    };
+    Ok(home
+        .join(".agent-browser")
+        .join(SERVICE_DIR)
+        .join(SERVICE_STATE_FILENAME))
+}
+
+fn temp_state_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(SERVICE_STATE_FILENAME);
+    path.with_file_name(format!("{}.tmp.{}", file_name, std::process::id()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::native::service_model::{BrowserHealth, BrowserHost, BrowserProcess, SitePolicy};
+    use std::collections::BTreeMap;
+
+    fn unique_state_path(label: &str) -> PathBuf {
+        std::env::temp_dir()
+            .join(format!(
+                "agent-browser-{label}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ))
+            .join("state.json")
+    }
+
+    #[test]
+    fn missing_state_file_loads_default_state() {
+        let store = JsonServiceStateStore::new(unique_state_path("missing-service-state"));
+
+        let state = store.load().expect("missing state should load default");
+
+        assert_eq!(state, ServiceState::default());
+    }
+
+    #[test]
+    fn save_and_load_round_trips_service_state() {
+        let path = unique_state_path("round-trip-service-state");
+        let store = JsonServiceStateStore::new(&path);
+        let state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    host: BrowserHost::DockerHeaded,
+                    health: BrowserHealth::Ready,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "https://accounts.google.com".to_string(),
+                    manual_login_preferred: true,
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        store.save(&state).expect("state should save");
+        let loaded = store.load().expect("state should load");
+
+        assert_eq!(loaded, state);
+        assert_eq!(store.path(), path.as_path());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn invalid_state_file_returns_error() {
+        let path = unique_state_path("bad-service-state");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "{not-json").unwrap();
+        let store = JsonServiceStateStore::new(&path);
+
+        let err = store.load().expect_err("invalid state should fail");
+
+        assert!(err.contains("Invalid service state JSON"));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+}
