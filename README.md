@@ -1204,6 +1204,7 @@ agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
 agent-browser service jobs --limit 20
+agent-browser service jobs --id <job-id>
 agent-browser service jobs --state failed --action navigate --since 2026-04-22T00:00:00Z
 agent-browser service events --limit 20
 agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
@@ -1220,7 +1221,7 @@ Use `service reconcile` to run the persisted browser health and target probes in
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
 
-Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
+Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 
 Use `service events --limit <n>` to inspect recent reconciliation summaries, browser health transitions, and tab lifecycle changes without parsing the full service state. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, and `reconciliation_error`. `--since` accepts RFC 3339 timestamps.
 
@@ -1229,6 +1230,7 @@ When the session stream server is running, agents can read the same service surf
 ```bash
 curl "http://127.0.0.1:<stream-port>/api/service/status"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs?limit=20&state=failed"
+curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
 curl "http://127.0.0.1:<stream-port>/api/service/events?limit=20&kind=browser_health_changed"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 ```

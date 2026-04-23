@@ -163,39 +163,41 @@ fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
 }
 
 fn format_service_jobs_text(data: &serde_json::Value) -> Option<String> {
+    if let Some(job) = data.get("job") {
+        return Some(format_service_job_line(job));
+    }
     let jobs = data.get("jobs").and_then(|value| value.as_array())?;
     if jobs.is_empty() {
         return Some("No service jobs".to_string());
     }
 
-    let lines = jobs
-        .iter()
-        .map(|job| {
-            let timestamp = job
-                .get("submittedAt")
-                .and_then(|value| value.as_str())
-                .unwrap_or("unknown-time");
-            let state = job
-                .get("state")
-                .and_then(|value| value.as_str())
-                .unwrap_or("unknown");
-            let action = job
-                .get("action")
-                .and_then(|value| value.as_str())
-                .unwrap_or("unknown-action");
-            let id = job
-                .get("id")
-                .and_then(|value| value.as_str())
-                .unwrap_or("unknown-id");
-            let error = job
-                .get("error")
-                .and_then(|value| value.as_str())
-                .map(|error| format!(" error={error}"))
-                .unwrap_or_default();
-            format!("{timestamp} {state} action={action} id={id}{error}")
-        })
-        .collect::<Vec<_>>();
+    let lines = jobs.iter().map(format_service_job_line).collect::<Vec<_>>();
     Some(lines.join("\n"))
+}
+
+fn format_service_job_line(job: &serde_json::Value) -> String {
+    let timestamp = job
+        .get("submittedAt")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-time");
+    let state = job
+        .get("state")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let action = job
+        .get("action")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-action");
+    let id = job
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-id");
+    let error = job
+        .get("error")
+        .and_then(|value| value.as_str())
+        .map(|error| format!(" error={error}"))
+        .unwrap_or_default();
+    format!("{timestamp} {state} action={action} id={id}{error}")
 }
 
 pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &OutputOptions) {
@@ -2611,7 +2613,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
-  agent-browser service jobs [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
+  agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
 
 Commands:
@@ -2631,7 +2633,7 @@ Notes:
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
-  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/events, and /api/service/reconcile.
+  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
@@ -2646,6 +2648,7 @@ Examples:
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
   agent-browser service jobs --limit 20
+  agent-browser service jobs --id <job-id>
   agent-browser service jobs --state failed --action navigate
   agent-browser service events --limit 20
   agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z

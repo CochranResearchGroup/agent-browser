@@ -97,6 +97,8 @@ The first backend-first correction is implemented on `service-model-phase-0`:
   priority, timestamps, final state, and error text
 - `service jobs` and `GET /api/service/jobs` expose recent job records without
   requiring agents or operators to parse the full service status payload
+- `service jobs --id <job-id>` and `GET /api/service/jobs/<job-id>` expose one
+  retained job for dashboard and operator detail inspection
 
 This deliberately uses the existing service status, reconcile, HTTP API, and
 dashboard surfaces instead of adding more dashboard-only state.

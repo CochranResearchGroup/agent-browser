@@ -947,7 +947,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             })),
             Some("jobs") => {
                 let usage =
-                    "service jobs [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]";
+                    "service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]";
                 let mut cmd = json!({
                     "id": id,
                     "action": "service_jobs",
@@ -969,6 +969,16 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                     usage,
                                 })?;
                             cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        "--id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["jobId"] = json!(raw);
                             i += 1;
                         }
                         "--state" => {
@@ -4270,6 +4280,14 @@ mod tests {
         assert_eq!(cmd["state"], "failed");
         assert_eq!(cmd["jobAction"], "navigate");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_jobs_id_lookup() {
+        let cmd = parse_command(&args("service jobs --id job-123"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_jobs");
+        assert_eq!(cmd["jobId"], "job-123");
     }
 
     #[test]

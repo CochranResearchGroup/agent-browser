@@ -100,6 +100,12 @@ type ServiceJob = {
   action?: string;
   state?: string;
   priority?: string;
+  target?: unknown;
+  owner?: unknown;
+  timeoutMs?: number | null;
+  request?: unknown;
+  response?: unknown;
+  result?: unknown;
   submittedAt?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
@@ -137,6 +143,7 @@ type ServiceEventsData = {
 };
 
 type ServiceJobsData = {
+  job?: ServiceJob;
   jobs?: ServiceJob[];
   count?: number;
   matched?: number;
@@ -314,10 +321,15 @@ function EventRow({ event, onSelect }: { event: ServiceEvent; onSelect: (event: 
   );
 }
 
-function JobRow({ job }: { job: ServiceJob }) {
+function JobRow({ job, onSelect }: { job: ServiceJob; onSelect: (job: ServiceJob) => void }) {
   const failed = job.state === "failed" || job.state === "timed_out" || job.state === "cancelled";
   return (
-    <div className="service-event-row">
+    <button
+      type="button"
+      className="service-event-row"
+      onClick={() => onSelect(job)}
+      aria-label={`Inspect job ${job.id}`}
+    >
       <span
         className={cn(
           "service-event-dot",
@@ -341,7 +353,7 @@ function JobRow({ job }: { job: ServiceJob }) {
           {job.error || job.id || "No job details"}
         </p>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -442,6 +454,79 @@ function BrowserDetailDialog({
                     View streams
                   </p>
                   <pre className="service-event-details-json">{formatDetails(browser.viewStreams)}</pre>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function JobDetailDialog({
+  job,
+  onOpenChange,
+}: {
+  job: ServiceJob | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const request = formatDetails(job?.request);
+  const response = formatDetails(job?.response ?? job?.result);
+  const target = formatDetails(job?.target);
+  return (
+    <Dialog open={!!job} onOpenChange={onOpenChange}>
+      <DialogContent className="service-event-dialog">
+        {job && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-8 text-xl font-black tracking-[-0.04em]">
+                {job.action ?? "Service job"}
+              </DialogTitle>
+              <DialogDescription>
+                {job.state ?? "unknown"} / {formatRelativeTime(job.submittedAt)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="service-event-dialog-body">
+              {job.error && (
+                <div className="service-browser-error">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{job.error}</span>
+                </div>
+              )}
+              <div className="service-event-detail-grid">
+                <EventDetailItem label="Job ID" value={job.id} />
+                <EventDetailItem label="Action" value={job.action} />
+                <EventDetailItem label="State" value={job.state} />
+                <EventDetailItem label="Priority" value={job.priority} />
+                <EventDetailItem label="Owner" value={job.owner ? formatActor(job.owner) : null} />
+                <EventDetailItem label="Timeout" value={job.timeoutMs ? `${job.timeoutMs} ms` : null} />
+                <EventDetailItem label="Submitted" value={job.submittedAt ? formatAbsoluteTime(job.submittedAt) : null} />
+                <EventDetailItem label="Started" value={job.startedAt ? formatAbsoluteTime(job.startedAt) : null} />
+                <EventDetailItem label="Completed" value={job.completedAt ? formatAbsoluteTime(job.completedAt) : null} />
+              </div>
+              {target && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Target
+                  </p>
+                  <pre className="service-event-details-json">{target}</pre>
+                </div>
+              )}
+              {request && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Request
+                  </p>
+                  <pre className="service-event-details-json">{request}</pre>
+                </div>
+              )}
+              {response && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Response
+                  </p>
+                  <pre className="service-event-details-json">{response}</pre>
                 </div>
               )}
             </div>
@@ -677,6 +762,7 @@ export function ServicePanel() {
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
   const [selectedTab, setSelectedTab] = useState<ServiceTab | null>(null);
+  const [selectedJob, setSelectedJob] = useState<ServiceJob | null>(null);
 
   const canFetch = activePort > 0 && !!activeSession;
   const activeFilterCount =
@@ -746,6 +832,23 @@ export function ServicePanel() {
       setReconciling(false);
     }
   }, [activePort, canFetch, fetchService, reconciling]);
+
+  const inspectJob = useCallback(async (job: ServiceJob) => {
+    if (!canFetch || !job.id) {
+      setSelectedJob(job);
+      return;
+    }
+    setError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/jobs/${encodeURIComponent(job.id)}`);
+      const json = (await resp.json()) as ApiResponse<ServiceJobsData>;
+      if (!json.success) throw new Error(json.error || "Service job lookup failed");
+      setSelectedJob(json.data?.job ?? job);
+    } catch (err) {
+      setSelectedJob(job);
+      setError(err instanceof Error ? err.message : "Service job lookup unavailable");
+    }
+  }, [activePort, canFetch]);
 
   const serviceState = status?.service_state;
   const control = status?.control_plane;
@@ -820,6 +923,12 @@ export function ServicePanel() {
         tab={selectedTab}
         onOpenChange={(open) => {
           if (!open) setSelectedTab(null);
+        }}
+      />
+      <JobDetailDialog
+        job={selectedJob}
+        onOpenChange={(open) => {
+          if (!open) setSelectedJob(null);
         }}
       />
       <div className="service-panel-hero">
@@ -1017,7 +1126,7 @@ export function ServicePanel() {
                   No service jobs yet.
                 </p>
               ) : (
-                recentJobs.map((job) => <JobRow key={job.id} job={job} />)
+                recentJobs.map((job) => <JobRow key={job.id} job={job} onSelect={inspectJob} />)
               )}
             </div>
           </div>

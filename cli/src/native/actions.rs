@@ -5809,6 +5809,20 @@ async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
         .map(parse_service_event_timestamp)
         .transpose()?;
     let total = service_state.jobs.len();
+    if let Some(job_id) = cmd.get("jobId").and_then(|value| value.as_str()) {
+        let job = service_state
+            .jobs
+            .get(job_id)
+            .cloned()
+            .ok_or_else(|| format!("Service job not found: {}", job_id))?;
+        return Ok(json!({
+            "job": job,
+            "jobs": [job],
+            "count": 1,
+            "matched": 1,
+            "total": total,
+        }));
+    }
     let mut jobs = service_state.jobs.into_values().collect::<Vec<_>>();
     jobs.sort_by(|left, right| {
         let left_time = left.submitted_at.as_deref().unwrap_or_default();
@@ -9700,6 +9714,42 @@ mod tests {
         assert_eq!(result["data"]["matched"], 1);
         assert_eq!(result["data"]["total"], 4);
         assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_jobs_returns_job_by_id() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_jobs",
+            "id": "svc-jobs-3",
+            "jobId": "job-2",
+            "serviceState": {
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "succeeded",
+                        "submittedAt": "2026-04-22T00:00:00Z"
+                    },
+                    "job-2": {
+                        "id": "job-2",
+                        "action": "click",
+                        "state": "failed",
+                        "submittedAt": "2026-04-22T00:01:00Z",
+                        "error": "selector missing"
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["job"]["id"], "job-2");
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["total"], 2);
         assert!(state.browser.is_none());
     }
 
