@@ -10,6 +10,7 @@ use super::actions::{execute_command, DaemonState};
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{reconcile_persisted_service_state, reconcile_service_state};
 use super::service_model::{
+    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
 };
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -328,6 +329,47 @@ fn persist_service_state_snapshot(state: &ServiceState) {
     };
     let store = JsonServiceStateStore::new(path);
     let _ = store.save(state);
+}
+
+fn service_browser_id(session_id: &str) -> String {
+    format!("session:{}", session_id)
+}
+
+fn persist_process_exited_browser_health(state: &DaemonState) {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return;
+    };
+    let store = JsonServiceStateStore::new(path);
+    let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
+    let id = service_browser_id(&state.session_id);
+    let existing = service_state.browsers.get(&id);
+    let host = existing
+        .map(|browser| browser.host)
+        .unwrap_or(ServiceBrowserHost::LocalHeaded);
+    let (pid, cdp_endpoint) = state
+        .browser
+        .as_ref()
+        .map(|mgr| (mgr.browser_pid(), Some(mgr.get_cdp_url().to_string())))
+        .unwrap_or((None, None));
+    let last_error = pid.map(|pid| format!("Browser process {} exited", pid));
+
+    service_state.browsers.insert(
+        id.clone(),
+        BrowserProcess {
+            id,
+            profile_id: existing.and_then(|browser| browser.profile_id.clone()),
+            host,
+            health: ServiceBrowserHealth::ProcessExited,
+            pid,
+            cdp_endpoint,
+            view_streams: existing
+                .map(|browser| browser.view_streams.clone())
+                .unwrap_or_default(),
+            active_session_ids: vec![state.session_id.clone()],
+            last_error,
+        },
+    );
+    let _ = store.save(&service_state);
 }
 
 /// Persist a bounded audit record for each control-plane request.
@@ -817,6 +859,7 @@ async fn close_browser(state: &mut DaemonState) {
 }
 
 async fn cleanup_exited_browser(state: &mut DaemonState) {
+    persist_process_exited_browser_health(state);
     if let Some(ref mut mgr) = state.browser {
         let _ = mgr.close().await;
     }
