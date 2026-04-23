@@ -1228,7 +1228,7 @@ Use `service reconcile` to run the persisted browser health and target probes in
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
 
-Use `service cancel <job-id>` to mark a queued service job cancelled before it dispatches. This is intentionally conservative: running jobs are not interrupted, and terminal jobs are rejected rather than rewritten. Add `--reason <text>` to record an operator-readable reason.
+Use `service cancel <job-id>` to mark a queued service job cancelled before it dispatches or request cooperative cancellation for a running job. Running cancellation drops the active service future, records the job as `cancelled`, and cleans up browser state before the worker accepts more work. Terminal jobs are rejected rather than rewritten. Add `--reason <text>` to record an operator-readable reason for queued cancellation.
 
 Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 

@@ -290,6 +290,18 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
                 println!("Cancelled {}", format_service_job_line(job));
                 return;
             }
+            if data
+                .get("cancellationRequested")
+                .and_then(|value| value.as_bool())
+                == Some(true)
+            {
+                let job_id = data
+                    .get("jobId")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown-id");
+                println!("Cancellation requested for service job {job_id}");
+                return;
+            }
         }
         if action == Some("storage_get") {
             if let Some(output) = format_storage_text(data) {
@@ -2636,7 +2648,7 @@ Notes:
   - Persisted service state is loaded from ~/.agent-browser/service/state.json.
   - The current control-plane snapshot is refreshed in the persisted service state.
   - Recent control-plane requests are retained as bounded job records with timestamps and final state.
-  - Cancel only applies to queued jobs. Running jobs are not interrupted because that is not yet safe.
+  - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.

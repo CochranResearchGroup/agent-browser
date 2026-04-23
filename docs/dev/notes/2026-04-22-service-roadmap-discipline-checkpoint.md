@@ -100,8 +100,9 @@ The first backend-first correction is implemented on `service-model-phase-0`:
 - `service jobs --id <job-id>` and `GET /api/service/jobs/<job-id>` expose one
   retained job for dashboard and operator detail inspection
 - `service cancel <job-id>` and `POST /api/service/jobs/<job-id>/cancel`
-  conservatively cancel queued jobs before dispatch; running jobs are not
-  interrupted until active-request cancellation is designed
+  cancel queued jobs before dispatch and request cooperative cancellation for
+  running jobs by dropping the active service future and cleaning up browser
+  state before accepting more work
 - `service.jobTimeoutMs`, `--service-job-timeout`, and
   `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` add opt-in worker-bound timeouts that
   mark long-running dispatched jobs as `timed_out`

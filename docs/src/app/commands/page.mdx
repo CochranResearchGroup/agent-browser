@@ -277,7 +277,7 @@ The persisted service state also includes bounded audit records for recent contr
 
 `service reconcile` runs the same persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `state.json`, refreshes live tab records for reachable browser CDP endpoints, refreshes the `reconciliation` snapshot, appends service events, and returns the reconciled service state plus counts for total and changed browser records.
 
-`service cancel <job-id>` marks a queued service job cancelled before it dispatches. This is intentionally conservative: running jobs are not interrupted, and terminal jobs are rejected rather than rewritten. Add `--reason <text>` to record an operator-readable reason.
+`service cancel <job-id>` marks a queued service job cancelled before it dispatches or requests cooperative cancellation for a running job. Running cancellation drops the active service future, records the job as <code>cancelled</code>, and cleans up browser state before the worker accepts more work. Terminal jobs are rejected rather than rewritten. Add <code>--reason &lt;text&gt;</code> to record an operator-readable reason for queued cancellation.
 
 `service jobs --limit <n>` prints recent control-plane jobs without requiring operators to parse the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 

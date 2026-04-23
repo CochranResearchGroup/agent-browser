@@ -1,8 +1,10 @@
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use tokio::sync::Notify;
 use tokio::sync::{mpsc, oneshot};
 
 use super::actions::{execute_command, DaemonState};
@@ -20,6 +22,7 @@ pub struct ControlPlaneHandle {
     tx: mpsc::Sender<WorkerMessage>,
     status: Arc<ControlPlaneStatus>,
     service_job_timeout_ms: Option<u64>,
+    running_cancellations: Arc<Mutex<HashMap<String, RunningJobCancel>>>,
 }
 
 pub struct ControlPlaneStatus {
@@ -65,8 +68,40 @@ pub struct ControlRequest {
     /// Optional worker-bound execution timeout. The worker records timed-out
     /// requests as service jobs with `timed_out` state.
     pub timeout_ms: Option<u64>,
+    pub cancellation: RunningJobCancel,
     pub submitted_at_wall: String,
     pub response_tx: oneshot::Sender<Value>,
+}
+
+#[derive(Clone)]
+pub struct RunningJobCancel {
+    cancelled: Arc<AtomicBool>,
+    notify: Arc<Notify>,
+}
+
+impl RunningJobCancel {
+    fn new() -> Self {
+        Self {
+            cancelled: Arc::new(AtomicBool::new(false)),
+            notify: Arc::new(Notify::new()),
+        }
+    }
+
+    fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+        self.notify.notify_waiters();
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
+
+    async fn cancelled(&self) {
+        if self.is_cancelled() {
+            return;
+        }
+        self.notify.notified().await;
+    }
 }
 
 enum WorkerMessage {
@@ -113,17 +148,20 @@ impl ControlPlaneWorker {
     ) -> ControlPlaneHandle {
         let (tx, rx) = mpsc::channel(capacity);
         let status = Arc::new(ControlPlaneStatus::new());
+        let running_cancellations = Arc::new(Mutex::new(HashMap::new()));
         tokio::spawn(run_worker(
             state,
             rx,
             status.clone(),
             service_reconcile_interval_ms,
             service_job_timeout_ms,
+            running_cancellations.clone(),
         ));
         ControlPlaneHandle {
             tx,
             status,
             service_job_timeout_ms,
+            running_cancellations,
         }
     }
 }
@@ -204,6 +242,7 @@ impl ControlPlaneHandle {
             command,
             priority: ControlPriority::Normal,
             timeout_ms,
+            cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
             response_tx,
         };
@@ -261,6 +300,24 @@ impl ControlPlaneHandle {
     }
 
     pub fn cancel_job_response(&self, id: &str, job_id: &str, reason: Option<&str>) -> Value {
+        if let Some(cancel) = self
+            .running_cancellations
+            .lock()
+            .ok()
+            .and_then(|running| running.get(job_id).cloned())
+        {
+            cancel.cancel();
+            return json!({
+                "id": id,
+                "success": true,
+                "data": {
+                    "cancelled": false,
+                    "cancellationRequested": true,
+                    "jobId": job_id,
+                },
+            });
+        }
+
         match cancel_persisted_service_job(job_id, reason) {
             Ok(job) => json!({
                 "id": id,
@@ -405,6 +462,28 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         timeout_ms: request.timeout_ms,
         result: Some(json!({ "success": false, "timedOut": true, "timeoutMs": timeout_ms })),
         error: Some(format!("Service job timed out after {}ms", timeout_ms)),
+        ..ServiceJob::default()
+    });
+}
+
+fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
+    let job_id = service_job_id(request);
+    let started_at = load_service_job(&job_id)
+        .and_then(|job| job.started_at)
+        .unwrap_or_else(current_timestamp);
+    persist_service_job(ServiceJob {
+        id: job_id,
+        action: request.action.clone(),
+        target: JobTarget::Service,
+        owner: ServiceActor::System,
+        state: JobState::Cancelled,
+        priority: service_job_priority(request.priority),
+        submitted_at: Some(request.submitted_at_wall.clone()),
+        started_at: Some(started_at),
+        completed_at: Some(current_timestamp()),
+        timeout_ms: request.timeout_ms,
+        result: Some(json!({ "success": false, "cancelled": true })),
+        error: Some(reason.to_string()),
         ..ServiceJob::default()
     });
 }
@@ -607,6 +686,7 @@ async fn run_worker(
     status: Arc<ControlPlaneStatus>,
     service_reconcile_interval_ms: Option<u64>,
     service_job_timeout_ms: Option<u64>,
+    running_cancellations: Arc<Mutex<HashMap<String, RunningJobCancel>>>,
 ) {
     let mut drain_interval = tokio::time::interval(Duration::from_millis(100));
     drain_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -637,18 +717,29 @@ async fn run_worker(
                         }
                         status.set_state(WorkerState::Busy);
                         persist_service_job_running(&request);
+                        if let Ok(mut running) = running_cancellations.lock() {
+                            running.insert(request.job_id.clone(), request.cancellation.clone());
+                        }
                         refresh_browser_health(&mut state, &status).await;
                         let timeout_ms = request.timeout_ms.or(service_job_timeout_ms);
                         let response = match timeout_ms {
                             Some(ms) if ms > 0 => {
-                                match tokio::time::timeout(
-                                    Duration::from_millis(ms),
-                                    execute_command(&request.command, &mut state),
-                                )
-                                .await
-                                {
-                                    Ok(response) => response,
-                                    Err(_) => {
+                                tokio::select! {
+                                    response = execute_command(&request.command, &mut state) => response,
+                                    _ = request.cancellation.cancelled() => {
+                                        persist_service_job_cancelled(&request, "Service job was cancelled while running");
+                                        cleanup_exited_browser(&mut state).await;
+                                        status.set_browser_health(BrowserHealth::NotStarted);
+                                        json!({
+                                            "id": request.id.clone(),
+                                            "success": false,
+                                            "error": "Service job was cancelled while running",
+                                            "data": {
+                                                "cancelled": true,
+                                            },
+                                        })
+                                    }
+                                    _ = tokio::time::sleep(Duration::from_millis(ms)) => {
                                         persist_service_job_timed_out(&request);
                                         cleanup_exited_browser(&mut state).await;
                                         status.set_browser_health(BrowserHealth::NotStarted);
@@ -664,13 +755,37 @@ async fn run_worker(
                                     }
                                 }
                             }
-                            _ => execute_command(&request.command, &mut state).await,
+                            _ => {
+                                tokio::select! {
+                                    response = execute_command(&request.command, &mut state) => response,
+                                    _ = request.cancellation.cancelled() => {
+                                        persist_service_job_cancelled(&request, "Service job was cancelled while running");
+                                        cleanup_exited_browser(&mut state).await;
+                                        status.set_browser_health(BrowserHealth::NotStarted);
+                                        json!({
+                                            "id": request.id.clone(),
+                                            "success": false,
+                                            "error": "Service job was cancelled while running",
+                                            "data": {
+                                                "cancelled": true,
+                                            },
+                                        })
+                                    }
+                                }
+                            }
                         };
+                        if let Ok(mut running) = running_cancellations.lock() {
+                            running.remove(&request.job_id);
+                        }
                         refresh_browser_health(&mut state, &status).await;
                         if response
                             .pointer("/data/timedOut")
                             .and_then(|value| value.as_bool())
                             != Some(true)
+                            && response
+                                .pointer("/data/cancelled")
+                                .and_then(|value| value.as_bool())
+                                != Some(true)
                         {
                             persist_service_job_finished(&request, &response);
                         }
@@ -1126,6 +1241,74 @@ mod tests {
         assert_eq!(job.state, JobState::TimedOut);
         assert_eq!(job.timeout_ms, Some(10));
         assert_eq!(job.result.as_ref().unwrap()["timedOut"], true);
+
+        handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn service_job_cancel_requests_running_job_cancellation() {
+        let home = temp_home("control-plane-running-cancel");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let handle = ControlPlaneWorker::start(DaemonState::new());
+        let submit_handle = {
+            let handle = handle.clone();
+            tokio::spawn(async move {
+                handle
+                    .submit(json!({
+                        "id": "test-running-cancel",
+                        "action": "__test_sleep",
+                        "ms": 5000,
+                    }))
+                    .await
+            })
+        };
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+
+        for _ in 0..50 {
+            if store
+                .load()
+                .unwrap()
+                .jobs
+                .get("test-running-cancel")
+                .is_some_and(|job| job.state == JobState::Running)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let cancel_response =
+            handle.cancel_job_response("cancel-running", "test-running-cancel", None);
+
+        assert_eq!(
+            cancel_response
+                .pointer("/data/cancellationRequested")
+                .and_then(|value| value.as_bool()),
+            Some(true)
+        );
+
+        let response = submit_handle.await.expect("submit task should complete");
+
+        assert_eq!(
+            response.get("success").and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            response
+                .pointer("/data/cancelled")
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+
+        let persisted = store.load().unwrap();
+        let job = &persisted.jobs["test-running-cancel"];
+        assert_eq!(job.state, JobState::Cancelled);
+        assert_eq!(
+            job.error.as_deref(),
+            Some("Service job was cancelled while running")
+        );
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);

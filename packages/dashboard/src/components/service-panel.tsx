@@ -478,7 +478,7 @@ function JobDetailDialog({
   const request = formatDetails(job?.request);
   const response = formatDetails(job?.response ?? job?.result);
   const target = formatDetails(job?.target);
-  const canCancel = job?.state === "queued";
+  const canCancel = job?.state === "queued" || job?.state === "running";
   return (
     <Dialog open={!!job} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -541,7 +541,7 @@ function JobDetailDialog({
                   className="rounded-full"
                   onClick={() => onCancel(job)}
                 >
-                  Cancel queued job
+                  {job.state === "running" ? "Cancel running job" : "Cancel queued job"}
                 </Button>
               )}
             </div>
@@ -874,7 +874,7 @@ export function ServicePanel() {
       });
       const json = (await resp.json()) as ApiResponse<ServiceJobsData & { cancelled?: boolean }>;
       if (!json.success) throw new Error(json.error || "Service job cancel failed");
-      setSelectedJob(json.data?.job ?? null);
+      setSelectedJob(json.data?.job ?? { ...job, error: "Cancellation requested" });
       await fetchService(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service job cancel unavailable");
