@@ -5,9 +5,10 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::RwLock;
 
-use crate::connection::get_socket_dir;
 #[cfg(windows)]
 use crate::connection::resolve_port;
+use crate::connection::{attach_daemon_auth_token, get_socket_dir};
+use crate::flags::parse_flags;
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
@@ -57,7 +58,8 @@ pub(super) async fn handle_http_request(
     let request = String::from_utf8_lossy(peeked);
     let first_line = request.lines().next().unwrap_or("");
     let method = first_line.split_whitespace().next().unwrap_or("GET");
-    let path = first_line.split_whitespace().nth(1).unwrap_or("/");
+    let raw_path = first_line.split_whitespace().nth(1).unwrap_or("/");
+    let (path, query) = split_path_query(raw_path);
     let origin = parse_origin(peeked);
 
     if method == "OPTIONS" {
@@ -126,10 +128,35 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if path == "/api/service/reconcile" {
+            let result = relay_service_command(session_name, service_reconcile_command()).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if path == "/api/chat" {
             handle_chat_request(&mut stream, body_str, origin.as_deref()).await;
             return;
         }
+    }
+
+    if method == "GET" && path == "/api/service/status" {
+        let result = relay_service_command(session_name, service_status_command()).await;
+        write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/service/events" {
+        let cmd = match service_events_command(query) {
+            Ok(cmd) => cmd,
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                return;
+            }
+        };
+        let result = relay_service_command(session_name, cmd).await;
+        write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
     }
 
     if method == "GET" && path == "/api/models" {
@@ -177,6 +204,99 @@ pub(super) async fn handle_http_request(
     );
     let _ = stream.write_all(response.as_bytes()).await;
     let _ = stream.write_all(&body).await;
+}
+
+fn split_path_query(raw_path: &str) -> (&str, Option<&str>) {
+    match raw_path.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (raw_path, None),
+    }
+}
+
+async fn write_json_result(
+    stream: &mut tokio::net::TcpStream,
+    result: Result<String, String>,
+    error_status: &str,
+) {
+    let (status, resp_body) = match result {
+        Ok(resp) => ("200 OK", resp),
+        Err(e) => (
+            error_status,
+            format!(
+                r#"{{"success":false,"error":{}}}"#,
+                serde_json::to_string(&e).unwrap_or_else(|_| format!("\"{}\"", e))
+            ),
+        ),
+    };
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
+        resp_body.len()
+    );
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.write_all(resp_body.as_bytes()).await;
+}
+
+fn service_status_command() -> Value {
+    json!({
+        "action": "service_status",
+        "serviceState": load_service_state_snapshot(),
+    })
+}
+
+fn service_reconcile_command() -> Value {
+    json!({
+        "action": "service_reconcile",
+        "serviceState": load_service_state_snapshot(),
+    })
+}
+
+fn service_events_command(query: Option<&str>) -> Result<Value, String> {
+    let mut cmd = json!({
+        "action": "service_events",
+        "serviceState": load_service_state_snapshot(),
+    });
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "limit" => {
+                let limit = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("Invalid limit value: {}", value))?;
+                cmd["limit"] = json!(limit);
+            }
+            "kind" => match value.as_str() {
+                "reconciliation" | "browser_health_changed" | "reconciliation_error" => {
+                    cmd["kind"] = json!(value);
+                }
+                _ => return Err(format!("Invalid kind value: {}", value)),
+            },
+            "browserId" | "browser_id" | "browser-id" => {
+                cmd["browserId"] = json!(value);
+            }
+            "since" => {
+                cmd["since"] = json!(value);
+            }
+            "" => {}
+            _ => return Err(format!("Unknown service events query parameter: {}", key)),
+        }
+    }
+
+    Ok(cmd)
+}
+
+fn query_params(query: Option<&str>) -> Vec<(String, String)> {
+    query
+        .map(|query| {
+            url::form_urlencoded::parse(query.as_bytes())
+                .into_owned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn load_service_state_snapshot() -> Value {
+    let args = vec!["service".to_string(), "status".to_string()];
+    serde_json::to_value(parse_flags(&args).service_state).unwrap_or_else(|_| json!({}))
 }
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {
@@ -243,7 +363,8 @@ pub(super) async fn relay_command_to_daemon(
         cmd["id"] = json!(id);
     }
 
-    let mut json_str = serde_json::to_string(&cmd).map_err(|e| e.to_string())?;
+    let authenticated_cmd = attach_daemon_auth_token(&cmd, session_name)?;
+    let mut json_str = serde_json::to_string(&authenticated_cmd).map_err(|e| e.to_string())?;
     json_str.push('\n');
 
     #[cfg(unix)]
@@ -276,6 +397,57 @@ pub(super) async fn relay_command_to_daemon(
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
     Ok(response_line.trim().to_string())
+}
+
+async fn relay_service_command(session_name: &str, cmd: Value) -> Result<String, String> {
+    let body = serde_json::to_string(&cmd).map_err(|e| e.to_string())?;
+    relay_command_to_daemon(session_name, &body).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_path_query_returns_path_and_query() {
+        assert_eq!(
+            split_path_query("/api/service/events?limit=2&kind=reconciliation"),
+            ("/api/service/events", Some("limit=2&kind=reconciliation"))
+        );
+        assert_eq!(
+            split_path_query("/api/service/status"),
+            ("/api/service/status", None)
+        );
+    }
+
+    #[test]
+    fn service_events_command_maps_query_filters() {
+        let cmd = service_events_command(Some(
+            "limit=7&kind=browser_health_changed&browser-id=browser-1&since=2026-04-22T00%3A00%3A00Z",
+        ))
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_events");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["kind"], "browser_health_changed");
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+        assert!(cmd.get("serviceState").is_some());
+    }
+
+    #[test]
+    fn service_events_command_rejects_unknown_query() {
+        let err = service_events_command(Some("bogus=true")).unwrap_err();
+
+        assert!(err.contains("Unknown service events query parameter"));
+    }
+
+    #[test]
+    fn service_events_command_rejects_invalid_kind() {
+        let err = service_events_command(Some("kind=crash")).unwrap_err();
+
+        assert!(err.contains("Invalid kind value"));
+    }
 }
 
 pub(super) fn serve_embedded_file(url_path: &str) -> (&'static str, &'static str, Vec<u8>) {

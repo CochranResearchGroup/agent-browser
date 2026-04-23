@@ -1217,6 +1217,16 @@ Use `service status --watch` or `service watch` for a polling operator view of w
 
 Use `service events --limit <n>` to inspect recent reconciliation summaries and browser health transitions without parsing the full service state. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. `--since` accepts RFC 3339 timestamps.
 
+When the session stream server is running, agents can read the same service surface over HTTP without shelling out:
+
+```bash
+curl "http://127.0.0.1:<stream-port>/api/service/status"
+curl "http://127.0.0.1:<stream-port>/api/service/events?limit=20&kind=browser_health_changed"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
+```
+
+The HTTP API loads the same persisted and configured service state as the CLI before relaying the request to the daemon.
+
 Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background.
 
 ### WebSocket Protocol

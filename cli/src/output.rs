@@ -2585,6 +2585,7 @@ Notes:
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries and browser health transitions.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
+  - The stream server exposes the same surface at /api/service/status, /api/service/events, and /api/service/reconcile.
   - Set --service-reconcile-interval <ms> or service.reconcileIntervalMs to run probes in the daemon background.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.

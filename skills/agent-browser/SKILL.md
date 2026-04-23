@@ -395,6 +395,8 @@ Use `agent-browser service reconcile` to run persisted browser health probes int
 
 Use `agent-browser service events --limit <n>` to inspect recent service events directly without parsing the full service status payload. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. `--since` accepts RFC 3339 timestamps.
 
+When a session stream server is running, use `GET /api/service/status`, `GET /api/service/events?limit=<n>&kind=<kind>&browser-id=<id>&since=<timestamp>`, or `POST /api/service/reconcile` on the stream port for a programmatic service surface that does not require shelling out.
+
 Set `service.reconcileIntervalMs` in config, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background. Unset or `0` disables the background loop.
 
 ## Batch Execution

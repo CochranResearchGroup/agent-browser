@@ -179,7 +179,7 @@ fn load_daemon_auth_token(session: &str) -> Result<String, String> {
         .map_err(|e| format!("Failed to read daemon auth token: {}", e))
 }
 
-fn attach_daemon_auth_token(cmd: &Value, session: &str) -> Result<Value, String> {
+pub(crate) fn attach_daemon_auth_token(cmd: &Value, session: &str) -> Result<Value, String> {
     let token = load_daemon_auth_token(session)?;
     let mut authenticated = cmd.clone();
     let obj = authenticated

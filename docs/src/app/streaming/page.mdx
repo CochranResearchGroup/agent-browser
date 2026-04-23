@@ -38,6 +38,18 @@ agent-browser stream disable           # Stop streaming for the session
 
 `connected` reports whether the daemon currently has a browser attached. `screencasting` reports whether frames are actively being produced for the stream server.
 
+## Service HTTP API
+
+The stream server also exposes a session-scoped JSON API for service-mode state:
+
+```bash
+curl "http://127.0.0.1:9223/api/service/status"
+curl "http://127.0.0.1:9223/api/service/events?limit=20&kind=browser_health_changed"
+curl -X POST "http://127.0.0.1:9223/api/service/reconcile"
+```
+
+`GET /api/service/status` returns the same service snapshot as `agent-browser service status`. `GET /api/service/events` accepts `limit`, `kind`, `browser-id`, `browser_id`, `browserId`, and `since` query parameters. `POST /api/service/reconcile` runs the same persisted browser health probes as `agent-browser service reconcile`.
+
 ## Relationship to screencast commands
 
 `stream enable` creates the WebSocket server and keeps it available for the session. WebSocket clients then trigger live frame delivery automatically.
