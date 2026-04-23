@@ -628,6 +628,59 @@ body {
     background-color 160ms ease;
 }
 
+.service-browser-row {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.72rem;
+  border: 0;
+  border-radius: 1rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.service-browser-row:hover,
+.service-browser-row:focus-visible {
+  transform: translateX(2px);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.service-browser-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 72%, transparent);
+  outline-offset: 2px;
+}
+
+.service-browser-health-dot {
+  width: 0.72rem;
+  height: 0.72rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--muted-foreground) 14%, transparent);
+}
+
+.service-browser-health-good {
+  background: var(--success);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.service-browser-health-warn {
+  background: var(--warning);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.service-browser-health-bad {
+  background: var(--destructive);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--destructive) 14%, transparent);
+}
+
 .service-event-row:hover,
 .service-event-row:focus-visible {
   transform: translateX(2px);
@@ -726,6 +779,25 @@ body {
   font-family: var(--font-mono), "JetBrains Mono", "SFMono-Regular", monospace;
   font-size: 0.72rem;
   line-height: 1.6;
+}
+
+.service-browser-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--destructive) 28%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--destructive) 11%, transparent);
+  padding: 0.75rem;
+  color: var(--destructive);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.service-token-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .service-panel-empty {

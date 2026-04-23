@@ -54,6 +54,18 @@ type ServiceEvent = {
   details?: unknown;
 };
 
+type ServiceBrowser = {
+  id: string;
+  profileId?: string | null;
+  host?: string;
+  health?: string;
+  pid?: number | null;
+  cdpEndpoint?: string | null;
+  viewStreams?: unknown[];
+  activeSessionIds?: string[];
+  lastError?: string | null;
+};
+
 type ServiceState = {
   controlPlane?: {
     workerState?: string;
@@ -63,7 +75,7 @@ type ServiceState = {
   };
   reconciliation?: ReconciliationSnapshot | null;
   events?: ServiceEvent[];
-  browsers?: Record<string, unknown>;
+  browsers?: Record<string, ServiceBrowser>;
   profiles?: Record<string, unknown>;
   sessions?: Record<string, unknown>;
   tabs?: Record<string, unknown>;
@@ -246,6 +258,103 @@ function EventDetailItem({ label, value }: { label: string; value?: string | nul
   );
 }
 
+function BrowserRow({ browser, onSelect }: { browser: ServiceBrowser; onSelect: (browser: ServiceBrowser) => void }) {
+  const tone = healthTone(browser.health);
+  return (
+    <button
+      type="button"
+      className="service-browser-row"
+      onClick={() => onSelect(browser)}
+      aria-label={`Inspect browser ${browser.id}`}
+    >
+      <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-bold text-foreground">{browser.id || "unnamed browser"}</span>
+          <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
+            {browser.health ?? "unknown"}
+          </Badge>
+        </div>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {browser.host ?? "unknown host"}
+          {browser.pid ? ` / pid ${browser.pid}` : ""}
+        </p>
+      </div>
+      <span className="text-[10px] font-bold text-muted-foreground">
+        {browser.activeSessionIds?.length ?? 0} sessions
+      </span>
+    </button>
+  );
+}
+
+function BrowserDetailDialog({
+  browser,
+  onOpenChange,
+}: {
+  browser: ServiceBrowser | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const viewStreamCount = browser?.viewStreams?.length ?? 0;
+  return (
+    <Dialog open={!!browser} onOpenChange={onOpenChange}>
+      <DialogContent className="service-event-dialog">
+        {browser && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-8 text-xl font-black tracking-[-0.04em]">
+                {browser.id || "Browser process"}
+              </DialogTitle>
+              <DialogDescription>
+                {browser.host ?? "unknown host"} / {browser.health ?? "unknown health"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="service-event-dialog-body">
+              {browser.lastError && (
+                <div className="service-browser-error">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{browser.lastError}</span>
+                </div>
+              )}
+              <div className="service-event-detail-grid">
+                <EventDetailItem label="Browser ID" value={browser.id} />
+                <EventDetailItem label="Profile" value={browser.profileId} />
+                <EventDetailItem label="Host" value={browser.host} />
+                <EventDetailItem label="Health" value={browser.health} />
+                <EventDetailItem label="PID" value={browser.pid ? String(browser.pid) : null} />
+                <EventDetailItem label="CDP endpoint" value={browser.cdpEndpoint} />
+                <EventDetailItem label="Active sessions" value={String(browser.activeSessionIds?.length ?? 0)} />
+                <EventDetailItem label="View streams" value={String(viewStreamCount)} />
+              </div>
+              {!!browser.activeSessionIds?.length && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Attached sessions
+                  </p>
+                  <div className="service-token-list">
+                    {browser.activeSessionIds.map((sessionId) => (
+                      <Badge key={sessionId} variant="outline" className="max-w-full truncate">
+                        {sessionId}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!!browser.viewStreams?.length && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    View streams
+                  </p>
+                  <pre className="service-event-details-json">{formatDetails(browser.viewStreams)}</pre>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EventDetailDialog({
   event,
   onOpenChange,
@@ -305,6 +414,7 @@ export function ServicePanel() {
   const [eventLimit, setEventLimit] = useState<EventLimit>(8);
   const [eventBrowserId, setEventBrowserId] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
+  const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
 
   const canFetch = activePort > 0 && !!activeSession;
   const activeFilterCount =
@@ -378,6 +488,10 @@ export function ServicePanel() {
     events?.matched !== undefined && events?.total !== undefined
       ? `${events.matched} of ${events.total} matched`
       : `Last ${recentEvents.length} retained service events`;
+  const browserRecords = useMemo(
+    () => Object.values(serviceState?.browsers ?? {}),
+    [serviceState?.browsers],
+  );
   const entityCounts = useMemo(() => ({
     browsers: countEntries(serviceState?.browsers),
     profiles: countEntries(serviceState?.profiles),
@@ -407,6 +521,12 @@ export function ServicePanel() {
         event={selectedEvent}
         onOpenChange={(open) => {
           if (!open) setSelectedEvent(null);
+        }}
+      />
+      <BrowserDetailDialog
+        browser={selectedBrowser}
+        onOpenChange={(open) => {
+          if (!open) setSelectedBrowser(null);
         }}
       />
       <div className="service-panel-hero">
@@ -496,6 +616,35 @@ export function ServicePanel() {
                 <span>{reconciliation.lastError}</span>
               </div>
             )}
+          </div>
+
+          <div className="service-summary-card">
+            <div className="flex items-center gap-2">
+              <RadioTower className="size-4 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
+                  Managed browsers
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {browserRecords.length} persisted browser records
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1">
+              {browserRecords.length === 0 ? (
+                <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
+                  No browser records yet.
+                </p>
+              ) : (
+                browserRecords.map((browser, index) => (
+                  <BrowserRow
+                    key={browser.id || browser.cdpEndpoint || `browser-${index}`}
+                    browser={browser}
+                    onSelect={setSelectedBrowser}
+                  />
+                ))
+              )}
+            </div>
           </div>
 
           <div className="service-timeline-card">
