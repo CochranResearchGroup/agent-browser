@@ -1,10 +1,13 @@
-//! Health probes for persisted service-mode browser records.
+//! Health and target probes for persisted service-mode browser records.
 
+use std::collections::BTreeSet;
 use std::time::Duration;
 
+use serde::Deserialize;
+
 use super::service_model::{
-    BrowserHealth, BrowserProcess, ServiceEvent, ServiceEventKind, ServiceReconciliationSnapshot,
-    ServiceState,
+    BrowserHealth, BrowserProcess, BrowserSession, BrowserTab, ServiceEvent, ServiceEventKind,
+    ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
 };
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
@@ -20,6 +23,7 @@ pub struct ServiceReconcileSummary {
 pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconcileSummary {
     let before = state.clone();
     refresh_persisted_browser_health(state).await;
+    reconcile_live_browser_targets(state).await;
 
     let changed_browsers = state
         .browsers
@@ -57,6 +61,8 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
             details: Some(serde_json::json!({
                 "browserCount": summary.browser_count,
                 "changedBrowsers": summary.changed_browsers,
+                "tabCount": state.tabs.len(),
+                "changedTabs": changed_tab_count(state, &before),
             })),
             ..new_service_event()
         },
@@ -108,6 +114,97 @@ async fn refresh_browser_record_health(browser: &mut BrowserProcess) {
     }
 }
 
+async fn reconcile_live_browser_targets(state: &mut ServiceState) {
+    let browser_records = state
+        .browsers
+        .iter()
+        .map(|(id, browser)| (id.clone(), browser.clone()))
+        .collect::<Vec<_>>();
+
+    for (browser_id, browser) in browser_records {
+        if browser.health != BrowserHealth::Ready {
+            continue;
+        }
+        let Some(endpoint) = browser.cdp_endpoint.as_deref() else {
+            continue;
+        };
+        let Ok(targets) = fetch_cdp_targets(endpoint).await else {
+            continue;
+        };
+        reconcile_browser_targets(state, &browser_id, &browser, targets);
+    }
+}
+
+fn reconcile_browser_targets(
+    state: &mut ServiceState,
+    browser_id: &str,
+    browser: &BrowserProcess,
+    targets: Vec<CdpHttpTargetInfo>,
+) {
+    let mut live_tab_ids = BTreeSet::new();
+    let owner_session_id = browser.active_session_ids.first().cloned();
+
+    for target in targets.into_iter().filter(should_track_service_target) {
+        let tab_id = format!("target:{}", target.id);
+        live_tab_ids.insert(tab_id.clone());
+        state.tabs.insert(
+            tab_id.clone(),
+            BrowserTab {
+                id: tab_id.clone(),
+                browser_id: browser_id.to_string(),
+                target_id: Some(target.id),
+                lifecycle: TabLifecycle::Ready,
+                url: empty_to_none(target.url),
+                title: empty_to_none(target.title),
+                owner_session_id: owner_session_id.clone(),
+                ..state.tabs.get(&tab_id).cloned().unwrap_or_default()
+            },
+        );
+    }
+
+    for tab in state.tabs.values_mut() {
+        if tab.browser_id == browser_id && !live_tab_ids.contains(&tab.id) {
+            tab.lifecycle = TabLifecycle::Closed;
+        }
+    }
+
+    if let Some(owner_session_id) = owner_session_id {
+        let session = state
+            .sessions
+            .entry(owner_session_id.clone())
+            .or_insert_with(|| BrowserSession {
+                id: owner_session_id.clone(),
+                ..BrowserSession::default()
+            });
+        merge_unique(&mut session.browser_ids, browser_id.to_string());
+        for tab_id in live_tab_ids {
+            merge_unique(&mut session.tab_ids, tab_id);
+        }
+    }
+}
+
+async fn fetch_cdp_targets(endpoint: &str) -> Result<Vec<CdpHttpTargetInfo>, String> {
+    let Some(url) = cdp_list_url(endpoint) else {
+        return Err("Invalid CDP endpoint".to_string());
+    };
+    let client = reqwest::Client::builder()
+        .timeout(CDP_PROBE_TIMEOUT)
+        .build()
+        .map_err(|err| format!("Failed to build CDP target client: {}", err))?;
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|err| format!("Failed to fetch CDP targets: {}", err))?;
+    if !response.status().is_success() {
+        return Err(format!("CDP target list returned {}", response.status()));
+    }
+    response
+        .json::<Vec<CdpHttpTargetInfo>>()
+        .await
+        .map_err(|err| format!("Failed to parse CDP targets: {}", err))
+}
+
 async fn cdp_endpoint_reachable(endpoint: &str) -> bool {
     let Some(url) = cdp_version_url(endpoint) else {
         return false;
@@ -124,7 +221,19 @@ async fn cdp_endpoint_reachable(endpoint: &str) -> bool {
     response.status().is_success()
 }
 
+fn cdp_list_url(endpoint: &str) -> Option<String> {
+    let mut url = cdp_root_url(endpoint)?;
+    url.set_path("/json/list");
+    Some(url.to_string())
+}
+
 fn cdp_version_url(endpoint: &str) -> Option<String> {
+    let mut url = cdp_root_url(endpoint)?;
+    url.set_path("/json/version");
+    Some(url.to_string())
+}
+
+fn cdp_root_url(endpoint: &str) -> Option<url::Url> {
     let mut url = url::Url::parse(endpoint).ok()?;
     match url.scheme() {
         "ws" => url.set_scheme("http").ok()?,
@@ -132,10 +241,9 @@ fn cdp_version_url(endpoint: &str) -> Option<String> {
         "http" | "https" => {}
         _ => return None,
     }
-    url.set_path("/json/version");
     url.set_query(None);
     url.set_fragment(None);
-    Some(url.to_string())
+    Some(url)
 }
 
 fn current_timestamp() -> String {
@@ -191,6 +299,46 @@ fn record_health_transition_events(state: &mut ServiceState, before: &ServiceSta
     }
 }
 
+fn changed_tab_count(state: &ServiceState, before: &ServiceState) -> usize {
+    state
+        .tabs
+        .iter()
+        .filter(|(id, tab)| before.tabs.get(*id) != Some(*tab))
+        .count()
+}
+
+fn empty_to_none(value: String) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn merge_unique(values: &mut Vec<String>, value: String) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
+}
+
+fn should_track_service_target(target: &CdpHttpTargetInfo) -> bool {
+    (target.target_type == "page" || target.target_type == "webview")
+        && !target.url.starts_with("chrome://")
+        && !target.url.starts_with("chrome-extension://")
+        && !target.url.starts_with("devtools://")
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct CdpHttpTargetInfo {
+    id: String,
+    #[serde(rename = "type")]
+    target_type: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    url: String,
+}
+
 #[cfg(unix)]
 fn pid_is_running(pid: u32) -> bool {
     let rc = unsafe { libc::kill(pid as i32, 0) };
@@ -243,6 +391,26 @@ mod tests {
         stream.write_all(response.as_bytes()).await.unwrap();
     }
 
+    async fn serve_cdp_version_and_list(listener: TcpListener, list_body: &'static str) {
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 2048];
+            let read = stream.read(&mut buf).await.unwrap_or(0);
+            let request = String::from_utf8_lossy(&buf[..read]);
+            let body = if request.contains("/json/list") {
+                list_body
+            } else {
+                r#"{"Browser":"Chrome/123"}"#
+            };
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        }
+    }
+
     #[test]
     fn cdp_version_url_normalizes_websocket_endpoint() {
         assert_eq!(
@@ -254,6 +422,14 @@ mod tests {
             Some("https://example.com/json/version")
         );
         assert!(cdp_version_url("file:///tmp/not-cdp").is_none());
+    }
+
+    #[test]
+    fn cdp_list_url_normalizes_websocket_endpoint() {
+        assert_eq!(
+            cdp_list_url("ws://127.0.0.1:9222/devtools/browser/abc?token=1").as_deref(),
+            Some("http://127.0.0.1:9222/json/list")
+        );
     }
 
     #[tokio::test]
@@ -275,6 +451,78 @@ mod tests {
         let browser = &state.browsers["browser-1"];
         assert_eq!(browser.health, BrowserHealth::Ready);
         assert_eq!(browser.last_error, None);
+    }
+
+    #[tokio::test]
+    async fn reconcile_discovers_live_cdp_targets() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(serve_cdp_version_and_list(
+            listener,
+            r#"[
+                {"id":"page-1","type":"page","title":"Example","url":"https://example.com"},
+                {"id":"devtools-1","type":"page","title":"DevTools","url":"devtools://devtools/bundled/inspector.html"}
+            ]"#,
+        ));
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            cdp_endpoint: Some(format!("ws://127.0.0.1:{}/devtools/browser/abc", port)),
+            active_session_ids: vec!["session-1".to_string()],
+            ..BrowserProcess::default()
+        });
+
+        reconcile_service_state(&mut state).await;
+        server.await.unwrap();
+
+        let tab = &state.tabs["target:page-1"];
+        assert_eq!(tab.browser_id, "browser-1");
+        assert_eq!(tab.target_id.as_deref(), Some("page-1"));
+        assert_eq!(tab.lifecycle, TabLifecycle::Ready);
+        assert_eq!(tab.url.as_deref(), Some("https://example.com"));
+        assert_eq!(tab.title.as_deref(), Some("Example"));
+        assert_eq!(tab.owner_session_id.as_deref(), Some("session-1"));
+        assert!(!state.tabs.contains_key("target:devtools-1"));
+
+        let session = &state.sessions["session-1"];
+        assert_eq!(session.browser_ids, vec!["browser-1"]);
+        assert_eq!(session.tab_ids, vec!["target:page-1"]);
+        assert_eq!(
+            state.events.last().unwrap().details.as_ref().unwrap()["changedTabs"],
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_marks_missing_live_targets_closed() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(serve_cdp_version_and_list(listener, r#"[]"#));
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            cdp_endpoint: Some(format!("ws://127.0.0.1:{}/devtools/browser/abc", port)),
+            ..BrowserProcess::default()
+        });
+        state.tabs.insert(
+            "target:stale".to_string(),
+            BrowserTab {
+                id: "target:stale".to_string(),
+                browser_id: "browser-1".to_string(),
+                target_id: Some("stale".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        );
+
+        reconcile_service_state(&mut state).await;
+        server.await.unwrap();
+
+        assert_eq!(state.tabs["target:stale"].lifecycle, TabLifecycle::Closed);
+        assert_eq!(
+            state.events.last().unwrap().details.as_ref().unwrap()["changedTabs"],
+            1
+        );
     }
 
     #[tokio::test]

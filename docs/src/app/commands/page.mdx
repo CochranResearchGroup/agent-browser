@@ -260,7 +260,7 @@ agent-browser service events --limit 20
 agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
 ```
 
-`service status` reports the service control-plane state, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode entities from `agent-browser.json` and `~/.agent-browser/config.json` without launching a browser. It refreshes the persisted control-plane snapshot in `state.json` and probes persisted browser records for dead PIDs and unreachable CDP endpoints. Dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Browser launch and close commands also update the active session's persisted browser health record. Configured site policies and providers override entries with the same IDs from the persisted state.
+`service status` reports the service control-plane state, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode entities from `agent-browser.json` and `~/.agent-browser/config.json` without launching a browser. It refreshes the persisted control-plane snapshot in `state.json` and probes persisted browser records for dead PIDs and unreachable CDP endpoints. Dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Browser launch and close commands also update the active session's persisted browser health record. Configured site policies and providers override entries with the same IDs from the persisted state.
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 
@@ -268,7 +268,7 @@ The persisted service state also includes a bounded `events` log with reconcilia
 
 `service status --watch` and `service watch` poll the same status path until interrupted. Use `--interval <ms>` to set the polling interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 
-`service reconcile` runs the same persisted browser health probes intentionally without requesting a control-plane status snapshot. It updates `state.json`, refreshes the `reconciliation` snapshot, appends service events, and returns the reconciled service state plus counts for total and changed browser records.
+`service reconcile` runs the same persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `state.json`, refreshes live tab records for reachable browser CDP endpoints, refreshes the `reconciliation` snapshot, appends service events, and returns the reconciled service state plus counts for total and changed browser records.
 
 `service events --limit <n>` prints recent reconciliation summaries and browser health transitions without requiring operators to parse the full service state. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. `--since` accepts RFC 3339 timestamps.
 

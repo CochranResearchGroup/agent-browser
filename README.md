@@ -1206,13 +1206,13 @@ agent-browser service events --limit 20
 agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
 ```
 
-The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch and close commands also update the persisted browser health records for the active session.
+The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch and close commands also update the persisted browser health records for the active session.
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 
 The persisted service state also includes a bounded `events` log with reconciliation summaries and browser health transitions. This keeps recent service behavior auditable without requiring operators to scrape logs.
 
-Use `service reconcile` to run the persisted browser health probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot and appends service events.
+Use `service reconcile` to run the persisted browser health and target probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot, refreshes live tab records for reachable browser CDP endpoints, and appends service events.
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
 
