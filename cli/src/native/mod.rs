@@ -5,6 +5,8 @@ pub mod auth;
 #[allow(dead_code)]
 pub mod browser;
 #[allow(dead_code)]
+pub mod cancellation;
+#[allow(dead_code)]
 pub mod cdp;
 #[allow(dead_code)]
 pub mod control_plane;

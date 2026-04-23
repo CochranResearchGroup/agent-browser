@@ -135,7 +135,7 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
-agent-browser service cancel <job-id> # Cancel a queued service control job
+agent-browser service cancel <job-id> # Cancel a queued or running service control job
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service events          # Show recent service events
 agent-browser close                   # Close browser (aliases: quit, exit)
@@ -805,7 +805,7 @@ The dashboard runs as a standalone background process on port 4848, independent 
 
 The dashboard displays:
 - **Live viewport** — real-time JPEG frames from the browser
-- **Service view** — worker and browser health cards, reconciliation status, managed entity counts, recent service jobs with queued-job cancellation, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
+- **Service view** — worker and browser health cards, reconciliation status, managed entity counts, recent service jobs with queued/running job cancellation, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
 - **Activity feed** — chronological command/result stream with timing and expandable details
 - **Console output** — browser console messages (log, warn, error)
 - **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)

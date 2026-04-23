@@ -324,7 +324,7 @@ agent-browser stream disable          # Stop runtime streaming and remove the .s
 agent-browser service status          # Inspect service control-plane and configured service entities
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
-agent-browser service cancel <job-id> # Cancel a queued service control job
+agent-browser service cancel <job-id> # Cancel a queued or running service control job
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service events          # Show recent service events
 

@@ -1,13 +1,13 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tokio::sync::Notify;
 use tokio::sync::{mpsc, oneshot};
 
 use super::actions::{execute_command, DaemonState};
+use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{reconcile_persisted_service_state, reconcile_service_state};
 use super::service_model::{
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
@@ -71,37 +71,6 @@ pub struct ControlRequest {
     pub cancellation: RunningJobCancel,
     pub submitted_at_wall: String,
     pub response_tx: oneshot::Sender<Value>,
-}
-
-#[derive(Clone)]
-pub struct RunningJobCancel {
-    cancelled: Arc<AtomicBool>,
-    notify: Arc<Notify>,
-}
-
-impl RunningJobCancel {
-    fn new() -> Self {
-        Self {
-            cancelled: Arc::new(AtomicBool::new(false)),
-            notify: Arc::new(Notify::new()),
-        }
-    }
-
-    fn cancel(&self) {
-        self.cancelled.store(true, Ordering::Relaxed);
-        self.notify.notify_waiters();
-    }
-
-    fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::Relaxed)
-    }
-
-    async fn cancelled(&self) {
-        if self.is_cancelled() {
-            return;
-        }
-        self.notify.notified().await;
-    }
 }
 
 enum WorkerMessage {
@@ -722,6 +691,9 @@ async fn run_worker(
                         }
                         refresh_browser_health(&mut state, &status).await;
                         let timeout_ms = request.timeout_ms.or(service_job_timeout_ms);
+                        let previous_cancellation = state
+                            .current_cancellation
+                            .replace(request.cancellation.clone());
                         let response = match timeout_ms {
                             Some(ms) if ms > 0 => {
                                 tokio::select! {
@@ -774,19 +746,26 @@ async fn run_worker(
                                 }
                             }
                         };
+                        state.current_cancellation = previous_cancellation;
                         if let Ok(mut running) = running_cancellations.lock() {
                             running.remove(&request.job_id);
                         }
-                        refresh_browser_health(&mut state, &status).await;
-                        if response
+                        let timed_out = response
                             .pointer("/data/timedOut")
                             .and_then(|value| value.as_bool())
-                            != Some(true)
-                            && response
-                                .pointer("/data/cancelled")
-                                .and_then(|value| value.as_bool())
-                                != Some(true)
-                        {
+                            == Some(true);
+                        let cancelled = response
+                            .pointer("/data/cancelled")
+                            .and_then(|value| value.as_bool())
+                            == Some(true);
+                        if cancelled {
+                            persist_service_job_cancelled(&request, "Service job was cancelled while running");
+                            cleanup_exited_browser(&mut state).await;
+                            status.set_browser_health(BrowserHealth::NotStarted);
+                        } else {
+                            refresh_browser_health(&mut state, &status).await;
+                        }
+                        if !timed_out && !cancelled {
                             persist_service_job_finished(&request, &response);
                         }
                         let _ = request.response_tx.send(response);

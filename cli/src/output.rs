@@ -2639,7 +2639,7 @@ Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
-  cancel                Mark a queued service job cancelled before dispatch
+  cancel                Cancel a queued job or request running job cancellation
   jobs                  Show recent service control-plane jobs
   events                Show recent service reconciliation, browser health, and tab lifecycle events
 
@@ -3031,7 +3031,7 @@ Service:
   service status             Show service worker health and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
-  service cancel             Mark a queued service job cancelled before dispatch
+  service cancel             Cancel a queued job or request running job cancellation
   service jobs               Show recent service control-plane jobs
   service events             Show recent service events
 
@@ -3271,7 +3271,7 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
-  agent-browser service cancel <job-id>  # Cancel a queued service job
+  agent-browser service cancel <job-id>  # Cancel a queued or running service job
   agent-browser service jobs             # Inspect recent service control jobs
   agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode

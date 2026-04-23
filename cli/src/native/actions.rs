@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
+use std::future::Future;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -15,6 +16,7 @@ use crate::runtime_profile::{clear_runtime_state, pid_is_running, read_runtime_s
 
 use super::auth;
 use super::browser::{should_track_target, BrowserManager, WaitUntil};
+use super::cancellation::CancellationToken;
 use super::cdp::chrome::LaunchOptions;
 use super::cdp::client::CdpClient;
 use super::cdp::types::{
@@ -458,6 +460,9 @@ pub struct DaemonState {
     pub engine: String,
     /// Default timeout for wait operations, from AGENT_BROWSER_DEFAULT_TIMEOUT env var.
     pub default_timeout_ms: u64,
+    /// Cancellation token for the currently running service job, if this
+    /// command is executing inside the service control-plane worker.
+    pub current_cancellation: Option<CancellationToken>,
     /// Storage mutations made through agent-browser storage commands, keyed by origin.
     /// This preserves cross-origin storage for state saves even after navigation.
     tracked_origin_storage: HashMap<String, state::OriginStorage>,
@@ -517,6 +522,7 @@ impl DaemonState {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(30_000),
+            current_cancellation: None,
             tracked_origin_storage: HashMap::new(),
         }
     }
@@ -1477,6 +1483,25 @@ impl Drop for DaemonState {
     }
 }
 
+fn cancellation_error() -> String {
+    "Service job was cancelled while running".to_string()
+}
+
+async fn cancellable<F, T>(future: F, cancellation: Option<CancellationToken>) -> Result<T, String>
+where
+    F: Future<Output = Result<T, String>>,
+{
+    let Some(cancellation) = cancellation else {
+        return future.await;
+    };
+
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err(cancellation_error()),
+        result = future => result,
+    }
+}
+
 pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
     let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
     let id = cmd
@@ -1805,6 +1830,14 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             }
             resp
         }
+        Err(e) if e == cancellation_error() => json!({
+            "id": id,
+            "success": false,
+            "error": e,
+            "data": {
+                "cancelled": true,
+            },
+        }),
         Err(e) => error_response(&id, &super::browser::to_ai_friendly_error(&e)),
     };
 
@@ -2549,6 +2582,7 @@ async fn launch_safari(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
 }
 
 async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let cancellation = state.current_cancellation.clone();
     let url = cmd
         .get("url")
         .and_then(|v| v.as_str())
@@ -2565,9 +2599,13 @@ async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     if let Some(ref wb) = state.webdriver_backend {
         if state.browser.is_none() {
             state.ref_map.clear();
-            wb.navigate(url).await?;
-            let new_url = wb.get_url().await.unwrap_or_else(|_| url.to_string());
-            let title = wb.get_title().await.unwrap_or_default();
+            cancellable(wb.navigate(url), cancellation.clone()).await?;
+            let new_url = cancellable(wb.get_url(), cancellation.clone())
+                .await
+                .unwrap_or_else(|_| url.to_string());
+            let title = cancellable(wb.get_title(), cancellation.clone())
+                .await
+                .unwrap_or_default();
             let mut data = json!({ "url": new_url, "title": title });
             add_manual_login_hint_warning(cmd, &mut data);
             return Ok(data);
@@ -2617,9 +2655,12 @@ async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
                 if has_proxy_creds {
                     params["handleAuthRequests"] = json!(true);
                 }
-                mgr.client
-                    .send_command("Fetch.enable", Some(params), Some(&session_id))
-                    .await?;
+                cancellable(
+                    mgr.client
+                        .send_command("Fetch.enable", Some(params), Some(&session_id)),
+                    cancellation.clone(),
+                )
+                .await?;
             }
         }
     }
@@ -2627,7 +2668,7 @@ async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     state.ref_map.clear();
     state.iframe_sessions.clear();
     state.active_frame_id = None;
-    let mut data = mgr.navigate(url, wait_until).await?;
+    let mut data = cancellable(mgr.navigate(url, wait_until), cancellation).await?;
     add_manual_login_hint_warning(cmd, &mut data);
     Ok(data)
 }
@@ -2939,6 +2980,7 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
 // ---------------------------------------------------------------------------
 
 async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let cancellation = state.current_cancellation.clone();
     let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
     let session_id = mgr.active_session_id()?.to_string();
 
@@ -2963,17 +3005,22 @@ async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     };
 
     state.ref_map.clear();
-    let tree = snapshot::take_snapshot(
-        &mgr.client,
-        &session_id,
-        &options,
-        &mut state.ref_map,
-        state.active_frame_id.as_deref(),
-        &state.iframe_sessions,
+    let tree = cancellable(
+        snapshot::take_snapshot(
+            &mgr.client,
+            &session_id,
+            &options,
+            &mut state.ref_map,
+            state.active_frame_id.as_deref(),
+            &state.iframe_sessions,
+        ),
+        cancellation.clone(),
     )
     .await?;
 
-    let url = mgr.get_url().await.unwrap_or_default();
+    let url = cancellable(mgr.get_url(), cancellation)
+        .await
+        .unwrap_or_default();
 
     let refs: serde_json::Map<String, Value> = state
         .ref_map
@@ -2991,6 +3038,7 @@ async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
 }
 
 async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let cancellation = state.current_cancellation.clone();
     let annotate = cmd
         .get("annotate")
         .and_then(|v| v.as_bool())
@@ -3005,7 +3053,7 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
                 );
             }
 
-            let base64_data = wb.screenshot().await?;
+            let base64_data = cancellable(wb.screenshot(), cancellation.clone()).await?;
             let path = cmd.get("path").and_then(|v| v.as_str());
             if let Some(p) = path {
                 let bytes = base64::Engine::decode(
@@ -3066,26 +3114,32 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
 
     if annotate {
         state.ref_map.clear();
-        let _ = snapshot::take_snapshot(
-            &mgr.client,
-            &session_id,
-            &SnapshotOptions {
-                interactive: true,
-                ..SnapshotOptions::default()
-            },
-            &mut state.ref_map,
-            state.active_frame_id.as_deref(),
-            &state.iframe_sessions,
+        let _ = cancellable(
+            snapshot::take_snapshot(
+                &mgr.client,
+                &session_id,
+                &SnapshotOptions {
+                    interactive: true,
+                    ..SnapshotOptions::default()
+                },
+                &mut state.ref_map,
+                state.active_frame_id.as_deref(),
+                &state.iframe_sessions,
+            ),
+            cancellation.clone(),
         )
         .await?;
     }
 
-    let result = match screenshot::take_screenshot(
-        &mgr.client,
-        &session_id,
-        &state.ref_map,
-        &options,
-        &state.iframe_sessions,
+    let result = match cancellable(
+        screenshot::take_screenshot(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            &options,
+            &state.iframe_sessions,
+        ),
+        cancellation.clone(),
     )
     .await
     {
@@ -3106,12 +3160,15 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
             }
             let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
             let fresh_session_id = mgr.active_session_id()?.to_string();
-            screenshot::take_screenshot(
-                &mgr.client,
-                &fresh_session_id,
-                &state.ref_map,
-                &options,
-                &state.iframe_sessions,
+            cancellable(
+                screenshot::take_screenshot(
+                    &mgr.client,
+                    &fresh_session_id,
+                    &state.ref_map,
+                    &options,
+                    &state.iframe_sessions,
+                ),
+                cancellation,
             )
             .await?
         }
@@ -8709,6 +8766,23 @@ mod tests {
             "agent-browser-{label}-{}-{nanos}",
             std::process::id()
         ))
+    }
+
+    #[tokio::test]
+    async fn test_cancellable_returns_cancelled_error_before_future_completes() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+
+        let result = cancellable(
+            async {
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                Ok::<_, String>(json!({ "completed": true }))
+            },
+            Some(cancellation),
+        )
+        .await;
+
+        assert_eq!(result, Err(cancellation_error()));
     }
 
     #[tokio::test]
