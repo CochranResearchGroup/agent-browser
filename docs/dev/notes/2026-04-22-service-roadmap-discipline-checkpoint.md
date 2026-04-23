@@ -86,6 +86,9 @@ The first backend-first correction is implemented on `service-model-phase-0`:
 - stale tab records for a reconciled browser are marked `closed`
 - known active browser sessions are linked to discovered tab IDs
 - reconciliation event details include `tabCount` and `changedTabs`
+- normal auto-launching browser commands now persist service browser records,
+  so a plain `open` followed by `service reconcile` can discover live tabs from
+  the stored service state
 
 This deliberately uses the existing service status, reconcile, HTTP API, and
 dashboard surfaces instead of adding more dashboard-only state.

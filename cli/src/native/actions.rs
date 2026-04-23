@@ -1904,6 +1904,11 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(
+            state,
+            ServiceBrowserHost::AttachedExisting,
+            ServiceBrowserHealth::Ready,
+        );
         try_auto_restore_state(state).await;
         return Ok(());
     }
@@ -1918,6 +1923,11 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(
+            state,
+            ServiceBrowserHost::AttachedExisting,
+            ServiceBrowserHealth::Ready,
+        );
         try_auto_restore_state(state).await;
         return Ok(());
     }
@@ -1955,6 +1965,11 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
                     state.start_dialog_handler();
                     state.update_stream_client().await;
                     write_provider_file(&state.session_id, &p);
+                    persist_current_browser_health(
+                        state,
+                        ServiceBrowserHost::CloudProvider,
+                        ServiceBrowserHealth::Ready,
+                    );
                     try_auto_restore_state(state).await;
                     return Ok(());
                 }
@@ -1968,6 +1983,11 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         }
     }
 
+    let service_host = if options.headless {
+        ServiceBrowserHost::LocalHeadless
+    } else {
+        ServiceBrowserHost::LocalHeaded
+    };
     let hash = launch_hash(&options);
     let mgr = BrowserManager::launch(options, engine.as_deref()).await?;
     state.reset_input_state();
@@ -1981,6 +2001,7 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
+    persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
 
     // Enable Fetch with handleAuthRequests for proxy authentication
     if has_proxy_auth {
