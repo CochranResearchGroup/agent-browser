@@ -243,6 +243,10 @@ function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
   return "warn";
 }
 
+function formatHealthLabel(value?: string | null): string {
+  return value ? value.replaceAll("_", " ") : "unknown";
+}
+
 function HealthCard({
   label,
   value,
@@ -320,6 +324,75 @@ function EventRow({ event, onSelect }: { event: ServiceEvent; onSelect: (event: 
         </p>
       </div>
     </button>
+  );
+}
+
+function HealthTransitionTimeline({
+  events,
+  onSelect,
+}: {
+  events: ServiceEvent[];
+  onSelect: (event: ServiceEvent) => void;
+}) {
+  return (
+    <div className="service-health-timeline-card">
+      <div className="flex items-center gap-2 px-1">
+        <RadioTower className="size-4 text-muted-foreground" />
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Browser health timeline
+          </p>
+          <p className="truncate text-[11px] text-muted-foreground">
+            Crash and recovery transitions from retained service events
+          </p>
+        </div>
+      </div>
+      <div className="service-health-timeline">
+        {events.length === 0 ? (
+          <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+            No browser health transitions recorded yet.
+          </p>
+        ) : (
+          events.map((event) => {
+            const tone = healthTone(event.currentHealth ?? undefined);
+            return (
+              <button
+                key={event.id}
+                type="button"
+                className={cn("service-health-transition", `service-health-transition-${tone}`)}
+                onClick={() => onSelect(event)}
+                aria-label={`Inspect health transition for ${event.browserId ?? "browser"}`}
+              >
+                <span className="service-health-transition-rail" />
+                <span className="service-health-transition-node" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-xs font-black text-foreground">
+                      {event.browserId ?? "browser"}
+                    </span>
+                    <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-[9px]">
+                      {formatRelativeTime(event.timestamp)}
+                    </Badge>
+                  </span>
+                  <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="truncate">{formatHealthLabel(event.previousHealth)}</span>
+                    <span className="text-[10px] font-black text-muted-foreground">to</span>
+                    <span className={cn("truncate font-black", tone === "bad" && "text-destructive", tone === "good" && "text-success", tone === "warn" && "text-warning")}>
+                      {formatHealthLabel(event.currentHealth)}
+                    </span>
+                  </span>
+                  {event.message && (
+                    <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+                      {event.message}
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -888,6 +961,14 @@ export function ServicePanel() {
   const reconciliation = serviceState?.reconciliation;
   const recentJobs = jobs?.jobs ?? Object.values(serviceState?.jobs ?? {}).slice(-8);
   const recentEvents = events?.events ?? serviceState?.events?.slice(-8) ?? [];
+  const healthTransitionEvents = useMemo(
+    () =>
+      (serviceState?.events ?? events?.events ?? [])
+        .filter((event) => event.kind === "browser_health_changed")
+        .slice(-6)
+        .reverse(),
+    [events?.events, serviceState?.events],
+  );
   const jobSummary =
     jobs?.matched !== undefined && jobs?.total !== undefined
       ? `${jobs.matched} of ${jobs.total} matched`
@@ -1089,6 +1170,11 @@ export function ServicePanel() {
               )}
             </div>
           </div>
+
+          <HealthTransitionTimeline
+            events={healthTransitionEvents}
+            onSelect={setSelectedEvent}
+          />
 
           <div className="service-summary-card">
             <div className="flex items-center gap-2">
