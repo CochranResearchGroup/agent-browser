@@ -230,8 +230,15 @@ const INCIDENT_HANDLING_OPTIONS: Array<{ value: IncidentHandlingFilter; label: s
   { value: "resolved", label: "Resolved" },
 ];
 
+const OPERATOR_STORAGE_KEY = "agent-browser-dashboard-operator";
+
 function serviceBase(port: number): string {
   return `http://localhost:${port}/api/service`;
+}
+
+function initialOperatorIdentity(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(OPERATOR_STORAGE_KEY) ?? "";
 }
 
 function formatRelativeTime(value?: string | null): string {
@@ -1218,6 +1225,7 @@ export function ServicePanel() {
   const [incidentOnly, setIncidentOnly] = useState(false);
   const [incidentHandlingFilter, setIncidentHandlingFilter] = useState<IncidentHandlingFilter>("all");
   const [actingIncidentId, setActingIncidentId] = useState<string | null>(null);
+  const [operatorIdentity, setOperatorIdentity] = useState(initialOperatorIdentity);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
@@ -1279,6 +1287,15 @@ export function ServicePanel() {
     return () => clearInterval(timer);
   }, [canFetch, fetchService]);
 
+  useEffect(() => {
+    const trimmed = operatorIdentity.trim();
+    if (trimmed) {
+      window.localStorage.setItem(OPERATOR_STORAGE_KEY, trimmed);
+    } else {
+      window.localStorage.removeItem(OPERATOR_STORAGE_KEY);
+    }
+  }, [operatorIdentity]);
+
   const reconcile = useCallback(async () => {
     if (!canFetch || reconciling) return;
     setReconciling(true);
@@ -1336,7 +1353,9 @@ export function ServicePanel() {
     setActingIncidentId(incident.id);
     setError("");
     try {
-      const params = new URLSearchParams({ by: "dashboard" });
+      const params = new URLSearchParams({
+        by: operatorIdentity.trim() || activeSession || "dashboard",
+      });
       const resp = await fetch(
         `${serviceBase(activePort)}/incidents/${encodeURIComponent(incident.id)}/${action}?${params.toString()}`,
         { method: "POST" },
@@ -1350,7 +1369,7 @@ export function ServicePanel() {
     } finally {
       setActingIncidentId(null);
     }
-  }, [activePort, canFetch, fetchService]);
+  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
 
   const serviceState = status?.service_state;
   const control = status?.control_plane;
@@ -1511,6 +1530,24 @@ export function ServicePanel() {
           {reconciling ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
           Reconcile
         </Button>
+      </div>
+
+      <div className="service-operator-card">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Operator identity
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Incident actions are recorded as this actor.
+          </p>
+        </div>
+        <input
+          aria-label="Operator identity for incident actions"
+          className="service-operator-input"
+          placeholder={activeSession || "dashboard"}
+          value={operatorIdentity}
+          onChange={(event) => setOperatorIdentity(event.target.value)}
+        />
       </div>
 
       {error && (
