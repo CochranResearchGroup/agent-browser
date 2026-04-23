@@ -247,6 +247,45 @@ function formatHealthLabel(value?: string | null): string {
   return value ? value.replaceAll("_", " ") : "unknown";
 }
 
+function isBadHealth(value?: string | null): boolean {
+  return ["process_exited", "cdp_disconnected", "unreachable"].includes((value ?? "").toLowerCase());
+}
+
+function isRecoveryHealth(previous?: string | null, current?: string | null): boolean {
+  return isBadHealth(previous) && (current ?? "").toLowerCase() === "ready";
+}
+
+function isIncidentEvent(event: ServiceEvent): boolean {
+  if (event.kind === "reconciliation_error") return true;
+  if (event.kind === "browser_health_changed") {
+    return isBadHealth(event.currentHealth) || isRecoveryHealth(event.previousHealth, event.currentHealth);
+  }
+  return event.kind === "service_job_timeout" || event.kind === "service_job_cancelled";
+}
+
+function deriveJobIncidentEvents(jobs: ServiceJob[]): ServiceEvent[] {
+  return jobs
+    .filter((job) => job.state === "timed_out" || job.state === "cancelled")
+    .map((job) => ({
+      id: `job-incident-${job.id}`,
+      timestamp: job.completedAt ?? job.startedAt ?? job.submittedAt ?? new Date().toISOString(),
+      kind: job.state === "timed_out" ? "service_job_timeout" : "service_job_cancelled",
+      message:
+        job.state === "timed_out"
+          ? `${job.action ?? "Service job"} timed out`
+          : `${job.action ?? "Service job"} was cancelled`,
+      details: {
+        jobId: job.id,
+        action: job.action,
+        state: job.state,
+        submittedAt: job.submittedAt,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        error: job.error,
+      },
+    }));
+}
+
 function HealthCard({
   label,
   value,
@@ -284,11 +323,12 @@ function EventDot({ kind }: { kind: string }) {
   const isError = kind === "reconciliation_error";
   const isHealth = kind === "browser_health_changed";
   const isTab = kind === "tab_lifecycle_changed";
+  const isJobIncident = kind === "service_job_timeout" || kind === "service_job_cancelled";
   return (
     <span
       className={cn(
         "service-event-dot",
-        isError && "service-event-dot-error",
+        (isError || isJobIncident) && "service-event-dot-error",
         isHealth && "service-event-dot-health",
         isTab && "service-event-dot-tab",
       )}
@@ -846,6 +886,7 @@ export function ServicePanel() {
   const [eventWindow, setEventWindow] = useState<EventWindowFilter>("all");
   const [eventLimit, setEventLimit] = useState<EventLimit>(8);
   const [eventBrowserId, setEventBrowserId] = useState("");
+  const [incidentOnly, setIncidentOnly] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
@@ -857,7 +898,8 @@ export function ServicePanel() {
     (eventKind === "all" ? 0 : 1) +
     (eventWindow === "all" ? 0 : 1) +
     (eventBrowserId.trim() ? 1 : 0) +
-    (eventLimit === 8 ? 0 : 1);
+    (eventLimit === 8 ? 0 : 1) +
+    (incidentOnly ? 1 : 0);
 
   const fetchService = useCallback(async (showSpinner: boolean) => {
     if (!canFetch) return;
@@ -961,6 +1003,13 @@ export function ServicePanel() {
   const reconciliation = serviceState?.reconciliation;
   const recentJobs = jobs?.jobs ?? Object.values(serviceState?.jobs ?? {}).slice(-8);
   const recentEvents = events?.events ?? serviceState?.events?.slice(-8) ?? [];
+  const jobIncidentEvents = useMemo(() => deriveJobIncidentEvents(recentJobs), [recentJobs]);
+  const visibleEvents = useMemo(() => {
+    const merged = [...recentEvents, ...jobIncidentEvents]
+      .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
+      .slice(0, eventLimit);
+    return incidentOnly ? merged.filter(isIncidentEvent) : merged;
+  }, [eventLimit, incidentOnly, jobIncidentEvents, recentEvents]);
   const healthTransitionEvents = useMemo(
     () =>
       (serviceState?.events ?? events?.events ?? [])
@@ -974,9 +1023,11 @@ export function ServicePanel() {
       ? `${jobs.matched} of ${jobs.total} matched`
       : `Last ${recentJobs.length} retained service jobs`;
   const eventSummary =
-    events?.matched !== undefined && events?.total !== undefined
-      ? `${events.matched} of ${events.total} matched`
-      : `Last ${recentEvents.length} retained service events`;
+    incidentOnly
+      ? `${visibleEvents.length} incident events shown`
+      : events?.matched !== undefined && events?.total !== undefined
+        ? `${events.matched} of ${events.total} matched`
+        : `Last ${visibleEvents.length} retained service events`;
   const browserRecords = useMemo(
     () => Object.values(serviceState?.browsers ?? {}),
     [serviceState?.browsers],
@@ -1265,6 +1316,13 @@ export function ServicePanel() {
             <div className="service-filter-bar" aria-label="Event filters">
               <div className="service-filter-group">
                 <Filter className="size-3.5 text-muted-foreground" />
+                <button
+                  type="button"
+                  className={cn("service-filter-chip", incidentOnly && "service-filter-chip-active service-filter-chip-incident")}
+                  onClick={() => setIncidentOnly((value) => !value)}
+                >
+                  Incidents
+                </button>
                 {EVENT_KIND_OPTIONS.map((option) => (
                   <button
                     key={option.value}
@@ -1316,6 +1374,7 @@ export function ServicePanel() {
                     setEventWindow("all");
                     setEventLimit(8);
                     setEventBrowserId("");
+                    setIncidentOnly(false);
                   }}
                 >
                   Reset {activeFilterCount}
@@ -1324,12 +1383,12 @@ export function ServicePanel() {
             </div>
             <Separator className="my-3" />
             <div className="space-y-1">
-              {recentEvents.length === 0 ? (
+              {visibleEvents.length === 0 ? (
                 <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
-                  No service events yet.
+                  {incidentOnly ? "No incident events matched the current filters." : "No service events yet."}
                 </p>
               ) : (
-                recentEvents.map((event) => (
+                visibleEvents.map((event) => (
                   <EventRow key={event.id} event={event} onSelect={setSelectedEvent} />
                 ))
               )}

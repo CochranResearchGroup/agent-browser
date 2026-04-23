@@ -676,6 +676,13 @@ body {
   box-shadow: 0 8px 18px color-mix(in srgb, var(--success) 10%, transparent);
 }
 
+.service-filter-chip-incident {
+  border-color: color-mix(in srgb, var(--destructive) 40%, var(--border));
+  color: color-mix(in srgb, var(--destructive) 88%, var(--foreground));
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--destructive) 12%, transparent);
+}
+
 .service-filter-input {
   min-width: 7rem;
   flex: 1 1 8rem;
