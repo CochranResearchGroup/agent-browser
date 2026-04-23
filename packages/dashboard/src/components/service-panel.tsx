@@ -167,6 +167,12 @@ type IncidentRecord = {
   latestMessage: string;
   latestKind: string;
   currentHealth?: string | null;
+  acknowledgedAt?: string | null;
+  acknowledgedBy?: string | null;
+  acknowledgementNote?: string | null;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
+  resolutionNote?: string | null;
   serviceEvents: ServiceEvent[];
   transitionEvents: ServiceEvent[];
   jobEvents: ServiceEvent[];
@@ -180,6 +186,12 @@ type ServiceIncident = {
   latestMessage: string;
   latestKind: string;
   currentHealth?: string | null;
+  acknowledgedAt?: string | null;
+  acknowledgedBy?: string | null;
+  acknowledgementNote?: string | null;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
+  resolutionNote?: string | null;
   eventIds?: string[];
   jobIds?: string[];
 };
@@ -192,6 +204,7 @@ type EventKindFilter =
   | "reconciliation_error";
 type EventWindowFilter = "all" | "15m" | "1h" | "24h";
 type EventLimit = 8 | 20 | 50;
+type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
 
 const EVENT_KIND_OPTIONS: Array<{ value: EventKindFilter; label: string }> = [
   { value: "all", label: "All" },
@@ -209,6 +222,13 @@ const EVENT_WINDOW_OPTIONS: Array<{ value: EventWindowFilter; label: string; mil
 ];
 
 const EVENT_LIMIT_OPTIONS: EventLimit[] = [8, 20, 50];
+
+const INCIDENT_HANDLING_OPTIONS: Array<{ value: IncidentHandlingFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "unacknowledged", label: "Unacknowledged" },
+  { value: "acknowledged", label: "Acknowledged" },
+  { value: "resolved", label: "Resolved" },
+];
 
 function serviceBase(port: number): string {
   return `http://localhost:${port}/api/service`;
@@ -289,6 +309,18 @@ function isIncidentEvent(event: ServiceEvent): boolean {
   return event.kind === "service_job_timeout" || event.kind === "service_job_cancelled";
 }
 
+function incidentHandlingState(incident: IncidentRecord): Exclude<IncidentHandlingFilter, "all"> {
+  if (incident.resolvedAt) return "resolved";
+  if (incident.acknowledgedAt) return "acknowledged";
+  return "unacknowledged";
+}
+
+function incidentHandlingLabel(incident: IncidentRecord): string {
+  const state = incidentHandlingState(incident);
+  if (state === "unacknowledged") return "needs ack";
+  return state;
+}
+
 function deriveJobIncidentEvents(jobs: ServiceJob[]): ServiceEvent[] {
   return jobs
     .filter((job) => job.state === "timed_out" || job.state === "cancelled")
@@ -358,6 +390,12 @@ function deriveIncidentRecords(
         latestMessage: incident.latestMessage,
         latestKind: incident.latestKind,
         currentHealth: incident.currentHealth,
+        acknowledgedAt: incident.acknowledgedAt,
+        acknowledgedBy: incident.acknowledgedBy,
+        acknowledgementNote: incident.acknowledgementNote,
+        resolvedAt: incident.resolvedAt,
+        resolvedBy: incident.resolvedBy,
+        resolutionNote: incident.resolutionNote,
         serviceEvents,
         transitionEvents,
         jobEvents,
@@ -528,6 +566,7 @@ function IncidentRow({
 }) {
   const tone = healthTone(incident.currentHealth ?? undefined);
   const incidentCount = incident.transitionEvents.length + incident.jobEvents.length;
+  const handlingState = incidentHandlingState(incident);
   return (
     <button
       type="button"
@@ -541,6 +580,17 @@ function IncidentRow({
           <span className="truncate text-xs font-bold text-foreground">{incident.label}</span>
           <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
             {incidentCount} incidents
+          </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "h-4 shrink-0 px-1.5 text-[9px]",
+              handlingState === "unacknowledged" && "service-incident-badge-unacknowledged",
+              handlingState === "acknowledged" && "service-incident-badge-acknowledged",
+              handlingState === "resolved" && "service-incident-badge-resolved",
+            )}
+          >
+            {incidentHandlingLabel(incident)}
           </Badge>
         </div>
         <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -994,13 +1044,20 @@ function EventDetailDialog({
 function IncidentDetailDialog({
   incident,
   onOpenChange,
+  onAcknowledge,
+  onResolve,
+  acting,
 }: {
   incident: IncidentRecord | null;
   onOpenChange: (open: boolean) => void;
+  onAcknowledge: (incident: IncidentRecord) => void;
+  onResolve: (incident: IncidentRecord) => void;
+  acting: boolean;
 }) {
   const serviceEventCount = incident?.serviceEvents.length ?? 0;
   const incidentCount = serviceEventCount + (incident?.jobEvents.length ?? 0);
   const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
+  const handlingState = incident ? incidentHandlingState(incident) : "unacknowledged";
   return (
     <Dialog open={!!incident} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -1011,7 +1068,7 @@ function IncidentDetailDialog({
                 {incident.label}
               </DialogTitle>
               <DialogDescription>
-                {incidentCount} incident entries / latest {formatRelativeTime(incident.latestTimestamp)}
+                {incidentCount} incident entries / {incidentHandlingLabel(incident)} / latest {formatRelativeTime(incident.latestTimestamp)}
               </DialogDescription>
             </DialogHeader>
             <div className="service-event-dialog-body">
@@ -1020,7 +1077,53 @@ function IncidentDetailDialog({
                 <EventDetailItem label="Browser" value={incident.browserId} />
                 <EventDetailItem label="Latest kind" value={formatEventKind(incident.latestKind)} />
                 <EventDetailItem label="Current health" value={incident.currentHealth} />
+                <EventDetailItem label="Handling state" value={incidentHandlingLabel(incident)} />
                 <EventDetailItem label="Incident count" value={String(incidentCount)} />
+                <EventDetailItem label="Acknowledged by" value={incident.acknowledgedBy} />
+                <EventDetailItem label="Acknowledged" value={incident.acknowledgedAt ? formatAbsoluteTime(incident.acknowledgedAt) : null} />
+                <EventDetailItem label="Resolved by" value={incident.resolvedBy} />
+                <EventDetailItem label="Resolved" value={incident.resolvedAt ? formatAbsoluteTime(incident.resolvedAt) : null} />
+              </div>
+              {(incident.acknowledgementNote || incident.resolutionNote) && (
+                <div className="service-incident-notes">
+                  {incident.acknowledgementNote && (
+                    <p>
+                      <span>Acknowledgement note</span>
+                      {incident.acknowledgementNote}
+                    </p>
+                  )}
+                  {incident.resolutionNote && (
+                    <p>
+                      <span>Resolution note</span>
+                      {incident.resolutionNote}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="service-incident-actions">
+                {handlingState === "unacknowledged" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    disabled={acting}
+                    onClick={() => onAcknowledge(incident)}
+                  >
+                    {acting ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                    Mark acknowledged
+                  </Button>
+                )}
+                {handlingState !== "resolved" && (
+                  <Button
+                    type="button"
+                    className="rounded-full"
+                    disabled={acting}
+                    onClick={() => onResolve(incident)}
+                  >
+                    {acting ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+                    Mark resolved
+                  </Button>
+                )}
               </div>
               {incident.transitionEvents.length > 0 && (
                 <div>
@@ -1113,6 +1216,8 @@ export function ServicePanel() {
   const [eventLimit, setEventLimit] = useState<EventLimit>(8);
   const [eventBrowserId, setEventBrowserId] = useState("");
   const [incidentOnly, setIncidentOnly] = useState(false);
+  const [incidentHandlingFilter, setIncidentHandlingFilter] = useState<IncidentHandlingFilter>("all");
+  const [actingIncidentId, setActingIncidentId] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
@@ -1223,6 +1328,30 @@ export function ServicePanel() {
     }
   }, [activePort, canFetch, fetchService]);
 
+  const handleIncident = useCallback(async (
+    incident: IncidentRecord,
+    action: "acknowledge" | "resolve",
+  ) => {
+    if (!canFetch || !incident.id) return;
+    setActingIncidentId(incident.id);
+    setError("");
+    try {
+      const params = new URLSearchParams({ by: "dashboard" });
+      const resp = await fetch(
+        `${serviceBase(activePort)}/incidents/${encodeURIComponent(incident.id)}/${action}?${params.toString()}`,
+        { method: "POST" },
+      );
+      const json = (await resp.json()) as ApiResponse<{ incident?: ServiceIncident }>;
+      if (!json.success) throw new Error(json.error || `Service incident ${action} failed`);
+      setSelectedIncident(null);
+      await fetchService(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Service incident ${action} unavailable`);
+    } finally {
+      setActingIncidentId(null);
+    }
+  }, [activePort, canFetch, fetchService]);
+
   const serviceState = status?.service_state;
   const control = status?.control_plane;
   const serviceJobTimeoutMs =
@@ -1272,6 +1401,18 @@ export function ServicePanel() {
       ),
     [retainedServiceJobs, serviceState?.events, serviceState?.incidents],
   );
+  const visibleIncidentRecords = useMemo(
+    () =>
+      incidentHandlingFilter === "all"
+        ? incidentRecords
+        : incidentRecords.filter((incident) => incidentHandlingState(incident) === incidentHandlingFilter),
+    [incidentHandlingFilter, incidentRecords],
+  );
+  const incidentHandlingSummary = useMemo(() => ({
+    unacknowledged: incidentRecords.filter((incident) => incidentHandlingState(incident) === "unacknowledged").length,
+    acknowledged: incidentRecords.filter((incident) => incidentHandlingState(incident) === "acknowledged").length,
+    resolved: incidentRecords.filter((incident) => incidentHandlingState(incident) === "resolved").length,
+  }), [incidentRecords]);
   const sessionRecords = useMemo(
     () => Object.values(serviceState?.sessions ?? {}),
     [serviceState?.sessions],
@@ -1317,6 +1458,9 @@ export function ServicePanel() {
         onOpenChange={(open) => {
           if (!open) setSelectedIncident(null);
         }}
+        onAcknowledge={(incident) => handleIncident(incident, "acknowledge")}
+        onResolve={(incident) => handleIncident(incident, "resolve")}
+        acting={!!selectedIncident && actingIncidentId === selectedIncident.id}
       />
       <BrowserDetailDialog
         browser={selectedBrowser}
@@ -1481,17 +1625,38 @@ export function ServicePanel() {
                   Incident browsers
                 </p>
                 <p className="truncate text-[11px] text-muted-foreground">
-                  Grouped crash, disconnect, recovery, timeout, and cancellation narratives
+                  {incidentHandlingSummary.unacknowledged} unacknowledged / {incidentHandlingSummary.acknowledged} acknowledged / {incidentHandlingSummary.resolved} resolved
                 </p>
               </div>
             </div>
+            <div className="service-filter-bar" aria-label="Incident handling filters">
+              <div className="service-filter-group">
+                <Filter className="size-3.5 text-muted-foreground" />
+                {INCIDENT_HANDLING_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={cn(
+                      "service-filter-chip",
+                      incidentHandlingFilter === option.value && "service-filter-chip-active",
+                      option.value === "unacknowledged" && incidentHandlingFilter === option.value && "service-filter-chip-incident",
+                    )}
+                    onClick={() => setIncidentHandlingFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-3 space-y-1">
-              {incidentRecords.length === 0 ? (
+              {visibleIncidentRecords.length === 0 ? (
                 <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
-                  No grouped incidents for this session yet.
+                  {incidentRecords.length === 0
+                    ? "No grouped incidents for this session yet."
+                    : "No grouped incidents matched the current handling filter."}
                 </p>
               ) : (
-                incidentRecords.map((incident) => (
+                visibleIncidentRecords.map((incident) => (
                   <IncidentRow
                     key={incident.id}
                     incident={incident}
