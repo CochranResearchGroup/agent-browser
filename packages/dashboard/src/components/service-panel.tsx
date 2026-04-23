@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  Filter,
   GitBranch,
   History,
   Loader2,
@@ -77,6 +78,26 @@ type ApiResponse<T> = {
   data?: T;
   error?: string | null;
 };
+
+type EventKindFilter = "all" | "reconciliation" | "browser_health_changed" | "reconciliation_error";
+type EventWindowFilter = "all" | "15m" | "1h" | "24h";
+type EventLimit = 8 | 20 | 50;
+
+const EVENT_KIND_OPTIONS: Array<{ value: EventKindFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "reconciliation", label: "Reconcile" },
+  { value: "browser_health_changed", label: "Health" },
+  { value: "reconciliation_error", label: "Errors" },
+];
+
+const EVENT_WINDOW_OPTIONS: Array<{ value: EventWindowFilter; label: string; milliseconds?: number }> = [
+  { value: "all", label: "All time" },
+  { value: "15m", label: "15m", milliseconds: 15 * 60 * 1000 },
+  { value: "1h", label: "1h", milliseconds: 60 * 60 * 1000 },
+  { value: "24h", label: "24h", milliseconds: 24 * 60 * 60 * 1000 },
+];
+
+const EVENT_LIMIT_OPTIONS: EventLimit[] = [8, 20, 50];
 
 function serviceBase(port: number): string {
   return `http://localhost:${port}/api/service`;
@@ -192,17 +213,33 @@ export function ServicePanel() {
   const [loading, setLoading] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [error, setError] = useState("");
+  const [eventKind, setEventKind] = useState<EventKindFilter>("all");
+  const [eventWindow, setEventWindow] = useState<EventWindowFilter>("all");
+  const [eventLimit, setEventLimit] = useState<EventLimit>(8);
+  const [eventBrowserId, setEventBrowserId] = useState("");
 
   const canFetch = activePort > 0 && !!activeSession;
+  const activeFilterCount =
+    (eventKind === "all" ? 0 : 1) +
+    (eventWindow === "all" ? 0 : 1) +
+    (eventBrowserId.trim() ? 1 : 0) +
+    (eventLimit === 8 ? 0 : 1);
 
   const fetchService = useCallback(async (showSpinner: boolean) => {
     if (!canFetch) return;
     if (showSpinner) setLoading(true);
     setError("");
     try {
+      const params = new URLSearchParams({ limit: String(eventLimit) });
+      if (eventKind !== "all") params.set("kind", eventKind);
+      if (eventBrowserId.trim()) params.set("browser-id", eventBrowserId.trim());
+      const windowOption = EVENT_WINDOW_OPTIONS.find((option) => option.value === eventWindow);
+      if (windowOption?.milliseconds) {
+        params.set("since", new Date(Date.now() - windowOption.milliseconds).toISOString());
+      }
       const [statusResp, eventsResp] = await Promise.all([
         fetch(`${serviceBase(activePort)}/status`),
-        fetch(`${serviceBase(activePort)}/events?limit=8`),
+        fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
       ]);
       const statusJson = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
       const eventsJson = (await eventsResp.json()) as ApiResponse<ServiceEventsData>;
@@ -215,7 +252,7 @@ export function ServicePanel() {
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, [activePort, canFetch]);
+  }, [activePort, canFetch, eventBrowserId, eventKind, eventLimit, eventWindow]);
 
   useEffect(() => {
     setStatus(null);
@@ -249,6 +286,10 @@ export function ServicePanel() {
   const control = status?.control_plane;
   const reconciliation = serviceState?.reconciliation;
   const recentEvents = events?.events ?? serviceState?.events?.slice(-8) ?? [];
+  const eventSummary =
+    events?.matched !== undefined && events?.total !== undefined
+      ? `${events.matched} of ${events.total} matched`
+      : `Last ${recentEvents.length} retained service events`;
   const entityCounts = useMemo(() => ({
     browsers: countEntries(serviceState?.browsers),
     profiles: countEntries(serviceState?.profiles),
@@ -366,15 +407,73 @@ export function ServicePanel() {
           <div className="service-timeline-card">
             <div className="flex items-center gap-2 px-1">
               <CheckCircle2 className="size-4 text-success" />
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
                   Recent events
                 </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Last {recentEvents.length} retained service events
-                </p>
+                <p className="truncate text-[11px] text-muted-foreground">{eventSummary}</p>
               </div>
               {loading && <Loader2 className="ml-auto size-3.5 animate-spin text-muted-foreground" />}
+            </div>
+            <div className="service-filter-bar" aria-label="Event filters">
+              <div className="service-filter-group">
+                <Filter className="size-3.5 text-muted-foreground" />
+                {EVENT_KIND_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={cn("service-filter-chip", eventKind === option.value && "service-filter-chip-active")}
+                    onClick={() => setEventKind(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="service-filter-group">
+                {EVENT_WINDOW_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={cn("service-filter-chip", eventWindow === option.value && "service-filter-chip-active")}
+                    onClick={() => setEventWindow(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="service-filter-group">
+                {EVENT_LIMIT_OPTIONS.map((limit) => (
+                  <button
+                    key={limit}
+                    type="button"
+                    className={cn("service-filter-chip", eventLimit === limit && "service-filter-chip-active")}
+                    onClick={() => setEventLimit(limit)}
+                  >
+                    {limit}
+                  </button>
+                ))}
+              </div>
+              <input
+                aria-label="Filter events by browser ID"
+                className="service-filter-input"
+                placeholder="browser id"
+                value={eventBrowserId}
+                onChange={(event) => setEventBrowserId(event.target.value)}
+              />
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  className="service-filter-reset"
+                  onClick={() => {
+                    setEventKind("all");
+                    setEventWindow("all");
+                    setEventLimit(8);
+                    setEventBrowserId("");
+                  }}
+                >
+                  Reset {activeFilterCount}
+                </button>
+              )}
             </div>
             <Separator className="my-3" />
             <div className="space-y-1">

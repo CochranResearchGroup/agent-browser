@@ -990,7 +990,7 @@ agent-browser open example.com
 agent-browser dashboard stop
 ```
 
-The dashboard runs independently of browser sessions on port 4848 (configurable with `--port`). All sessions automatically stream to the dashboard. Sessions can also be created from the dashboard UI with local engines or cloud providers. Use the Service view to inspect worker/browser health, reconciliation status, managed entity counts, recent service events, and to run reconciliation from the UI.
+The dashboard runs independently of browser sessions on port 4848 (configurable with `--port`). All sessions automatically stream to the dashboard. Sessions can also be created from the dashboard UI with local engines or cloud providers. Use the Service view to inspect worker/browser health, reconciliation status, managed entity counts, filter service events, and run reconciliation from the UI.
 
 ### Dashboard AI Chat
 
