@@ -2526,8 +2526,9 @@ Usage: agent-browser dashboard [start|stop] [options]
 Manage the observability dashboard, a local web UI that shows live
 browser viewports and command activity feeds for all sessions.
 The dashboard is bundled into the binary and requires no separate install.
-The Service view includes a browser-health transition timeline and an
-incident filter for crash, disconnect, recovery, timeout, and cancellation signals.
+The Service view includes a browser-health transition timeline, a grouped
+incident browser panel, and an incident filter for crash, disconnect,
+recovery, timeout, and cancellation signals.
 
 Subcommands:
   start [--port <n>]   Start the dashboard server (default port: 4848)

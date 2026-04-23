@@ -805,7 +805,7 @@ The dashboard runs as a standalone background process on port 4848, independent 
 
 The dashboard displays:
 - **Live viewport** — real-time JPEG frames from the browser
-- **Service view** — worker and browser health cards, a browser-health transition timeline for crash/recovery visibility, an incident filter for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, managed entity counts, recent service jobs with queued/running job cancellation, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
+- **Service view** — worker and browser health cards, a browser-health transition timeline for crash/recovery visibility, a grouped incident browser panel plus incident filter for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, managed entity counts, recent service jobs with queued/running job cancellation, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
 - **Activity feed** — chronological command/result stream with timing and expandable details
 - **Console output** — browser console messages (log, warn, error)
 - **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)

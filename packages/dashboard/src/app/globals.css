@@ -888,6 +888,13 @@ body {
   line-height: 1.6;
 }
 
+.service-incident-entry {
+  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--background) 48%, transparent);
+  padding: 0.72rem 0.8rem;
+}
+
 .service-browser-error {
   display: flex;
   align-items: flex-start;

@@ -158,6 +158,18 @@ type ApiResponse<T> = {
   error?: string | null;
 };
 
+type IncidentRecord = {
+  id: string;
+  browserId?: string | null;
+  label: string;
+  latestTimestamp: string;
+  latestMessage: string;
+  latestKind: string;
+  currentHealth?: string | null;
+  transitionEvents: ServiceEvent[];
+  jobEvents: ServiceEvent[];
+};
+
 type EventKindFilter =
   | "all"
   | "reconciliation"
@@ -284,6 +296,69 @@ function deriveJobIncidentEvents(jobs: ServiceJob[]): ServiceEvent[] {
         error: job.error,
       },
     }));
+}
+
+function deriveIncidentRecords(
+  events: ServiceEvent[],
+  browsers: ServiceBrowser[],
+  activeSession?: string | null,
+): IncidentRecord[] {
+  const matchingBrowsers = browsers.filter((browser) =>
+    browser.activeSessionIds?.includes(activeSession ?? ""),
+  );
+  const fallbackBrowserId =
+    matchingBrowsers.length === 1
+      ? matchingBrowsers[0]?.id
+      : browsers.length === 1
+        ? browsers[0]?.id
+        : undefined;
+  const grouped = new Map<string, IncidentRecord>();
+
+  for (const event of events.filter(isIncidentEvent)) {
+    const browserId = event.browserId ?? fallbackBrowserId ?? null;
+    const key = browserId ?? "service";
+    const existing = grouped.get(key) ?? {
+      id: key,
+      browserId,
+      label: browserId ?? "Service incidents",
+      latestTimestamp: event.timestamp,
+      latestMessage: event.message || "No message",
+      latestKind: event.kind,
+      currentHealth: event.currentHealth,
+      transitionEvents: [],
+      jobEvents: [],
+    };
+
+    if (new Date(event.timestamp).getTime() >= new Date(existing.latestTimestamp).getTime()) {
+      existing.latestTimestamp = event.timestamp;
+      existing.latestMessage = event.message || "No message";
+      existing.latestKind = event.kind;
+      existing.currentHealth = event.currentHealth ?? existing.currentHealth;
+    }
+
+    if (event.kind === "browser_health_changed") {
+      existing.transitionEvents.push(event);
+    } else {
+      existing.jobEvents.push(event);
+    }
+
+    grouped.set(key, existing);
+  }
+
+  return [...grouped.values()]
+    .map((record) => ({
+      ...record,
+      transitionEvents: [...record.transitionEvents].sort(
+        (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
+      ),
+      jobEvents: [...record.jobEvents].sort(
+        (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
+      ),
+    }))
+    .sort(
+      (left, right) =>
+        new Date(right.latestTimestamp).getTime() - new Date(left.latestTimestamp).getTime(),
+    );
 }
 
 function HealthCard({
@@ -433,6 +508,41 @@ function HealthTransitionTimeline({
         )}
       </div>
     </div>
+  );
+}
+
+function IncidentRow({
+  incident,
+  onSelect,
+}: {
+  incident: IncidentRecord;
+  onSelect: (incident: IncidentRecord) => void;
+}) {
+  const tone = healthTone(incident.currentHealth ?? undefined);
+  const incidentCount = incident.transitionEvents.length + incident.jobEvents.length;
+  return (
+    <button
+      type="button"
+      className="service-browser-row"
+      onClick={() => onSelect(incident)}
+      aria-label={`Inspect incidents for ${incident.label}`}
+    >
+      <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-bold text-foreground">{incident.label}</span>
+          <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
+            {incidentCount} incidents
+          </Badge>
+        </div>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {incident.latestMessage}
+        </p>
+      </div>
+      <span className="text-[10px] font-bold text-muted-foreground">
+        {formatRelativeTime(incident.latestTimestamp)}
+      </span>
+    </button>
   );
 }
 
@@ -873,6 +983,89 @@ function EventDetailDialog({
   );
 }
 
+function IncidentDetailDialog({
+  incident,
+  onOpenChange,
+}: {
+  incident: IncidentRecord | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const incidentCount = (incident?.transitionEvents.length ?? 0) + (incident?.jobEvents.length ?? 0);
+  return (
+    <Dialog open={!!incident} onOpenChange={onOpenChange}>
+      <DialogContent className="service-event-dialog">
+        {incident && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-8 text-xl font-black tracking-[-0.04em]">
+                {incident.label}
+              </DialogTitle>
+              <DialogDescription>
+                {incidentCount} incident entries / latest {formatRelativeTime(incident.latestTimestamp)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="service-event-dialog-body">
+              <p className="service-event-dialog-message">{incident.latestMessage}</p>
+              <div className="service-event-detail-grid">
+                <EventDetailItem label="Browser" value={incident.browserId} />
+                <EventDetailItem label="Latest kind" value={formatEventKind(incident.latestKind)} />
+                <EventDetailItem label="Current health" value={incident.currentHealth} />
+                <EventDetailItem label="Incident count" value={String(incidentCount)} />
+              </div>
+              {incident.transitionEvents.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Health transitions
+                  </p>
+                  <div className="space-y-1">
+                    {incident.transitionEvents.map((event) => (
+                      <div key={event.id} className="service-incident-entry">
+                        <div className="flex items-center gap-2">
+                          <EventDot kind={event.kind} />
+                          <span className="truncate text-xs font-bold text-foreground">
+                            {formatHealthLabel(event.previousHealth)} to {formatHealthLabel(event.currentHealth)}
+                          </span>
+                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                            {formatAbsoluteTime(event.timestamp)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{event.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {incident.jobEvents.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Related jobs
+                  </p>
+                  <div className="space-y-1">
+                    {incident.jobEvents.map((event) => (
+                      <div key={event.id} className="service-incident-entry">
+                        <div className="flex items-center gap-2">
+                          <EventDot kind={event.kind} />
+                          <span className="truncate text-xs font-bold text-foreground">
+                            {formatEventKind(event.kind)}
+                          </span>
+                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                            {formatAbsoluteTime(event.timestamp)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{event.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ServicePanel() {
   const activePort = useAtomValue(activePortAtom);
   const activeSession = useAtomValue(activeSessionNameAtom);
@@ -887,6 +1080,7 @@ export function ServicePanel() {
   const [eventLimit, setEventLimit] = useState<EventLimit>(8);
   const [eventBrowserId, setEventBrowserId] = useState("");
   const [incidentOnly, setIncidentOnly] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
@@ -1032,6 +1226,10 @@ export function ServicePanel() {
     () => Object.values(serviceState?.browsers ?? {}),
     [serviceState?.browsers],
   );
+  const incidentRecords = useMemo(
+    () => deriveIncidentRecords([...recentEvents, ...jobIncidentEvents], browserRecords, activeSession),
+    [activeSession, browserRecords, jobIncidentEvents, recentEvents],
+  );
   const sessionRecords = useMemo(
     () => Object.values(serviceState?.sessions ?? {}),
     [serviceState?.sessions],
@@ -1070,6 +1268,12 @@ export function ServicePanel() {
         event={selectedEvent}
         onOpenChange={(open) => {
           if (!open) setSelectedEvent(null);
+        }}
+      />
+      <IncidentDetailDialog
+        incident={selectedIncident}
+        onOpenChange={(open) => {
+          if (!open) setSelectedIncident(null);
         }}
       />
       <BrowserDetailDialog
@@ -1226,6 +1430,35 @@ export function ServicePanel() {
             events={healthTransitionEvents}
             onSelect={setSelectedEvent}
           />
+
+          <div className="service-summary-card">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="size-4 text-destructive" />
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
+                  Incident browsers
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  Grouped crash, disconnect, recovery, timeout, and cancellation narratives
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1">
+              {incidentRecords.length === 0 ? (
+                <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                  No grouped incidents for this session yet.
+                </p>
+              ) : (
+                incidentRecords.map((incident) => (
+                  <IncidentRow
+                    key={incident.id}
+                    incident={incident}
+                    onSelect={setSelectedIncident}
+                  />
+                ))
+              )}
+            </div>
+          </div>
 
           <div className="service-summary-card">
             <div className="flex items-center gap-2">
