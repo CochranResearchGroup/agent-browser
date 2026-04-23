@@ -66,6 +66,30 @@ type ServiceBrowser = {
   lastError?: string | null;
 };
 
+type ServiceSession = {
+  id: string;
+  owner?: unknown;
+  lease?: string;
+  browserIds?: string[];
+  tabIds?: string[];
+  createdAt?: string | null;
+  expiresAt?: string | null;
+};
+
+type ServiceTab = {
+  id: string;
+  browserId?: string;
+  targetId?: string | null;
+  sessionId?: string | null;
+  lifecycle?: string;
+  url?: string | null;
+  title?: string | null;
+  ownerSessionId?: string | null;
+  latestSnapshotId?: string | null;
+  latestScreenshotId?: string | null;
+  challengeId?: string | null;
+};
+
 type ServiceState = {
   controlPlane?: {
     workerState?: string;
@@ -77,8 +101,8 @@ type ServiceState = {
   events?: ServiceEvent[];
   browsers?: Record<string, ServiceBrowser>;
   profiles?: Record<string, unknown>;
-  sessions?: Record<string, unknown>;
-  tabs?: Record<string, unknown>;
+  sessions?: Record<string, ServiceSession>;
+  tabs?: Record<string, ServiceTab>;
   sitePolicies?: Record<string, unknown>;
   providers?: Record<string, unknown>;
 };
@@ -160,6 +184,16 @@ function formatDetails(value: unknown): string {
   if (value === undefined || value === null) return "";
   if (typeof value === "string") return value;
   return JSON.stringify(value, null, 2);
+}
+
+function formatActor(value: unknown): string {
+  if (!value) return "unknown";
+  if (typeof value === "string") return value;
+  if (typeof value !== "object") return String(value);
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return "unknown";
+  const [kind, detail] = entries[0];
+  return detail ? `${kind}: ${String(detail)}` : kind;
 }
 
 function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
@@ -355,6 +389,168 @@ function BrowserDetailDialog({
   );
 }
 
+function ServiceSessionRow({
+  session,
+  onSelect,
+}: {
+  session: ServiceSession;
+  onSelect: (session: ServiceSession) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="service-browser-row"
+      onClick={() => onSelect(session)}
+      aria-label={`Inspect session ${session.id}`}
+    >
+      <span className="service-browser-health-dot service-browser-health-good" />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-bold text-foreground">{session.id || "unnamed session"}</span>
+          <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
+            {session.lease ?? "shared"}
+          </Badge>
+        </div>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {formatActor(session.owner)} / {session.browserIds?.length ?? 0} browsers / {session.tabIds?.length ?? 0} tabs
+        </p>
+      </div>
+    </button>
+  );
+}
+
+function ServiceTabRow({ tab, onSelect }: { tab: ServiceTab; onSelect: (tab: ServiceTab) => void }) {
+  const tone = tab.lifecycle === "crashed" ? "bad" : tab.lifecycle === "ready" ? "good" : "neutral";
+  return (
+    <button
+      type="button"
+      className="service-browser-row"
+      onClick={() => onSelect(tab)}
+      aria-label={`Inspect tab ${tab.id}`}
+    >
+      <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-bold text-foreground">{tab.title || tab.id || "untitled tab"}</span>
+          <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
+            {tab.lifecycle ?? "unknown"}
+          </Badge>
+        </div>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {tab.url || tab.targetId || tab.browserId || "no target"}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+function SessionDetailDialog({
+  session,
+  onOpenChange,
+}: {
+  session: ServiceSession | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={!!session} onOpenChange={onOpenChange}>
+      <DialogContent className="service-event-dialog">
+        {session && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-8 text-xl font-black tracking-[-0.04em]">
+                {session.id || "Service session"}
+              </DialogTitle>
+              <DialogDescription>
+                {session.lease ?? "shared"} / {formatActor(session.owner)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="service-event-dialog-body">
+              <div className="service-event-detail-grid">
+                <EventDetailItem label="Session ID" value={session.id} />
+                <EventDetailItem label="Owner" value={formatActor(session.owner)} />
+                <EventDetailItem label="Lease" value={session.lease} />
+                <EventDetailItem label="Created" value={session.createdAt ? formatAbsoluteTime(session.createdAt) : null} />
+                <EventDetailItem label="Expires" value={session.expiresAt ? formatAbsoluteTime(session.expiresAt) : null} />
+                <EventDetailItem label="Browsers" value={String(session.browserIds?.length ?? 0)} />
+                <EventDetailItem label="Tabs" value={String(session.tabIds?.length ?? 0)} />
+              </div>
+              {!!session.browserIds?.length && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Browser IDs
+                  </p>
+                  <div className="service-token-list">
+                    {session.browserIds.map((browserId) => (
+                      <Badge key={browserId} variant="outline" className="max-w-full truncate">
+                        {browserId}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!!session.tabIds?.length && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Tab IDs
+                  </p>
+                  <div className="service-token-list">
+                    {session.tabIds.map((tabId) => (
+                      <Badge key={tabId} variant="outline" className="max-w-full truncate">
+                        {tabId}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TabDetailDialog({
+  tab,
+  onOpenChange,
+}: {
+  tab: ServiceTab | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={!!tab} onOpenChange={onOpenChange}>
+      <DialogContent className="service-event-dialog">
+        {tab && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-8 text-xl font-black tracking-[-0.04em]">
+                {tab.title || tab.id || "Browser tab"}
+              </DialogTitle>
+              <DialogDescription>
+                {tab.lifecycle ?? "unknown"} / {tab.browserId ?? "unknown browser"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="service-event-dialog-body">
+              {tab.url && <p className="service-event-dialog-message">{tab.url}</p>}
+              <div className="service-event-detail-grid">
+                <EventDetailItem label="Tab ID" value={tab.id} />
+                <EventDetailItem label="Browser ID" value={tab.browserId} />
+                <EventDetailItem label="Target ID" value={tab.targetId} />
+                <EventDetailItem label="Session ID" value={tab.sessionId} />
+                <EventDetailItem label="Owner session" value={tab.ownerSessionId} />
+                <EventDetailItem label="Lifecycle" value={tab.lifecycle} />
+                <EventDetailItem label="Snapshot" value={tab.latestSnapshotId} />
+                <EventDetailItem label="Screenshot" value={tab.latestScreenshotId} />
+                <EventDetailItem label="Challenge" value={tab.challengeId} />
+              </div>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EventDetailDialog({
   event,
   onOpenChange,
@@ -415,6 +611,8 @@ export function ServicePanel() {
   const [eventBrowserId, setEventBrowserId] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
+  const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
+  const [selectedTab, setSelectedTab] = useState<ServiceTab | null>(null);
 
   const canFetch = activePort > 0 && !!activeSession;
   const activeFilterCount =
@@ -492,6 +690,14 @@ export function ServicePanel() {
     () => Object.values(serviceState?.browsers ?? {}),
     [serviceState?.browsers],
   );
+  const sessionRecords = useMemo(
+    () => Object.values(serviceState?.sessions ?? {}),
+    [serviceState?.sessions],
+  );
+  const tabRecords = useMemo(
+    () => Object.values(serviceState?.tabs ?? {}),
+    [serviceState?.tabs],
+  );
   const entityCounts = useMemo(() => ({
     browsers: countEntries(serviceState?.browsers),
     profiles: countEntries(serviceState?.profiles),
@@ -527,6 +733,18 @@ export function ServicePanel() {
         browser={selectedBrowser}
         onOpenChange={(open) => {
           if (!open) setSelectedBrowser(null);
+        }}
+      />
+      <SessionDetailDialog
+        session={selectedSession}
+        onOpenChange={(open) => {
+          if (!open) setSelectedSession(null);
+        }}
+      />
+      <TabDetailDialog
+        tab={selectedTab}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTab(null);
         }}
       />
       <div className="service-panel-hero">
@@ -644,6 +862,58 @@ export function ServicePanel() {
                   />
                 ))
               )}
+            </div>
+          </div>
+
+          <div className="service-summary-card">
+            <div className="flex items-center gap-2">
+              <GitBranch className="size-4 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
+                  Sessions and tabs
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {sessionRecords.length} sessions / {tabRecords.length} tabs
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <div className="space-y-1">
+                <p className="px-1 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                  Sessions
+                </p>
+                {sessionRecords.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                    No service sessions yet.
+                  </p>
+                ) : (
+                  sessionRecords.map((session, index) => (
+                    <ServiceSessionRow
+                      key={session.id || `session-${index}`}
+                      session={session}
+                      onSelect={setSelectedSession}
+                    />
+                  ))
+                )}
+              </div>
+              <div className="space-y-1">
+                <p className="px-1 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                  Tabs
+                </p>
+                {tabRecords.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                    No service tabs yet.
+                  </p>
+                ) : (
+                  tabRecords.map((tab, index) => (
+                    <ServiceTabRow
+                      key={tab.id || tab.targetId || `tab-${index}`}
+                      tab={tab}
+                      onSelect={setSelectedTab}
+                    />
+                  ))
+                )}
+              </div>
             </div>
           </div>
 
