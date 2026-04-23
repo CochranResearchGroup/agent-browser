@@ -265,7 +265,7 @@ agent-browser service events --kind tab_lifecycle_changed
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 
-The persisted service state also includes a bounded `events` log with reconciliation summaries, browser health transitions, and tab lifecycle changes such as discovered tabs, URL or title changes, and closed tabs. This keeps recent service behavior auditable without requiring operators to scrape logs.
+The persisted service state also includes bounded audit records for recent control-plane jobs in `jobs`, plus an `events` log with reconciliation summaries, browser health transitions, and tab lifecycle changes such as discovered tabs, URL or title changes, and closed tabs. Job records track request action, priority, timestamps, final success or failure, and error text without storing large command payloads.
 
 `service status --watch` and `service watch` poll the same status path until interrupted. Use `--interval <ms>` to set the polling interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 

@@ -801,7 +801,7 @@ The dashboard runs as a standalone background process on port 4848, independent 
 
 The dashboard displays:
 - **Live viewport** — real-time JPEG frames from the browser
-- **Service view** — worker and browser health cards, reconciliation status, managed entity counts, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
+- **Service view** — worker and browser health cards, reconciliation status, managed entity counts including jobs, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
 - **Activity feed** — chronological command/result stream with timing and expandable details
 - **Console output** — browser console messages (log, warn, error)
 - **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
@@ -1211,7 +1211,7 @@ The response includes worker state, browser health, queue depth, persisted servi
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 
-The persisted service state also includes a bounded `events` log with reconciliation summaries, browser health transitions, and tab lifecycle changes such as discovered tabs, URL or title changes, and closed tabs. This keeps recent service behavior auditable without requiring operators to scrape logs.
+The persisted service state also includes bounded audit records for recent control-plane jobs in `jobs`, plus an `events` log with reconciliation summaries, browser health transitions, and tab lifecycle changes such as discovered tabs, URL or title changes, and closed tabs. Job records track request action, priority, timestamps, final success or failure, and error text without storing large command payloads.
 
 Use `service reconcile` to run the persisted browser health and target probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot, refreshes live tab records for reachable browser CDP endpoints, and appends service events.
 

@@ -1,16 +1,19 @@
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot};
 
 use super::actions::{execute_command, DaemonState};
 use super::service_health::{reconcile_persisted_service_state, reconcile_service_state};
-use super::service_model::{ControlPlaneSnapshot, ServiceState};
+use super::service_model::{
+    ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
+};
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
+const MAX_SERVICE_JOBS: usize = 200;
 
 #[derive(Clone)]
 pub struct ControlPlaneHandle {
@@ -54,10 +57,11 @@ pub enum ControlPriority {
 
 pub struct ControlRequest {
     pub id: String,
+    pub job_id: String,
     pub action: String,
     pub command: Value,
     pub priority: ControlPriority,
-    pub submitted_at: Instant,
+    pub submitted_at_wall: String,
     pub response_tx: oneshot::Sender<Value>,
 }
 
@@ -158,20 +162,29 @@ impl ControlPlaneHandle {
             .unwrap_or("")
             .to_string();
         let (response_tx, response_rx) = oneshot::channel();
+        let job_id = if id.is_empty() {
+            format!("job-{}", uuid::Uuid::new_v4())
+        } else {
+            id.clone()
+        };
         let request = ControlRequest {
             id: id.clone(),
-            action,
+            job_id,
+            action: action.clone(),
             command,
             priority: ControlPriority::Normal,
-            submitted_at: Instant::now(),
+            submitted_at_wall: current_timestamp(),
             response_tx,
         };
 
         self.status.queue_depth.fetch_add(1, Ordering::Relaxed);
+        persist_service_job_queued(&request);
+        let job_id = request.job_id.clone();
         match self.tx.try_send(WorkerMessage::Request(request)) {
             Ok(()) => {}
             Err(mpsc::error::TrySendError::Full(_)) => {
                 self.status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+                persist_service_job_failed_to_enqueue(&job_id, &action, "Control queue is full");
                 return json!({
                     "id": id,
                     "success": false,
@@ -185,6 +198,11 @@ impl ControlPlaneHandle {
             }
             Err(mpsc::error::TrySendError::Closed(_)) => {
                 self.status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+                persist_service_job_failed_to_enqueue(
+                    &job_id,
+                    &action,
+                    "Control plane worker is stopped",
+                );
                 return json!({
                     "id": id,
                     "success": false,
@@ -235,6 +253,137 @@ fn persist_service_state_snapshot(state: &ServiceState) {
     };
     let store = JsonServiceStateStore::new(path);
     let _ = store.save(state);
+}
+
+/// Persist a bounded audit record for each control-plane request.
+fn persist_service_job(job: ServiceJob) {
+    mutate_service_jobs(|state| {
+        state.jobs.insert(job.id.clone(), job);
+    });
+}
+
+fn mutate_service_jobs(mutator: impl FnOnce(&mut ServiceState)) {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return;
+    };
+    let store = JsonServiceStateStore::new(path);
+    let mut state = store.load().unwrap_or_else(|_| ServiceState::default());
+    mutator(&mut state);
+    prune_service_jobs(&mut state);
+    let _ = store.save(&state);
+}
+
+fn persist_service_job_queued(request: &ControlRequest) {
+    persist_service_job(ServiceJob {
+        id: service_job_id(request),
+        action: request.action.clone(),
+        target: JobTarget::Service,
+        owner: ServiceActor::System,
+        state: JobState::Queued,
+        priority: service_job_priority(request.priority),
+        submitted_at: Some(request.submitted_at_wall.clone()),
+        ..ServiceJob::default()
+    });
+}
+
+fn persist_service_job_running(request: &ControlRequest) {
+    persist_service_job(ServiceJob {
+        id: service_job_id(request),
+        action: request.action.clone(),
+        target: JobTarget::Service,
+        owner: ServiceActor::System,
+        state: JobState::Running,
+        priority: service_job_priority(request.priority),
+        submitted_at: Some(request.submitted_at_wall.clone()),
+        started_at: Some(current_timestamp()),
+        ..ServiceJob::default()
+    });
+}
+
+fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
+    let job_id = service_job_id(request);
+    let started_at = load_service_job(&job_id)
+        .and_then(|job| job.started_at)
+        .unwrap_or_else(current_timestamp);
+    let success = response
+        .get("success")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let error = response
+        .get("error")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+
+    persist_service_job(ServiceJob {
+        id: job_id,
+        action: request.action.clone(),
+        target: JobTarget::Service,
+        owner: ServiceActor::System,
+        state: if success {
+            JobState::Succeeded
+        } else {
+            JobState::Failed
+        },
+        priority: service_job_priority(request.priority),
+        submitted_at: Some(request.submitted_at_wall.clone()),
+        started_at: Some(started_at),
+        completed_at: Some(current_timestamp()),
+        result: Some(json!({ "success": success })),
+        error,
+        ..ServiceJob::default()
+    });
+}
+
+fn persist_service_job_failed_to_enqueue(job_id: &str, action: &str, error: &str) {
+    let submitted_at = load_service_job(&job_id)
+        .and_then(|job| job.submitted_at)
+        .unwrap_or_else(current_timestamp);
+    persist_service_job(ServiceJob {
+        id: job_id.to_string(),
+        action: action.to_string(),
+        target: JobTarget::Service,
+        owner: ServiceActor::System,
+        state: JobState::Failed,
+        priority: JobPriority::Normal,
+        submitted_at: Some(submitted_at),
+        completed_at: Some(current_timestamp()),
+        result: Some(json!({ "success": false })),
+        error: Some(error.to_string()),
+        ..ServiceJob::default()
+    });
+}
+
+fn load_service_job(id: &str) -> Option<ServiceJob> {
+    let path = JsonServiceStateStore::default_path().ok()?;
+    let store = JsonServiceStateStore::new(path);
+    store.load().ok()?.jobs.remove(id)
+}
+
+fn service_job_id(request: &ControlRequest) -> String {
+    request.job_id.clone()
+}
+
+fn service_job_priority(priority: ControlPriority) -> JobPriority {
+    match priority {
+        ControlPriority::Normal => JobPriority::Normal,
+        ControlPriority::Lifecycle => JobPriority::Lifecycle,
+    }
+}
+
+fn prune_service_jobs(state: &mut ServiceState) {
+    if state.jobs.len() <= MAX_SERVICE_JOBS {
+        return;
+    }
+    let mut jobs = state
+        .jobs
+        .values()
+        .map(|job| (job.submitted_at.clone().unwrap_or_default(), job.id.clone()))
+        .collect::<Vec<_>>();
+    jobs.sort();
+    let excess = state.jobs.len() - MAX_SERVICE_JOBS;
+    for (_, id) in jobs.into_iter().take(excess) {
+        state.jobs.remove(&id);
+    }
 }
 
 fn current_timestamp() -> String {
@@ -344,9 +493,11 @@ async fn run_worker(
                     WorkerMessage::Request(request) => {
                         status.queue_depth.fetch_sub(1, Ordering::Relaxed);
                         status.set_state(WorkerState::Busy);
+                        persist_service_job_running(&request);
                         refresh_browser_health(&mut state, &status).await;
                         let response = execute_command(&request.command, &mut state).await;
                         refresh_browser_health(&mut state, &status).await;
+                        persist_service_job_finished(&request, &response);
                         let _ = request.response_tx.send(response);
                         status.set_state(WorkerState::Ready);
                     }
@@ -443,6 +594,9 @@ mod tests {
 
     #[tokio::test]
     async fn submit_returns_command_response() {
+        let home = temp_home("control-plane-submit");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
         let handle = ControlPlaneWorker::start(DaemonState::new());
         let response = handle
             .submit(json!({
@@ -458,11 +612,26 @@ mod tests {
         );
         assert_eq!(handle.queue_depth(), 0);
         assert_eq!(handle.browser_health(), BrowserHealth::NotStarted);
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        let job = &persisted.jobs["test-1"];
+        assert_eq!(job.action, "state_list");
+        assert_eq!(job.state, JobState::Succeeded);
+        assert!(job.submitted_at.is_some());
+        assert!(job.started_at.is_some());
+        assert!(job.completed_at.is_some());
+        assert_eq!(job.result.as_ref().unwrap()["success"], true);
+
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[tokio::test]
     async fn status_response_reports_worker_state() {
+        let home = temp_home("control-plane-status");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
         let handle = ControlPlaneWorker::start(DaemonState::new());
         let _ = handle
             .submit(json!({
@@ -502,6 +671,7 @@ mod tests {
         );
 
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[tokio::test]
@@ -649,6 +819,9 @@ mod tests {
 
     #[tokio::test]
     async fn parallel_submits_leave_queue_depth_at_zero() {
+        let home = temp_home("control-plane-parallel");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
         let handle = ControlPlaneWorker::start(DaemonState::new());
         let mut tasks = Vec::new();
 
@@ -676,10 +849,14 @@ mod tests {
         assert_eq!(handle.queue_depth(), 0);
 
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[tokio::test]
     async fn full_queue_returns_structured_error() {
+        let home = temp_home("control-plane-full-queue");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
         let handle = ControlPlaneWorker::start_with_capacity(DaemonState::new(), 1);
         let _permit = handle
             .tx
@@ -713,7 +890,14 @@ mod tests {
             Some("NotStarted")
         );
 
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        let job = &persisted.jobs["test-full"];
+        assert_eq!(job.state, JobState::Failed);
+        assert_eq!(job.error.as_deref(), Some("Control queue is full"));
+
         drop(_permit);
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

@@ -106,6 +106,7 @@ type ServiceState = {
   events?: ServiceEvent[];
   browsers?: Record<string, ServiceBrowser>;
   profiles?: Record<string, unknown>;
+  jobs?: Record<string, unknown>;
   sessions?: Record<string, ServiceSession>;
   tabs?: Record<string, ServiceTab>;
   sitePolicies?: Record<string, unknown>;
@@ -714,6 +715,7 @@ export function ServicePanel() {
   const entityCounts = useMemo(() => ({
     browsers: countEntries(serviceState?.browsers),
     profiles: countEntries(serviceState?.profiles),
+    jobs: countEntries(serviceState?.jobs),
     sessions: countEntries(serviceState?.sessions),
     tabs: countEntries(serviceState?.tabs),
     policies: countEntries(serviceState?.sitePolicies),

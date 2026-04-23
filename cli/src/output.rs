@@ -2581,6 +2581,7 @@ Notes:
   - It does not launch a browser.
   - Persisted service state is loaded from ~/.agent-browser/service/state.json.
   - The current control-plane snapshot is refreshed in the persisted service state.
+  - Recent control-plane requests are retained as bounded job records with timestamps and final state.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.

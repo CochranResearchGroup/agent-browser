@@ -93,6 +93,8 @@ The first backend-first correction is implemented on `service-model-phase-0`:
   60000 ms by default, while `0` remains the explicit opt-out
 - tab reconciliation now emits `tab_lifecycle_changed` events for discovered
   tabs, lifecycle changes, URL/title changes, and closed tabs
+- control-plane requests now persist bounded service job records with action,
+  priority, timestamps, final state, and error text
 
 This deliberately uses the existing service status, reconcile, HTTP API, and
 dashboard surfaces instead of adding more dashboard-only state.
