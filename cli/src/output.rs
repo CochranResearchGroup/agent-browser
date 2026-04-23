@@ -3118,6 +3118,7 @@ Options:
   --confirm-interactive      Interactive confirmation prompts; auto-denies if stdin is not a TTY (or AGENT_BROWSER_CONFIRM_INTERACTIVE)
   --engine <name>            Browser engine: chrome (default), lightpanda (or AGENT_BROWSER_ENGINE)
   --service-reconcile-interval <ms> Background service browser-health reconciliation interval (default: 60000); 0 disables it
+  --service-job-timeout <ms> Timeout for dispatched service control jobs; 0 disables it
   --no-auto-dialog           Disable automatic dismissal of alert/beforeunload dialogs (or AGENT_BROWSER_NO_AUTO_DIALOG)
   --model <name>             AI model for chat (or AI_GATEWAY_MODEL env)
   -v, --verbose              Show tool commands and their raw output
@@ -3158,7 +3159,8 @@ Configuration:
         }}
       }},
       "service": {{
-        "reconcileIntervalMs": 60000
+        "reconcileIntervalMs": 60000,
+        "jobTimeoutMs": 120000
       }}
     }}
 
@@ -3172,6 +3174,8 @@ Configuration:
   to resize the browser content area after launch and before the command runs.
   Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`
   to run persisted browser-health reconciliation in the daemon background.
+  Set `service.jobTimeoutMs` or pass `--service-job-timeout` to mark
+  long-running service control jobs as timed_out.
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.
@@ -3207,6 +3211,7 @@ Environment:
   AGENT_BROWSER_STREAM_PORT      Override WebSocket streaming port (default: OS-assigned)
   AGENT_BROWSER_IDLE_TIMEOUT_MS  Auto-shutdown daemon after N ms of inactivity (disabled by default)
   AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS Background service browser-health reconciliation interval in ms (default: 60000; 0 disables it)
+  AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS Timeout for dispatched service control jobs in ms (disabled by default; 0 disables it)
   AGENT_BROWSER_IOS_DEVICE       Default iOS device name
   AGENT_BROWSER_IOS_UDID         Default iOS device UDID
   AGENT_BROWSER_RUNTIME_PROFILE  Managed runtime profile name

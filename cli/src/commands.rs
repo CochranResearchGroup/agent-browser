@@ -2678,6 +2678,7 @@ mod tests {
             manual_login_preferred_services: Vec::new(),
             service_state: crate::native::service_model::ServiceState::default(),
             service_reconcile_interval_ms: None,
+            service_job_timeout_ms: None,
             runtime_profile: None,
             json: false,
             headed: false,

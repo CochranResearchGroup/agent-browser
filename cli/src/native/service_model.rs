@@ -74,6 +74,7 @@ pub struct ControlPlaneSnapshot {
     pub browser_health: String,
     pub queue_depth: usize,
     pub queue_capacity: usize,
+    pub service_job_timeout_ms: Option<u64>,
     pub updated_at: Option<String>,
 }
 
@@ -640,6 +641,7 @@ mod tests {
                 browser_health: "Ready".to_string(),
                 queue_depth: 0,
                 queue_capacity: 256,
+                service_job_timeout_ms: Some(5000),
                 updated_at: Some("2026-04-22T00:00:00Z".to_string()),
             }),
             reconciliation: Some(ServiceReconciliationSnapshot {

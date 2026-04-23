@@ -83,6 +83,29 @@ fn service_reconcile_interval_from_sources(config: &Config) -> Option<u64> {
     Some(DEFAULT_SERVICE_RECONCILE_INTERVAL_MS)
 }
 
+fn service_job_timeout_from_sources(config: &Config) -> Option<u64> {
+    if let Ok(raw) = env::var("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS") {
+        return match raw.parse::<u64>() {
+            Ok(0) => None,
+            Ok(ms) => Some(ms),
+            Err(_) => {
+                eprintln!(
+                    "{} invalid service job timeout from AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS: expected milliseconds, got {}",
+                    color::warning_indicator(),
+                    raw
+                );
+                None
+            }
+        };
+    }
+
+    config
+        .service
+        .as_ref()
+        .and_then(|service| service.job_timeout_ms)
+        .filter(|ms| *ms > 0)
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct RuntimeProfileLaunchConfig {
@@ -144,6 +167,7 @@ pub struct ServiceConfig {
     pub site_policies: Option<BTreeMap<String, SitePolicy>>,
     pub providers: Option<BTreeMap<String, ServiceProvider>>,
     pub reconcile_interval_ms: Option<u64>,
+    pub job_timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -361,6 +385,7 @@ fn merge_service_configs(
             site_policies: merge_service_model_maps(base.site_policies, overlay.site_policies),
             providers: merge_service_model_maps(base.providers, overlay.providers),
             reconcile_interval_ms: overlay.reconcile_interval_ms.or(base.reconcile_interval_ms),
+            job_timeout_ms: overlay.job_timeout_ms.or(base.job_timeout_ms),
         }),
     }
 }
@@ -756,6 +781,7 @@ fn extract_config_path(args: &[String]) -> Option<Option<String>> {
         "--screenshot-format",
         "--idle-timeout",
         "--service-reconcile-interval",
+        "--service-job-timeout",
         "--model",
     ];
     let mut i = 0;
@@ -820,6 +846,7 @@ pub struct Flags {
     pub manual_login_preferred_services: Vec<String>,
     pub service_state: ServiceState,
     pub service_reconcile_interval_ms: Option<u64>,
+    pub service_job_timeout_ms: Option<u64>,
     pub runtime_profile: Option<String>,
     pub headers: Option<String>,
     pub executable_path: Option<String>,
@@ -896,6 +923,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
     let manual_login_preferred_services = manual_login_preferred_services(&config);
     let service_state = service_state_from_store(config.service_state_snapshot());
     let service_reconcile_interval_ms = service_reconcile_interval_from_sources(&config);
+    let service_job_timeout_ms = service_job_timeout_from_sources(&config);
 
     let extensions_env = env::var("AGENT_BROWSER_EXTENSIONS")
         .ok()
@@ -927,6 +955,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         manual_login_preferred_services,
         service_state,
         service_reconcile_interval_ms,
+        service_job_timeout_ms,
         runtime_profile: env::var("AGENT_BROWSER_RUNTIME_PROFILE")
             .ok()
             .or(config.runtime_profile),
@@ -1105,6 +1134,20 @@ pub fn parse_flags(args: &[String]) -> Flags {
                         Ok(ms) => flags.service_reconcile_interval_ms = Some(ms),
                         Err(_) => eprintln!(
                             "{} Invalid --service-reconcile-interval: expected milliseconds, got {}",
+                            color::warning_indicator(),
+                            s
+                        ),
+                    }
+                    i += 1;
+                }
+            }
+            "--service-job-timeout" => {
+                if let Some(s) = args.get(i + 1) {
+                    match s.parse::<u64>() {
+                        Ok(0) => flags.service_job_timeout_ms = None,
+                        Ok(ms) => flags.service_job_timeout_ms = Some(ms),
+                        Err(_) => eprintln!(
+                            "{} Invalid --service-job-timeout: expected milliseconds, got {}",
                             color::warning_indicator(),
                             s
                         ),
@@ -1411,6 +1454,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
         "--screenshot-format",
         "--idle-timeout",
         "--service-reconcile-interval",
+        "--service-job-timeout",
         "--model",
     ];
 
@@ -1591,6 +1635,12 @@ mod tests {
     #[test]
     fn test_clean_args_removes_service_reconcile_interval_before_command() {
         let cleaned = clean_args(&args("--service-reconcile-interval 1000 open example.com"));
+        assert_eq!(cleaned, vec!["open", "example.com"]);
+    }
+
+    #[test]
+    fn test_clean_args_removes_service_job_timeout_before_command() {
+        let cleaned = clean_args(&args("--service-job-timeout 1000 open example.com"));
         assert_eq!(cleaned, vec!["open", "example.com"]);
     }
 
@@ -1862,6 +1912,7 @@ mod tests {
                     },
                 )])),
                 reconcile_interval_ms: Some(60_000),
+                job_timeout_ms: Some(120_000),
             }),
             ..Config::default()
         };
@@ -1901,6 +1952,7 @@ mod tests {
                 ])),
                 providers: None,
                 reconcile_interval_ms: Some(30_000),
+                job_timeout_ms: Some(90_000),
             }),
             ..Config::default()
         };
@@ -1933,6 +1985,7 @@ mod tests {
             Some("Manual")
         );
         assert_eq!(service.reconcile_interval_ms, Some(30_000));
+        assert_eq!(service.job_timeout_ms, Some(90_000));
     }
 
     #[test]
@@ -2205,6 +2258,7 @@ mod tests {
                     },
                 )])),
                 reconcile_interval_ms: Some(45_000),
+                job_timeout_ms: Some(120_000),
             }),
             ..Config::default()
         };
@@ -2321,6 +2375,64 @@ mod tests {
         let flags = parse_flags(&args("--service-reconcile-interval 0 service status"));
 
         assert_eq!(flags.service_reconcile_interval_ms, None);
+    }
+
+    #[test]
+    fn test_parse_flags_loads_service_job_timeout_from_config() {
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-job-timeout-config-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
+        let config_dir = home.join(".agent-browser");
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("config.json");
+        fs::write(&config_path, r#"{"service":{"jobTimeoutMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args("service status"));
+
+        assert_eq!(flags.service_job_timeout_ms, Some(5000));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_job_timeout_flag_overrides_config() {
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-job-timeout-flag-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
+        let config_dir = home.join(".agent-browser");
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("config.json");
+        fs::write(&config_path, r#"{"service":{"jobTimeoutMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args("--service-job-timeout 250 service status"));
+
+        assert_eq!(flags.service_job_timeout_ms, Some(250));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_job_timeout_flag_zero_disables_timeout() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
+        guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
+
+        let flags = parse_flags(&args("--service-job-timeout 0 service status"));
+
+        assert_eq!(flags.service_job_timeout_ms, None);
     }
 
     #[test]

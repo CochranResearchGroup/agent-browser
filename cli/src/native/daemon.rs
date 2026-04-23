@@ -159,6 +159,10 @@ pub async fn run_daemon(session: &str) {
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .filter(|&ms| ms > 0);
+    let service_job_timeout_ms = env::var("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|&ms| ms > 0);
 
     let result = run_socket_server(
         &socket_path,
@@ -168,6 +172,7 @@ pub async fn run_daemon(session: &str) {
         stream_server_instance,
         idle_timeout_ms,
         service_reconcile_interval_ms,
+        service_job_timeout_ms,
     )
     .await;
 
@@ -201,6 +206,7 @@ async fn run_socket_server(
     stream_server: Option<Arc<StreamServer>>,
     idle_timeout_ms: Option<u64>,
     service_reconcile_interval_ms: Option<u64>,
+    service_job_timeout_ms: Option<u64>,
 ) -> Result<(), String> {
     use tokio::net::UnixListener;
 
@@ -215,9 +221,10 @@ async fn run_socket_server(
         None
     };
 
-    let control_plane = ControlPlaneWorker::start_with_service_reconcile_interval(
+    let control_plane = ControlPlaneWorker::start_with_options(
         DaemonState::new_with_stream(stream_client, stream_server),
         service_reconcile_interval_ms,
+        service_job_timeout_ms,
     );
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
@@ -290,6 +297,7 @@ async fn run_socket_server(
     stream_server: Option<Arc<StreamServer>>,
     idle_timeout_ms: Option<u64>,
     service_reconcile_interval_ms: Option<u64>,
+    service_job_timeout_ms: Option<u64>,
 ) -> Result<(), String> {
     use tokio::net::TcpListener;
 
@@ -318,9 +326,10 @@ async fn run_socket_server(
         None
     };
 
-    let control_plane = ControlPlaneWorker::start_with_service_reconcile_interval(
+    let control_plane = ControlPlaneWorker::start_with_options(
         DaemonState::new_with_stream(stream_client, stream_server),
         service_reconcile_interval_ms,
+        service_job_timeout_ms,
     );
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);

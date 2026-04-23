@@ -405,6 +405,8 @@ When a session stream server is running, use `GET /api/service/status`, `GET /ap
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs` in config, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable the background loop.
 
+Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, pass `--service-job-timeout <ms>`, or set `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.
+
 ## Batch Execution
 
 Use `batch` when running 2 or more commands in sequence. Batch executes commands in order, so dependent commands like navigate then screenshot work correctly. Each quoted argument is a separate command.

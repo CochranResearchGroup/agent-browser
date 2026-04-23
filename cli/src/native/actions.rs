@@ -1487,6 +1487,13 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
 
     let cmd_start = std::time::Instant::now();
 
+    #[cfg(test)]
+    if action == "__test_sleep" {
+        let ms = cmd.get("ms").and_then(|value| value.as_u64()).unwrap_or(1);
+        tokio::time::sleep(tokio::time::Duration::from_millis(ms)).await;
+        return success_response(&id, json!({ "sleptMs": ms }));
+    }
+
     if let Some(ref server) = state.stream_server {
         server.broadcast_command(action, &id, cmd);
     }

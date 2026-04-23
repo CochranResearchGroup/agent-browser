@@ -776,6 +776,8 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--confirm-actions <list>` | Action categories requiring confirmation (or `AGENT_BROWSER_CONFIRM_ACTIONS` env) |
 | `--confirm-interactive` | Interactive confirmation prompts; auto-denies if stdin is not a TTY (or `AGENT_BROWSER_CONFIRM_INTERACTIVE` env) |
 | `--engine <name>` | Browser engine: `chrome` (default), `lightpanda` (or `AGENT_BROWSER_ENGINE` env) |
+| `--service-reconcile-interval <ms>` | Background service browser-health reconciliation interval; `0` disables it (or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` env) |
+| `--service-job-timeout <ms>` | Timeout for dispatched service control jobs; `0` disables it (or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` env) |
 | `--no-auto-dialog` | Disable automatic dismissal of `alert`/`beforeunload` dialogs (or `AGENT_BROWSER_NO_AUTO_DIALOG` env) |
 | `--model <name>` | AI model for chat command (or `AI_GATEWAY_MODEL` env) |
 | `-v`, `--verbose` | Show tool commands and their raw output (chat) |
@@ -855,7 +857,8 @@ Create an `agent-browser.json` file to set persistent defaults instead of repeat
   "profile": "./browser-data",
   "userAgent": "my-agent/1.0",
   "service": {
-    "reconcileIntervalMs": 60000
+    "reconcileIntervalMs": 60000,
+    "jobTimeoutMs": 120000
   },
   "ignoreHttpsErrors": true
 }
@@ -871,6 +874,8 @@ AGENT_BROWSER_CONFIG=./ci-config.json agent-browser open example.com
 All options from the table above can be set in the config file using camelCase keys (e.g., `--executable-path` becomes `"executablePath"`, `--proxy-bypass` becomes `"proxyBypass"`). Unknown keys are ignored for forward compatibility.
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
+
+Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, pass `--service-job-timeout <ms>`, or set `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.
 
 Boolean flags accept an optional `true`/`false` value to override config settings. For example, `--headed false` disables `"headed": true` from config. A bare `--headed` is equivalent to `--headed true`.
 
@@ -1243,6 +1248,8 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 The HTTP API loads the same persisted and configured service state as the CLI before relaying the request to the daemon.
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
+
+Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, `--service-job-timeout <ms>`, or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.
 
 ### WebSocket Protocol
 

@@ -298,6 +298,7 @@ pub struct DaemonOptions<'a> {
     pub auto_connect: bool,
     pub idle_timeout: Option<&'a str>,
     pub service_reconcile_interval_ms: Option<u64>,
+    pub service_job_timeout_ms: Option<u64>,
     pub default_timeout: Option<u64>,
     pub cdp: Option<&'a str>,
     pub runtime_attach_managed: bool,
@@ -397,6 +398,9 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
             "AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS",
             ms.to_string(),
         );
+    }
+    if let Some(ms) = opts.service_job_timeout_ms {
+        cmd.env("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS", ms.to_string());
     }
     if let Some(timeout) = opts.default_timeout {
         cmd.env("AGENT_BROWSER_DEFAULT_TIMEOUT", timeout.to_string());
@@ -998,6 +1002,7 @@ mod tests {
             auto_connect: false,
             idle_timeout: None,
             service_reconcile_interval_ms: Some(1234),
+            service_job_timeout_ms: Some(5678),
             default_timeout: None,
             cdp: None,
             runtime_attach_managed: false,
@@ -1023,6 +1028,9 @@ mod tests {
         }));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS" && v.as_deref() == Some("1234")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS" && v.as_deref() == Some("5678")
         }));
     }
 

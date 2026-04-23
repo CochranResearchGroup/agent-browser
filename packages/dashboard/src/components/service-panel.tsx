@@ -34,6 +34,7 @@ type ControlPlaneSnapshot = {
   browser_health?: string;
   queue_depth?: number;
   queue_capacity?: number;
+  service_job_timeout_ms?: number | null;
 };
 
 type ReconciliationSnapshot = {
@@ -118,6 +119,7 @@ type ServiceState = {
     browserHealth?: string;
     queueDepth?: number;
     queueCapacity?: number;
+    serviceJobTimeoutMs?: number | null;
   };
   reconciliation?: ReconciliationSnapshot | null;
   events?: ServiceEvent[];
@@ -881,6 +883,8 @@ export function ServicePanel() {
 
   const serviceState = status?.service_state;
   const control = status?.control_plane;
+  const serviceJobTimeoutMs =
+    control?.service_job_timeout_ms ?? serviceState?.controlPlane?.serviceJobTimeoutMs ?? null;
   const reconciliation = serviceState?.reconciliation;
   const recentJobs = jobs?.jobs ?? Object.values(serviceState?.jobs ?? {}).slice(-8);
   const recentEvents = events?.events ?? serviceState?.events?.slice(-8) ?? [];
@@ -1000,7 +1004,7 @@ export function ServicePanel() {
             <HealthCard
               label="Worker"
               value={control?.worker_state ?? serviceState?.controlPlane?.workerState ?? "unknown"}
-              detail={`Queue ${control?.queue_depth ?? serviceState?.controlPlane?.queueDepth ?? 0} of ${control?.queue_capacity ?? serviceState?.controlPlane?.queueCapacity ?? 0}`}
+              detail={`Queue ${control?.queue_depth ?? serviceState?.controlPlane?.queueDepth ?? 0} of ${control?.queue_capacity ?? serviceState?.controlPlane?.queueCapacity ?? 0}; job timeout ${serviceJobTimeoutMs ? `${serviceJobTimeoutMs} ms` : "off"}`}
               icon={ServerCog}
               tone={healthTone(control?.worker_state ?? serviceState?.controlPlane?.workerState)}
             />

@@ -19,6 +19,7 @@ const MAX_SERVICE_JOBS: usize = 200;
 pub struct ControlPlaneHandle {
     tx: mpsc::Sender<WorkerMessage>,
     status: Arc<ControlPlaneStatus>,
+    service_job_timeout_ms: Option<u64>,
 }
 
 pub struct ControlPlaneStatus {
@@ -61,6 +62,9 @@ pub struct ControlRequest {
     pub action: String,
     pub command: Value,
     pub priority: ControlPriority,
+    /// Optional worker-bound execution timeout. The worker records timed-out
+    /// requests as service jobs with `timed_out` state.
+    pub timeout_ms: Option<u64>,
     pub submitted_at_wall: String,
     pub response_tx: oneshot::Sender<Value>,
 }
@@ -74,24 +78,38 @@ pub struct ControlPlaneWorker;
 
 impl ControlPlaneWorker {
     pub fn start(state: DaemonState) -> ControlPlaneHandle {
-        Self::start_with_capacity(state, DEFAULT_QUEUE_CAPACITY)
+        Self::start_with_capacity_and_options(state, DEFAULT_QUEUE_CAPACITY, None, None)
     }
 
     pub fn start_with_service_reconcile_interval(
         state: DaemonState,
         service_reconcile_interval_ms: Option<u64>,
     ) -> ControlPlaneHandle {
-        Self::start_with_options(state, DEFAULT_QUEUE_CAPACITY, service_reconcile_interval_ms)
+        Self::start_with_options(state, service_reconcile_interval_ms, None)
+    }
+
+    pub fn start_with_options(
+        state: DaemonState,
+        service_reconcile_interval_ms: Option<u64>,
+        service_job_timeout_ms: Option<u64>,
+    ) -> ControlPlaneHandle {
+        Self::start_with_capacity_and_options(
+            state,
+            DEFAULT_QUEUE_CAPACITY,
+            service_reconcile_interval_ms,
+            service_job_timeout_ms,
+        )
     }
 
     fn start_with_capacity(state: DaemonState, capacity: usize) -> ControlPlaneHandle {
-        Self::start_with_options(state, capacity, None)
+        Self::start_with_capacity_and_options(state, capacity, None, None)
     }
 
-    fn start_with_options(
+    fn start_with_capacity_and_options(
         state: DaemonState,
         capacity: usize,
         service_reconcile_interval_ms: Option<u64>,
+        service_job_timeout_ms: Option<u64>,
     ) -> ControlPlaneHandle {
         let (tx, rx) = mpsc::channel(capacity);
         let status = Arc::new(ControlPlaneStatus::new());
@@ -100,8 +118,13 @@ impl ControlPlaneWorker {
             rx,
             status.clone(),
             service_reconcile_interval_ms,
+            service_job_timeout_ms,
         ));
-        ControlPlaneHandle { tx, status }
+        ControlPlaneHandle {
+            tx,
+            status,
+            service_job_timeout_ms,
+        }
     }
 }
 
@@ -137,6 +160,7 @@ impl ControlPlaneHandle {
             browser_health: self.status.browser_health().as_str().to_string(),
             queue_depth: self.status.queue_depth(),
             queue_capacity: self.tx.max_capacity(),
+            service_job_timeout_ms: self.service_job_timeout_ms,
             updated_at: Some(current_timestamp()),
         }
     }
@@ -147,6 +171,7 @@ impl ControlPlaneHandle {
             "browser_health": self.status.browser_health().as_str(),
             "queue_depth": self.status.queue_depth(),
             "queue_capacity": self.tx.max_capacity(),
+            "service_job_timeout_ms": self.service_job_timeout_ms,
         })
     }
 
@@ -167,12 +192,18 @@ impl ControlPlaneHandle {
         } else {
             id.clone()
         };
+        let timeout_ms = command
+            .get("jobTimeoutMs")
+            .and_then(|v| v.as_u64())
+            .filter(|ms| *ms > 0)
+            .or(self.service_job_timeout_ms);
         let request = ControlRequest {
             id: id.clone(),
             job_id,
             action: action.clone(),
             command,
             priority: ControlPriority::Normal,
+            timeout_ms,
             submitted_at_wall: current_timestamp(),
             response_tx,
         };
@@ -300,6 +331,7 @@ fn persist_service_job_queued(request: &ControlRequest) {
         state: JobState::Queued,
         priority: service_job_priority(request.priority),
         submitted_at: Some(request.submitted_at_wall.clone()),
+        timeout_ms: request.timeout_ms,
         ..ServiceJob::default()
     });
 }
@@ -314,6 +346,7 @@ fn persist_service_job_running(request: &ControlRequest) {
         priority: service_job_priority(request.priority),
         submitted_at: Some(request.submitted_at_wall.clone()),
         started_at: Some(current_timestamp()),
+        timeout_ms: request.timeout_ms,
         ..ServiceJob::default()
     });
 }
@@ -346,8 +379,32 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         submitted_at: Some(request.submitted_at_wall.clone()),
         started_at: Some(started_at),
         completed_at: Some(current_timestamp()),
+        timeout_ms: request.timeout_ms,
         result: Some(json!({ "success": success })),
         error,
+        ..ServiceJob::default()
+    });
+}
+
+fn persist_service_job_timed_out(request: &ControlRequest) {
+    let job_id = service_job_id(request);
+    let started_at = load_service_job(&job_id)
+        .and_then(|job| job.started_at)
+        .unwrap_or_else(current_timestamp);
+    let timeout_ms = request.timeout_ms.unwrap_or_default();
+    persist_service_job(ServiceJob {
+        id: job_id,
+        action: request.action.clone(),
+        target: JobTarget::Service,
+        owner: ServiceActor::System,
+        state: JobState::TimedOut,
+        priority: service_job_priority(request.priority),
+        submitted_at: Some(request.submitted_at_wall.clone()),
+        started_at: Some(started_at),
+        completed_at: Some(current_timestamp()),
+        timeout_ms: request.timeout_ms,
+        result: Some(json!({ "success": false, "timedOut": true, "timeoutMs": timeout_ms })),
+        error: Some(format!("Service job timed out after {}ms", timeout_ms)),
         ..ServiceJob::default()
     });
 }
@@ -549,6 +606,7 @@ async fn run_worker(
     mut rx: mpsc::Receiver<WorkerMessage>,
     status: Arc<ControlPlaneStatus>,
     service_reconcile_interval_ms: Option<u64>,
+    service_job_timeout_ms: Option<u64>,
 ) {
     let mut drain_interval = tokio::time::interval(Duration::from_millis(100));
     drain_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -580,9 +638,42 @@ async fn run_worker(
                         status.set_state(WorkerState::Busy);
                         persist_service_job_running(&request);
                         refresh_browser_health(&mut state, &status).await;
-                        let response = execute_command(&request.command, &mut state).await;
+                        let timeout_ms = request.timeout_ms.or(service_job_timeout_ms);
+                        let response = match timeout_ms {
+                            Some(ms) if ms > 0 => {
+                                match tokio::time::timeout(
+                                    Duration::from_millis(ms),
+                                    execute_command(&request.command, &mut state),
+                                )
+                                .await
+                                {
+                                    Ok(response) => response,
+                                    Err(_) => {
+                                        persist_service_job_timed_out(&request);
+                                        cleanup_exited_browser(&mut state).await;
+                                        status.set_browser_health(BrowserHealth::NotStarted);
+                                        json!({
+                                            "id": request.id.clone(),
+                                            "success": false,
+                                            "error": format!("Service job timed out after {}ms", ms),
+                                            "data": {
+                                                "timedOut": true,
+                                                "timeoutMs": ms,
+                                            },
+                                        })
+                                    }
+                                }
+                            }
+                            _ => execute_command(&request.command, &mut state).await,
+                        };
                         refresh_browser_health(&mut state, &status).await;
-                        persist_service_job_finished(&request, &response);
+                        if response
+                            .pointer("/data/timedOut")
+                            .and_then(|value| value.as_bool())
+                            != Some(true)
+                        {
+                            persist_service_job_finished(&request, &response);
+                        }
                         let _ = request.response_tx.send(response);
                         status.set_state(WorkerState::Ready);
                     }
@@ -997,6 +1088,44 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(10)).await;
         assert_eq!(handle.queue_depth(), 0);
+
+        handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn service_job_timeout_marks_running_job_timed_out() {
+        let home = temp_home("control-plane-job-timeout");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let handle = ControlPlaneWorker::start_with_options(DaemonState::new(), None, Some(10));
+        let response = handle
+            .submit(json!({
+                "id": "test-timeout",
+                "action": "__test_sleep",
+                "ms": 100,
+            }))
+            .await;
+
+        assert_eq!(
+            response.get("success").and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            response.pointer("/data/timedOut").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            response.pointer("/data/timeoutMs").and_then(|v| v.as_u64()),
+            Some(10)
+        );
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        let job = &persisted.jobs["test-timeout"];
+        assert_eq!(job.state, JobState::TimedOut);
+        assert_eq!(job.timeout_ms, Some(10));
+        assert_eq!(job.result.as_ref().unwrap()["timedOut"], true);
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
