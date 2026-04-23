@@ -19,6 +19,13 @@ import { activePortAtom, activeSessionNameAtom } from "@/store/sessions";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -42,6 +49,9 @@ type ServiceEvent = {
   kind: "reconciliation" | "browser_health_changed" | "reconciliation_error" | string;
   message: string;
   browserId?: string | null;
+  previousHealth?: string | null;
+  currentHealth?: string | null;
+  details?: unknown;
 };
 
 type ServiceState = {
@@ -124,6 +134,22 @@ function countEntries(value?: Record<string, unknown>): number {
   return value ? Object.keys(value).length : 0;
 }
 
+function formatAbsoluteTime(value?: string | null): string {
+  if (!value) return "unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  });
+}
+
+function formatDetails(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+
 function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
   const normalized = (value ?? "").toLowerCase();
   if (["ready", "cdp_ready", "running"].includes(normalized)) return "good";
@@ -179,9 +205,14 @@ function EventDot({ kind }: { kind: string }) {
   );
 }
 
-function EventRow({ event }: { event: ServiceEvent }) {
+function EventRow({ event, onSelect }: { event: ServiceEvent; onSelect: (event: ServiceEvent) => void }) {
   return (
-    <div className="service-event-row">
+    <button
+      type="button"
+      className="service-event-row"
+      onClick={() => onSelect(event)}
+      aria-label={`Inspect ${formatEventKind(event.kind)} event`}
+    >
       <EventDot kind={event.kind} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
@@ -201,7 +232,63 @@ function EventRow({ event }: { event: ServiceEvent }) {
           {event.message || "No message"}
         </p>
       </div>
+    </button>
+  );
+}
+
+function EventDetailItem({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="service-event-detail-item">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
+  );
+}
+
+function EventDetailDialog({
+  event,
+  onOpenChange,
+}: {
+  event: ServiceEvent | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const details = formatDetails(event?.details);
+  return (
+    <Dialog open={!!event} onOpenChange={onOpenChange}>
+      <DialogContent className="service-event-dialog">
+        {event && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-8 text-xl font-black tracking-[-0.04em]">
+                {formatEventKind(event.kind)}
+              </DialogTitle>
+              <DialogDescription>
+                {formatAbsoluteTime(event.timestamp)} / {formatRelativeTime(event.timestamp)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="service-event-dialog-body">
+              <p className="service-event-dialog-message">{event.message || "No message"}</p>
+              <div className="service-event-detail-grid">
+                <EventDetailItem label="Event ID" value={event.id} />
+                <EventDetailItem label="Kind" value={event.kind} />
+                <EventDetailItem label="Browser" value={event.browserId} />
+                <EventDetailItem label="Previous health" value={event.previousHealth} />
+                <EventDetailItem label="Current health" value={event.currentHealth} />
+              </div>
+              {details && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Raw details
+                  </p>
+                  <pre className="service-event-details-json">{details}</pre>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -217,6 +304,7 @@ export function ServicePanel() {
   const [eventWindow, setEventWindow] = useState<EventWindowFilter>("all");
   const [eventLimit, setEventLimit] = useState<EventLimit>(8);
   const [eventBrowserId, setEventBrowserId] = useState("");
+  const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
 
   const canFetch = activePort > 0 && !!activeSession;
   const activeFilterCount =
@@ -315,6 +403,12 @@ export function ServicePanel() {
 
   return (
     <div className="flex h-full flex-col">
+      <EventDetailDialog
+        event={selectedEvent}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEvent(null);
+        }}
+      />
       <div className="service-panel-hero">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -482,7 +576,9 @@ export function ServicePanel() {
                   No service events yet.
                 </p>
               ) : (
-                recentEvents.map((event) => <EventRow key={event.id} event={event} />)
+                recentEvents.map((event) => (
+                  <EventRow key={event.id} event={event} onSelect={setSelectedEvent} />
+                ))
               )}
             </div>
           </div>
