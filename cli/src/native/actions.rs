@@ -35,7 +35,7 @@ use super::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use super::providers;
 use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
-use super::service_health::reconcile_service_state;
+use super::service_health::{reconcile_service_state, record_browser_health_changed_event};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     JobState as ServiceJobState, ServiceEvent, ServiceEventKind, ServiceState,
@@ -341,20 +341,20 @@ fn persist_service_browser_record(
     let store = JsonServiceStateStore::new(path);
     let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
     let id = service_browser_id(session_id);
-    service_state.browsers.insert(
-        id.clone(),
-        BrowserProcess {
-            id,
-            profile_id: None,
-            host,
-            health,
-            pid,
-            cdp_endpoint,
-            view_streams: Vec::new(),
-            active_session_ids: vec![session_id.to_string()],
-            last_error,
-        },
-    );
+    let previous = service_state.browsers.get(&id).cloned();
+    let browser = BrowserProcess {
+        id: id.clone(),
+        profile_id: None,
+        host,
+        health,
+        pid,
+        cdp_endpoint,
+        view_streams: Vec::new(),
+        active_session_ids: vec![session_id.to_string()],
+        last_error,
+    };
+    record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    service_state.browsers.insert(id, browser);
     let _ = store.save(&service_state);
 }
 
@@ -378,21 +378,20 @@ fn persist_closed_browser_health(state: &DaemonState) {
     let store = JsonServiceStateStore::new(path);
     let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
     let id = service_browser_id(&state.session_id);
-    let host = service_state
-        .browsers
-        .get(&id)
+    let previous = service_state.browsers.get(&id).cloned();
+    let host = previous
+        .as_ref()
         .map(|browser| browser.host)
         .unwrap_or(ServiceBrowserHost::LocalHeaded);
-    service_state.browsers.insert(
-        id.clone(),
-        BrowserProcess {
-            id,
-            host,
-            health: ServiceBrowserHealth::NotStarted,
-            active_session_ids: vec![state.session_id.clone()],
-            ..BrowserProcess::default()
-        },
-    );
+    let browser = BrowserProcess {
+        id: id.clone(),
+        host,
+        health: ServiceBrowserHealth::NotStarted,
+        active_session_ids: vec![state.session_id.clone()],
+        ..BrowserProcess::default()
+    };
+    record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    service_state.browsers.insert(id, browser);
     let _ = store.save(&service_state);
 }
 

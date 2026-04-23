@@ -8,7 +8,9 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::actions::{execute_command, DaemonState};
 use super::cancellation::CancellationToken as RunningJobCancel;
-use super::service_health::{reconcile_persisted_service_state, reconcile_service_state};
+use super::service_health::{
+    reconcile_persisted_service_state, reconcile_service_state, record_browser_health_changed_event,
+};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
@@ -342,8 +344,9 @@ fn persist_process_exited_browser_health(state: &DaemonState) {
     let store = JsonServiceStateStore::new(path);
     let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
     let id = service_browser_id(&state.session_id);
-    let existing = service_state.browsers.get(&id);
-    let host = existing
+    let previous = service_state.browsers.get(&id).cloned();
+    let host = previous
+        .as_ref()
         .map(|browser| browser.host)
         .unwrap_or(ServiceBrowserHost::LocalHeaded);
     let (pid, cdp_endpoint) = state
@@ -353,22 +356,24 @@ fn persist_process_exited_browser_health(state: &DaemonState) {
         .unwrap_or((None, None));
     let last_error = pid.map(|pid| format!("Browser process {} exited", pid));
 
-    service_state.browsers.insert(
-        id.clone(),
-        BrowserProcess {
-            id,
-            profile_id: existing.and_then(|browser| browser.profile_id.clone()),
-            host,
-            health: ServiceBrowserHealth::ProcessExited,
-            pid,
-            cdp_endpoint,
-            view_streams: existing
-                .map(|browser| browser.view_streams.clone())
-                .unwrap_or_default(),
-            active_session_ids: vec![state.session_id.clone()],
-            last_error,
-        },
-    );
+    let browser = BrowserProcess {
+        id: id.clone(),
+        profile_id: previous
+            .as_ref()
+            .and_then(|browser| browser.profile_id.clone()),
+        host,
+        health: ServiceBrowserHealth::ProcessExited,
+        pid,
+        cdp_endpoint,
+        view_streams: previous
+            .as_ref()
+            .map(|browser| browser.view_streams.clone())
+            .unwrap_or_default(),
+        active_session_ids: vec![state.session_id.clone()],
+        last_error,
+    };
+    record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    service_state.browsers.insert(id, browser);
     let _ = store.save(&service_state);
 }
 
@@ -859,7 +864,9 @@ async fn close_browser(state: &mut DaemonState) {
 }
 
 async fn cleanup_exited_browser(state: &mut DaemonState) {
-    persist_process_exited_browser_health(state);
+    if state.browser.is_some() {
+        persist_process_exited_browser_health(state);
+    }
     if let Some(ref mut mgr) = state.browser {
         let _ = mgr.close().await;
     }

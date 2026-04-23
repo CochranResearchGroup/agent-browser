@@ -270,33 +270,52 @@ fn push_service_event(state: &mut ServiceState, event: ServiceEvent) {
     }
 }
 
-fn record_health_transition_events(state: &mut ServiceState, before: &ServiceState) {
-    let mut events = Vec::new();
-    for (id, browser) in &state.browsers {
-        let Some(previous) = before.browsers.get(id) else {
-            continue;
-        };
-        if previous.health == browser.health && previous.last_error == browser.last_error {
-            continue;
-        }
-        events.push(ServiceEvent {
+pub fn record_browser_health_changed_event(
+    state: &mut ServiceState,
+    browser_id: &str,
+    previous: Option<&BrowserProcess>,
+    current: &BrowserProcess,
+) {
+    let Some(previous) = previous else {
+        return;
+    };
+    if previous.health == current.health && previous.last_error == current.last_error {
+        return;
+    }
+    push_service_event(
+        state,
+        ServiceEvent {
             kind: ServiceEventKind::BrowserHealthChanged,
             message: format!(
                 "Browser {} health changed from {:?} to {:?}",
-                id, previous.health, browser.health
+                browser_id, previous.health, current.health
             ),
-            browser_id: Some(id.clone()),
+            browser_id: Some(browser_id.to_string()),
             previous_health: Some(previous.health),
-            current_health: Some(browser.health),
+            current_health: Some(current.health),
             details: Some(serde_json::json!({
                 "previousError": previous.last_error,
-                "currentError": browser.last_error,
+                "currentError": current.last_error,
             })),
             ..new_service_event()
-        });
-    }
-    for event in events {
-        push_service_event(state, event);
+        },
+    );
+}
+
+fn record_health_transition_events(state: &mut ServiceState, before: &ServiceState) {
+    let transitions: Vec<(String, BrowserProcess, BrowserProcess)> = state
+        .browsers
+        .iter()
+        .filter_map(|(id, browser)| {
+            before
+                .browsers
+                .get(id)
+                .map(|previous| (id.clone(), previous.clone(), browser.clone()))
+        })
+        .collect();
+
+    for (id, previous, current) in transitions {
+        record_browser_health_changed_event(state, &id, Some(&previous), &current);
     }
 }
 

@@ -353,6 +353,12 @@ async fn e2e_service_detects_browser_crash_and_recovers_on_next_command() {
         "crash detection should record an operator-readable error: {:?}",
         crashed_browser.last_error
     );
+    assert!(detected.events.iter().any(|event| {
+        event.kind == super::service_model::ServiceEventKind::BrowserHealthChanged
+            && event.browser_id.as_deref() == Some(browser_id)
+            && event.previous_health == Some(ServiceBrowserHealth::Ready)
+            && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+    }));
 
     let recovered = handle
         .submit(json!({
@@ -400,6 +406,12 @@ async fn e2e_service_detects_browser_crash_and_recovers_on_next_command() {
         .expect("service browser record should exist after recovery");
     assert_eq!(browser.health, ServiceBrowserHealth::Ready);
     assert_eq!(browser.pid, Some(new_pid));
+    assert!(recovered_state.events.iter().any(|event| {
+        event.kind == super::service_model::ServiceEventKind::BrowserHealthChanged
+            && event.browser_id.as_deref() == Some(browser_id)
+            && event.previous_health == Some(ServiceBrowserHealth::ProcessExited)
+            && event.current_health == Some(ServiceBrowserHealth::Ready)
+    }));
     assert_eq!(
         recovered_state.jobs["e2e-crash-recovered-navigate"].state,
         JobState::Succeeded
