@@ -1057,14 +1057,20 @@ function IncidentDetailDialog({
 }: {
   incident: IncidentRecord | null;
   onOpenChange: (open: boolean) => void;
-  onAcknowledge: (incident: IncidentRecord) => void;
-  onResolve: (incident: IncidentRecord) => void;
+  onAcknowledge: (incident: IncidentRecord, note: string) => void;
+  onResolve: (incident: IncidentRecord, note: string) => void;
   acting: boolean;
 }) {
+  const [actionNote, setActionNote] = useState("");
   const serviceEventCount = incident?.serviceEvents.length ?? 0;
   const incidentCount = serviceEventCount + (incident?.jobEvents.length ?? 0);
   const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
   const handlingState = incident ? incidentHandlingState(incident) : "unacknowledged";
+
+  useEffect(() => {
+    setActionNote("");
+  }, [incident?.id]);
+
   return (
     <Dialog open={!!incident} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -1107,6 +1113,20 @@ function IncidentDetailDialog({
                   )}
                 </div>
               )}
+              {handlingState !== "resolved" && (
+                <div className="service-incident-action-note">
+                  <label htmlFor="service-incident-action-note">
+                    Operator note
+                  </label>
+                  <textarea
+                    id="service-incident-action-note"
+                    value={actionNote}
+                    onChange={(event) => setActionNote(event.target.value)}
+                    placeholder="Optional context for the acknowledgement or resolution"
+                    rows={3}
+                  />
+                </div>
+              )}
               <div className="service-incident-actions">
                 {handlingState === "unacknowledged" && (
                   <Button
@@ -1114,7 +1134,7 @@ function IncidentDetailDialog({
                     variant="outline"
                     className="rounded-full"
                     disabled={acting}
-                    onClick={() => onAcknowledge(incident)}
+                    onClick={() => onAcknowledge(incident, actionNote)}
                   >
                     {acting ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
                     Mark acknowledged
@@ -1125,7 +1145,7 @@ function IncidentDetailDialog({
                     type="button"
                     className="rounded-full"
                     disabled={acting}
-                    onClick={() => onResolve(incident)}
+                    onClick={() => onResolve(incident, actionNote)}
                   >
                     {acting ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
                     Mark resolved
@@ -1348,6 +1368,7 @@ export function ServicePanel() {
   const handleIncident = useCallback(async (
     incident: IncidentRecord,
     action: "acknowledge" | "resolve",
+    note: string,
   ) => {
     if (!canFetch || !incident.id) return;
     setActingIncidentId(incident.id);
@@ -1356,6 +1377,8 @@ export function ServicePanel() {
       const params = new URLSearchParams({
         by: operatorIdentity.trim() || activeSession || "dashboard",
       });
+      const trimmedNote = note.trim();
+      if (trimmedNote) params.set("note", trimmedNote);
       const resp = await fetch(
         `${serviceBase(activePort)}/incidents/${encodeURIComponent(incident.id)}/${action}?${params.toString()}`,
         { method: "POST" },
@@ -1477,8 +1500,8 @@ export function ServicePanel() {
         onOpenChange={(open) => {
           if (!open) setSelectedIncident(null);
         }}
-        onAcknowledge={(incident) => handleIncident(incident, "acknowledge")}
-        onResolve={(incident) => handleIncident(incident, "resolve")}
+        onAcknowledge={(incident, note) => handleIncident(incident, "acknowledge", note)}
+        onResolve={(incident, note) => handleIncident(incident, "resolve", note)}
         acting={!!selectedIncident && actingIncidentId === selectedIncident.id}
       />
       <BrowserDetailDialog
