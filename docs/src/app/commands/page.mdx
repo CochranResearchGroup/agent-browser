@@ -282,7 +282,7 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 
 The HTTP API loads the same persisted and configured service state as the CLI before relaying the request to the daemon.
 
-Set <code>service.reconcileIntervalMs</code>, pass <code>--service-reconcile-interval &lt;ms&gt;</code>, or set <code>AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS</code> to run the same persisted browser-health probes automatically in the daemon background.
+Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set <code>service.reconcileIntervalMs</code>, pass <code>--service-reconcile-interval &lt;ms&gt;</code>, or set <code>AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS</code> to change the interval. Use <code>0</code> to disable it.
 
 ## Debug
 

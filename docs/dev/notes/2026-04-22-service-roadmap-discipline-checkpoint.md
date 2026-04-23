@@ -89,6 +89,8 @@ The first backend-first correction is implemented on `service-model-phase-0`:
 - normal auto-launching browser commands now persist service browser records,
   so a plain `open` followed by `service reconcile` can discover live tabs from
   the stored service state
+- daemon-launched sessions now enable background service reconciliation every
+  60000 ms by default, while `0` remains the explicit opt-out
 
 This deliberately uses the existing service status, reconcile, HTTP API, and
 dashboard surfaces instead of adding more dashboard-only state.

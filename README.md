@@ -868,7 +868,7 @@ AGENT_BROWSER_CONFIG=./ci-config.json agent-browser open example.com
 
 All options from the table above can be set in the config file using camelCase keys (e.g., `--executable-path` becomes `"executablePath"`, `--proxy-bypass` becomes `"proxyBypass"`). Unknown keys are ignored for forward compatibility.
 
-Set `service.reconcileIntervalMs` in config, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run persisted service browser-health reconciliation in the daemon background. Use `0` to disable the CLI flag or environment override.
+Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
 Boolean flags accept an optional `true`/`false` value to override config settings. For example, `--headed false` disables `"headed": true` from config. A bare `--headed` is equivalent to `--headed true`.
 
@@ -1228,7 +1228,7 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 
 The HTTP API loads the same persisted and configured service state as the CLI before relaying the request to the daemon.
 
-Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background.
+Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
 ### WebSocket Protocol
 
@@ -1294,7 +1294,7 @@ agent-browser uses a client-daemon architecture:
 
 The daemon starts automatically on first command and persists between commands for fast subsequent operations. To auto-shutdown the daemon after a period of inactivity, set `AGENT_BROWSER_IDLE_TIMEOUT_MS` (value in milliseconds). When set, the daemon closes the browser and exits after receiving no commands for the specified duration.
 
-Set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run persisted service browser-health reconciliation periodically while the daemon is alive. The value is milliseconds; unset or `0` disables the background loop.
+Persisted service browser-health reconciliation runs every 60000 ms while the daemon is alive. Set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable the background loop.
 
 **Browser Engine:** Uses Chrome (from Chrome for Testing) by default. The `--engine` flag selects between `chrome` and `lightpanda`. Supported browsers: Chromium/Chrome (via CDP) and Safari (via WebDriver for iOS).
 

@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 const CONFIG_DIR: &str = ".agent-browser";
 const CONFIG_FILENAME: &str = "config.json";
 const PROJECT_CONFIG_FILENAME: &str = "agent-browser.json";
+/// Default daemon background interval for persisted service browser-health probes.
+const DEFAULT_SERVICE_RECONCILE_INTERVAL_MS: u64 = 60_000;
 
 /// Parse idle timeout from user-friendly format.
 /// Supports: "10s" (seconds), "3m" (minutes), "1h" (hours), or raw milliseconds.
@@ -52,6 +54,33 @@ fn parse_idle_timeout_value(value: Option<String>, source: &str) -> Option<Strin
             None
         }
     })
+}
+
+fn service_reconcile_interval_from_sources(config: &Config) -> Option<u64> {
+    if let Ok(raw) = env::var("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS") {
+        return match raw.parse::<u64>() {
+            Ok(0) => None,
+            Ok(ms) => Some(ms),
+            Err(_) => {
+                eprintln!(
+                    "{} invalid service reconcile interval from AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS: expected milliseconds, got {}",
+                    color::warning_indicator(),
+                    raw
+                );
+                Some(DEFAULT_SERVICE_RECONCILE_INTERVAL_MS)
+            }
+        };
+    }
+
+    if let Some(ms) = config
+        .service
+        .as_ref()
+        .and_then(|service| service.reconcile_interval_ms)
+    {
+        return (ms > 0).then_some(ms);
+    }
+
+    Some(DEFAULT_SERVICE_RECONCILE_INTERVAL_MS)
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -726,6 +755,7 @@ fn extract_config_path(args: &[String]) -> Option<Option<String>> {
         "--screenshot-quality",
         "--screenshot-format",
         "--idle-timeout",
+        "--service-reconcile-interval",
         "--model",
     ];
     let mut i = 0;
@@ -865,16 +895,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
     let service_state = service_state_from_store(config.service_state_snapshot());
-    let service_reconcile_interval_ms = env::var("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .or_else(|| {
-            config
-                .service
-                .as_ref()
-                .and_then(|service| service.reconcile_interval_ms)
-        })
-        .filter(|&ms| ms > 0);
+    let service_reconcile_interval_ms = service_reconcile_interval_from_sources(&config);
 
     let extensions_env = env::var("AGENT_BROWSER_EXTENSIONS")
         .ok()
@@ -1389,6 +1410,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
         "--screenshot-quality",
         "--screenshot-format",
         "--idle-timeout",
+        "--service-reconcile-interval",
         "--model",
     ];
 
@@ -1563,6 +1585,12 @@ mod tests {
     #[test]
     fn test_clean_args_removes_idle_timeout_before_command() {
         let cleaned = clean_args(&args("--idle-timeout 10s open example.com"));
+        assert_eq!(cleaned, vec!["open", "example.com"]);
+    }
+
+    #[test]
+    fn test_clean_args_removes_service_reconcile_interval_before_command() {
+        let cleaned = clean_args(&args("--service-reconcile-interval 1000 open example.com"));
         assert_eq!(cleaned, vec!["open", "example.com"]);
     }
 
@@ -2215,6 +2243,54 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_flags_defaults_service_reconcile_interval() {
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-service-reconcile-default-home-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS", "HOME"]);
+        guard.remove("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS");
+        guard.set("HOME", home.to_str().unwrap());
+
+        let flags = parse_flags(&args("service status"));
+
+        assert_eq!(
+            flags.service_reconcile_interval_ms,
+            Some(DEFAULT_SERVICE_RECONCILE_INTERVAL_MS)
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_reconcile_interval_zero_disables_default() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-service-reconcile-disable-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(&config_path, r#"{"service":{"reconcileIntervalMs":0}}"#).unwrap();
+
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS"]);
+        guard.remove("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS");
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
+
+        assert_eq!(flags.service_reconcile_interval_ms, None);
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
     fn test_service_reconcile_interval_flag_overrides_config() {
         let dir = std::env::temp_dir().join(format!(
             "agent-browser-service-reconcile-flag-test-{}",
@@ -2235,6 +2311,16 @@ mod tests {
         assert_eq!(flags.service_reconcile_interval_ms, Some(250));
         let _ = fs::remove_file(&config_path);
         let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_service_reconcile_interval_flag_zero_disables_default() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS"]);
+        guard.remove("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS");
+
+        let flags = parse_flags(&args("--service-reconcile-interval 0 service status"));
+
+        assert_eq!(flags.service_reconcile_interval_ms, None);
     }
 
     #[test]

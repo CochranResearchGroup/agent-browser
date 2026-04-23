@@ -228,7 +228,7 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_RUNTIME_PROFILE</code></td><td>Managed runtime profile name used for persistent browser state.</td><td><code>default</code></td></tr>
     <tr><td><code>AGENT_BROWSER_STREAM_PORT</code></td><td>Override the WebSocket streaming port. By default, an OS-assigned port is used. Set this to bind to a specific port (e.g., <code>9223</code>).</td><td>OS-assigned</td></tr>
     <tr><td><code>AGENT_BROWSER_IDLE_TIMEOUT_MS</code></td><td>Auto-shutdown the daemon after N ms of inactivity (no commands received). Useful for ephemeral environments.</td><td>(disabled)</td></tr>
-    <tr><td><code>AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS</code></td><td>Run persisted service browser-health reconciliation periodically while the daemon is alive.</td><td>(disabled)</td></tr>
+    <tr><td><code>AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS</code></td><td>Override the persisted service browser-health reconciliation interval in milliseconds. Set <code>0</code> to disable the daemon background loop.</td><td><code>60000</code></td></tr>
     <tr><td><code>AGENT_BROWSER_IOS_DEVICE</code></td><td>Default iOS device name for the <code>ios</code> provider.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_IOS_UDID</code></td><td>Default iOS device UDID for the <code>ios</code> provider.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_ENV_FILE</code></td><td>Optional dotenv file loaded before startup for agent-browser secrets.</td><td><code>~/.agent-browser/.env</code> if present</td></tr>

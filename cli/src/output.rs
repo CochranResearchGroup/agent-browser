@@ -2586,7 +2586,7 @@ Notes:
   - The bounded events log records reconciliation summaries and browser health transitions.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes the same surface at /api/service/status, /api/service/events, and /api/service/reconcile.
-  - Set --service-reconcile-interval <ms> or service.reconcileIntervalMs to run probes in the daemon background.
+  - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 
@@ -3053,7 +3053,7 @@ Options:
   --confirm-actions <list>   Categories requiring confirmation (or AGENT_BROWSER_CONFIRM_ACTIONS)
   --confirm-interactive      Interactive confirmation prompts; auto-denies if stdin is not a TTY (or AGENT_BROWSER_CONFIRM_INTERACTIVE)
   --engine <name>            Browser engine: chrome (default), lightpanda (or AGENT_BROWSER_ENGINE)
-  --service-reconcile-interval <ms> Background service browser-health reconciliation interval; 0 disables it
+  --service-reconcile-interval <ms> Background service browser-health reconciliation interval (default: 60000); 0 disables it
   --no-auto-dialog           Disable automatic dismissal of alert/beforeunload dialogs (or AGENT_BROWSER_NO_AUTO_DIALOG)
   --model <name>             AI model for chat (or AI_GATEWAY_MODEL env)
   -v, --verbose              Show tool commands and their raw output
@@ -3142,7 +3142,7 @@ Environment:
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM session encryption
   AGENT_BROWSER_STREAM_PORT      Override WebSocket streaming port (default: OS-assigned)
   AGENT_BROWSER_IDLE_TIMEOUT_MS  Auto-shutdown daemon after N ms of inactivity (disabled by default)
-  AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS Background service browser-health reconciliation interval in ms
+  AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS Background service browser-health reconciliation interval in ms (default: 60000; 0 disables it)
   AGENT_BROWSER_IOS_DEVICE       Default iOS device name
   AGENT_BROWSER_IOS_UDID         Default iOS device UDID
   AGENT_BROWSER_RUNTIME_PROFILE  Managed runtime profile name
