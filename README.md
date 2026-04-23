@@ -800,11 +800,12 @@ agent-browser dashboard stop
 The dashboard runs as a standalone background process on port 4848, independent of browser sessions. It stays available even when no sessions are running. All sessions automatically stream to the dashboard.
 
 The dashboard displays:
-- **Live viewport** -- real-time JPEG frames from the browser
-- **Activity feed** -- chronological command/result stream with timing and expandable details
-- **Console output** -- browser console messages (log, warn, error)
-- **Session creation** -- create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
-- **AI Chat** -- chat with an AI assistant directly in the dashboard (requires Vercel AI Gateway configuration)
+- **Live viewport** — real-time JPEG frames from the browser
+- **Service view** — worker and browser health cards, reconciliation status, managed entity counts, recent service events, and a reconcile action
+- **Activity feed** — chronological command/result stream with timing and expandable details
+- **Console output** — browser console messages (log, warn, error)
+- **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
+- **AI Chat** — chat with an AI assistant directly in the dashboard (requires Vercel AI Gateway configuration)
 
 ### AI Chat
 

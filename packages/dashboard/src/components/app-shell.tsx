@@ -36,11 +36,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { label: "Overview", icon: LayoutDashboard, active: true },
-  { label: "Browsers", icon: MonitorDot },
-  { label: "Service", icon: ShieldCheck },
-  { label: "Activity", icon: Activity },
+export type DashboardSection = "overview" | "browsers" | "service" | "activity";
+
+const NAV_ITEMS: { id: DashboardSection; label: string; icon: typeof LayoutDashboard }[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "browsers", label: "Browsers", icon: MonitorDot },
+  { id: "service", label: "Service", icon: ShieldCheck },
+  { id: "activity", label: "Activity", icon: Activity },
 ];
 
 function StatusChip({
@@ -75,7 +77,15 @@ function currentHost(url: string): string {
   }
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  activeSection = "overview",
+  onSectionChange,
+  children,
+}: {
+  activeSection?: DashboardSection;
+  onSectionChange?: (section: DashboardSection) => void;
+  children: ReactNode;
+}) {
   const sessions = useAtomValue(sessionsAtom);
   const activeSession = useAtomValue(activeSessionInfoAtom);
   const streamConnected = useAtomValue(streamConnectedAtom);
@@ -116,7 +126,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               key={item.label}
               type="button"
-              className={cn("dashboard-nav-item", item.active && "dashboard-nav-item-active")}
+              onClick={() => onSectionChange?.(item.id)}
+              className={cn(
+                "dashboard-nav-item",
+                activeSection === item.id && "dashboard-nav-item-active",
+              )}
             >
               <item.icon className="size-3.5" />
               <span>{item.label}</span>

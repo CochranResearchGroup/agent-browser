@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import { activePortAtom, sessionsAtom, newSessionDialogAtom } from "@/store/sessions";
 import { useSessionsSync } from "@/store/sessions";
@@ -16,7 +17,8 @@ import { StoragePanel } from "@/components/storage-panel";
 import { ExtensionsPanel } from "@/components/extensions-panel";
 import { NetworkPanel } from "@/components/network-panel";
 import { SessionTree } from "@/components/session-tree";
-import { AppShell } from "@/components/app-shell";
+import { AppShell, type DashboardSection } from "@/components/app-shell";
+import { ServicePanel } from "@/components/service-panel";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -27,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
 export default function DashboardPage() {
+  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -39,6 +42,11 @@ export default function DashboardPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const hasConsoleErrors = useAtomValue(hasConsoleErrorsAtom);
   const activeExtensions = useAtomValue(activeExtensionsAtom);
+  const primaryPanel = activeSection === "service"
+    ? <ServicePanel />
+    : activeSection === "activity"
+      ? <ActivityFeed />
+      : <Viewport />;
 
   const sidePanel = (
     <Tabs defaultValue="chat" className="flex h-full flex-col">
@@ -46,6 +54,7 @@ export default function DashboardPage() {
         <TabsList variant="line" className="h-7 w-full">
           <TabsTrigger value="chat" className="text-[11px]">Chat</TabsTrigger>
           <TabsTrigger value="activity" className="text-[11px]">Activity</TabsTrigger>
+          <TabsTrigger value="service" className="text-[11px]">Service</TabsTrigger>
           <TabsTrigger value="console" className="text-[11px]">
             Console
             {hasConsoleErrors && (
@@ -64,6 +73,9 @@ export default function DashboardPage() {
       </div>
       <TabsContent value="activity" className="min-h-0 flex-1 overflow-hidden">
         <ActivityFeed />
+      </TabsContent>
+      <TabsContent value="service" className="min-h-0 flex-1 overflow-hidden">
+        <ServicePanel />
       </TabsContent>
       <TabsContent value="console" className="min-h-0 flex-1 overflow-hidden">
         <ConsolePanel />
@@ -86,7 +98,7 @@ export default function DashboardPage() {
   if (isDesktop) {
     if (!hasSessions) {
       return (
-        <AppShell>
+        <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
           <ResizablePanelGroup
             orientation="horizontal"
             className="dashboard-panel-grid"
@@ -128,7 +140,7 @@ export default function DashboardPage() {
     }
 
     return (
-      <AppShell>
+      <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
         <ResizablePanelGroup
           orientation="horizontal"
           className="dashboard-panel-grid"
@@ -141,7 +153,7 @@ export default function DashboardPage() {
           <ResizableHandle />
           <ResizablePanel id="viewport" defaultSize="55%" minSize="30%">
             <div className="dashboard-pane dashboard-pane-viewport">
-              <Viewport />
+              {primaryPanel}
             </div>
           </ResizablePanel>
           <ResizableHandle />
@@ -156,13 +168,24 @@ export default function DashboardPage() {
   }
 
   return (
-    <AppShell>
-      <Tabs defaultValue="viewport" className="min-h-0 flex-1">
+    <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
+      <Tabs
+        value={activeSection === "service" ? "service" : activeSection === "activity" ? "activity" : "viewport"}
+        onValueChange={(value) => {
+          if (value === "service" || value === "activity") {
+            setActiveSection(value);
+          } else {
+            setActiveSection("overview");
+          }
+        }}
+        className="min-h-0 flex-1"
+      >
         <div className="shrink-0 px-3 pt-3">
           <TabsList className="w-full rounded-2xl bg-white/60 p-1 shadow-sm ring-1 ring-foreground/10 backdrop-blur-xl dark:bg-white/5">
             <TabsTrigger value="sessions">Sessions</TabsTrigger>
             <TabsTrigger value="viewport">Viewport</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="service">Service</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="sessions" className="min-h-0 overflow-hidden p-3">
@@ -173,6 +196,11 @@ export default function DashboardPage() {
         </TabsContent>
         <TabsContent value="activity" className="min-h-0 overflow-hidden p-3">
           {sidePanel}
+        </TabsContent>
+        <TabsContent value="service" className="min-h-0 overflow-hidden p-3">
+          <div className="dashboard-pane">
+            <ServicePanel />
+          </div>
         </TabsContent>
       </Tabs>
     </AppShell>
