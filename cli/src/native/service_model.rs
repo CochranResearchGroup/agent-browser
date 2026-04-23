@@ -130,6 +130,8 @@ pub enum ServiceEventKind {
     BrowserHealthChanged,
     TabLifecycleChanged,
     ReconciliationError,
+    IncidentAcknowledged,
+    IncidentResolved,
 }
 
 fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
@@ -141,7 +143,9 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
         .filter(|event| service_event_is_incident(event))
     {
         let browser_id = event.browser_id.clone();
-        let key = browser_id.clone().unwrap_or_else(|| "service".to_string());
+        let key = service_event_incident_id(event)
+            .or(browser_id.clone())
+            .unwrap_or_else(|| "service".to_string());
         let incident = grouped
             .entry(key.clone())
             .or_insert_with(|| ServiceIncident {
@@ -162,7 +166,9 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
                 ..ServiceIncident::default()
             });
 
-        if incident_is_newer(&event.timestamp, &incident.latest_timestamp) {
+        if !service_event_is_handling(event.kind)
+            && incident_is_newer(&event.timestamp, &incident.latest_timestamp)
+        {
             incident.latest_timestamp = event.timestamp.clone();
             incident.latest_message = event.message.clone();
             incident.latest_kind = service_event_kind_name(event.kind).to_string();
@@ -300,12 +306,30 @@ fn incident_is_newer(candidate: &str, current: &str) -> bool {
 fn service_event_is_incident(event: &ServiceEvent) -> bool {
     match event.kind {
         ServiceEventKind::ReconciliationError => true,
+        ServiceEventKind::IncidentAcknowledged | ServiceEventKind::IncidentResolved => true,
         ServiceEventKind::BrowserHealthChanged => {
             browser_health_is_bad(event.current_health)
                 || browser_health_is_recovery(event.previous_health, event.current_health)
         }
         ServiceEventKind::Reconciliation | ServiceEventKind::TabLifecycleChanged => false,
     }
+}
+
+fn service_event_is_handling(kind: ServiceEventKind) -> bool {
+    matches!(
+        kind,
+        ServiceEventKind::IncidentAcknowledged | ServiceEventKind::IncidentResolved
+    )
+}
+
+fn service_event_incident_id(event: &ServiceEvent) -> Option<String> {
+    event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("incidentId"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
 }
 
 fn browser_health_is_bad(value: Option<BrowserHealth>) -> bool {
@@ -377,6 +401,8 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
+        ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
+        ServiceEventKind::IncidentResolved => "incident_resolved",
     }
 }
 

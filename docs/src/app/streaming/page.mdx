@@ -52,7 +52,7 @@ curl "http://127.0.0.1:9223/api/service/events?kind=tab_lifecycle_changed"
 curl -X POST "http://127.0.0.1:9223/api/service/reconcile"
 ```
 
-`GET /api/service/status` returns the same service snapshot as `agent-browser service status`. `GET /api/service/jobs` accepts `id`, `limit`, `state`, `action`, and `since` query parameters. `GET /api/service/jobs/<job-id>` returns one retained job by ID. `POST /api/service/jobs/<job-id>/cancel` marks a queued job cancelled before dispatch and rejects running or terminal jobs. `GET /api/service/events` accepts `limit`, `kind`, `browser-id`, `browser_id`, `browserId`, and `since` query parameters. Valid event kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, and `reconciliation_error`. `POST /api/service/reconcile` runs the same persisted browser health probes as `agent-browser service reconcile`.
+`GET /api/service/status` returns the same service snapshot as `agent-browser service status`. `GET /api/service/jobs` accepts `id`, `limit`, `state`, `action`, and `since` query parameters. `GET /api/service/jobs/<job-id>` returns one retained job by ID. `POST /api/service/jobs/<job-id>/cancel` marks a queued job cancelled before dispatch and rejects running or terminal jobs. `GET /api/service/events` accepts `limit`, `kind`, `browser-id`, `browser_id`, `browserId`, and `since` query parameters. Valid event kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, `reconciliation_error`, `incident_acknowledged`, and `incident_resolved`. `POST /api/service/reconcile` runs the same persisted browser health probes as `agent-browser service reconcile`.
 
 ## Relationship to screencast commands
 

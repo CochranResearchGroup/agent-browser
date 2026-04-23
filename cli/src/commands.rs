@@ -1325,7 +1325,9 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 "reconciliation"
                                 | "browser_health_changed"
                                 | "tab_lifecycle_changed"
-                                | "reconciliation_error" => {
+                                | "reconciliation_error"
+                                | "incident_acknowledged"
+                                | "incident_resolved" => {
                                     cmd["kind"] = json!(raw);
                                 }
                                 _ => {
@@ -4699,6 +4701,23 @@ mod tests {
         .unwrap();
 
         assert_eq!(cmd["kind"], "tab_lifecycle_changed");
+    }
+
+    #[test]
+    fn test_service_events_accepts_incident_handling_kinds() {
+        let acknowledged = parse_command(
+            &args("service events --kind incident_acknowledged"),
+            &default_flags(),
+        )
+        .unwrap();
+        let resolved = parse_command(
+            &args("service events --kind incident_resolved"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(acknowledged["kind"], "incident_acknowledged");
+        assert_eq!(resolved["kind"], "incident_resolved");
     }
 
     #[test]

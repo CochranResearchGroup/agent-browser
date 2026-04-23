@@ -67,6 +67,7 @@ const AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS: u64 = 100;
 /// Time spent trying targeted username selectors before broad text-input
 /// fallback selectors are allowed.
 const AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS: u64 = 5_000;
+const MAX_SERVICE_EVENTS: usize = 100;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum CloseBehavior {
@@ -5839,18 +5840,27 @@ async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, Strin
         .ok_or("Missing incidentId")?;
     let by = cmd.get("by").and_then(|value| value.as_str());
     let note = cmd.get("note").and_then(|value| value.as_str());
-    let incident = mutate_persisted_service_incident(incident_id, |incident| {
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+    let incident = mutate_persisted_service_incident(incident_id, |state, incident_index| {
+        let incident = &mut state.incidents[incident_index];
         if incident.acknowledged_at.is_none() {
-            incident.acknowledged_at = Some(service_now_timestamp());
+            incident.acknowledged_at = Some(timestamp.clone());
         }
-        incident.acknowledged_by = Some(
-            by.filter(|value| !value.trim().is_empty())
-                .unwrap_or("operator")
-                .to_string(),
+        incident.acknowledged_by = Some(actor.clone());
+        incident.acknowledgement_note = note.clone();
+        let incident = incident.clone();
+        push_service_event_bounded(
+            state,
+            service_incident_handling_event(
+                &incident,
+                ServiceEventKind::IncidentAcknowledged,
+                &timestamp,
+                &actor,
+                note.as_deref(),
+            ),
         );
-        incident.acknowledgement_note = note
-            .filter(|value| !value.trim().is_empty())
-            .map(str::to_string);
     })?;
 
     Ok(json!({
@@ -5866,26 +5876,31 @@ async fn handle_service_incident_resolve(cmd: &Value) -> Result<Value, String> {
         .ok_or("Missing incidentId")?;
     let by = cmd.get("by").and_then(|value| value.as_str());
     let note = cmd.get("note").and_then(|value| value.as_str());
-    let incident = mutate_persisted_service_incident(incident_id, |incident| {
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+    let incident = mutate_persisted_service_incident(incident_id, |state, incident_index| {
+        let incident = &mut state.incidents[incident_index];
         if incident.acknowledged_at.is_none() {
-            incident.acknowledged_at = Some(service_now_timestamp());
+            incident.acknowledged_at = Some(timestamp.clone());
         }
         if incident.acknowledged_by.is_none() {
-            incident.acknowledged_by = Some(
-                by.filter(|value| !value.trim().is_empty())
-                    .unwrap_or("operator")
-                    .to_string(),
-            );
+            incident.acknowledged_by = Some(actor.clone());
         }
-        incident.resolved_at = Some(service_now_timestamp());
-        incident.resolved_by = Some(
-            by.filter(|value| !value.trim().is_empty())
-                .unwrap_or("operator")
-                .to_string(),
+        incident.resolved_at = Some(timestamp.clone());
+        incident.resolved_by = Some(actor.clone());
+        incident.resolution_note = note.clone();
+        let incident = incident.clone();
+        push_service_event_bounded(
+            state,
+            service_incident_handling_event(
+                &incident,
+                ServiceEventKind::IncidentResolved,
+                &timestamp,
+                &actor,
+                note.as_deref(),
+            ),
         );
-        incident.resolution_note = note
-            .filter(|value| !value.trim().is_empty())
-            .map(str::to_string);
     })?;
 
     Ok(json!({
@@ -5896,7 +5911,7 @@ async fn handle_service_incident_resolve(cmd: &Value) -> Result<Value, String> {
 
 fn mutate_persisted_service_incident(
     incident_id: &str,
-    mutator: impl FnOnce(&mut super::service_model::ServiceIncident),
+    mutator: impl FnOnce(&mut ServiceState, usize),
 ) -> Result<super::service_model::ServiceIncident, String> {
     let path = JsonServiceStateStore::default_path()
         .map_err(|_| "Unable to resolve service state path".to_string())?;
@@ -5904,15 +5919,75 @@ fn mutate_persisted_service_incident(
     let mut state = store
         .load()
         .map_err(|err| format!("Unable to load service state: {}", err))?;
+    state.refresh_derived_views();
+    let incident_index = state
+        .incidents
+        .iter()
+        .position(|incident| incident.id == incident_id)
+        .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
+    mutator(&mut state, incident_index);
+    state.refresh_derived_views();
     let incident = state
         .incidents
-        .iter_mut()
+        .iter()
         .find(|incident| incident.id == incident_id)
+        .cloned()
         .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
-    mutator(incident);
-    let incident = incident.clone();
     store.save(&state)?;
     Ok(incident)
+}
+
+fn normalized_operator(value: Option<&str>) -> String {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("operator")
+        .to_string()
+}
+
+fn normalized_note(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn service_incident_handling_event(
+    incident: &super::service_model::ServiceIncident,
+    kind: ServiceEventKind,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> ServiceEvent {
+    let action = match kind {
+        ServiceEventKind::IncidentResolved => "resolved",
+        _ => "acknowledged",
+    };
+    let mut details = json!({
+        "incidentId": incident.id,
+        "actor": actor,
+        "action": action,
+    });
+    if let Some(note) = note {
+        details["note"] = json!(note);
+    }
+    ServiceEvent {
+        id: format!("event-{}", uuid::Uuid::new_v4()),
+        timestamp: timestamp.to_string(),
+        kind,
+        message: format!("Incident {} {}", incident.label, action),
+        browser_id: incident.browser_id.clone(),
+        details: Some(details),
+        ..ServiceEvent::default()
+    }
+}
+
+fn push_service_event_bounded(state: &mut ServiceState, event: ServiceEvent) {
+    state.events.push(event);
+    if state.events.len() > MAX_SERVICE_EVENTS {
+        let excess = state.events.len() - MAX_SERVICE_EVENTS;
+        state.events.drain(0..excess);
+    }
 }
 
 async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
@@ -6108,6 +6183,8 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
+        ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
+        ServiceEventKind::IncidentResolved => "incident_resolved",
     }
 }
 
@@ -10186,6 +10263,13 @@ mod tests {
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["incident"]["acknowledgedBy"], "operator");
         assert_eq!(result["data"]["incident"]["acknowledgementNote"], "triaged");
+        assert_eq!(
+            result["data"]["incident"]["eventIds"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
         let persisted = store.load().unwrap();
         assert_eq!(
             persisted.incidents[0].acknowledged_by.as_deref(),
@@ -10195,6 +10279,15 @@ mod tests {
             persisted.incidents[0].acknowledgement_note.as_deref(),
             Some("triaged")
         );
+        let event = persisted.events.last().unwrap();
+        assert_eq!(
+            event.kind,
+            crate::native::service_model::ServiceEventKind::IncidentAcknowledged
+        );
+        assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
+        assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
+        assert_eq!(event.details.as_ref().unwrap()["note"], "triaged");
         let _ = fs::remove_dir_all(&home);
     }
 
@@ -10263,6 +10356,15 @@ mod tests {
             persisted.incidents[0].resolution_note.as_deref(),
             Some("recovered")
         );
+        let event = persisted.events.last().unwrap();
+        assert_eq!(
+            event.kind,
+            crate::native::service_model::ServiceEventKind::IncidentResolved
+        );
+        assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
+        assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
+        assert_eq!(event.details.as_ref().unwrap()["note"], "recovered");
         let _ = fs::remove_dir_all(&home);
     }
 

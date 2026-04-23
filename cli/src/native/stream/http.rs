@@ -413,7 +413,9 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
                 "reconciliation"
                 | "browser_health_changed"
                 | "tab_lifecycle_changed"
-                | "reconciliation_error" => {
+                | "reconciliation_error"
+                | "incident_acknowledged"
+                | "incident_resolved" => {
                     cmd["kind"] = json!(value);
                 }
                 _ => return Err(format!("Invalid kind value: {}", value)),
@@ -682,6 +684,15 @@ mod tests {
         let cmd = service_events_command(Some("kind=tab_lifecycle_changed")).unwrap();
 
         assert_eq!(cmd["kind"], "tab_lifecycle_changed");
+    }
+
+    #[test]
+    fn service_events_command_accepts_incident_handling_kinds() {
+        let acknowledged = service_events_command(Some("kind=incident_acknowledged")).unwrap();
+        let resolved = service_events_command(Some("kind=incident_resolved")).unwrap();
+
+        assert_eq!(acknowledged["kind"], "incident_acknowledged");
+        assert_eq!(resolved["kind"], "incident_resolved");
     }
 
     #[test]

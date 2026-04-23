@@ -52,6 +52,8 @@ type ServiceEvent = {
     | "browser_health_changed"
     | "tab_lifecycle_changed"
     | "reconciliation_error"
+    | "incident_acknowledged"
+    | "incident_resolved"
     | string;
   message: string;
   browserId?: string | null;
@@ -201,7 +203,9 @@ type EventKindFilter =
   | "reconciliation"
   | "browser_health_changed"
   | "tab_lifecycle_changed"
-  | "reconciliation_error";
+  | "reconciliation_error"
+  | "incident_acknowledged"
+  | "incident_resolved";
 type EventWindowFilter = "all" | "15m" | "1h" | "24h";
 type EventLimit = 8 | 20 | 50;
 type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
@@ -219,6 +223,8 @@ const EVENT_KIND_OPTIONS: Array<{ value: EventKindFilter; label: string }> = [
   { value: "browser_health_changed", label: "Health" },
   { value: "tab_lifecycle_changed", label: "Tabs" },
   { value: "reconciliation_error", label: "Errors" },
+  { value: "incident_acknowledged", label: "Ack" },
+  { value: "incident_resolved", label: "Resolved" },
 ];
 
 const EVENT_WINDOW_OPTIONS: Array<{ value: EventWindowFilter; label: string; milliseconds?: number }> = [

@@ -219,6 +219,7 @@ mod tests {
             vec![crate::native::service_model::ServiceIncident {
                 id: "service".to_string(),
                 label: "Service incidents".to_string(),
+                state: crate::native::service_model::ServiceIncidentState::Service,
                 latest_timestamp: "2026-04-22T00:00:00Z".to_string(),
                 latest_message: "Failed to reconcile service state".to_string(),
                 latest_kind: "reconciliation_error".to_string(),

@@ -2763,6 +2763,7 @@ Notes:
   - Recent control-plane requests are retained as bounded job records with timestamps and final state.
   - Derived grouped incidents are retained with incident state, latest kind, and related event/job ids.
   - Incident operator metadata includes acknowledgement and resolution timestamps, actor names, and notes.
+  - Acknowledgement and resolution append incident_acknowledged and incident_resolved service events.
   - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
   - Incident filters match incident state, operator handling state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
