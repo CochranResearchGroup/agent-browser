@@ -1289,6 +1289,25 @@ mod tests {
             Some("Service job was cancelled while running")
         );
 
+        let follow_up = handle
+            .submit(json!({
+                "id": "test-after-running-cancel",
+                "action": "state_list",
+            }))
+            .await;
+
+        assert_eq!(
+            follow_up.get("success").and_then(|v| v.as_bool()),
+            Some(true),
+            "worker should accept follow-up work after running cancellation: {}",
+            follow_up
+        );
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.jobs["test-after-running-cancel"].state,
+            JobState::Succeeded
+        );
+
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
     }
