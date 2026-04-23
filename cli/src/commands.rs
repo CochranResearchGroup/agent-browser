@@ -1157,7 +1157,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }
             Some("incidents") => {
                 let usage =
-                    "service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]";
+                    "service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]";
                 let mut cmd = json!({
                     "id": id,
                     "action": "service_incidents",
@@ -1205,6 +1205,29 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 _ => {
                                     return Err(ParseError::InvalidValue {
                                         message: format!("Invalid --state value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--handling-state" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --handling-state".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "unacknowledged" | "acknowledged" | "resolved" => {
+                                    cmd["handlingState"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!(
+                                            "Invalid --handling-state value: {}",
+                                            raw
+                                        ),
                                         usage,
                                     });
                                 }
@@ -4594,7 +4617,7 @@ mod tests {
     fn test_service_incidents_filters() {
         let cmd = parse_command(
             &args(
-                "service incidents --limit 7 --state active --kind service_job_timeout --browser-id browser-1 --since 2026-04-22T00:00:00Z",
+                "service incidents --limit 7 --state active --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --since 2026-04-22T00:00:00Z",
             ),
             &default_flags(),
         )
@@ -4603,6 +4626,7 @@ mod tests {
         assert_eq!(cmd["action"], "service_incidents");
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");
+        assert_eq!(cmd["handlingState"], "unacknowledged");
         assert_eq!(cmd["kind"], "service_job_timeout");
         assert_eq!(cmd["browserId"], "browser-1");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
@@ -4632,6 +4656,17 @@ mod tests {
     fn test_service_incidents_reject_invalid_kind() {
         let err = parse_command(
             &args("service incidents --kind tab_lifecycle_changed"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_handling_state() {
+        let err = parse_command(
+            &args("service incidents --handling-state active"),
             &default_flags(),
         )
         .unwrap_err();

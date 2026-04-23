@@ -455,6 +455,12 @@ fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
                 }
                 _ => return Err(format!("Invalid state value: {}", value)),
             },
+            "handlingState" | "handling_state" | "handling-state" => match value.as_str() {
+                "unacknowledged" | "acknowledged" | "resolved" => {
+                    cmd["handlingState"] = json!(value);
+                }
+                _ => return Err(format!("Invalid handlingState value: {}", value)),
+            },
             "kind" => match value.as_str() {
                 "browser_health_changed"
                 | "reconciliation_error"
@@ -681,7 +687,7 @@ mod tests {
     #[test]
     fn service_incidents_command_maps_query_filters() {
         let cmd = service_incidents_command(Some(
-            "id=incident-1&limit=7&state=active&kind=service_job_timeout&browser-id=browser-1&since=2026-04-22T00%3A00%3A00Z",
+            "id=incident-1&limit=7&state=active&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&since=2026-04-22T00%3A00%3A00Z",
         ))
         .unwrap();
 
@@ -689,6 +695,7 @@ mod tests {
         assert_eq!(cmd["incidentId"], "incident-1");
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");
+        assert_eq!(cmd["handlingState"], "unacknowledged");
         assert_eq!(cmd["kind"], "service_job_timeout");
         assert_eq!(cmd["browserId"], "browser-1");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
@@ -806,6 +813,13 @@ mod tests {
         let err = service_incidents_command(Some("state=failed")).unwrap_err();
 
         assert!(err.contains("Invalid state value"));
+    }
+
+    #[test]
+    fn service_incidents_command_rejects_invalid_handling_state() {
+        let err = service_incidents_command(Some("handling-state=active")).unwrap_err();
+
+        assert!(err.contains("Invalid handlingState value"));
     }
 
     #[test]

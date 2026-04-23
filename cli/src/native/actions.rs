@@ -5971,6 +5971,7 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         .map(|value| value as usize)
         .unwrap_or(20);
     let state = cmd.get("state").and_then(|value| value.as_str());
+    let handling_state = cmd.get("handlingState").and_then(|value| value.as_str());
     let kind = cmd.get("kind").and_then(|value| value.as_str());
     let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
     let since = cmd
@@ -6017,6 +6018,9 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         .into_iter()
         .filter(|incident| {
             state.is_none_or(|expected| service_incident_state_name(incident.state) == expected)
+                && handling_state.is_none_or(|expected| {
+                    service_incident_handling_state_name(incident) == expected
+                })
                 && kind.is_none_or(|expected| incident.latest_kind == expected)
                 && browser_id
                     .is_none_or(|expected| incident.browser_id.as_deref() == Some(expected))
@@ -6123,6 +6127,18 @@ fn service_incident_state_name(state: super::service_model::ServiceIncidentState
         super::service_model::ServiceIncidentState::Active => "active",
         super::service_model::ServiceIncidentState::Recovered => "recovered",
         super::service_model::ServiceIncidentState::Service => "service",
+    }
+}
+
+fn service_incident_handling_state_name(
+    incident: &super::service_model::ServiceIncident,
+) -> &'static str {
+    if incident.resolved_at.is_some() {
+        "resolved"
+    } else if incident.acknowledged_at.is_some() {
+        "acknowledged"
+    } else {
+        "unacknowledged"
     }
 }
 
@@ -10016,6 +10032,56 @@ mod tests {
         assert_eq!(result["data"]["matched"], 1);
         assert_eq!(result["data"]["total"], 4);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1-match");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_filter_by_handling_state() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-2b",
+            "handlingState": "acknowledged",
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "incident-unack",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "latestTimestamp": "2026-04-22T00:00:00Z",
+                        "latestMessage": "Needs attention",
+                        "latestKind": "reconciliation_error"
+                    },
+                    {
+                        "id": "incident-ack",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "acknowledgedAt": "2026-04-22T00:01:00Z",
+                        "acknowledgedBy": "operator",
+                        "latestTimestamp": "2026-04-22T00:01:00Z",
+                        "latestMessage": "Triaged",
+                        "latestKind": "reconciliation_error"
+                    },
+                    {
+                        "id": "incident-resolved",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "acknowledgedAt": "2026-04-22T00:02:00Z",
+                        "resolvedAt": "2026-04-22T00:03:00Z",
+                        "resolvedBy": "operator",
+                        "latestTimestamp": "2026-04-22T00:03:00Z",
+                        "latestMessage": "Handled",
+                        "latestKind": "reconciliation_error"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["incidents"][0]["id"], "incident-ack");
         assert!(state.browser.is_none());
     }
 

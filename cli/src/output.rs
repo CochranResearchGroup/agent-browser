@@ -2740,7 +2740,7 @@ Usage:
   agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
   agent-browser service resolve <incident-id> [--by <text>] [--note <text>]
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
-  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
+  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
 
 Commands:
@@ -2763,7 +2763,7 @@ Notes:
   - Incident operator metadata includes acknowledgement and resolution timestamps, actor names, and notes.
   - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
-  - Incident filters match incident state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
+  - Incident filters match incident state, operator handling state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
@@ -2791,8 +2791,9 @@ Examples:
   agent-browser service jobs --state failed --action navigate
   agent-browser service incidents --limit 20
   agent-browser service incidents --id browser-1
+  agent-browser service incidents --handling-state unacknowledged
   agent-browser service incidents --state active --kind service_job_timeout
-  agent-browser service incidents --state recovered --browser-id browser-1
+  agent-browser service incidents --state recovered --handling-state resolved --browser-id browser-1
   agent-browser service events --limit 20
   agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
   agent-browser service events --kind tab_lifecycle_changed
