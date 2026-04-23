@@ -166,6 +166,19 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" && path == "/api/service/incidents" {
+        let cmd = match service_incidents_command(query) {
+            Ok(cmd) => cmd,
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                return;
+            }
+        };
+        let result = relay_service_command(session_name, cmd).await;
+        write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
+    }
+
     if method == "GET" && path.starts_with("/api/service/jobs/") {
         let Some(job_id) = path
             .strip_prefix("/api/service/jobs/")
@@ -340,6 +353,54 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
             }
             "" => {}
             _ => return Err(format!("Unknown service events query parameter: {}", key)),
+        }
+    }
+
+    Ok(cmd)
+}
+
+fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
+    let mut cmd = json!({
+        "action": "service_incidents",
+        "serviceState": load_service_state_snapshot(),
+    });
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "limit" => {
+                let limit = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("Invalid limit value: {}", value))?;
+                cmd["limit"] = json!(limit);
+            }
+            "state" => match value.as_str() {
+                "active" | "recovered" | "service" => {
+                    cmd["state"] = json!(value);
+                }
+                _ => return Err(format!("Invalid state value: {}", value)),
+            },
+            "kind" => match value.as_str() {
+                "browser_health_changed"
+                | "reconciliation_error"
+                | "service_job_timeout"
+                | "service_job_cancelled" => {
+                    cmd["kind"] = json!(value);
+                }
+                _ => return Err(format!("Invalid kind value: {}", value)),
+            },
+            "browserId" | "browser_id" | "browser-id" => {
+                cmd["browserId"] = json!(value);
+            }
+            "since" => {
+                cmd["since"] = json!(value);
+            }
+            "" => {}
+            _ => {
+                return Err(format!(
+                    "Unknown service incidents query parameter: {}",
+                    key
+                ))
+            }
         }
     }
 
@@ -542,6 +603,22 @@ mod tests {
     }
 
     #[test]
+    fn service_incidents_command_maps_query_filters() {
+        let cmd = service_incidents_command(Some(
+            "limit=7&state=active&kind=service_job_timeout&browser-id=browser-1&since=2026-04-22T00%3A00%3A00Z",
+        ))
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incidents");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["state"], "active");
+        assert_eq!(cmd["kind"], "service_job_timeout");
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+        assert!(cmd.get("serviceState").is_some());
+    }
+
+    #[test]
     fn service_jobs_command_maps_query_filters() {
         let cmd = service_jobs_command(Some(
             "limit=7&state=failed&action=navigate&since=2026-04-22T00%3A00%3A00Z",
@@ -601,6 +678,20 @@ mod tests {
         let err = service_events_command(Some("kind=crash")).unwrap_err();
 
         assert!(err.contains("Invalid kind value"));
+    }
+
+    #[test]
+    fn service_incidents_command_rejects_invalid_state() {
+        let err = service_incidents_command(Some("state=failed")).unwrap_err();
+
+        assert!(err.contains("Invalid state value"));
+    }
+
+    #[test]
+    fn service_incidents_command_rejects_unknown_query() {
+        let err = service_incidents_command(Some("bogus=true")).unwrap_err();
+
+        assert!(err.contains("Unknown service incidents query parameter"));
     }
 }
 

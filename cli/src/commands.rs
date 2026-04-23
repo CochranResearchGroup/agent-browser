@@ -1067,6 +1067,106 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }
                 Ok(cmd)
             }
+            Some("incidents") => {
+                let usage =
+                    "service incidents [--limit <n>] [--state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]";
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_incidents",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--limit" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --limit".to_string(),
+                                    usage,
+                                });
+                            };
+                            let limit =
+                                raw.parse::<usize>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --limit value: {}", raw),
+                                    usage,
+                                })?;
+                            cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        "--state" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --state".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "active" | "recovered" | "service" => {
+                                    cmd["state"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --state value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--kind" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --kind".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "browser_health_changed"
+                                | "reconciliation_error"
+                                | "service_job_timeout"
+                                | "service_job_cancelled" => {
+                                    cmd["kind"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --kind value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--browser-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --browser-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["browserId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--since" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --since".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["since"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service incidents: {}", flag),
+                                usage,
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
             Some("events") => {
                 let usage =
                     "service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]";
@@ -1149,11 +1249,19 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }
             Some(sub) => Err(ParseError::UnknownSubcommand {
                 subcommand: sub.to_string(),
-                valid_options: &["status", "watch", "reconcile", "cancel", "jobs", "events"],
+                valid_options: &[
+                    "status",
+                    "watch",
+                    "reconcile",
+                    "cancel",
+                    "jobs",
+                    "incidents",
+                    "events",
+                ],
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|cancel|jobs|events>",
+                usage: "service <status|watch|reconcile|cancel|jobs|incidents|events>",
             }),
         },
 
@@ -4352,6 +4460,43 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_events");
         assert_eq!(cmd["limit"], 7);
+    }
+
+    #[test]
+    fn test_service_incidents_filters() {
+        let cmd = parse_command(
+            &args(
+                "service incidents --limit 7 --state active --kind service_job_timeout --browser-id browser-1 --since 2026-04-22T00:00:00Z",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incidents");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["state"], "active");
+        assert_eq!(cmd["kind"], "service_job_timeout");
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_state() {
+        let err =
+            parse_command(&args("service incidents --state failed"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_kind() {
+        let err = parse_command(
+            &args("service incidents --kind tab_lifecycle_changed"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
     }
 
     #[test]

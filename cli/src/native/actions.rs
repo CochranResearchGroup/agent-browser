@@ -1597,6 +1597,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_reconcile"
             | "service_job_cancel"
             | "service_jobs"
+            | "service_incidents"
             | "service_events"
     );
     if !skip_launch {
@@ -1763,6 +1764,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_reconcile" => handle_service_reconcile(cmd).await,
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
+        "service_incidents" => handle_service_incidents(cmd).await,
         "service_events" => handle_service_events(cmd).await,
         "waitforurl" => handle_waitforurl(cmd, state).await,
         "waitforloadstate" => handle_waitforloadstate(cmd, state).await,
@@ -5868,6 +5870,51 @@ async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let limit = cmd
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let state = cmd.get("state").and_then(|value| value.as_str());
+    let kind = cmd.get("kind").and_then(|value| value.as_str());
+    let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+    let since = cmd
+        .get("since")
+        .and_then(|value| value.as_str())
+        .map(parse_service_event_timestamp)
+        .transpose()?;
+    let total = service_state.incidents.len();
+    let mut incidents = service_state
+        .incidents
+        .into_iter()
+        .filter(|incident| {
+            state.is_none_or(|expected| service_incident_state_name(incident.state) == expected)
+                && kind.is_none_or(|expected| incident.latest_kind == expected)
+                && browser_id
+                    .is_none_or(|expected| incident.browser_id.as_deref() == Some(expected))
+                && since.is_none_or(|minimum| service_incident_at_or_after(incident, minimum))
+        })
+        .collect::<Vec<_>>();
+    let matched = incidents.len();
+    let start = matched.saturating_sub(limit);
+    incidents = incidents[start..].to_vec();
+
+    Ok(json!({
+        "incidents": incidents,
+        "count": incidents.len(),
+        "matched": matched,
+        "total": total,
+    }))
+}
+
 async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
     let service_state = cmd
         .get("serviceState")
@@ -5951,6 +5998,14 @@ fn service_job_state_name(state: ServiceJobState) -> &'static str {
     }
 }
 
+fn service_incident_state_name(state: super::service_model::ServiceIncidentState) -> &'static str {
+    match state {
+        super::service_model::ServiceIncidentState::Active => "active",
+        super::service_model::ServiceIncidentState::Recovered => "recovered",
+        super::service_model::ServiceIncidentState::Service => "service",
+    }
+}
+
 fn parse_service_event_timestamp(raw: &str) -> Result<DateTime<FixedOffset>, String> {
     DateTime::parse_from_rfc3339(raw)
         .map_err(|err| format!("Invalid --since timestamp '{}': {}", raw, err))
@@ -5968,6 +6023,15 @@ fn service_job_at_or_after(
 
 fn service_event_at_or_after(event: &ServiceEvent, minimum: DateTime<FixedOffset>) -> bool {
     DateTime::parse_from_rfc3339(&event.timestamp)
+        .map(|timestamp| timestamp >= minimum)
+        .unwrap_or(false)
+}
+
+fn service_incident_at_or_after(
+    incident: &super::service_model::ServiceIncident,
+    minimum: DateTime<FixedOffset>,
+) -> bool {
+    DateTime::parse_from_rfc3339(&incident.latest_timestamp)
         .map(|timestamp| timestamp >= minimum)
         .unwrap_or(false)
 }
@@ -9727,6 +9791,107 @@ mod tests {
             .as_str()
             .unwrap_or_default()
             .contains("Invalid --since timestamp"));
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_returns_limited_incidents() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-1",
+            "limit": 1,
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "latestTimestamp": "2026-04-22T00:00:00Z",
+                        "latestMessage": "Browser crashed",
+                        "latestKind": "browser_health_changed"
+                    },
+                    {
+                        "id": "service",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "latestTimestamp": "2026-04-22T00:01:00Z",
+                        "latestMessage": "Reconciliation failed",
+                        "latestKind": "reconciliation_error"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 2);
+        assert_eq!(result["data"]["total"], 2);
+        assert_eq!(result["data"]["incidents"][0]["id"], "service");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_filter_by_state_kind_browser_and_since() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-2",
+            "state": "recovered",
+            "kind": "browser_health_changed",
+            "browserId": "browser-1",
+            "since": "2026-04-22T00:01:00Z",
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "browser-1-old",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:00:00Z",
+                        "latestMessage": "Too old",
+                        "latestKind": "browser_health_changed"
+                    },
+                    {
+                        "id": "browser-1-match",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:01:00Z",
+                        "latestMessage": "Matching incident",
+                        "latestKind": "browser_health_changed"
+                    },
+                    {
+                        "id": "browser-2",
+                        "browserId": "browser-2",
+                        "label": "browser-2",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:02:00Z",
+                        "latestMessage": "Wrong browser",
+                        "latestKind": "browser_health_changed"
+                    },
+                    {
+                        "id": "service",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "latestTimestamp": "2026-04-22T00:03:00Z",
+                        "latestMessage": "Wrong state",
+                        "latestKind": "reconciliation_error"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["total"], 4);
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-1-match");
         assert!(state.browser.is_none());
     }
 

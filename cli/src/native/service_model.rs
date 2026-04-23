@@ -59,12 +59,23 @@ pub struct ServiceIncident {
     pub id: String,
     pub browser_id: Option<String>,
     pub label: String,
+    pub state: ServiceIncidentState,
     pub latest_timestamp: String,
     pub latest_message: String,
     pub latest_kind: String,
     pub current_health: Option<BrowserHealth>,
     pub event_ids: Vec<String>,
     pub job_ids: Vec<String>,
+}
+
+/// Operator-facing summary state for a grouped incident.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServiceIncidentState {
+    #[default]
+    Active,
+    Recovered,
+    Service,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,6 +106,11 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
                 label: browser_id
                     .clone()
                     .unwrap_or_else(|| "Service incidents".to_string()),
+                state: classify_incident_state(
+                    browser_id.is_some(),
+                    event.current_health,
+                    event.kind,
+                ),
                 latest_timestamp: event.timestamp.clone(),
                 latest_message: event.message.clone(),
                 latest_kind: service_event_kind_name(event.kind).to_string(),
@@ -107,6 +123,11 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
             incident.latest_message = event.message.clone();
             incident.latest_kind = service_event_kind_name(event.kind).to_string();
             incident.current_health = event.current_health.or(incident.current_health);
+            incident.state = classify_incident_state(
+                incident.browser_id.is_some(),
+                incident.current_health,
+                event.kind,
+            );
         }
 
         incident.event_ids.push(event.id.clone());
@@ -130,6 +151,7 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
                 label: browser_id
                     .clone()
                     .unwrap_or_else(|| "Service incidents".to_string()),
+                state: classify_job_incident_state(browser_id.is_some()),
                 latest_timestamp: timestamp.to_string(),
                 latest_message: message.clone(),
                 latest_kind: kind.to_string(),
@@ -145,6 +167,7 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
                 incident.current_health =
                     state.browsers.get(browser_id).map(|browser| browser.health);
             }
+            incident.state = classify_job_incident_state(incident.browser_id.is_some());
         }
 
         incident.job_ids.push(job.id.clone());
@@ -187,6 +210,30 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
                 .as_ref()
                 .and_then(|browser_id| state.browsers.get(browser_id))
                 .map(|browser| browser.health);
+        }
+        if let Some(browser_id) = incident.browser_id.as_ref() {
+            if browser_health_is_bad(incident.current_health) {
+                incident.state = ServiceIncidentState::Active;
+            } else if incident.latest_kind == "browser_health_changed"
+                && state
+                    .events
+                    .iter()
+                    .filter(|event| incident.event_ids.contains(&event.id))
+                    .any(|event| {
+                        event.kind == ServiceEventKind::BrowserHealthChanged
+                            && browser_health_is_recovery(
+                                event.previous_health,
+                                event.current_health,
+                            )
+                            && event.browser_id.as_deref() == Some(browser_id)
+                    })
+            {
+                incident.state = ServiceIncidentState::Recovered;
+            } else {
+                incident.state = ServiceIncidentState::Active;
+            }
+        } else {
+            incident.state = ServiceIncidentState::Service;
         }
     }
     incidents.sort_by(|left, right| {
@@ -286,6 +333,28 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
+    }
+}
+
+fn classify_incident_state(
+    has_browser: bool,
+    current_health: Option<BrowserHealth>,
+    kind: ServiceEventKind,
+) -> ServiceIncidentState {
+    if !has_browser {
+        return ServiceIncidentState::Service;
+    }
+    if kind == ServiceEventKind::BrowserHealthChanged && !browser_health_is_bad(current_health) {
+        return ServiceIncidentState::Recovered;
+    }
+    ServiceIncidentState::Active
+}
+
+fn classify_job_incident_state(has_browser: bool) -> ServiceIncidentState {
+    if has_browser {
+        ServiceIncidentState::Active
+    } else {
+        ServiceIncidentState::Service
     }
 }
 
@@ -1053,11 +1122,13 @@ mod tests {
 
         assert_eq!(state.incidents.len(), 2);
         assert_eq!(state.incidents[0].id, "service");
+        assert_eq!(state.incidents[0].state, ServiceIncidentState::Service);
         assert_eq!(state.incidents[0].latest_kind, "service_job_timeout");
         assert_eq!(state.incidents[0].event_ids, vec!["event-reconcile-error"]);
         assert_eq!(state.incidents[0].job_ids, vec!["job-timeout"]);
         assert_eq!(state.incidents[1].id, "browser-1");
         assert_eq!(state.incidents[1].browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(state.incidents[1].state, ServiceIncidentState::Active);
         assert_eq!(state.incidents[1].latest_kind, "service_job_cancelled");
         assert_eq!(
             state.incidents[1].event_ids,
