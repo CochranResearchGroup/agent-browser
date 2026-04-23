@@ -945,6 +945,40 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "action": "service_reconcile",
                 "serviceState": flags.service_state.clone(),
             })),
+            Some("cancel") => {
+                let job_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service cancel".to_string(),
+                    usage: "service cancel <job-id> [--reason <text>]",
+                })?;
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_job_cancel",
+                    "jobId": job_id,
+                });
+                let mut i = 2;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--reason" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --reason".to_string(),
+                                    usage: "service cancel <job-id> [--reason <text>]",
+                                });
+                            };
+                            cmd["reason"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service cancel: {}", flag),
+                                usage: "service cancel <job-id> [--reason <text>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
             Some("jobs") => {
                 let usage =
                     "service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]";
@@ -1115,11 +1149,11 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }
             Some(sub) => Err(ParseError::UnknownSubcommand {
                 subcommand: sub.to_string(),
-                valid_options: &["status", "watch", "reconcile", "jobs", "events"],
+                valid_options: &["status", "watch", "reconcile", "cancel", "jobs", "events"],
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|events>",
+                usage: "service <status|watch|reconcile|cancel|jobs|events>",
             }),
         },
 
@@ -4288,6 +4322,19 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_jobs");
         assert_eq!(cmd["jobId"], "job-123");
+    }
+
+    #[test]
+    fn test_service_cancel_job() {
+        let cmd = parse_command(
+            &args("service cancel job-123 --reason no-longer-needed"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_job_cancel");
+        assert_eq!(cmd["jobId"], "job-123");
+        assert_eq!(cmd["reason"], "no-longer-needed");
     }
 
     #[test]

@@ -451,6 +451,11 @@ async fn handle_connection<S>(
                 let response = if action == Some("worker_status") {
                     let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
                     control_plane.status_response(id)
+                } else if action == Some("service_job_cancel") {
+                    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    let job_id = cmd.get("jobId").and_then(|v| v.as_str()).unwrap_or("");
+                    let reason = cmd.get("reason").and_then(|v| v.as_str());
+                    control_plane.cancel_job_response(id, job_id, reason)
                 } else if action == Some("service_status") {
                     let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
                     let service_state = cmd

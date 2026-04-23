@@ -467,13 +467,16 @@ function BrowserDetailDialog({
 function JobDetailDialog({
   job,
   onOpenChange,
+  onCancel,
 }: {
   job: ServiceJob | null;
   onOpenChange: (open: boolean) => void;
+  onCancel: (job: ServiceJob) => void;
 }) {
   const request = formatDetails(job?.request);
   const response = formatDetails(job?.response ?? job?.result);
   const target = formatDetails(job?.target);
+  const canCancel = job?.state === "queued";
   return (
     <Dialog open={!!job} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -528,6 +531,16 @@ function JobDetailDialog({
                   </p>
                   <pre className="service-event-details-json">{response}</pre>
                 </div>
+              )}
+              {canCancel && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="rounded-full"
+                  onClick={() => onCancel(job)}
+                >
+                  Cancel queued job
+                </Button>
               )}
             </div>
           </>
@@ -850,6 +863,22 @@ export function ServicePanel() {
     }
   }, [activePort, canFetch]);
 
+  const cancelJob = useCallback(async (job: ServiceJob) => {
+    if (!canFetch || !job.id) return;
+    setError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/jobs/${encodeURIComponent(job.id)}/cancel`, {
+        method: "POST",
+      });
+      const json = (await resp.json()) as ApiResponse<ServiceJobsData & { cancelled?: boolean }>;
+      if (!json.success) throw new Error(json.error || "Service job cancel failed");
+      setSelectedJob(json.data?.job ?? null);
+      await fetchService(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Service job cancel unavailable");
+    }
+  }, [activePort, canFetch, fetchService]);
+
   const serviceState = status?.service_state;
   const control = status?.control_plane;
   const reconciliation = serviceState?.reconciliation;
@@ -930,6 +959,7 @@ export function ServicePanel() {
         onOpenChange={(open) => {
           if (!open) setSelectedJob(null);
         }}
+        onCancel={cancelJob}
       />
       <div className="service-panel-hero">
         <div className="min-w-0">

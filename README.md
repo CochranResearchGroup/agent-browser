@@ -135,6 +135,7 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
+agent-browser service cancel <job-id> # Cancel a queued service control job
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service events          # Show recent service events
 agent-browser close                   # Close browser (aliases: quit, exit)
@@ -802,7 +803,7 @@ The dashboard runs as a standalone background process on port 4848, independent 
 
 The dashboard displays:
 - **Live viewport** — real-time JPEG frames from the browser
-- **Service view** — worker and browser health cards, reconciliation status, managed entity counts, recent service jobs, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
+- **Service view** — worker and browser health cards, reconciliation status, managed entity counts, recent service jobs with queued-job cancellation, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
 - **Activity feed** — chronological command/result stream with timing and expandable details
 - **Console output** — browser console messages (log, warn, error)
 - **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
@@ -1203,6 +1204,7 @@ agent-browser service status
 agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
+agent-browser service cancel <job-id> --reason stale
 agent-browser service jobs --limit 20
 agent-browser service jobs --id <job-id>
 agent-browser service jobs --state failed --action navigate --since 2026-04-22T00:00:00Z
@@ -1221,6 +1223,8 @@ Use `service reconcile` to run the persisted browser health and target probes in
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
 
+Use `service cancel <job-id>` to mark a queued service job cancelled before it dispatches. This is intentionally conservative: running jobs are not interrupted, and terminal jobs are rejected rather than rewritten. Add `--reason <text>` to record an operator-readable reason.
+
 Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 
 Use `service events --limit <n>` to inspect recent reconciliation summaries, browser health transitions, and tab lifecycle changes without parsing the full service state. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, and `reconciliation_error`. `--since` accepts RFC 3339 timestamps.
@@ -1231,6 +1235,7 @@ When the session stream server is running, agents can read the same service surf
 curl "http://127.0.0.1:<stream-port>/api/service/status"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs?limit=20&state=failed"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>/cancel"
 curl "http://127.0.0.1:<stream-port>/api/service/events?limit=20&kind=browser_health_changed"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 ```

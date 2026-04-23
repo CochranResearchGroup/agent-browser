@@ -99,6 +99,9 @@ The first backend-first correction is implemented on `service-model-phase-0`:
   requiring agents or operators to parse the full service status payload
 - `service jobs --id <job-id>` and `GET /api/service/jobs/<job-id>` expose one
   retained job for dashboard and operator detail inspection
+- `service cancel <job-id>` and `POST /api/service/jobs/<job-id>/cancel`
+  conservatively cancel queued jobs before dispatch; running jobs are not
+  interrupted until active-request cancellation is designed
 
 This deliberately uses the existing service status, reconcile, HTTP API, and
 dashboard surfaces instead of adding more dashboard-only state.

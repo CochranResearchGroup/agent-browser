@@ -285,6 +285,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
                 return;
             }
         }
+        if action == Some("service_job_cancel") {
+            if let Some(job) = data.get("job") {
+                println!("Cancelled {}", format_service_job_line(job));
+                return;
+            }
+        }
         if action == Some("storage_get") {
             if let Some(output) = format_storage_text(data) {
                 println!("{}", output);
@@ -2613,6 +2619,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
+  agent-browser service cancel <job-id> [--reason <text>]
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
 
@@ -2620,6 +2627,7 @@ Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
+  cancel                Mark a queued service job cancelled before dispatch
   jobs                  Show recent service control-plane jobs
   events                Show recent service reconciliation, browser health, and tab lifecycle events
 
@@ -2628,12 +2636,13 @@ Notes:
   - Persisted service state is loaded from ~/.agent-browser/service/state.json.
   - The current control-plane snapshot is refreshed in the persisted service state.
   - Recent control-plane requests are retained as bounded job records with timestamps and final state.
+  - Cancel only applies to queued jobs. Running jobs are not interrupted because that is not yet safe.
   - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
-  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/events, and /api/service/reconcile.
+  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
@@ -2647,6 +2656,7 @@ Examples:
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
+  agent-browser service cancel <job-id> --reason stale
   agent-browser service jobs --limit 20
   agent-browser service jobs --id <job-id>
   agent-browser service jobs --state failed --action navigate
@@ -3009,6 +3019,7 @@ Service:
   service status             Show service worker health and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
+  service cancel             Mark a queued service job cancelled before dispatch
   service jobs               Show recent service control-plane jobs
   service events             Show recent service events
 
@@ -3243,6 +3254,7 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
+  agent-browser service cancel <job-id>  # Cancel a queued service job
   agent-browser service jobs             # Inspect recent service control jobs
   agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode

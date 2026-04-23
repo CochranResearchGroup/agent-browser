@@ -22,6 +22,7 @@ use super::cdp::types::{
     DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
     TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
 };
+use super::control_plane::cancel_persisted_service_job;
 use super::cookies;
 use super::diff;
 use super::element::RefMap;
@@ -1563,6 +1564,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "stream_status"
             | "service_status"
             | "service_reconcile"
+            | "service_job_cancel"
             | "service_jobs"
             | "service_events"
     );
@@ -1728,6 +1730,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_status" => handle_stream_status(state).await,
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
+        "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
         "service_events" => handle_service_events(cmd).await,
         "waitforurl" => handle_waitforurl(cmd, state).await,
@@ -5743,6 +5746,20 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
         "browserCount": summary.browser_count,
         "changedBrowsers": summary.changed_browsers,
         "service_state": service_state,
+    }))
+}
+
+async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
+    let job_id = cmd
+        .get("jobId")
+        .and_then(|value| value.as_str())
+        .ok_or("Missing jobId")?;
+    let reason = cmd.get("reason").and_then(|value| value.as_str());
+    let job = cancel_persisted_service_job(job_id, reason)?;
+
+    Ok(json!({
+        "cancelled": true,
+        "job": job,
     }))
 }
 

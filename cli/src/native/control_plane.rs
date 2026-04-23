@@ -229,6 +229,24 @@ impl ControlPlaneHandle {
         }
     }
 
+    pub fn cancel_job_response(&self, id: &str, job_id: &str, reason: Option<&str>) -> Value {
+        match cancel_persisted_service_job(job_id, reason) {
+            Ok(job) => json!({
+                "id": id,
+                "success": true,
+                "data": {
+                    "cancelled": true,
+                    "job": job,
+                },
+            }),
+            Err(err) => json!({
+                "id": id,
+                "success": false,
+                "error": err,
+            }),
+        }
+    }
+
     pub async fn shutdown(&self) {
         let (tx, rx) = oneshot::channel();
         if self.tx.send(WorkerMessage::Shutdown(tx)).await.is_ok() {
@@ -353,10 +371,69 @@ fn persist_service_job_failed_to_enqueue(job_id: &str, action: &str, error: &str
     });
 }
 
+pub fn cancel_persisted_service_job(
+    job_id: &str,
+    reason: Option<&str>,
+) -> Result<ServiceJob, String> {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return Err("Unable to resolve service state path".to_string());
+    };
+    let store = JsonServiceStateStore::new(path);
+    let mut state = store
+        .load()
+        .map_err(|err| format!("Unable to load service state: {}", err))?;
+    let job = state
+        .jobs
+        .get_mut(job_id)
+        .ok_or_else(|| format!("Service job not found: {}", job_id))?;
+
+    match job.state {
+        JobState::Queued => {
+            job.state = JobState::Cancelled;
+            job.completed_at = Some(current_timestamp());
+            job.error = Some(
+                reason
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or("Cancelled by operator")
+                    .to_string(),
+            );
+            job.result = Some(json!({ "success": false, "cancelled": true }));
+            let job = job.clone();
+            store.save(&state)?;
+            Ok(job)
+        }
+        JobState::Cancelled => Ok(job.clone()),
+        JobState::Running => Err(format!(
+            "Service job {} is already running and cannot be cancelled safely",
+            job_id
+        )),
+        JobState::Succeeded | JobState::Failed | JobState::TimedOut => Err(format!(
+            "Service job {} is already terminal with state {}",
+            job_id,
+            job_state_name(job.state)
+        )),
+    }
+}
+
+fn service_job_cancelled(job_id: &str) -> bool {
+    load_service_job(job_id).is_some_and(|job| job.state == JobState::Cancelled)
+}
+
 fn load_service_job(id: &str) -> Option<ServiceJob> {
     let path = JsonServiceStateStore::default_path().ok()?;
     let store = JsonServiceStateStore::new(path);
     store.load().ok()?.jobs.remove(id)
+}
+
+fn job_state_name(state: JobState) -> &'static str {
+    match state {
+        JobState::Queued => "queued",
+        JobState::Running => "running",
+        JobState::Succeeded => "succeeded",
+        JobState::Failed => "failed",
+        JobState::Cancelled => "cancelled",
+        JobState::TimedOut => "timed_out",
+    }
 }
 
 fn service_job_id(request: &ControlRequest) -> String {
@@ -492,6 +569,14 @@ async fn run_worker(
                 match message {
                     WorkerMessage::Request(request) => {
                         status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+                        if service_job_cancelled(&request.job_id) {
+                            let _ = request.response_tx.send(json!({
+                                "id": request.id,
+                                "success": false,
+                                "error": "Service job was cancelled before dispatch",
+                            }));
+                            continue;
+                        }
                         status.set_state(WorkerState::Busy);
                         persist_service_job_running(&request);
                         refresh_browser_health(&mut state, &status).await;
@@ -759,6 +844,71 @@ mod tests {
         assert_eq!(persisted.events.len(), 1);
 
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn cancel_persisted_service_job_marks_queued_job_cancelled() {
+        let home = temp_home("control-plane-cancel-queued");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                jobs: std::collections::BTreeMap::from([(
+                    "job-queued".to_string(),
+                    ServiceJob {
+                        id: "job-queued".to_string(),
+                        action: "navigate".to_string(),
+                        state: JobState::Queued,
+                        submitted_at: Some("2026-04-22T00:00:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let job = cancel_persisted_service_job("job-queued", Some("stale")).unwrap();
+
+        assert_eq!(job.state, JobState::Cancelled);
+        assert_eq!(job.error.as_deref(), Some("stale"));
+        assert_eq!(job.result.as_ref().unwrap()["cancelled"], true);
+        assert!(job.completed_at.is_some());
+
+        let persisted = store.load().unwrap();
+        assert_eq!(persisted.jobs["job-queued"].state, JobState::Cancelled);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn cancel_persisted_service_job_rejects_running_job() {
+        let home = temp_home("control-plane-cancel-running");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                jobs: std::collections::BTreeMap::from([(
+                    "job-running".to_string(),
+                    ServiceJob {
+                        id: "job-running".to_string(),
+                        action: "navigate".to_string(),
+                        state: JobState::Running,
+                        submitted_at: Some("2026-04-22T00:00:00Z".to_string()),
+                        started_at: Some("2026-04-22T00:00:01Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let err = cancel_persisted_service_job("job-running", Some("stale")).unwrap_err();
+
+        assert!(err.contains("already running"));
+        let persisted = store.load().unwrap();
+        assert_eq!(persisted.jobs["job-running"].state, JobState::Running);
         let _ = std::fs::remove_dir_all(&home);
     }
 

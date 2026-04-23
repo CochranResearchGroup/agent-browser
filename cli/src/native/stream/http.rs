@@ -134,6 +134,13 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(job_id) = service_job_cancel_id(path) {
+            let result =
+                relay_service_command(session_name, service_job_cancel_command(job_id)).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if path == "/api/chat" {
             handle_chat_request(&mut stream, body_str, origin.as_deref()).await;
             return;
@@ -286,6 +293,19 @@ fn service_reconcile_command() -> Value {
     json!({
         "action": "service_reconcile",
         "serviceState": load_service_state_snapshot(),
+    })
+}
+
+fn service_job_cancel_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/jobs/")
+        .and_then(|rest| rest.strip_suffix("/cancel"))
+        .filter(|id| !id.is_empty())
+}
+
+fn service_job_cancel_command(job_id: &str) -> Value {
+    json!({
+        "action": "service_job_cancel",
+        "jobId": job_id,
     })
 }
 
@@ -541,6 +561,24 @@ mod tests {
         let cmd = service_jobs_command(Some("id=job-123")).unwrap();
 
         assert_eq!(cmd["action"], "service_jobs");
+        assert_eq!(cmd["jobId"], "job-123");
+    }
+
+    #[test]
+    fn service_job_cancel_id_maps_path() {
+        assert_eq!(
+            service_job_cancel_id("/api/service/jobs/job-123/cancel"),
+            Some("job-123")
+        );
+        assert_eq!(service_job_cancel_id("/api/service/jobs//cancel"), None);
+        assert_eq!(service_job_cancel_id("/api/service/jobs/job-123"), None);
+    }
+
+    #[test]
+    fn service_job_cancel_command_maps_id() {
+        let cmd = service_job_cancel_command("job-123");
+
+        assert_eq!(cmd["action"], "service_job_cancel");
         assert_eq!(cmd["jobId"], "job-123");
     }
 
