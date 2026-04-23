@@ -141,6 +141,25 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(incident_id) = service_incident_action_id(path, "/acknowledge") {
+            let cmd = service_incident_mutation_command(
+                "service_incident_acknowledge",
+                incident_id,
+                query,
+            );
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
+        if let Some(incident_id) = service_incident_action_id(path, "/resolve") {
+            let cmd =
+                service_incident_mutation_command("service_incident_resolve", incident_id, query);
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if path == "/api/chat" {
             handle_chat_request(&mut stream, body_str, origin.as_deref()).await;
             return;
@@ -341,11 +360,39 @@ fn service_job_cancel_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty())
 }
 
+fn service_incident_action_id<'a>(path: &'a str, suffix: &str) -> Option<&'a str> {
+    path.strip_prefix("/api/service/incidents/")
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .filter(|id| !id.is_empty())
+}
+
 fn service_job_cancel_command(job_id: &str) -> Value {
     json!({
         "action": "service_job_cancel",
         "jobId": job_id,
     })
+}
+
+fn service_incident_mutation_command(
+    action: &str,
+    incident_id: &str,
+    query: Option<&str>,
+) -> Value {
+    let mut cmd = json!({
+        "action": action,
+        "incidentId": incident_id,
+    });
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "by" => cmd["by"] = json!(value),
+            "note" => cmd["note"] = json!(value),
+            "" => {}
+            _ => {}
+        }
+    }
+
+    cmd
 }
 
 fn service_events_command(query: Option<&str>) -> Result<Value, String> {
@@ -690,6 +737,39 @@ mod tests {
         );
         assert_eq!(service_job_cancel_id("/api/service/jobs//cancel"), None);
         assert_eq!(service_job_cancel_id("/api/service/jobs/job-123"), None);
+    }
+
+    #[test]
+    fn service_incident_action_id_maps_path() {
+        assert_eq!(
+            service_incident_action_id(
+                "/api/service/incidents/incident-123/acknowledge",
+                "/acknowledge"
+            ),
+            Some("incident-123")
+        );
+        assert_eq!(
+            service_incident_action_id("/api/service/incidents/incident-123/resolve", "/resolve"),
+            Some("incident-123")
+        );
+        assert_eq!(
+            service_incident_action_id("/api/service/incidents//resolve", "/resolve"),
+            None
+        );
+    }
+
+    #[test]
+    fn service_incident_mutation_command_maps_query() {
+        let cmd = service_incident_mutation_command(
+            "service_incident_acknowledge",
+            "incident-123",
+            Some("by=operator&note=triaged"),
+        );
+
+        assert_eq!(cmd["action"], "service_incident_acknowledge");
+        assert_eq!(cmd["incidentId"], "incident-123");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "triaged");
     }
 
     #[test]

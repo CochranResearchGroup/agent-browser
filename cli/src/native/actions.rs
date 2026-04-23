@@ -1596,6 +1596,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_status"
             | "service_reconcile"
             | "service_job_cancel"
+            | "service_incident_acknowledge"
+            | "service_incident_resolve"
             | "service_jobs"
             | "service_incidents"
             | "service_events"
@@ -1763,6 +1765,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
+        "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
+        "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
         "service_incidents" => handle_service_incidents(cmd).await,
         "service_events" => handle_service_events(cmd).await,
@@ -5828,6 +5832,89 @@ async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, String> {
+    let incident_id = cmd
+        .get("incidentId")
+        .and_then(|value| value.as_str())
+        .ok_or("Missing incidentId")?;
+    let by = cmd.get("by").and_then(|value| value.as_str());
+    let note = cmd.get("note").and_then(|value| value.as_str());
+    let incident = mutate_persisted_service_incident(incident_id, |incident| {
+        if incident.acknowledged_at.is_none() {
+            incident.acknowledged_at = Some(service_now_timestamp());
+        }
+        incident.acknowledged_by = Some(
+            by.filter(|value| !value.trim().is_empty())
+                .unwrap_or("operator")
+                .to_string(),
+        );
+        incident.acknowledgement_note = note
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string);
+    })?;
+
+    Ok(json!({
+        "acknowledged": true,
+        "incident": incident,
+    }))
+}
+
+async fn handle_service_incident_resolve(cmd: &Value) -> Result<Value, String> {
+    let incident_id = cmd
+        .get("incidentId")
+        .and_then(|value| value.as_str())
+        .ok_or("Missing incidentId")?;
+    let by = cmd.get("by").and_then(|value| value.as_str());
+    let note = cmd.get("note").and_then(|value| value.as_str());
+    let incident = mutate_persisted_service_incident(incident_id, |incident| {
+        if incident.acknowledged_at.is_none() {
+            incident.acknowledged_at = Some(service_now_timestamp());
+        }
+        if incident.acknowledged_by.is_none() {
+            incident.acknowledged_by = Some(
+                by.filter(|value| !value.trim().is_empty())
+                    .unwrap_or("operator")
+                    .to_string(),
+            );
+        }
+        incident.resolved_at = Some(service_now_timestamp());
+        incident.resolved_by = Some(
+            by.filter(|value| !value.trim().is_empty())
+                .unwrap_or("operator")
+                .to_string(),
+        );
+        incident.resolution_note = note
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string);
+    })?;
+
+    Ok(json!({
+        "resolved": true,
+        "incident": incident,
+    }))
+}
+
+fn mutate_persisted_service_incident(
+    incident_id: &str,
+    mutator: impl FnOnce(&mut super::service_model::ServiceIncident),
+) -> Result<super::service_model::ServiceIncident, String> {
+    let path = JsonServiceStateStore::default_path()
+        .map_err(|_| "Unable to resolve service state path".to_string())?;
+    let store = JsonServiceStateStore::new(path);
+    let mut state = store
+        .load()
+        .map_err(|err| format!("Unable to load service state: {}", err))?;
+    let incident = state
+        .incidents
+        .iter_mut()
+        .find(|incident| incident.id == incident_id)
+        .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
+    mutator(incident);
+    let incident = incident.clone();
+    store.save(&state)?;
+    Ok(incident)
+}
+
 async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
     let service_state = cmd
         .get("serviceState")
@@ -6067,6 +6154,10 @@ fn service_incident_at_or_after(
     DateTime::parse_from_rfc3339(&incident.latest_timestamp)
         .map(|timestamp| timestamp >= minimum)
         .unwrap_or(false)
+}
+
+fn service_now_timestamp() -> String {
+    chrono::Utc::now().to_rfc3339()
 }
 
 // ---------------------------------------------------------------------------
@@ -9977,6 +10068,136 @@ mod tests {
         assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
         assert_eq!(result["data"]["count"], 1);
         assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incident_acknowledge_persists_metadata() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-incident-ack-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                events: vec![crate::native::service_model::ServiceEvent {
+                    id: "event-1".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: crate::native::service_model::ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from Ready to ProcessExited"
+                        .to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(crate::native::service_model::BrowserHealth::Ready),
+                    current_health: Some(
+                        crate::native::service_model::BrowserHealth::ProcessExited,
+                    ),
+                    ..crate::native::service_model::ServiceEvent::default()
+                }],
+                browsers: std::collections::BTreeMap::from([(
+                    "browser-1".to_string(),
+                    crate::native::service_model::BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: crate::native::service_model::BrowserHealth::ProcessExited,
+                        ..crate::native::service_model::BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_incident_acknowledge",
+                "id": "svc-incidents-ack-1",
+                "incidentId": "browser-1",
+                "by": "operator",
+                "note": "triaged"
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["incident"]["acknowledgedBy"], "operator");
+        assert_eq!(result["data"]["incident"]["acknowledgementNote"], "triaged");
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.incidents[0].acknowledged_by.as_deref(),
+            Some("operator")
+        );
+        assert_eq!(
+            persisted.incidents[0].acknowledgement_note.as_deref(),
+            Some("triaged")
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_incident_resolve_persists_metadata() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-incident-resolve-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                events: vec![crate::native::service_model::ServiceEvent {
+                    id: "event-1".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: crate::native::service_model::ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from Ready to ProcessExited"
+                        .to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(crate::native::service_model::BrowserHealth::Ready),
+                    current_health: Some(
+                        crate::native::service_model::BrowserHealth::ProcessExited,
+                    ),
+                    ..crate::native::service_model::ServiceEvent::default()
+                }],
+                incidents: vec![crate::native::service_model::ServiceIncident {
+                    id: "browser-1".to_string(),
+                    acknowledged_at: Some("2026-04-22T00:00:00Z".to_string()),
+                    acknowledged_by: Some("operator".to_string()),
+                    ..crate::native::service_model::ServiceIncident::default()
+                }],
+                browsers: std::collections::BTreeMap::from([(
+                    "browser-1".to_string(),
+                    crate::native::service_model::BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: crate::native::service_model::BrowserHealth::ProcessExited,
+                        ..crate::native::service_model::BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_incident_resolve",
+                "id": "svc-incidents-resolve-1",
+                "incidentId": "browser-1",
+                "by": "operator",
+                "note": "recovered"
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["incident"]["resolvedBy"], "operator");
+        assert_eq!(result["data"]["incident"]["resolutionNote"], "recovered");
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.incidents[0].resolved_by.as_deref(),
+            Some("operator")
+        );
+        assert_eq!(
+            persisted.incidents[0].resolution_note.as_deref(),
+            Some("recovered")
+        );
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[tokio::test]

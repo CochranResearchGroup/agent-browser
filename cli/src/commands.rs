@@ -979,6 +979,94 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }
                 Ok(cmd)
             }
+            Some("acknowledge") => {
+                let incident_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service acknowledge".to_string(),
+                    usage: "service acknowledge <incident-id> [--by <text>] [--note <text>]",
+                })?;
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_incident_acknowledge",
+                    "incidentId": incident_id,
+                });
+                let mut i = 2;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--by" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --by".to_string(),
+                                    usage: "service acknowledge <incident-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["by"] = json!(raw);
+                            i += 1;
+                        }
+                        "--note" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --note".to_string(),
+                                    usage: "service acknowledge <incident-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["note"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service acknowledge: {}", flag),
+                                usage: "service acknowledge <incident-id> [--by <text>] [--note <text>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("resolve") => {
+                let incident_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service resolve".to_string(),
+                    usage: "service resolve <incident-id> [--by <text>] [--note <text>]",
+                })?;
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_incident_resolve",
+                    "incidentId": incident_id,
+                });
+                let mut i = 2;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--by" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --by".to_string(),
+                                    usage: "service resolve <incident-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["by"] = json!(raw);
+                            i += 1;
+                        }
+                        "--note" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --note".to_string(),
+                                    usage: "service resolve <incident-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["note"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service resolve: {}", flag),
+                                usage: "service resolve <incident-id> [--by <text>] [--note <text>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
             Some("jobs") => {
                 let usage =
                     "service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]";
@@ -1264,6 +1352,8 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "watch",
                     "reconcile",
                     "cancel",
+                    "acknowledge",
+                    "resolve",
                     "jobs",
                     "incidents",
                     "events",
@@ -1271,7 +1361,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|cancel|jobs|incidents|events>",
+                usage: "service <status|watch|reconcile|cancel|acknowledge|resolve|jobs|incidents|events>",
             }),
         },
 
@@ -4454,6 +4544,34 @@ mod tests {
         assert_eq!(cmd["action"], "service_job_cancel");
         assert_eq!(cmd["jobId"], "job-123");
         assert_eq!(cmd["reason"], "no-longer-needed");
+    }
+
+    #[test]
+    fn test_service_acknowledge_incident() {
+        let cmd = parse_command(
+            &args("service acknowledge incident-123 --by operator --note triaged"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incident_acknowledge");
+        assert_eq!(cmd["incidentId"], "incident-123");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "triaged");
+    }
+
+    #[test]
+    fn test_service_resolve_incident() {
+        let cmd = parse_command(
+            &args("service resolve incident-123 --by operator --note fixed"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incident_resolve");
+        assert_eq!(cmd["incidentId"], "incident-123");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "fixed");
     }
 
     #[test]

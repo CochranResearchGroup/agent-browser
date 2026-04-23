@@ -325,6 +325,8 @@ agent-browser service status          # Inspect service control-plane and config
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser service cancel <job-id> # Cancel a queued or running service control job
+agent-browser service acknowledge <incident-id> # Mark a retained incident acknowledged
+agent-browser service resolve <incident-id>     # Mark a retained incident resolved
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service incidents       # Show grouped retained service incidents
 agent-browser service events          # Show recent service events
@@ -398,13 +400,17 @@ Use `agent-browser service reconcile` to run persisted browser health and target
 
 Use `agent-browser service cancel <job-id>` to mark a queued service job cancelled before it dispatches or request cooperative cancellation for a running job. Running cancellation drops the active service future, records the job as `cancelled`, and cleans up browser state before the worker accepts more work. Terminal jobs are rejected rather than rewritten. Add `--reason <text>` to record why a queued job was cancelled.
 
+Use `agent-browser service acknowledge <incident-id>` to mark a retained incident seen by an operator. Add `--by <text>` to record who acknowledged it and `--note <text>` to persist a short operator note.
+
+Use `agent-browser service resolve <incident-id>` to mark a retained incident handled while preserving the derived incident record. Add `--by <text>` to record who resolved it and `--note <text>` to persist a resolution note.
+
 Use `agent-browser service jobs --limit <n>` to inspect recent control-plane jobs directly without parsing the full service status payload. Use `agent-browser service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 
-Use `agent-browser service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service status payload. Use `agent-browser service incidents --id <incident-id>` to fetch one retained incident together with its expanded related events and jobs. Add `--state <state>`, `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter incidents before the limit is applied. Valid states are `active`, `recovered`, and `service`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` accepts RFC 3339 timestamps and compares the incident `latestTimestamp`.
+Use `agent-browser service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service status payload. Use `agent-browser service incidents --id <incident-id>` to fetch one retained incident together with its expanded related events and jobs. Incident detail also includes acknowledgement and resolution metadata when present. Add `--state <state>`, `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter incidents before the limit is applied. Valid states are `active`, `recovered`, and `service`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` accepts RFC 3339 timestamps and compares the incident `latestTimestamp`.
 
 Use `agent-browser service events --limit <n>` to inspect recent service events directly without parsing the full service status payload. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, and `reconciliation_error`. `--since` accepts RFC 3339 timestamps.
 
-When a session stream server is running, use `GET /api/service/status`, `GET /api/service/jobs?limit=<n>&state=<state>&action=<action>&since=<timestamp>`, `GET /api/service/jobs/<job-id>`, `POST /api/service/jobs/<job-id>/cancel`, `GET /api/service/incidents?limit=<n>&state=<state>&kind=<kind>&browser-id=<id>&since=<timestamp>`, `GET /api/service/incidents/<incident-id>`, `GET /api/service/events?limit=<n>&kind=<kind>&browser-id=<id>&since=<timestamp>`, or `POST /api/service/reconcile` on the stream port for a programmatic service surface that does not require shelling out.
+When a session stream server is running, use `GET /api/service/status`, `GET /api/service/jobs?limit=<n>&state=<state>&action=<action>&since=<timestamp>`, `GET /api/service/jobs/<job-id>`, `POST /api/service/jobs/<job-id>/cancel`, `GET /api/service/incidents?limit=<n>&state=<state>&kind=<kind>&browser-id=<id>&since=<timestamp>`, `GET /api/service/incidents/<incident-id>`, `POST /api/service/incidents/<incident-id>/acknowledge?by=<actor>&note=<text>`, `POST /api/service/incidents/<incident-id>/resolve?by=<actor>&note=<text>`, `GET /api/service/events?limit=<n>&kind=<kind>&browser-id=<id>&since=<timestamp>`, or `POST /api/service/reconcile` on the stream port for a programmatic service surface that does not require shelling out.
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs` in config, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable the background loop.
 

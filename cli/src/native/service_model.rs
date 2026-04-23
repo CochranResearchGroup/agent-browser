@@ -34,7 +34,45 @@ impl ServiceState {
 
     /// Refresh bounded derived collections before persistence or API exposure.
     pub fn refresh_derived_views(&mut self) {
-        self.incidents = derive_service_incidents(self);
+        let preserved_metadata = self
+            .incidents
+            .iter()
+            .map(|incident| {
+                (
+                    incident.id.clone(),
+                    (
+                        incident.acknowledged_at.clone(),
+                        incident.acknowledged_by.clone(),
+                        incident.acknowledgement_note.clone(),
+                        incident.resolved_at.clone(),
+                        incident.resolved_by.clone(),
+                        incident.resolution_note.clone(),
+                    ),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        self.incidents = derive_service_incidents(self)
+            .into_iter()
+            .map(|mut incident| {
+                if let Some((
+                    acknowledged_at,
+                    acknowledged_by,
+                    acknowledgement_note,
+                    resolved_at,
+                    resolved_by,
+                    resolution_note,
+                )) = preserved_metadata.get(&incident.id)
+                {
+                    incident.acknowledged_at = acknowledged_at.clone();
+                    incident.acknowledged_by = acknowledged_by.clone();
+                    incident.acknowledgement_note = acknowledgement_note.clone();
+                    incident.resolved_at = resolved_at.clone();
+                    incident.resolved_by = resolved_by.clone();
+                    incident.resolution_note = resolution_note.clone();
+                }
+                incident
+            })
+            .collect();
     }
 }
 
@@ -60,6 +98,12 @@ pub struct ServiceIncident {
     pub browser_id: Option<String>,
     pub label: String,
     pub state: ServiceIncidentState,
+    pub acknowledged_at: Option<String>,
+    pub acknowledged_by: Option<String>,
+    pub acknowledgement_note: Option<String>,
+    pub resolved_at: Option<String>,
+    pub resolved_by: Option<String>,
+    pub resolution_note: Option<String>,
     pub latest_timestamp: String,
     pub latest_message: String,
     pub latest_kind: String,
@@ -1138,6 +1182,54 @@ mod tests {
         assert_eq!(
             state.incidents[1].current_health,
             Some(BrowserHealth::Ready)
+        );
+    }
+
+    #[test]
+    fn refresh_derived_views_preserves_incident_operator_metadata() {
+        let mut state = ServiceState {
+            incidents: vec![ServiceIncident {
+                id: "browser-1".to_string(),
+                acknowledged_at: Some("2026-04-22T00:09:00Z".to_string()),
+                acknowledged_by: Some("operator".to_string()),
+                acknowledgement_note: Some("Investigating".to_string()),
+                resolved_at: Some("2026-04-22T00:10:00Z".to_string()),
+                resolved_by: Some("operator".to_string()),
+                resolution_note: Some("Recovered".to_string()),
+                ..ServiceIncident::default()
+            }],
+            events: vec![ServiceEvent {
+                id: "event-crash".to_string(),
+                timestamp: "2026-04-22T00:02:00Z".to_string(),
+                kind: ServiceEventKind::BrowserHealthChanged,
+                message: "Browser browser-1 health changed from Ready to ProcessExited".to_string(),
+                browser_id: Some("browser-1".to_string()),
+                previous_health: Some(BrowserHealth::Ready),
+                current_health: Some(BrowserHealth::ProcessExited),
+                ..ServiceEvent::default()
+            }],
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::ProcessExited,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_derived_views();
+
+        assert_eq!(state.incidents.len(), 1);
+        assert_eq!(
+            state.incidents[0].acknowledged_at.as_deref(),
+            Some("2026-04-22T00:09:00Z")
+        );
+        assert_eq!(state.incidents[0].resolved_by.as_deref(), Some("operator"));
+        assert_eq!(
+            state.incidents[0].resolution_note.as_deref(),
+            Some("Recovered")
         );
     }
 

@@ -199,8 +199,24 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
             .and_then(|value| value.as_array())
             .map(|value| value.len())
             .unwrap_or(0);
+        let acknowledged_by = incident
+            .get("acknowledgedBy")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none");
+        let acknowledged_at = incident
+            .get("acknowledgedAt")
+            .and_then(|value| value.as_str())
+            .unwrap_or("never");
+        let resolved_by = incident
+            .get("resolvedBy")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none");
+        let resolved_at = incident
+            .get("resolvedAt")
+            .and_then(|value| value.as_str())
+            .unwrap_or("never");
         return Some(format!(
-            "{timestamp} {state} kind={kind} id={id}\n{browser}message={message}\nrelated_events={events} related_jobs={jobs}"
+            "{timestamp} {state} kind={kind} id={id}\n{browser}message={message}\nacknowledged_by={acknowledged_by} acknowledged_at={acknowledged_at}\nresolved_by={resolved_by} resolved_at={resolved_at}\nrelated_events={events} related_jobs={jobs}"
         ));
     }
     let incidents = data.get("incidents").and_then(|value| value.as_array())?;
@@ -2721,6 +2737,8 @@ Usage:
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
   agent-browser service cancel <job-id> [--reason <text>]
+  agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
+  agent-browser service resolve <incident-id> [--by <text>] [--note <text>]
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
   agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
@@ -2730,6 +2748,8 @@ Commands:
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
   cancel                Cancel a queued job or request running job cancellation
+  acknowledge           Record that an operator has seen a retained incident
+  resolve               Mark a retained incident handled with operator metadata
   jobs                  Show recent service control-plane jobs
   incidents             Show grouped retained service incidents
   events                Show recent service reconciliation, browser health, and tab lifecycle events
@@ -2740,6 +2760,7 @@ Notes:
   - The current control-plane snapshot is refreshed in the persisted service state.
   - Recent control-plane requests are retained as bounded job records with timestamps and final state.
   - Derived grouped incidents are retained with incident state, latest kind, and related event/job ids.
+  - Incident operator metadata includes acknowledgement and resolution timestamps, actor names, and notes.
   - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
   - Incident filters match incident state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
@@ -2748,7 +2769,7 @@ Notes:
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
-  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/events, and /api/service/reconcile.
+  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
@@ -2763,6 +2784,8 @@ Examples:
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
   agent-browser service cancel <job-id> --reason stale
+  agent-browser service acknowledge browser-1 --by operator --note triaged
+  agent-browser service resolve browser-1 --by operator --note recovered
   agent-browser service jobs --limit 20
   agent-browser service jobs --id <job-id>
   agent-browser service jobs --state failed --action navigate
@@ -3130,6 +3153,8 @@ Service:
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
   service cancel             Cancel a queued job or request running job cancellation
+  service acknowledge        Record that an operator has seen a retained incident
+  service resolve            Mark a retained incident handled
   service jobs               Show recent service control-plane jobs
   service incidents          Show grouped retained service incidents
   service events             Show recent service events
@@ -3371,6 +3396,8 @@ Examples:
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
   agent-browser service cancel <job-id>  # Cancel a queued or running service job
+  agent-browser service acknowledge      # Mark a retained incident acknowledged
+  agent-browser service resolve          # Mark a retained incident resolved
   agent-browser service jobs             # Inspect recent service control jobs
   agent-browser service incidents        # Inspect grouped retained service incidents
   agent-browser service events           # Inspect recent service events

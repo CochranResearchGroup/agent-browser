@@ -136,6 +136,8 @@ agent-browser service status          # Show service control-plane and configure
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser service cancel <job-id> # Cancel a queued or running service control job
+agent-browser service acknowledge <incident-id> # Mark a retained incident acknowledged
+agent-browser service resolve <incident-id>     # Mark a retained incident resolved
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service incidents       # Show grouped retained service incidents
 agent-browser service events          # Show recent service events
@@ -1211,6 +1213,8 @@ agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
 agent-browser service cancel <job-id> --reason stale
+agent-browser service acknowledge browser-1 --by operator --note triaged
+agent-browser service resolve browser-1 --by operator --note recovered
 agent-browser service jobs --limit 20
 agent-browser service jobs --id <job-id>
 agent-browser service jobs --state failed --action navigate --since 2026-04-22T00:00:00Z
@@ -1235,9 +1239,13 @@ Use `service status --watch` or `service watch` for a polling operator view of w
 
 Use `service cancel <job-id>` to mark a queued service job cancelled before it dispatches or request cooperative cancellation for a running job. Running cancellation drops the active service future, records the job as `cancelled`, and cleans up browser state before the worker accepts more work. Terminal jobs are rejected rather than rewritten. Add `--reason <text>` to record an operator-readable reason for queued cancellation.
 
+Use `service acknowledge <incident-id>` to mark a retained incident seen by an operator. Add `--by <text>` to record who acknowledged it and `--note <text>` to persist a short operator note.
+
+Use `service resolve <incident-id>` to mark a retained incident handled. This preserves the derived incident record while adding durable resolution metadata. Add `--by <text>` to record who resolved it and `--note <text>` to persist a resolution note.
+
 Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 
-Use `service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service state. Use `service incidents --id <incident-id>` to fetch one retained incident together with its expanded related events and jobs. Add `--state <state>`, `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter incidents before the limit is applied. Valid states are `active`, `recovered`, and `service`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` compares the incident `latestTimestamp` using RFC 3339 timestamps.
+Use `service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service state. Use `service incidents --id <incident-id>` to fetch one retained incident together with its expanded related events and jobs. Incident detail also includes acknowledgement and resolution metadata when present. Add `--state <state>`, `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter incidents before the limit is applied. Valid states are `active`, `recovered`, and `service`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` compares the incident `latestTimestamp` using RFC 3339 timestamps.
 
 Use `service events --limit <n>` to inspect recent reconciliation summaries, browser health transitions, and tab lifecycle changes without parsing the full service state. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, and `reconciliation_error`. `--since` accepts RFC 3339 timestamps.
 
@@ -1250,6 +1258,8 @@ curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>/cancel"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents?limit=20&state=active"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/acknowledge?by=operator&note=triaged"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/resolve?by=operator&note=recovered"
 curl "http://127.0.0.1:<stream-port>/api/service/events?limit=20&kind=browser_health_changed"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 ```
