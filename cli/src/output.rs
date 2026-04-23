@@ -162,6 +162,42 @@ fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_jobs_text(data: &serde_json::Value) -> Option<String> {
+    let jobs = data.get("jobs").and_then(|value| value.as_array())?;
+    if jobs.is_empty() {
+        return Some("No service jobs".to_string());
+    }
+
+    let lines = jobs
+        .iter()
+        .map(|job| {
+            let timestamp = job
+                .get("submittedAt")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-time");
+            let state = job
+                .get("state")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let action = job
+                .get("action")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-action");
+            let id = job
+                .get("id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-id");
+            let error = job
+                .get("error")
+                .and_then(|value| value.as_str())
+                .map(|error| format!(" error={error}"))
+                .unwrap_or_default();
+            format!("{timestamp} {state} action={action} id={id}{error}")
+        })
+        .collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
 pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &OutputOptions) {
     if opts.json {
         if opts.content_boundaries {
@@ -237,6 +273,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_events") {
             if let Some(output) = format_service_events_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_jobs") {
+            if let Some(output) = format_service_jobs_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -2569,12 +2611,14 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
+  agent-browser service jobs [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
 
 Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
+  jobs                  Show recent service control-plane jobs
   events                Show recent service reconciliation, browser health, and tab lifecycle events
 
 Notes:
@@ -2582,11 +2626,12 @@ Notes:
   - Persisted service state is loaded from ~/.agent-browser/service/state.json.
   - The current control-plane snapshot is refreshed in the persisted service state.
   - Recent control-plane requests are retained as bounded job records with timestamps and final state.
+  - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
-  - The stream server exposes the same surface at /api/service/status, /api/service/events, and /api/service/reconcile.
+  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
@@ -2600,6 +2645,8 @@ Examples:
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
+  agent-browser service jobs --limit 20
+  agent-browser service jobs --state failed --action navigate
   agent-browser service events --limit 20
   agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
   agent-browser service events --kind tab_lifecycle_changed
@@ -2959,6 +3006,7 @@ Service:
   service status             Show service worker health and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
+  service jobs               Show recent service control-plane jobs
   service events             Show recent service events
 
 Batch:
@@ -3192,6 +3240,7 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
+  agent-browser service jobs             # Inspect recent service control jobs
   agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile

@@ -36,6 +36,7 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
+agent-browser service jobs            # Show recent service control jobs
 agent-browser service events          # Show recent service events
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
@@ -256,6 +257,8 @@ agent-browser service status          # Inspect worker state, browser health, qu
 agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile       # Probe persisted browser records and update service state
+agent-browser service jobs --limit 20
+agent-browser service jobs --state failed --action navigate --since 2026-04-22T00:00:00Z
 agent-browser service events --limit 20
 agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
 agent-browser service events --kind tab_lifecycle_changed
@@ -271,12 +274,15 @@ The persisted service state also includes bounded audit records for recent contr
 
 `service reconcile` runs the same persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `state.json`, refreshes live tab records for reachable browser CDP endpoints, refreshes the `reconciliation` snapshot, appends service events, and returns the reconciled service state plus counts for total and changed browser records.
 
+`service jobs --limit <n>` prints recent control-plane jobs without requiring operators to parse the full service state. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
+
 `service events --limit <n>` prints recent reconciliation summaries, browser health transitions, and tab lifecycle changes without requiring operators to parse the full service state. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, and `reconciliation_error`. `--since` accepts RFC 3339 timestamps.
 
 When the session stream server is running, agents can read the same service surface over HTTP without shelling out:
 
 ```bash
 curl "http://127.0.0.1:<stream-port>/api/service/status"
+curl "http://127.0.0.1:<stream-port>/api/service/jobs?limit=20&state=failed"
 curl "http://127.0.0.1:<stream-port>/api/service/events?limit=20&kind=browser_health_changed"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 ```

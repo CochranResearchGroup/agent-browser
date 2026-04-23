@@ -95,6 +95,8 @@ The first backend-first correction is implemented on `service-model-phase-0`:
   tabs, lifecycle changes, URL/title changes, and closed tabs
 - control-plane requests now persist bounded service job records with action,
   priority, timestamps, final state, and error text
+- `service jobs` and `GET /api/service/jobs` expose recent job records without
+  requiring agents or operators to parse the full service status payload
 
 This deliberately uses the existing service status, reconcile, HTTP API, and
 dashboard surfaces instead of adding more dashboard-only state.

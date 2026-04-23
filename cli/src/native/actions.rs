@@ -35,7 +35,7 @@ use super::screenshot::{self, ScreenshotOptions};
 use super::service_health::reconcile_service_state;
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
-    ServiceEvent, ServiceEventKind, ServiceState,
+    JobState as ServiceJobState, ServiceEvent, ServiceEventKind, ServiceState,
 };
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 use super::snapshot::{self, SnapshotOptions};
@@ -1563,6 +1563,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "stream_status"
             | "service_status"
             | "service_reconcile"
+            | "service_jobs"
             | "service_events"
     );
     if !skip_launch {
@@ -1727,6 +1728,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_status" => handle_stream_status(state).await,
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
+        "service_jobs" => handle_service_jobs(cmd).await,
         "service_events" => handle_service_events(cmd).await,
         "waitforurl" => handle_waitforurl(cmd, state).await,
         "waitforloadstate" => handle_waitforloadstate(cmd, state).await,
@@ -5786,6 +5788,55 @@ async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let limit = cmd
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let state = cmd.get("state").and_then(|value| value.as_str());
+    let action = cmd.get("jobAction").and_then(|value| value.as_str());
+    let since = cmd
+        .get("since")
+        .and_then(|value| value.as_str())
+        .map(parse_service_event_timestamp)
+        .transpose()?;
+    let total = service_state.jobs.len();
+    let mut jobs = service_state.jobs.into_values().collect::<Vec<_>>();
+    jobs.sort_by(|left, right| {
+        let left_time = left.submitted_at.as_deref().unwrap_or_default();
+        let right_time = right.submitted_at.as_deref().unwrap_or_default();
+        left_time
+            .cmp(right_time)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let mut jobs = jobs
+        .into_iter()
+        .filter(|job| {
+            state.is_none_or(|expected| service_job_state_name(job.state) == expected)
+                && action.is_none_or(|expected| job.action == expected)
+                && since.is_none_or(|minimum| service_job_at_or_after(job, minimum))
+        })
+        .collect::<Vec<_>>();
+    let matched = jobs.len();
+    let start = matched.saturating_sub(limit);
+    jobs = jobs[start..].to_vec();
+
+    Ok(json!({
+        "jobs": jobs,
+        "count": jobs.len(),
+        "matched": matched,
+        "total": total,
+    }))
+}
+
 fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
     match kind {
         ServiceEventKind::Reconciliation => "reconciliation",
@@ -5795,9 +5846,30 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
     }
 }
 
+fn service_job_state_name(state: ServiceJobState) -> &'static str {
+    match state {
+        ServiceJobState::Queued => "queued",
+        ServiceJobState::Running => "running",
+        ServiceJobState::Succeeded => "succeeded",
+        ServiceJobState::Failed => "failed",
+        ServiceJobState::Cancelled => "cancelled",
+        ServiceJobState::TimedOut => "timed_out",
+    }
+}
+
 fn parse_service_event_timestamp(raw: &str) -> Result<DateTime<FixedOffset>, String> {
     DateTime::parse_from_rfc3339(raw)
         .map_err(|err| format!("Invalid --since timestamp '{}': {}", raw, err))
+}
+
+fn service_job_at_or_after(
+    job: &super::service_model::ServiceJob,
+    minimum: DateTime<FixedOffset>,
+) -> bool {
+    job.submitted_at
+        .as_deref()
+        .and_then(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
+        .is_some_and(|timestamp| timestamp >= minimum)
 }
 
 fn service_event_at_or_after(event: &ServiceEvent, minimum: DateTime<FixedOffset>) -> bool {
@@ -9544,6 +9616,90 @@ mod tests {
             .as_str()
             .unwrap_or_default()
             .contains("Invalid --since timestamp"));
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_jobs_returns_limited_jobs() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_jobs",
+            "id": "svc-jobs-1",
+            "limit": 1,
+            "serviceState": {
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "succeeded",
+                        "submittedAt": "2026-04-22T00:00:00Z"
+                    },
+                    "job-2": {
+                        "id": "job-2",
+                        "action": "click",
+                        "state": "failed",
+                        "submittedAt": "2026-04-22T00:01:00Z"
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 2);
+        assert_eq!(result["data"]["total"], 2);
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_jobs_filters_by_state_action_and_since() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_jobs",
+            "id": "svc-jobs-2",
+            "state": "failed",
+            "jobAction": "navigate",
+            "since": "2026-04-22T00:01:00Z",
+            "serviceState": {
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "failed",
+                        "submittedAt": "2026-04-22T00:00:00Z"
+                    },
+                    "job-2": {
+                        "id": "job-2",
+                        "action": "navigate",
+                        "state": "failed",
+                        "submittedAt": "2026-04-22T00:01:00Z"
+                    },
+                    "job-3": {
+                        "id": "job-3",
+                        "action": "click",
+                        "state": "failed",
+                        "submittedAt": "2026-04-22T00:02:00Z"
+                    },
+                    "job-4": {
+                        "id": "job-4",
+                        "action": "navigate",
+                        "state": "succeeded",
+                        "submittedAt": "2026-04-22T00:03:00Z"
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["total"], 4);
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
         assert!(state.browser.is_none());
     }
 

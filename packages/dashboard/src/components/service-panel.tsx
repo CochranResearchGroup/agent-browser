@@ -95,6 +95,17 @@ type ServiceTab = {
   challengeId?: string | null;
 };
 
+type ServiceJob = {
+  id: string;
+  action?: string;
+  state?: string;
+  priority?: string;
+  submittedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  error?: string | null;
+};
+
 type ServiceState = {
   controlPlane?: {
     workerState?: string;
@@ -106,7 +117,7 @@ type ServiceState = {
   events?: ServiceEvent[];
   browsers?: Record<string, ServiceBrowser>;
   profiles?: Record<string, unknown>;
-  jobs?: Record<string, unknown>;
+  jobs?: Record<string, ServiceJob>;
   sessions?: Record<string, ServiceSession>;
   tabs?: Record<string, ServiceTab>;
   sitePolicies?: Record<string, unknown>;
@@ -120,6 +131,13 @@ type ServiceStatusData = {
 
 type ServiceEventsData = {
   events?: ServiceEvent[];
+  count?: number;
+  matched?: number;
+  total?: number;
+};
+
+type ServiceJobsData = {
+  jobs?: ServiceJob[];
   count?: number;
   matched?: number;
   total?: number;
@@ -293,6 +311,37 @@ function EventRow({ event, onSelect }: { event: ServiceEvent; onSelect: (event: 
         </p>
       </div>
     </button>
+  );
+}
+
+function JobRow({ job }: { job: ServiceJob }) {
+  const failed = job.state === "failed" || job.state === "timed_out" || job.state === "cancelled";
+  return (
+    <div className="service-event-row">
+      <span
+        className={cn(
+          "service-event-dot",
+          job.state === "succeeded" && "service-event-dot-health",
+          failed && "service-event-dot-error",
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-bold text-foreground">
+            {job.action ?? "unknown action"}
+          </span>
+          <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
+            {job.state ?? "unknown"}
+          </Badge>
+          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+            {formatRelativeTime(job.submittedAt)}
+          </span>
+        </div>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+          {job.error || job.id || "No job details"}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -616,6 +665,7 @@ export function ServicePanel() {
   const activeSession = useAtomValue(activeSessionNameAtom);
   const [status, setStatus] = useState<ServiceStatusData | null>(null);
   const [events, setEvents] = useState<ServiceEventsData | null>(null);
+  const [jobs, setJobs] = useState<ServiceJobsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [error, setError] = useState("");
@@ -647,15 +697,19 @@ export function ServicePanel() {
       if (windowOption?.milliseconds) {
         params.set("since", new Date(Date.now() - windowOption.milliseconds).toISOString());
       }
-      const [statusResp, eventsResp] = await Promise.all([
+      const [statusResp, jobsResp, eventsResp] = await Promise.all([
         fetch(`${serviceBase(activePort)}/status`),
+        fetch(`${serviceBase(activePort)}/jobs?limit=8`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
       ]);
       const statusJson = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
+      const jobsJson = (await jobsResp.json()) as ApiResponse<ServiceJobsData>;
       const eventsJson = (await eventsResp.json()) as ApiResponse<ServiceEventsData>;
       if (!statusJson.success) throw new Error(statusJson.error || "Service status failed");
+      if (!jobsJson.success) throw new Error(jobsJson.error || "Service jobs failed");
       if (!eventsJson.success) throw new Error(eventsJson.error || "Service events failed");
       setStatus(statusJson.data ?? null);
+      setJobs(jobsJson.data ?? null);
       setEvents(eventsJson.data ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service API unavailable");
@@ -666,6 +720,7 @@ export function ServicePanel() {
 
   useEffect(() => {
     setStatus(null);
+    setJobs(null);
     setEvents(null);
     setError("");
     if (!canFetch) return;
@@ -695,7 +750,12 @@ export function ServicePanel() {
   const serviceState = status?.service_state;
   const control = status?.control_plane;
   const reconciliation = serviceState?.reconciliation;
+  const recentJobs = jobs?.jobs ?? Object.values(serviceState?.jobs ?? {}).slice(-8);
   const recentEvents = events?.events ?? serviceState?.events?.slice(-8) ?? [];
+  const jobSummary =
+    jobs?.matched !== undefined && jobs?.total !== undefined
+      ? `${jobs.matched} of ${jobs.total} matched`
+      : `Last ${recentJobs.length} retained service jobs`;
   const eventSummary =
     events?.matched !== undefined && events?.total !== undefined
       ? `${events.matched} of ${events.total} matched`
@@ -826,6 +886,13 @@ export function ServicePanel() {
               icon={History}
               tone="neutral"
             />
+            <HealthCard
+              label="Jobs"
+              value={String(jobs?.total ?? entityCounts.jobs)}
+              detail={`${jobs?.count ?? recentJobs.length} recent control jobs`}
+              icon={ServerCog}
+              tone="neutral"
+            />
           </div>
 
           <div className="service-summary-card">
@@ -929,6 +996,29 @@ export function ServicePanel() {
                   ))
                 )}
               </div>
+            </div>
+          </div>
+
+          <div className="service-timeline-card">
+            <div className="flex items-center gap-2 px-1">
+              <ServerCog className="size-4 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
+                  Recent jobs
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">{jobSummary}</p>
+              </div>
+              {loading && <Loader2 className="ml-auto size-3.5 animate-spin text-muted-foreground" />}
+            </div>
+            <Separator className="my-3" />
+            <div className="space-y-1">
+              {recentJobs.length === 0 ? (
+                <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
+                  No service jobs yet.
+                </p>
+              ) : (
+                recentJobs.map((job) => <JobRow key={job.id} job={job} />)
+              )}
             </div>
           </div>
 

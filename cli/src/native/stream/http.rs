@@ -159,6 +159,19 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" && path == "/api/service/jobs" {
+        let cmd = match service_jobs_command(query) {
+            Ok(cmd) => cmd,
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                return;
+            }
+        };
+        let result = relay_service_command(session_name, cmd).await;
+        write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
+    }
+
     if method == "GET" && path == "/api/models" {
         handle_models_request(&mut stream, origin.as_deref()).await;
         return;
@@ -281,6 +294,40 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
             }
             "" => {}
             _ => return Err(format!("Unknown service events query parameter: {}", key)),
+        }
+    }
+
+    Ok(cmd)
+}
+
+fn service_jobs_command(query: Option<&str>) -> Result<Value, String> {
+    let mut cmd = json!({
+        "action": "service_jobs",
+        "serviceState": load_service_state_snapshot(),
+    });
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "limit" => {
+                let limit = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("Invalid limit value: {}", value))?;
+                cmd["limit"] = json!(limit);
+            }
+            "state" => match value.as_str() {
+                "queued" | "running" | "succeeded" | "failed" | "cancelled" | "timed_out" => {
+                    cmd["state"] = json!(value);
+                }
+                _ => return Err(format!("Invalid state value: {}", value)),
+            },
+            "action" | "jobAction" | "job_action" | "job-action" => {
+                cmd["jobAction"] = json!(value);
+            }
+            "since" => {
+                cmd["since"] = json!(value);
+            }
+            "" => {}
+            _ => return Err(format!("Unknown service jobs query parameter: {}", key)),
         }
     }
 
@@ -443,6 +490,28 @@ mod tests {
         let cmd = service_events_command(Some("kind=tab_lifecycle_changed")).unwrap();
 
         assert_eq!(cmd["kind"], "tab_lifecycle_changed");
+    }
+
+    #[test]
+    fn service_jobs_command_maps_query_filters() {
+        let cmd = service_jobs_command(Some(
+            "limit=7&state=failed&action=navigate&since=2026-04-22T00%3A00%3A00Z",
+        ))
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_jobs");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["state"], "failed");
+        assert_eq!(cmd["jobAction"], "navigate");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+        assert!(cmd.get("serviceState").is_some());
+    }
+
+    #[test]
+    fn service_jobs_command_rejects_invalid_state() {
+        let err = service_jobs_command(Some("state=broken")).unwrap_err();
+
+        assert!(err.contains("Invalid state value"));
     }
 
     #[test]
