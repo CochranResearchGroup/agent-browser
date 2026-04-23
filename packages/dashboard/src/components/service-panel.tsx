@@ -205,6 +205,13 @@ type EventKindFilter =
 type EventWindowFilter = "all" | "15m" | "1h" | "24h";
 type EventLimit = 8 | 20 | 50;
 type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
+type IncidentTimelineItem = {
+  id: string;
+  timestamp: string;
+  kind: string;
+  title: string;
+  message?: string | null;
+};
 
 const EVENT_KIND_OPTIONS: Array<{ value: EventKindFilter; label: string }> = [
   { value: "all", label: "All" },
@@ -326,6 +333,48 @@ function incidentHandlingLabel(incident: IncidentRecord): string {
   const state = incidentHandlingState(incident);
   if (state === "unacknowledged") return "needs ack";
   return state;
+}
+
+function deriveIncidentTimeline(incident: IncidentRecord): IncidentTimelineItem[] {
+  const eventItems = incident.serviceEvents.map((event) => ({
+    id: event.id,
+    timestamp: event.timestamp,
+    kind: event.kind,
+    title:
+      event.kind === "browser_health_changed"
+        ? `${formatHealthLabel(event.previousHealth)} to ${formatHealthLabel(event.currentHealth)}`
+        : formatEventKind(event.kind),
+    message: event.message,
+  }));
+  const jobItems = incident.jobEvents.map((event) => ({
+    id: event.id,
+    timestamp: event.timestamp,
+    kind: event.kind,
+    title: formatEventKind(event.kind),
+    message: event.message,
+  }));
+  const operatorItems: IncidentTimelineItem[] = [];
+  if (incident.acknowledgedAt) {
+    operatorItems.push({
+      id: `${incident.id}-acknowledged`,
+      timestamp: incident.acknowledgedAt,
+      kind: "incident_acknowledged",
+      title: `Acknowledged by ${incident.acknowledgedBy || "unknown"}`,
+      message: incident.acknowledgementNote,
+    });
+  }
+  if (incident.resolvedAt) {
+    operatorItems.push({
+      id: `${incident.id}-resolved`,
+      timestamp: incident.resolvedAt,
+      kind: "incident_resolved",
+      title: `Resolved by ${incident.resolvedBy || "unknown"}`,
+      message: incident.resolutionNote,
+    });
+  }
+  return [...eventItems, ...jobItems, ...operatorItems].sort(
+    (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
+  );
 }
 
 function deriveJobIncidentEvents(jobs: ServiceJob[]): ServiceEvent[] {
@@ -452,12 +501,13 @@ function EventDot({ kind }: { kind: string }) {
   const isHealth = kind === "browser_health_changed";
   const isTab = kind === "tab_lifecycle_changed";
   const isJobIncident = kind === "service_job_timeout" || kind === "service_job_cancelled";
+  const isOperatorIncident = kind === "incident_acknowledged" || kind === "incident_resolved";
   return (
     <span
       className={cn(
         "service-event-dot",
         (isError || isJobIncident) && "service-event-dot-error",
-        isHealth && "service-event-dot-health",
+        (isHealth || isOperatorIncident) && "service-event-dot-health",
         isTab && "service-event-dot-tab",
       )}
     />
@@ -1066,6 +1116,10 @@ function IncidentDetailDialog({
   const incidentCount = serviceEventCount + (incident?.jobEvents.length ?? 0);
   const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
   const handlingState = incident ? incidentHandlingState(incident) : "unacknowledged";
+  const timeline = useMemo(
+    () => (incident ? deriveIncidentTimeline(incident) : []),
+    [incident],
+  );
 
   useEffect(() => {
     setActionNote("");
@@ -1152,6 +1206,35 @@ function IncidentDetailDialog({
                   </Button>
                 )}
               </div>
+              {timeline.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Incident history
+                  </p>
+                  <div className="service-incident-history">
+                    {timeline.map((item) => (
+                      <div key={item.id} className="service-incident-history-item">
+                        <EventDot kind={item.kind} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-xs font-bold text-foreground">
+                              {item.title}
+                            </span>
+                            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                              {formatAbsoluteTime(item.timestamp)}
+                            </span>
+                          </div>
+                          {item.message && (
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              {item.message}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {incident.transitionEvents.length > 0 && (
                 <div>
                   <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
