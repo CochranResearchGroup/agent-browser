@@ -324,6 +324,7 @@ agent-browser stream disable          # Stop runtime streaming and remove the .s
 agent-browser service status          # Inspect service control-plane and configured service entities
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
+agent-browser service events          # Show recent service events
 
 # Clipboard
 agent-browser clipboard read                      # Read text from clipboard
@@ -391,6 +392,8 @@ Use `agent-browser service status` for a service-mode snapshot. It reports worke
 Use `agent-browser service status --watch` or `agent-browser service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. Add `--interval <ms>` to set the poll interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 
 Use `agent-browser service reconcile` to run persisted browser health probes intentionally without requesting a control-plane status snapshot. It updates `~/.agent-browser/service/state.json` and returns the reconciled service state plus total and changed browser counts. The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError`, plus a bounded `events` log for reconciliation summaries and browser health transitions.
+
+Use `agent-browser service events --limit <n>` to inspect recent service events directly without parsing the full service status payload.
 
 Set `service.reconcileIntervalMs` in config, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background. Unset or `0` disables the background loop.
 

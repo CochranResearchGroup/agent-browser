@@ -945,13 +945,48 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "action": "service_reconcile",
                 "serviceState": flags.service_state.clone(),
             })),
+            Some("events") => {
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_events",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--limit" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --limit".to_string(),
+                                    usage: "service events [--limit <n>]",
+                                });
+                            };
+                            let limit =
+                                raw.parse::<usize>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --limit value: {}", raw),
+                                    usage: "service events [--limit <n>]",
+                                })?;
+                            cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service events: {}", flag),
+                                usage: "service events [--limit <n>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
             Some(sub) => Err(ParseError::UnknownSubcommand {
                 subcommand: sub.to_string(),
-                valid_options: &["status", "watch", "reconcile"],
+                valid_options: &["status", "watch", "reconcile", "events"],
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile>",
+                usage: "service <status|watch|reconcile|events>",
             }),
         },
 
@@ -4095,6 +4130,14 @@ mod tests {
             cmd["serviceState"]["sitePolicies"]["google"]["manualLoginPreferred"],
             true
         );
+    }
+
+    #[test]
+    fn test_service_events_limit() {
+        let cmd = parse_command(&args("service events --limit 7"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_events");
+        assert_eq!(cmd["limit"], 7);
     }
 
     #[test]

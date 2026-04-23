@@ -130,6 +130,38 @@ fn format_stream_status_text(action: Option<&str>, data: &serde_json::Value) -> 
     }
 }
 
+fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
+    let events = data.get("events").and_then(|value| value.as_array())?;
+    if events.is_empty() {
+        return Some("No service events".to_string());
+    }
+
+    let lines = events
+        .iter()
+        .map(|event| {
+            let timestamp = event
+                .get("timestamp")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-time");
+            let kind = event
+                .get("kind")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let message = event
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let browser = event
+                .get("browserId")
+                .and_then(|value| value.as_str())
+                .map(|id| format!(" browser={id}"))
+                .unwrap_or_default();
+            format!("{timestamp} {kind}{browser} {message}")
+        })
+        .collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
 pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &OutputOptions) {
     if opts.json {
         if opts.content_boundaries {
@@ -202,6 +234,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         if let Some(output) = format_stream_status_text(action, data) {
             println!("{}", output);
             return;
+        }
+        if action == Some("service_events") {
+            if let Some(output) = format_service_events_text(data) {
+                println!("{}", output);
+                return;
+            }
         }
         if action == Some("storage_get") {
             if let Some(output) = format_storage_text(data) {
@@ -2531,11 +2569,13 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
+  agent-browser service events [--limit <n>]
 
 Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
+  events                Show recent service reconciliation and browser health events
 
 Notes:
   - It does not launch a browser.
@@ -2557,6 +2597,7 @@ Examples:
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
+  agent-browser service events --limit 20
   agent-browser --json service status
 "##
         }
@@ -2913,6 +2954,7 @@ Service:
   service status             Show service worker health and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
+  service events             Show recent service events
 
 Batch:
   batch [--bail] ["cmd" ...]  Execute multiple commands sequentially (args or stdin)
@@ -3145,6 +3187,7 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
+  agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile
   agent-browser runtime login https://example.com --attachable # DevTools-enabled manual login for ordinary sites

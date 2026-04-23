@@ -1562,6 +1562,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "stream_status"
             | "service_status"
             | "service_reconcile"
+            | "service_events"
     );
     if !skip_launch {
         // Check if existing connection is stale and needs re-launch.
@@ -1725,6 +1726,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_status" => handle_stream_status(state).await,
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
+        "service_events" => handle_service_events(cmd).await,
         "waitforurl" => handle_waitforurl(cmd, state).await,
         "waitforloadstate" => handle_waitforloadstate(cmd, state).await,
         "waitforfunction" => handle_waitforfunction(cmd, state).await,
@@ -5720,6 +5722,30 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let limit = cmd
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let total = service_state.events.len();
+    let start = total.saturating_sub(limit);
+    let events = service_state.events[start..].to_vec();
+
+    Ok(json!({
+        "events": events,
+        "count": events.len(),
+        "total": total,
+    }))
+}
+
 // ---------------------------------------------------------------------------
 // Screencast handlers
 // ---------------------------------------------------------------------------
@@ -9348,6 +9374,41 @@ mod tests {
         assert_eq!(persisted.events.len(), 2);
 
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_events_returns_limited_events() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_events",
+            "id": "svc-events-1",
+            "limit": 1,
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "reconciliation",
+                        "message": "first"
+                    },
+                    {
+                        "id": "event-2",
+                        "timestamp": "2026-04-22T00:01:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "second",
+                        "browserId": "browser-1"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["total"], 2);
+        assert_eq!(result["data"]["events"][0]["id"], "event-2");
+        assert!(state.browser.is_none());
     }
 
     #[test]

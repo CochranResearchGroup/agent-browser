@@ -135,6 +135,7 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
+agent-browser service events          # Show recent service events
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 agent-browser chat "<instruction>"    # AI chat: natural language browser control (single-shot)
@@ -1200,6 +1201,7 @@ agent-browser service status
 agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
+agent-browser service events --limit 20
 ```
 
 The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch and close commands also update the persisted browser health records for the active session.
@@ -1211,6 +1213,8 @@ The persisted service state also includes a bounded `events` log with reconcilia
 Use `service reconcile` to run the persisted browser health probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot and appends service events.
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
+
+Use `service events --limit <n>` to inspect recent reconciliation summaries and browser health transitions without parsing the full service state.
 
 Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background.
 
