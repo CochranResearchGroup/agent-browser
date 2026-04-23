@@ -5790,6 +5790,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
     match kind {
         ServiceEventKind::Reconciliation => "reconciliation",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
+        ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
     }
 }

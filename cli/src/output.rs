@@ -2575,7 +2575,7 @@ Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
-  events                Show recent service reconciliation and browser health events
+  events                Show recent service reconciliation, browser health, and tab lifecycle events
 
 Notes:
   - It does not launch a browser.
@@ -2583,7 +2583,7 @@ Notes:
   - The current control-plane snapshot is refreshed in the persisted service state.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
-  - The bounded events log records reconciliation summaries and browser health transitions.
+  - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes the same surface at /api/service/status, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
@@ -2601,6 +2601,7 @@ Examples:
   agent-browser service reconcile
   agent-browser service events --limit 20
   agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
+  agent-browser service events --kind tab_lifecycle_changed
   agent-browser --json service status
 "##
         }

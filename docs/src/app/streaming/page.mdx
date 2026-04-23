@@ -45,10 +45,11 @@ The stream server also exposes a session-scoped JSON API for service-mode state:
 ```bash
 curl "http://127.0.0.1:9223/api/service/status"
 curl "http://127.0.0.1:9223/api/service/events?limit=20&kind=browser_health_changed"
+curl "http://127.0.0.1:9223/api/service/events?kind=tab_lifecycle_changed"
 curl -X POST "http://127.0.0.1:9223/api/service/reconcile"
 ```
 
-`GET /api/service/status` returns the same service snapshot as `agent-browser service status`. `GET /api/service/events` accepts `limit`, `kind`, `browser-id`, `browser_id`, `browserId`, and `since` query parameters. `POST /api/service/reconcile` runs the same persisted browser health probes as `agent-browser service reconcile`.
+`GET /api/service/status` returns the same service snapshot as `agent-browser service status`. `GET /api/service/events` accepts `limit`, `kind`, `browser-id`, `browser_id`, `browserId`, and `since` query parameters. Valid event kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, and `reconciliation_error`. `POST /api/service/reconcile` runs the same persisted browser health probes as `agent-browser service reconcile`.
 
 ## Relationship to screencast commands
 

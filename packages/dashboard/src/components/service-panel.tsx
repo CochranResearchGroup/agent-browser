@@ -46,7 +46,12 @@ type ReconciliationSnapshot = {
 type ServiceEvent = {
   id: string;
   timestamp: string;
-  kind: "reconciliation" | "browser_health_changed" | "reconciliation_error" | string;
+  kind:
+    | "reconciliation"
+    | "browser_health_changed"
+    | "tab_lifecycle_changed"
+    | "reconciliation_error"
+    | string;
   message: string;
   browserId?: string | null;
   previousHealth?: string | null;
@@ -125,7 +130,12 @@ type ApiResponse<T> = {
   error?: string | null;
 };
 
-type EventKindFilter = "all" | "reconciliation" | "browser_health_changed" | "reconciliation_error";
+type EventKindFilter =
+  | "all"
+  | "reconciliation"
+  | "browser_health_changed"
+  | "tab_lifecycle_changed"
+  | "reconciliation_error";
 type EventWindowFilter = "all" | "15m" | "1h" | "24h";
 type EventLimit = 8 | 20 | 50;
 
@@ -133,6 +143,7 @@ const EVENT_KIND_OPTIONS: Array<{ value: EventKindFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "reconciliation", label: "Reconcile" },
   { value: "browser_health_changed", label: "Health" },
+  { value: "tab_lifecycle_changed", label: "Tabs" },
   { value: "reconciliation_error", label: "Errors" },
 ];
 
@@ -240,12 +251,14 @@ function HealthCard({
 function EventDot({ kind }: { kind: string }) {
   const isError = kind === "reconciliation_error";
   const isHealth = kind === "browser_health_changed";
+  const isTab = kind === "tab_lifecycle_changed";
   return (
     <span
       className={cn(
         "service-event-dot",
         isError && "service-event-dot-error",
         isHealth && "service-event-dot-health",
+        isTab && "service-event-dot-tab",
       )}
     />
   );

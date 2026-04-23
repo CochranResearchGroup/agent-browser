@@ -265,7 +265,10 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
                 cmd["limit"] = json!(limit);
             }
             "kind" => match value.as_str() {
-                "reconciliation" | "browser_health_changed" | "reconciliation_error" => {
+                "reconciliation"
+                | "browser_health_changed"
+                | "tab_lifecycle_changed"
+                | "reconciliation_error" => {
                     cmd["kind"] = json!(value);
                 }
                 _ => return Err(format!("Invalid kind value: {}", value)),
@@ -433,6 +436,13 @@ mod tests {
         assert_eq!(cmd["browserId"], "browser-1");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
         assert!(cmd.get("serviceState").is_some());
+    }
+
+    #[test]
+    fn service_events_command_accepts_tab_lifecycle_kind() {
+        let cmd = service_events_command(Some("kind=tab_lifecycle_changed")).unwrap();
+
+        assert_eq!(cmd["kind"], "tab_lifecycle_changed");
     }
 
     #[test]

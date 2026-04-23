@@ -52,6 +52,7 @@ pub enum ServiceEventKind {
     #[default]
     Reconciliation,
     BrowserHealthChanged,
+    TabLifecycleChanged,
     ReconciliationError,
 }
 

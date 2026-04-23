@@ -981,6 +981,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                             match *raw {
                                 "reconciliation"
                                 | "browser_health_changed"
+                                | "tab_lifecycle_changed"
                                 | "reconciliation_error" => {
                                     cmd["kind"] = json!(raw);
                                 }
@@ -4198,6 +4199,17 @@ mod tests {
         assert_eq!(cmd["kind"], "browser_health_changed");
         assert_eq!(cmd["browserId"], "browser-1");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_events_accepts_tab_lifecycle_kind() {
+        let cmd = parse_command(
+            &args("service events --kind tab_lifecycle_changed"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["kind"], "tab_lifecycle_changed");
     }
 
     #[test]

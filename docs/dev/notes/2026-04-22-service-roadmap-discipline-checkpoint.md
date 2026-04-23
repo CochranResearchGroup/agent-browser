@@ -91,6 +91,8 @@ The first backend-first correction is implemented on `service-model-phase-0`:
   the stored service state
 - daemon-launched sessions now enable background service reconciliation every
   60000 ms by default, while `0` remains the explicit opt-out
+- tab reconciliation now emits `tab_lifecycle_changed` events for discovered
+  tabs, lifecycle changes, URL/title changes, and closed tabs
 
 This deliberately uses the existing service status, reconcile, HTTP API, and
 dashboard surfaces instead of adding more dashboard-only state.

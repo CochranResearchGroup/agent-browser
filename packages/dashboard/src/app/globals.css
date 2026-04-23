@@ -707,6 +707,11 @@ body {
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 14%, transparent);
 }
 
+.service-event-dot-tab {
+  background: var(--accent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .service-event-dot-error {
   background: var(--destructive);
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--destructive) 14%, transparent);

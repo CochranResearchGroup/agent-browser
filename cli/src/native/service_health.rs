@@ -50,6 +50,7 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
         changed_browsers: summary.changed_browsers,
     });
     record_health_transition_events(state, &before);
+    record_tab_lifecycle_events(state, &before);
     push_service_event(
         state,
         ServiceEvent {
@@ -299,6 +300,46 @@ fn record_health_transition_events(state: &mut ServiceState, before: &ServiceSta
     }
 }
 
+fn record_tab_lifecycle_events(state: &mut ServiceState, before: &ServiceState) {
+    let mut events = Vec::new();
+    for (id, tab) in &state.tabs {
+        let previous = before.tabs.get(id);
+        if previous.is_some_and(|previous| previous == tab) {
+            continue;
+        }
+
+        let message = match previous {
+            None => format!("Tab {} opened", id),
+            Some(previous) if previous.lifecycle != tab.lifecycle => format!(
+                "Tab {} lifecycle changed from {:?} to {:?}",
+                id, previous.lifecycle, tab.lifecycle
+            ),
+            Some(_) => format!("Tab {} metadata changed", id),
+        };
+
+        events.push(ServiceEvent {
+            kind: ServiceEventKind::TabLifecycleChanged,
+            message,
+            browser_id: Some(tab.browser_id.clone()),
+            details: Some(serde_json::json!({
+                "tabId": id,
+                "targetId": tab.target_id.clone(),
+                "previousLifecycle": previous.map(|tab| tab.lifecycle),
+                "currentLifecycle": tab.lifecycle,
+                "previousUrl": previous.and_then(|tab| tab.url.clone()),
+                "currentUrl": tab.url.clone(),
+                "previousTitle": previous.and_then(|tab| tab.title.clone()),
+                "currentTitle": tab.title.clone(),
+                "ownerSessionId": tab.owner_session_id.clone(),
+            })),
+            ..new_service_event()
+        });
+    }
+    for event in events {
+        push_service_event(state, event);
+    }
+}
+
 fn changed_tab_count(state: &ServiceState, before: &ServiceState) -> usize {
     state
         .tabs
@@ -491,6 +532,20 @@ mod tests {
             state.events.last().unwrap().details.as_ref().unwrap()["changedTabs"],
             1
         );
+        let tab_event = state
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::TabLifecycleChanged)
+            .unwrap();
+        assert_eq!(tab_event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["tabId"],
+            "target:page-1"
+        );
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["currentLifecycle"],
+            "ready"
+        );
     }
 
     #[tokio::test]
@@ -522,6 +577,76 @@ mod tests {
         assert_eq!(
             state.events.last().unwrap().details.as_ref().unwrap()["changedTabs"],
             1
+        );
+        let tab_event = state
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::TabLifecycleChanged)
+            .unwrap();
+        assert_eq!(tab_event.details.as_ref().unwrap()["tabId"], "target:stale");
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["previousLifecycle"],
+            "ready"
+        );
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["currentLifecycle"],
+            "closed"
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_records_tab_metadata_change_events() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(serve_cdp_version_and_list(
+            listener,
+            r#"[
+                {"id":"page-1","type":"page","title":"New Title","url":"https://example.com/new"}
+            ]"#,
+        ));
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            cdp_endpoint: Some(format!("ws://127.0.0.1:{}/devtools/browser/abc", port)),
+            ..BrowserProcess::default()
+        });
+        state.tabs.insert(
+            "target:page-1".to_string(),
+            BrowserTab {
+                id: "target:page-1".to_string(),
+                browser_id: "browser-1".to_string(),
+                target_id: Some("page-1".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                url: Some("https://example.com/old".to_string()),
+                title: Some("Old Title".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+
+        reconcile_service_state(&mut state).await;
+        server.await.unwrap();
+
+        let tab_event = state
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::TabLifecycleChanged)
+            .unwrap();
+        assert_eq!(tab_event.message, "Tab target:page-1 metadata changed");
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["previousUrl"],
+            "https://example.com/old"
+        );
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["currentUrl"],
+            "https://example.com/new"
+        );
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["previousTitle"],
+            "Old Title"
+        );
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["currentTitle"],
+            "New Title"
         );
     }
 
