@@ -163,6 +163,46 @@ fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
 }
 
 fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
+    if let Some(incident) = data.get("incident") {
+        let timestamp = incident
+            .get("latestTimestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown-time");
+        let state = incident
+            .get("state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let kind = incident
+            .get("latestKind")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let id = incident
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown-id");
+        let browser = incident
+            .get("browserId")
+            .and_then(|value| value.as_str())
+            .map(|value| format!("browser={value}\n"))
+            .unwrap_or_default();
+        let message = incident
+            .get("latestMessage")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let events = data
+            .get("events")
+            .and_then(|value| value.as_array())
+            .map(|value| value.len())
+            .unwrap_or(0);
+        let jobs = data
+            .get("jobs")
+            .and_then(|value| value.as_array())
+            .map(|value| value.len())
+            .unwrap_or(0);
+        return Some(format!(
+            "{timestamp} {state} kind={kind} id={id}\n{browser}message={message}\nrelated_events={events} related_jobs={jobs}"
+        ));
+    }
     let incidents = data.get("incidents").and_then(|value| value.as_array())?;
     if incidents.is_empty() {
         return Some("No service incidents".to_string());
@@ -2682,7 +2722,7 @@ Usage:
   agent-browser service reconcile
   agent-browser service cancel <job-id> [--reason <text>]
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
-  agent-browser service incidents [--limit <n>] [--state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
+  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
 
 Commands:
@@ -2703,6 +2743,7 @@ Notes:
   - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
   - Incident filters match incident state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
+  - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
@@ -2726,6 +2767,7 @@ Examples:
   agent-browser service jobs --id <job-id>
   agent-browser service jobs --state failed --action navigate
   agent-browser service incidents --limit 20
+  agent-browser service incidents --id browser-1
   agent-browser service incidents --state active --kind service_job_timeout
   agent-browser service incidents --state recovered --browser-id browser-1
   agent-browser service events --limit 20

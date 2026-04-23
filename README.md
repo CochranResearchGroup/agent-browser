@@ -1215,6 +1215,7 @@ agent-browser service jobs --limit 20
 agent-browser service jobs --id <job-id>
 agent-browser service jobs --state failed --action navigate --since 2026-04-22T00:00:00Z
 agent-browser service incidents --limit 20
+agent-browser service incidents --id browser-1
 agent-browser service incidents --state active --kind service_job_timeout
 agent-browser service incidents --state recovered --browser-id browser-1
 agent-browser service events --limit 20
@@ -1236,7 +1237,7 @@ Use `service cancel <job-id>` to mark a queued service job cancelled before it d
 
 Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 
-Use `service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service state. Add `--state <state>`, `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter incidents before the limit is applied. Valid states are `active`, `recovered`, and `service`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` compares the incident `latestTimestamp` using RFC 3339 timestamps.
+Use `service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service state. Use `service incidents --id <incident-id>` to fetch one retained incident together with its expanded related events and jobs. Add `--state <state>`, `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter incidents before the limit is applied. Valid states are `active`, `recovered`, and `service`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` compares the incident `latestTimestamp` using RFC 3339 timestamps.
 
 Use `service events --limit <n>` to inspect recent reconciliation summaries, browser health transitions, and tab lifecycle changes without parsing the full service state. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, and `reconciliation_error`. `--since` accepts RFC 3339 timestamps.
 
@@ -1248,6 +1249,7 @@ curl "http://127.0.0.1:<stream-port>/api/service/jobs?limit=20&state=failed"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>/cancel"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents?limit=20&state=active"
+curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>"
 curl "http://127.0.0.1:<stream-port>/api/service/events?limit=20&kind=browser_health_changed"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 ```

@@ -5892,6 +5892,39 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         .map(parse_service_event_timestamp)
         .transpose()?;
     let total = service_state.incidents.len();
+    if let Some(incident_id) = cmd.get("incidentId").and_then(|value| value.as_str()) {
+        let incident = service_state
+            .incidents
+            .iter()
+            .find(|incident| incident.id == incident_id)
+            .cloned()
+            .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
+        let events = incident
+            .event_ids
+            .iter()
+            .filter_map(|event_id| {
+                service_state
+                    .events
+                    .iter()
+                    .find(|event| &event.id == event_id)
+                    .cloned()
+            })
+            .collect::<Vec<_>>();
+        let jobs = incident
+            .job_ids
+            .iter()
+            .filter_map(|job_id| service_state.jobs.get(job_id).cloned())
+            .collect::<Vec<_>>();
+        return Ok(json!({
+            "incident": incident,
+            "incidents": [incident],
+            "events": events,
+            "jobs": jobs,
+            "count": 1,
+            "matched": 1,
+            "total": total,
+        }));
+    }
     let mut incidents = service_state
         .incidents
         .into_iter()
@@ -9892,6 +9925,57 @@ mod tests {
         assert_eq!(result["data"]["matched"], 1);
         assert_eq!(result["data"]["total"], 4);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1-match");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_returns_incident_by_id_with_related_records() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-3",
+            "incidentId": "browser-1",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser recovered",
+                        "browserId": "browser-1"
+                    }
+                ],
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "cancelled",
+                        "submittedAt": "2026-04-22T00:01:00Z"
+                    }
+                },
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "latestTimestamp": "2026-04-22T00:01:00Z",
+                        "latestMessage": "navigate was cancelled",
+                        "latestKind": "service_job_cancelled",
+                        "eventIds": ["event-1"],
+                        "jobIds": ["job-1"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["incident"]["id"], "browser-1");
+        assert_eq!(result["data"]["events"][0]["id"], "event-1");
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
+        assert_eq!(result["data"]["count"], 1);
         assert!(state.browser.is_none());
     }
 

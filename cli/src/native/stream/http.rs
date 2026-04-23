@@ -179,6 +179,32 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" && path.starts_with("/api/service/incidents/") {
+        let Some(incident_id) = path
+            .strip_prefix("/api/service/incidents/")
+            .filter(|id| !id.is_empty())
+        else {
+            write_json_result(
+                &mut stream,
+                Err("Missing service incident id".to_string()),
+                "400 Bad Request",
+            )
+            .await;
+            return;
+        };
+        let mut cmd = match service_incidents_command(query) {
+            Ok(cmd) => cmd,
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                return;
+            }
+        };
+        cmd["incidentId"] = json!(incident_id);
+        let result = relay_service_command(session_name, cmd).await;
+        write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
+    }
+
     if method == "GET" && path.starts_with("/api/service/jobs/") {
         let Some(job_id) = path
             .strip_prefix("/api/service/jobs/")
@@ -372,6 +398,9 @@ fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
                     .parse::<usize>()
                     .map_err(|_| format!("Invalid limit value: {}", value))?;
                 cmd["limit"] = json!(limit);
+            }
+            "id" | "incidentId" | "incident_id" | "incident-id" => {
+                cmd["incidentId"] = json!(value);
             }
             "state" => match value.as_str() {
                 "active" | "recovered" | "service" => {
@@ -605,17 +634,29 @@ mod tests {
     #[test]
     fn service_incidents_command_maps_query_filters() {
         let cmd = service_incidents_command(Some(
-            "limit=7&state=active&kind=service_job_timeout&browser-id=browser-1&since=2026-04-22T00%3A00%3A00Z",
+            "id=incident-1&limit=7&state=active&kind=service_job_timeout&browser-id=browser-1&since=2026-04-22T00%3A00%3A00Z",
         ))
         .unwrap();
 
         assert_eq!(cmd["action"], "service_incidents");
+        assert_eq!(cmd["incidentId"], "incident-1");
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");
         assert_eq!(cmd["kind"], "service_job_timeout");
         assert_eq!(cmd["browserId"], "browser-1");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
         assert!(cmd.get("serviceState").is_some());
+    }
+
+    #[test]
+    fn split_path_query_handles_service_incident_detail() {
+        assert_eq!(
+            split_path_query("/api/service/incidents/incident-123?since=2026-04-22T00%3A00%3A00Z"),
+            (
+                "/api/service/incidents/incident-123",
+                Some("since=2026-04-22T00%3A00%3A00Z")
+            )
+        );
     }
 
     #[test]
