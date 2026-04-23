@@ -14,6 +14,7 @@ pub struct ServiceState {
     pub control_plane: Option<ControlPlaneSnapshot>,
     pub reconciliation: Option<ServiceReconciliationSnapshot>,
     pub events: Vec<ServiceEvent>,
+    pub incidents: Vec<ServiceIncident>,
     pub profiles: BTreeMap<String, BrowserProfile>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     pub sessions: BTreeMap<String, BrowserSession>,
@@ -29,6 +30,11 @@ impl ServiceState {
     pub fn overlay_configured_entities(&mut self, configured: ServiceState) {
         self.site_policies.extend(configured.site_policies);
         self.providers.extend(configured.providers);
+    }
+
+    /// Refresh bounded derived collections before persistence or API exposure.
+    pub fn refresh_derived_views(&mut self) {
+        self.incidents = derive_service_incidents(self);
     }
 }
 
@@ -46,6 +52,21 @@ pub struct ServiceEvent {
     pub details: Option<serde_json::Value>,
 }
 
+/// Grouped service incident derived from event and job history.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceIncident {
+    pub id: String,
+    pub browser_id: Option<String>,
+    pub label: String,
+    pub latest_timestamp: String,
+    pub latest_message: String,
+    pub latest_kind: String,
+    pub current_health: Option<BrowserHealth>,
+    pub event_ids: Vec<String>,
+    pub job_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceEventKind {
@@ -54,6 +75,218 @@ pub enum ServiceEventKind {
     BrowserHealthChanged,
     TabLifecycleChanged,
     ReconciliationError,
+}
+
+fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
+    let mut grouped = BTreeMap::<String, ServiceIncident>::new();
+
+    for event in state
+        .events
+        .iter()
+        .filter(|event| service_event_is_incident(event))
+    {
+        let browser_id = event.browser_id.clone();
+        let key = browser_id.clone().unwrap_or_else(|| "service".to_string());
+        let incident = grouped
+            .entry(key.clone())
+            .or_insert_with(|| ServiceIncident {
+                id: key.clone(),
+                browser_id: browser_id.clone(),
+                label: browser_id
+                    .clone()
+                    .unwrap_or_else(|| "Service incidents".to_string()),
+                latest_timestamp: event.timestamp.clone(),
+                latest_message: event.message.clone(),
+                latest_kind: service_event_kind_name(event.kind).to_string(),
+                current_health: event.current_health,
+                ..ServiceIncident::default()
+            });
+
+        if incident_is_newer(&event.timestamp, &incident.latest_timestamp) {
+            incident.latest_timestamp = event.timestamp.clone();
+            incident.latest_message = event.message.clone();
+            incident.latest_kind = service_event_kind_name(event.kind).to_string();
+            incident.current_health = event.current_health.or(incident.current_health);
+        }
+
+        incident.event_ids.push(event.id.clone());
+    }
+
+    for job in state
+        .jobs
+        .values()
+        .filter(|job| service_job_is_incident(job))
+    {
+        let browser_id = service_job_browser_id(job, state);
+        let key = browser_id.clone().unwrap_or_else(|| "service".to_string());
+        let timestamp = service_job_incident_timestamp(job);
+        let message = service_job_incident_message(job);
+        let kind = service_job_incident_kind(job);
+        let incident = grouped
+            .entry(key.clone())
+            .or_insert_with(|| ServiceIncident {
+                id: key.clone(),
+                browser_id: browser_id.clone(),
+                label: browser_id
+                    .clone()
+                    .unwrap_or_else(|| "Service incidents".to_string()),
+                latest_timestamp: timestamp.to_string(),
+                latest_message: message.clone(),
+                latest_kind: kind.to_string(),
+                current_health: state.browsers.get(&key).map(|browser| browser.health),
+                ..ServiceIncident::default()
+            });
+
+        if incident_is_newer(&timestamp, &incident.latest_timestamp) {
+            incident.latest_timestamp = timestamp.to_string();
+            incident.latest_message = message;
+            incident.latest_kind = kind.to_string();
+            if let Some(browser_id) = incident.browser_id.as_ref() {
+                incident.current_health =
+                    state.browsers.get(browser_id).map(|browser| browser.health);
+            }
+        }
+
+        incident.job_ids.push(job.id.clone());
+    }
+
+    let event_timestamps: BTreeMap<&str, &str> = state
+        .events
+        .iter()
+        .map(|event| (event.id.as_str(), event.timestamp.as_str()))
+        .collect();
+    let job_timestamps: BTreeMap<&str, &str> = state
+        .jobs
+        .values()
+        .map(|job| (job.id.as_str(), service_job_incident_timestamp(job)))
+        .collect();
+
+    let mut incidents = grouped.into_values().collect::<Vec<_>>();
+    for incident in &mut incidents {
+        incident.event_ids.sort_by(|left, right| {
+            job_or_event_timestamp(&event_timestamps, left)
+                .cmp(&job_or_event_timestamp(&event_timestamps, right))
+                .reverse()
+                .then_with(|| left.cmp(right))
+        });
+        incident.job_ids.sort_by(|left, right| {
+            job_or_event_timestamp(&job_timestamps, left)
+                .cmp(&job_or_event_timestamp(&job_timestamps, right))
+                .reverse()
+                .then_with(|| left.cmp(right))
+        });
+        if incident.label.is_empty() {
+            incident.label = incident
+                .browser_id
+                .clone()
+                .unwrap_or_else(|| "Service incidents".to_string());
+        }
+        if incident.current_health.is_none() {
+            incident.current_health = incident
+                .browser_id
+                .as_ref()
+                .and_then(|browser_id| state.browsers.get(browser_id))
+                .map(|browser| browser.health);
+        }
+    }
+    incidents.sort_by(|left, right| {
+        left.latest_timestamp
+            .cmp(&right.latest_timestamp)
+            .reverse()
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    incidents
+}
+
+fn job_or_event_timestamp<'a>(timestamps: &'a BTreeMap<&str, &'a str>, id: &str) -> &'a str {
+    timestamps.get(id).copied().unwrap_or("")
+}
+
+fn incident_is_newer(candidate: &str, current: &str) -> bool {
+    candidate >= current
+}
+
+fn service_event_is_incident(event: &ServiceEvent) -> bool {
+    match event.kind {
+        ServiceEventKind::ReconciliationError => true,
+        ServiceEventKind::BrowserHealthChanged => {
+            browser_health_is_bad(event.current_health)
+                || browser_health_is_recovery(event.previous_health, event.current_health)
+        }
+        ServiceEventKind::Reconciliation | ServiceEventKind::TabLifecycleChanged => false,
+    }
+}
+
+fn browser_health_is_bad(value: Option<BrowserHealth>) -> bool {
+    matches!(
+        value,
+        Some(BrowserHealth::ProcessExited)
+            | Some(BrowserHealth::CdpDisconnected)
+            | Some(BrowserHealth::Unreachable)
+    )
+}
+
+fn browser_health_is_recovery(
+    previous: Option<BrowserHealth>,
+    current: Option<BrowserHealth>,
+) -> bool {
+    browser_health_is_bad(previous) && current == Some(BrowserHealth::Ready)
+}
+
+fn service_job_is_incident(job: &ServiceJob) -> bool {
+    matches!(job.state, JobState::Cancelled | JobState::TimedOut)
+}
+
+fn service_job_incident_kind(job: &ServiceJob) -> &'static str {
+    match job.state {
+        JobState::TimedOut => "service_job_timeout",
+        JobState::Cancelled => "service_job_cancelled",
+        _ => "service_job_incident",
+    }
+}
+
+fn service_job_incident_message(job: &ServiceJob) -> String {
+    if job.state == JobState::TimedOut {
+        format!("{} timed out", empty_to_service_label(&job.action))
+    } else {
+        format!("{} was cancelled", empty_to_service_label(&job.action))
+    }
+}
+
+fn empty_to_service_label(value: &str) -> &str {
+    if value.is_empty() {
+        "Service job"
+    } else {
+        value
+    }
+}
+
+fn service_job_incident_timestamp(job: &ServiceJob) -> &str {
+    job.completed_at
+        .as_deref()
+        .or(job.started_at.as_deref())
+        .or(job.submitted_at.as_deref())
+        .unwrap_or("")
+}
+
+fn service_job_browser_id(job: &ServiceJob, state: &ServiceState) -> Option<String> {
+    match &job.target {
+        JobTarget::Browser(browser_id) => Some(browser_id.clone()),
+        JobTarget::Tab(tab_id) => state.tabs.get(tab_id).map(|tab| tab.browser_id.clone()),
+        JobTarget::Service
+        | JobTarget::Profile(_)
+        | JobTarget::Monitor(_)
+        | JobTarget::Challenge(_) => None,
+    }
+}
+
+fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
+    match kind {
+        ServiceEventKind::Reconciliation => "reconciliation",
+        ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
+        ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
+        ServiceEventKind::ReconciliationError => "reconciliation_error",
+    }
 }
 
 /// Latest persisted service reconciliation result.
@@ -736,6 +969,104 @@ mod tests {
         assert_eq!(
             decoded.sessions["session-1"].owner,
             ServiceActor::Agent("codex".to_string())
+        );
+    }
+
+    #[test]
+    fn refresh_derived_views_groups_incidents_by_browser() {
+        let mut state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "event-crash".to_string(),
+                    timestamp: "2026-04-22T00:02:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from Ready to ProcessExited"
+                        .to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(BrowserHealth::Ready),
+                    current_health: Some(BrowserHealth::ProcessExited),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "event-recover".to_string(),
+                    timestamp: "2026-04-22T00:03:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from ProcessExited to Ready"
+                        .to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(BrowserHealth::ProcessExited),
+                    current_health: Some(BrowserHealth::Ready),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "event-reconcile-error".to_string(),
+                    timestamp: "2026-04-22T00:04:00Z".to_string(),
+                    kind: ServiceEventKind::ReconciliationError,
+                    message: "Failed to reconcile service state".to_string(),
+                    ..ServiceEvent::default()
+                },
+            ],
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::Ready,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            tabs: BTreeMap::from([(
+                "tab-1".to_string(),
+                BrowserTab {
+                    id: "tab-1".to_string(),
+                    browser_id: "browser-1".to_string(),
+                    ..BrowserTab::default()
+                },
+            )]),
+            jobs: BTreeMap::from([
+                (
+                    "job-cancelled".to_string(),
+                    ServiceJob {
+                        id: "job-cancelled".to_string(),
+                        action: "navigate".to_string(),
+                        target: JobTarget::Tab("tab-1".to_string()),
+                        state: JobState::Cancelled,
+                        completed_at: Some("2026-04-22T00:05:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                ),
+                (
+                    "job-timeout".to_string(),
+                    ServiceJob {
+                        id: "job-timeout".to_string(),
+                        action: "snapshot".to_string(),
+                        target: JobTarget::Service,
+                        state: JobState::TimedOut,
+                        completed_at: Some("2026-04-22T00:06:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_derived_views();
+
+        assert_eq!(state.incidents.len(), 2);
+        assert_eq!(state.incidents[0].id, "service");
+        assert_eq!(state.incidents[0].latest_kind, "service_job_timeout");
+        assert_eq!(state.incidents[0].event_ids, vec!["event-reconcile-error"]);
+        assert_eq!(state.incidents[0].job_ids, vec!["job-timeout"]);
+        assert_eq!(state.incidents[1].id, "browser-1");
+        assert_eq!(state.incidents[1].browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(state.incidents[1].latest_kind, "service_job_cancelled");
+        assert_eq!(
+            state.incidents[1].event_ids,
+            vec!["event-recover", "event-crash"]
+        );
+        assert_eq!(state.incidents[1].job_ids, vec!["job-cancelled"]);
+        assert_eq!(
+            state.incidents[1].current_health,
+            Some(BrowserHealth::Ready)
         );
     }
 

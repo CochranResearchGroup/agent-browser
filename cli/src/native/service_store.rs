@@ -52,13 +52,15 @@ impl ServiceStateStore for JsonServiceStateStore {
             }
         };
 
-        serde_json::from_str(&raw).map_err(|err| {
+        let mut state: ServiceState = serde_json::from_str(&raw).map_err(|err| {
             format!(
                 "Invalid service state JSON {}: {}",
                 self.path.display(),
                 err
             )
-        })
+        })?;
+        state.refresh_derived_views();
+        Ok(state)
     }
 
     fn save(&self, state: &ServiceState) -> Result<(), String> {
@@ -72,7 +74,9 @@ impl ServiceStateStore for JsonServiceStateStore {
             })?;
         }
 
-        let serialized = serde_json::to_string_pretty(state)
+        let mut normalized = state.clone();
+        normalized.refresh_derived_views();
+        let serialized = serde_json::to_string_pretty(&normalized)
             .map_err(|err| format!("Failed to serialize service state: {}", err))?;
         let temp_path = temp_state_path(&self.path);
         fs::write(&temp_path, format!("{}\n", serialized)).map_err(|err| {
@@ -185,6 +189,43 @@ mod tests {
         let err = store.load().expect_err("invalid state should fail");
 
         assert!(err.contains("Invalid service state JSON"));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn load_backfills_derived_incidents() {
+        let path = unique_state_path("service-state-incidents");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            r#"{
+  "events": [
+    {
+      "id": "event-1",
+      "timestamp": "2026-04-22T00:00:00Z",
+      "kind": "reconciliation_error",
+      "message": "Failed to reconcile service state"
+    }
+  ]
+}"#,
+        )
+        .unwrap();
+        let store = JsonServiceStateStore::new(&path);
+
+        let state = store.load().expect("state should load");
+
+        assert_eq!(
+            state.incidents,
+            vec![crate::native::service_model::ServiceIncident {
+                id: "service".to_string(),
+                label: "Service incidents".to_string(),
+                latest_timestamp: "2026-04-22T00:00:00Z".to_string(),
+                latest_message: "Failed to reconcile service state".to_string(),
+                latest_kind: "reconciliation_error".to_string(),
+                event_ids: vec!["event-1".to_string()],
+                ..crate::native::service_model::ServiceIncident::default()
+            }]
+        );
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 }

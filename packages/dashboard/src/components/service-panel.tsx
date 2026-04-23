@@ -123,6 +123,7 @@ type ServiceState = {
   };
   reconciliation?: ReconciliationSnapshot | null;
   events?: ServiceEvent[];
+  incidents?: ServiceIncident[];
   browsers?: Record<string, ServiceBrowser>;
   profiles?: Record<string, unknown>;
   jobs?: Record<string, ServiceJob>;
@@ -166,8 +167,21 @@ type IncidentRecord = {
   latestMessage: string;
   latestKind: string;
   currentHealth?: string | null;
+  serviceEvents: ServiceEvent[];
   transitionEvents: ServiceEvent[];
   jobEvents: ServiceEvent[];
+};
+
+type ServiceIncident = {
+  id: string;
+  browserId?: string | null;
+  label: string;
+  latestTimestamp: string;
+  latestMessage: string;
+  latestKind: string;
+  currentHealth?: string | null;
+  eventIds?: string[];
+  jobIds?: string[];
 };
 
 type EventKindFilter =
@@ -299,62 +313,56 @@ function deriveJobIncidentEvents(jobs: ServiceJob[]): ServiceEvent[] {
 }
 
 function deriveIncidentRecords(
-  events: ServiceEvent[],
-  browsers: ServiceBrowser[],
-  activeSession?: string | null,
+  incidents: ServiceIncident[],
+  allEvents: ServiceEvent[],
+  allJobs: ServiceJob[],
 ): IncidentRecord[] {
-  const matchingBrowsers = browsers.filter((browser) =>
-    browser.activeSessionIds?.includes(activeSession ?? ""),
-  );
-  const fallbackBrowserId =
-    matchingBrowsers.length === 1
-      ? matchingBrowsers[0]?.id
-      : browsers.length === 1
-        ? browsers[0]?.id
-        : undefined;
-  const grouped = new Map<string, IncidentRecord>();
+  const eventById = new Map(allEvents.map((event) => [event.id, event]));
+  const jobById = new Map(allJobs.map((job) => [job.id, job]));
 
-  for (const event of events.filter(isIncidentEvent)) {
-    const browserId = event.browserId ?? fallbackBrowserId ?? null;
-    const key = browserId ?? "service";
-    const existing = grouped.get(key) ?? {
-      id: key,
-      browserId,
-      label: browserId ?? "Service incidents",
-      latestTimestamp: event.timestamp,
-      latestMessage: event.message || "No message",
-      latestKind: event.kind,
-      currentHealth: event.currentHealth,
-      transitionEvents: [],
-      jobEvents: [],
-    };
+  return incidents
+    .map((incident) => {
+      const serviceEvents = (incident.eventIds ?? [])
+        .map((id) => eventById.get(id))
+        .filter((event): event is ServiceEvent => !!event)
+        .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
+      const transitionEvents = serviceEvents.filter((event) => event.kind === "browser_health_changed");
+      const jobEvents = (incident.jobIds ?? [])
+        .map((id) => jobById.get(id))
+        .filter((job): job is ServiceJob => !!job)
+        .map((job) => ({
+          id: `job-incident-${job.id}`,
+          timestamp: job.completedAt ?? job.startedAt ?? job.submittedAt ?? "",
+          kind: job.state === "timed_out" ? "service_job_timeout" : "service_job_cancelled",
+          message:
+            job.state === "timed_out"
+              ? `${job.action ?? "Service job"} timed out`
+              : `${job.action ?? "Service job"} was cancelled`,
+          details: {
+            jobId: job.id,
+            action: job.action,
+            state: job.state,
+            submittedAt: job.submittedAt,
+            startedAt: job.startedAt,
+            completedAt: job.completedAt,
+            error: job.error,
+          },
+        }))
+        .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
 
-    if (new Date(event.timestamp).getTime() >= new Date(existing.latestTimestamp).getTime()) {
-      existing.latestTimestamp = event.timestamp;
-      existing.latestMessage = event.message || "No message";
-      existing.latestKind = event.kind;
-      existing.currentHealth = event.currentHealth ?? existing.currentHealth;
-    }
-
-    if (event.kind === "browser_health_changed") {
-      existing.transitionEvents.push(event);
-    } else {
-      existing.jobEvents.push(event);
-    }
-
-    grouped.set(key, existing);
-  }
-
-  return [...grouped.values()]
-    .map((record) => ({
-      ...record,
-      transitionEvents: [...record.transitionEvents].sort(
-        (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
-      ),
-      jobEvents: [...record.jobEvents].sort(
-        (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
-      ),
-    }))
+      return {
+        id: incident.id,
+        browserId: incident.browserId,
+        label: incident.label,
+        latestTimestamp: incident.latestTimestamp,
+        latestMessage: incident.latestMessage,
+        latestKind: incident.latestKind,
+        currentHealth: incident.currentHealth,
+        serviceEvents,
+        transitionEvents,
+        jobEvents,
+      };
+    })
     .sort(
       (left, right) =>
         new Date(right.latestTimestamp).getTime() - new Date(left.latestTimestamp).getTime(),
@@ -990,7 +998,9 @@ function IncidentDetailDialog({
   incident: IncidentRecord | null;
   onOpenChange: (open: boolean) => void;
 }) {
-  const incidentCount = (incident?.transitionEvents.length ?? 0) + (incident?.jobEvents.length ?? 0);
+  const serviceEventCount = incident?.serviceEvents.length ?? 0;
+  const incidentCount = serviceEventCount + (incident?.jobEvents.length ?? 0);
+  const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
   return (
     <Dialog open={!!incident} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -1024,6 +1034,29 @@ function IncidentDetailDialog({
                           <EventDot kind={event.kind} />
                           <span className="truncate text-xs font-bold text-foreground">
                             {formatHealthLabel(event.previousHealth)} to {formatHealthLabel(event.currentHealth)}
+                          </span>
+                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                            {formatAbsoluteTime(event.timestamp)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{event.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {serviceOnlyEvents.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Related service events
+                  </p>
+                  <div className="space-y-1">
+                    {serviceOnlyEvents.map((event) => (
+                      <div key={event.id} className="service-incident-entry">
+                        <div className="flex items-center gap-2">
+                          <EventDot kind={event.kind} />
+                          <span className="truncate text-xs font-bold text-foreground">
+                            {formatEventKind(event.kind)}
                           </span>
                           <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
                             {formatAbsoluteTime(event.timestamp)}
@@ -1226,9 +1259,18 @@ export function ServicePanel() {
     () => Object.values(serviceState?.browsers ?? {}),
     [serviceState?.browsers],
   );
+  const retainedServiceJobs = useMemo(
+    () => Object.values(serviceState?.jobs ?? {}),
+    [serviceState?.jobs],
+  );
   const incidentRecords = useMemo(
-    () => deriveIncidentRecords([...recentEvents, ...jobIncidentEvents], browserRecords, activeSession),
-    [activeSession, browserRecords, jobIncidentEvents, recentEvents],
+    () =>
+      deriveIncidentRecords(
+        serviceState?.incidents ?? [],
+        serviceState?.events ?? [],
+        retainedServiceJobs,
+      ),
+    [retainedServiceJobs, serviceState?.events, serviceState?.incidents],
   );
   const sessionRecords = useMemo(
     () => Object.values(serviceState?.sessions ?? {}),
