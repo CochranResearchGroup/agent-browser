@@ -1202,6 +1202,7 @@ agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
 agent-browser service events --limit 20
+agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
 ```
 
 The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, and unreachable CDP endpoints without a PID are marked `unreachable`. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch and close commands also update the persisted browser health records for the active session.
@@ -1214,7 +1215,7 @@ Use `service reconcile` to run the persisted browser health probes intentionally
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
 
-Use `service events --limit <n>` to inspect recent reconciliation summaries and browser health transitions without parsing the full service state.
+Use `service events --limit <n>` to inspect recent reconciliation summaries and browser health transitions without parsing the full service state. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. `--since` accepts RFC 3339 timestamps.
 
 Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to run the same persisted browser-health probes automatically in the daemon background.
 

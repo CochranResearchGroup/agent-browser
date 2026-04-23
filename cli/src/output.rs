@@ -2569,7 +2569,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
-  agent-browser service events [--limit <n>]
+  agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
 
 Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
@@ -2584,6 +2584,7 @@ Notes:
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries and browser health transitions.
+  - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
   - Set --service-reconcile-interval <ms> or service.reconcileIntervalMs to run probes in the daemon background.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
@@ -2598,6 +2599,7 @@ Examples:
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
   agent-browser service events --limit 20
+  agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
   agent-browser --json service status
 "##
         }

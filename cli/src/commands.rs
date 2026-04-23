@@ -946,6 +946,8 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "serviceState": flags.service_state.clone(),
             })),
             Some("events") => {
+                let usage =
+                    "service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]";
                 let mut cmd = json!({
                     "id": id,
                     "action": "service_events",
@@ -958,21 +960,63 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                             let Some(raw) = rest.get(i + 1) else {
                                 return Err(ParseError::InvalidValue {
                                     message: "Missing value for --limit".to_string(),
-                                    usage: "service events [--limit <n>]",
+                                    usage,
                                 });
                             };
                             let limit =
                                 raw.parse::<usize>().map_err(|_| ParseError::InvalidValue {
                                     message: format!("Invalid --limit value: {}", raw),
-                                    usage: "service events [--limit <n>]",
+                                    usage,
                                 })?;
                             cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        "--kind" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --kind".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "reconciliation"
+                                | "browser_health_changed"
+                                | "reconciliation_error" => {
+                                    cmd["kind"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --kind value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--browser-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --browser-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["browserId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--since" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --since".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["since"] = json!(raw);
                             i += 1;
                         }
                         flag => {
                             return Err(ParseError::InvalidValue {
                                 message: format!("Unknown flag for service events: {}", flag),
-                                usage: "service events [--limit <n>]",
+                                usage,
                             });
                         }
                     }
@@ -4138,6 +4182,30 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_events");
         assert_eq!(cmd["limit"], 7);
+    }
+
+    #[test]
+    fn test_service_events_filters() {
+        let cmd = parse_command(
+            &args(
+                "service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_events");
+        assert_eq!(cmd["kind"], "browser_health_changed");
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_events_rejects_invalid_kind() {
+        let err =
+            parse_command(&args("service events --kind crash"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
     }
 
     #[test]

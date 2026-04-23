@@ -1,3 +1,4 @@
+use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -34,7 +35,7 @@ use super::screenshot::{self, ScreenshotOptions};
 use super::service_health::reconcile_service_state;
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
-    ServiceState,
+    ServiceEvent, ServiceEventKind, ServiceState,
 };
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 use super::snapshot::{self, SnapshotOptions};
@@ -5735,15 +5736,52 @@ async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
         .and_then(|value| value.as_u64())
         .map(|value| value as usize)
         .unwrap_or(20);
+    let kind = cmd.get("kind").and_then(|value| value.as_str());
+    let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+    let since = cmd
+        .get("since")
+        .and_then(|value| value.as_str())
+        .map(parse_service_event_timestamp)
+        .transpose()?;
     let total = service_state.events.len();
-    let start = total.saturating_sub(limit);
-    let events = service_state.events[start..].to_vec();
+    let mut events = service_state
+        .events
+        .into_iter()
+        .filter(|event| {
+            kind.is_none_or(|expected| service_event_kind_name(event.kind) == expected)
+                && browser_id.is_none_or(|expected| event.browser_id.as_deref() == Some(expected))
+                && since.is_none_or(|minimum| service_event_at_or_after(event, minimum))
+        })
+        .collect::<Vec<_>>();
+    let matched = events.len();
+    let start = matched.saturating_sub(limit);
+    events = events[start..].to_vec();
 
     Ok(json!({
         "events": events,
         "count": events.len(),
+        "matched": matched,
         "total": total,
     }))
+}
+
+fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
+    match kind {
+        ServiceEventKind::Reconciliation => "reconciliation",
+        ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
+        ServiceEventKind::ReconciliationError => "reconciliation_error",
+    }
+}
+
+fn parse_service_event_timestamp(raw: &str) -> Result<DateTime<FixedOffset>, String> {
+    DateTime::parse_from_rfc3339(raw)
+        .map_err(|err| format!("Invalid --since timestamp '{}': {}", raw, err))
+}
+
+fn service_event_at_or_after(event: &ServiceEvent, minimum: DateTime<FixedOffset>) -> bool {
+    DateTime::parse_from_rfc3339(&event.timestamp)
+        .map(|timestamp| timestamp >= minimum)
+        .unwrap_or(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -9406,8 +9444,84 @@ mod tests {
 
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 2);
         assert_eq!(result["data"]["total"], 2);
         assert_eq!(result["data"]["events"][0]["id"], "event-2");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_events_filters_by_kind_browser_and_since() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_events",
+            "id": "svc-events-2",
+            "kind": "browser_health_changed",
+            "browserId": "browser-1",
+            "since": "2026-04-22T00:01:00Z",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "too old",
+                        "browserId": "browser-1"
+                    },
+                    {
+                        "id": "event-2",
+                        "timestamp": "2026-04-22T00:01:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "matching",
+                        "browserId": "browser-1"
+                    },
+                    {
+                        "id": "event-3",
+                        "timestamp": "2026-04-22T00:02:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "different browser",
+                        "browserId": "browser-2"
+                    },
+                    {
+                        "id": "event-4",
+                        "timestamp": "2026-04-22T00:03:00Z",
+                        "kind": "reconciliation",
+                        "message": "different kind",
+                        "browserId": "browser-1"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["total"], 4);
+        assert_eq!(result["data"]["events"][0]["id"], "event-2");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_events_rejects_invalid_since() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_events",
+            "id": "svc-events-3",
+            "since": "not-a-timestamp",
+            "serviceState": {
+                "events": []
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], false);
+        assert!(result["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Invalid --since timestamp"));
         assert!(state.browser.is_none());
     }
 
