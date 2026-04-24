@@ -179,6 +179,22 @@ try {
     'MCP incident activity template missing',
   );
 
+  const tools = await send('tools/list');
+  const cancelTool = tools.tools?.find((tool) => tool.name === 'service_job_cancel');
+  assert(cancelTool, 'MCP service_job_cancel tool missing');
+  assert(
+    cancelTool.inputSchema?.properties?.serviceName,
+    'MCP service_job_cancel missing serviceName trace field',
+  );
+  assert(
+    cancelTool.inputSchema?.properties?.agentName,
+    'MCP service_job_cancel missing agentName trace field',
+  );
+  assert(
+    cancelTool.inputSchema?.properties?.taskName,
+    'MCP service_job_cancel missing taskName trace field',
+  );
+
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];
   assert(incidentContent?.mimeType === 'application/json', 'MCP incident content MIME mismatch');

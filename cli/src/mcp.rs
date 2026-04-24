@@ -2,6 +2,7 @@ use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Value};
 
+use crate::connection::{send_command, Response};
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -24,9 +25,9 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 ///
 /// `mcp serve` is a stdio JSON-RPC transport for MCP clients. The other
 /// subcommands are shell inspection helpers over the same read-only resources.
-pub fn run_mcp_command(args: &[String], json_output: bool) -> i32 {
+pub fn run_mcp_command(args: &[String], json_output: bool, session: &str) -> i32 {
     if args.get(1).map(|value| value.as_str()) == Some("serve") {
-        return match run_stdio_server(io::stdin().lock(), io::stdout().lock()) {
+        return match run_stdio_server(io::stdin().lock(), io::stdout().lock(), session) {
             Ok(()) => 0,
             Err(err) => {
                 eprintln!("{}", err);
@@ -284,7 +285,7 @@ fn read_service_mcp_resource_contents(uri: &str) -> Result<Value, String> {
     }))
 }
 
-fn run_stdio_server<R, W>(reader: R, mut writer: W) -> Result<(), String>
+fn run_stdio_server<R, W>(reader: R, mut writer: W, session: &str) -> Result<(), String>
 where
     R: BufRead,
     W: Write,
@@ -295,7 +296,7 @@ where
             continue;
         }
 
-        if let Some(response) = handle_jsonrpc_line(&line) {
+        if let Some(response) = handle_jsonrpc_line(&line, session) {
             writeln!(
                 writer,
                 "{}",
@@ -311,9 +312,9 @@ where
     Ok(())
 }
 
-fn handle_jsonrpc_line(line: &str) -> Option<Value> {
+fn handle_jsonrpc_line(line: &str, session: &str) -> Option<Value> {
     match serde_json::from_str::<Value>(line) {
-        Ok(message) => handle_jsonrpc_message(&message),
+        Ok(message) => handle_jsonrpc_message(&message, session),
         Err(err) => Some(jsonrpc_error(
             Value::Null,
             -32700,
@@ -323,7 +324,7 @@ fn handle_jsonrpc_line(line: &str) -> Option<Value> {
     }
 }
 
-fn handle_jsonrpc_message(message: &Value) -> Option<Value> {
+fn handle_jsonrpc_message(message: &Value, session: &str) -> Option<Value> {
     let Some(object) = message.as_object() else {
         return Some(jsonrpc_error(
             Value::Null,
@@ -350,7 +351,7 @@ fn handle_jsonrpc_message(message: &Value) -> Option<Value> {
         return handle_jsonrpc_notification(method);
     };
 
-    match handle_jsonrpc_request(method, object.get("params")) {
+    match handle_jsonrpc_request(method, object.get("params"), session) {
         Ok(result) => Some(json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -367,7 +368,11 @@ fn handle_jsonrpc_notification(method: &str) -> Option<Value> {
     }
 }
 
-fn handle_jsonrpc_request(method: &str, params: Option<&Value>) -> Result<Value, JsonRpcError> {
+fn handle_jsonrpc_request(
+    method: &str,
+    params: Option<&Value>,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
     match method {
         "initialize" => Ok(initialize_result(params)),
         "ping" => Ok(json!({})),
@@ -386,7 +391,8 @@ fn handle_jsonrpc_request(method: &str, params: Option<&Value>) -> Result<Value,
                 })?;
             read_service_mcp_resource_contents(uri).map_err(|err| resource_read_error(uri, err))
         }
-        "tools/list" => Ok(json!({ "tools": [] })),
+        "tools/list" => Ok(json!({ "tools": service_mcp_tools() })),
+        "tools/call" => call_service_mcp_tool(params, session),
         "prompts/list" => Ok(json!({ "prompts": [] })),
         _ => Err(JsonRpcError::method_not_found(method)),
     }
@@ -406,13 +412,161 @@ fn initialize_result(params: Option<&Value>) -> Value {
         "protocolVersion": protocol_version,
         "capabilities": {
             "resources": {},
+            "tools": {},
         },
         "serverInfo": {
             "name": "agent-browser",
             "title": "Agent Browser",
             "version": env!("CARGO_PKG_VERSION"),
         },
-        "instructions": "Read-only agent-browser service resources. Browser control tools are intentionally not exposed yet.",
+        "instructions": "agent-browser service resources plus low-risk service control tools. Browser-mutating tools are intentionally not exposed yet.",
+    })
+}
+
+fn service_mcp_tools() -> Vec<Value> {
+    vec![json!({
+        "name": "service_job_cancel",
+        "title": "Cancel service job",
+        "description": "Cancel a queued service job or request cancellation for a running service job. Include serviceName, agentName, and taskName when available to make multi-agent traces debuggable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "jobId": {
+                    "type": "string",
+                    "description": "Service job id to cancel."
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Human-readable cancellation reason."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["jobId"]
+        }
+    })]
+}
+
+fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value, JsonRpcError> {
+    let name = params
+        .and_then(|value| value.get("name"))
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| JsonRpcError::invalid_params("tools/call requires params.name"))?;
+    let arguments = params
+        .and_then(|value| value.get("arguments"))
+        .unwrap_or(&Value::Null);
+
+    match name {
+        "service_job_cancel" => call_service_job_cancel(arguments, session),
+        _ => Err(JsonRpcError {
+            code: -32602,
+            message: "Invalid params",
+            data: Some(json!({ "message": format!("Unknown MCP tool: {}", name) })),
+        }),
+    }
+}
+
+fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let job_id = arguments
+        .get("jobId")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| JsonRpcError::invalid_params("service_job_cancel requires jobId"))?;
+    let reason = optional_string_argument(arguments, "reason")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+
+    let mut command = json!({
+        "id": format!("mcp-service-job-cancel-{}", uuid::Uuid::new_v4()),
+        "action": "service_job_cancel",
+        "jobId": job_id,
+    });
+    if let Some(reason) = reason {
+        command["reason"] = json!(reason);
+    }
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "service_job_cancel",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "service_job_cancel",
+        session,
+        trace,
+        response,
+    ))
+}
+
+fn optional_string_argument<'a>(
+    arguments: &'a Value,
+    name: &str,
+) -> Result<Option<&'a str>, JsonRpcError> {
+    match arguments.get(name) {
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => value
+            .as_str()
+            .filter(|value| !value.trim().is_empty())
+            .map(Some)
+            .ok_or_else(|| {
+                JsonRpcError::invalid_params(&format!("{} must be a non-empty string", name))
+            }),
+        None => Ok(None),
+    }
+}
+
+fn service_tool_trace(
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    json!({
+        "serviceName": service_name,
+        "agentName": agent_name,
+        "taskName": task_name,
+    })
+}
+
+fn tool_response_from_daemon(
+    tool_name: &str,
+    session: &str,
+    trace: Value,
+    response: Response,
+) -> Value {
+    let payload = json!({
+        "tool": tool_name,
+        "session": session,
+        "trace": trace,
+        "success": response.success,
+        "data": response.data,
+        "error": response.error,
+    });
+    json!({
+        "content": [
+            {
+                "type": "text",
+                "text": serde_json::to_string_pretty(&payload).unwrap_or_default(),
+            }
+        ],
+        "isError": !response.success,
     })
 }
 
@@ -525,19 +679,23 @@ mod tests {
     fn initialize_returns_read_only_resource_capability() {
         let response = handle_jsonrpc_line(
             r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+            "default",
         )
         .unwrap();
 
         assert_eq!(response["id"], 1);
         assert_eq!(response["result"]["protocolVersion"], MCP_PROTOCOL_VERSION);
         assert!(response["result"]["capabilities"]["resources"].is_object());
+        assert!(response["result"]["capabilities"]["tools"].is_object());
     }
 
     #[test]
     fn resources_list_returns_jsonrpc_resources() {
-        let response =
-            handle_jsonrpc_line(r#"{"jsonrpc":"2.0","id":"r1","method":"resources/list"}"#)
-                .unwrap();
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":"r1","method":"resources/list"}"#,
+            "default",
+        )
+        .unwrap();
 
         assert_eq!(response["id"], "r1");
         assert_eq!(
@@ -568,6 +726,7 @@ mod tests {
     fn resource_templates_list_returns_jsonrpc_templates() {
         let response = handle_jsonrpc_line(
             r#"{"jsonrpc":"2.0","id":"t1","method":"resources/templates/list"}"#,
+            "default",
         )
         .unwrap();
 
@@ -580,15 +739,16 @@ mod tests {
 
     #[test]
     fn notifications_do_not_return_responses() {
-        assert!(
-            handle_jsonrpc_line(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
-                .is_none()
-        );
+        assert!(handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+            "default",
+        )
+        .is_none());
     }
 
     #[test]
     fn malformed_json_returns_parse_error() {
-        let response = handle_jsonrpc_line("{bad json").unwrap();
+        let response = handle_jsonrpc_line("{bad json", "default").unwrap();
 
         assert_eq!(response["id"], Value::Null);
         assert_eq!(response["error"]["code"], -32700);
@@ -596,11 +756,100 @@ mod tests {
 
     #[test]
     fn missing_resource_uri_returns_invalid_params() {
-        let response =
-            handle_jsonrpc_line(r#"{"jsonrpc":"2.0","id":2,"method":"resources/read"}"#).unwrap();
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":2,"method":"resources/read"}"#,
+            "default",
+        )
+        .unwrap();
 
         assert_eq!(response["id"], 2);
         assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn tools_list_returns_service_job_cancel() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":"tools","method":"tools/list"}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], "tools");
+        assert_eq!(response["result"]["tools"][0]["name"], "service_job_cancel");
+        assert_eq!(
+            response["result"]["tools"][0]["inputSchema"]["required"][0],
+            "jobId"
+        );
+        assert!(
+            response["result"]["tools"][0]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][0]["inputSchema"]["properties"]["agentName"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][0]["inputSchema"]["properties"]["taskName"].is_object()
+        );
+    }
+
+    #[test]
+    fn tools_call_requires_tool_name() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call"}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 3);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn service_job_cancel_requires_job_id_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"service_job_cancel","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 4);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn service_tool_trace_preserves_names() {
+        let trace = service_tool_trace(
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(trace["serviceName"], "JournalDownloader");
+        assert_eq!(trace["agentName"], "agent-a");
+        assert_eq!(trace["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn tool_response_includes_trace_and_error_flag() {
+        let response = Response {
+            success: false,
+            data: None,
+            error: Some("Service job not found: job-1".to_string()),
+            warning: None,
+        };
+        let tool_response = tool_response_from_daemon(
+            "service_job_cancel",
+            "default",
+            service_tool_trace(Some("svc"), Some("agent"), Some("task")),
+            response,
+        );
+        let text = tool_response["content"][0]["text"].as_str().unwrap();
+        let payload: Value = serde_json::from_str(text).unwrap();
+
+        assert_eq!(tool_response["isError"], true);
+        assert_eq!(payload["tool"], "service_job_cancel");
+        assert_eq!(payload["session"], "default");
+        assert_eq!(payload["trace"]["serviceName"], "svc");
+        assert_eq!(payload["error"], "Service job not found: job-1");
     }
 
     #[test]
@@ -615,7 +864,7 @@ mod tests {
         );
         let mut output = Vec::new();
 
-        run_stdio_server(input.as_bytes(), &mut output).unwrap();
+        run_stdio_server(input.as_bytes(), &mut output, "default").unwrap();
         let lines = String::from_utf8(output).unwrap();
         let responses = lines.lines().collect::<Vec<_>>();
 

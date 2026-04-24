@@ -2856,7 +2856,7 @@ Examples:
 
         "mcp" => {
             r##"
-agent-browser mcp - Inspect read-only MCP resource contracts
+agent-browser mcp - Inspect MCP resource contracts and service tools
 
 Usage:
   agent-browser mcp serve
@@ -2864,12 +2864,14 @@ Usage:
   agent-browser mcp read <uri>
 
 Commands:
-  serve                 Run a read-only MCP stdio server
+  serve                 Run the MCP stdio server
   resources             List read-only service resources exposed for MCP adapters
   read                  Read a service resource URI as JSON
 
 Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
+  - The first MCP tool is service_job_cancel for cancelling queued jobs or requesting running-job cancellation.
+  - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
   - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
@@ -3255,7 +3257,7 @@ Service:
   service events             Show recent service events
 
 MCP:
-  mcp serve                  Run a read-only MCP stdio server
+  mcp serve                  Run the MCP stdio server
   mcp resources              List read-only service resource contracts
   mcp read <uri>             Read a service resource as JSON
 

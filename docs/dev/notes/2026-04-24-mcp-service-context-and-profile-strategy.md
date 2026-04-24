@@ -1,0 +1,57 @@
+# MCP Service Context And Profile Strategy
+
+Date: 2026-04-24
+
+## Context
+
+`agent-browser` is moving toward a service model where multiple services and
+agents can share the same browser control plane. MCP calls should not assume a
+single anonymous caller. Services and agents should identify themselves and the
+task being performed so operators can debug behavior, trace decisions, and
+attribute browser activity.
+
+Example caller context:
+
+- `serviceName`: `JournalDownloader`
+- `agentName`: `article-probe-agent`
+- `taskName`: `probeACSwebsite`
+
+## Interface Guidance
+
+MCP tools should accept optional caller context fields when the caller can
+provide them:
+
+- `serviceName`
+- `agentName`
+- `taskName`
+
+The service should preserve this context in job metadata, audit events, and
+tool responses as the write path matures. Read-only resources can remain global
+for now, but mutation tools should include caller context before browser
+control tools are added.
+
+## Profile Strategy
+
+A browser profile represents one browser identity per site. Different services
+may need different profile isolation levels:
+
+- shared service profile: lower resource use, faster warm starts, but shared
+  cookies and identity state;
+- profile per service: clearer ownership and fewer identity collisions, but
+  more Chrome processes and memory pressure when profiles must run
+  independently;
+- profile per site or identity: strongest isolation for anti-bot, login, and
+  keyring policy, but highest operational overhead.
+
+Profile allocation should be explicit policy, not an accidental default.
+Future service profile records should include profile ownership, keyring
+policy, credential provider posture, site policy bindings, and whether
+multiple services may share the profile.
+
+## Near-Term Decision
+
+Start MCP mutation support with low-risk service control tools before browser
+control tools. `service_job_cancel` is the first tool because it already has
+CLI, HTTP, daemon, queue, and cancellation semantics. Browser-mutating tools
+should wait until job owner metadata and profile/session policy are first-class
+in the service model.

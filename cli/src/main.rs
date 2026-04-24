@@ -1363,7 +1363,7 @@ fn main() {
     }
 
     if clean.first().map(|s| s.as_str()) == Some("mcp") {
-        exit(mcp::run_mcp_command(&clean, flags.json));
+        exit(mcp::run_mcp_command(&clean, flags.json, &flags.session));
     }
 
     // Handle session separately (doesn't need daemon)
