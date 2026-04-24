@@ -419,43 +419,95 @@ fn initialize_result(params: Option<&Value>) -> Value {
             "title": "Agent Browser",
             "version": env!("CARGO_PKG_VERSION"),
         },
-        "instructions": "agent-browser service resources plus low-risk service control tools. Browser-mutating tools are intentionally not exposed yet.",
+        "instructions": "agent-browser service resources plus queued browser-control tools. Include serviceName, agentName, and taskName on tools/call whenever possible.",
     })
 }
 
 fn service_mcp_tools() -> Vec<Value> {
-    vec![json!({
-        "name": "service_job_cancel",
-        "title": "Cancel service job",
-        "description": "Cancel a queued service job or request cancellation for a running service job. Include serviceName, agentName, and taskName when available to make multi-agent traces debuggable.",
-        "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "jobId": {
-                    "type": "string",
-                    "description": "Service job id to cancel."
+    vec![
+        json!({
+            "name": "service_job_cancel",
+            "title": "Cancel service job",
+            "description": "Cancel a queued service job or request cancellation for a running service job. Include serviceName, agentName, and taskName when available to make multi-agent traces debuggable.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "jobId": {
+                        "type": "string",
+                        "description": "Service job id to cancel."
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Human-readable cancellation reason."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
                 },
-                "reason": {
-                    "type": "string",
-                    "description": "Human-readable cancellation reason."
+                "required": ["jobId"]
+            }
+        }),
+        json!({
+            "name": "browser_snapshot",
+            "title": "Take browser snapshot",
+            "description": "Queue a browser accessibility snapshot against the active session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Optional CSS selector to scope the snapshot."
+                    },
+                    "interactive": {
+                        "type": "boolean",
+                        "description": "Return only interactive elements and assign refs."
+                    },
+                    "compact": {
+                        "type": "boolean",
+                        "description": "Remove empty structural elements from the snapshot."
+                    },
+                    "maxDepth": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Optional maximum accessibility-tree depth."
+                    },
+                    "urls": {
+                        "type": "boolean",
+                        "description": "Include href URLs for links when available."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued snapshot job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
                 },
-                "serviceName": {
-                    "type": "string",
-                    "description": "Calling service name, for example JournalDownloader."
-                },
-                "agentName": {
-                    "type": "string",
-                    "description": "Calling agent name."
-                },
-                "taskName": {
-                    "type": "string",
-                    "description": "Calling task name, for example probeACSwebsite."
-                }
-            },
-            "required": ["jobId"]
-        }
-    })]
+                "required": []
+            }
+        }),
+    ]
 }
 
 fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value, JsonRpcError> {
@@ -469,6 +521,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
 
     match name {
         "service_job_cancel" => call_service_job_cancel(arguments, session),
+        "browser_snapshot" => call_browser_snapshot(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -509,6 +562,47 @@ fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, Js
     ))
 }
 
+fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = optional_string_argument(arguments, "selector")?;
+    let interactive = optional_bool_argument(arguments, "interactive")?;
+    let compact = optional_bool_argument(arguments, "compact")?;
+    let max_depth = optional_u64_argument(arguments, "maxDepth")?;
+    let urls = optional_bool_argument(arguments, "urls")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_snapshot_command(BrowserSnapshotCommandArgs {
+        selector,
+        interactive,
+        compact,
+        max_depth,
+        urls,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    });
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_snapshot",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_snapshot",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -536,6 +630,53 @@ fn service_job_cancel_command(
     command
 }
 
+struct BrowserSnapshotCommandArgs<'a> {
+    selector: Option<&'a str>,
+    interactive: Option<bool>,
+    compact: Option<bool>,
+    max_depth: Option<u64>,
+    urls: Option<bool>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+fn browser_snapshot_command(args: BrowserSnapshotCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-snapshot-{}", uuid::Uuid::new_v4()),
+        "action": "snapshot",
+    });
+    if let Some(selector) = args.selector {
+        command["selector"] = json!(selector);
+    }
+    if let Some(interactive) = args.interactive {
+        command["interactive"] = json!(interactive);
+    }
+    if let Some(compact) = args.compact {
+        command["compact"] = json!(compact);
+    }
+    if let Some(max_depth) = args.max_depth {
+        command["maxDepth"] = json!(max_depth);
+    }
+    if let Some(urls) = args.urls {
+        command["urls"] = json!(urls);
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
 fn optional_string_argument<'a>(
     arguments: &'a Value,
     name: &str,
@@ -550,6 +691,40 @@ fn optional_string_argument<'a>(
                 JsonRpcError::invalid_params(&format!("{} must be a non-empty string", name))
             }),
         None => Ok(None),
+    }
+}
+
+fn optional_bool_argument(arguments: &Value, name: &str) -> Result<Option<bool>, JsonRpcError> {
+    match arguments.get(name) {
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => value
+            .as_bool()
+            .map(Some)
+            .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} must be a boolean", name))),
+        None => Ok(None),
+    }
+}
+
+fn optional_u64_argument(arguments: &Value, name: &str) -> Result<Option<u64>, JsonRpcError> {
+    match arguments.get(name) {
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => value.as_u64().map(Some).ok_or_else(|| {
+            JsonRpcError::invalid_params(&format!("{} must be a non-negative integer", name))
+        }),
+        None => Ok(None),
+    }
+}
+
+fn optional_positive_u64_argument(
+    arguments: &Value,
+    name: &str,
+) -> Result<Option<u64>, JsonRpcError> {
+    match optional_u64_argument(arguments, name)? {
+        Some(0) => Err(JsonRpcError::invalid_params(&format!(
+            "{} must be a positive integer",
+            name
+        ))),
+        value => Ok(value),
     }
 }
 
@@ -809,6 +984,13 @@ mod tests {
         assert!(
             response["result"]["tools"][0]["inputSchema"]["properties"]["taskName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][1]["name"], "browser_snapshot");
+        assert!(
+            response["result"]["tools"][1]["inputSchema"]["properties"]["interactive"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][1]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -832,6 +1014,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 4);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_snapshot_rejects_invalid_argument_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"browser_snapshot","arguments":{"interactive":"true"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 5);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -861,6 +1055,32 @@ mod tests {
         assert_eq!(command["action"], "service_job_cancel");
         assert_eq!(command["jobId"], "job-1");
         assert_eq!(command["reason"], "stale");
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_snapshot_command_forwards_options_and_trace_fields() {
+        let command = browser_snapshot_command(BrowserSnapshotCommandArgs {
+            selector: Some("#main"),
+            interactive: Some(true),
+            compact: Some(true),
+            max_depth: Some(3),
+            urls: Some(true),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(command["action"], "snapshot");
+        assert_eq!(command["selector"], "#main");
+        assert_eq!(command["interactive"], true);
+        assert_eq!(command["compact"], true);
+        assert_eq!(command["maxDepth"], 3);
+        assert_eq!(command["urls"], true);
+        assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
         assert_eq!(command["taskName"], "probeACSwebsite");

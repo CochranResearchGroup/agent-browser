@@ -52,6 +52,8 @@ multiple services may share the profile.
 
 Start MCP mutation support with low-risk service control tools before browser
 control tools. `service_job_cancel` is the first tool because it already has
-CLI, HTTP, daemon, queue, and cancellation semantics. Browser-mutating tools
-should wait until profile and session policy are first-class in the service
-model, and they should always supply job caller context.
+CLI, HTTP, daemon, queue, and cancellation semantics. `browser_snapshot` is the
+first browser-control tool because it exercises the live browser queue path
+without navigation or input mutation. More invasive browser tools should wait
+until profile and session policy are first-class in the service model, and they
+should always supply job caller context.

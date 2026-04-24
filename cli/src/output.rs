@@ -2870,7 +2870,8 @@ Commands:
 
 Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
-  - The first MCP tool is service_job_cancel for cancelling queued jobs or requesting running-job cancellation.
+  - MCP tools include service_job_cancel and browser_snapshot.
+  - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
   - Service jobs persist serviceName, agentName, and taskName when commands provide them.
   - It reads persisted service state from ~/.agent-browser/service/state.json.

@@ -194,6 +194,24 @@ try {
     cancelTool.inputSchema?.properties?.taskName,
     'MCP service_job_cancel missing taskName trace field',
   );
+  const snapshotTool = tools.tools?.find((tool) => tool.name === 'browser_snapshot');
+  assert(snapshotTool, 'MCP browser_snapshot tool missing');
+  assert(
+    snapshotTool.inputSchema?.properties?.interactive,
+    'MCP browser_snapshot missing interactive option',
+  );
+  assert(
+    snapshotTool.inputSchema?.properties?.serviceName,
+    'MCP browser_snapshot missing serviceName trace field',
+  );
+  assert(
+    snapshotTool.inputSchema?.properties?.agentName,
+    'MCP browser_snapshot missing agentName trace field',
+  );
+  assert(
+    snapshotTool.inputSchema?.properties?.taskName,
+    'MCP browser_snapshot missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];
