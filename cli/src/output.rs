@@ -2854,6 +2854,34 @@ Examples:
 "##
         }
 
+        "mcp" => {
+            r##"
+agent-browser mcp - Inspect read-only MCP resource contracts
+
+Usage:
+  agent-browser mcp resources
+  agent-browser mcp read <uri>
+
+Commands:
+  resources             List read-only service resources exposed for MCP adapters
+  read                  Read a service resource URI as JSON
+
+Notes:
+  - This is a local read-only adapter scaffold, not the long-running MCP transport server.
+  - It reads persisted service state from ~/.agent-browser/service/state.json.
+  - Implemented resources are agent-browser://incidents and agent-browser://incidents/{incident_id}/activity.
+  - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
+
+Global Options:
+  --json               Output compact JSON
+
+Examples:
+  agent-browser mcp resources
+  agent-browser mcp read agent-browser://incidents
+  agent-browser mcp read agent-browser://incidents/browser-1/activity
+"##
+        }
+
         // === iOS Commands ===
         "tap" => {
             r##"
@@ -3213,6 +3241,10 @@ Service:
   service jobs               Show recent service control-plane jobs
   service incidents          Show grouped retained service incidents
   service events             Show recent service events
+
+MCP:
+  mcp resources              List read-only service resource contracts
+  mcp read <uri>             Read a service resource as JSON
 
 Batch:
   batch [--bail] ["cmd" ...]  Execute multiple commands sequentially (args or stdin)

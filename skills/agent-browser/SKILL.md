@@ -331,6 +331,8 @@ agent-browser service activity <incident-id>    # Show a retained incident timel
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service incidents       # Show grouped retained service incidents
 agent-browser service events          # Show recent service events
+agent-browser mcp resources           # List read-only service resources for MCP adapters
+agent-browser mcp read agent-browser://incidents
 
 # Clipboard
 agent-browser clipboard read                      # Read text from clipboard
@@ -408,6 +410,8 @@ Use `agent-browser service resolve <incident-id>` to mark a retained incident ha
 Acknowledgement and resolution also append retained service events with `incident_acknowledged` and `incident_resolved` kinds. Incident detail includes those handling events alongside the health and job events that define the grouped incident. Use `agent-browser service activity <incident-id>` to fetch a normalized chronological timeline for one retained incident without reconstructing it client-side.
 
 The activity response is the canonical agent-facing incident timeline. It returns `{ incident, activity, count }`. Each activity item includes `id`, `source`, `timestamp`, `kind`, `title`, and `message`, plus `eventId` or `jobId` when it came from a retained event or job. Older retained incidents can include `source: "metadata"` acknowledgement or resolution items when handling metadata predates retained handling events.
+
+For MCP adapter scaffolding, use `agent-browser mcp resources` to list read-only service resource contracts and `agent-browser mcp read <uri>` to read one resource from persisted service state without launching a browser. Implemented resources are `agent-browser://incidents` and `agent-browser://incidents/{incident_id}/activity`.
 
 Use `agent-browser service jobs --limit <n>` to inspect recent control-plane jobs directly without parsing the full service status payload. Use `agent-browser service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 

@@ -33,6 +33,8 @@ pub mod recording;
 #[allow(dead_code)]
 pub mod screenshot;
 #[allow(dead_code)]
+pub mod service_activity;
+#[allow(dead_code)]
 pub mod service_health;
 #[allow(dead_code)]
 pub mod service_model;

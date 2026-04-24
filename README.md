@@ -142,6 +142,8 @@ agent-browser service activity <incident-id>    # Show a retained incident timel
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service incidents       # Show grouped retained service incidents
 agent-browser service events          # Show recent service events
+agent-browser mcp resources           # List read-only service resources for MCP adapters
+agent-browser mcp read agent-browser://incidents
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 agent-browser chat "<instruction>"    # AI chat: natural language browser control (single-shot)
@@ -1273,6 +1275,8 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 ```
 
 The HTTP API loads the same persisted and configured service state as the CLI before relaying the request to the daemon.
+
+For MCP adapter scaffolding, use `mcp resources` to list read-only service resource contracts and `mcp read <uri>` to read one resource from persisted service state without launching a browser. Implemented resources are `agent-browser://incidents` and `agent-browser://incidents/{incident_id}/activity`.
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 

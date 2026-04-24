@@ -5,6 +5,7 @@ mod commands;
 mod connection;
 mod flags;
 mod install;
+mod mcp;
 mod native;
 mod output;
 mod runtime_profile;
@@ -1359,6 +1360,10 @@ fn main() {
     if clean.first().map(|s| s.as_str()) == Some("runtime") {
         run_runtime_command(&clean, &flags);
         return;
+    }
+
+    if clean.first().map(|s| s.as_str()) == Some("mcp") {
+        exit(mcp::run_mcp_command(&clean, flags.json));
     }
 
     // Handle session separately (doesn't need daemon)
