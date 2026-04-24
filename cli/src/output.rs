@@ -2859,15 +2859,17 @@ Examples:
 agent-browser mcp - Inspect read-only MCP resource contracts
 
 Usage:
+  agent-browser mcp serve
   agent-browser mcp resources
   agent-browser mcp read <uri>
 
 Commands:
+  serve                 Run a read-only MCP stdio server
   resources             List read-only service resources exposed for MCP adapters
   read                  Read a service resource URI as JSON
 
 Notes:
-  - This is a local read-only adapter scaffold, not the long-running MCP transport server.
+  - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
   - Implemented resources are agent-browser://incidents and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
@@ -2876,6 +2878,7 @@ Global Options:
   --json               Output compact JSON
 
 Examples:
+  agent-browser mcp serve
   agent-browser mcp resources
   agent-browser mcp read agent-browser://incidents
   agent-browser mcp read agent-browser://incidents/browser-1/activity
@@ -3243,6 +3246,7 @@ Service:
   service events             Show recent service events
 
 MCP:
+  mcp serve                  Run a read-only MCP stdio server
   mcp resources              List read-only service resource contracts
   mcp read <uri>             Read a service resource as JSON
 
