@@ -57,3 +57,9 @@ first browser-control tool because it exercises the live browser queue path
 without navigation or input mutation. More invasive browser tools should wait
 until profile and session policy are first-class in the service model, and they
 should always supply job caller context.
+
+## Live Validation
+
+`pnpm test:mcp-live` launches an isolated temp-home browser session, calls
+`browser_snapshot` over MCP stdio, and verifies that the retained `snapshot`
+service job records `serviceName`, `agentName`, and `taskName`.
