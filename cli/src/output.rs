@@ -2872,6 +2872,7 @@ Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
   - The first MCP tool is service_job_cancel for cancelling queued jobs or requesting running-job cancellation.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
+  - Service jobs persist serviceName, agentName, and taskName when commands provide them.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
   - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.

@@ -18,17 +18,17 @@ Example caller context:
 
 ## Interface Guidance
 
-MCP tools should accept optional caller context fields when the caller can
-provide them:
+MCP tools accept optional caller context fields when the caller can provide
+them:
 
 - `serviceName`
 - `agentName`
 - `taskName`
 
-The service should preserve this context in job metadata, audit events, and
-tool responses as the write path matures. Read-only resources can remain global
-for now, but mutation tools should include caller context before browser
-control tools are added.
+The service preserves this context in retained job metadata when commands
+provide it. Read-only resources can remain global for now, but mutation tools
+should include caller context before browser control tools are added. Audit
+events should carry the same context as event ownership matures.
 
 ## Profile Strategy
 
@@ -53,5 +53,5 @@ multiple services may share the profile.
 Start MCP mutation support with low-risk service control tools before browser
 control tools. `service_job_cancel` is the first tool because it already has
 CLI, HTTP, daemon, queue, and cancellation semantics. Browser-mutating tools
-should wait until job owner metadata and profile/session policy are first-class
-in the service model.
+should wait until profile and session policy are first-class in the service
+model, and they should always supply job caller context.

@@ -489,14 +489,7 @@ fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, Js
     let task_name = optional_string_argument(arguments, "taskName")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
 
-    let mut command = json!({
-        "id": format!("mcp-service-job-cancel-{}", uuid::Uuid::new_v4()),
-        "action": "service_job_cancel",
-        "jobId": job_id,
-    });
-    if let Some(reason) = reason {
-        command["reason"] = json!(reason);
-    }
+    let command = service_job_cancel_command(job_id, reason, service_name, agent_name, task_name);
 
     let response = send_command(command, session).map_err(|err| JsonRpcError {
         code: -32603,
@@ -514,6 +507,33 @@ fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, Js
         trace,
         response,
     ))
+}
+
+fn service_job_cancel_command(
+    job_id: &str,
+    reason: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-job-cancel-{}", uuid::Uuid::new_v4()),
+        "action": "service_job_cancel",
+        "jobId": job_id,
+    });
+    if let Some(reason) = reason {
+        command["reason"] = json!(reason);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
 }
 
 fn optional_string_argument<'a>(
@@ -826,6 +846,24 @@ mod tests {
         assert_eq!(trace["serviceName"], "JournalDownloader");
         assert_eq!(trace["agentName"], "agent-a");
         assert_eq!(trace["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn service_job_cancel_command_forwards_trace_fields() {
+        let command = service_job_cancel_command(
+            "job-1",
+            Some("stale"),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "service_job_cancel");
+        assert_eq!(command["jobId"], "job-1");
+        assert_eq!(command["reason"], "stale");
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
     }
 
     #[test]

@@ -66,6 +66,9 @@ pub struct ControlRequest {
     pub id: String,
     pub job_id: String,
     pub action: String,
+    pub service_name: Option<String>,
+    pub agent_name: Option<String>,
+    pub task_name: Option<String>,
     pub command: Value,
     pub priority: ControlPriority,
     /// Optional worker-bound execution timeout. The worker records timed-out
@@ -77,7 +80,7 @@ pub struct ControlRequest {
 }
 
 enum WorkerMessage {
-    Request(ControlRequest),
+    Request(Box<ControlRequest>),
     Shutdown(oneshot::Sender<()>),
 }
 
@@ -207,10 +210,16 @@ impl ControlPlaneHandle {
             .and_then(|v| v.as_u64())
             .filter(|ms| *ms > 0)
             .or(self.service_job_timeout_ms);
+        let service_name = optional_command_string(&command, "serviceName");
+        let agent_name = optional_command_string(&command, "agentName");
+        let task_name = optional_command_string(&command, "taskName");
         let request = ControlRequest {
             id: id.clone(),
             job_id,
             action: action.clone(),
+            service_name,
+            agent_name,
+            task_name,
             command,
             priority: ControlPriority::Normal,
             timeout_ms,
@@ -221,12 +230,12 @@ impl ControlPlaneHandle {
 
         self.status.queue_depth.fetch_add(1, Ordering::Relaxed);
         persist_service_job_queued(&request);
-        let job_id = request.job_id.clone();
-        match self.tx.try_send(WorkerMessage::Request(request)) {
+        match self.tx.try_send(WorkerMessage::Request(Box::new(request))) {
             Ok(()) => {}
-            Err(mpsc::error::TrySendError::Full(_)) => {
+            Err(mpsc::error::TrySendError::Full(WorkerMessage::Request(request))) => {
+                let request = *request;
                 self.status.queue_depth.fetch_sub(1, Ordering::Relaxed);
-                persist_service_job_failed_to_enqueue(&job_id, &action, "Control queue is full");
+                persist_service_job_failed_to_enqueue(&request, "Control queue is full");
                 return json!({
                     "id": id,
                     "success": false,
@@ -238,17 +247,27 @@ impl ControlPlaneHandle {
                     },
                 });
             }
-            Err(mpsc::error::TrySendError::Closed(_)) => {
+            Err(mpsc::error::TrySendError::Closed(WorkerMessage::Request(request))) => {
+                let request = *request;
                 self.status.queue_depth.fetch_sub(1, Ordering::Relaxed);
-                persist_service_job_failed_to_enqueue(
-                    &job_id,
-                    &action,
-                    "Control plane worker is stopped",
-                );
+                persist_service_job_failed_to_enqueue(&request, "Control plane worker is stopped");
                 return json!({
                     "id": id,
                     "success": false,
                     "error": "Control plane worker is stopped",
+                    "data": {
+                        "worker_state": self.status.worker_state().as_str(),
+                        "browser_health": self.status.browser_health().as_str(),
+                    },
+                });
+            }
+            Err(mpsc::error::TrySendError::Full(WorkerMessage::Shutdown(_)))
+            | Err(mpsc::error::TrySendError::Closed(WorkerMessage::Shutdown(_))) => {
+                self.status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+                return json!({
+                    "id": id,
+                    "success": false,
+                    "error": "Control plane worker rejected an internal shutdown message",
                     "data": {
                         "worker_state": self.status.worker_state().as_str(),
                         "browser_health": self.status.browser_health().as_str(),
@@ -399,6 +418,9 @@ fn persist_service_job_queued(request: &ControlRequest) {
     persist_service_job(ServiceJob {
         id: service_job_id(request),
         action: request.action.clone(),
+        service_name: request.service_name.clone(),
+        agent_name: request.agent_name.clone(),
+        task_name: request.task_name.clone(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Queued,
@@ -413,6 +435,9 @@ fn persist_service_job_running(request: &ControlRequest) {
     persist_service_job(ServiceJob {
         id: service_job_id(request),
         action: request.action.clone(),
+        service_name: request.service_name.clone(),
+        agent_name: request.agent_name.clone(),
+        task_name: request.task_name.clone(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Running,
@@ -441,6 +466,9 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
     persist_service_job(ServiceJob {
         id: job_id,
         action: request.action.clone(),
+        service_name: request.service_name.clone(),
+        agent_name: request.agent_name.clone(),
+        task_name: request.task_name.clone(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: if success {
@@ -455,7 +483,6 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         timeout_ms: request.timeout_ms,
         result: Some(json!({ "success": success })),
         error,
-        ..ServiceJob::default()
     });
 }
 
@@ -468,6 +495,9 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
     persist_service_job(ServiceJob {
         id: job_id,
         action: request.action.clone(),
+        service_name: request.service_name.clone(),
+        agent_name: request.agent_name.clone(),
+        task_name: request.task_name.clone(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::TimedOut,
@@ -478,7 +508,6 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         timeout_ms: request.timeout_ms,
         result: Some(json!({ "success": false, "timedOut": true, "timeoutMs": timeout_ms })),
         error: Some(format!("Service job timed out after {}ms", timeout_ms)),
-        ..ServiceJob::default()
     });
 }
 
@@ -490,6 +519,9 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
     persist_service_job(ServiceJob {
         id: job_id,
         action: request.action.clone(),
+        service_name: request.service_name.clone(),
+        agent_name: request.agent_name.clone(),
+        task_name: request.task_name.clone(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Cancelled,
@@ -500,17 +532,20 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
         timeout_ms: request.timeout_ms,
         result: Some(json!({ "success": false, "cancelled": true })),
         error: Some(reason.to_string()),
-        ..ServiceJob::default()
     });
 }
 
-fn persist_service_job_failed_to_enqueue(job_id: &str, action: &str, error: &str) {
+fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) {
+    let job_id = service_job_id(request);
     let submitted_at = load_service_job(&job_id)
         .and_then(|job| job.submitted_at)
         .unwrap_or_else(current_timestamp);
     persist_service_job(ServiceJob {
-        id: job_id.to_string(),
-        action: action.to_string(),
+        id: job_id,
+        action: request.action.clone(),
+        service_name: request.service_name.clone(),
+        agent_name: request.agent_name.clone(),
+        task_name: request.task_name.clone(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Failed,
@@ -597,6 +632,15 @@ fn service_job_priority(priority: ControlPriority) -> JobPriority {
         ControlPriority::Normal => JobPriority::Normal,
         ControlPriority::Lifecycle => JobPriority::Lifecycle,
     }
+}
+
+fn optional_command_string(command: &Value, name: &str) -> Option<String> {
+    command
+        .get(name)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn prune_service_jobs(state: &mut ServiceState) {
@@ -722,6 +766,7 @@ async fn run_worker(
 
                 match message {
                     WorkerMessage::Request(request) => {
+                        let request = *request;
                         status.queue_depth.fetch_sub(1, Ordering::Relaxed);
                         if service_job_cancelled(&request.job_id) {
                             let _ = request.response_tx.send(json!({
@@ -1247,6 +1292,9 @@ mod tests {
             .submit(json!({
                 "id": "test-timeout",
                 "action": "__test_sleep",
+                "serviceName": "JournalDownloader",
+                "agentName": "article-probe-agent",
+                "taskName": "probeACSwebsite",
                 "ms": 100,
             }))
             .await;
@@ -1269,6 +1317,9 @@ mod tests {
         let job = &persisted.jobs["test-timeout"];
         assert_eq!(job.state, JobState::TimedOut);
         assert_eq!(job.timeout_ms, Some(10));
+        assert_eq!(job.service_name.as_deref(), Some("JournalDownloader"));
+        assert_eq!(job.agent_name.as_deref(), Some("article-probe-agent"));
+        assert_eq!(job.task_name.as_deref(), Some("probeACSwebsite"));
         assert_eq!(job.result.as_ref().unwrap()["timedOut"], true);
 
         handle.shutdown().await;
@@ -1378,6 +1429,9 @@ mod tests {
             .submit(json!({
                 "id": "test-full",
                 "action": "state_list",
+                "serviceName": "JournalDownloader",
+                "agentName": "article-probe-agent",
+                "taskName": "probeACSwebsite",
             }))
             .await;
 
@@ -1404,6 +1458,9 @@ mod tests {
         let persisted = store.load().unwrap();
         let job = &persisted.jobs["test-full"];
         assert_eq!(job.state, JobState::Failed);
+        assert_eq!(job.service_name.as_deref(), Some("JournalDownloader"));
+        assert_eq!(job.agent_name.as_deref(), Some("article-probe-agent"));
+        assert_eq!(job.task_name.as_deref(), Some("probeACSwebsite"));
         assert_eq!(job.error.as_deref(), Some("Control queue is full"));
 
         drop(_permit);

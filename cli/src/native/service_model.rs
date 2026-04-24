@@ -562,6 +562,12 @@ impl Default for BrowserTab {
 pub struct ServiceJob {
     pub id: String,
     pub action: String,
+    /// Service-level caller label supplied by MCP, CLI, HTTP, or API clients.
+    pub service_name: Option<String>,
+    /// Agent-level caller label supplied by MCP, CLI, HTTP, or API clients.
+    pub agent_name: Option<String>,
+    /// Task-level caller label supplied by MCP, CLI, HTTP, or API clients.
+    pub task_name: Option<String>,
     pub target: JobTarget,
     pub owner: ServiceActor,
     pub state: JobState,
@@ -579,6 +585,9 @@ impl Default for ServiceJob {
         Self {
             id: String::new(),
             action: String::new(),
+            service_name: None,
+            agent_name: None,
+            task_name: None,
             target: JobTarget::Service,
             owner: ServiceActor::System,
             state: JobState::Queued,
@@ -1076,6 +1085,9 @@ mod tests {
                 ServiceJob {
                     id: "job-1".to_string(),
                     action: "navigate".to_string(),
+                    service_name: Some("JournalDownloader".to_string()),
+                    agent_name: Some("article-probe-agent".to_string()),
+                    task_name: Some("probeACSwebsite".to_string()),
                     target: JobTarget::Tab("tab-1".to_string()),
                     result: Some(json!({"ok": true})),
                     ..ServiceJob::default()
@@ -1108,6 +1120,18 @@ mod tests {
         assert_eq!(
             decoded.sessions["session-1"].owner,
             ServiceActor::Agent("codex".to_string())
+        );
+        assert_eq!(
+            decoded.jobs["job-1"].service_name.as_deref(),
+            Some("JournalDownloader")
+        );
+        assert_eq!(
+            decoded.jobs["job-1"].agent_name.as_deref(),
+            Some("article-probe-agent")
+        );
+        assert_eq!(
+            decoded.jobs["job-1"].task_name.as_deref(),
+            Some("probeACSwebsite")
         );
     }
 
