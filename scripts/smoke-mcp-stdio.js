@@ -302,6 +302,32 @@ try {
     clickTool.inputSchema?.properties?.taskName,
     'MCP browser_click missing taskName trace field',
   );
+  const fillTool = tools.tools?.find((tool) => tool.name === 'browser_fill');
+  assert(fillTool, 'MCP browser_fill tool missing');
+  assert(
+    fillTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_fill missing selector requirement',
+  );
+  assert(
+    fillTool.inputSchema?.required?.includes('value'),
+    'MCP browser_fill missing value requirement',
+  );
+  assert(
+    fillTool.inputSchema?.properties?.value,
+    'MCP browser_fill missing value property',
+  );
+  assert(
+    fillTool.inputSchema?.properties?.serviceName,
+    'MCP browser_fill missing serviceName trace field',
+  );
+  assert(
+    fillTool.inputSchema?.properties?.agentName,
+    'MCP browser_fill missing agentName trace field',
+  );
+  assert(
+    fillTool.inputSchema?.properties?.taskName,
+    'MCP browser_fill missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

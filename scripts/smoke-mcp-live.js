@@ -215,6 +215,10 @@ try {
     '<h1>MCP Live Smoke</h1>',
     '<button id="ready" onclick="document.getElementById(\'status\').textContent = \'Clicked\'">Ready</button>',
     '<p id="status">Not clicked</p>',
+    '<label for="name">Name</label>',
+    '<input id="name" name="name" value="">',
+    '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value">Copy name</button>',
+    '<p id="name-output"></p>',
     '<a href="https://example.com/">Example</a>',
     '</main>',
     '</body>',
@@ -384,6 +388,42 @@ try {
   assert(clickPayload.trace?.agentName === agentName, 'browser_click trace missing agentName');
   assert(clickPayload.trace?.taskName === taskName, 'browser_click trace missing taskName');
 
+  const fillResult = await send('tools/call', {
+    name: 'browser_fill',
+    arguments: {
+      selector: '#name',
+      value: 'Ada Lovelace',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const fillPayload = parseToolPayload(fillResult);
+  assert(fillPayload.success === true, `browser_fill failed: ${JSON.stringify(fillPayload)}`);
+  assert(fillPayload.data?.filled === '#name', 'browser_fill did not report filled selector');
+  assert(fillPayload.trace?.serviceName === serviceName, 'browser_fill trace missing serviceName');
+  assert(fillPayload.trace?.agentName === agentName, 'browser_fill trace missing agentName');
+  assert(fillPayload.trace?.taskName === taskName, 'browser_fill trace missing taskName');
+
+  const copyNameResult = await send('tools/call', {
+    name: 'browser_click',
+    arguments: {
+      selector: '#copy-name',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const copyNamePayload = parseToolPayload(copyNameResult);
+  assert(
+    copyNamePayload.success === true,
+    `post-fill browser_click failed: ${JSON.stringify(copyNamePayload)}`,
+  );
+  assert(
+    copyNamePayload.data?.clicked === '#copy-name',
+    'post-fill browser_click did not report clicked selector',
+  );
+
   const clickedSnapshotResult = await send('tools/call', {
     name: 'browser_snapshot',
     arguments: {
@@ -402,6 +442,11 @@ try {
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
       clickedSnapshotPayload.data.snapshot.includes('Clicked'),
     'browser_click did not mutate the page state visible to a follow-up snapshot',
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('Ada Lovelace'),
+    'browser_fill did not mutate the page state visible to a follow-up snapshot',
   );
 
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
@@ -466,6 +511,15 @@ try {
   );
   assert(clickJob, 'Retained service job with browser_click caller context was not found');
   assert(clickJob.state === 'succeeded', `Click service job state was ${clickJob.state}`);
+  const fillJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'fill' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(fillJob, 'Retained service job with browser_fill caller context was not found');
+  assert(fillJob.state === 'succeeded', `Fill service job state was ${fillJob.state}`);
 
   await cleanup();
   console.log('MCP live smoke passed');

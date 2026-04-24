@@ -639,6 +639,43 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector"]
             }
         }),
+        json!({
+            "name": "browser_fill",
+            "title": "Fill browser field",
+            "description": "Queue a fill against a selector or cached ref in the active browser session. This mutates page state, so include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Required CSS selector or cached ref such as @e1."
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Required text value to fill into the target field."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued fill job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["selector", "value"]
+            }
+        }),
     ]
 }
 
@@ -716,6 +753,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_tabs" => call_browser_tabs(arguments, session),
         "browser_screenshot" => call_browser_screenshot(arguments, session),
         "browser_click" => call_browser_click(arguments, session),
+        "browser_fill" => call_browser_fill(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -935,6 +973,41 @@ fn call_browser_click(arguments: &Value, session: &str) -> Result<Value, JsonRpc
     ))
 }
 
+fn call_browser_fill(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let value = required_string_argument(arguments, "value")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_fill_command(
+        selector,
+        value,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_fill",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_fill",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -978,6 +1051,35 @@ fn browser_click_command(
     if let Some(new_tab) = new_tab {
         command["newTab"] = json!(new_tab);
     }
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_fill_command(
+    selector: &str,
+    value: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-fill-{}", uuid::Uuid::new_v4()),
+        "action": "fill",
+        "selector": selector,
+        "value": value,
+    });
     if let Some(job_timeout_ms) = job_timeout_ms {
         command["jobTimeoutMs"] = json!(job_timeout_ms);
     }
@@ -1534,6 +1636,19 @@ mod tests {
         assert!(
             response["result"]["tools"][6]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][7]["name"], "browser_fill");
+        assert_eq!(
+            response["result"]["tools"][7]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert_eq!(
+            response["result"]["tools"][7]["inputSchema"]["required"][1],
+            "value"
+        );
+        assert!(response["result"]["tools"][7]["inputSchema"]["properties"]["value"].is_object());
+        assert!(
+            response["result"]["tools"][7]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -1638,6 +1753,27 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 11);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_fill_requires_selector_and_value_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"browser_fill","arguments":{"value":"Ada Lovelace","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 12);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"browser_fill","arguments":{"selector":"#name","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 13);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -1794,6 +1930,26 @@ mod tests {
         assert_eq!(command["action"], "click");
         assert_eq!(command["selector"], "#ready");
         assert_eq!(command["newTab"], true);
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_fill_command_forwards_options_and_trace_fields() {
+        let command = browser_fill_command(
+            "#name",
+            "Ada Lovelace",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "fill");
+        assert_eq!(command["selector"], "#name");
+        assert_eq!(command["value"], "Ada Lovelace");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
