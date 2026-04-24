@@ -263,6 +263,21 @@ try {
   assert(payload.trace?.agentName === agentName, 'browser_snapshot trace missing agentName');
   assert(payload.trace?.taskName === taskName, 'browser_snapshot trace missing taskName');
 
+  const urlResult = await send('tools/call', {
+    name: 'browser_get_url',
+    arguments: {
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const urlPayload = parseToolPayload(urlResult);
+  assert(urlPayload.success === true, `browser_get_url failed: ${JSON.stringify(urlPayload)}`);
+  assert(urlPayload.data?.url === pageUrl, 'browser_get_url did not return the active page URL');
+  assert(urlPayload.trace?.serviceName === serviceName, 'browser_get_url trace missing serviceName');
+  assert(urlPayload.trace?.agentName === agentName, 'browser_get_url trace missing agentName');
+  assert(urlPayload.trace?.taskName === taskName, 'browser_get_url trace missing taskName');
+
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
   const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');
   const snapshotJob = jobPayload.jobs?.find(
@@ -274,6 +289,15 @@ try {
   );
   assert(snapshotJob, 'Retained service job with browser_snapshot caller context was not found');
   assert(snapshotJob.state === 'succeeded', `Snapshot service job state was ${snapshotJob.state}`);
+  const urlJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'url' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(urlJob, 'Retained service job with browser_get_url caller context was not found');
+  assert(urlJob.state === 'succeeded', `URL service job state was ${urlJob.state}`);
 
   await cleanup();
   console.log('MCP live smoke passed');

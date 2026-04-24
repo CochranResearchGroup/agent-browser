@@ -507,6 +507,35 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": []
             }
         }),
+        json!({
+            "name": "browser_get_url",
+            "title": "Get browser URL",
+            "description": "Queue a read of the active browser session URL. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued URL read job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": []
+            }
+        }),
     ]
 }
 
@@ -522,6 +551,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
     match name {
         "service_job_cancel" => call_service_job_cancel(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
+        "browser_get_url" => call_browser_get_url(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -603,6 +633,32 @@ fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, Json
     ))
 }
 
+fn call_browser_get_url(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_get_url_command(job_timeout_ms, service_name, agent_name, task_name);
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_get_url",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_get_url",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -617,6 +673,31 @@ fn service_job_cancel_command(
     });
     if let Some(reason) = reason {
         command["reason"] = json!(reason);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_get_url_command(
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-get-url-{}", uuid::Uuid::new_v4()),
+        "action": "url",
+    });
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
     }
     if let Some(service_name) = service_name {
         command["serviceName"] = json!(service_name);
@@ -991,6 +1072,13 @@ mod tests {
         assert!(
             response["result"]["tools"][1]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][2]["name"], "browser_get_url");
+        assert!(
+            response["result"]["tools"][2]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][2]["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+        );
     }
 
     #[test]
@@ -1026,6 +1114,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 5);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_get_url_rejects_invalid_timeout_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"browser_get_url","arguments":{"jobTimeoutMs":0}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 6);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -1080,6 +1180,22 @@ mod tests {
         assert_eq!(command["compact"], true);
         assert_eq!(command["maxDepth"], 3);
         assert_eq!(command["urls"], true);
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_get_url_command_forwards_timeout_and_trace_fields() {
+        let command = browser_get_url_command(
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "url");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
