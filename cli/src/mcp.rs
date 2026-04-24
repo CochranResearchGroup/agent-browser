@@ -509,6 +509,39 @@ fn service_mcp_tools() -> Vec<Value> {
         }),
         browser_read_tool_schema(BROWSER_GET_URL_TOOL),
         browser_read_tool_schema(BROWSER_GET_TITLE_TOOL),
+        json!({
+            "name": "browser_tabs",
+            "title": "List browser tabs",
+            "description": "Queue a read of the active browser session tabs. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "verbose": {
+                        "type": "boolean",
+                        "description": "Include targetId and sessionId for each tab."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued tabs read job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": []
+            }
+        }),
     ]
 }
 
@@ -583,6 +616,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
+        "browser_tabs" => call_browser_tabs(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -694,6 +728,34 @@ fn call_browser_read_tool(
     ))
 }
 
+fn call_browser_tabs(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let verbose = optional_bool_argument(arguments, "verbose")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command =
+        browser_tabs_command(verbose, job_timeout_ms, service_name, agent_name, task_name);
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_tabs",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_tabs",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -708,6 +770,35 @@ fn service_job_cancel_command(
     });
     if let Some(reason) = reason {
         command["reason"] = json!(reason);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_tabs_command(
+    verbose: Option<bool>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-tabs-{}", uuid::Uuid::new_v4()),
+        "action": "tab_list",
+    });
+    if let Some(verbose) = verbose {
+        command["verbose"] = json!(verbose);
+    }
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
     }
     if let Some(service_name) = service_name {
         command["serviceName"] = json!(service_name);
@@ -1122,6 +1213,14 @@ mod tests {
         assert!(
             response["result"]["tools"][3]["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
         );
+        assert_eq!(response["result"]["tools"][4]["name"], "browser_tabs");
+        assert!(response["result"]["tools"][4]["inputSchema"]["properties"]["verbose"].is_object());
+        assert!(
+            response["result"]["tools"][4]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][4]["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+        );
     }
 
     #[test]
@@ -1181,6 +1280,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 7);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_tabs_rejects_invalid_argument_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"browser_tabs","arguments":{"verbose":"yes"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 8);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -1269,6 +1380,24 @@ mod tests {
         );
 
         assert_eq!(command["action"], "title");
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_tabs_command_forwards_options_and_trace_fields() {
+        let command = browser_tabs_command(
+            Some(true),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "tab_list");
+        assert_eq!(command["verbose"], true);
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");

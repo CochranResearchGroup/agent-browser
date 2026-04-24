@@ -302,6 +302,35 @@ try {
   assert(titlePayload.trace?.agentName === agentName, 'browser_get_title trace missing agentName');
   assert(titlePayload.trace?.taskName === taskName, 'browser_get_title trace missing taskName');
 
+  const tabsResult = await send('tools/call', {
+    name: 'browser_tabs',
+    arguments: {
+      verbose: true,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const tabsPayload = parseToolPayload(tabsResult);
+  assert(tabsPayload.success === true, `browser_tabs failed: ${JSON.stringify(tabsPayload)}`);
+  const tabs = tabsPayload.data?.tabs;
+  assert(Array.isArray(tabs), 'browser_tabs payload did not include tabs array');
+  assert(
+    tabs.some(
+      (tab) =>
+        tab.url === pageUrl &&
+        tab.active === true &&
+        tab.type === 'page' &&
+        typeof tab.title === 'string' &&
+        typeof tab.targetId === 'string' &&
+        typeof tab.sessionId === 'string',
+    ),
+    `browser_tabs did not return the active live smoke tab with verbose metadata: ${JSON.stringify(tabs)}`,
+  );
+  assert(tabsPayload.trace?.serviceName === serviceName, 'browser_tabs trace missing serviceName');
+  assert(tabsPayload.trace?.agentName === agentName, 'browser_tabs trace missing agentName');
+  assert(tabsPayload.trace?.taskName === taskName, 'browser_tabs trace missing taskName');
+
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
   const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');
   const snapshotJob = jobPayload.jobs?.find(
@@ -331,6 +360,15 @@ try {
   );
   assert(titleJob, 'Retained service job with browser_get_title caller context was not found');
   assert(titleJob.state === 'succeeded', `Title service job state was ${titleJob.state}`);
+  const tabsJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'tab_list' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(tabsJob, 'Retained service job with browser_tabs caller context was not found');
+  assert(tabsJob.state === 'succeeded', `Tabs service job state was ${tabsJob.state}`);
 
   await cleanup();
   console.log('MCP live smoke passed');

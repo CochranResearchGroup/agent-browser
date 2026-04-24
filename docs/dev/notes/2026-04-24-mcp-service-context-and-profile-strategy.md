@@ -57,13 +57,14 @@ first browser-control tool because it exercises the live browser queue path
 without navigation or input mutation. `browser_get_url` extends the same
 read-only MCP browser-control pattern to active page URL inspection.
 `browser_get_title` adds the same pattern for active page title inspection.
-More invasive browser tools should wait until profile and session policy are
-first-class in the service model, and they should always supply job caller
-context.
+`browser_tabs` applies the pattern to open tab inspection, with optional
+verbose target metadata. More invasive browser tools should wait until profile
+and session policy are first-class in the service model, and they should always
+supply job caller context.
 
 ## Live Validation
 
 `pnpm test:mcp-live` launches an isolated temp-home browser session, calls
-`browser_snapshot`, `browser_get_url`, and `browser_get_title` over MCP stdio,
-and verifies that the retained `snapshot`, `url`, and `title` service jobs
-record `serviceName`, `agentName`, and `taskName`.
+`browser_snapshot`, `browser_get_url`, `browser_get_title`, and `browser_tabs`
+over MCP stdio, and verifies that the retained `snapshot`, `url`, `title`, and
+`tab_list` service jobs record `serviceName`, `agentName`, and `taskName`.

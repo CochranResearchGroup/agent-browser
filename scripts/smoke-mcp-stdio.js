@@ -240,6 +240,24 @@ try {
     getTitleTool.inputSchema?.properties?.taskName,
     'MCP browser_get_title missing taskName trace field',
   );
+  const tabsTool = tools.tools?.find((tool) => tool.name === 'browser_tabs');
+  assert(tabsTool, 'MCP browser_tabs tool missing');
+  assert(
+    tabsTool.inputSchema?.properties?.verbose,
+    'MCP browser_tabs missing verbose option',
+  );
+  assert(
+    tabsTool.inputSchema?.properties?.serviceName,
+    'MCP browser_tabs missing serviceName trace field',
+  );
+  assert(
+    tabsTool.inputSchema?.properties?.agentName,
+    'MCP browser_tabs missing agentName trace field',
+  );
+  assert(
+    tabsTool.inputSchema?.properties?.taskName,
+    'MCP browser_tabs missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];
