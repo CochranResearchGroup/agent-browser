@@ -507,65 +507,66 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": []
             }
         }),
-        json!({
-            "name": "browser_get_url",
-            "title": "Get browser URL",
-            "description": "Queue a read of the active browser session URL. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
-            "inputSchema": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                    "jobTimeoutMs": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "description": "Optional worker-bound timeout for this queued URL read job."
-                    },
-                    "serviceName": {
-                        "type": "string",
-                        "description": "Calling service name, for example JournalDownloader."
-                    },
-                    "agentName": {
-                        "type": "string",
-                        "description": "Calling agent name."
-                    },
-                    "taskName": {
-                        "type": "string",
-                        "description": "Calling task name, for example probeACSwebsite."
-                    }
-                },
-                "required": []
-            }
-        }),
-        json!({
-            "name": "browser_get_title",
-            "title": "Get browser title",
-            "description": "Queue a read of the active browser session title. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
-            "inputSchema": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                    "jobTimeoutMs": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "description": "Optional worker-bound timeout for this queued title read job."
-                    },
-                    "serviceName": {
-                        "type": "string",
-                        "description": "Calling service name, for example JournalDownloader."
-                    },
-                    "agentName": {
-                        "type": "string",
-                        "description": "Calling agent name."
-                    },
-                    "taskName": {
-                        "type": "string",
-                        "description": "Calling task name, for example probeACSwebsite."
-                    }
-                },
-                "required": []
-            }
-        }),
+        browser_read_tool_schema(BROWSER_GET_URL_TOOL),
+        browser_read_tool_schema(BROWSER_GET_TITLE_TOOL),
     ]
+}
+
+#[derive(Clone, Copy)]
+struct BrowserReadToolSpec {
+    tool_name: &'static str,
+    title: &'static str,
+    action: &'static str,
+    state_name: &'static str,
+    id_prefix: &'static str,
+}
+
+const BROWSER_GET_URL_TOOL: BrowserReadToolSpec = BrowserReadToolSpec {
+    tool_name: "browser_get_url",
+    title: "Get browser URL",
+    action: "url",
+    state_name: "URL",
+    id_prefix: "mcp-browser-get-url",
+};
+
+const BROWSER_GET_TITLE_TOOL: BrowserReadToolSpec = BrowserReadToolSpec {
+    tool_name: "browser_get_title",
+    title: "Get browser title",
+    action: "title",
+    state_name: "title",
+    id_prefix: "mcp-browser-get-title",
+};
+
+fn browser_read_tool_schema(spec: BrowserReadToolSpec) -> Value {
+    json!({
+        "name": spec.tool_name,
+        "title": spec.title,
+        "description": format!("Queue a read of the active browser session {}. Include serviceName, agentName, and taskName when available so the retained service job is traceable.", spec.state_name),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": format!("Optional worker-bound timeout for this queued {} read job.", spec.state_name)
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
 }
 
 fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value, JsonRpcError> {
@@ -580,8 +581,8 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
     match name {
         "service_job_cancel" => call_service_job_cancel(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
-        "browser_get_url" => call_browser_get_url(arguments, session),
-        "browser_get_title" => call_browser_get_title(arguments, session),
+        "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
+        "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -663,13 +664,17 @@ fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, Json
     ))
 }
 
-fn call_browser_get_url(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+fn call_browser_read_tool(
+    arguments: &Value,
+    session: &str,
+    spec: BrowserReadToolSpec,
+) -> Result<Value, JsonRpcError> {
     let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
     let service_name = optional_string_argument(arguments, "serviceName")?;
     let agent_name = optional_string_argument(arguments, "agentName")?;
     let task_name = optional_string_argument(arguments, "taskName")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
-    let command = browser_get_url_command(job_timeout_ms, service_name, agent_name, task_name);
+    let command = browser_read_command(spec, job_timeout_ms, service_name, agent_name, task_name);
 
     let response = send_command(command, session).map_err(|err| JsonRpcError {
         code: -32603,
@@ -677,38 +682,12 @@ fn call_browser_get_url(arguments: &Value, session: &str) -> Result<Value, JsonR
         data: Some(json!({
             "message": err,
             "session": session,
-            "tool": "browser_get_url",
+            "tool": spec.tool_name,
             "trace": trace,
         })),
     })?;
     Ok(tool_response_from_daemon(
-        "browser_get_url",
-        session,
-        trace,
-        response,
-    ))
-}
-
-fn call_browser_get_title(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
-    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
-    let command = browser_get_title_command(job_timeout_ms, service_name, agent_name, task_name);
-
-    let response = send_command(command, session).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({
-            "message": err,
-            "session": session,
-            "tool": "browser_get_title",
-            "trace": trace,
-        })),
-    })?;
-    Ok(tool_response_from_daemon(
-        "browser_get_title",
+        spec.tool_name,
         session,
         trace,
         response,
@@ -742,40 +721,16 @@ fn service_job_cancel_command(
     command
 }
 
-fn browser_get_url_command(
+fn browser_read_command(
+    spec: BrowserReadToolSpec,
     job_timeout_ms: Option<u64>,
     service_name: Option<&str>,
     agent_name: Option<&str>,
     task_name: Option<&str>,
 ) -> Value {
     let mut command = json!({
-        "id": format!("mcp-browser-get-url-{}", uuid::Uuid::new_v4()),
-        "action": "url",
-    });
-    if let Some(job_timeout_ms) = job_timeout_ms {
-        command["jobTimeoutMs"] = json!(job_timeout_ms);
-    }
-    if let Some(service_name) = service_name {
-        command["serviceName"] = json!(service_name);
-    }
-    if let Some(agent_name) = agent_name {
-        command["agentName"] = json!(agent_name);
-    }
-    if let Some(task_name) = task_name {
-        command["taskName"] = json!(task_name);
-    }
-    command
-}
-
-fn browser_get_title_command(
-    job_timeout_ms: Option<u64>,
-    service_name: Option<&str>,
-    agent_name: Option<&str>,
-    task_name: Option<&str>,
-) -> Value {
-    let mut command = json!({
-        "id": format!("mcp-browser-get-title-{}", uuid::Uuid::new_v4()),
-        "action": "title",
+        "id": format!("{}-{}", spec.id_prefix, uuid::Uuid::new_v4()),
+        "action": spec.action,
     });
     if let Some(job_timeout_ms) = job_timeout_ms {
         command["jobTimeoutMs"] = json!(job_timeout_ms);
@@ -1288,7 +1243,8 @@ mod tests {
 
     #[test]
     fn browser_get_url_command_forwards_timeout_and_trace_fields() {
-        let command = browser_get_url_command(
+        let command = browser_read_command(
+            BROWSER_GET_URL_TOOL,
             Some(1000),
             Some("JournalDownloader"),
             Some("agent-a"),
@@ -1304,7 +1260,8 @@ mod tests {
 
     #[test]
     fn browser_get_title_command_forwards_timeout_and_trace_fields() {
-        let command = browser_get_title_command(
+        let command = browser_read_command(
+            BROWSER_GET_TITLE_TOOL,
             Some(1000),
             Some("JournalDownloader"),
             Some("agent-a"),
