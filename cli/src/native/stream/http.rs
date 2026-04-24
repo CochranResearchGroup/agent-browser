@@ -789,6 +789,10 @@ mod tests {
             Some("incident-123")
         );
         assert_eq!(
+            service_incident_action_id("/api/service/incidents/incident-123/activity", "/activity"),
+            Some("incident-123")
+        );
+        assert_eq!(
             service_incident_action_id("/api/service/incidents//resolve", "/resolve"),
             None
         );

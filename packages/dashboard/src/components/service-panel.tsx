@@ -1136,7 +1136,7 @@ function IncidentDetailDialog({
     () => (incident ? deriveIncidentTimeline(incident) : []),
     [incident],
   );
-  const timeline = activity ?? fallbackTimeline;
+  const timeline = activity && activity.length > 0 ? activity : fallbackTimeline;
   const incidentCount = timeline.length;
   const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
   const handlingState = incident ? incidentHandlingState(incident) : "unacknowledged";

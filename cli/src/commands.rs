@@ -4674,6 +4674,17 @@ mod tests {
     }
 
     #[test]
+    fn test_service_activity_rejects_extra_argument() {
+        let err = parse_command(
+            &args("service activity incident-123 extra"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
     fn test_service_incidents_reject_invalid_state() {
         let err =
             parse_command(&args("service incidents --state failed"), &default_flags()).unwrap_err();
