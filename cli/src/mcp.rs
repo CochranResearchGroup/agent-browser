@@ -10,8 +10,11 @@ const BROWSERS_RESOURCE: &str = "agent-browser://browsers";
 const EVENTS_RESOURCE: &str = "agent-browser://events";
 const JOBS_RESOURCE: &str = "agent-browser://jobs";
 const PROFILES_RESOURCE: &str = "agent-browser://profiles";
+const PROVIDERS_RESOURCE: &str = "agent-browser://providers";
 const SESSIONS_RESOURCE: &str = "agent-browser://sessions";
+const SITE_POLICIES_RESOURCE: &str = "agent-browser://site-policies";
 const TABS_RESOURCE: &str = "agent-browser://tabs";
+const CHALLENGES_RESOURCE: &str = "agent-browser://challenges";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
@@ -126,6 +129,24 @@ fn service_mcp_resources() -> Vec<Value> {
             "description": "Service-owned browser tab records sorted by tab id"
         }),
         json!({
+            "uri": SITE_POLICIES_RESOURCE,
+            "name": "Service site policies",
+            "mimeType": "application/json",
+            "description": "Service-owned site access policy records sorted by policy id"
+        }),
+        json!({
+            "uri": PROVIDERS_RESOURCE,
+            "name": "Service providers",
+            "mimeType": "application/json",
+            "description": "Service-owned integration provider records sorted by provider id"
+        }),
+        json!({
+            "uri": CHALLENGES_RESOURCE,
+            "name": "Service challenges",
+            "mimeType": "application/json",
+            "description": "Service-owned auth and challenge records sorted by challenge id"
+        }),
+        json!({
             "uri": JOBS_RESOURCE,
             "name": "Service jobs",
             "mimeType": "application/json",
@@ -187,6 +208,27 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             json!({
                 "tabs": tabs,
                 "count": tabs.len(),
+            })
+        }
+        SITE_POLICIES_RESOURCE => {
+            let site_policies = state.site_policies.values().cloned().collect::<Vec<_>>();
+            json!({
+                "sitePolicies": site_policies,
+                "count": site_policies.len(),
+            })
+        }
+        PROVIDERS_RESOURCE => {
+            let providers = state.providers.values().cloned().collect::<Vec<_>>();
+            json!({
+                "providers": providers,
+                "count": providers.len(),
+            })
+        }
+        CHALLENGES_RESOURCE => {
+            let challenges = state.challenges.values().cloned().collect::<Vec<_>>();
+            json!({
+                "challenges": challenges,
+                "count": challenges.len(),
             })
         }
         JOBS_RESOURCE => {
@@ -449,8 +491,14 @@ mod tests {
         assert_eq!(response["data"]["resources"][2]["uri"], SESSIONS_RESOURCE);
         assert_eq!(response["data"]["resources"][3]["uri"], BROWSERS_RESOURCE);
         assert_eq!(response["data"]["resources"][4]["uri"], TABS_RESOURCE);
-        assert_eq!(response["data"]["resources"][5]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["data"]["resources"][6]["uri"], EVENTS_RESOURCE);
+        assert_eq!(
+            response["data"]["resources"][5]["uri"],
+            SITE_POLICIES_RESOURCE
+        );
+        assert_eq!(response["data"]["resources"][6]["uri"], PROVIDERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][7]["uri"], CHALLENGES_RESOURCE);
+        assert_eq!(response["data"]["resources"][8]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["data"]["resources"][9]["uri"], EVENTS_RESOURCE);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
@@ -500,8 +548,20 @@ mod tests {
         assert_eq!(response["result"]["resources"][2]["uri"], SESSIONS_RESOURCE);
         assert_eq!(response["result"]["resources"][3]["uri"], BROWSERS_RESOURCE);
         assert_eq!(response["result"]["resources"][4]["uri"], TABS_RESOURCE);
-        assert_eq!(response["result"]["resources"][5]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["result"]["resources"][6]["uri"], EVENTS_RESOURCE);
+        assert_eq!(
+            response["result"]["resources"][5]["uri"],
+            SITE_POLICIES_RESOURCE
+        );
+        assert_eq!(
+            response["result"]["resources"][6]["uri"],
+            PROVIDERS_RESOURCE
+        );
+        assert_eq!(
+            response["result"]["resources"][7]["uri"],
+            CHALLENGES_RESOURCE
+        );
+        assert_eq!(response["result"]["resources"][8]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["result"]["resources"][9]["uri"], EVENTS_RESOURCE);
     }
 
     #[test]
@@ -566,6 +626,9 @@ mod tests {
         assert!(responses[1].contains("agent-browser://sessions"));
         assert!(responses[1].contains("agent-browser://browsers"));
         assert!(responses[1].contains("agent-browser://tabs"));
+        assert!(responses[1].contains("agent-browser://site-policies"));
+        assert!(responses[1].contains("agent-browser://providers"));
+        assert!(responses[1].contains("agent-browser://challenges"));
         assert!(responses[1].contains("agent-browser://jobs"));
         assert!(responses[1].contains("agent-browser://events"));
     }
@@ -712,6 +775,116 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["tabs"][0]["id"], "tab-a");
         assert_eq!(resource["contents"]["tabs"][1]["id"], "tab-b");
+    }
+
+    #[test]
+    fn read_site_policies_resource_returns_policies_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::SitePolicy;
+
+        let state = ServiceState {
+            site_policies: BTreeMap::from([
+                (
+                    "microsoft".to_string(),
+                    SitePolicy {
+                        id: "microsoft".to_string(),
+                        origin_pattern: "https://login.microsoftonline.com".to_string(),
+                        ..SitePolicy::default()
+                    },
+                ),
+                (
+                    "google".to_string(),
+                    SitePolicy {
+                        id: "google".to_string(),
+                        origin_pattern: "https://accounts.google.com".to_string(),
+                        ..SitePolicy::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource =
+            read_service_mcp_resource_from_state(SITE_POLICIES_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["sitePolicies"][0]["id"], "google");
+        assert_eq!(resource["contents"]["sitePolicies"][1]["id"], "microsoft");
+    }
+
+    #[test]
+    fn read_providers_resource_returns_providers_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{ProviderKind, ServiceProvider};
+
+        let state = ServiceState {
+            providers: BTreeMap::from([
+                (
+                    "sms".to_string(),
+                    ServiceProvider {
+                        id: "sms".to_string(),
+                        kind: ProviderKind::Sms,
+                        display_name: "SMS".to_string(),
+                        ..ServiceProvider::default()
+                    },
+                ),
+                (
+                    "manual".to_string(),
+                    ServiceProvider {
+                        id: "manual".to_string(),
+                        kind: ProviderKind::ManualApproval,
+                        display_name: "Manual approval".to_string(),
+                        ..ServiceProvider::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(PROVIDERS_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["providers"][0]["id"], "manual");
+        assert_eq!(resource["contents"]["providers"][1]["id"], "sms");
+    }
+
+    #[test]
+    fn read_challenges_resource_returns_challenges_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{Challenge, ChallengeKind, ChallengeState};
+
+        let state = ServiceState {
+            challenges: BTreeMap::from([
+                (
+                    "challenge-b".to_string(),
+                    Challenge {
+                        id: "challenge-b".to_string(),
+                        kind: ChallengeKind::TwoFactor,
+                        state: ChallengeState::WaitingForProvider,
+                        ..Challenge::default()
+                    },
+                ),
+                (
+                    "challenge-a".to_string(),
+                    Challenge {
+                        id: "challenge-a".to_string(),
+                        kind: ChallengeKind::Captcha,
+                        state: ChallengeState::Detected,
+                        ..Challenge::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(CHALLENGES_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["challenges"][0]["id"], "challenge-a");
+        assert_eq!(resource["contents"]["challenges"][1]["id"], "challenge-b");
     }
 
     #[test]

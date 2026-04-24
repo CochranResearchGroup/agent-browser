@@ -150,6 +150,18 @@ try {
     'MCP tabs resource missing',
   );
   assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://site-policies'),
+    'MCP site policies resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://providers'),
+    'MCP providers resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://challenges'),
+    'MCP challenges resource missing',
+  );
+  assert(
     resources.resources?.some((resource) => resource.uri === 'agent-browser://jobs'),
     'MCP jobs resource missing',
   );
@@ -194,6 +206,27 @@ try {
   const tabPayload = JSON.parse(tabs.contents?.[0]?.text || '{}');
   assert(Array.isArray(tabPayload.tabs), 'MCP tabs payload missing tabs array');
   assert(tabPayload.count === 0, 'Fresh MCP smoke state should have zero tabs');
+
+  const sitePolicies = await send('resources/read', { uri: 'agent-browser://site-policies' });
+  const sitePolicyPayload = JSON.parse(sitePolicies.contents?.[0]?.text || '{}');
+  assert(
+    Array.isArray(sitePolicyPayload.sitePolicies),
+    'MCP site policies payload missing sitePolicies array',
+  );
+  assert(sitePolicyPayload.count === 0, 'Fresh MCP smoke state should have zero site policies');
+
+  const providers = await send('resources/read', { uri: 'agent-browser://providers' });
+  const providerPayload = JSON.parse(providers.contents?.[0]?.text || '{}');
+  assert(Array.isArray(providerPayload.providers), 'MCP providers payload missing providers array');
+  assert(providerPayload.count === 0, 'Fresh MCP smoke state should have zero providers');
+
+  const challenges = await send('resources/read', { uri: 'agent-browser://challenges' });
+  const challengePayload = JSON.parse(challenges.contents?.[0]?.text || '{}');
+  assert(
+    Array.isArray(challengePayload.challenges),
+    'MCP challenges payload missing challenges array',
+  );
+  assert(challengePayload.count === 0, 'Fresh MCP smoke state should have zero challenges');
 
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
   const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');

@@ -2871,7 +2871,7 @@ Commands:
 Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
-  - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
+  - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
 
 Global Options:
@@ -2885,6 +2885,9 @@ Examples:
   agent-browser mcp read agent-browser://sessions
   agent-browser mcp read agent-browser://browsers
   agent-browser mcp read agent-browser://tabs
+  agent-browser mcp read agent-browser://site-policies
+  agent-browser mcp read agent-browser://providers
+  agent-browser mcp read agent-browser://challenges
   agent-browser mcp read agent-browser://jobs
   agent-browser mcp read agent-browser://events
   agent-browser mcp read agent-browser://incidents/browser-1/activity
