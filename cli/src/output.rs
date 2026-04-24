@@ -258,6 +258,46 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_incident_activity_text(data: &serde_json::Value) -> Option<String> {
+    let activity = data.get("activity").and_then(|value| value.as_array())?;
+    if activity.is_empty() {
+        return Some("No service incident activity".to_string());
+    }
+
+    let lines = activity
+        .iter()
+        .map(|item| {
+            let timestamp = item
+                .get("timestamp")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-time");
+            let kind = item
+                .get("kind")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let source = item
+                .get("source")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let id = item
+                .get("id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-id");
+            let message = item
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let browser = item
+                .get("browserId")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" browser={value}"))
+                .unwrap_or_default();
+            format!("{timestamp} {kind} source={source} id={id}{browser} {message}")
+        })
+        .collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
 fn format_service_jobs_text(data: &serde_json::Value) -> Option<String> {
     if let Some(job) = data.get("job") {
         return Some(format_service_job_line(job));
@@ -377,6 +417,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_incidents") {
             if let Some(output) = format_service_incidents_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_incident_activity") {
+            if let Some(output) = format_service_incident_activity_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -2741,6 +2787,7 @@ Usage:
   agent-browser service cancel <job-id> [--reason <text>]
   agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
   agent-browser service resolve <incident-id> [--by <text>] [--note <text>]
+  agent-browser service activity <incident-id>
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
   agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
@@ -2752,6 +2799,7 @@ Commands:
   cancel                Cancel a queued job or request running job cancellation
   acknowledge           Record that an operator has seen a retained incident
   resolve               Mark a retained incident handled with operator metadata
+  activity              Show a normalized incident timeline from related events, jobs, and handling metadata
   jobs                  Show recent service control-plane jobs
   incidents             Show grouped retained service incidents
   events                Show recent service reconciliation, browser health, and tab lifecycle events
@@ -2768,11 +2816,12 @@ Notes:
   - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
   - Incident filters match incident state, operator handling state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
+  - Incident activity returns a normalized chronological timeline for one retained incident.
   - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
-  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
+  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.
   - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
@@ -2789,6 +2838,7 @@ Examples:
   agent-browser service cancel <job-id> --reason stale
   agent-browser service acknowledge browser-1 --by operator --note triaged
   agent-browser service resolve browser-1 --by operator --note recovered
+  agent-browser service activity browser-1
   agent-browser service jobs --limit 20
   agent-browser service jobs --id <job-id>
   agent-browser service jobs --state failed --action navigate
@@ -3159,6 +3209,7 @@ Service:
   service cancel             Cancel a queued job or request running job cancellation
   service acknowledge        Record that an operator has seen a retained incident
   service resolve            Mark a retained incident handled
+  service activity           Show a normalized retained incident timeline
   service jobs               Show recent service control-plane jobs
   service incidents          Show grouped retained service incidents
   service events             Show recent service events
@@ -3402,6 +3453,7 @@ Examples:
   agent-browser service cancel <job-id>  # Cancel a queued or running service job
   agent-browser service acknowledge      # Mark a retained incident acknowledged
   agent-browser service resolve          # Mark a retained incident resolved
+  agent-browser service activity         # Inspect a retained incident timeline
   agent-browser service jobs             # Inspect recent service control jobs
   agent-browser service incidents        # Inspect grouped retained service incidents
   agent-browser service events           # Inspect recent service events

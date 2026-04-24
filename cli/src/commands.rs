@@ -1067,6 +1067,24 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }
                 Ok(cmd)
             }
+            Some("activity") => {
+                let incident_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service activity".to_string(),
+                    usage: "service activity <incident-id>",
+                })?;
+                if rest.len() > 2 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service activity: {}", rest[2]),
+                        usage: "service activity <incident-id>",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_incident_activity",
+                    "incidentId": incident_id,
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
             Some("jobs") => {
                 let usage =
                     "service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]";
@@ -4644,6 +4662,15 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_incidents");
         assert_eq!(cmd["incidentId"], "incident-123");
+    }
+
+    #[test]
+    fn test_service_activity_id_lookup() {
+        let cmd = parse_command(&args("service activity incident-123"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_incident_activity");
+        assert_eq!(cmd["incidentId"], "incident-123");
+        assert!(cmd["serviceState"].is_object());
     }
 
     #[test]

@@ -198,6 +198,16 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" {
+        if let Some(incident_id) = service_incident_action_id(path, "/activity") {
+            let result =
+                relay_service_command(session_name, service_incident_activity_command(incident_id))
+                    .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+    }
+
     if method == "GET" && path.starts_with("/api/service/incidents/") {
         let Some(incident_id) = path
             .strip_prefix("/api/service/incidents/")
@@ -393,6 +403,14 @@ fn service_incident_mutation_command(
     }
 
     cmd
+}
+
+fn service_incident_activity_command(incident_id: &str) -> Value {
+    json!({
+        "action": "service_incident_activity",
+        "incidentId": incident_id,
+        "serviceState": load_service_state_snapshot(),
+    })
 }
 
 fn service_events_command(query: Option<&str>) -> Result<Value, String> {
@@ -774,6 +792,15 @@ mod tests {
             service_incident_action_id("/api/service/incidents//resolve", "/resolve"),
             None
         );
+    }
+
+    #[test]
+    fn service_incident_activity_command_maps_id() {
+        let cmd = service_incident_activity_command("incident-123");
+
+        assert_eq!(cmd["action"], "service_incident_activity");
+        assert_eq!(cmd["incidentId"], "incident-123");
+        assert!(cmd["serviceState"].is_object());
     }
 
     #[test]

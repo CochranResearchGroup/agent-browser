@@ -138,6 +138,7 @@ agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser service cancel <job-id> # Cancel a queued or running service control job
 agent-browser service acknowledge <incident-id> # Mark a retained incident acknowledged
 agent-browser service resolve <incident-id>     # Mark a retained incident resolved
+agent-browser service activity <incident-id>    # Show a retained incident timeline
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service incidents       # Show grouped retained service incidents
 agent-browser service events          # Show recent service events
@@ -1215,6 +1216,7 @@ agent-browser service reconcile
 agent-browser service cancel <job-id> --reason stale
 agent-browser service acknowledge browser-1 --by operator --note triaged
 agent-browser service resolve browser-1 --by operator --note recovered
+agent-browser service activity browser-1
 agent-browser service jobs --limit 20
 agent-browser service jobs --id <job-id>
 agent-browser service jobs --state failed --action navigate --since 2026-04-22T00:00:00Z
@@ -1244,7 +1246,7 @@ Use `service acknowledge <incident-id>` to mark a retained incident seen by an o
 
 Use `service resolve <incident-id>` to mark a retained incident handled. This preserves the derived incident record while adding durable resolution metadata. Add `--by <text>` to record who resolved it and `--note <text>` to persist a resolution note.
 
-Acknowledgement and resolution also append retained service events with `incident_acknowledged` and `incident_resolved` kinds. Incident detail includes those handling events alongside the health and job events that define the grouped incident.
+Acknowledgement and resolution also append retained service events with `incident_acknowledged` and `incident_resolved` kinds. Incident detail includes those handling events alongside the health and job events that define the grouped incident. Use `service activity <incident-id>` to fetch a normalized chronological timeline for one retained incident without reconstructing it client-side.
 
 Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 
@@ -1261,6 +1263,7 @@ curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>/cancel"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents?limit=20&handling-state=unacknowledged"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>"
+curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/activity"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/acknowledge?by=operator&note=triaged"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/resolve?by=operator&note=recovered"
 curl "http://127.0.0.1:<stream-port>/api/service/events?limit=20&kind=browser_health_changed"

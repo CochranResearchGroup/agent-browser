@@ -1599,6 +1599,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_job_cancel"
             | "service_incident_acknowledge"
             | "service_incident_resolve"
+            | "service_incident_activity"
             | "service_jobs"
             | "service_incidents"
             | "service_events"
@@ -1768,6 +1769,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
         "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
+        "service_incident_activity" => handle_service_incident_activity(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
         "service_incidents" => handle_service_incidents(cmd).await,
         "service_events" => handle_service_events(cmd).await,
@@ -6177,6 +6179,196 @@ async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_incident_activity(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let incident_id = cmd
+        .get("incidentId")
+        .and_then(|value| value.as_str())
+        .ok_or("Missing incidentId")?;
+    let incident = service_state
+        .incidents
+        .iter()
+        .find(|incident| incident.id == incident_id)
+        .cloned()
+        .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
+    let activity = service_incident_activity(&service_state, &incident);
+
+    Ok(json!({
+        "incident": incident,
+        "activity": activity,
+        "count": activity.len(),
+    }))
+}
+
+fn service_incident_activity(
+    service_state: &ServiceState,
+    incident: &super::service_model::ServiceIncident,
+) -> Vec<Value> {
+    let mut activity = Vec::new();
+
+    for event_id in &incident.event_ids {
+        if let Some(event) = service_state
+            .events
+            .iter()
+            .find(|event| &event.id == event_id)
+        {
+            activity.push(service_event_activity(event));
+        }
+    }
+
+    for job_id in &incident.job_ids {
+        if let Some(job) = service_state.jobs.get(job_id) {
+            activity.push(service_job_activity(job));
+        }
+    }
+
+    if !activity.iter().any(|item| {
+        item.get("kind")
+            .and_then(|kind| kind.as_str())
+            .is_some_and(|kind| kind == "incident_acknowledged")
+    }) {
+        if let Some(item) = service_incident_metadata_activity(incident, "acknowledged") {
+            activity.push(item);
+        }
+    }
+
+    if !activity.iter().any(|item| {
+        item.get("kind")
+            .and_then(|kind| kind.as_str())
+            .is_some_and(|kind| kind == "incident_resolved")
+    }) {
+        if let Some(item) = service_incident_metadata_activity(incident, "resolved") {
+            activity.push(item);
+        }
+    }
+
+    activity.sort_by(|left, right| {
+        let left_timestamp = left
+            .get("timestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let right_timestamp = right
+            .get("timestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let left_id = left
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let right_id = right
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        left_timestamp
+            .cmp(right_timestamp)
+            .then_with(|| left_id.cmp(right_id))
+    });
+    activity
+}
+
+fn service_event_activity(event: &ServiceEvent) -> Value {
+    let kind = service_event_kind_name(event.kind);
+    json!({
+        "id": event.id,
+        "source": "event",
+        "eventId": event.id,
+        "timestamp": event.timestamp,
+        "kind": kind,
+        "title": service_activity_title(kind),
+        "message": event.message,
+        "browserId": event.browser_id,
+        "details": event.details,
+    })
+}
+
+fn service_job_activity(job: &super::service_model::ServiceJob) -> Value {
+    let kind = match job.state {
+        ServiceJobState::TimedOut => "service_job_timeout",
+        ServiceJobState::Cancelled => "service_job_cancelled",
+        _ => "service_job",
+    };
+    let timestamp = job
+        .completed_at
+        .as_deref()
+        .or(job.started_at.as_deref())
+        .or(job.submitted_at.as_deref())
+        .unwrap_or("unknown-time");
+    let message = job.error.as_deref().unwrap_or("Service job changed state");
+    json!({
+        "id": job.id,
+        "source": "job",
+        "jobId": job.id,
+        "timestamp": timestamp,
+        "kind": kind,
+        "title": service_activity_title(kind),
+        "message": message,
+        "jobState": service_job_state_name(job.state),
+        "jobAction": job.action,
+        "target": job.target,
+    })
+}
+
+fn service_incident_metadata_activity(
+    incident: &super::service_model::ServiceIncident,
+    action: &str,
+) -> Option<Value> {
+    let (timestamp, actor, note, kind, title) = match action {
+        "acknowledged" => (
+            incident.acknowledged_at.as_deref()?,
+            incident.acknowledged_by.as_deref().unwrap_or("operator"),
+            incident.acknowledgement_note.as_deref(),
+            "incident_acknowledged",
+            "Incident acknowledged",
+        ),
+        "resolved" => (
+            incident.resolved_at.as_deref()?,
+            incident.resolved_by.as_deref().unwrap_or("operator"),
+            incident.resolution_note.as_deref(),
+            "incident_resolved",
+            "Incident resolved",
+        ),
+        _ => return None,
+    };
+    let mut details = json!({
+        "incidentId": incident.id,
+        "actor": actor,
+        "action": action,
+    });
+    if let Some(note) = note {
+        details["note"] = json!(note);
+    }
+    Some(json!({
+        "id": format!("{}-{}", incident.id, action),
+        "source": "metadata",
+        "timestamp": timestamp,
+        "kind": kind,
+        "title": title,
+        "message": format!("Incident {} {}", incident.label, action),
+        "browserId": incident.browser_id,
+        "details": details,
+    }))
+}
+
+fn service_activity_title(kind: &str) -> &'static str {
+    match kind {
+        "browser_health_changed" => "Browser health changed",
+        "tab_lifecycle_changed" => "Tab lifecycle changed",
+        "reconciliation_error" => "Reconciliation error",
+        "incident_acknowledged" => "Incident acknowledged",
+        "incident_resolved" => "Incident resolved",
+        "service_job_timeout" => "Service job timed out",
+        "service_job_cancelled" => "Service job cancelled",
+        "service_job" => "Service job updated",
+        _ => "Service activity",
+    }
+}
+
 fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
     match kind {
         ServiceEventKind::Reconciliation => "reconciliation",
@@ -10210,6 +10402,86 @@ mod tests {
         assert_eq!(result["data"]["events"][0]["id"], "event-1");
         assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
         assert_eq!(result["data"]["count"], 1);
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incident_activity_returns_normalized_timeline() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incident_activity",
+            "id": "svc-activity-1",
+            "incidentId": "browser-1",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser browser-1 health changed from Ready to ProcessExited",
+                        "browserId": "browser-1"
+                    },
+                    {
+                        "id": "event-2",
+                        "timestamp": "2026-04-22T00:02:00Z",
+                        "kind": "incident_acknowledged",
+                        "message": "Incident browser-1 acknowledged",
+                        "browserId": "browser-1",
+                        "details": {
+                            "incidentId": "browser-1",
+                            "actor": "operator",
+                            "action": "acknowledged",
+                            "note": "triaged"
+                        }
+                    }
+                ],
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "timed_out",
+                        "submittedAt": "2026-04-22T00:01:00Z",
+                        "error": "Timed out after 30000 ms"
+                    }
+                },
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "acknowledgedAt": "2026-04-22T00:02:00Z",
+                        "acknowledgedBy": "operator",
+                        "resolvedAt": "2026-04-22T00:03:00Z",
+                        "resolvedBy": "operator",
+                        "resolutionNote": "handled",
+                        "latestTimestamp": "2026-04-22T00:03:00Z",
+                        "latestMessage": "Handled",
+                        "latestKind": "service_job_timeout",
+                        "eventIds": ["event-1", "event-2"],
+                        "jobIds": ["job-1"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["incident"]["id"], "browser-1");
+        assert_eq!(result["data"]["count"], 4);
+        assert_eq!(
+            result["data"]["activity"][0]["kind"],
+            "browser_health_changed"
+        );
+        assert_eq!(result["data"]["activity"][1]["kind"], "service_job_timeout");
+        assert_eq!(
+            result["data"]["activity"][2]["kind"],
+            "incident_acknowledged"
+        );
+        assert_eq!(result["data"]["activity"][2]["source"], "event");
+        assert_eq!(result["data"]["activity"][3]["kind"], "incident_resolved");
+        assert_eq!(result["data"]["activity"][3]["source"], "metadata");
         assert!(state.browser.is_none());
     }
 

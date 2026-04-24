@@ -47,12 +47,15 @@ curl "http://127.0.0.1:9223/api/service/status"
 curl "http://127.0.0.1:9223/api/service/jobs?limit=20&state=failed"
 curl "http://127.0.0.1:9223/api/service/jobs/<job-id>"
 curl -X POST "http://127.0.0.1:9223/api/service/jobs/<job-id>/cancel"
+curl "http://127.0.0.1:9223/api/service/incidents?limit=20&handling-state=unacknowledged"
+curl "http://127.0.0.1:9223/api/service/incidents/<incident-id>"
+curl "http://127.0.0.1:9223/api/service/incidents/<incident-id>/activity"
 curl "http://127.0.0.1:9223/api/service/events?limit=20&kind=browser_health_changed"
 curl "http://127.0.0.1:9223/api/service/events?kind=tab_lifecycle_changed"
 curl -X POST "http://127.0.0.1:9223/api/service/reconcile"
 ```
 
-`GET /api/service/status` returns the same service snapshot as `agent-browser service status`. `GET /api/service/jobs` accepts `id`, `limit`, `state`, `action`, and `since` query parameters. `GET /api/service/jobs/<job-id>` returns one retained job by ID. `POST /api/service/jobs/<job-id>/cancel` marks a queued job cancelled before dispatch and rejects running or terminal jobs. `GET /api/service/events` accepts `limit`, `kind`, `browser-id`, `browser_id`, `browserId`, and `since` query parameters. Valid event kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, `reconciliation_error`, `incident_acknowledged`, and `incident_resolved`. `POST /api/service/reconcile` runs the same persisted browser health probes as `agent-browser service reconcile`.
+`GET /api/service/status` returns the same service snapshot as `agent-browser service status`. `GET /api/service/jobs` accepts `id`, `limit`, `state`, `action`, and `since` query parameters. `GET /api/service/jobs/<job-id>` returns one retained job by ID. `POST /api/service/jobs/<job-id>/cancel` marks a queued job cancelled before dispatch and rejects running or terminal jobs. `GET /api/service/incidents` accepts incident filters, `GET /api/service/incidents/<incident-id>` returns one incident with related raw records, and `GET /api/service/incidents/<incident-id>/activity` returns the normalized chronological timeline for one retained incident. `GET /api/service/events` accepts `limit`, `kind`, `browser-id`, `browser_id`, `browserId`, and `since` query parameters. Valid event kinds are `reconciliation`, `browser_health_changed`, `tab_lifecycle_changed`, `reconciliation_error`, `incident_acknowledged`, and `incident_resolved`. `POST /api/service/reconcile` runs the same persisted browser health probes as `agent-browser service reconcile`.
 
 ## Relationship to screencast commands
 
