@@ -736,6 +736,52 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": []
             }
         }),
+        json!({
+            "name": "browser_type",
+            "title": "Type into browser field",
+            "description": "Queue typed text against a selector or cached ref in the active browser session. This mutates page state using keyboard-style input, so include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Required CSS selector or cached ref such as @e1."
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Required text to type into the target field."
+                    },
+                    "clear": {
+                        "type": "boolean",
+                        "description": "Clear the field before typing. Defaults to false."
+                    },
+                    "delayMs": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Optional delay in milliseconds between key events."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued type job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["selector", "text"]
+            }
+        }),
     ]
 }
 
@@ -815,6 +861,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_click" => call_browser_click(arguments, session),
         "browser_fill" => call_browser_fill(arguments, session),
         "browser_wait" => call_browser_wait(arguments, session),
+        "browser_type" => call_browser_type(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -1115,6 +1162,45 @@ fn call_browser_wait(arguments: &Value, session: &str) -> Result<Value, JsonRpcE
     ))
 }
 
+fn call_browser_type(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let text = required_string_argument(arguments, "text")?;
+    let clear = optional_bool_argument(arguments, "clear")?;
+    let delay_ms = optional_u64_argument(arguments, "delayMs")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_type_command(BrowserTypeCommandArgs {
+        selector,
+        text,
+        clear,
+        delay_ms,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    });
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_type",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_type",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -1295,6 +1381,45 @@ fn browser_wait_command(args: BrowserWaitCommandArgs<'_>) -> Result<Value, JsonR
         command["taskName"] = json!(task_name);
     }
     Ok(command)
+}
+
+struct BrowserTypeCommandArgs<'a> {
+    selector: &'a str,
+    text: &'a str,
+    clear: Option<bool>,
+    delay_ms: Option<u64>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+fn browser_type_command(args: BrowserTypeCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-type-{}", uuid::Uuid::new_v4()),
+        "action": "type",
+        "selector": args.selector,
+        "text": args.text,
+    });
+    if let Some(clear) = args.clear {
+        command["clear"] = json!(clear);
+    }
+    if let Some(delay_ms) = args.delay_ms {
+        command["delay"] = json!(delay_ms);
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
 }
 
 struct BrowserScreenshotCommandArgs<'a> {
@@ -1892,6 +2017,20 @@ mod tests {
         assert!(
             response["result"]["tools"][8]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][9]["name"], "browser_type");
+        assert_eq!(
+            response["result"]["tools"][9]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert_eq!(
+            response["result"]["tools"][9]["inputSchema"]["required"][1],
+            "text"
+        );
+        assert!(response["result"]["tools"][9]["inputSchema"]["properties"]["clear"].is_object());
+        assert!(response["result"]["tools"][9]["inputSchema"]["properties"]["delayMs"].is_object());
+        assert!(
+            response["result"]["tools"][9]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -2056,6 +2195,36 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 17);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_type_requires_selector_and_text_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":18,"method":"tools/call","params":{"name":"browser_type","arguments":{"text":" Jr","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 18);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":19,"method":"tools/call","params":{"name":"browser_type","arguments":{"selector":"#name","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 19);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"browser_type","arguments":{"selector":"#name","text":" Jr","clear":"false","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 20);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -2335,6 +2504,30 @@ mod tests {
         .unwrap();
         assert_eq!(timeout_command["action"], "wait");
         assert_eq!(timeout_command["timeout"], 250);
+    }
+
+    #[test]
+    fn browser_type_command_forwards_options_and_trace_fields() {
+        let command = browser_type_command(BrowserTypeCommandArgs {
+            selector: "#name",
+            text: " Jr",
+            clear: Some(false),
+            delay_ms: Some(25),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(command["action"], "type");
+        assert_eq!(command["selector"], "#name");
+        assert_eq!(command["text"], " Jr");
+        assert_eq!(command["clear"], false);
+        assert_eq!(command["delay"], 25);
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
     }
 
     #[test]

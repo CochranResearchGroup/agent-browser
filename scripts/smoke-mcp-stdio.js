@@ -358,6 +358,36 @@ try {
     waitTool.inputSchema?.properties?.taskName,
     'MCP browser_wait missing taskName trace field',
   );
+  const typeTool = tools.tools?.find((tool) => tool.name === 'browser_type');
+  assert(typeTool, 'MCP browser_type tool missing');
+  assert(
+    typeTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_type missing selector requirement',
+  );
+  assert(
+    typeTool.inputSchema?.required?.includes('text'),
+    'MCP browser_type missing text requirement',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.clear,
+    'MCP browser_type missing clear option',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.delayMs,
+    'MCP browser_type missing delayMs option',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.serviceName,
+    'MCP browser_type missing serviceName trace field',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.agentName,
+    'MCP browser_type missing agentName trace field',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.taskName,
+    'MCP browser_type missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

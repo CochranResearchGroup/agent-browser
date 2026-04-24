@@ -406,6 +406,24 @@ try {
   assert(fillPayload.trace?.agentName === agentName, 'browser_fill trace missing agentName');
   assert(fillPayload.trace?.taskName === taskName, 'browser_fill trace missing taskName');
 
+  const typeResult = await send('tools/call', {
+    name: 'browser_type',
+    arguments: {
+      selector: '#name',
+      text: ' Jr',
+      delayMs: 1,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const typePayload = parseToolPayload(typeResult);
+  assert(typePayload.success === true, `browser_type failed: ${JSON.stringify(typePayload)}`);
+  assert(typePayload.data?.typed === ' Jr', 'browser_type did not report typed text');
+  assert(typePayload.trace?.serviceName === serviceName, 'browser_type trace missing serviceName');
+  assert(typePayload.trace?.agentName === agentName, 'browser_type trace missing agentName');
+  assert(typePayload.trace?.taskName === taskName, 'browser_type trace missing taskName');
+
   const copyNameResult = await send('tools/call', {
     name: 'browser_click',
     arguments: {
@@ -464,7 +482,7 @@ try {
   );
   assert(
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
-      clickedSnapshotPayload.data.snapshot.includes('Ada Lovelace'),
+      clickedSnapshotPayload.data.snapshot.includes('Ada Lovelace Jr'),
     'browser_fill did not mutate the page state visible to a follow-up snapshot',
   );
 
@@ -539,6 +557,15 @@ try {
   );
   assert(fillJob, 'Retained service job with browser_fill caller context was not found');
   assert(fillJob.state === 'succeeded', `Fill service job state was ${fillJob.state}`);
+  const typeJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'type' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(typeJob, 'Retained service job with browser_type caller context was not found');
+  assert(typeJob.state === 'succeeded', `Type service job state was ${typeJob.state}`);
   const waitJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'wait' &&
