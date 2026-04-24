@@ -334,6 +334,8 @@ agent-browser service events          # Show recent service events
 agent-browser mcp serve               # Run the read-only MCP stdio server
 agent-browser mcp resources           # List read-only service resources for MCP adapters
 agent-browser mcp read agent-browser://incidents
+agent-browser mcp read agent-browser://browsers
+agent-browser mcp read agent-browser://tabs
 agent-browser mcp read agent-browser://jobs
 agent-browser mcp read agent-browser://events
 
@@ -414,7 +416,7 @@ Acknowledgement and resolution also append retained service events with `inciden
 
 The activity response is the canonical agent-facing incident timeline. It returns `{ incident, activity, count }`. Each activity item includes `id`, `source`, `timestamp`, `kind`, `title`, and `message`, plus `eventId` or `jobId` when it came from a retained event or job. Older retained incidents can include `source: "metadata"` acknowledgement or resolution items when handling metadata predates retained handling events.
 
-For MCP clients, use `agent-browser mcp serve` to run a read-only stdio server that exposes service resources without launching a browser. The server supports `initialize`, `ping`, `resources/list`, `resources/templates/list`, and `resources/read`. For shell inspection, use `agent-browser mcp resources` to list read-only service resource contracts and `agent-browser mcp read <uri>` to read one resource from persisted service state. Implemented resources are `agent-browser://incidents`, `agent-browser://jobs`, `agent-browser://events`, and `agent-browser://incidents/{incident_id}/activity`.
+For MCP clients, use `agent-browser mcp serve` to run a read-only stdio server that exposes service resources without launching a browser. The server supports `initialize`, `ping`, `resources/list`, `resources/templates/list`, and `resources/read`. For shell inspection, use `agent-browser mcp resources` to list read-only service resource contracts and `agent-browser mcp read <uri>` to read one resource from persisted service state. Implemented resources are `agent-browser://incidents`, `agent-browser://browsers`, `agent-browser://tabs`, `agent-browser://jobs`, `agent-browser://events`, and `agent-browser://incidents/{incident_id}/activity`.
 
 Use `agent-browser service jobs --limit <n>` to inspect recent control-plane jobs directly without parsing the full service status payload. Use `agent-browser service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 

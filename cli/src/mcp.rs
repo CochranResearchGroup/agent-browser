@@ -6,8 +6,10 @@ use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
+const BROWSERS_RESOURCE: &str = "agent-browser://browsers";
 const EVENTS_RESOURCE: &str = "agent-browser://events";
 const JOBS_RESOURCE: &str = "agent-browser://jobs";
+const TABS_RESOURCE: &str = "agent-browser://tabs";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
@@ -98,6 +100,18 @@ fn service_mcp_resources() -> Vec<Value> {
             "description": "Grouped retained service incidents derived from service events and jobs"
         }),
         json!({
+            "uri": BROWSERS_RESOURCE,
+            "name": "Service browsers",
+            "mimeType": "application/json",
+            "description": "Service-owned browser process records sorted by browser id"
+        }),
+        json!({
+            "uri": TABS_RESOURCE,
+            "name": "Service tabs",
+            "mimeType": "application/json",
+            "description": "Service-owned browser tab records sorted by tab id"
+        }),
+        json!({
             "uri": JOBS_RESOURCE,
             "name": "Service jobs",
             "mimeType": "application/json",
@@ -133,6 +147,20 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             "incidents": state.incidents,
             "count": state.incidents.len(),
         }),
+        BROWSERS_RESOURCE => {
+            let browsers = state.browsers.values().cloned().collect::<Vec<_>>();
+            json!({
+                "browsers": browsers,
+                "count": browsers.len(),
+            })
+        }
+        TABS_RESOURCE => {
+            let tabs = state.tabs.values().cloned().collect::<Vec<_>>();
+            json!({
+                "tabs": tabs,
+                "count": tabs.len(),
+            })
+        }
         JOBS_RESOURCE => {
             let mut jobs = state.jobs.values().cloned().collect::<Vec<_>>();
             jobs.sort_by(|left, right| {
@@ -389,8 +417,10 @@ mod tests {
 
         assert_eq!(response["success"], true);
         assert_eq!(response["data"]["resources"][0]["uri"], INCIDENTS_RESOURCE);
-        assert_eq!(response["data"]["resources"][1]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["data"]["resources"][2]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][1]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][2]["uri"], TABS_RESOURCE);
+        assert_eq!(response["data"]["resources"][3]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["data"]["resources"][4]["uri"], EVENTS_RESOURCE);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
@@ -436,8 +466,10 @@ mod tests {
             response["result"]["resources"][0]["uri"],
             INCIDENTS_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][1]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["result"]["resources"][2]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["result"]["resources"][1]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["result"]["resources"][2]["uri"], TABS_RESOURCE);
+        assert_eq!(response["result"]["resources"][3]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["result"]["resources"][4]["uri"], EVENTS_RESOURCE);
     }
 
     #[test]
@@ -498,8 +530,82 @@ mod tests {
         assert_eq!(responses.len(), 2);
         assert!(responses[0].contains(r#""method""#) == false);
         assert!(responses[1].contains("agent-browser://incidents"));
+        assert!(responses[1].contains("agent-browser://browsers"));
+        assert!(responses[1].contains("agent-browser://tabs"));
         assert!(responses[1].contains("agent-browser://jobs"));
         assert!(responses[1].contains("agent-browser://events"));
+    }
+
+    #[test]
+    fn read_browsers_resource_returns_browsers_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{BrowserHealth, BrowserProcess};
+
+        let state = ServiceState {
+            browsers: BTreeMap::from([
+                (
+                    "browser-b".to_string(),
+                    BrowserProcess {
+                        id: "browser-b".to_string(),
+                        health: BrowserHealth::Ready,
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "browser-a".to_string(),
+                    BrowserProcess {
+                        id: "browser-a".to_string(),
+                        health: BrowserHealth::NotStarted,
+                        ..BrowserProcess::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(BROWSERS_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["browsers"][0]["id"], "browser-a");
+        assert_eq!(resource["contents"]["browsers"][1]["id"], "browser-b");
+    }
+
+    #[test]
+    fn read_tabs_resource_returns_tabs_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{BrowserTab, TabLifecycle};
+
+        let state = ServiceState {
+            tabs: BTreeMap::from([
+                (
+                    "tab-b".to_string(),
+                    BrowserTab {
+                        id: "tab-b".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Ready,
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "tab-a".to_string(),
+                    BrowserTab {
+                        id: "tab-a".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Loading,
+                        ..BrowserTab::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(TABS_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["tabs"][0]["id"], "tab-a");
+        assert_eq!(resource["contents"]["tabs"][1]["id"], "tab-b");
     }
 
     #[test]

@@ -134,6 +134,14 @@ try {
     'MCP incidents resource missing',
   );
   assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://browsers'),
+    'MCP browsers resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://tabs'),
+    'MCP tabs resource missing',
+  );
+  assert(
     resources.resources?.some((resource) => resource.uri === 'agent-browser://jobs'),
     'MCP jobs resource missing',
   );
@@ -158,6 +166,16 @@ try {
   const incidentPayload = JSON.parse(incidentContent.text);
   assert(Array.isArray(incidentPayload.incidents), 'MCP incident payload missing incidents array');
   assert(incidentPayload.count === 0, 'Fresh MCP smoke state should have zero incidents');
+
+  const browsers = await send('resources/read', { uri: 'agent-browser://browsers' });
+  const browserPayload = JSON.parse(browsers.contents?.[0]?.text || '{}');
+  assert(Array.isArray(browserPayload.browsers), 'MCP browsers payload missing browsers array');
+  assert(browserPayload.count === 0, 'Fresh MCP smoke state should have zero browsers');
+
+  const tabs = await send('resources/read', { uri: 'agent-browser://tabs' });
+  const tabPayload = JSON.parse(tabs.contents?.[0]?.text || '{}');
+  assert(Array.isArray(tabPayload.tabs), 'MCP tabs payload missing tabs array');
+  assert(tabPayload.count === 0, 'Fresh MCP smoke state should have zero tabs');
 
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
   const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');

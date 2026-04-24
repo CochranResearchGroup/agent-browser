@@ -145,6 +145,8 @@ agent-browser service events          # Show recent service events
 agent-browser mcp serve               # Run the read-only MCP stdio server
 agent-browser mcp resources           # List read-only service resources for MCP adapters
 agent-browser mcp read agent-browser://incidents
+agent-browser mcp read agent-browser://browsers
+agent-browser mcp read agent-browser://tabs
 agent-browser mcp read agent-browser://jobs
 agent-browser mcp read agent-browser://events
 agent-browser close                   # Close browser (aliases: quit, exit)
@@ -1279,7 +1281,7 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 
 The HTTP API loads the same persisted and configured service state as the CLI before relaying the request to the daemon.
 
-For MCP clients, use `mcp serve` to run a read-only stdio server that exposes service resources without launching a browser. The server supports `initialize`, `ping`, `resources/list`, `resources/templates/list`, and `resources/read`. For shell inspection, use `mcp resources` to list read-only service resource contracts and `mcp read <uri>` to read one resource from persisted service state. Implemented resources are `agent-browser://incidents`, `agent-browser://jobs`, `agent-browser://events`, and `agent-browser://incidents/{incident_id}/activity`.
+For MCP clients, use `mcp serve` to run a read-only stdio server that exposes service resources without launching a browser. The server supports `initialize`, `ping`, `resources/list`, `resources/templates/list`, and `resources/read`. For shell inspection, use `mcp resources` to list read-only service resource contracts and `mcp read <uri>` to read one resource from persisted service state. Implemented resources are `agent-browser://incidents`, `agent-browser://browsers`, `agent-browser://tabs`, `agent-browser://jobs`, `agent-browser://events`, and `agent-browser://incidents/{incident_id}/activity`.
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
