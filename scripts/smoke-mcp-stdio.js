@@ -258,6 +258,28 @@ try {
     tabsTool.inputSchema?.properties?.taskName,
     'MCP browser_tabs missing taskName trace field',
   );
+  const screenshotTool = tools.tools?.find((tool) => tool.name === 'browser_screenshot');
+  assert(screenshotTool, 'MCP browser_screenshot tool missing');
+  assert(
+    screenshotTool.inputSchema?.properties?.selector,
+    'MCP browser_screenshot missing selector option',
+  );
+  assert(
+    screenshotTool.inputSchema?.properties?.format,
+    'MCP browser_screenshot missing format option',
+  );
+  assert(
+    screenshotTool.inputSchema?.properties?.serviceName,
+    'MCP browser_screenshot missing serviceName trace field',
+  );
+  assert(
+    screenshotTool.inputSchema?.properties?.agentName,
+    'MCP browser_screenshot missing agentName trace field',
+  );
+  assert(
+    screenshotTool.inputSchema?.properties?.taskName,
+    'MCP browser_screenshot missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

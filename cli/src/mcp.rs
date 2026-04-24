@@ -542,6 +542,66 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": []
             }
         }),
+        json!({
+            "name": "browser_screenshot",
+            "title": "Take browser screenshot",
+            "description": "Queue a screenshot against the active browser session and return the saved image path. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Optional CSS selector or cached ref to scope the screenshot."
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Optional output path. If omitted, agent-browser saves to the configured screenshot directory."
+                    },
+                    "fullPage": {
+                        "type": "boolean",
+                        "description": "Capture the full scrollable page."
+                    },
+                    "annotate": {
+                        "type": "boolean",
+                        "description": "Overlay numbered labels for interactive elements and return annotation metadata."
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["png", "jpeg"],
+                        "description": "Screenshot format. Defaults to png."
+                    },
+                    "quality": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100,
+                        "description": "JPEG quality from 0 to 100. Only applies when format is jpeg."
+                    },
+                    "screenshotDir": {
+                        "type": "string",
+                        "description": "Optional output directory when path is omitted."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued screenshot job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": []
+            }
+        }),
     ]
 }
 
@@ -617,6 +677,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
         "browser_tabs" => call_browser_tabs(arguments, session),
+        "browser_screenshot" => call_browser_screenshot(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -756,6 +817,51 @@ fn call_browser_tabs(arguments: &Value, session: &str) -> Result<Value, JsonRpcE
     ))
 }
 
+fn call_browser_screenshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = optional_string_argument(arguments, "selector")?;
+    let path = optional_string_argument(arguments, "path")?;
+    let full_page = optional_bool_argument(arguments, "fullPage")?;
+    let annotate = optional_bool_argument(arguments, "annotate")?;
+    let format = optional_screenshot_format_argument(arguments)?;
+    let quality = optional_bounded_u64_argument(arguments, "quality", 0, 100)?;
+    let screenshot_dir = optional_string_argument(arguments, "screenshotDir")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_screenshot_command(BrowserScreenshotCommandArgs {
+        selector,
+        path,
+        full_page,
+        annotate,
+        format,
+        quality,
+        screenshot_dir,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    });
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_screenshot",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_screenshot",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -778,6 +884,61 @@ fn service_job_cancel_command(
         command["agentName"] = json!(agent_name);
     }
     if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+struct BrowserScreenshotCommandArgs<'a> {
+    selector: Option<&'a str>,
+    path: Option<&'a str>,
+    full_page: Option<bool>,
+    annotate: Option<bool>,
+    format: Option<&'a str>,
+    quality: Option<u64>,
+    screenshot_dir: Option<&'a str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+fn browser_screenshot_command(args: BrowserScreenshotCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-screenshot-{}", uuid::Uuid::new_v4()),
+        "action": "screenshot",
+    });
+    if let Some(selector) = args.selector {
+        command["selector"] = json!(selector);
+    }
+    if let Some(path) = args.path {
+        command["path"] = json!(path);
+    }
+    if let Some(full_page) = args.full_page {
+        command["fullPage"] = json!(full_page);
+    }
+    if let Some(annotate) = args.annotate {
+        command["annotate"] = json!(annotate);
+    }
+    if let Some(format) = args.format {
+        command["format"] = json!(format);
+    }
+    if let Some(quality) = args.quality {
+        command["quality"] = json!(quality);
+    }
+    if let Some(screenshot_dir) = args.screenshot_dir {
+        command["screenshotDir"] = json!(screenshot_dir);
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
         command["taskName"] = json!(task_name);
     }
     command
@@ -933,6 +1094,32 @@ fn optional_positive_u64_argument(
             name
         ))),
         value => Ok(value),
+    }
+}
+
+fn optional_bounded_u64_argument(
+    arguments: &Value,
+    name: &str,
+    min: u64,
+    max: u64,
+) -> Result<Option<u64>, JsonRpcError> {
+    match optional_u64_argument(arguments, name)? {
+        Some(value) if value < min || value > max => Err(JsonRpcError::invalid_params(&format!(
+            "{} must be between {} and {}",
+            name, min, max
+        ))),
+        value => Ok(value),
+    }
+}
+
+fn optional_screenshot_format_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
+    match optional_string_argument(arguments, "format")? {
+        Some("png") => Ok(Some("png")),
+        Some("jpeg") => Ok(Some("jpeg")),
+        Some(_) => Err(JsonRpcError::invalid_params(
+            "format must be either png or jpeg",
+        )),
+        None => Ok(None),
     }
 }
 
@@ -1221,6 +1408,14 @@ mod tests {
         assert!(
             response["result"]["tools"][4]["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
         );
+        assert_eq!(response["result"]["tools"][5]["name"], "browser_screenshot");
+        assert!(
+            response["result"]["tools"][5]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(response["result"]["tools"][5]["inputSchema"]["properties"]["format"].is_object());
+        assert!(
+            response["result"]["tools"][5]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -1292,6 +1487,27 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 8);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_screenshot_rejects_invalid_argument_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"browser_screenshot","arguments":{"format":"webp"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 9);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"browser_screenshot","arguments":{"quality":101}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 10);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -1398,6 +1614,36 @@ mod tests {
 
         assert_eq!(command["action"], "tab_list");
         assert_eq!(command["verbose"], true);
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_screenshot_command_forwards_options_and_trace_fields() {
+        let command = browser_screenshot_command(BrowserScreenshotCommandArgs {
+            selector: Some("#main"),
+            path: Some("/tmp/page.jpeg"),
+            full_page: Some(true),
+            annotate: Some(false),
+            format: Some("jpeg"),
+            quality: Some(80),
+            screenshot_dir: Some("/tmp/shots"),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(command["action"], "screenshot");
+        assert_eq!(command["selector"], "#main");
+        assert_eq!(command["path"], "/tmp/page.jpeg");
+        assert_eq!(command["fullPage"], true);
+        assert_eq!(command["annotate"], false);
+        assert_eq!(command["format"], "jpeg");
+        assert_eq!(command["quality"], 80);
+        assert_eq!(command["screenshotDir"], "/tmp/shots");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");

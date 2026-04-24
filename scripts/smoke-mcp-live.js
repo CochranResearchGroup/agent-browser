@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,12 +14,14 @@ const session = `mcp-live-${process.pid}-${Date.now()}`;
 const agentHome = join(tempHome, '.agent-browser');
 const socketDir = join(agentHome, 'sockets');
 const profileDir = join(tempHome, 'chrome-profile');
+const screenshotDir = join(tempHome, 'screenshots');
 const serviceName = 'McpLiveSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'browserSnapshotSmoke';
 
 mkdirSync(socketDir, { recursive: true });
 mkdirSync(profileDir, { recursive: true });
+mkdirSync(screenshotDir, { recursive: true });
 
 const env = {
   ...process.env,
@@ -331,6 +333,40 @@ try {
   assert(tabsPayload.trace?.agentName === agentName, 'browser_tabs trace missing agentName');
   assert(tabsPayload.trace?.taskName === taskName, 'browser_tabs trace missing taskName');
 
+  const screenshotResult = await send('tools/call', {
+    name: 'browser_screenshot',
+    arguments: {
+      selector: '#main',
+      screenshotDir,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const screenshotPayload = parseToolPayload(screenshotResult);
+  assert(
+    screenshotPayload.success === true,
+    `browser_screenshot failed: ${JSON.stringify(screenshotPayload)}`,
+  );
+  assert(
+    typeof screenshotPayload.data?.path === 'string' &&
+      screenshotPayload.data.path.startsWith(screenshotDir) &&
+      existsSync(screenshotPayload.data.path),
+    `browser_screenshot did not save an image in the requested directory: ${JSON.stringify(screenshotPayload)}`,
+  );
+  assert(
+    screenshotPayload.trace?.serviceName === serviceName,
+    'browser_screenshot trace missing serviceName',
+  );
+  assert(
+    screenshotPayload.trace?.agentName === agentName,
+    'browser_screenshot trace missing agentName',
+  );
+  assert(
+    screenshotPayload.trace?.taskName === taskName,
+    'browser_screenshot trace missing taskName',
+  );
+
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
   const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');
   const snapshotJob = jobPayload.jobs?.find(
@@ -369,6 +405,21 @@ try {
   );
   assert(tabsJob, 'Retained service job with browser_tabs caller context was not found');
   assert(tabsJob.state === 'succeeded', `Tabs service job state was ${tabsJob.state}`);
+  const screenshotJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'screenshot' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(
+    screenshotJob,
+    'Retained service job with browser_screenshot caller context was not found',
+  );
+  assert(
+    screenshotJob.state === 'succeeded',
+    `Screenshot service job state was ${screenshotJob.state}`,
+  );
 
   await cleanup();
   console.log('MCP live smoke passed');
