@@ -602,6 +602,43 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": []
             }
         }),
+        json!({
+            "name": "browser_click",
+            "title": "Click browser element",
+            "description": "Queue a click against a selector or cached ref in the active browser session. This mutates page state, so include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Required CSS selector or cached ref such as @e1."
+                    },
+                    "newTab": {
+                        "type": "boolean",
+                        "description": "Open a link target in a new tab instead of clicking in-place."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued click job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["selector"]
+            }
+        }),
     ]
 }
 
@@ -678,6 +715,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
         "browser_tabs" => call_browser_tabs(arguments, session),
         "browser_screenshot" => call_browser_screenshot(arguments, session),
+        "browser_click" => call_browser_click(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -862,6 +900,41 @@ fn call_browser_screenshot(arguments: &Value, session: &str) -> Result<Value, Js
     ))
 }
 
+fn call_browser_click(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let new_tab = optional_bool_argument(arguments, "newTab")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_click_command(
+        selector,
+        new_tab,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_click",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_click",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -876,6 +949,37 @@ fn service_job_cancel_command(
     });
     if let Some(reason) = reason {
         command["reason"] = json!(reason);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_click_command(
+    selector: &str,
+    new_tab: Option<bool>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-click-{}", uuid::Uuid::new_v4()),
+        "action": "click",
+        "selector": selector,
+    });
+    if let Some(new_tab) = new_tab {
+        command["newTab"] = json!(new_tab);
+    }
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
     }
     if let Some(service_name) = service_name {
         command["serviceName"] = json!(service_name);
@@ -1061,6 +1165,11 @@ fn optional_string_argument<'a>(
             }),
         None => Ok(None),
     }
+}
+
+fn required_string_argument<'a>(arguments: &'a Value, name: &str) -> Result<&'a str, JsonRpcError> {
+    optional_string_argument(arguments, name)?
+        .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
 }
 
 fn optional_bool_argument(arguments: &Value, name: &str) -> Result<Option<bool>, JsonRpcError> {
@@ -1416,6 +1525,15 @@ mod tests {
         assert!(
             response["result"]["tools"][5]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][6]["name"], "browser_click");
+        assert_eq!(
+            response["result"]["tools"][6]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert!(response["result"]["tools"][6]["inputSchema"]["properties"]["newTab"].is_object());
+        assert!(
+            response["result"]["tools"][6]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -1508,6 +1626,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 10);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_click_requires_selector_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"browser_click","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 11);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -1644,6 +1774,26 @@ mod tests {
         assert_eq!(command["format"], "jpeg");
         assert_eq!(command["quality"], 80);
         assert_eq!(command["screenshotDir"], "/tmp/shots");
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_click_command_forwards_options_and_trace_fields() {
+        let command = browser_click_command(
+            "#ready",
+            Some(true),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "click");
+        assert_eq!(command["selector"], "#ready");
+        assert_eq!(command["newTab"], true);
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");

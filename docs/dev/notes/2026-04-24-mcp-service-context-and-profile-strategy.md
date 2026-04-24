@@ -59,14 +59,18 @@ read-only MCP browser-control pattern to active page URL inspection.
 `browser_get_title` adds the same pattern for active page title inspection.
 `browser_tabs` applies the pattern to open tab inspection, with optional
 verbose target metadata. `browser_screenshot` adds a visual inspection path
-that saves the image to disk instead of returning inline bytes. More invasive
-browser tools should wait until profile and session policy are first-class in
-the service model, and they should always supply job caller context.
+that saves the image to disk instead of returning inline bytes. `browser_click`
+is the first mutating MCP browser control and is limited to the stable CLI
+click contract of selector or cached ref plus optional new-tab behavior. More
+invasive browser tools should wait until profile and session policy are
+first-class in the service model, and they should always supply job caller
+context.
 
 ## Live Validation
 
 `pnpm test:mcp-live` launches an isolated temp-home browser session, calls
 `browser_snapshot`, `browser_get_url`, `browser_get_title`, `browser_tabs`, and
-`browser_screenshot` over MCP stdio, and verifies that the retained `snapshot`,
-`url`, `title`, `tab_list`, and `screenshot` service jobs record `serviceName`,
-`agentName`, and `taskName`.
+`browser_screenshot` over MCP stdio, calls `browser_click`, verifies the click
+mutates page state through a follow-up snapshot, and verifies that the retained
+`snapshot`, `url`, `title`, `tab_list`, `screenshot`, and `click` service jobs
+record `serviceName`, `agentName`, and `taskName`.

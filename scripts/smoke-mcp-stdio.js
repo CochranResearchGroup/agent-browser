@@ -280,6 +280,28 @@ try {
     screenshotTool.inputSchema?.properties?.taskName,
     'MCP browser_screenshot missing taskName trace field',
   );
+  const clickTool = tools.tools?.find((tool) => tool.name === 'browser_click');
+  assert(clickTool, 'MCP browser_click tool missing');
+  assert(
+    clickTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_click missing selector requirement',
+  );
+  assert(
+    clickTool.inputSchema?.properties?.newTab,
+    'MCP browser_click missing newTab option',
+  );
+  assert(
+    clickTool.inputSchema?.properties?.serviceName,
+    'MCP browser_click missing serviceName trace field',
+  );
+  assert(
+    clickTool.inputSchema?.properties?.agentName,
+    'MCP browser_click missing agentName trace field',
+  );
+  assert(
+    clickTool.inputSchema?.properties?.taskName,
+    'MCP browser_click missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

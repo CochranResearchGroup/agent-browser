@@ -213,7 +213,8 @@ try {
     '<body>',
     '<main id="main">',
     '<h1>MCP Live Smoke</h1>',
-    '<button id="ready">Ready</button>',
+    '<button id="ready" onclick="document.getElementById(\'status\').textContent = \'Clicked\'">Ready</button>',
+    '<p id="status">Not clicked</p>',
     '<a href="https://example.com/">Example</a>',
     '</main>',
     '</body>',
@@ -367,6 +368,42 @@ try {
     'browser_screenshot trace missing taskName',
   );
 
+  const clickResult = await send('tools/call', {
+    name: 'browser_click',
+    arguments: {
+      selector: '#ready',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const clickPayload = parseToolPayload(clickResult);
+  assert(clickPayload.success === true, `browser_click failed: ${JSON.stringify(clickPayload)}`);
+  assert(clickPayload.data?.clicked === '#ready', 'browser_click did not report clicked selector');
+  assert(clickPayload.trace?.serviceName === serviceName, 'browser_click trace missing serviceName');
+  assert(clickPayload.trace?.agentName === agentName, 'browser_click trace missing agentName');
+  assert(clickPayload.trace?.taskName === taskName, 'browser_click trace missing taskName');
+
+  const clickedSnapshotResult = await send('tools/call', {
+    name: 'browser_snapshot',
+    arguments: {
+      selector: '#main',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const clickedSnapshotPayload = parseToolPayload(clickedSnapshotResult);
+  assert(
+    clickedSnapshotPayload.success === true,
+    `post-click browser_snapshot failed: ${JSON.stringify(clickedSnapshotPayload)}`,
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('Clicked'),
+    'browser_click did not mutate the page state visible to a follow-up snapshot',
+  );
+
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
   const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');
   const snapshotJob = jobPayload.jobs?.find(
@@ -420,6 +457,15 @@ try {
     screenshotJob.state === 'succeeded',
     `Screenshot service job state was ${screenshotJob.state}`,
   );
+  const clickJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'click' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(clickJob, 'Retained service job with browser_click caller context was not found');
+  assert(clickJob.state === 'succeeded', `Click service job state was ${clickJob.state}`);
 
   await cleanup();
   console.log('MCP live smoke passed');
