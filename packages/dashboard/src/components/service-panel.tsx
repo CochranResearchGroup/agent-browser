@@ -155,6 +155,12 @@ type ServiceJobsData = {
   total?: number;
 };
 
+type ServiceIncidentActivityData = {
+  incident?: ServiceIncident;
+  activity?: IncidentTimelineItem[];
+  count?: number;
+};
+
 type ApiResponse<T> = {
   success: boolean;
   data?: T;
@@ -215,6 +221,8 @@ type IncidentTimelineItem = {
   kind: string;
   title: string;
   message?: string | null;
+  source?: string;
+  browserId?: string | null;
 };
 
 const EVENT_KIND_OPTIONS: Array<{ value: EventKindFilter; label: string }> = [
@@ -1106,26 +1114,32 @@ function EventDetailDialog({
 
 function IncidentDetailDialog({
   incident,
+  activity,
+  activityLoading,
+  activityError,
   onOpenChange,
   onAcknowledge,
   onResolve,
   acting,
 }: {
   incident: IncidentRecord | null;
+  activity: IncidentTimelineItem[] | null;
+  activityLoading: boolean;
+  activityError: string;
   onOpenChange: (open: boolean) => void;
   onAcknowledge: (incident: IncidentRecord, note: string) => void;
   onResolve: (incident: IncidentRecord, note: string) => void;
   acting: boolean;
 }) {
   const [actionNote, setActionNote] = useState("");
-  const serviceEventCount = incident?.serviceEvents.length ?? 0;
-  const incidentCount = serviceEventCount + (incident?.jobEvents.length ?? 0);
-  const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
-  const handlingState = incident ? incidentHandlingState(incident) : "unacknowledged";
-  const timeline = useMemo(
+  const fallbackTimeline = useMemo(
     () => (incident ? deriveIncidentTimeline(incident) : []),
     [incident],
   );
+  const timeline = activity ?? fallbackTimeline;
+  const incidentCount = timeline.length;
+  const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
+  const handlingState = incident ? incidentHandlingState(incident) : "unacknowledged";
 
   useEffect(() => {
     setActionNote("");
@@ -1214,9 +1228,22 @@ function IncidentDetailDialog({
               </div>
               {timeline.length > 0 && (
                 <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    Incident history
-                  </p>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                      Incident history
+                    </p>
+                    {activityLoading && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                        <Loader2 className="size-3 animate-spin" />
+                        Loading service timeline
+                      </span>
+                    )}
+                  </div>
+                  {activityError && (
+                    <p className="mb-2 text-[10px] leading-4 text-muted-foreground">
+                      Using local fallback timeline: {activityError}
+                    </p>
+                  )}
                   <div className="service-incident-history">
                     {timeline.map((item) => (
                       <div key={item.id} className="service-incident-history-item">
@@ -1226,6 +1253,11 @@ function IncidentDetailDialog({
                             <span className="truncate text-xs font-bold text-foreground">
                               {item.title}
                             </span>
+                            {item.source && (
+                              <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px] uppercase">
+                                {item.source}
+                              </Badge>
+                            )}
                             <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
                               {formatAbsoluteTime(item.timestamp)}
                             </span>
@@ -1336,6 +1368,9 @@ export function ServicePanel() {
   const [actingIncidentId, setActingIncidentId] = useState<string | null>(null);
   const [operatorIdentity, setOperatorIdentity] = useState(initialOperatorIdentity);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
+  const [selectedIncidentActivity, setSelectedIncidentActivity] = useState<IncidentTimelineItem[] | null>(null);
+  const [selectedIncidentActivityLoading, setSelectedIncidentActivityLoading] = useState(false);
+  const [selectedIncidentActivityError, setSelectedIncidentActivityError] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
@@ -1404,6 +1439,40 @@ export function ServicePanel() {
       window.localStorage.removeItem(OPERATOR_STORAGE_KEY);
     }
   }, [operatorIdentity]);
+
+  useEffect(() => {
+    setSelectedIncidentActivity(null);
+    setSelectedIncidentActivityError("");
+    if (!canFetch || !selectedIncident?.id) {
+      setSelectedIncidentActivityLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSelectedIncidentActivityLoading(true);
+    fetch(`${serviceBase(activePort)}/incidents/${encodeURIComponent(selectedIncident.id)}/activity`)
+      .then(async (resp) => {
+        const json = (await resp.json()) as ApiResponse<ServiceIncidentActivityData>;
+        if (!json.success) throw new Error(json.error || "Service incident activity failed");
+        if (!cancelled) {
+          setSelectedIncidentActivity(json.data?.activity ?? []);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSelectedIncidentActivityError(
+            err instanceof Error ? err.message : "Service incident activity unavailable",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedIncidentActivityLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePort, canFetch, selectedIncident?.id]);
 
   const reconcile = useCallback(async () => {
     if (!canFetch || reconciling) return;
@@ -1586,6 +1655,9 @@ export function ServicePanel() {
       />
       <IncidentDetailDialog
         incident={selectedIncident}
+        activity={selectedIncidentActivity}
+        activityLoading={selectedIncidentActivityLoading}
+        activityError={selectedIncidentActivityError}
         onOpenChange={(open) => {
           if (!open) setSelectedIncident(null);
         }}
