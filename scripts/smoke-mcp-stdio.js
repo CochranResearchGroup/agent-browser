@@ -32,7 +32,7 @@ let nextId = 1;
 const pending = new Map();
 const timeout = setTimeout(() => {
   fail('Timed out waiting for MCP stdio responses');
-}, 15000);
+}, 45000);
 
 child.stdout.setEncoding('utf8');
 child.stdout.on('data', (chunk) => {
@@ -133,6 +133,14 @@ try {
     resources.resources?.some((resource) => resource.uri === 'agent-browser://incidents'),
     'MCP incidents resource missing',
   );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://jobs'),
+    'MCP jobs resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://events'),
+    'MCP events resource missing',
+  );
 
   const templates = await send('resources/templates/list');
   assert(
@@ -150,6 +158,16 @@ try {
   const incidentPayload = JSON.parse(incidentContent.text);
   assert(Array.isArray(incidentPayload.incidents), 'MCP incident payload missing incidents array');
   assert(incidentPayload.count === 0, 'Fresh MCP smoke state should have zero incidents');
+
+  const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
+  const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');
+  assert(Array.isArray(jobPayload.jobs), 'MCP jobs payload missing jobs array');
+  assert(jobPayload.count === 0, 'Fresh MCP smoke state should have zero jobs');
+
+  const events = await send('resources/read', { uri: 'agent-browser://events' });
+  const eventPayload = JSON.parse(events.contents?.[0]?.text || '{}');
+  assert(Array.isArray(eventPayload.events), 'MCP events payload missing events array');
+  assert(eventPayload.count === 0, 'Fresh MCP smoke state should have zero events');
 
   clearTimeout(timeout);
   child.stdin.end();

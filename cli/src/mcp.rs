@@ -3,8 +3,11 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Value};
 
 use crate::native::service_activity::service_incident_activity_response;
+use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
+const EVENTS_RESOURCE: &str = "agent-browser://events";
+const JOBS_RESOURCE: &str = "agent-browser://jobs";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
@@ -87,12 +90,26 @@ fn mcp_command_response(args: &[String]) -> Result<Value, String> {
 }
 
 fn service_mcp_resources() -> Vec<Value> {
-    vec![json!({
-        "uri": INCIDENTS_RESOURCE,
-        "name": "Service incidents",
-        "mimeType": "application/json",
-        "description": "Grouped retained service incidents derived from service events and jobs"
-    })]
+    vec![
+        json!({
+            "uri": INCIDENTS_RESOURCE,
+            "name": "Service incidents",
+            "mimeType": "application/json",
+            "description": "Grouped retained service incidents derived from service events and jobs"
+        }),
+        json!({
+            "uri": JOBS_RESOURCE,
+            "name": "Service jobs",
+            "mimeType": "application/json",
+            "description": "Retained service control-plane jobs sorted by submission time"
+        }),
+        json!({
+            "uri": EVENTS_RESOURCE,
+            "name": "Service events",
+            "mimeType": "application/json",
+            "description": "Retained service events in chronological order"
+        }),
+    ]
 }
 
 fn service_mcp_resource_templates() -> Vec<Value> {
@@ -107,26 +124,47 @@ fn service_mcp_resource_templates() -> Vec<Value> {
 fn read_service_mcp_resource(uri: &str) -> Result<Value, String> {
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?);
     let state = store.load()?;
-    if uri == INCIDENTS_RESOURCE {
-        return Ok(json!({
-            "uri": uri,
-            "mimeType": "application/json",
-            "contents": {
-                "incidents": state.incidents,
-                "count": state.incidents.len(),
-            },
-        }));
-    }
+    read_service_mcp_resource_from_state(uri, &state)
+}
 
-    if let Some(incident_id) = incident_activity_resource_id(uri) {
-        return Ok(json!({
-            "uri": uri,
-            "mimeType": "application/json",
-            "contents": service_incident_activity_response(&state, incident_id)?,
-        }));
-    }
+fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Result<Value, String> {
+    let contents = match uri {
+        INCIDENTS_RESOURCE => json!({
+            "incidents": state.incidents,
+            "count": state.incidents.len(),
+        }),
+        JOBS_RESOURCE => {
+            let mut jobs = state.jobs.values().cloned().collect::<Vec<_>>();
+            jobs.sort_by(|left, right| {
+                let left_time = left.submitted_at.as_deref().unwrap_or_default();
+                let right_time = right.submitted_at.as_deref().unwrap_or_default();
+                left_time
+                    .cmp(right_time)
+                    .then_with(|| left.id.cmp(&right.id))
+            });
+            json!({
+                "jobs": jobs,
+                "count": jobs.len(),
+            })
+        }
+        EVENTS_RESOURCE => json!({
+            "events": state.events,
+            "count": state.events.len(),
+        }),
+        _ => {
+            if let Some(incident_id) = incident_activity_resource_id(uri) {
+                service_incident_activity_response(state, incident_id)?
+            } else {
+                return Err(format!("Unknown MCP resource URI: {}", uri));
+            }
+        }
+    };
 
-    Err(format!("Unknown MCP resource URI: {}", uri))
+    Ok(json!({
+        "uri": uri,
+        "mimeType": "application/json",
+        "contents": contents,
+    }))
 }
 
 fn read_service_mcp_resource_contents(uri: &str) -> Result<Value, String> {
@@ -351,6 +389,8 @@ mod tests {
 
         assert_eq!(response["success"], true);
         assert_eq!(response["data"]["resources"][0]["uri"], INCIDENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][1]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["data"]["resources"][2]["uri"], EVENTS_RESOURCE);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
@@ -396,6 +436,8 @@ mod tests {
             response["result"]["resources"][0]["uri"],
             INCIDENTS_RESOURCE
         );
+        assert_eq!(response["result"]["resources"][1]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["result"]["resources"][2]["uri"], EVENTS_RESOURCE);
     }
 
     #[test]
@@ -456,5 +498,69 @@ mod tests {
         assert_eq!(responses.len(), 2);
         assert!(responses[0].contains(r#""method""#) == false);
         assert!(responses[1].contains("agent-browser://incidents"));
+        assert!(responses[1].contains("agent-browser://jobs"));
+        assert!(responses[1].contains("agent-browser://events"));
+    }
+
+    #[test]
+    fn read_jobs_resource_returns_jobs_sorted_by_submission_time() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{JobState, JobTarget, ServiceJob};
+
+        let state = ServiceState {
+            jobs: BTreeMap::from([
+                (
+                    "job-b".to_string(),
+                    ServiceJob {
+                        id: "job-b".to_string(),
+                        action: "snapshot".to_string(),
+                        target: JobTarget::Service,
+                        state: JobState::Succeeded,
+                        submitted_at: Some("2026-04-22T00:02:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                ),
+                (
+                    "job-a".to_string(),
+                    ServiceJob {
+                        id: "job-a".to_string(),
+                        action: "navigate".to_string(),
+                        target: JobTarget::Service,
+                        state: JobState::Queued,
+                        submitted_at: Some("2026-04-22T00:01:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(JOBS_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["jobs"][0]["id"], "job-a");
+        assert_eq!(resource["contents"]["jobs"][1]["id"], "job-b");
+    }
+
+    #[test]
+    fn read_events_resource_returns_retained_events() {
+        use crate::native::service_model::{ServiceEvent, ServiceEventKind};
+
+        let state = ServiceState {
+            events: vec![ServiceEvent {
+                id: "event-1".to_string(),
+                timestamp: "2026-04-22T00:00:00Z".to_string(),
+                kind: ServiceEventKind::Reconciliation,
+                message: "Reconciled service state".to_string(),
+                ..ServiceEvent::default()
+            }],
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(EVENTS_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 1);
+        assert_eq!(resource["contents"]["events"][0]["id"], "event-1");
     }
 }
