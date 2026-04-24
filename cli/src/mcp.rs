@@ -9,6 +9,8 @@ use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 const BROWSERS_RESOURCE: &str = "agent-browser://browsers";
 const EVENTS_RESOURCE: &str = "agent-browser://events";
 const JOBS_RESOURCE: &str = "agent-browser://jobs";
+const PROFILES_RESOURCE: &str = "agent-browser://profiles";
+const SESSIONS_RESOURCE: &str = "agent-browser://sessions";
 const TABS_RESOURCE: &str = "agent-browser://tabs";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
@@ -100,6 +102,18 @@ fn service_mcp_resources() -> Vec<Value> {
             "description": "Grouped retained service incidents derived from service events and jobs"
         }),
         json!({
+            "uri": PROFILES_RESOURCE,
+            "name": "Service profiles",
+            "mimeType": "application/json",
+            "description": "Service-owned browser profile records sorted by profile id"
+        }),
+        json!({
+            "uri": SESSIONS_RESOURCE,
+            "name": "Service sessions",
+            "mimeType": "application/json",
+            "description": "Service-owned browser session lease records sorted by session id"
+        }),
+        json!({
             "uri": BROWSERS_RESOURCE,
             "name": "Service browsers",
             "mimeType": "application/json",
@@ -147,6 +161,20 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             "incidents": state.incidents,
             "count": state.incidents.len(),
         }),
+        PROFILES_RESOURCE => {
+            let profiles = state.profiles.values().cloned().collect::<Vec<_>>();
+            json!({
+                "profiles": profiles,
+                "count": profiles.len(),
+            })
+        }
+        SESSIONS_RESOURCE => {
+            let sessions = state.sessions.values().cloned().collect::<Vec<_>>();
+            json!({
+                "sessions": sessions,
+                "count": sessions.len(),
+            })
+        }
         BROWSERS_RESOURCE => {
             let browsers = state.browsers.values().cloned().collect::<Vec<_>>();
             json!({
@@ -417,10 +445,12 @@ mod tests {
 
         assert_eq!(response["success"], true);
         assert_eq!(response["data"]["resources"][0]["uri"], INCIDENTS_RESOURCE);
-        assert_eq!(response["data"]["resources"][1]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][2]["uri"], TABS_RESOURCE);
-        assert_eq!(response["data"]["resources"][3]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["data"]["resources"][4]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][1]["uri"], PROFILES_RESOURCE);
+        assert_eq!(response["data"]["resources"][2]["uri"], SESSIONS_RESOURCE);
+        assert_eq!(response["data"]["resources"][3]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][4]["uri"], TABS_RESOURCE);
+        assert_eq!(response["data"]["resources"][5]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["data"]["resources"][6]["uri"], EVENTS_RESOURCE);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
@@ -466,10 +496,12 @@ mod tests {
             response["result"]["resources"][0]["uri"],
             INCIDENTS_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][1]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["result"]["resources"][2]["uri"], TABS_RESOURCE);
-        assert_eq!(response["result"]["resources"][3]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["result"]["resources"][4]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["result"]["resources"][1]["uri"], PROFILES_RESOURCE);
+        assert_eq!(response["result"]["resources"][2]["uri"], SESSIONS_RESOURCE);
+        assert_eq!(response["result"]["resources"][3]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["result"]["resources"][4]["uri"], TABS_RESOURCE);
+        assert_eq!(response["result"]["resources"][5]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["result"]["resources"][6]["uri"], EVENTS_RESOURCE);
     }
 
     #[test]
@@ -530,10 +562,84 @@ mod tests {
         assert_eq!(responses.len(), 2);
         assert!(responses[0].contains(r#""method""#) == false);
         assert!(responses[1].contains("agent-browser://incidents"));
+        assert!(responses[1].contains("agent-browser://profiles"));
+        assert!(responses[1].contains("agent-browser://sessions"));
         assert!(responses[1].contains("agent-browser://browsers"));
         assert!(responses[1].contains("agent-browser://tabs"));
         assert!(responses[1].contains("agent-browser://jobs"));
         assert!(responses[1].contains("agent-browser://events"));
+    }
+
+    #[test]
+    fn read_profiles_resource_returns_profiles_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{BrowserHost, BrowserProfile};
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([
+                (
+                    "profile-b".to_string(),
+                    BrowserProfile {
+                        id: "profile-b".to_string(),
+                        name: "Profile B".to_string(),
+                        default_browser_host: Some(BrowserHost::LocalHeaded),
+                        ..BrowserProfile::default()
+                    },
+                ),
+                (
+                    "profile-a".to_string(),
+                    BrowserProfile {
+                        id: "profile-a".to_string(),
+                        name: "Profile A".to_string(),
+                        default_browser_host: Some(BrowserHost::LocalHeadless),
+                        ..BrowserProfile::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(PROFILES_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["profiles"][0]["id"], "profile-a");
+        assert_eq!(resource["contents"]["profiles"][1]["id"], "profile-b");
+    }
+
+    #[test]
+    fn read_sessions_resource_returns_sessions_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{BrowserSession, LeaseState};
+
+        let state = ServiceState {
+            sessions: BTreeMap::from([
+                (
+                    "session-b".to_string(),
+                    BrowserSession {
+                        id: "session-b".to_string(),
+                        lease: LeaseState::Exclusive,
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "session-a".to_string(),
+                    BrowserSession {
+                        id: "session-a".to_string(),
+                        lease: LeaseState::Shared,
+                        ..BrowserSession::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(SESSIONS_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["sessions"][0]["id"], "session-a");
+        assert_eq!(resource["contents"]["sessions"][1]["id"], "session-b");
     }
 
     #[test]
