@@ -226,6 +226,20 @@ try {
     getUrlTool.inputSchema?.properties?.taskName,
     'MCP browser_get_url missing taskName trace field',
   );
+  const getTitleTool = tools.tools?.find((tool) => tool.name === 'browser_get_title');
+  assert(getTitleTool, 'MCP browser_get_title tool missing');
+  assert(
+    getTitleTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_title missing serviceName trace field',
+  );
+  assert(
+    getTitleTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_title missing agentName trace field',
+  );
+  assert(
+    getTitleTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_title missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];
