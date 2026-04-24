@@ -676,6 +676,66 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector", "value"]
             }
         }),
+        json!({
+            "name": "browser_wait",
+            "title": "Wait for browser state",
+            "description": "Queue a bounded wait against the active browser session. Choose one of selector, text, url, function, loadState, or provide timeoutMs alone for a fixed wait. Include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Optional CSS selector or cached ref to wait for."
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": ["visible", "hidden", "attached", "detached"],
+                        "description": "Selector wait state. Defaults to visible."
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Optional page text substring to wait for."
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Optional URL glob pattern to wait for."
+                    },
+                    "function": {
+                        "type": "string",
+                        "description": "Optional JavaScript expression to wait until truthy."
+                    },
+                    "loadState": {
+                        "type": "string",
+                        "enum": ["load", "domcontentloaded", "networkidle", "none"],
+                        "description": "Optional load state to wait for."
+                    },
+                    "timeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Condition timeout in milliseconds, or fixed wait duration when no condition is provided."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued wait job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": []
+            }
+        }),
     ]
 }
 
@@ -754,6 +814,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_screenshot" => call_browser_screenshot(arguments, session),
         "browser_click" => call_browser_click(arguments, session),
         "browser_fill" => call_browser_fill(arguments, session),
+        "browser_wait" => call_browser_wait(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -1008,6 +1069,52 @@ fn call_browser_fill(arguments: &Value, session: &str) -> Result<Value, JsonRpcE
     ))
 }
 
+fn call_browser_wait(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = optional_string_argument(arguments, "selector")?;
+    let state = optional_selector_wait_state_argument(arguments)?;
+    let text = optional_string_argument(arguments, "text")?;
+    let url = optional_string_argument(arguments, "url")?;
+    let function = optional_string_argument(arguments, "function")?;
+    let load_state = optional_load_state_argument(arguments)?;
+    let timeout_ms = optional_positive_u64_argument(arguments, "timeoutMs")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let args = BrowserWaitCommandArgs {
+        selector,
+        state,
+        text,
+        url,
+        function,
+        load_state,
+        timeout_ms,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    };
+    let command = browser_wait_command(args)?;
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_wait",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_wait",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -1093,6 +1200,101 @@ fn browser_fill_command(
         command["taskName"] = json!(task_name);
     }
     command
+}
+
+struct BrowserWaitCommandArgs<'a> {
+    selector: Option<&'a str>,
+    state: Option<&'a str>,
+    text: Option<&'a str>,
+    url: Option<&'a str>,
+    function: Option<&'a str>,
+    load_state: Option<&'a str>,
+    timeout_ms: Option<u64>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+fn browser_wait_command(args: BrowserWaitCommandArgs<'_>) -> Result<Value, JsonRpcError> {
+    let condition_count = [
+        args.selector.is_some(),
+        args.text.is_some(),
+        args.url.is_some(),
+        args.function.is_some(),
+        args.load_state.is_some(),
+    ]
+    .into_iter()
+    .filter(|has_condition| *has_condition)
+    .count();
+
+    if condition_count > 1 {
+        return Err(JsonRpcError::invalid_params(
+            "browser_wait accepts only one of selector, text, url, function, or loadState",
+        ));
+    }
+    if args.state.is_some() && args.selector.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "state can only be used with selector",
+        ));
+    }
+    if condition_count == 0 && args.timeout_ms.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "browser_wait requires a condition or timeoutMs",
+        ));
+    }
+
+    let mut command = if let Some(url) = args.url {
+        json!({
+            "id": format!("mcp-browser-wait-{}", uuid::Uuid::new_v4()),
+            "action": "waitforurl",
+            "url": url,
+        })
+    } else if let Some(function) = args.function {
+        json!({
+            "id": format!("mcp-browser-wait-{}", uuid::Uuid::new_v4()),
+            "action": "waitforfunction",
+            "expression": function,
+        })
+    } else if let Some(load_state) = args.load_state {
+        json!({
+            "id": format!("mcp-browser-wait-{}", uuid::Uuid::new_v4()),
+            "action": "waitforloadstate",
+            "state": load_state,
+        })
+    } else {
+        let mut command = json!({
+            "id": format!("mcp-browser-wait-{}", uuid::Uuid::new_v4()),
+            "action": "wait",
+        });
+        if let Some(selector) = args.selector {
+            command["selector"] = json!(selector);
+        }
+        if let Some(state) = args.state {
+            command["state"] = json!(state);
+        }
+        if let Some(text) = args.text {
+            command["text"] = json!(text);
+        }
+        command
+    };
+
+    if let Some(timeout_ms) = args.timeout_ms {
+        command["timeout"] = json!(timeout_ms);
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    Ok(command)
 }
 
 struct BrowserScreenshotCommandArgs<'a> {
@@ -1334,6 +1536,32 @@ fn optional_screenshot_format_argument(arguments: &Value) -> Result<Option<&str>
     }
 }
 
+fn optional_selector_wait_state_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
+    match optional_string_argument(arguments, "state")? {
+        Some("visible") => Ok(Some("visible")),
+        Some("hidden") => Ok(Some("hidden")),
+        Some("attached") => Ok(Some("attached")),
+        Some("detached") => Ok(Some("detached")),
+        Some(_) => Err(JsonRpcError::invalid_params(
+            "state must be one of visible, hidden, attached, or detached",
+        )),
+        None => Ok(None),
+    }
+}
+
+fn optional_load_state_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
+    match optional_string_argument(arguments, "loadState")? {
+        Some("load") => Ok(Some("load")),
+        Some("domcontentloaded") => Ok(Some("domcontentloaded")),
+        Some("networkidle") => Ok(Some("networkidle")),
+        Some("none") => Ok(Some("none")),
+        Some(_) => Err(JsonRpcError::invalid_params(
+            "loadState must be one of load, domcontentloaded, networkidle, or none",
+        )),
+        None => Ok(None),
+    }
+}
+
 fn service_tool_trace(
     service_name: Option<&str>,
     agent_name: Option<&str>,
@@ -1402,6 +1630,7 @@ fn jsonrpc_error(id: Value, code: i64, message: &str, data: Option<Value>) -> Va
     })
 }
 
+#[derive(Debug)]
 struct JsonRpcError {
     code: i64,
     message: &'static str,
@@ -1649,6 +1878,20 @@ mod tests {
         assert!(
             response["result"]["tools"][7]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][8]["name"], "browser_wait");
+        assert!(
+            response["result"]["tools"][8]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(response["result"]["tools"][8]["inputSchema"]["properties"]["text"].is_object());
+        assert!(
+            response["result"]["tools"][8]["inputSchema"]["properties"]["loadState"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][8]["inputSchema"]["properties"]["timeoutMs"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][8]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -1774,6 +2017,45 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 13);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_wait_rejects_invalid_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"browser_wait","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 14);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"browser_wait","arguments":{"selector":"#name","text":"Ada Lovelace","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 15);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"browser_wait","arguments":{"selector":"#name","state":"gone","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 16);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"browser_wait","arguments":{"state":"visible","timeoutMs":1000,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 17);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -1954,6 +2236,105 @@ mod tests {
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
         assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_wait_command_forwards_selector_options_and_trace_fields() {
+        let command = browser_wait_command(BrowserWaitCommandArgs {
+            selector: Some("#ready"),
+            state: Some("visible"),
+            text: None,
+            url: None,
+            function: None,
+            load_state: None,
+            timeout_ms: Some(1000),
+            job_timeout_ms: Some(1500),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        })
+        .unwrap();
+
+        assert_eq!(command["action"], "wait");
+        assert_eq!(command["selector"], "#ready");
+        assert_eq!(command["state"], "visible");
+        assert_eq!(command["timeout"], 1000);
+        assert_eq!(command["jobTimeoutMs"], 1500);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_wait_command_maps_url_function_load_and_timeout_modes() {
+        let url_command = browser_wait_command(BrowserWaitCommandArgs {
+            selector: None,
+            state: None,
+            text: None,
+            url: Some("**/dashboard"),
+            function: None,
+            load_state: None,
+            timeout_ms: Some(1000),
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        })
+        .unwrap();
+        assert_eq!(url_command["action"], "waitforurl");
+        assert_eq!(url_command["url"], "**/dashboard");
+        assert_eq!(url_command["timeout"], 1000);
+
+        let function_command = browser_wait_command(BrowserWaitCommandArgs {
+            selector: None,
+            state: None,
+            text: None,
+            url: None,
+            function: Some("window.ready === true"),
+            load_state: None,
+            timeout_ms: Some(1000),
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        })
+        .unwrap();
+        assert_eq!(function_command["action"], "waitforfunction");
+        assert_eq!(function_command["expression"], "window.ready === true");
+
+        let load_command = browser_wait_command(BrowserWaitCommandArgs {
+            selector: None,
+            state: None,
+            text: None,
+            url: None,
+            function: None,
+            load_state: Some("domcontentloaded"),
+            timeout_ms: Some(1000),
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        })
+        .unwrap();
+        assert_eq!(load_command["action"], "waitforloadstate");
+        assert_eq!(load_command["state"], "domcontentloaded");
+
+        let timeout_command = browser_wait_command(BrowserWaitCommandArgs {
+            selector: None,
+            state: None,
+            text: None,
+            url: None,
+            function: None,
+            load_state: None,
+            timeout_ms: Some(250),
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        })
+        .unwrap();
+        assert_eq!(timeout_command["action"], "wait");
+        assert_eq!(timeout_command["timeout"], 250);
     }
 
     #[test]

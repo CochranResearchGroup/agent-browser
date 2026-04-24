@@ -328,6 +328,36 @@ try {
     fillTool.inputSchema?.properties?.taskName,
     'MCP browser_fill missing taskName trace field',
   );
+  const waitTool = tools.tools?.find((tool) => tool.name === 'browser_wait');
+  assert(waitTool, 'MCP browser_wait tool missing');
+  assert(
+    waitTool.inputSchema?.properties?.selector,
+    'MCP browser_wait missing selector option',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.text,
+    'MCP browser_wait missing text option',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.loadState,
+    'MCP browser_wait missing loadState option',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.timeoutMs,
+    'MCP browser_wait missing timeoutMs option',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.serviceName,
+    'MCP browser_wait missing serviceName trace field',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.agentName,
+    'MCP browser_wait missing agentName trace field',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.taskName,
+    'MCP browser_wait missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

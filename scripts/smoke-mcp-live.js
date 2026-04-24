@@ -217,8 +217,9 @@ try {
     '<p id="status">Not clicked</p>',
     '<label for="name">Name</label>',
     '<input id="name" name="name" value="">',
-    '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value">Copy name</button>',
+    '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value; setTimeout(() => { document.getElementById(\'wait-status\').textContent = \'Name copied\'; }, 100)">Copy name</button>',
     '<p id="name-output"></p>',
+    '<p id="wait-status"></p>',
     '<a href="https://example.com/">Example</a>',
     '</main>',
     '</body>',
@@ -424,6 +425,24 @@ try {
     'post-fill browser_click did not report clicked selector',
   );
 
+  const waitResult = await send('tools/call', {
+    name: 'browser_wait',
+    arguments: {
+      text: 'Name copied',
+      timeoutMs: 5000,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const waitPayload = parseToolPayload(waitResult);
+  assert(waitPayload.success === true, `browser_wait failed: ${JSON.stringify(waitPayload)}`);
+  assert(waitPayload.data?.waited === 'text', 'browser_wait did not report text wait');
+  assert(waitPayload.data?.text === 'Name copied', 'browser_wait did not report waited text');
+  assert(waitPayload.trace?.serviceName === serviceName, 'browser_wait trace missing serviceName');
+  assert(waitPayload.trace?.agentName === agentName, 'browser_wait trace missing agentName');
+  assert(waitPayload.trace?.taskName === taskName, 'browser_wait trace missing taskName');
+
   const clickedSnapshotResult = await send('tools/call', {
     name: 'browser_snapshot',
     arguments: {
@@ -520,6 +539,15 @@ try {
   );
   assert(fillJob, 'Retained service job with browser_fill caller context was not found');
   assert(fillJob.state === 'succeeded', `Fill service job state was ${fillJob.state}`);
+  const waitJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'wait' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(waitJob, 'Retained service job with browser_wait caller context was not found');
+  assert(waitJob.state === 'succeeded', `Wait service job state was ${waitJob.state}`);
 
   await cleanup();
   console.log('MCP live smoke passed');

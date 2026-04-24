@@ -63,15 +63,18 @@ that saves the image to disk instead of returning inline bytes. `browser_click`
 is the first mutating MCP browser control and is limited to the stable CLI
 click contract of selector or cached ref plus optional new-tab behavior.
 `browser_fill` extends mutating MCP control to field entry with required
-selector and value. More invasive browser tools should wait until profile and
-session policy are first-class in the service model, and they should always
-supply job caller context.
+selector and value. `browser_wait` adds the post-mutation synchronization
+primitive for selector, text, URL, function, load-state, and fixed-duration
+waits. More invasive browser tools should wait until profile and session policy
+are first-class in the service model, and they should always supply job caller
+context.
 
 ## Live Validation
 
 `pnpm test:mcp-live` launches an isolated temp-home browser session, calls
 `browser_snapshot`, `browser_get_url`, `browser_get_title`, `browser_tabs`, and
-`browser_screenshot` over MCP stdio, calls `browser_click` and `browser_fill`,
-verifies the mutations through a follow-up snapshot, and verifies that the
-retained `snapshot`, `url`, `title`, `tab_list`, `screenshot`, `click`, and
-`fill` service jobs record `serviceName`, `agentName`, and `taskName`.
+`browser_screenshot` over MCP stdio, calls `browser_click`, `browser_fill`, and
+`browser_wait`, verifies the mutations through a follow-up snapshot, and
+verifies that the retained `snapshot`, `url`, `title`, `tab_list`, `screenshot`,
+`click`, `fill`, and `wait` service jobs record `serviceName`, `agentName`, and
+`taskName`.

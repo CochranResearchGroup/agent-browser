@@ -2870,7 +2870,7 @@ Commands:
 
 Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
-  - MCP tools include service_job_cancel, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, and browser_fill.
+  - MCP tools include service_job_cancel, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, browser_fill, and browser_wait.
   - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
   - Service jobs persist serviceName, agentName, and taskName when commands provide them.
