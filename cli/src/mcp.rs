@@ -1037,6 +1037,39 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector"]
             }
         }),
+        json!({
+            "name": "browser_focus",
+            "title": "Focus browser element",
+            "description": "Queue focusing an element in the active browser session. This prepares keyboard-driven interaction, so include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Required CSS selector or cached ref for the element to focus."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued focus job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["selector"]
+            }
+        }),
     ]
 }
 
@@ -1124,6 +1157,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_uncheck" => call_browser_uncheck(arguments, session),
         "browser_scroll" => call_browser_scroll(arguments, session),
         "browser_scroll_into_view" => call_browser_scroll_into_view(arguments, session),
+        "browser_focus" => call_browser_focus(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -1676,6 +1710,39 @@ fn call_browser_scroll_into_view(arguments: &Value, session: &str) -> Result<Val
     ))
 }
 
+fn call_browser_focus(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_focus_command(
+        selector,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_focus",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_focus",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -2072,6 +2139,33 @@ fn browser_scroll_into_view_command(
     let mut command = json!({
         "id": format!("mcp-browser-scroll-into-view-{}", uuid::Uuid::new_v4()),
         "action": "scrollintoview",
+        "selector": selector,
+    });
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_focus_command(
+    selector: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-focus-{}", uuid::Uuid::new_v4()),
+        "action": "focus",
         "selector": selector,
     });
     if let Some(job_timeout_ms) = job_timeout_ms {
@@ -2866,6 +2960,21 @@ mod tests {
         assert!(
             response["result"]["tools"][16]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][17]["name"], "browser_focus");
+        assert_eq!(
+            response["result"]["tools"][17]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert!(
+            response["result"]["tools"][17]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][17]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
+            response["result"]["tools"][17]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -3177,6 +3286,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 31);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_focus_requires_selector_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"browser_focus","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 32);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -3638,6 +3759,24 @@ mod tests {
 
         assert_eq!(command["action"], "scrollintoview");
         assert_eq!(command["selector"], "#footer");
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_focus_command_forwards_selector_and_trace_fields() {
+        let command = browser_focus_command(
+            "#name",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "focus");
+        assert_eq!(command["selector"], "#name");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");

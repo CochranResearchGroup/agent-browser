@@ -216,7 +216,8 @@ try {
     '<button id="ready" onclick="document.getElementById(\'status\').textContent = \'Clicked\'">Ready</button>',
     '<p id="status">Not clicked</p>',
     '<label for="name">Name</label>',
-    '<input id="name" name="name" value="" onkeydown="if (event.key === \'Enter\') { document.getElementById(\'press-output\').textContent = \'Pressed Enter\'; }">',
+    '<input id="name" name="name" value="" onfocus="document.getElementById(\'focus-output\').textContent = \'Focused name\'" onkeydown="if (event.key === \'Enter\') { document.getElementById(\'press-output\').textContent = \'Pressed Enter\'; }">',
+    '<p id="focus-output"></p>',
     '<p id="press-output"></p>',
     '<button id="hover-target" onmouseover="document.getElementById(\'hover-output\').textContent = \'Hovered menu\'">Hover menu</button>',
     '<p id="hover-output"></p>',
@@ -399,6 +400,22 @@ try {
   assert(clickPayload.trace?.serviceName === serviceName, 'browser_click trace missing serviceName');
   assert(clickPayload.trace?.agentName === agentName, 'browser_click trace missing agentName');
   assert(clickPayload.trace?.taskName === taskName, 'browser_click trace missing taskName');
+
+  const focusResult = await send('tools/call', {
+    name: 'browser_focus',
+    arguments: {
+      selector: '#name',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const focusPayload = parseToolPayload(focusResult);
+  assert(focusPayload.success === true, `browser_focus failed: ${JSON.stringify(focusPayload)}`);
+  assert(focusPayload.data?.focused === '#name', 'browser_focus did not report focused selector');
+  assert(focusPayload.trace?.serviceName === serviceName, 'browser_focus trace missing serviceName');
+  assert(focusPayload.trace?.agentName === agentName, 'browser_focus trace missing agentName');
+  assert(focusPayload.trace?.taskName === taskName, 'browser_focus trace missing taskName');
 
   const fillResult = await send('tools/call', {
     name: 'browser_fill',
@@ -686,6 +703,11 @@ try {
   );
   assert(
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('Focused name'),
+    'browser_focus did not mutate the page state visible to a follow-up snapshot',
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
       clickedSnapshotPayload.data.snapshot.includes('Pressed Enter'),
     'browser_press did not mutate the page state visible to a follow-up snapshot',
   );
@@ -772,6 +794,15 @@ try {
   );
   assert(clickJob, 'Retained service job with browser_click caller context was not found');
   assert(clickJob.state === 'succeeded', `Click service job state was ${clickJob.state}`);
+  const focusJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'focus' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(focusJob, 'Retained service job with browser_focus caller context was not found');
+  assert(focusJob.state === 'succeeded', `Focus service job state was ${focusJob.state}`);
   const fillJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'fill' &&

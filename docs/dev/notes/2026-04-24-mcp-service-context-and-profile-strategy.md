@@ -76,9 +76,11 @@ controls for consent, remember-me, terms, and preference flows.
 `browser_scroll` covers page and container scrolling for long forms,
 offscreen controls, and infinite-scroll workflows. `browser_scroll_into_view`
 targets specific offscreen elements without requiring callers to guess pixel
-distances. More invasive browser tools should wait until profile and session
-policy are first-class in the service model, and they should always supply job
-caller context.
+distances. `browser_focus` prepares fields and controls for keyboard-driven
+interaction, autocomplete, passkey prompts, and other focus-sensitive browser
+flows. More invasive browser tools should wait until profile and session policy
+are first-class in the service model, and they should always supply job caller
+context.
 
 ## Live Validation
 
@@ -87,9 +89,9 @@ caller context.
 `browser_screenshot` over MCP stdio, calls `browser_click`, `browser_fill`,
 `browser_type`, `browser_press`, `browser_hover`, `browser_select`,
 `browser_check`, `browser_uncheck`, `browser_scroll`,
-`browser_scroll_into_view`, and `browser_wait`, verifies the mutations through
-a follow-up snapshot or post-scroll function wait, and verifies that the
-retained `snapshot`, `url`, `title`, `tab_list`, `screenshot`, `click`, `fill`,
-`type`, `press`, `hover`, `select`, `check`, `uncheck`, `scroll`,
-`scrollintoview`, and `wait` service jobs record `serviceName`, `agentName`,
-and `taskName`.
+`browser_scroll_into_view`, `browser_focus`, and `browser_wait`, verifies the
+mutations through a follow-up snapshot or post-scroll function wait, and
+verifies that the retained `snapshot`, `url`, `title`, `tab_list`,
+`screenshot`, `click`, `fill`, `type`, `press`, `hover`, `select`, `check`,
+`uncheck`, `scroll`, `scrollintoview`, `focus`, and `wait` service jobs record
+`serviceName`, `agentName`, and `taskName`.

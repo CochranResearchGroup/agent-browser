@@ -551,6 +551,28 @@ try {
     scrollIntoViewTool.inputSchema?.properties?.taskName,
     'MCP browser_scroll_into_view missing taskName trace field',
   );
+  const focusTool = tools.tools?.find((tool) => tool.name === 'browser_focus');
+  assert(focusTool, 'MCP browser_focus tool missing');
+  assert(
+    focusTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_focus missing selector requirement',
+  );
+  assert(
+    focusTool.inputSchema?.properties?.selector,
+    'MCP browser_focus missing selector property',
+  );
+  assert(
+    focusTool.inputSchema?.properties?.serviceName,
+    'MCP browser_focus missing serviceName trace field',
+  );
+  assert(
+    focusTool.inputSchema?.properties?.agentName,
+    'MCP browser_focus missing agentName trace field',
+  );
+  assert(
+    focusTool.inputSchema?.properties?.taskName,
+    'MCP browser_focus missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];
