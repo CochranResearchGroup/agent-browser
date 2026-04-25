@@ -1,5 +1,7 @@
 use crate::color;
-use crate::native::service_model::{ServiceProvider, ServiceState, SitePolicy};
+use crate::native::service_model::{
+    BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SitePolicy,
+};
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -164,6 +166,8 @@ pub struct RuntimeProfileConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ServiceConfig {
+    pub profiles: Option<BTreeMap<String, BrowserProfile>>,
+    pub sessions: Option<BTreeMap<String, BrowserSession>>,
     pub site_policies: Option<BTreeMap<String, SitePolicy>>,
     pub providers: Option<BTreeMap<String, ServiceProvider>>,
     pub reconcile_interval_ms: Option<u64>,
@@ -225,6 +229,8 @@ impl Config {
         };
 
         ServiceState {
+            profiles: service.profiles.clone().unwrap_or_default(),
+            sessions: service.sessions.clone().unwrap_or_default(),
             site_policies: service.site_policies.clone().unwrap_or_default(),
             providers: service.providers.clone().unwrap_or_default(),
             ..ServiceState::default()
@@ -382,6 +388,8 @@ fn merge_service_configs(
         (None, None) => None,
         (Some(config), None) | (None, Some(config)) => Some(config),
         (Some(base), Some(overlay)) => Some(ServiceConfig {
+            profiles: merge_service_model_maps(base.profiles, overlay.profiles),
+            sessions: merge_service_model_maps(base.sessions, overlay.sessions),
             site_policies: merge_service_model_maps(base.site_policies, overlay.site_policies),
             providers: merge_service_model_maps(base.providers, overlay.providers),
             reconcile_interval_ms: overlay.reconcile_interval_ms.or(base.reconcile_interval_ms),
@@ -1894,6 +1902,8 @@ mod tests {
             proxy: Some("http://user-proxy:8080".to_string()),
             profile: Some("/user/profile".to_string()),
             service: Some(ServiceConfig {
+                profiles: None,
+                sessions: None,
                 site_policies: Some(BTreeMap::from([(
                     "google".to_string(),
                     SitePolicy {
@@ -1931,6 +1941,8 @@ mod tests {
             proxy: Some("http://project-proxy:9090".to_string()),
             debug: Some(true),
             service: Some(ServiceConfig {
+                profiles: None,
+                sessions: None,
                 site_policies: Some(BTreeMap::from([
                     (
                         "google".to_string(),
@@ -2240,6 +2252,30 @@ mod tests {
     fn test_service_state_snapshot_contains_configured_service_entities() {
         let config = Config {
             service: Some(ServiceConfig {
+                profiles: Some(BTreeMap::from([(
+                    "work".to_string(),
+                    BrowserProfile {
+                        id: "work".to_string(),
+                        name: "Work".to_string(),
+                        allocation:
+                            crate::native::service_model::ProfileAllocationPolicy::PerService,
+                        keyring:
+                            crate::native::service_model::ProfileKeyringPolicy::BasicPasswordStore,
+                        shared_service_ids: vec!["JournalDownloader".to_string()],
+                        ..BrowserProfile::default()
+                    },
+                )])),
+                sessions: Some(BTreeMap::from([(
+                    "journal-session".to_string(),
+                    BrowserSession {
+                        id: "journal-session".to_string(),
+                        service_name: Some("JournalDownloader".to_string()),
+                        profile_id: Some("work".to_string()),
+                        lease: crate::native::service_model::LeaseState::Exclusive,
+                        cleanup: crate::native::service_model::SessionCleanupPolicy::CloseTabs,
+                        ..BrowserSession::default()
+                    },
+                )])),
                 site_policies: Some(BTreeMap::from([(
                     "google".to_string(),
                     SitePolicy {
@@ -2265,12 +2301,21 @@ mod tests {
 
         let state = config.service_state_snapshot();
 
+        assert_eq!(state.profiles.len(), 1);
+        assert_eq!(state.sessions.len(), 1);
         assert_eq!(state.site_policies.len(), 1);
         assert_eq!(state.providers.len(), 1);
+        assert_eq!(
+            state.profiles["work"].shared_service_ids,
+            vec!["JournalDownloader"]
+        );
+        assert_eq!(
+            state.sessions["journal-session"].profile_id.as_deref(),
+            Some("work")
+        );
         assert!(state.site_policies["google"].manual_login_preferred);
         assert_eq!(state.providers["manual"].display_name, "Dashboard approval");
         assert!(state.browsers.is_empty());
-        assert!(state.sessions.is_empty());
     }
 
     #[test]

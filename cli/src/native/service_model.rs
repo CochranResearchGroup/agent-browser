@@ -28,6 +28,8 @@ pub struct ServiceState {
 
 impl ServiceState {
     pub fn overlay_configured_entities(&mut self, configured: ServiceState) {
+        self.profiles.extend(configured.profiles);
+        self.sessions.extend(configured.sessions);
         self.site_policies.extend(configured.site_policies);
         self.providers.extend(configured.providers);
     }
@@ -461,6 +463,11 @@ pub struct BrowserProfile {
     pub user_data_dir: Option<String>,
     pub site_policy_ids: Vec<String>,
     pub default_browser_host: Option<BrowserHost>,
+    pub allocation: ProfileAllocationPolicy,
+    pub keyring: ProfileKeyringPolicy,
+    pub shared_service_ids: Vec<String>,
+    pub credential_provider_ids: Vec<String>,
+    pub manual_login_preferred: bool,
     pub persistent: bool,
     pub tags: Vec<String>,
 }
@@ -501,8 +508,16 @@ impl Default for BrowserProcess {
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSession {
     pub id: String,
+    /// Calling service label supplied by MCP, CLI, HTTP, or API clients.
+    pub service_name: Option<String>,
+    /// Calling agent label supplied by MCP, CLI, HTTP, or API clients.
+    pub agent_name: Option<String>,
+    /// Calling task label supplied by MCP, CLI, HTTP, or API clients.
+    pub task_name: Option<String>,
     pub owner: ServiceActor,
     pub lease: LeaseState,
+    pub profile_id: Option<String>,
+    pub cleanup: SessionCleanupPolicy,
     pub browser_ids: Vec<String>,
     pub tab_ids: Vec<String>,
     pub created_at: Option<String>,
@@ -513,8 +528,13 @@ impl Default for BrowserSession {
     fn default() -> Self {
         Self {
             id: String::new(),
+            service_name: None,
+            agent_name: None,
+            task_name: None,
             owner: ServiceActor::System,
             lease: LeaseState::Shared,
+            profile_id: None,
+            cleanup: SessionCleanupPolicy::Detach,
             browser_ids: Vec::new(),
             tab_ids: Vec::new(),
             created_at: None,
@@ -841,6 +861,29 @@ pub enum ChallengePolicy {
     Deny,
 }
 
+/// How the service may allocate or share this profile.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileAllocationPolicy {
+    #[default]
+    SharedService,
+    PerService,
+    PerSite,
+    PerIdentity,
+    CallerSupplied,
+}
+
+/// Browser credential-store posture for launches using this profile.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileKeyringPolicy {
+    #[default]
+    BasicPasswordStore,
+    RealOsKeychain,
+    ManagedVault,
+    ManualLoginProfile,
+}
+
 /// Service-side actor category.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -860,6 +903,17 @@ pub enum LeaseState {
     HumanTakeover,
     Released,
     Expired,
+}
+
+/// What the service should do when a session lease ends.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionCleanupPolicy {
+    #[default]
+    Detach,
+    CloseTabs,
+    CloseBrowser,
+    ReleaseOnly,
 }
 
 /// Current tab lifecycle.
@@ -1046,6 +1100,11 @@ mod tests {
                 BrowserProfile {
                     id: "work".to_string(),
                     name: "Work".to_string(),
+                    allocation: ProfileAllocationPolicy::PerService,
+                    keyring: ProfileKeyringPolicy::ManualLoginProfile,
+                    shared_service_ids: vec!["JournalDownloader".to_string()],
+                    credential_provider_ids: vec!["keepassxc".to_string()],
+                    manual_login_preferred: true,
                     persistent: true,
                     ..BrowserProfile::default()
                 },
@@ -1066,8 +1125,13 @@ mod tests {
                 "session-1".to_string(),
                 BrowserSession {
                     id: "session-1".to_string(),
+                    service_name: Some("JournalDownloader".to_string()),
+                    agent_name: Some("article-probe-agent".to_string()),
+                    task_name: Some("probeACSwebsite".to_string()),
                     owner: ServiceActor::Agent("codex".to_string()),
                     lease: LeaseState::Exclusive,
+                    profile_id: Some("work".to_string()),
+                    cleanup: SessionCleanupPolicy::CloseTabs,
                     browser_ids: vec!["browser-1".to_string()],
                     ..BrowserSession::default()
                 },
@@ -1118,10 +1182,26 @@ mod tests {
         );
         assert_eq!(decoded.events.len(), 1);
         assert_eq!(decoded.events[0].kind, ServiceEventKind::Reconciliation);
+        assert_eq!(
+            decoded.profiles["work"].allocation,
+            ProfileAllocationPolicy::PerService
+        );
+        assert_eq!(
+            decoded.profiles["work"].keyring,
+            ProfileKeyringPolicy::ManualLoginProfile
+        );
         assert_eq!(decoded.browsers["browser-1"].health, BrowserHealth::Ready);
         assert_eq!(
             decoded.sessions["session-1"].owner,
             ServiceActor::Agent("codex".to_string())
+        );
+        assert_eq!(
+            decoded.sessions["session-1"].service_name.as_deref(),
+            Some("JournalDownloader")
+        );
+        assert_eq!(
+            decoded.sessions["session-1"].cleanup,
+            SessionCleanupPolicy::CloseTabs
         );
         assert_eq!(
             decoded.jobs["job-1"].service_name.as_deref(),
@@ -1307,6 +1387,28 @@ mod tests {
             ..ServiceState::default()
         };
         let configured = ServiceState {
+            profiles: BTreeMap::from([(
+                "work".to_string(),
+                BrowserProfile {
+                    id: "work".to_string(),
+                    name: "Configured Work".to_string(),
+                    allocation: ProfileAllocationPolicy::PerService,
+                    keyring: ProfileKeyringPolicy::BasicPasswordStore,
+                    shared_service_ids: vec!["JournalDownloader".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "service-session".to_string(),
+                BrowserSession {
+                    id: "service-session".to_string(),
+                    service_name: Some("JournalDownloader".to_string()),
+                    profile_id: Some("work".to_string()),
+                    lease: LeaseState::Exclusive,
+                    cleanup: SessionCleanupPolicy::CloseTabs,
+                    ..BrowserSession::default()
+                },
+            )]),
             site_policies: BTreeMap::from([(
                 "google".to_string(),
                 SitePolicy {
@@ -1329,6 +1431,11 @@ mod tests {
         persisted.overlay_configured_entities(configured);
 
         assert!(persisted.browsers.contains_key("browser-1"));
+        assert_eq!(persisted.profiles["work"].name, "Configured Work");
+        assert_eq!(
+            persisted.sessions["service-session"].profile_id.as_deref(),
+            Some("work")
+        );
         assert_eq!(
             persisted.site_policies["google"].origin_pattern,
             "configured"

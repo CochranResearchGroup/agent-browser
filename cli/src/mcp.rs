@@ -4753,7 +4753,9 @@ mod tests {
     fn read_profiles_resource_returns_profiles_sorted_by_id() {
         use std::collections::BTreeMap;
 
-        use crate::native::service_model::{BrowserHost, BrowserProfile};
+        use crate::native::service_model::{
+            BrowserHost, BrowserProfile, ProfileAllocationPolicy, ProfileKeyringPolicy,
+        };
 
         let state = ServiceState {
             profiles: BTreeMap::from([
@@ -4763,6 +4765,8 @@ mod tests {
                         id: "profile-b".to_string(),
                         name: "Profile B".to_string(),
                         default_browser_host: Some(BrowserHost::LocalHeaded),
+                        allocation: ProfileAllocationPolicy::PerService,
+                        keyring: ProfileKeyringPolicy::BasicPasswordStore,
                         ..BrowserProfile::default()
                     },
                 ),
@@ -4784,13 +4788,21 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["profiles"][0]["id"], "profile-a");
         assert_eq!(resource["contents"]["profiles"][1]["id"], "profile-b");
+        assert_eq!(
+            resource["contents"]["profiles"][1]["allocation"],
+            "per_service"
+        );
+        assert_eq!(
+            resource["contents"]["profiles"][1]["keyring"],
+            "basic_password_store"
+        );
     }
 
     #[test]
     fn read_sessions_resource_returns_sessions_sorted_by_id() {
         use std::collections::BTreeMap;
 
-        use crate::native::service_model::{BrowserSession, LeaseState};
+        use crate::native::service_model::{BrowserSession, LeaseState, SessionCleanupPolicy};
 
         let state = ServiceState {
             sessions: BTreeMap::from([
@@ -4798,7 +4810,10 @@ mod tests {
                     "session-b".to_string(),
                     BrowserSession {
                         id: "session-b".to_string(),
+                        service_name: Some("JournalDownloader".to_string()),
                         lease: LeaseState::Exclusive,
+                        profile_id: Some("profile-b".to_string()),
+                        cleanup: SessionCleanupPolicy::CloseTabs,
                         ..BrowserSession::default()
                     },
                 ),
@@ -4819,6 +4834,15 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["sessions"][0]["id"], "session-a");
         assert_eq!(resource["contents"]["sessions"][1]["id"], "session-b");
+        assert_eq!(
+            resource["contents"]["sessions"][1]["serviceName"],
+            "JournalDownloader"
+        );
+        assert_eq!(
+            resource["contents"]["sessions"][1]["profileId"],
+            "profile-b"
+        );
+        assert_eq!(resource["contents"]["sessions"][1]["cleanup"], "close_tabs");
     }
 
     #[test]

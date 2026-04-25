@@ -55,7 +55,26 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
   },
   "service": {
     "reconcileIntervalMs": 60000,
-    "jobTimeoutMs": 120000
+    "jobTimeoutMs": 120000,
+    "profiles": {
+      "work": {
+        "name": "Work",
+        "allocation": "per_service",
+        "keyring": "basic_password_store",
+        "sharedServiceIds": ["JournalDownloader"],
+        "manualLoginPreferred": true
+      }
+    },
+    "sessions": {
+      "journal-session": {
+        "serviceName": "JournalDownloader",
+        "agentName": "article-probe-agent",
+        "taskName": "probeACSwebsite",
+        "profileId": "work",
+        "lease": "exclusive",
+        "cleanup": "close_tabs"
+      }
+    }
   },
   "userAgent": "my-agent/1.0",
   "ignoreHttpsErrors": true
@@ -75,6 +94,14 @@ managed runtime-profile browser instead of shutting it down. Set
 <code>preferences.defaultViewport</code> to a <code>WIDTHxHEIGHT</code> value,
 such as <code>960x640</code>, when a runtime profile should resize the browser
 content area after launch and before the requested command runs.
+
+The <code>service.profiles</code> and <code>service.sessions</code> maps define
+service control-plane metadata for profile allocation, keyring posture, caller
+ownership, profile binding, lease state, and cleanup policy. These records are
+exposed through service status, MCP resources, and the HTTP service APIs.
+Current browser launch behavior still comes from <code>runtimeProfiles</code>,
+<code>--runtime-profile</code>, <code>--profile</code>, and existing launch
+flags.
 
 Use <code>agent-browser runtime list</code> to inspect the merged runtime-profile
 view from config plus on-disk managed profiles. If a profile sets

@@ -2825,7 +2825,7 @@ Notes:
   - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.
-  - Configured site policies and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
+  - Configured profiles, sessions, site policies, and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 
 Global Options:
   --json               Output as JSON
@@ -3401,9 +3401,33 @@ Configuration:
       }},
       "service": {{
         "reconcileIntervalMs": 60000,
-        "jobTimeoutMs": 120000
+        "jobTimeoutMs": 120000,
+        "profiles": {{
+          "work": {{
+            "name": "Work",
+            "allocation": "per_service",
+            "keyring": "basic_password_store",
+            "sharedServiceIds": ["JournalDownloader"],
+            "manualLoginPreferred": true
+          }}
+        }},
+        "sessions": {{
+          "journal-session": {{
+            "serviceName": "JournalDownloader",
+            "agentName": "article-probe-agent",
+            "taskName": "probeACSwebsite",
+            "profileId": "work",
+            "lease": "exclusive",
+            "cleanup": "close_tabs"
+          }}
+        }}
       }}
     }}
+
+  service.profiles and service.sessions are contract metadata for the service
+  control plane. They describe allocation, keyring posture, caller ownership,
+  and cleanup policy; current launch behavior still comes from runtimeProfiles,
+  --runtime-profile, --profile, and existing launch flags.
 
   Service hints are advisory. When a configured service marks
   manualLoginPreferred, navigation to known login hosts emits a warning that

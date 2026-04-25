@@ -500,6 +500,27 @@ stable per-profile defaults and service-specific login hints.
         "defaultViewport": "960x640"
       }
     }
+  },
+  "service": {
+    "profiles": {
+      "work": {
+        "name": "Work",
+        "allocation": "per_service",
+        "keyring": "basic_password_store",
+        "sharedServiceIds": ["JournalDownloader"],
+        "manualLoginPreferred": true
+      }
+    },
+    "sessions": {
+      "journal-session": {
+        "serviceName": "JournalDownloader",
+        "agentName": "article-probe-agent",
+        "taskName": "probeACSwebsite",
+        "profileId": "work",
+        "lease": "exclusive",
+        "cleanup": "close_tabs"
+      }
+    }
   }
 }
 ```
@@ -514,6 +535,13 @@ is accepted. Set `launch.leaveOpen` or pass `--leave-open` when you want
 down. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
 `960x640`, when a runtime profile should resize the browser content area after
 launch and before the requested command runs.
+
+The `service.profiles` and `service.sessions` maps define service control-plane
+metadata for profile allocation, keyring posture, caller ownership, profile
+binding, lease state, and cleanup policy. These records are exposed through
+service status, MCP resources, and the HTTP service APIs. Current browser
+launch behavior still comes from `runtimeProfiles`, `--runtime-profile`,
+`--profile`, and existing launch flags.
 
 You can register a runtime profile into user config explicitly:
 
@@ -1242,7 +1270,7 @@ agent-browser service events --kind browser_health_changed --browser-id browser-
 agent-browser service events --kind tab_lifecycle_changed
 ```
 
-The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode site policies and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, unreachable CDP endpoints without a PID are marked `unreachable`, and endpoints that answer health probes but fail target-list discovery are marked `degraded`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active. Configured site policies and providers override entries with the same IDs from the persisted state. Browser launch, auto-launching browser commands such as `open`, and close commands update the persisted browser health records for the active session.
+The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode profiles, sessions, site policies, and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, unreachable CDP endpoints without a PID are marked `unreachable`, and endpoints that answer health probes but fail target-list discovery are marked `degraded`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active. Configured profiles, sessions, site policies, and providers override entries with the same IDs from the persisted state. Browser launch, auto-launching browser commands such as `open`, and close commands update the persisted browser health records for the active session.
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 
