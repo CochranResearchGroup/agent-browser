@@ -550,12 +550,64 @@ fn browser_api_command(
         ("POST", "/api/browser/errors") => {
             Some(browser_body_command("errors", "http-browser-errors", body))
         }
+        ("POST", "/api/browser/set-content") => Some(browser_body_command(
+            "setcontent",
+            "http-browser-set-content",
+            body,
+        )),
+        ("POST", "/api/browser/headers") => Some(browser_body_command(
+            "headers",
+            "http-browser-headers",
+            body,
+        )),
+        ("POST", "/api/browser/offline") => Some(browser_body_command(
+            "offline",
+            "http-browser-offline",
+            body,
+        )),
+        ("POST", "/api/browser/dialog") => {
+            Some(browser_body_command("dialog", "http-browser-dialog", body))
+        }
+        ("POST", "/api/browser/clipboard") => Some(browser_body_command(
+            "clipboard",
+            "http-browser-clipboard",
+            body,
+        )),
         ("POST", "/api/browser/upload") => {
             Some(browser_body_command("upload", "http-browser-upload", body))
         }
         ("POST", "/api/browser/download") => Some(browser_body_command(
             "download",
             "http-browser-download",
+            body,
+        )),
+        ("POST", "/api/browser/wait-for-download") => Some(browser_body_command(
+            "waitfordownload",
+            "http-browser-wait-for-download",
+            body,
+        )),
+        ("POST", "/api/browser/pdf") => Some(browser_body_command("pdf", "http-browser-pdf", body)),
+        ("POST", "/api/browser/response-body") => Some(browser_body_command(
+            "responsebody",
+            "http-browser-response-body",
+            body,
+        )),
+        ("POST", "/api/browser/har/start") => Some(browser_body_command(
+            "har_start",
+            "http-browser-har-start",
+            body,
+        )),
+        ("POST", "/api/browser/har/stop") => Some(browser_body_command(
+            "har_stop",
+            "http-browser-har-stop",
+            body,
+        )),
+        ("POST", "/api/browser/route") => {
+            Some(browser_body_command("route", "http-browser-route", body))
+        }
+        ("POST", "/api/browser/unroute") => Some(browser_body_command(
+            "unroute",
+            "http-browser-unroute",
             body,
         )),
         ("POST", "/api/browser/requests") => Some(browser_body_command(
@@ -1612,6 +1664,46 @@ mod tests {
         let errors = browser_api_command("POST", "/api/browser/errors", None, "{}")
             .unwrap()
             .unwrap();
+        let set_content = browser_api_command(
+            "POST",
+            "/api/browser/set-content",
+            None,
+            r##"{"html":"<h1>Ready</h1>"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let headers = browser_api_command(
+            "POST",
+            "/api/browser/headers",
+            None,
+            r##"{"headers":{"X-Smoke":"ok"}}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let offline = browser_api_command(
+            "POST",
+            "/api/browser/offline",
+            None,
+            r##"{"offline":true}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let dialog = browser_api_command(
+            "POST",
+            "/api/browser/dialog",
+            None,
+            r##"{"response":"status"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let clipboard = browser_api_command(
+            "POST",
+            "/api/browser/clipboard",
+            None,
+            r##"{"operation":"write","text":"ok"}"##,
+        )
+        .unwrap()
+        .unwrap();
         let upload = browser_api_command(
             "POST",
             "/api/browser/upload",
@@ -1625,6 +1717,57 @@ mod tests {
             "/api/browser/download",
             None,
             r##"{"selector":"#download","path":"/tmp/download.txt"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let wait_for_download = browser_api_command(
+            "POST",
+            "/api/browser/wait-for-download",
+            None,
+            r##"{"path":"/tmp/download.txt"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let pdf = browser_api_command(
+            "POST",
+            "/api/browser/pdf",
+            None,
+            r##"{"path":"/tmp/page.pdf"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let response_body = browser_api_command(
+            "POST",
+            "/api/browser/response-body",
+            None,
+            r##"{"url":"/api/data"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let har_start = browser_api_command("POST", "/api/browser/har/start", None, "{}")
+            .unwrap()
+            .unwrap();
+        let har_stop = browser_api_command(
+            "POST",
+            "/api/browser/har/stop",
+            None,
+            r##"{"path":"/tmp/capture.har"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let route = browser_api_command(
+            "POST",
+            "/api/browser/route",
+            None,
+            r##"{"url":"**/api/*","abort":true}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let unroute = browser_api_command(
+            "POST",
+            "/api/browser/unroute",
+            None,
+            r##"{"url":"**/api/*"}"##,
         )
         .unwrap()
         .unwrap();
@@ -1882,10 +2025,33 @@ mod tests {
         assert_eq!(console["action"], "console");
         assert_eq!(console["clear"], true);
         assert_eq!(errors["action"], "errors");
+        assert_eq!(set_content["action"], "setcontent");
+        assert_eq!(set_content["html"], "<h1>Ready</h1>");
+        assert_eq!(headers["action"], "headers");
+        assert_eq!(headers["headers"]["X-Smoke"], "ok");
+        assert_eq!(offline["action"], "offline");
+        assert_eq!(offline["offline"], true);
+        assert_eq!(dialog["action"], "dialog");
+        assert_eq!(dialog["response"], "status");
+        assert_eq!(clipboard["action"], "clipboard");
+        assert_eq!(clipboard["operation"], "write");
         assert_eq!(upload["action"], "upload");
         assert_eq!(upload["selector"], "#file");
         assert_eq!(download["action"], "download");
         assert_eq!(download["path"], "/tmp/download.txt");
+        assert_eq!(wait_for_download["action"], "waitfordownload");
+        assert_eq!(wait_for_download["path"], "/tmp/download.txt");
+        assert_eq!(pdf["action"], "pdf");
+        assert_eq!(pdf["path"], "/tmp/page.pdf");
+        assert_eq!(response_body["action"], "responsebody");
+        assert_eq!(response_body["url"], "/api/data");
+        assert_eq!(har_start["action"], "har_start");
+        assert_eq!(har_stop["action"], "har_stop");
+        assert_eq!(har_stop["path"], "/tmp/capture.har");
+        assert_eq!(route["action"], "route");
+        assert_eq!(route["url"], "**/api/*");
+        assert_eq!(unroute["action"], "unroute");
+        assert_eq!(unroute["url"], "**/api/*");
         assert_eq!(requests["action"], "requests");
         assert_eq!(requests["status"], "2xx");
         assert_eq!(request_detail["action"], "request_detail");

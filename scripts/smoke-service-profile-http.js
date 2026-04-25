@@ -337,6 +337,30 @@ try {
   assertHttpSuccess(browserErrors, 'HTTP browser errors');
   assert(Array.isArray(browserErrors.data?.errors), 'HTTP browser errors missing errors array');
 
+  const browserHeaders = await browserPost(port, 'headers', {
+    headers: { 'X-Agent-Browser-Smoke': 'ok' },
+  });
+  assertHttpSuccess(browserHeaders, 'HTTP browser headers');
+  assert(browserHeaders.data?.set === true, 'HTTP browser headers did not report set');
+
+  const browserOfflineOn = await browserPost(port, 'offline', {
+    offline: true,
+  });
+  assertHttpSuccess(browserOfflineOn, 'HTTP browser offline on');
+  assert(browserOfflineOn.data?.offline === true, 'HTTP browser offline on did not report offline');
+
+  const browserOfflineOff = await browserPost(port, 'offline', {
+    offline: false,
+  });
+  assertHttpSuccess(browserOfflineOff, 'HTTP browser offline off');
+  assert(browserOfflineOff.data?.offline === false, 'HTTP browser offline off did not report online');
+
+  const browserDialogStatus = await browserPost(port, 'dialog', {
+    response: 'status',
+  });
+  assertHttpSuccess(browserDialogStatus, 'HTTP browser dialog status');
+  assert(browserDialogStatus.data?.hasDialog === false, 'HTTP browser dialog status reported pending dialog');
+
   const uploadPath = `${context.tempHome}/http-upload.txt`;
   writeFileSync(uploadPath, 'upload-ok');
   const browserUpload = await browserPost(port, 'upload', {
