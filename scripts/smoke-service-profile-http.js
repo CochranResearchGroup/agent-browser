@@ -16,6 +16,7 @@ const runtimeProfile = `smoke-http-${process.pid}`;
 const serviceName = 'RuntimeProfileHttpSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'profileSessionHttpStatusSmoke';
+const traceFields = { serviceName, agentName, taskName };
 
 const timeout = setTimeout(() => {
   fail('Timed out waiting for service profile HTTP smoke to complete');
@@ -31,6 +32,14 @@ async function fail(message) {
   await cleanup();
   console.error(message);
   process.exit(1);
+}
+
+async function browserPost(port, endpoint, body = {}) {
+  return httpJson(port, 'POST', `/api/browser/${endpoint}`, { ...body, ...traceFields });
+}
+
+function assertHttpSuccess(response, label) {
+  assert(response.success === true, `${label} failed: ${JSON.stringify(response)}`);
 }
 
 try {
@@ -129,371 +138,230 @@ try {
     `HTTP browser tabs did not include active smoke page: ${JSON.stringify(browserTabs)}`,
   );
 
-  const browserSnapshot = await httpJson(port, 'POST', '/api/browser/snapshot', {
+  const browserSnapshot = await browserPost(port, 'snapshot', {
     selector: '#main',
     interactive: true,
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserSnapshot.success === true,
-    `HTTP browser snapshot failed: ${JSON.stringify(browserSnapshot)}`,
-  );
+  assertHttpSuccess(browserSnapshot, 'HTTP browser snapshot');
   assert(
     browserSnapshot.data?.snapshot?.includes('Service Profile HTTP Smoke'),
     `HTTP browser snapshot missing page content: ${JSON.stringify(browserSnapshot)}`,
   );
 
   const screenshotPath = `${context.tempHome}/http-browser-screenshot.png`;
-  const browserScreenshot = await httpJson(port, 'POST', '/api/browser/screenshot', {
+  const browserScreenshot = await browserPost(port, 'screenshot', {
     selector: '#main',
     path: screenshotPath,
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserScreenshot.success === true,
-    `HTTP browser screenshot failed: ${JSON.stringify(browserScreenshot)}`,
-  );
+  assertHttpSuccess(browserScreenshot, 'HTTP browser screenshot');
   assert(
     browserScreenshot.data?.path === screenshotPath && existsSync(screenshotPath),
     `HTTP browser screenshot did not write expected path: ${JSON.stringify(browserScreenshot)}`,
   );
 
-  const browserFill = await httpJson(port, 'POST', '/api/browser/fill', {
+  const browserFill = await browserPost(port, 'fill', {
     selector: '#name',
     value: 'Ada Lovelace',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserFill.success === true, `HTTP browser fill failed: ${JSON.stringify(browserFill)}`);
+  assertHttpSuccess(browserFill, 'HTTP browser fill');
   assert(browserFill.data?.filled === '#name', 'HTTP browser fill did not report filled selector');
 
-  const browserType = await httpJson(port, 'POST', '/api/browser/type', {
+  const browserType = await browserPost(port, 'type', {
     selector: '#name',
     text: ' Jr',
     delayMs: 1,
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserType.success === true, `HTTP browser type failed: ${JSON.stringify(browserType)}`);
+  assertHttpSuccess(browserType, 'HTTP browser type');
   assert(browserType.data?.typed === ' Jr', 'HTTP browser type did not report typed text');
 
-  const browserPress = await httpJson(port, 'POST', '/api/browser/press', {
+  const browserPress = await browserPost(port, 'press', {
     key: 'Enter',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserPress.success === true, `HTTP browser press failed: ${JSON.stringify(browserPress)}`);
+  assertHttpSuccess(browserPress, 'HTTP browser press');
   assert(browserPress.data?.pressed === 'Enter', 'HTTP browser press did not report pressed key');
 
-  const browserFocus = await httpJson(port, 'POST', '/api/browser/focus', {
+  const browserFocus = await browserPost(port, 'focus', {
     selector: '#name',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserFocus.success === true, `HTTP browser focus failed: ${JSON.stringify(browserFocus)}`);
+  assertHttpSuccess(browserFocus, 'HTTP browser focus');
   assert(browserFocus.data?.focused === '#name', 'HTTP browser focus did not report focused selector');
 
-  const browserValue = await httpJson(port, 'POST', '/api/browser/get-value', {
+  const browserValue = await browserPost(port, 'get-value', {
     selector: '#name',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserValue.success === true,
-    `HTTP browser get-value failed: ${JSON.stringify(browserValue)}`,
-  );
+  assertHttpSuccess(browserValue, 'HTTP browser get-value');
   assert(
     browserValue.data?.value === 'Ada Lovelace Jr',
     `HTTP browser get-value returned ${browserValue.data?.value}`,
   );
 
-  const browserClear = await httpJson(port, 'POST', '/api/browser/clear', {
+  const browserClear = await browserPost(port, 'clear', {
     selector: '#name',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserClear.success === true, `HTTP browser clear failed: ${JSON.stringify(browserClear)}`);
+  assertHttpSuccess(browserClear, 'HTTP browser clear');
   assert(browserClear.data?.cleared === '#name', 'HTTP browser clear did not report cleared selector');
 
-  const browserClearedValue = await httpJson(port, 'POST', '/api/browser/get-value', {
+  const browserClearedValue = await browserPost(port, 'get-value', {
     selector: '#name',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserClearedValue.success === true,
-    `HTTP browser cleared get-value failed: ${JSON.stringify(browserClearedValue)}`,
-  );
+  assertHttpSuccess(browserClearedValue, 'HTTP browser cleared get-value');
   assert(
     browserClearedValue.data?.value === '',
     `HTTP browser clear left value ${browserClearedValue.data?.value}`,
   );
 
-  const browserSelect = await httpJson(port, 'POST', '/api/browser/select', {
+  const browserSelect = await browserPost(port, 'select', {
     selector: '#choice',
     values: ['b'],
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserSelect.success === true, `HTTP browser select failed: ${JSON.stringify(browserSelect)}`);
+  assertHttpSuccess(browserSelect, 'HTTP browser select');
   assert(
     browserSelect.data?.selected?.[0] === 'b',
     `HTTP browser select returned ${JSON.stringify(browserSelect.data)}`,
   );
 
-  const browserSelectedValue = await httpJson(port, 'POST', '/api/browser/get-value', {
+  const browserSelectedValue = await browserPost(port, 'get-value', {
     selector: '#choice',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserSelectedValue.success === true,
-    `HTTP browser selected get-value failed: ${JSON.stringify(browserSelectedValue)}`,
-  );
+  assertHttpSuccess(browserSelectedValue, 'HTTP browser selected get-value');
   assert(
     browserSelectedValue.data?.value === 'b',
     `HTTP browser select left value ${browserSelectedValue.data?.value}`,
   );
 
-  const browserHover = await httpJson(port, 'POST', '/api/browser/hover', {
+  const browserHover = await browserPost(port, 'hover', {
     selector: '#hover-target',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserHover.success === true, `HTTP browser hover failed: ${JSON.stringify(browserHover)}`);
+  assertHttpSuccess(browserHover, 'HTTP browser hover');
   assert(browserHover.data?.hovered === '#hover-target', 'HTTP browser hover did not report hovered selector');
 
-  const browserHoverText = await httpJson(port, 'POST', '/api/browser/get-text', {
+  const browserHoverText = await browserPost(port, 'get-text', {
     selector: '#hover-output',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserHoverText.success === true,
-    `HTTP browser hover get-text failed: ${JSON.stringify(browserHoverText)}`,
-  );
+  assertHttpSuccess(browserHoverText, 'HTTP browser hover get-text');
   assert(
     browserHoverText.data?.text === 'Hovered',
     `HTTP browser hover did not update page text: ${browserHoverText.data?.text}`,
   );
 
-  const browserClick = await httpJson(port, 'POST', '/api/browser/click', {
+  const browserClick = await browserPost(port, 'click', {
     selector: '#mark-ready',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserClick.success === true,
-    `HTTP browser click failed: ${JSON.stringify(browserClick)}`,
-  );
+  assertHttpSuccess(browserClick, 'HTTP browser click');
   assert(
     browserClick.data?.clicked === '#mark-ready',
     'HTTP browser click did not report clicked selector',
   );
 
-  const browserWait = await httpJson(port, 'POST', '/api/browser/wait', {
+  const browserWait = await browserPost(port, 'wait', {
     selector: '#click-output',
     text: 'Clicked',
     timeoutMs: 2000,
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserWait.success === true, `HTTP browser wait failed: ${JSON.stringify(browserWait)}`);
+  assertHttpSuccess(browserWait, 'HTTP browser wait');
   assert(browserWait.data?.waited === 'text', 'HTTP browser wait did not report text wait');
   assert(browserWait.data?.text === 'Clicked', 'HTTP browser wait did not report waited text');
 
-  const browserText = await httpJson(port, 'POST', '/api/browser/get-text', {
+  const browserText = await browserPost(port, 'get-text', {
     selector: '#click-output',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserText.success === true,
-    `HTTP browser get-text failed: ${JSON.stringify(browserText)}`,
-  );
+  assertHttpSuccess(browserText, 'HTTP browser get-text');
   assert(browserText.data?.text === 'Clicked', `HTTP browser get-text returned ${browserText.data?.text}`);
 
-  const browserVisible = await httpJson(port, 'POST', '/api/browser/is-visible', {
+  const browserVisible = await browserPost(port, 'is-visible', {
     selector: '#ready',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserVisible.success === true,
-    `HTTP browser is-visible failed: ${JSON.stringify(browserVisible)}`,
-  );
+  assertHttpSuccess(browserVisible, 'HTTP browser is-visible');
   assert(browserVisible.data?.visible === true, 'HTTP browser is-visible did not report visible');
 
-  const browserEnabled = await httpJson(port, 'POST', '/api/browser/is-enabled', {
+  const browserEnabled = await browserPost(port, 'is-enabled', {
     selector: '#name',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserEnabled.success === true,
-    `HTTP browser is-enabled failed: ${JSON.stringify(browserEnabled)}`,
-  );
+  assertHttpSuccess(browserEnabled, 'HTTP browser is-enabled');
   assert(browserEnabled.data?.enabled === true, 'HTTP browser is-enabled did not report enabled');
 
-  const browserDisabled = await httpJson(port, 'POST', '/api/browser/is-enabled', {
+  const browserDisabled = await browserPost(port, 'is-enabled', {
     selector: '#disabled-name',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserDisabled.success === true,
-    `HTTP browser disabled is-enabled failed: ${JSON.stringify(browserDisabled)}`,
-  );
+  assertHttpSuccess(browserDisabled, 'HTTP browser disabled is-enabled');
   assert(browserDisabled.data?.enabled === false, 'HTTP browser is-enabled did not report disabled');
 
-  const browserAttribute = await httpJson(port, 'POST', '/api/browser/get-attribute', {
+  const browserAttribute = await browserPost(port, 'get-attribute', {
     selector: '#box',
     attribute: 'data-role',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserAttribute.success === true,
-    `HTTP browser get-attribute failed: ${JSON.stringify(browserAttribute)}`,
-  );
+  assertHttpSuccess(browserAttribute, 'HTTP browser get-attribute');
   assert(
     browserAttribute.data?.value === 'sample',
     `HTTP browser get-attribute returned ${browserAttribute.data?.value}`,
   );
 
-  const browserHtml = await httpJson(port, 'POST', '/api/browser/get-html', {
+  const browserHtml = await browserPost(port, 'get-html', {
     selector: '#box',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserHtml.success === true, `HTTP browser get-html failed: ${JSON.stringify(browserHtml)}`);
+  assertHttpSuccess(browserHtml, 'HTTP browser get-html');
   assert(browserHtml.data?.html === 'Box target', `HTTP browser get-html returned ${browserHtml.data?.html}`);
 
-  const browserStyles = await httpJson(port, 'POST', '/api/browser/get-styles', {
+  const browserStyles = await browserPost(port, 'get-styles', {
     selector: '#box',
     properties: ['display', 'width', 'height'],
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserStyles.success === true,
-    `HTTP browser get-styles failed: ${JSON.stringify(browserStyles)}`,
-  );
+  assertHttpSuccess(browserStyles, 'HTTP browser get-styles');
   assert(browserStyles.data?.styles?.display === 'block', 'HTTP browser get-styles did not return display');
   assert(browserStyles.data?.styles?.width === '200px', 'HTTP browser get-styles did not return width');
   assert(browserStyles.data?.styles?.height === '100px', 'HTTP browser get-styles did not return height');
 
-  const browserCount = await httpJson(port, 'POST', '/api/browser/count', {
+  const browserCount = await browserPost(port, 'count', {
     selector: '.item',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserCount.success === true, `HTTP browser count failed: ${JSON.stringify(browserCount)}`);
+  assertHttpSuccess(browserCount, 'HTTP browser count');
   assert(browserCount.data?.count === 3, `HTTP browser count returned ${browserCount.data?.count}`);
 
-  const browserBox = await httpJson(port, 'POST', '/api/browser/get-box', {
+  const browserBox = await browserPost(port, 'get-box', {
     selector: '#box',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserBox.success === true, `HTTP browser get-box failed: ${JSON.stringify(browserBox)}`);
+  assertHttpSuccess(browserBox, 'HTTP browser get-box');
   assert(browserBox.data?.width === 200, 'HTTP browser get-box did not return expected width');
   assert(browserBox.data?.height === 100, 'HTTP browser get-box did not return expected height');
 
-  const browserCheck = await httpJson(port, 'POST', '/api/browser/check', {
+  const browserCheck = await browserPost(port, 'check', {
     selector: '#remember',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserCheck.success === true, `HTTP browser check failed: ${JSON.stringify(browserCheck)}`);
+  assertHttpSuccess(browserCheck, 'HTTP browser check');
   assert(browserCheck.data?.checked === '#remember', 'HTTP browser check did not report checked selector');
 
-  const browserChecked = await httpJson(port, 'POST', '/api/browser/is-checked', {
+  const browserChecked = await browserPost(port, 'is-checked', {
     selector: '#remember',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserChecked.success === true,
-    `HTTP browser is-checked failed: ${JSON.stringify(browserChecked)}`,
-  );
+  assertHttpSuccess(browserChecked, 'HTTP browser is-checked');
   assert(browserChecked.data?.checked === true, 'HTTP browser is-checked did not report checked');
 
-  const browserUncheck = await httpJson(port, 'POST', '/api/browser/uncheck', {
+  const browserUncheck = await browserPost(port, 'uncheck', {
     selector: '#remember',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserUncheck.success === true,
-    `HTTP browser uncheck failed: ${JSON.stringify(browserUncheck)}`,
-  );
+  assertHttpSuccess(browserUncheck, 'HTTP browser uncheck');
   assert(
     browserUncheck.data?.unchecked === '#remember',
     'HTTP browser uncheck did not report unchecked selector',
   );
 
-  const browserUnchecked = await httpJson(port, 'POST', '/api/browser/is-checked', {
+  const browserUnchecked = await browserPost(port, 'is-checked', {
     selector: '#remember',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserUnchecked.success === true,
-    `HTTP browser unchecked is-checked failed: ${JSON.stringify(browserUnchecked)}`,
-  );
+  assertHttpSuccess(browserUnchecked, 'HTTP browser unchecked is-checked');
   assert(browserUnchecked.data?.checked === false, 'HTTP browser is-checked did not report unchecked');
 
-  const browserScroll = await httpJson(port, 'POST', '/api/browser/scroll', {
+  const browserScroll = await browserPost(port, 'scroll', {
     direction: 'down',
     amount: 200,
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(browserScroll.success === true, `HTTP browser scroll failed: ${JSON.stringify(browserScroll)}`);
+  assertHttpSuccess(browserScroll, 'HTTP browser scroll');
   assert(browserScroll.data?.scrolled === true, 'HTTP browser scroll did not report success');
 
-  const browserScrollIntoView = await httpJson(port, 'POST', '/api/browser/scroll-into-view', {
+  const browserScrollIntoView = await browserPost(port, 'scroll-into-view', {
     selector: '#bottom-target',
-    serviceName,
-    agentName,
-    taskName,
   });
-  assert(
-    browserScrollIntoView.success === true,
-    `HTTP browser scroll-into-view failed: ${JSON.stringify(browserScrollIntoView)}`,
-  );
+  assertHttpSuccess(browserScrollIntoView, 'HTTP browser scroll-into-view');
   assert(
     browserScrollIntoView.data?.scrolled === '#bottom-target',
     'HTTP browser scroll-into-view did not report target selector',
