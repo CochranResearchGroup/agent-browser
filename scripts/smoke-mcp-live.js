@@ -602,6 +602,73 @@ try {
   assert(selectPayload.trace?.agentName === agentName, 'browser_select trace missing agentName');
   assert(selectPayload.trace?.taskName === taskName, 'browser_select trace missing taskName');
 
+  const textResult = await send('tools/call', {
+    name: 'browser_get_text',
+    arguments: {
+      selector: '#org-output',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const textPayload = parseToolPayload(textResult);
+  assert(textPayload.success === true, `browser_get_text failed: ${JSON.stringify(textPayload)}`);
+  assert(textPayload.data?.text === 'org-b', 'browser_get_text did not return selected output text');
+  assert(textPayload.trace?.serviceName === serviceName, 'browser_get_text trace missing serviceName');
+  assert(textPayload.trace?.agentName === agentName, 'browser_get_text trace missing agentName');
+  assert(textPayload.trace?.taskName === taskName, 'browser_get_text trace missing taskName');
+
+  const valueResult = await send('tools/call', {
+    name: 'browser_get_value',
+    arguments: {
+      selector: '#name',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const valuePayload = parseToolPayload(valueResult);
+  assert(valuePayload.success === true, `browser_get_value failed: ${JSON.stringify(valuePayload)}`);
+  assert(
+    valuePayload.data?.value === 'Ada Lovelace Jr',
+    'browser_get_value did not return typed field value',
+  );
+  assert(valuePayload.trace?.serviceName === serviceName, 'browser_get_value trace missing serviceName');
+  assert(valuePayload.trace?.agentName === agentName, 'browser_get_value trace missing agentName');
+  assert(valuePayload.trace?.taskName === taskName, 'browser_get_value trace missing taskName');
+
+  const attributeResult = await send('tools/call', {
+    name: 'browser_get_attribute',
+    arguments: {
+      selector: 'a[href]',
+      attribute: 'href',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const attributePayload = parseToolPayload(attributeResult);
+  assert(
+    attributePayload.success === true,
+    `browser_get_attribute failed: ${JSON.stringify(attributePayload)}`,
+  );
+  assert(
+    attributePayload.data?.value === 'https://example.com/',
+    'browser_get_attribute did not return link href',
+  );
+  assert(
+    attributePayload.trace?.serviceName === serviceName,
+    'browser_get_attribute trace missing serviceName',
+  );
+  assert(
+    attributePayload.trace?.agentName === agentName,
+    'browser_get_attribute trace missing agentName',
+  );
+  assert(
+    attributePayload.trace?.taskName === taskName,
+    'browser_get_attribute trace missing taskName',
+  );
+
   const initiallyCheckedResult = await send('tools/call', {
     name: 'browser_is_checked',
     arguments: {
@@ -1044,6 +1111,39 @@ try {
   );
   assert(selectJob, 'Retained service job with browser_select caller context was not found');
   assert(selectJob.state === 'succeeded', `Select service job state was ${selectJob.state}`);
+  const textJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'gettext' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(textJob, 'Retained service job with browser_get_text caller context was not found');
+  assert(textJob.state === 'succeeded', `Text service job state was ${textJob.state}`);
+  const valueJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'inputvalue' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(valueJob, 'Retained service job with browser_get_value caller context was not found');
+  assert(valueJob.state === 'succeeded', `Value service job state was ${valueJob.state}`);
+  const attributeJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'getattribute' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(
+    attributeJob,
+    'Retained service job with browser_get_attribute caller context was not found',
+  );
+  assert(
+    attributeJob.state === 'succeeded',
+    `Attribute service job state was ${attributeJob.state}`,
+  );
   const checkJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'check' &&

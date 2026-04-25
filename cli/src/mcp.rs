@@ -887,6 +887,24 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector", "values"]
             }
         }),
+        browser_element_read_tool_schema(
+            "browser_get_text",
+            "Read browser element text",
+            "Queue reading an element's visible text in the active browser session. Include serviceName, agentName, and taskName when available for traceability.",
+            false,
+        ),
+        browser_element_read_tool_schema(
+            "browser_get_value",
+            "Read browser field value",
+            "Queue reading an input, textarea, or select value in the active browser session. Include serviceName, agentName, and taskName when available for traceability.",
+            false,
+        ),
+        browser_element_read_tool_schema(
+            "browser_get_attribute",
+            "Read browser element attribute",
+            "Queue reading an element attribute in the active browser session. Include serviceName, agentName, and taskName when available for traceability.",
+            true,
+        ),
         browser_element_state_tool_schema(
             "browser_is_visible",
             "Read browser visibility state",
@@ -1210,6 +1228,58 @@ fn browser_read_tool_schema(spec: BrowserReadToolSpec) -> Value {
     })
 }
 
+fn browser_element_read_tool_schema(
+    tool_name: &str,
+    title: &str,
+    description: &str,
+    requires_attribute: bool,
+) -> Value {
+    let mut properties = json!({
+        "selector": {
+            "type": "string",
+            "description": "Required CSS selector or cached ref for the element to read."
+        },
+        "jobTimeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional worker-bound timeout for this queued element read job."
+        },
+        "serviceName": {
+            "type": "string",
+            "description": "Calling service name, for example JournalDownloader."
+        },
+        "agentName": {
+            "type": "string",
+            "description": "Calling agent name."
+        },
+        "taskName": {
+            "type": "string",
+            "description": "Calling task name, for example probeACSwebsite."
+        }
+    });
+    let required = if requires_attribute {
+        properties["attribute"] = json!({
+            "type": "string",
+            "description": "Required attribute name to read from the target element."
+        });
+        json!(["selector", "attribute"])
+    } else {
+        json!(["selector"])
+    };
+
+    json!({
+        "name": tool_name,
+        "title": title,
+        "description": description,
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": properties,
+            "required": required
+        }
+    })
+}
+
 fn browser_element_state_tool_schema(
     tool_name: &str,
     title: &str,
@@ -1275,6 +1345,23 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_press" => call_browser_press(arguments, session),
         "browser_hover" => call_browser_hover(arguments, session),
         "browser_select" => call_browser_select(arguments, session),
+        "browser_get_text" => {
+            call_browser_element_read_tool(arguments, session, "browser_get_text", "gettext", None)
+        }
+        "browser_get_value" => call_browser_element_read_tool(
+            arguments,
+            session,
+            "browser_get_value",
+            "inputvalue",
+            None,
+        ),
+        "browser_get_attribute" => call_browser_element_read_tool(
+            arguments,
+            session,
+            "browser_get_attribute",
+            "getattribute",
+            Some("attribute"),
+        ),
         "browser_is_visible" => {
             call_browser_element_state_tool(arguments, session, "browser_is_visible", "isvisible")
         }
@@ -1742,6 +1829,48 @@ fn call_browser_element_state_tool(
         agent_name,
         task_name,
     );
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": tool_name,
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        tool_name, session, trace, response,
+    ))
+}
+
+fn call_browser_element_read_tool(
+    arguments: &Value,
+    session: &str,
+    tool_name: &str,
+    action: &str,
+    attribute_key: Option<&str>,
+) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let attribute = match attribute_key {
+        Some(key) => Some(required_string_argument(arguments, key)?),
+        None => None,
+    };
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_element_read_command(BrowserElementReadCommandArgs {
+        action,
+        selector,
+        attribute,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    });
 
     let response = send_command(command, session).map_err(|err| JsonRpcError {
         code: -32603,
@@ -2279,6 +2408,40 @@ fn browser_element_state_command(
         command["agentName"] = json!(agent_name);
     }
     if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+struct BrowserElementReadCommandArgs<'a> {
+    action: &'a str,
+    selector: &'a str,
+    attribute: Option<&'a str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+fn browser_element_read_command(args: BrowserElementReadCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-{}-{}", args.action, uuid::Uuid::new_v4()),
+        "action": args.action,
+        "selector": args.selector,
+    });
+    if let Some(attribute) = args.attribute {
+        command["attribute"] = json!(attribute);
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
         command["taskName"] = json!(task_name);
     }
     command
@@ -3117,10 +3280,7 @@ mod tests {
         assert!(
             response["result"]["tools"][12]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(
-            response["result"]["tools"][13]["name"],
-            "browser_is_visible"
-        );
+        assert_eq!(response["result"]["tools"][13]["name"], "browser_get_text");
         assert_eq!(
             response["result"]["tools"][13]["inputSchema"]["required"][0],
             "selector"
@@ -3135,10 +3295,7 @@ mod tests {
         assert!(
             response["result"]["tools"][13]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(
-            response["result"]["tools"][14]["name"],
-            "browser_is_enabled"
-        );
+        assert_eq!(response["result"]["tools"][14]["name"], "browser_get_value");
         assert_eq!(
             response["result"]["tools"][14]["inputSchema"]["required"][0],
             "selector"
@@ -3153,20 +3310,31 @@ mod tests {
         assert!(
             response["result"]["tools"][14]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][15]["name"], "browser_check");
+        assert_eq!(
+            response["result"]["tools"][15]["name"],
+            "browser_get_attribute"
+        );
         assert_eq!(
             response["result"]["tools"][15]["inputSchema"]["required"][0],
             "selector"
+        );
+        assert_eq!(
+            response["result"]["tools"][15]["inputSchema"]["required"][1],
+            "attribute"
         );
         assert!(
             response["result"]["tools"][15]["inputSchema"]["properties"]["selector"].is_object()
         );
         assert!(
-            response["result"]["tools"][15]["inputSchema"]["properties"]["serviceName"].is_object()
+            response["result"]["tools"][15]["inputSchema"]["properties"]["attribute"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][15]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
         );
         assert_eq!(
             response["result"]["tools"][16]["name"],
-            "browser_is_checked"
+            "browser_is_visible"
         );
         assert_eq!(
             response["result"]["tools"][16]["inputSchema"]["required"][0],
@@ -3182,7 +3350,10 @@ mod tests {
         assert!(
             response["result"]["tools"][16]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][17]["name"], "browser_uncheck");
+        assert_eq!(
+            response["result"]["tools"][17]["name"],
+            "browser_is_enabled"
+        );
         assert_eq!(
             response["result"]["tools"][17]["inputSchema"]["required"][0],
             "selector"
@@ -3191,15 +3362,17 @@ mod tests {
             response["result"]["tools"][17]["inputSchema"]["properties"]["selector"].is_object()
         );
         assert!(
+            response["result"]["tools"][17]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
             response["result"]["tools"][17]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][18]["name"], "browser_scroll");
-        assert!(
-            response["result"]["tools"][18]["inputSchema"]["properties"]["direction"].is_object()
+        assert_eq!(response["result"]["tools"][18]["name"], "browser_check");
+        assert_eq!(
+            response["result"]["tools"][18]["inputSchema"]["required"][0],
+            "selector"
         );
-        assert!(response["result"]["tools"][18]["inputSchema"]["properties"]["amount"].is_object());
-        assert!(response["result"]["tools"][18]["inputSchema"]["properties"]["deltaX"].is_object());
-        assert!(response["result"]["tools"][18]["inputSchema"]["properties"]["deltaY"].is_object());
         assert!(
             response["result"]["tools"][18]["inputSchema"]["properties"]["selector"].is_object()
         );
@@ -3208,7 +3381,7 @@ mod tests {
         );
         assert_eq!(
             response["result"]["tools"][19]["name"],
-            "browser_scroll_into_view"
+            "browser_is_checked"
         );
         assert_eq!(
             response["result"]["tools"][19]["inputSchema"]["required"][0],
@@ -3224,7 +3397,7 @@ mod tests {
         assert!(
             response["result"]["tools"][19]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][20]["name"], "browser_focus");
+        assert_eq!(response["result"]["tools"][20]["name"], "browser_uncheck");
         assert_eq!(
             response["result"]["tools"][20]["inputSchema"]["required"][0],
             "selector"
@@ -3233,26 +3406,68 @@ mod tests {
             response["result"]["tools"][20]["inputSchema"]["properties"]["selector"].is_object()
         );
         assert!(
-            response["result"]["tools"][20]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
             response["result"]["tools"][20]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][21]["name"], "browser_clear");
-        assert_eq!(
-            response["result"]["tools"][21]["inputSchema"]["required"][0],
-            "selector"
+        assert_eq!(response["result"]["tools"][21]["name"], "browser_scroll");
+        assert!(
+            response["result"]["tools"][21]["inputSchema"]["properties"]["direction"].is_object()
         );
+        assert!(response["result"]["tools"][21]["inputSchema"]["properties"]["amount"].is_object());
+        assert!(response["result"]["tools"][21]["inputSchema"]["properties"]["deltaX"].is_object());
+        assert!(response["result"]["tools"][21]["inputSchema"]["properties"]["deltaY"].is_object());
         assert!(
             response["result"]["tools"][21]["inputSchema"]["properties"]["selector"].is_object()
         );
         assert!(
-            response["result"]["tools"][21]["inputSchema"]["properties"]["jobTimeoutMs"]
+            response["result"]["tools"][21]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        assert_eq!(
+            response["result"]["tools"][22]["name"],
+            "browser_scroll_into_view"
+        );
+        assert_eq!(
+            response["result"]["tools"][22]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert!(
+            response["result"]["tools"][22]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][22]["inputSchema"]["properties"]["jobTimeoutMs"]
                 .is_object()
         );
         assert!(
-            response["result"]["tools"][21]["inputSchema"]["properties"]["serviceName"].is_object()
+            response["result"]["tools"][22]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        assert_eq!(response["result"]["tools"][23]["name"], "browser_focus");
+        assert_eq!(
+            response["result"]["tools"][23]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert!(
+            response["result"]["tools"][23]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][23]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
+            response["result"]["tools"][23]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        assert_eq!(response["result"]["tools"][24]["name"], "browser_clear");
+        assert_eq!(
+            response["result"]["tools"][24]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert!(
+            response["result"]["tools"][24]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][24]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
+            response["result"]["tools"][24]["inputSchema"]["properties"]["serviceName"].is_object()
         );
     }
 
@@ -3502,6 +3717,36 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 25);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_element_read_tools_require_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":37,"method":"tools/call","params":{"name":"browser_get_text","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 37);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":38,"method":"tools/call","params":{"name":"browser_get_value","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 38);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":39,"method":"tools/call","params":{"name":"browser_get_attribute","arguments":{"selector":"#link","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 39);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -3982,6 +4227,42 @@ mod tests {
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
         assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_element_read_command_forwards_action_selector_attribute_and_trace_fields() {
+        let text_command = browser_element_read_command(BrowserElementReadCommandArgs {
+            action: "gettext",
+            selector: "#status",
+            attribute: None,
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(text_command["action"], "gettext");
+        assert_eq!(text_command["selector"], "#status");
+        assert_eq!(text_command["jobTimeoutMs"], 1000);
+        assert_eq!(text_command["serviceName"], "JournalDownloader");
+        assert_eq!(text_command["agentName"], "agent-a");
+        assert_eq!(text_command["taskName"], "probeACSwebsite");
+
+        let attribute_command = browser_element_read_command(BrowserElementReadCommandArgs {
+            action: "getattribute",
+            selector: "#link",
+            attribute: Some("href"),
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        });
+
+        assert_eq!(attribute_command["action"], "getattribute");
+        assert_eq!(attribute_command["selector"], "#link");
+        assert_eq!(attribute_command["attribute"], "href");
+        assert!(attribute_command.get("jobTimeoutMs").is_none());
+        assert!(attribute_command.get("serviceName").is_none());
     }
 
     #[test]
