@@ -528,6 +528,47 @@ try {
     getAttributeTool.inputSchema?.properties?.taskName,
     'MCP browser_get_attribute missing taskName trace field',
   );
+  const countTool = tools.tools?.find((tool) => tool.name === 'browser_count');
+  assert(countTool, 'MCP browser_count tool missing');
+  assert(
+    countTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_count missing selector requirement',
+  );
+  assert(countTool.inputSchema?.properties?.selector, 'MCP browser_count missing selector property');
+  assert(
+    countTool.inputSchema?.properties?.serviceName,
+    'MCP browser_count missing serviceName trace field',
+  );
+  assert(
+    countTool.inputSchema?.properties?.agentName,
+    'MCP browser_count missing agentName trace field',
+  );
+  assert(
+    countTool.inputSchema?.properties?.taskName,
+    'MCP browser_count missing taskName trace field',
+  );
+  const getBoxTool = tools.tools?.find((tool) => tool.name === 'browser_get_box');
+  assert(getBoxTool, 'MCP browser_get_box tool missing');
+  assert(
+    getBoxTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_box missing selector requirement',
+  );
+  assert(
+    getBoxTool.inputSchema?.properties?.selector,
+    'MCP browser_get_box missing selector property',
+  );
+  assert(
+    getBoxTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_box missing serviceName trace field',
+  );
+  assert(
+    getBoxTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_box missing agentName trace field',
+  );
+  assert(
+    getBoxTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_box missing taskName trace field',
+  );
   const isVisibleTool = tools.tools?.find((tool) => tool.name === 'browser_is_visible');
   assert(isVisibleTool, 'MCP browser_is_visible tool missing');
   assert(

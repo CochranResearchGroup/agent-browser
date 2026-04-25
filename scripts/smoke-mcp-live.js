@@ -229,6 +229,8 @@ try {
     '<p id="org-output"></p>',
     '<label for="remember"><input id="remember" type="checkbox" onchange="document.getElementById(\'remember-output\').textContent = this.checked ? \'Remember checked\' : \'Remember unchecked\'">Remember me</label>',
     '<p id="remember-output"></p>',
+    '<ul><li class="item">One</li><li class="item">Two</li><li class="item">Three</li></ul>',
+    '<div id="box" style="width: 200px; height: 100px; padding: 0; margin: 0;">Box target</div>',
     '<div style="height: 1600px" aria-label="scroll spacer"></div>',
     '<button id="scroll-target" onclick="document.getElementById(\'scroll-into-output\').textContent = \'Scrolled target clicked\'">Scroll target</button>',
     '<p id="scroll-into-output"></p>',
@@ -668,6 +670,41 @@ try {
     attributePayload.trace?.taskName === taskName,
     'browser_get_attribute trace missing taskName',
   );
+
+  const countResult = await send('tools/call', {
+    name: 'browser_count',
+    arguments: {
+      selector: '.item',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const countPayload = parseToolPayload(countResult);
+  assert(countPayload.success === true, `browser_count failed: ${JSON.stringify(countPayload)}`);
+  assert(countPayload.data?.count === 3, 'browser_count did not return matching item count');
+  assert(countPayload.trace?.serviceName === serviceName, 'browser_count trace missing serviceName');
+  assert(countPayload.trace?.agentName === agentName, 'browser_count trace missing agentName');
+  assert(countPayload.trace?.taskName === taskName, 'browser_count trace missing taskName');
+
+  const boxResult = await send('tools/call', {
+    name: 'browser_get_box',
+    arguments: {
+      selector: '#box',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const boxPayload = parseToolPayload(boxResult);
+  assert(boxPayload.success === true, `browser_get_box failed: ${JSON.stringify(boxPayload)}`);
+  assert(boxPayload.data?.width === 200, 'browser_get_box did not return expected width');
+  assert(boxPayload.data?.height === 100, 'browser_get_box did not return expected height');
+  assert(typeof boxPayload.data?.x === 'number', 'browser_get_box did not return x coordinate');
+  assert(typeof boxPayload.data?.y === 'number', 'browser_get_box did not return y coordinate');
+  assert(boxPayload.trace?.serviceName === serviceName, 'browser_get_box trace missing serviceName');
+  assert(boxPayload.trace?.agentName === agentName, 'browser_get_box trace missing agentName');
+  assert(boxPayload.trace?.taskName === taskName, 'browser_get_box trace missing taskName');
 
   const initiallyCheckedResult = await send('tools/call', {
     name: 'browser_is_checked',
@@ -1144,6 +1181,24 @@ try {
     attributeJob.state === 'succeeded',
     `Attribute service job state was ${attributeJob.state}`,
   );
+  const countJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'count' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(countJob, 'Retained service job with browser_count caller context was not found');
+  assert(countJob.state === 'succeeded', `Count service job state was ${countJob.state}`);
+  const boxJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'boundingbox' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(boxJob, 'Retained service job with browser_get_box caller context was not found');
+  assert(boxJob.state === 'succeeded', `Box service job state was ${boxJob.state}`);
   const checkJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'check' &&
