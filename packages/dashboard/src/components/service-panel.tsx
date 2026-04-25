@@ -173,8 +173,19 @@ type ServiceIncidentActivityData = {
   count?: number;
 };
 
+type ServiceTraceFiltersData = {
+  browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  since?: string | null;
+  limit?: number;
+};
+
 type ServiceTraceData = {
-  filters?: Record<string, unknown>;
+  filters?: ServiceTraceFiltersData;
   events?: ServiceEvent[];
   jobs?: ServiceJob[];
   incidents?: ServiceIncident[];
@@ -202,6 +213,13 @@ type ApiResponse<T> = {
   success: boolean;
   data?: T;
   error?: string | null;
+};
+
+type ServiceTraceToolPayload = {
+  tool?: string;
+  success?: boolean;
+  data?: ServiceTraceData;
+  error?: unknown;
 };
 
 type IncidentRecord = {
@@ -276,6 +294,7 @@ type TraceFilters = {
   browserId: string;
   profileId: string;
   sessionId: string;
+  since: string;
   limit: EventLimit;
 };
 
@@ -382,6 +401,27 @@ function traceContextLabel(item: {
     .filter((value): value is string => typeof value === "string" && value.length > 0)
     .slice(0, 4);
   return parts.length > 0 ? parts.join(" / ") : "No trace context";
+}
+
+function normalizeServiceTraceData(value: ServiceTraceData | ServiceTraceToolPayload | null | undefined): ServiceTraceData | null {
+  if (!value) return null;
+  if ("tool" in value && value.tool === "service_trace") return value.data ?? null;
+  return value as ServiceTraceData;
+}
+
+function traceFilterSummary(filters?: ServiceTraceFiltersData): string {
+  if (!filters) return "No returned filters";
+  const parts = [
+    filters.serviceName && `service ${filters.serviceName}`,
+    filters.agentName && `agent ${filters.agentName}`,
+    filters.taskName && `task ${filters.taskName}`,
+    filters.browserId && `browser ${filters.browserId}`,
+    filters.profileId && `profile ${filters.profileId}`,
+    filters.sessionId && `session ${filters.sessionId}`,
+    filters.since && `since ${filters.since}`,
+    filters.limit && `limit ${filters.limit}`,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+  return parts.length > 0 ? parts.join(" / ") : "No returned filters";
 }
 
 function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
@@ -788,7 +828,8 @@ function TraceExplorer({
     !!filters.taskName.trim() ||
     !!filters.browserId.trim() ||
     !!filters.profileId.trim() ||
-    !!filters.sessionId.trim();
+    !!filters.sessionId.trim() ||
+    !!filters.since.trim();
 
   return (
     <div className="service-trace-card">
@@ -846,6 +887,13 @@ function TraceExplorer({
           placeholder="session id"
           value={filters.sessionId}
           onChange={(event) => onFiltersChange({ ...filters, sessionId: event.target.value })}
+        />
+        <input
+          aria-label="Trace since timestamp"
+          className="service-filter-input service-trace-input"
+          placeholder="since RFC 3339"
+          value={filters.since}
+          onChange={(event) => onFiltersChange({ ...filters, since: event.target.value })}
         />
       </div>
       <div className="service-filter-bar">
@@ -907,6 +955,11 @@ function TraceExplorer({
         <p className="px-1 text-[10px] leading-4 text-muted-foreground">
           Matched {matched.events ?? 0} events, {matched.jobs ?? 0} jobs, {matched.incidents ?? 0} incidents,
           and {matched.activity ?? 0} activity entries before per-section limits.
+        </p>
+      )}
+      {trace && (
+        <p className="px-1 text-[10px] leading-4 text-muted-foreground">
+          Contract data: events/jobs/incidents/activity. Returned filters: {traceFilterSummary(trace.filters)}
         </p>
       )}
       {trace && (
@@ -1694,6 +1747,7 @@ export function ServicePanel() {
     browserId: "",
     profileId: "",
     sessionId: "",
+    since: "",
     limit: 20,
   });
   const [loading, setLoading] = useState(false);
@@ -1794,10 +1848,11 @@ export function ServicePanel() {
       if (traceFilters.browserId.trim()) params.set("browser-id", traceFilters.browserId.trim());
       if (traceFilters.profileId.trim()) params.set("profile-id", traceFilters.profileId.trim());
       if (traceFilters.sessionId.trim()) params.set("session-id", traceFilters.sessionId.trim());
+      if (traceFilters.since.trim()) params.set("since", traceFilters.since.trim());
       const resp = await fetch(`${serviceBase(activePort)}/trace?${params.toString()}`);
-      const json = (await resp.json()) as ApiResponse<ServiceTraceData>;
+      const json = (await resp.json()) as ApiResponse<ServiceTraceData | ServiceTraceToolPayload>;
       if (!json.success) throw new Error(json.error || "Service trace failed");
-      setTrace(json.data ?? null);
+      setTrace(normalizeServiceTraceData(json.data));
     } catch (err) {
       setTraceError(err instanceof Error ? err.message : "Service trace unavailable");
     } finally {
@@ -1815,6 +1870,7 @@ export function ServicePanel() {
       browserId: "",
       profileId: "",
       sessionId: "",
+      since: "",
       limit: 20,
     });
   }, []);
