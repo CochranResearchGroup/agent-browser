@@ -458,6 +458,50 @@ try {
     selectTool.inputSchema?.properties?.taskName,
     'MCP browser_select missing taskName trace field',
   );
+  const checkTool = tools.tools?.find((tool) => tool.name === 'browser_check');
+  assert(checkTool, 'MCP browser_check tool missing');
+  assert(
+    checkTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_check missing selector requirement',
+  );
+  assert(
+    checkTool.inputSchema?.properties?.selector,
+    'MCP browser_check missing selector property',
+  );
+  assert(
+    checkTool.inputSchema?.properties?.serviceName,
+    'MCP browser_check missing serviceName trace field',
+  );
+  assert(
+    checkTool.inputSchema?.properties?.agentName,
+    'MCP browser_check missing agentName trace field',
+  );
+  assert(
+    checkTool.inputSchema?.properties?.taskName,
+    'MCP browser_check missing taskName trace field',
+  );
+  const uncheckTool = tools.tools?.find((tool) => tool.name === 'browser_uncheck');
+  assert(uncheckTool, 'MCP browser_uncheck tool missing');
+  assert(
+    uncheckTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_uncheck missing selector requirement',
+  );
+  assert(
+    uncheckTool.inputSchema?.properties?.selector,
+    'MCP browser_uncheck missing selector property',
+  );
+  assert(
+    uncheckTool.inputSchema?.properties?.serviceName,
+    'MCP browser_uncheck missing serviceName trace field',
+  );
+  assert(
+    uncheckTool.inputSchema?.properties?.agentName,
+    'MCP browser_uncheck missing agentName trace field',
+  );
+  assert(
+    uncheckTool.inputSchema?.properties?.taskName,
+    'MCP browser_uncheck missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

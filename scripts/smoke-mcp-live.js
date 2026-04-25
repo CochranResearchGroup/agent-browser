@@ -223,6 +223,8 @@ try {
     '<label for="org">Organization</label>',
     '<select id="org" onchange="document.getElementById(\'org-output\').textContent = this.value"><option value="">Choose</option><option value="org-a">Org A</option><option value="org-b">Org B</option></select>',
     '<p id="org-output"></p>',
+    '<label for="remember"><input id="remember" type="checkbox" onchange="document.getElementById(\'remember-output\').textContent = this.checked ? \'Remember checked\' : \'Remember unchecked\'">Remember me</label>',
+    '<p id="remember-output"></p>',
     '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value; setTimeout(() => { document.getElementById(\'wait-status\').textContent = \'Name copied\'; }, 100)">Copy name</button>',
     '<p id="name-output"></p>',
     '<p id="wait-status"></p>',
@@ -491,6 +493,47 @@ try {
   assert(selectPayload.trace?.agentName === agentName, 'browser_select trace missing agentName');
   assert(selectPayload.trace?.taskName === taskName, 'browser_select trace missing taskName');
 
+  const checkResult = await send('tools/call', {
+    name: 'browser_check',
+    arguments: {
+      selector: '#remember',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const checkPayload = parseToolPayload(checkResult);
+  assert(checkPayload.success === true, `browser_check failed: ${JSON.stringify(checkPayload)}`);
+  assert(checkPayload.data?.checked === '#remember', 'browser_check did not report checked selector');
+  assert(checkPayload.trace?.serviceName === serviceName, 'browser_check trace missing serviceName');
+  assert(checkPayload.trace?.agentName === agentName, 'browser_check trace missing agentName');
+  assert(checkPayload.trace?.taskName === taskName, 'browser_check trace missing taskName');
+
+  const uncheckResult = await send('tools/call', {
+    name: 'browser_uncheck',
+    arguments: {
+      selector: '#remember',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const uncheckPayload = parseToolPayload(uncheckResult);
+  assert(
+    uncheckPayload.success === true,
+    `browser_uncheck failed: ${JSON.stringify(uncheckPayload)}`,
+  );
+  assert(
+    uncheckPayload.data?.unchecked === '#remember',
+    'browser_uncheck did not report unchecked selector',
+  );
+  assert(
+    uncheckPayload.trace?.serviceName === serviceName,
+    'browser_uncheck trace missing serviceName',
+  );
+  assert(uncheckPayload.trace?.agentName === agentName, 'browser_uncheck trace missing agentName');
+  assert(uncheckPayload.trace?.taskName === taskName, 'browser_uncheck trace missing taskName');
+
   const copyNameResult = await send('tools/call', {
     name: 'browser_click',
     arguments: {
@@ -566,6 +609,11 @@ try {
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
       clickedSnapshotPayload.data.snapshot.includes('org-b'),
     'browser_select did not mutate the page state visible to a follow-up snapshot',
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('Remember unchecked'),
+    'browser_uncheck did not mutate the page state visible to a follow-up snapshot',
   );
 
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
@@ -675,6 +723,24 @@ try {
   );
   assert(selectJob, 'Retained service job with browser_select caller context was not found');
   assert(selectJob.state === 'succeeded', `Select service job state was ${selectJob.state}`);
+  const checkJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'check' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(checkJob, 'Retained service job with browser_check caller context was not found');
+  assert(checkJob.state === 'succeeded', `Check service job state was ${checkJob.state}`);
+  const uncheckJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'uncheck' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(uncheckJob, 'Retained service job with browser_uncheck caller context was not found');
+  assert(uncheckJob.state === 'succeeded', `Uncheck service job state was ${uncheckJob.state}`);
   const waitJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'wait' &&
