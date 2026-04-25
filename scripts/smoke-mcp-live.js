@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, mkdirSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 
 import {
@@ -28,6 +29,7 @@ mkdirSync(profileDir, { recursive: true });
 mkdirSync(screenshotDir, { recursive: true });
 
 let mcp;
+let networkServer;
 const timeout = setTimeout(() => {
   fail('Timed out waiting for live MCP smoke to complete');
 }, 90000);
@@ -57,6 +59,11 @@ function parseToolPayload(result) {
 async function cleanup() {
   clearTimeout(timeout);
   if (mcp) mcp.close();
+  if (networkServer) {
+    networkServer.closeAllConnections?.();
+    await new Promise((resolve) => networkServer.close(resolve));
+    networkServer = undefined;
+  }
   try {
     await closeSession(context);
   } finally {
@@ -73,7 +80,55 @@ async function fail(message) {
   process.exit(1);
 }
 
+async function startNetworkServer() {
+  const server = createServer((req, res) => {
+    if (req.url?.startsWith('/asset.png')) {
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l1EG6QAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      res.writeHead(200, {
+        'content-type': 'image/png',
+        'content-length': png.length,
+      });
+      res.end(png);
+      return;
+    }
+
+    const body = [
+      '<!doctype html>',
+      '<html>',
+      '<head><title>MCP Browser Command Smoke</title></head>',
+      '<body>',
+      '<main id="browser-command-main">',
+      '<h1>MCP Browser Command Smoke</h1>',
+      '<img id="network-probe" src="/asset.png?probe=1" alt="network probe">',
+      '</main>',
+      '</body>',
+      '</html>',
+    ].join('');
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'content-length': Buffer.byteLength(body),
+    });
+    res.end(body);
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  const { port } = server.address();
+  return { server, url: `http://127.0.0.1:${port}/browser-command?probe=1` };
+}
+
 try {
+  const networkFixture = await startNetworkServer();
+  networkServer = networkFixture.server;
   const pageHtml = [
     '<!doctype html>',
     '<html>',
@@ -111,18 +166,7 @@ try {
     '</html>',
   ].join('');
   const pageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(pageHtml)}`;
-  const browserCommandHtml = [
-    '<!doctype html>',
-    '<html>',
-    '<head><title>MCP Browser Command Smoke</title></head>',
-    '<body>',
-    '<main id="browser-command-main">',
-    '<h1>MCP Browser Command Smoke</h1>',
-    '</main>',
-    '</body>',
-    '</html>',
-  ].join('');
-  const browserCommandUrl = `data:text/html;charset=utf-8,${encodeURIComponent(browserCommandHtml)}`;
+  const browserCommandUrl = networkFixture.url;
 
   const openResult = await runCli(context, [
     '--json',
@@ -146,6 +190,26 @@ try {
   });
   assert(initialize.capabilities?.tools, 'MCP tools capability missing');
   notify('notifications/initialized');
+
+  const commandTrackRequestsResult = await send('tools/call', {
+    name: 'browser_command',
+    arguments: {
+      action: 'requests',
+      params: {},
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandTrackRequestsPayload = parseToolPayload(commandTrackRequestsResult);
+  assert(
+    commandTrackRequestsPayload.success === true,
+    `browser_command requests tracking failed: ${JSON.stringify(commandTrackRequestsPayload)}`,
+  );
+  assert(
+    Array.isArray(commandTrackRequestsPayload.data?.requests),
+    'browser_command requests did not return a request array',
+  );
 
   const commandNavigateResult = await send('tools/call', {
     name: 'browser_command',
@@ -180,6 +244,50 @@ try {
   assert(
     commandNavigatePayload.trace?.taskName === taskName,
     'browser_command navigate trace missing taskName',
+  );
+
+  const commandRequestsResult = await send('tools/call', {
+    name: 'browser_command',
+    arguments: {
+      action: 'requests',
+      params: {
+        filter: '/asset.png',
+        method: 'GET',
+        status: '2xx',
+      },
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandRequestsPayload = parseToolPayload(commandRequestsResult);
+  assert(
+    commandRequestsPayload.success === true,
+    `browser_command requests failed: ${JSON.stringify(commandRequestsPayload)}`,
+  );
+  const commandRequests = commandRequestsPayload.data?.requests;
+  assert(Array.isArray(commandRequests), 'browser_command requests did not return requests array');
+  assert(
+    commandRequests.some(
+      (request) =>
+        typeof request.url === 'string' &&
+        request.url.includes('/asset.png?probe=1') &&
+        request.method === 'GET' &&
+        request.status === 200,
+    ),
+    `browser_command requests did not capture the local asset request: ${JSON.stringify(commandRequests)}`,
+  );
+  assert(
+    commandRequestsPayload.trace?.serviceName === serviceName,
+    'browser_command requests trace missing serviceName',
+  );
+  assert(
+    commandRequestsPayload.trace?.agentName === agentName,
+    'browser_command requests trace missing agentName',
+  );
+  assert(
+    commandRequestsPayload.trace?.taskName === taskName,
+    'browser_command requests trace missing taskName',
   );
 
   const commandReturnResult = await send('tools/call', {
@@ -1003,6 +1111,21 @@ try {
   assert(
     browserCommandJob.state === 'succeeded',
     `Browser command service job state was ${browserCommandJob.state}`,
+  );
+  const browserCommandRequestsJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'requests' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(
+    browserCommandRequestsJob,
+    'Retained service job with browser_command requests caller context was not found',
+  );
+  assert(
+    browserCommandRequestsJob.state === 'succeeded',
+    `Browser command requests service job state was ${browserCommandRequestsJob.state}`,
   );
   const urlJob = jobPayload.jobs?.find(
     (job) =>
