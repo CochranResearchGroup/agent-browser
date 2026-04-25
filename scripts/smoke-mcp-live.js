@@ -671,6 +671,50 @@ try {
     'browser_get_attribute trace missing taskName',
   );
 
+  const htmlResult = await send('tools/call', {
+    name: 'browser_get_html',
+    arguments: {
+      selector: '#box',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const htmlPayload = parseToolPayload(htmlResult);
+  assert(htmlPayload.success === true, `browser_get_html failed: ${JSON.stringify(htmlPayload)}`);
+  assert(
+    htmlPayload.data?.html === 'Box target',
+    'browser_get_html did not return element inner HTML',
+  );
+  assert(htmlPayload.trace?.serviceName === serviceName, 'browser_get_html trace missing serviceName');
+  assert(htmlPayload.trace?.agentName === agentName, 'browser_get_html trace missing agentName');
+  assert(htmlPayload.trace?.taskName === taskName, 'browser_get_html trace missing taskName');
+
+  const stylesResult = await send('tools/call', {
+    name: 'browser_get_styles',
+    arguments: {
+      selector: '#box',
+      properties: ['display', 'width', 'height'],
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const stylesPayload = parseToolPayload(stylesResult);
+  assert(
+    stylesPayload.success === true,
+    `browser_get_styles failed: ${JSON.stringify(stylesPayload)}`,
+  );
+  assert(stylesPayload.data?.styles?.display === 'block', 'browser_get_styles did not return display');
+  assert(stylesPayload.data?.styles?.width === '200px', 'browser_get_styles did not return width');
+  assert(stylesPayload.data?.styles?.height === '100px', 'browser_get_styles did not return height');
+  assert(
+    stylesPayload.trace?.serviceName === serviceName,
+    'browser_get_styles trace missing serviceName',
+  );
+  assert(stylesPayload.trace?.agentName === agentName, 'browser_get_styles trace missing agentName');
+  assert(stylesPayload.trace?.taskName === taskName, 'browser_get_styles trace missing taskName');
+
   const countResult = await send('tools/call', {
     name: 'browser_count',
     arguments: {
@@ -1181,6 +1225,24 @@ try {
     attributeJob.state === 'succeeded',
     `Attribute service job state was ${attributeJob.state}`,
   );
+  const htmlJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'innerhtml' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(htmlJob, 'Retained service job with browser_get_html caller context was not found');
+  assert(htmlJob.state === 'succeeded', `HTML service job state was ${htmlJob.state}`);
+  const stylesJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'styles' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(stylesJob, 'Retained service job with browser_get_styles caller context was not found');
+  assert(stylesJob.state === 'succeeded', `Styles service job state was ${stylesJob.state}`);
   const countJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'count' &&

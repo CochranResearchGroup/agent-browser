@@ -72,14 +72,14 @@ escape, and shortcut-driven flows. `browser_hover` adds pointer movement for
 menus and controls that reveal state on hover. `browser_select` adds dropdown
 and multi-select option selection for account, tenant, role, and region
 switchers. `browser_get_text`, `browser_get_value`,
-`browser_get_attribute`, `browser_count`, and `browser_get_box` add targeted
-page-state reads without requiring full snapshots, including repeated-element
-and geometry checks. `browser_is_visible` and `browser_is_enabled` add
-read-side readiness checks before agents attempt focus, typing, clicks, or
-control mutation. `browser_check`, `browser_is_checked`, and `browser_uncheck`
-cover checkbox and radio controls for consent, remember-me, terms, and
-preference flows, including read-side assertions before and after state
-changes.
+`browser_get_attribute`, `browser_get_html`, `browser_get_styles`,
+`browser_count`, and `browser_get_box` add targeted page-state reads without
+requiring full snapshots, including DOM, style, repeated-element, and geometry
+checks. `browser_is_visible` and `browser_is_enabled` add read-side readiness
+checks before agents attempt focus, typing, clicks, or control mutation.
+`browser_check`, `browser_is_checked`, and `browser_uncheck` cover checkbox
+and radio controls for consent, remember-me, terms, and preference flows,
+including read-side assertions before and after state changes.
 `browser_scroll` covers page and container scrolling for long forms,
 offscreen controls, and infinite-scroll workflows. `browser_scroll_into_view`
 targets specific offscreen elements without requiring callers to guess pixel
@@ -97,14 +97,15 @@ supply job caller context.
 `browser_screenshot` over MCP stdio, calls `browser_click`, `browser_fill`,
 `browser_type`, `browser_press`, `browser_hover`, `browser_select`,
 `browser_get_text`, `browser_get_value`, `browser_get_attribute`,
-`browser_count`, `browser_get_box`, `browser_is_visible`,
-`browser_is_enabled`, `browser_check`, `browser_is_checked`, `browser_uncheck`,
-`browser_scroll`,
+`browser_get_html`, `browser_get_styles`, `browser_count`, `browser_get_box`,
+`browser_is_visible`, `browser_is_enabled`, `browser_check`,
+`browser_is_checked`, `browser_uncheck`, `browser_scroll`,
 `browser_scroll_into_view`, `browser_focus`, `browser_clear`, and
 `browser_wait`, verifies the read-side state checks, verifies the mutations
 through a follow-up snapshot or post-scroll function wait, and verifies that
 the retained `snapshot`, `url`, `title`, `tab_list`, `screenshot`, `click`,
 `fill`, `type`, `press`, `hover`, `select`, `gettext`, `inputvalue`,
-`getattribute`, `count`, `boundingbox`, `isvisible`, `isenabled`, `check`,
-`ischecked`, `uncheck`, `scroll`, `scrollintoview`, `focus`, `clear`, and
-`wait` service jobs record `serviceName`, `agentName`, and `taskName`.
+`getattribute`, `innerhtml`, `styles`, `count`, `boundingbox`, `isvisible`,
+`isenabled`, `check`, `ischecked`, `uncheck`, `scroll`, `scrollintoview`,
+`focus`, `clear`, and `wait` service jobs record `serviceName`, `agentName`,
+and `taskName`.

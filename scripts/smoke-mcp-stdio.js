@@ -528,6 +528,54 @@ try {
     getAttributeTool.inputSchema?.properties?.taskName,
     'MCP browser_get_attribute missing taskName trace field',
   );
+  const getHtmlTool = tools.tools?.find((tool) => tool.name === 'browser_get_html');
+  assert(getHtmlTool, 'MCP browser_get_html tool missing');
+  assert(
+    getHtmlTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_html missing selector requirement',
+  );
+  assert(
+    getHtmlTool.inputSchema?.properties?.selector,
+    'MCP browser_get_html missing selector property',
+  );
+  assert(
+    getHtmlTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_html missing serviceName trace field',
+  );
+  assert(
+    getHtmlTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_html missing agentName trace field',
+  );
+  assert(
+    getHtmlTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_html missing taskName trace field',
+  );
+  const getStylesTool = tools.tools?.find((tool) => tool.name === 'browser_get_styles');
+  assert(getStylesTool, 'MCP browser_get_styles tool missing');
+  assert(
+    getStylesTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_styles missing selector requirement',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.selector,
+    'MCP browser_get_styles missing selector property',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.properties,
+    'MCP browser_get_styles missing properties option',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_styles missing serviceName trace field',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_styles missing agentName trace field',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_styles missing taskName trace field',
+  );
   const countTool = tools.tools?.find((tool) => tool.name === 'browser_count');
   assert(countTool, 'MCP browser_count tool missing');
   assert(

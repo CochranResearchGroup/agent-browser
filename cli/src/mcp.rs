@@ -906,6 +906,13 @@ fn service_mcp_tools() -> Vec<Value> {
             true,
         ),
         browser_element_read_tool_schema(
+            "browser_get_html",
+            "Read browser element HTML",
+            "Queue reading an element's inner HTML in the active browser session. Include serviceName, agentName, and taskName when available for traceability.",
+            false,
+        ),
+        browser_get_styles_tool_schema(),
+        browser_element_read_tool_schema(
             "browser_count",
             "Count browser elements",
             "Queue counting elements matching a CSS selector in the active browser session. Include serviceName, agentName, and taskName when available for traceability.",
@@ -1292,6 +1299,22 @@ fn browser_element_read_tool_schema(
     })
 }
 
+fn browser_get_styles_tool_schema() -> Value {
+    let mut schema = browser_element_read_tool_schema(
+        "browser_get_styles",
+        "Read browser element styles",
+        "Queue reading computed styles for an element in the active browser session. Include serviceName, agentName, and taskName when available for traceability.",
+        false,
+    );
+    schema["inputSchema"]["properties"]["properties"] = json!({
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 1,
+        "description": "Optional CSS property names to read. Omit to return all computed styles."
+    });
+    schema
+}
+
 fn browser_element_state_tool_schema(
     tool_name: &str,
     title: &str,
@@ -1374,6 +1397,14 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
             "getattribute",
             Some("attribute"),
         ),
+        "browser_get_html" => call_browser_element_read_tool(
+            arguments,
+            session,
+            "browser_get_html",
+            "innerhtml",
+            None,
+        ),
+        "browser_get_styles" => call_browser_get_styles(arguments, session),
         "browser_count" => {
             call_browser_element_read_tool(arguments, session, "browser_count", "count", None)
         }
@@ -1888,6 +1919,7 @@ fn call_browser_element_read_tool(
         action,
         selector,
         attribute,
+        properties: None,
         job_timeout_ms,
         service_name,
         agent_name,
@@ -1906,6 +1938,43 @@ fn call_browser_element_read_tool(
     })?;
     Ok(tool_response_from_daemon(
         tool_name, session, trace, response,
+    ))
+}
+
+fn call_browser_get_styles(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let properties = optional_string_array_argument(arguments, "properties")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_element_read_command(BrowserElementReadCommandArgs {
+        action: "styles",
+        selector,
+        attribute: None,
+        properties,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    });
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_get_styles",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_get_styles",
+        session,
+        trace,
+        response,
     ))
 }
 
@@ -2439,6 +2508,7 @@ struct BrowserElementReadCommandArgs<'a> {
     action: &'a str,
     selector: &'a str,
     attribute: Option<&'a str>,
+    properties: Option<Vec<String>>,
     job_timeout_ms: Option<u64>,
     service_name: Option<&'a str>,
     agent_name: Option<&'a str>,
@@ -2453,6 +2523,9 @@ fn browser_element_read_command(args: BrowserElementReadCommandArgs<'_>) -> Valu
     });
     if let Some(attribute) = args.attribute {
         command["attribute"] = json!(attribute);
+    }
+    if let Some(properties) = args.properties {
+        command["properties"] = json!(properties);
     }
     if let Some(job_timeout_ms) = args.job_timeout_ms {
         command["jobTimeoutMs"] = json!(job_timeout_ms);
@@ -2789,6 +2862,17 @@ fn required_string_array_argument(
                 })
         })
         .collect()
+}
+
+fn optional_string_array_argument(
+    arguments: &Value,
+    name: &str,
+) -> Result<Option<Vec<String>>, JsonRpcError> {
+    if arguments.get(name).is_none() {
+        return Ok(None);
+    }
+
+    required_string_array_argument(arguments, name).map(Some)
 }
 
 fn optional_bool_argument(arguments: &Value, name: &str) -> Result<Option<bool>, JsonRpcError> {
@@ -3354,7 +3438,7 @@ mod tests {
             response["result"]["tools"][15]["inputSchema"]["properties"]["jobTimeoutMs"]
                 .is_object()
         );
-        assert_eq!(response["result"]["tools"][16]["name"], "browser_count");
+        assert_eq!(response["result"]["tools"][16]["name"], "browser_get_html");
         assert_eq!(
             response["result"]["tools"][16]["inputSchema"]["required"][0],
             "selector"
@@ -3366,7 +3450,10 @@ mod tests {
             response["result"]["tools"][16]["inputSchema"]["properties"]["jobTimeoutMs"]
                 .is_object()
         );
-        assert_eq!(response["result"]["tools"][17]["name"], "browser_get_box");
+        assert_eq!(
+            response["result"]["tools"][17]["name"],
+            "browser_get_styles"
+        );
         assert_eq!(
             response["result"]["tools"][17]["inputSchema"]["required"][0],
             "selector"
@@ -3378,10 +3465,10 @@ mod tests {
             response["result"]["tools"][17]["inputSchema"]["properties"]["jobTimeoutMs"]
                 .is_object()
         );
-        assert_eq!(
-            response["result"]["tools"][18]["name"],
-            "browser_is_visible"
+        assert!(
+            response["result"]["tools"][17]["inputSchema"]["properties"]["properties"].is_object()
         );
+        assert_eq!(response["result"]["tools"][18]["name"], "browser_count");
         assert_eq!(
             response["result"]["tools"][18]["inputSchema"]["required"][0],
             "selector"
@@ -3393,13 +3480,7 @@ mod tests {
             response["result"]["tools"][18]["inputSchema"]["properties"]["jobTimeoutMs"]
                 .is_object()
         );
-        assert!(
-            response["result"]["tools"][18]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(
-            response["result"]["tools"][19]["name"],
-            "browser_is_enabled"
-        );
+        assert_eq!(response["result"]["tools"][19]["name"], "browser_get_box");
         assert_eq!(
             response["result"]["tools"][19]["inputSchema"]["required"][0],
             "selector"
@@ -3411,10 +3492,10 @@ mod tests {
             response["result"]["tools"][19]["inputSchema"]["properties"]["jobTimeoutMs"]
                 .is_object()
         );
-        assert!(
-            response["result"]["tools"][19]["inputSchema"]["properties"]["serviceName"].is_object()
+        assert_eq!(
+            response["result"]["tools"][20]["name"],
+            "browser_is_visible"
         );
-        assert_eq!(response["result"]["tools"][20]["name"], "browser_check");
         assert_eq!(
             response["result"]["tools"][20]["inputSchema"]["required"][0],
             "selector"
@@ -3423,11 +3504,15 @@ mod tests {
             response["result"]["tools"][20]["inputSchema"]["properties"]["selector"].is_object()
         );
         assert!(
+            response["result"]["tools"][20]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
             response["result"]["tools"][20]["inputSchema"]["properties"]["serviceName"].is_object()
         );
         assert_eq!(
             response["result"]["tools"][21]["name"],
-            "browser_is_checked"
+            "browser_is_enabled"
         );
         assert_eq!(
             response["result"]["tools"][21]["inputSchema"]["required"][0],
@@ -3443,7 +3528,7 @@ mod tests {
         assert!(
             response["result"]["tools"][21]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][22]["name"], "browser_uncheck");
+        assert_eq!(response["result"]["tools"][22]["name"], "browser_check");
         assert_eq!(
             response["result"]["tools"][22]["inputSchema"]["required"][0],
             "selector"
@@ -3454,23 +3539,25 @@ mod tests {
         assert!(
             response["result"]["tools"][22]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][23]["name"], "browser_scroll");
-        assert!(
-            response["result"]["tools"][23]["inputSchema"]["properties"]["direction"].is_object()
+        assert_eq!(
+            response["result"]["tools"][23]["name"],
+            "browser_is_checked"
         );
-        assert!(response["result"]["tools"][23]["inputSchema"]["properties"]["amount"].is_object());
-        assert!(response["result"]["tools"][23]["inputSchema"]["properties"]["deltaX"].is_object());
-        assert!(response["result"]["tools"][23]["inputSchema"]["properties"]["deltaY"].is_object());
+        assert_eq!(
+            response["result"]["tools"][23]["inputSchema"]["required"][0],
+            "selector"
+        );
         assert!(
             response["result"]["tools"][23]["inputSchema"]["properties"]["selector"].is_object()
         );
         assert!(
+            response["result"]["tools"][23]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
             response["result"]["tools"][23]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(
-            response["result"]["tools"][24]["name"],
-            "browser_scroll_into_view"
-        );
+        assert_eq!(response["result"]["tools"][24]["name"], "browser_uncheck");
         assert_eq!(
             response["result"]["tools"][24]["inputSchema"]["required"][0],
             "selector"
@@ -3479,28 +3566,25 @@ mod tests {
             response["result"]["tools"][24]["inputSchema"]["properties"]["selector"].is_object()
         );
         assert!(
-            response["result"]["tools"][24]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
             response["result"]["tools"][24]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][25]["name"], "browser_focus");
-        assert_eq!(
-            response["result"]["tools"][25]["inputSchema"]["required"][0],
-            "selector"
+        assert_eq!(response["result"]["tools"][25]["name"], "browser_scroll");
+        assert!(
+            response["result"]["tools"][25]["inputSchema"]["properties"]["direction"].is_object()
         );
+        assert!(response["result"]["tools"][25]["inputSchema"]["properties"]["amount"].is_object());
+        assert!(response["result"]["tools"][25]["inputSchema"]["properties"]["deltaX"].is_object());
+        assert!(response["result"]["tools"][25]["inputSchema"]["properties"]["deltaY"].is_object());
         assert!(
             response["result"]["tools"][25]["inputSchema"]["properties"]["selector"].is_object()
         );
         assert!(
-            response["result"]["tools"][25]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
             response["result"]["tools"][25]["inputSchema"]["properties"]["serviceName"].is_object()
         );
-        assert_eq!(response["result"]["tools"][26]["name"], "browser_clear");
+        assert_eq!(
+            response["result"]["tools"][26]["name"],
+            "browser_scroll_into_view"
+        );
         assert_eq!(
             response["result"]["tools"][26]["inputSchema"]["required"][0],
             "selector"
@@ -3514,6 +3598,36 @@ mod tests {
         );
         assert!(
             response["result"]["tools"][26]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        assert_eq!(response["result"]["tools"][27]["name"], "browser_focus");
+        assert_eq!(
+            response["result"]["tools"][27]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert!(
+            response["result"]["tools"][27]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][27]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
+            response["result"]["tools"][27]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        assert_eq!(response["result"]["tools"][28]["name"], "browser_clear");
+        assert_eq!(
+            response["result"]["tools"][28]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert!(
+            response["result"]["tools"][28]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][28]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
+            response["result"]["tools"][28]["inputSchema"]["properties"]["serviceName"].is_object()
         );
     }
 
@@ -3793,6 +3907,33 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 39);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"browser_get_html","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 42);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":43,"method":"tools/call","params":{"name":"browser_get_styles","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 43);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":44,"method":"tools/call","params":{"name":"browser_get_styles","arguments":{"selector":"#ready","properties":"display","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 44);
         assert_eq!(response["error"]["code"], -32602);
 
         let response = handle_jsonrpc_line(
@@ -4299,6 +4440,7 @@ mod tests {
             action: "gettext",
             selector: "#status",
             attribute: None,
+            properties: None,
             job_timeout_ms: Some(1000),
             service_name: Some("JournalDownloader"),
             agent_name: Some("agent-a"),
@@ -4316,6 +4458,7 @@ mod tests {
             action: "getattribute",
             selector: "#link",
             attribute: Some("href"),
+            properties: None,
             job_timeout_ms: None,
             service_name: None,
             agent_name: None,
@@ -4332,6 +4475,7 @@ mod tests {
             action: "count",
             selector: ".item",
             attribute: None,
+            properties: None,
             job_timeout_ms: None,
             service_name: None,
             agent_name: None,
@@ -4341,10 +4485,25 @@ mod tests {
         assert_eq!(count_command["action"], "count");
         assert_eq!(count_command["selector"], ".item");
 
+        let html_command = browser_element_read_command(BrowserElementReadCommandArgs {
+            action: "innerhtml",
+            selector: "#main",
+            attribute: None,
+            properties: None,
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        });
+
+        assert_eq!(html_command["action"], "innerhtml");
+        assert_eq!(html_command["selector"], "#main");
+
         let box_command = browser_element_read_command(BrowserElementReadCommandArgs {
             action: "boundingbox",
             selector: "#ready",
             attribute: None,
+            properties: None,
             job_timeout_ms: None,
             service_name: None,
             agent_name: None,
@@ -4353,6 +4512,22 @@ mod tests {
 
         assert_eq!(box_command["action"], "boundingbox");
         assert_eq!(box_command["selector"], "#ready");
+
+        let styles_command = browser_element_read_command(BrowserElementReadCommandArgs {
+            action: "styles",
+            selector: "#ready",
+            attribute: None,
+            properties: Some(vec!["display".to_string(), "color".to_string()]),
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        });
+
+        assert_eq!(styles_command["action"], "styles");
+        assert_eq!(styles_command["selector"], "#ready");
+        assert_eq!(styles_command["properties"][0], "display");
+        assert_eq!(styles_command["properties"][1], "color");
     }
 
     #[test]
