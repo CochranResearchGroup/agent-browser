@@ -8,7 +8,7 @@ import {
   parseJsonOutput,
   runCli,
 } from './smoke-utils.js';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 
 const context = createSmokeContext({ prefix: 'ab-sph-', sessionPrefix: 'sph' });
@@ -52,6 +52,21 @@ function assertHttpSuccess(response, label) {
 
 function listenFixtureServer(routes) {
   const server = createServer((req, res) => {
+    if (req.url === '/download.txt') {
+      res.writeHead(200, {
+        'content-disposition': 'attachment; filename="download.txt"',
+        'content-type': 'text/plain; charset=utf-8',
+      });
+      res.end('download-ok');
+      return;
+    }
+
+    if (req.url === '/pixel.png') {
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'base64'));
+      return;
+    }
+
     const body = routes.get(req.url) ?? routes.get('/');
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(body);
@@ -85,6 +100,10 @@ try {
     '<p id="press-output"></p>',
     '<label for="choice">Choice</label>',
     '<select id="choice"><option value="a">Alpha</option><option value="b">Beta</option></select>',
+    '<label for="file-input">Upload</label>',
+    '<input id="file-input" type="file">',
+    '<a id="download-link" href="/download.txt" download="download.txt">Download file</a>',
+    '<img id="probe-image" alt="probe image" src="/pixel.png">',
     '<label for="remember"><input id="remember" type="checkbox">Remember me</label>',
     '<ul><li class="item">One</li><li class="item">Two</li><li class="item">Three</li></ul>',
     '<div id="box" data-role="sample" style="display: block; width: 200px; height: 100px;">Box target</div>',
@@ -317,6 +336,53 @@ try {
   const browserErrors = await browserPost(port, 'errors');
   assertHttpSuccess(browserErrors, 'HTTP browser errors');
   assert(Array.isArray(browserErrors.data?.errors), 'HTTP browser errors missing errors array');
+
+  const uploadPath = `${context.tempHome}/http-upload.txt`;
+  writeFileSync(uploadPath, 'upload-ok');
+  const browserUpload = await browserPost(port, 'upload', {
+    selector: '#file-input',
+    files: [uploadPath],
+  });
+  assertHttpSuccess(browserUpload, 'HTTP browser upload');
+  assert(browserUpload.data?.uploaded === 1, `HTTP browser upload returned ${JSON.stringify(browserUpload.data)}`);
+
+  const downloadPath = `${context.tempHome}/http-download.txt`;
+  const browserDownload = await browserPost(port, 'download', {
+    selector: '#download-link',
+    path: downloadPath,
+  });
+  assertHttpSuccess(browserDownload, 'HTTP browser download');
+  assert(
+    browserDownload.data?.path === downloadPath && readFileSync(downloadPath, 'utf8') === 'download-ok',
+    `HTTP browser download did not write expected file: ${JSON.stringify(browserDownload)}`,
+  );
+
+  const browserRequestsClear = await browserPost(port, 'requests', {
+    clear: true,
+  });
+  assertHttpSuccess(browserRequestsClear, 'HTTP browser requests clear');
+  assert(browserRequestsClear.data?.cleared === true, 'HTTP browser requests clear did not report cleared');
+
+  const browserRequestsReload = await browserPost(port, 'reload');
+  assertHttpSuccess(browserRequestsReload, 'HTTP browser reload for requests');
+
+  const browserRequests = await browserPost(port, 'requests', {
+    filter: '/pixel.png',
+    method: 'GET',
+    status: '2xx',
+  });
+  assertHttpSuccess(browserRequests, 'HTTP browser requests');
+  const pixelRequest = browserRequests.data?.requests?.find((request) => request.url.endsWith('/pixel.png'));
+  assert(pixelRequest, `HTTP browser requests missing pixel request: ${JSON.stringify(browserRequests)}`);
+
+  const browserRequestDetail = await browserPost(port, 'request-detail', {
+    requestId: pixelRequest.requestId,
+  });
+  assertHttpSuccess(browserRequestDetail, 'HTTP browser request-detail');
+  assert(
+    browserRequestDetail.data?.url?.endsWith('/pixel.png'),
+    `HTTP browser request-detail returned ${JSON.stringify(browserRequestDetail.data)}`,
+  );
 
   const browserNavigate = await browserPost(port, 'navigate', {
     url: secondPageUrl,

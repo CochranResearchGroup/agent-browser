@@ -550,6 +550,24 @@ fn browser_api_command(
         ("POST", "/api/browser/errors") => {
             Some(browser_body_command("errors", "http-browser-errors", body))
         }
+        ("POST", "/api/browser/upload") => {
+            Some(browser_body_command("upload", "http-browser-upload", body))
+        }
+        ("POST", "/api/browser/download") => Some(browser_body_command(
+            "download",
+            "http-browser-download",
+            body,
+        )),
+        ("POST", "/api/browser/requests") => Some(browser_body_command(
+            "requests",
+            "http-browser-requests",
+            body,
+        )),
+        ("POST", "/api/browser/request-detail") => Some(browser_body_command(
+            "request_detail",
+            "http-browser-request-detail",
+            body,
+        )),
         ("POST", "/api/browser/snapshot") => Some(browser_body_command(
             "snapshot",
             "http-browser-snapshot",
@@ -1594,6 +1612,38 @@ mod tests {
         let errors = browser_api_command("POST", "/api/browser/errors", None, "{}")
             .unwrap()
             .unwrap();
+        let upload = browser_api_command(
+            "POST",
+            "/api/browser/upload",
+            None,
+            r##"{"selector":"#file","files":["/tmp/file.txt"]}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let download = browser_api_command(
+            "POST",
+            "/api/browser/download",
+            None,
+            r##"{"selector":"#download","path":"/tmp/download.txt"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let requests = browser_api_command(
+            "POST",
+            "/api/browser/requests",
+            None,
+            r##"{"filter":"/pixel","method":"GET","status":"2xx"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let request_detail = browser_api_command(
+            "POST",
+            "/api/browser/request-detail",
+            None,
+            r##"{"requestId":"request-1"}"##,
+        )
+        .unwrap()
+        .unwrap();
         let click = browser_api_command(
             "POST",
             "/api/browser/click",
@@ -1832,6 +1882,14 @@ mod tests {
         assert_eq!(console["action"], "console");
         assert_eq!(console["clear"], true);
         assert_eq!(errors["action"], "errors");
+        assert_eq!(upload["action"], "upload");
+        assert_eq!(upload["selector"], "#file");
+        assert_eq!(download["action"], "download");
+        assert_eq!(download["path"], "/tmp/download.txt");
+        assert_eq!(requests["action"], "requests");
+        assert_eq!(requests["status"], "2xx");
+        assert_eq!(request_detail["action"], "request_detail");
+        assert_eq!(request_detail["requestId"], "request-1");
         assert_eq!(click["action"], "click");
         assert_eq!(click["selector"], "#ready");
         assert_eq!(click["serviceName"], "JournalDownloader");
