@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 
 use super::service_model::{
-    JobState, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceJob, ServiceState,
+    JobState, JobTarget, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceJob, ServiceState,
 };
 
 pub(crate) fn service_incident_activity_response(
@@ -41,7 +41,7 @@ fn service_incident_activity(
 
     for job_id in &incident.job_ids {
         if let Some(job) = service_state.jobs.get(job_id) {
-            activity.push(service_job_activity(job));
+            activity.push(service_job_activity(service_state, job));
         }
     }
 
@@ -109,7 +109,7 @@ fn service_event_activity(event: &ServiceEvent) -> Value {
     })
 }
 
-fn service_job_activity(job: &ServiceJob) -> Value {
+fn service_job_activity(service_state: &ServiceState, job: &ServiceJob) -> Value {
     let kind = match job.state {
         JobState::TimedOut => "service_job_timeout",
         JobState::Cancelled => "service_job_cancelled",
@@ -133,7 +133,81 @@ fn service_job_activity(job: &ServiceJob) -> Value {
         "jobState": service_job_state_name(job.state),
         "jobAction": job.action,
         "target": job.target,
+        "browserId": service_job_browser_id(job, service_state),
+        "profileId": service_job_profile_id(job, service_state),
+        "sessionId": service_job_session_id(job, service_state),
+        "serviceName": job.service_name,
+        "agentName": job.agent_name,
+        "taskName": job.task_name,
     })
+}
+
+fn service_job_browser_id(job: &ServiceJob, service_state: &ServiceState) -> Option<String> {
+    match &job.target {
+        JobTarget::Browser(browser_id) => Some(browser_id.clone()),
+        JobTarget::Tab(tab_id) => service_state
+            .tabs
+            .get(tab_id)
+            .map(|tab| tab.browser_id.clone()),
+        JobTarget::Service
+        | JobTarget::Profile(_)
+        | JobTarget::Monitor(_)
+        | JobTarget::Challenge(_) => None,
+    }
+}
+
+fn service_job_profile_id(job: &ServiceJob, service_state: &ServiceState) -> Option<String> {
+    match &job.target {
+        JobTarget::Profile(profile_id) => Some(profile_id.clone()),
+        JobTarget::Browser(browser_id) => service_state
+            .browsers
+            .get(browser_id)
+            .and_then(|browser| browser.profile_id.clone()),
+        JobTarget::Tab(tab_id) => service_state.tabs.get(tab_id).and_then(|tab| {
+            tab.owner_session_id
+                .as_deref()
+                .and_then(|session_id| service_state.sessions.get(session_id))
+                .and_then(|session| session.profile_id.clone())
+                .or_else(|| {
+                    service_state
+                        .browsers
+                        .get(&tab.browser_id)
+                        .and_then(|browser| browser.profile_id.clone())
+                })
+        }),
+        JobTarget::Service | JobTarget::Monitor(_) | JobTarget::Challenge(_) => None,
+    }
+}
+
+fn service_job_session_id(job: &ServiceJob, service_state: &ServiceState) -> Option<String> {
+    match &job.target {
+        JobTarget::Browser(browser_id) => service_state
+            .browsers
+            .get(browser_id)
+            .and_then(|browser| browser.active_session_ids.first().cloned())
+            .or_else(|| session_id_for_browser(service_state, browser_id)),
+        JobTarget::Tab(tab_id) => service_state
+            .tabs
+            .get(tab_id)
+            .and_then(|tab| tab.owner_session_id.clone()),
+        JobTarget::Service
+        | JobTarget::Profile(_)
+        | JobTarget::Monitor(_)
+        | JobTarget::Challenge(_) => None,
+    }
+}
+
+fn session_id_for_browser(service_state: &ServiceState, browser_id: &str) -> Option<String> {
+    service_state
+        .sessions
+        .iter()
+        .find_map(|(session_id, session)| {
+            session
+                .browser_ids
+                .iter()
+                .any(|id| id == browser_id)
+                .then(|| session_id.clone())
+        })
 }
 
 fn service_incident_metadata_activity(incident: &ServiceIncident, action: &str) -> Option<Value> {
@@ -217,7 +291,10 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
-    use crate::native::service_model::{JobTarget, ServiceIncidentState};
+    use crate::native::service_model::{
+        BrowserHealth, BrowserProcess, BrowserSession, BrowserTab, JobTarget, ServiceIncidentState,
+        TabLifecycle,
+    };
 
     #[test]
     fn service_incident_activity_response_combines_events_jobs_and_metadata() {
@@ -235,11 +312,43 @@ mod tests {
                 ServiceJob {
                     id: "job-1".to_string(),
                     action: "navigate".to_string(),
+                    service_name: Some("JournalDownloader".to_string()),
+                    agent_name: Some("codex".to_string()),
+                    task_name: Some("probeACSwebsite".to_string()),
                     target: JobTarget::Browser("browser-1".to_string()),
                     state: JobState::TimedOut,
                     submitted_at: Some("2026-04-22T00:01:00Z".to_string()),
                     error: Some("Timed out".to_string()),
                     ..ServiceJob::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("work".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-1".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-1".to_string(),
+                BrowserSession {
+                    id: "session-1".to_string(),
+                    profile_id: Some("work".to_string()),
+                    browser_ids: vec!["browser-1".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            tabs: BTreeMap::from([(
+                "tab-1".to_string(),
+                BrowserTab {
+                    id: "tab-1".to_string(),
+                    browser_id: "browser-1".to_string(),
+                    lifecycle: TabLifecycle::Ready,
+                    owner_session_id: Some("session-1".to_string()),
+                    ..BrowserTab::default()
                 },
             )]),
             incidents: vec![ServiceIncident {
@@ -263,6 +372,12 @@ mod tests {
         assert_eq!(response["count"], 3);
         assert_eq!(response["activity"][0]["source"], "event");
         assert_eq!(response["activity"][1]["source"], "job");
+        assert_eq!(response["activity"][1]["browserId"], "browser-1");
+        assert_eq!(response["activity"][1]["profileId"], "work");
+        assert_eq!(response["activity"][1]["sessionId"], "session-1");
+        assert_eq!(response["activity"][1]["serviceName"], "JournalDownloader");
+        assert_eq!(response["activity"][1]["agentName"], "codex");
+        assert_eq!(response["activity"][1]["taskName"], "probeACSwebsite");
         assert_eq!(response["activity"][2]["source"], "metadata");
     }
 }

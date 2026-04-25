@@ -10783,9 +10783,27 @@ mod tests {
                     "job-1": {
                         "id": "job-1",
                         "action": "navigate",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "target": {"browser": "browser-1"},
                         "state": "timed_out",
                         "submittedAt": "2026-04-22T00:01:00Z",
                         "error": "Timed out after 30000 ms"
+                    }
+                },
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "profileId": "work",
+                        "activeSessionIds": ["session-1"]
+                    }
+                },
+                "sessions": {
+                    "session-1": {
+                        "id": "session-1",
+                        "profileId": "work",
+                        "browserIds": ["browser-1"]
                     }
                 },
                 "incidents": [
@@ -10819,6 +10837,15 @@ mod tests {
             "browser_health_changed"
         );
         assert_eq!(result["data"]["activity"][1]["kind"], "service_job_timeout");
+        assert_eq!(result["data"]["activity"][1]["browserId"], "browser-1");
+        assert_eq!(result["data"]["activity"][1]["profileId"], "work");
+        assert_eq!(result["data"]["activity"][1]["sessionId"], "session-1");
+        assert_eq!(
+            result["data"]["activity"][1]["serviceName"],
+            "JournalDownloader"
+        );
+        assert_eq!(result["data"]["activity"][1]["agentName"], "codex");
+        assert_eq!(result["data"]["activity"][1]["taskName"], "probeACSwebsite");
         assert_eq!(
             result["data"]["activity"][2]["kind"],
             "incident_acknowledged"
