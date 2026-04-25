@@ -226,7 +226,8 @@ try {
     '<label for="remember"><input id="remember" type="checkbox" onchange="document.getElementById(\'remember-output\').textContent = this.checked ? \'Remember checked\' : \'Remember unchecked\'">Remember me</label>',
     '<p id="remember-output"></p>',
     '<div style="height: 1600px" aria-label="scroll spacer"></div>',
-    '<p id="scroll-target">Scroll target</p>',
+    '<button id="scroll-target" onclick="document.getElementById(\'scroll-into-output\').textContent = \'Scrolled target clicked\'">Scroll target</button>',
+    '<p id="scroll-into-output"></p>',
     '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value; setTimeout(() => { document.getElementById(\'wait-status\').textContent = \'Name copied\'; }, 100)">Copy name</button>',
     '<p id="name-output"></p>',
     '<p id="wait-status"></p>',
@@ -576,6 +577,52 @@ try {
     'post-scroll browser_wait did not confirm scroll position',
   );
 
+  const scrollIntoViewResult = await send('tools/call', {
+    name: 'browser_scroll_into_view',
+    arguments: {
+      selector: '#scroll-target',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const scrollIntoViewPayload = parseToolPayload(scrollIntoViewResult);
+  assert(
+    scrollIntoViewPayload.success === true,
+    `browser_scroll_into_view failed: ${JSON.stringify(scrollIntoViewPayload)}`,
+  );
+  assert(
+    scrollIntoViewPayload.data?.scrolled === '#scroll-target',
+    'browser_scroll_into_view did not report scrolled selector',
+  );
+  assert(
+    scrollIntoViewPayload.trace?.serviceName === serviceName,
+    'browser_scroll_into_view trace missing serviceName',
+  );
+  assert(
+    scrollIntoViewPayload.trace?.agentName === agentName,
+    'browser_scroll_into_view trace missing agentName',
+  );
+  assert(
+    scrollIntoViewPayload.trace?.taskName === taskName,
+    'browser_scroll_into_view trace missing taskName',
+  );
+
+  const scrollTargetClickResult = await send('tools/call', {
+    name: 'browser_click',
+    arguments: {
+      selector: '#scroll-target',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const scrollTargetClickPayload = parseToolPayload(scrollTargetClickResult);
+  assert(
+    scrollTargetClickPayload.success === true,
+    `post-scroll-into-view browser_click failed: ${JSON.stringify(scrollTargetClickPayload)}`,
+  );
+
   const copyNameResult = await send('tools/call', {
     name: 'browser_click',
     arguments: {
@@ -656,6 +703,11 @@ try {
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
       clickedSnapshotPayload.data.snapshot.includes('Remember unchecked'),
     'browser_uncheck did not mutate the page state visible to a follow-up snapshot',
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('Scrolled target clicked'),
+    'browser_scroll_into_view did not make the offscreen target interactable',
   );
 
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
@@ -792,6 +844,21 @@ try {
   );
   assert(scrollJob, 'Retained service job with browser_scroll caller context was not found');
   assert(scrollJob.state === 'succeeded', `Scroll service job state was ${scrollJob.state}`);
+  const scrollIntoViewJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'scrollintoview' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(
+    scrollIntoViewJob,
+    'Retained service job with browser_scroll_into_view caller context was not found',
+  );
+  assert(
+    scrollIntoViewJob.state === 'succeeded',
+    `Scroll into view service job state was ${scrollIntoViewJob.state}`,
+  );
   const waitJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'wait' &&

@@ -527,6 +527,30 @@ try {
     scrollTool.inputSchema?.properties?.taskName,
     'MCP browser_scroll missing taskName trace field',
   );
+  const scrollIntoViewTool = tools.tools?.find(
+    (tool) => tool.name === 'browser_scroll_into_view',
+  );
+  assert(scrollIntoViewTool, 'MCP browser_scroll_into_view tool missing');
+  assert(
+    scrollIntoViewTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_scroll_into_view missing selector requirement',
+  );
+  assert(
+    scrollIntoViewTool.inputSchema?.properties?.selector,
+    'MCP browser_scroll_into_view missing selector property',
+  );
+  assert(
+    scrollIntoViewTool.inputSchema?.properties?.serviceName,
+    'MCP browser_scroll_into_view missing serviceName trace field',
+  );
+  assert(
+    scrollIntoViewTool.inputSchema?.properties?.agentName,
+    'MCP browser_scroll_into_view missing agentName trace field',
+  );
+  assert(
+    scrollIntoViewTool.inputSchema?.properties?.taskName,
+    'MCP browser_scroll_into_view missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];
