@@ -25,7 +25,8 @@
     "build:dashboard": "cd packages/dashboard && pnpm build",
     "test:mcp-stdio": "node scripts/smoke-mcp-stdio.js",
     "test:mcp-live": "node scripts/smoke-mcp-live.js",
-    "test:service-reconcile-live": "node scripts/smoke-service-reconcile-mcp.js"
+    "test:service-reconcile-live": "node scripts/smoke-service-reconcile-mcp.js",
+    "test:service-profile-live": "node scripts/smoke-service-profile-mcp.js"
   },
   "keywords": [
     "browser",
