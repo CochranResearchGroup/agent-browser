@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { request } from 'node:http';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { createConnection } from 'node:net';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -139,6 +140,49 @@ export function httpJson(port, method, path, body) {
 
 export function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+export function readResourceContents(response, label) {
+  assert(response.success === true, `${label} read failed: ${JSON.stringify(response)}`);
+  const contents = response.data?.contents;
+  assert(contents && typeof contents === 'object', `${label} resource missing contents`);
+  return contents;
+}
+
+export function daemonEndpoint(context) {
+  if (process.platform === 'win32') {
+    const port = Number(readFileSync(join(context.socketDir, `${context.session}.port`), 'utf8').trim());
+    return { port, host: '127.0.0.1' };
+  }
+  return { path: join(context.socketDir, `${context.session}.sock`) };
+}
+
+export function sendRawCommand(context, command) {
+  return new Promise((resolve, reject) => {
+    const token = readFileSync(join(context.socketDir, `${context.session}.token`), 'utf8').trim();
+    const socket = createConnection(daemonEndpoint(context));
+    let response = '';
+    const procTimeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`raw daemon command ${command.action} timed out`));
+    }, 30000);
+    socket.setEncoding('utf8');
+    socket.on('connect', () => {
+      socket.write(`${JSON.stringify({ ...command, _agentBrowserAuthToken: token })}\n`);
+    });
+    socket.on('data', (chunk) => {
+      response += chunk;
+      if (response.includes('\n')) {
+        clearTimeout(procTimeout);
+        socket.end();
+        resolve(JSON.parse(response.trim()));
+      }
+    });
+    socket.on('error', (err) => {
+      clearTimeout(procTimeout);
+      reject(err);
+    });
+  });
 }
 
 export async function closeSession(context) {
