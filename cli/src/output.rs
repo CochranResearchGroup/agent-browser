@@ -2983,8 +2983,8 @@ Usage:
   agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
   agent-browser service resolve <incident-id> [--by <text>] [--note <text>]
   agent-browser service activity <incident-id>
-  agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
-  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
+  agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
 
 Commands:
@@ -3008,8 +3008,8 @@ Notes:
   - Incident operator metadata includes acknowledgement and resolution timestamps, actor names, and notes.
   - Acknowledgement and resolution append incident_acknowledged and incident_resolved service events.
   - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
-  - Job filters match state, action, and RFC 3339 timestamps before applying --limit.
-  - Incident filters match incident state, operator handling state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
+  - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
+  - Incident filters match incident state, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
   - Text service status includes profile and session summary lines for operator traceability.

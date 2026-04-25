@@ -6299,6 +6299,11 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
     let handling_state = cmd.get("handlingState").and_then(|value| value.as_str());
     let kind = cmd.get("kind").and_then(|value| value.as_str());
     let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+    let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+    let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+    let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+    let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+    let task_name = cmd.get("taskName").and_then(|value| value.as_str());
     let since = cmd
         .get("since")
         .and_then(|value| value.as_str())
@@ -6340,7 +6345,7 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
     }
     let mut incidents = service_state
         .incidents
-        .into_iter()
+        .iter()
         .filter(|incident| {
             state.is_none_or(|expected| service_incident_state_name(incident.state) == expected)
                 && handling_state.is_none_or(|expected| {
@@ -6349,8 +6354,18 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
                 && kind.is_none_or(|expected| incident.latest_kind == expected)
                 && browser_id
                     .is_none_or(|expected| incident.browser_id.as_deref() == Some(expected))
+                && service_incident_matches_trace_filters(
+                    incident,
+                    &service_state,
+                    profile_id,
+                    session_id,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )
                 && since.is_none_or(|minimum| service_incident_at_or_after(incident, minimum))
         })
+        .cloned()
         .collect::<Vec<_>>();
     let matched = incidents.len();
     let start = matched.saturating_sub(limit);
@@ -6379,6 +6394,11 @@ async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
         .unwrap_or(20);
     let state = cmd.get("state").and_then(|value| value.as_str());
     let action = cmd.get("jobAction").and_then(|value| value.as_str());
+    let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+    let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+    let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+    let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+    let task_name = cmd.get("taskName").and_then(|value| value.as_str());
     let since = cmd
         .get("since")
         .and_then(|value| value.as_str())
@@ -6399,7 +6419,7 @@ async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
             "total": total,
         }));
     }
-    let mut jobs = service_state.jobs.into_values().collect::<Vec<_>>();
+    let mut jobs = service_state.jobs.values().cloned().collect::<Vec<_>>();
     jobs.sort_by(|left, right| {
         let left_time = left.submitted_at.as_deref().unwrap_or_default();
         let right_time = right.submitted_at.as_deref().unwrap_or_default();
@@ -6412,6 +6432,15 @@ async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
         .filter(|job| {
             state.is_none_or(|expected| service_job_state_name(job.state) == expected)
                 && action.is_none_or(|expected| job.action == expected)
+                && service_job_matches_trace_filters(
+                    job,
+                    &service_state,
+                    profile_id,
+                    session_id,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )
                 && since.is_none_or(|minimum| service_job_at_or_after(job, minimum))
         })
         .collect::<Vec<_>>();
@@ -6504,6 +6533,153 @@ fn service_event_at_or_after(event: &ServiceEvent, minimum: DateTime<FixedOffset
     DateTime::parse_from_rfc3339(&event.timestamp)
         .map(|timestamp| timestamp >= minimum)
         .unwrap_or(false)
+}
+
+fn service_incident_matches_trace_filters(
+    incident: &super::service_model::ServiceIncident,
+    service_state: &ServiceState,
+    profile_id: Option<&str>,
+    session_id: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> bool {
+    if profile_id.is_none()
+        && session_id.is_none()
+        && service_name.is_none()
+        && agent_name.is_none()
+        && task_name.is_none()
+    {
+        return true;
+    }
+
+    incident.event_ids.iter().any(|event_id| {
+        service_state
+            .events
+            .iter()
+            .find(|event| &event.id == event_id)
+            .is_some_and(|event| {
+                service_event_matches_trace_filters(
+                    event,
+                    profile_id,
+                    session_id,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )
+            })
+    }) || incident.job_ids.iter().any(|job_id| {
+        service_state.jobs.get(job_id).is_some_and(|job| {
+            service_job_matches_trace_filters(
+                job,
+                service_state,
+                profile_id,
+                session_id,
+                service_name,
+                agent_name,
+                task_name,
+            )
+        })
+    })
+}
+
+fn service_event_matches_trace_filters(
+    event: &ServiceEvent,
+    profile_id: Option<&str>,
+    session_id: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> bool {
+    profile_id.is_none_or(|expected| event.profile_id.as_deref() == Some(expected))
+        && session_id.is_none_or(|expected| event.session_id.as_deref() == Some(expected))
+        && service_name.is_none_or(|expected| event.service_name.as_deref() == Some(expected))
+        && agent_name.is_none_or(|expected| event.agent_name.as_deref() == Some(expected))
+        && task_name.is_none_or(|expected| event.task_name.as_deref() == Some(expected))
+}
+
+fn service_job_matches_trace_filters(
+    job: &super::service_model::ServiceJob,
+    service_state: &ServiceState,
+    profile_id: Option<&str>,
+    session_id: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> bool {
+    profile_id.is_none_or(|expected| service_job_profile_id(job, service_state) == Some(expected))
+        && session_id
+            .is_none_or(|expected| service_job_session_id(job, service_state) == Some(expected))
+        && service_name.is_none_or(|expected| job.service_name.as_deref() == Some(expected))
+        && agent_name.is_none_or(|expected| job.agent_name.as_deref() == Some(expected))
+        && task_name.is_none_or(|expected| job.task_name.as_deref() == Some(expected))
+}
+
+fn service_job_profile_id<'a>(
+    job: &'a super::service_model::ServiceJob,
+    service_state: &'a ServiceState,
+) -> Option<&'a str> {
+    match &job.target {
+        super::service_model::JobTarget::Profile(profile_id) => Some(profile_id.as_str()),
+        super::service_model::JobTarget::Browser(browser_id) => service_state
+            .browsers
+            .get(browser_id)
+            .and_then(|browser| browser.profile_id.as_deref()),
+        super::service_model::JobTarget::Tab(tab_id) => {
+            service_state.tabs.get(tab_id).and_then(|tab| {
+                tab.owner_session_id
+                    .as_deref()
+                    .and_then(|session_id| service_state.sessions.get(session_id))
+                    .and_then(|session| session.profile_id.as_deref())
+                    .or_else(|| {
+                        service_state
+                            .browsers
+                            .get(&tab.browser_id)
+                            .and_then(|browser| browser.profile_id.as_deref())
+                    })
+            })
+        }
+        super::service_model::JobTarget::Service
+        | super::service_model::JobTarget::Monitor(_)
+        | super::service_model::JobTarget::Challenge(_) => None,
+    }
+}
+
+fn service_job_session_id<'a>(
+    job: &'a super::service_model::ServiceJob,
+    service_state: &'a ServiceState,
+) -> Option<&'a str> {
+    match &job.target {
+        super::service_model::JobTarget::Browser(browser_id) => service_state
+            .browsers
+            .get(browser_id)
+            .and_then(|browser| browser.active_session_ids.first().map(String::as_str))
+            .or_else(|| session_id_for_browser(service_state, browser_id)),
+        super::service_model::JobTarget::Tab(tab_id) => service_state
+            .tabs
+            .get(tab_id)
+            .and_then(|tab| tab.owner_session_id.as_deref()),
+        super::service_model::JobTarget::Service
+        | super::service_model::JobTarget::Profile(_)
+        | super::service_model::JobTarget::Monitor(_)
+        | super::service_model::JobTarget::Challenge(_) => None,
+    }
+}
+
+fn session_id_for_browser<'a>(
+    service_state: &'a ServiceState,
+    browser_id: &str,
+) -> Option<&'a str> {
+    service_state
+        .sessions
+        .iter()
+        .find_map(|(session_id, session)| {
+            session
+                .browser_ids
+                .iter()
+                .any(|id| id == browser_id)
+                .then_some(session_id.as_str())
+        })
 }
 
 fn service_incident_at_or_after(
@@ -10363,8 +10539,51 @@ mod tests {
             "state": "recovered",
             "kind": "browser_health_changed",
             "browserId": "browser-1",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
             "since": "2026-04-22T00:01:00Z",
             "serviceState": {
+                "events": [
+                    {
+                        "id": "event-old",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Too old",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-match",
+                        "timestamp": "2026-04-22T00:01:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Matching incident",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-wrong-context",
+                        "timestamp": "2026-04-22T00:04:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Wrong context",
+                        "browserId": "browser-1",
+                        "profileId": "other",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    }
+                ],
                 "incidents": [
                     {
                         "id": "browser-1-old",
@@ -10373,7 +10592,8 @@ mod tests {
                         "state": "recovered",
                         "latestTimestamp": "2026-04-22T00:00:00Z",
                         "latestMessage": "Too old",
-                        "latestKind": "browser_health_changed"
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-old"]
                     },
                     {
                         "id": "browser-1-match",
@@ -10382,7 +10602,8 @@ mod tests {
                         "state": "recovered",
                         "latestTimestamp": "2026-04-22T00:01:00Z",
                         "latestMessage": "Matching incident",
-                        "latestKind": "browser_health_changed"
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-match"]
                     },
                     {
                         "id": "browser-2",
@@ -10391,7 +10612,8 @@ mod tests {
                         "state": "recovered",
                         "latestTimestamp": "2026-04-22T00:02:00Z",
                         "latestMessage": "Wrong browser",
-                        "latestKind": "browser_health_changed"
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-match"]
                     },
                     {
                         "id": "service",
@@ -10399,7 +10621,18 @@ mod tests {
                         "state": "service",
                         "latestTimestamp": "2026-04-22T00:03:00Z",
                         "latestMessage": "Wrong state",
-                        "latestKind": "reconciliation_error"
+                        "latestKind": "reconciliation_error",
+                        "eventIds": ["event-match"]
+                    },
+                    {
+                        "id": "browser-1-wrong-context",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:04:00Z",
+                        "latestMessage": "Wrong context",
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-wrong-context"]
                     }
                 ]
             }
@@ -10410,7 +10643,7 @@ mod tests {
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 1);
-        assert_eq!(result["data"]["total"], 4);
+        assert_eq!(result["data"]["total"], 5);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1-match");
         assert!(state.browser.is_none());
     }
@@ -10794,32 +11027,77 @@ mod tests {
             "id": "svc-jobs-2",
             "state": "failed",
             "jobAction": "navigate",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
             "since": "2026-04-22T00:01:00Z",
             "serviceState": {
+                "sessions": {
+                    "session-1": {
+                        "id": "session-1",
+                        "profileId": "work",
+                        "browserIds": ["browser-1"]
+                    }
+                },
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "profileId": "work",
+                        "activeSessionIds": ["session-1"]
+                    }
+                },
                 "jobs": {
                     "job-1": {
                         "id": "job-1",
                         "action": "navigate",
                         "state": "failed",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
                         "submittedAt": "2026-04-22T00:00:00Z"
                     },
                     "job-2": {
                         "id": "job-2",
                         "action": "navigate",
                         "state": "failed",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
                         "submittedAt": "2026-04-22T00:01:00Z"
                     },
                     "job-3": {
                         "id": "job-3",
                         "action": "click",
                         "state": "failed",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
                         "submittedAt": "2026-04-22T00:02:00Z"
                     },
                     "job-4": {
                         "id": "job-4",
                         "action": "navigate",
                         "state": "succeeded",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
                         "submittedAt": "2026-04-22T00:03:00Z"
+                    },
+                    "job-5": {
+                        "id": "job-5",
+                        "action": "navigate",
+                        "state": "failed",
+                        "target": {"profile": "other"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:04:00Z"
                     }
                 }
             }
@@ -10830,7 +11108,7 @@ mod tests {
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 1);
-        assert_eq!(result["data"]["total"], 4);
+        assert_eq!(result["data"]["total"], 5);
         assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
         assert!(state.browser.is_none());
     }
