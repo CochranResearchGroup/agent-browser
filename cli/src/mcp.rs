@@ -1906,73 +1906,37 @@ fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonR
         )));
     }
     let params = optional_object_argument(arguments, "params")?;
-    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
     let command = browser_command_command(BrowserCommandArgs {
         action,
         params,
-        job_timeout_ms,
-        service_name,
-        agent_name,
-        task_name,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
     });
 
-    let response = send_command(command, session).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({
-            "message": err,
-            "session": session,
-            "tool": "browser_command",
-            "trace": trace,
-        })),
-    })?;
-    Ok(tool_response_from_daemon(
-        "browser_command",
-        session,
-        trace,
-        response,
-    ))
+    send_queued_tool_command("browser_command", session, trace, command)
 }
 
 fn call_browser_navigate(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let url = required_string_argument(arguments, "url")?;
     let wait_until = optional_wait_until_argument(arguments)?;
     let headers = optional_object_argument(arguments, "headers")?;
-    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
     let command = browser_navigate_command(BrowserNavigateCommandArgs {
         url,
         wait_until,
         headers,
-        job_timeout_ms,
-        service_name,
-        agent_name,
-        task_name,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
     });
 
-    let response = send_command(command, session).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({
-            "message": err,
-            "session": session,
-            "tool": "browser_navigate",
-            "trace": trace,
-        })),
-    })?;
-    Ok(tool_response_from_daemon(
-        "browser_navigate",
-        session,
-        trace,
-        response,
-    ))
+    send_queued_tool_command("browser_navigate", session, trace, command)
 }
 
 fn call_browser_requests(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -1981,72 +1945,36 @@ fn call_browser_requests(arguments: &Value, session: &str) -> Result<Value, Json
     let resource_type = optional_string_argument(arguments, "type")?;
     let method = optional_string_argument(arguments, "method")?;
     let status = optional_string_argument(arguments, "status")?;
-    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
     let command = browser_requests_command(BrowserRequestsCommandArgs {
         clear,
         filter,
         resource_type,
         method,
         status,
-        job_timeout_ms,
-        service_name,
-        agent_name,
-        task_name,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
     });
 
-    let response = send_command(command, session).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({
-            "message": err,
-            "session": session,
-            "tool": "browser_requests",
-            "trace": trace,
-        })),
-    })?;
-    Ok(tool_response_from_daemon(
-        "browser_requests",
-        session,
-        trace,
-        response,
-    ))
+    send_queued_tool_command("browser_requests", session, trace, command)
 }
 
 fn call_browser_request_detail(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let request_id = required_string_argument(arguments, "requestId")?;
-    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
     let command = browser_request_detail_command(
         request_id,
-        job_timeout_ms,
-        service_name,
-        agent_name,
-        task_name,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
     );
 
-    let response = send_command(command, session).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({
-            "message": err,
-            "session": session,
-            "tool": "browser_request_detail",
-            "trace": trace,
-        })),
-    })?;
-    Ok(tool_response_from_daemon(
-        "browser_request_detail",
-        session,
-        trace,
-        response,
-    ))
+    send_queued_tool_command("browser_request_detail", session, trace, command)
 }
 
 fn call_browser_headers(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -2054,58 +1982,32 @@ fn call_browser_headers(arguments: &Value, session: &str) -> Result<Value, JsonR
         .get("headers")
         .and_then(|value| value.as_object())
         .ok_or_else(|| JsonRpcError::invalid_params("headers must be an object"))?;
-    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
-    let command =
-        browser_headers_command(headers, job_timeout_ms, service_name, agent_name, task_name);
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_headers_command(
+        headers,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
 
-    let response = send_command(command, session).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({
-            "message": err,
-            "session": session,
-            "tool": "browser_headers",
-            "trace": trace,
-        })),
-    })?;
-    Ok(tool_response_from_daemon(
-        "browser_headers",
-        session,
-        trace,
-        response,
-    ))
+    send_queued_tool_command("browser_headers", session, trace, command)
 }
 
 fn call_browser_offline(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let offline = optional_bool_argument(arguments, "offline")?;
-    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
-    let command =
-        browser_offline_command(offline, job_timeout_ms, service_name, agent_name, task_name);
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_offline_command(
+        offline,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
 
-    let response = send_command(command, session).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({
-            "message": err,
-            "session": session,
-            "tool": "browser_offline",
-            "trace": trace,
-        })),
-    })?;
-    Ok(tool_response_from_daemon(
-        "browser_offline",
-        session,
-        trace,
-        response,
-    ))
+    send_queued_tool_command("browser_offline", session, trace, command)
 }
 
 fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -2854,18 +2756,13 @@ fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
             }
         }
     }
-    if let Some(job_timeout_ms) = args.job_timeout_ms {
-        command["jobTimeoutMs"] = json!(job_timeout_ms);
-    }
-    if let Some(service_name) = args.service_name {
-        command["serviceName"] = json!(service_name);
-    }
-    if let Some(agent_name) = args.agent_name {
-        command["agentName"] = json!(agent_name);
-    }
-    if let Some(task_name) = args.task_name {
-        command["taskName"] = json!(task_name);
-    }
+    apply_service_command_fields(
+        &mut command,
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
+    );
     command
 }
 
@@ -2881,18 +2778,13 @@ fn browser_navigate_command(args: BrowserNavigateCommandArgs<'_>) -> Value {
     if let Some(headers) = args.headers {
         command["headers"] = json!(headers);
     }
-    if let Some(job_timeout_ms) = args.job_timeout_ms {
-        command["jobTimeoutMs"] = json!(job_timeout_ms);
-    }
-    if let Some(service_name) = args.service_name {
-        command["serviceName"] = json!(service_name);
-    }
-    if let Some(agent_name) = args.agent_name {
-        command["agentName"] = json!(agent_name);
-    }
-    if let Some(task_name) = args.task_name {
-        command["taskName"] = json!(task_name);
-    }
+    apply_service_command_fields(
+        &mut command,
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
+    );
     command
 }
 
@@ -2916,18 +2808,13 @@ fn browser_requests_command(args: BrowserRequestsCommandArgs<'_>) -> Value {
     if let Some(status) = args.status {
         command["status"] = json!(status);
     }
-    if let Some(job_timeout_ms) = args.job_timeout_ms {
-        command["jobTimeoutMs"] = json!(job_timeout_ms);
-    }
-    if let Some(service_name) = args.service_name {
-        command["serviceName"] = json!(service_name);
-    }
-    if let Some(agent_name) = args.agent_name {
-        command["agentName"] = json!(agent_name);
-    }
-    if let Some(task_name) = args.task_name {
-        command["taskName"] = json!(task_name);
-    }
+    apply_service_command_fields(
+        &mut command,
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
+    );
     command
 }
 
@@ -2943,18 +2830,13 @@ fn browser_request_detail_command(
         "action": "request_detail",
         "requestId": request_id,
     });
-    if let Some(job_timeout_ms) = job_timeout_ms {
-        command["jobTimeoutMs"] = json!(job_timeout_ms);
-    }
-    if let Some(service_name) = service_name {
-        command["serviceName"] = json!(service_name);
-    }
-    if let Some(agent_name) = agent_name {
-        command["agentName"] = json!(agent_name);
-    }
-    if let Some(task_name) = task_name {
-        command["taskName"] = json!(task_name);
-    }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
     command
 }
 
@@ -2970,18 +2852,13 @@ fn browser_headers_command(
         "action": "headers",
         "headers": headers,
     });
-    if let Some(job_timeout_ms) = job_timeout_ms {
-        command["jobTimeoutMs"] = json!(job_timeout_ms);
-    }
-    if let Some(service_name) = service_name {
-        command["serviceName"] = json!(service_name);
-    }
-    if let Some(agent_name) = agent_name {
-        command["agentName"] = json!(agent_name);
-    }
-    if let Some(task_name) = task_name {
-        command["taskName"] = json!(task_name);
-    }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
     command
 }
 
@@ -2999,18 +2876,13 @@ fn browser_offline_command(
     if let Some(offline) = offline {
         command["offline"] = json!(offline);
     }
-    if let Some(job_timeout_ms) = job_timeout_ms {
-        command["jobTimeoutMs"] = json!(job_timeout_ms);
-    }
-    if let Some(service_name) = service_name {
-        command["serviceName"] = json!(service_name);
-    }
-    if let Some(agent_name) = agent_name {
-        command["agentName"] = json!(agent_name);
-    }
-    if let Some(task_name) = task_name {
-        command["taskName"] = json!(task_name);
-    }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
     command
 }
 
@@ -3880,6 +3752,71 @@ fn service_tool_trace(
         "agentName": agent_name,
         "taskName": task_name,
     })
+}
+
+#[derive(Clone, Copy)]
+struct ServiceToolContext<'a> {
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+impl<'a> ServiceToolContext<'a> {
+    fn from_arguments(arguments: &'a Value) -> Result<Self, JsonRpcError> {
+        Ok(Self {
+            job_timeout_ms: optional_positive_u64_argument(arguments, "jobTimeoutMs")?,
+            service_name: optional_string_argument(arguments, "serviceName")?,
+            agent_name: optional_string_argument(arguments, "agentName")?,
+            task_name: optional_string_argument(arguments, "taskName")?,
+        })
+    }
+
+    fn trace(self) -> Value {
+        service_tool_trace(self.service_name, self.agent_name, self.task_name)
+    }
+}
+
+fn apply_service_command_fields(
+    command: &mut Value,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) {
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+}
+
+fn send_queued_tool_command(
+    tool_name: &str,
+    session: &str,
+    trace: Value,
+    command: Value,
+) -> Result<Value, JsonRpcError> {
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": tool_name,
+            "trace": trace.clone(),
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        tool_name, session, trace, response,
+    ))
 }
 
 fn tool_response_from_daemon(
