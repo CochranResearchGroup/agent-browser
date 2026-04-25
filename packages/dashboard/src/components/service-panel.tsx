@@ -28,6 +28,14 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  normalizeServiceTraceData,
+  traceFilterSummary,
+  traceTimelineItems,
+  type ServiceTraceData,
+  type ServiceTraceTimelineItem,
+  type ServiceTraceToolPayload,
+} from "@/lib/service-trace";
 
 type ControlPlaneSnapshot = {
   worker_state?: string;
@@ -169,57 +177,14 @@ type ServiceJobsData = {
 
 type ServiceIncidentActivityData = {
   incident?: ServiceIncident;
-  activity?: IncidentTimelineItem[];
+  activity?: ServiceTraceTimelineItem[];
   count?: number;
-};
-
-type ServiceTraceFiltersData = {
-  browserId?: string | null;
-  profileId?: string | null;
-  sessionId?: string | null;
-  serviceName?: string | null;
-  agentName?: string | null;
-  taskName?: string | null;
-  since?: string | null;
-  limit?: number;
-};
-
-type ServiceTraceData = {
-  filters?: ServiceTraceFiltersData;
-  events?: ServiceEvent[];
-  jobs?: ServiceJob[];
-  incidents?: ServiceIncident[];
-  activity?: IncidentTimelineItem[];
-  counts?: {
-    events?: number;
-    jobs?: number;
-    incidents?: number;
-    activity?: number;
-  };
-  matched?: {
-    events?: number;
-    jobs?: number;
-    incidents?: number;
-    activity?: number;
-  };
-  total?: {
-    events?: number;
-    jobs?: number;
-    incidents?: number;
-  };
 };
 
 type ApiResponse<T> = {
   success: boolean;
   data?: T;
   error?: string | null;
-};
-
-type ServiceTraceToolPayload = {
-  tool?: string;
-  success?: boolean;
-  data?: ServiceTraceData;
-  error?: unknown;
 };
 
 type IncidentRecord = {
@@ -270,23 +235,6 @@ type EventKindFilter =
 type EventWindowFilter = "all" | "15m" | "1h" | "24h";
 type EventLimit = 8 | 20 | 50;
 type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
-type IncidentTimelineItem = {
-  id: string;
-  timestamp: string;
-  kind: string;
-  title: string;
-  message?: string | null;
-  source?: string;
-  browserId?: string | null;
-  profileId?: string | null;
-  sessionId?: string | null;
-  serviceName?: string | null;
-  agentName?: string | null;
-  taskName?: string | null;
-  eventId?: string | null;
-  jobId?: string | null;
-};
-
 type TraceFilters = {
   serviceName: string;
   agentName: string;
@@ -403,27 +351,6 @@ function traceContextLabel(item: {
   return parts.length > 0 ? parts.join(" / ") : "No trace context";
 }
 
-function normalizeServiceTraceData(value: ServiceTraceData | ServiceTraceToolPayload | null | undefined): ServiceTraceData | null {
-  if (!value) return null;
-  if ("tool" in value && value.tool === "service_trace") return value.data ?? null;
-  return value as ServiceTraceData;
-}
-
-function traceFilterSummary(filters?: ServiceTraceFiltersData): string {
-  if (!filters) return "No returned filters";
-  const parts = [
-    filters.serviceName && `service ${filters.serviceName}`,
-    filters.agentName && `agent ${filters.agentName}`,
-    filters.taskName && `task ${filters.taskName}`,
-    filters.browserId && `browser ${filters.browserId}`,
-    filters.profileId && `profile ${filters.profileId}`,
-    filters.sessionId && `session ${filters.sessionId}`,
-    filters.since && `since ${filters.since}`,
-    filters.limit && `limit ${filters.limit}`,
-  ].filter((value): value is string => typeof value === "string" && value.length > 0);
-  return parts.length > 0 ? parts.join(" / ") : "No returned filters";
-}
-
 function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
   const normalized = (value ?? "").toLowerCase();
   if (["ready", "cdp_ready", "running"].includes(normalized)) return "good";
@@ -464,7 +391,7 @@ function incidentHandlingLabel(incident: IncidentRecord): string {
   return state;
 }
 
-function deriveIncidentTimeline(incident: IncidentRecord): IncidentTimelineItem[] {
+function deriveIncidentTimeline(incident: IncidentRecord): ServiceTraceTimelineItem[] {
   const eventItems = incident.serviceEvents.map((event) => ({
     id: event.id,
     timestamp: event.timestamp,
@@ -482,7 +409,7 @@ function deriveIncidentTimeline(incident: IncidentRecord): IncidentTimelineItem[
     title: formatEventKind(event.kind),
     message: event.message,
   }));
-  const operatorItems: IncidentTimelineItem[] = [];
+  const operatorItems: ServiceTraceTimelineItem[] = [];
   if (incident.acknowledgedAt) {
     operatorItems.push({
       id: `${incident.id}-acknowledged`,
@@ -590,64 +517,6 @@ function deriveIncidentRecords(
       (left, right) =>
         new Date(right.latestTimestamp).getTime() - new Date(left.latestTimestamp).getTime(),
     );
-}
-
-function serviceJobTimestamp(job: ServiceJob): string {
-  return job.completedAt ?? job.startedAt ?? job.submittedAt ?? "";
-}
-
-function traceTimelineItems(trace: ServiceTraceData | null): IncidentTimelineItem[] {
-  if (!trace) return [];
-  const seenEventIds = new Set(
-    (trace.activity ?? [])
-      .map((item) => item.eventId)
-      .filter((id): id is string => typeof id === "string" && id.length > 0),
-  );
-  const seenJobIds = new Set(
-    (trace.activity ?? [])
-      .map((item) => item.jobId)
-      .filter((id): id is string => typeof id === "string" && id.length > 0),
-  );
-  const activityItems = (trace.activity ?? []).map((item) => ({
-    ...item,
-    source: item.source ?? "activity",
-    title: item.title || formatEventKind(item.kind),
-  }));
-  const eventItems = (trace.events ?? [])
-    .filter((event) => !seenEventIds.has(event.id))
-    .map((event) => ({
-      id: `trace-event-${event.id}`,
-      eventId: event.id,
-      source: "event",
-      timestamp: event.timestamp,
-      kind: event.kind,
-      title: formatEventKind(event.kind),
-      message: event.message,
-      browserId: event.browserId,
-      profileId: event.profileId,
-      sessionId: event.sessionId,
-      serviceName: event.serviceName,
-      agentName: event.agentName,
-      taskName: event.taskName,
-    }));
-  const jobItems = (trace.jobs ?? [])
-    .filter((job) => !seenJobIds.has(job.id))
-    .map((job) => ({
-      id: `trace-job-${job.id}`,
-      jobId: job.id,
-      source: "job",
-      timestamp: serviceJobTimestamp(job),
-      kind: job.state ?? "service_job",
-      title: job.action ?? "Service job",
-      message: job.error || job.id,
-      serviceName: job.serviceName,
-      agentName: job.agentName,
-      taskName: job.taskName,
-    }));
-
-  return [...activityItems, ...eventItems, ...jobItems].sort(
-    (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
-  );
 }
 
 function HealthCard({
@@ -815,7 +684,7 @@ function TraceExplorer({
   trace: ServiceTraceData | null;
   loading: boolean;
   error: string;
-  timeline: IncidentTimelineItem[];
+  timeline: ServiceTraceTimelineItem[];
   onFiltersChange: (filters: TraceFilters) => void;
   onLoad: () => void;
   onClear: () => void;
@@ -1504,7 +1373,7 @@ function IncidentDetailDialog({
   acting,
 }: {
   incident: IncidentRecord | null;
-  activity: IncidentTimelineItem[] | null;
+  activity: ServiceTraceTimelineItem[] | null;
   activityLoading: boolean;
   activityError: string;
   onOpenChange: (open: boolean) => void;
@@ -1762,7 +1631,7 @@ export function ServicePanel() {
   const [actingIncidentId, setActingIncidentId] = useState<string | null>(null);
   const [operatorIdentity, setOperatorIdentity] = useState(initialOperatorIdentity);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
-  const [selectedIncidentActivity, setSelectedIncidentActivity] = useState<IncidentTimelineItem[] | null>(null);
+  const [selectedIncidentActivity, setSelectedIncidentActivity] = useState<ServiceTraceTimelineItem[] | null>(null);
   const [selectedIncidentActivityLoading, setSelectedIncidentActivityLoading] = useState(false);
   const [selectedIncidentActivityError, setSelectedIncidentActivityError] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
