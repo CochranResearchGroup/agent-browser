@@ -124,13 +124,23 @@ async fn reconcile_live_browser_targets(state: &mut ServiceState) {
 
     for (browser_id, browser) in browser_records {
         if browser.health != BrowserHealth::Ready {
+            close_browser_tabs(state, &browser_id);
             continue;
         }
         let Some(endpoint) = browser.cdp_endpoint.as_deref() else {
+            close_browser_tabs(state, &browser_id);
             continue;
         };
-        let Ok(targets) = fetch_cdp_targets(endpoint).await else {
-            continue;
+        let targets = match fetch_cdp_targets(endpoint).await {
+            Ok(targets) => targets,
+            Err(err) => {
+                if let Some(browser) = state.browsers.get_mut(&browser_id) {
+                    browser.health = BrowserHealth::Degraded;
+                    browser.last_error = Some(err);
+                }
+                close_browser_tabs(state, &browser_id);
+                continue;
+            }
         };
         reconcile_browser_targets(state, &browser_id, &browser, targets);
     }
@@ -178,9 +188,40 @@ fn reconcile_browser_targets(
                 ..BrowserSession::default()
             });
         merge_unique(&mut session.browser_ids, browser_id.to_string());
+        session.tab_ids.retain(|tab_id| {
+            state
+                .tabs
+                .get(tab_id)
+                .is_none_or(|tab| tab.browser_id != browser_id)
+        });
         for tab_id in live_tab_ids {
             merge_unique(&mut session.tab_ids, tab_id);
         }
+    }
+}
+
+fn close_browser_tabs(state: &mut ServiceState, browser_id: &str) {
+    let closed_tab_ids = state
+        .tabs
+        .values_mut()
+        .filter_map(|tab| {
+            if tab.browser_id == browser_id && tab.lifecycle != TabLifecycle::Closed {
+                tab.lifecycle = TabLifecycle::Closed;
+                Some(tab.id.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<BTreeSet<_>>();
+
+    if closed_tab_ids.is_empty() {
+        return;
+    }
+
+    for session in state.sessions.values_mut() {
+        session
+            .tab_ids
+            .retain(|tab_id| !closed_tab_ids.contains(tab_id));
     }
 }
 
@@ -531,6 +572,26 @@ mod tests {
             active_session_ids: vec!["session-1".to_string()],
             ..BrowserProcess::default()
         });
+        state.tabs.insert(
+            "target:stale".to_string(),
+            BrowserTab {
+                id: "target:stale".to_string(),
+                browser_id: "browser-1".to_string(),
+                target_id: Some("stale".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                owner_session_id: Some("session-1".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+        state.sessions.insert(
+            "session-1".to_string(),
+            BrowserSession {
+                id: "session-1".to_string(),
+                browser_ids: vec!["browser-1".to_string()],
+                tab_ids: vec!["target:stale".to_string()],
+                ..BrowserSession::default()
+            },
+        );
 
         reconcile_service_state(&mut state).await;
         server.await.unwrap();
@@ -547,9 +608,10 @@ mod tests {
         let session = &state.sessions["session-1"];
         assert_eq!(session.browser_ids, vec!["browser-1"]);
         assert_eq!(session.tab_ids, vec!["target:page-1"]);
+        assert_eq!(state.tabs["target:stale"].lifecycle, TabLifecycle::Closed);
         assert_eq!(
             state.events.last().unwrap().details.as_ref().unwrap()["changedTabs"],
-            1
+            2
         );
         let tab_event = state
             .events
@@ -564,6 +626,111 @@ mod tests {
         assert_eq!(
             tab_event.details.as_ref().unwrap()["currentLifecycle"],
             "ready"
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_marks_target_list_failure_degraded() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(serve_cdp_version_and_list(listener, r#"not-json"#));
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            cdp_endpoint: Some(format!("ws://127.0.0.1:{}/devtools/browser/abc", port)),
+            ..BrowserProcess::default()
+        });
+        state.tabs.insert(
+            "target:page-1".to_string(),
+            BrowserTab {
+                id: "target:page-1".to_string(),
+                browser_id: "browser-1".to_string(),
+                target_id: Some("page-1".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                owner_session_id: Some("session-1".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+        state.sessions.insert(
+            "session-1".to_string(),
+            BrowserSession {
+                id: "session-1".to_string(),
+                browser_ids: vec!["browser-1".to_string()],
+                tab_ids: vec!["target:page-1".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+
+        reconcile_service_state(&mut state).await;
+        server.await.unwrap();
+
+        let browser = &state.browsers["browser-1"];
+        assert_eq!(browser.health, BrowserHealth::Degraded);
+        assert!(browser
+            .last_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Failed to parse CDP targets"));
+        assert_eq!(
+            state
+                .events
+                .iter()
+                .find(|event| event.kind == ServiceEventKind::BrowserHealthChanged)
+                .unwrap()
+                .current_health,
+            Some(BrowserHealth::Degraded)
+        );
+        assert_eq!(
+            state
+                .reconciliation
+                .as_ref()
+                .map(|snapshot| snapshot.changed_browsers),
+            Some(1)
+        );
+        assert_eq!(state.tabs["target:page-1"].lifecycle, TabLifecycle::Closed);
+        assert!(state.sessions["session-1"].tab_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn reconcile_closes_tabs_for_non_ready_browser() {
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::ProcessExited,
+            ..BrowserProcess::default()
+        });
+        state.tabs.insert(
+            "target:page-1".to_string(),
+            BrowserTab {
+                id: "target:page-1".to_string(),
+                browser_id: "browser-1".to_string(),
+                target_id: Some("page-1".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                owner_session_id: Some("session-1".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+        state.sessions.insert(
+            "session-1".to_string(),
+            BrowserSession {
+                id: "session-1".to_string(),
+                browser_ids: vec!["browser-1".to_string()],
+                tab_ids: vec!["target:page-1".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+
+        reconcile_service_state(&mut state).await;
+
+        assert_eq!(state.tabs["target:page-1"].lifecycle, TabLifecycle::Closed);
+        assert!(state.sessions["session-1"].tab_ids.is_empty());
+        let tab_event = state
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::TabLifecycleChanged)
+            .unwrap();
+        assert_eq!(
+            tab_event.details.as_ref().unwrap()["currentLifecycle"],
+            "closed"
         );
     }
 

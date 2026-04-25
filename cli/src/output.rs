@@ -2817,7 +2817,8 @@ Notes:
   - Incident filters match incident state, operator handling state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
-  - Persisted browser records are probed for dead PIDs and unreachable CDP endpoints.
+  - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
+  - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.

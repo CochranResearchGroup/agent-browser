@@ -335,9 +335,11 @@ fn service_event_incident_id(event: &ServiceEvent) -> Option<String> {
 fn browser_health_is_bad(value: Option<BrowserHealth>) -> bool {
     matches!(
         value,
-        Some(BrowserHealth::ProcessExited)
+        Some(BrowserHealth::Degraded)
+            | Some(BrowserHealth::ProcessExited)
             | Some(BrowserHealth::CdpDisconnected)
             | Some(BrowserHealth::Unreachable)
+            | Some(BrowserHealth::Faulted)
     )
 }
 
