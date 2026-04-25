@@ -1325,6 +1325,62 @@ try {
   assert(waitJob, 'Retained service job with browser_wait caller context was not found');
   assert(waitJob.state === 'succeeded', `Wait service job state was ${waitJob.state}`);
 
+  const traceResult = await send('tools/call', {
+    name: 'service_trace',
+    arguments: {
+      limit: 50,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const tracePayload = parseToolPayload(traceResult);
+  assert(tracePayload.success === true, `service_trace failed: ${JSON.stringify(tracePayload)}`);
+  assert(tracePayload.tool === 'service_trace', 'service_trace payload tool mismatch');
+  assert(
+    tracePayload.trace?.serviceName === serviceName,
+    'service_trace response trace missing serviceName',
+  );
+  assert(tracePayload.trace?.agentName === agentName, 'service_trace response trace missing agentName');
+  assert(tracePayload.trace?.taskName === taskName, 'service_trace response trace missing taskName');
+  assert(
+    tracePayload.data?.filters?.serviceName === serviceName,
+    'service_trace filters missing serviceName',
+  );
+  assert(
+    tracePayload.data?.filters?.agentName === agentName,
+    'service_trace filters missing agentName',
+  );
+  assert(
+    tracePayload.data?.filters?.taskName === taskName,
+    'service_trace filters missing taskName',
+  );
+  assert(Array.isArray(tracePayload.data?.events), 'service_trace missing events array');
+  assert(Array.isArray(tracePayload.data?.jobs), 'service_trace missing jobs array');
+  assert(Array.isArray(tracePayload.data?.incidents), 'service_trace missing incidents array');
+  assert(Array.isArray(tracePayload.data?.activity), 'service_trace missing activity array');
+  assert(
+    tracePayload.data.jobs.length > 0,
+    'service_trace did not return retained jobs for the live MCP trace context',
+  );
+  assert(
+    tracePayload.data.matched?.jobs >= tracePayload.data.jobs.length,
+    'service_trace matched job count is inconsistent with returned jobs',
+  );
+  assert(
+    tracePayload.data.jobs.some((job) => job.id === waitJob.id),
+    'service_trace did not include a known retained MCP job',
+  );
+  assert(
+    tracePayload.data.jobs.every(
+      (job) =>
+        job.serviceName === serviceName &&
+        job.agentName === agentName &&
+        job.taskName === taskName,
+    ),
+    'service_trace returned a job outside the requested trace context',
+  );
+
   await cleanup();
   console.log('MCP live smoke passed');
 } catch (err) {
