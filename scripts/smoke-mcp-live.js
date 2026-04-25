@@ -209,6 +209,70 @@ try {
     'browser_requests did not return a request array',
   );
 
+  const commandHeadersResult = await send('tools/call', {
+    name: 'browser_headers',
+    arguments: {
+      headers: {
+        'X-Agent-Browser-Smoke': 'typed-headers',
+      },
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandHeadersPayload = parseToolPayload(commandHeadersResult);
+  assert(
+    commandHeadersPayload.success === true,
+    `browser_headers failed: ${JSON.stringify(commandHeadersPayload)}`,
+  );
+  assert(commandHeadersPayload.data?.set === true, 'browser_headers did not report set state');
+  assert(
+    commandHeadersPayload.trace?.serviceName === serviceName,
+    'browser_headers trace missing serviceName',
+  );
+  assert(commandHeadersPayload.trace?.agentName === agentName, 'browser_headers trace missing agentName');
+  assert(commandHeadersPayload.trace?.taskName === taskName, 'browser_headers trace missing taskName');
+
+  const commandOfflineResult = await send('tools/call', {
+    name: 'browser_offline',
+    arguments: {
+      offline: true,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandOfflinePayload = parseToolPayload(commandOfflineResult);
+  assert(
+    commandOfflinePayload.success === true,
+    `browser_offline enable failed: ${JSON.stringify(commandOfflinePayload)}`,
+  );
+  assert(commandOfflinePayload.data?.offline === true, 'browser_offline did not enable offline mode');
+  assert(
+    commandOfflinePayload.trace?.serviceName === serviceName,
+    'browser_offline enable trace missing serviceName',
+  );
+
+  const commandOnlineResult = await send('tools/call', {
+    name: 'browser_offline',
+    arguments: {
+      offline: false,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandOnlinePayload = parseToolPayload(commandOnlineResult);
+  assert(
+    commandOnlinePayload.success === true,
+    `browser_offline disable failed: ${JSON.stringify(commandOnlinePayload)}`,
+  );
+  assert(commandOnlinePayload.data?.offline === false, 'browser_offline did not restore online mode');
+  assert(
+    commandOnlinePayload.trace?.serviceName === serviceName,
+    'browser_offline disable trace missing serviceName',
+  );
+
   const commandNavigateResult = await send('tools/call', {
     name: 'browser_navigate',
     arguments: {
@@ -319,6 +383,10 @@ try {
   assert(
     commandRequestDetailPayload.data?.status === 200,
     'browser_request_detail did not return the local asset status',
+  );
+  assert(
+    commandRequestDetailPayload.data?.headers?.['X-Agent-Browser-Smoke'] === 'typed-headers',
+    'browser_request_detail did not show the header set by browser_headers',
   );
   assert(
     typeof commandRequestDetailPayload.data?.responseBody === 'string',
@@ -1188,6 +1256,30 @@ try {
   assert(
     browserRequestDetailJob.state === 'succeeded',
     `Browser request detail service job state was ${browserRequestDetailJob.state}`,
+  );
+  const browserHeadersJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'headers' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(browserHeadersJob, 'Retained service job with browser_headers caller context was not found');
+  assert(
+    browserHeadersJob.state === 'succeeded',
+    `Browser headers service job state was ${browserHeadersJob.state}`,
+  );
+  const browserOfflineJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'offline' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(browserOfflineJob, 'Retained service job with browser_offline caller context was not found');
+  assert(
+    browserOfflineJob.state === 'succeeded',
+    `Browser offline service job state was ${browserOfflineJob.state}`,
   );
   const urlJob = jobPayload.jobs?.find(
     (job) =>

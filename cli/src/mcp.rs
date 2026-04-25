@@ -1259,6 +1259,8 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_navigate_tool_schema(),
         browser_requests_tool_schema(),
         browser_request_detail_tool_schema(),
+        browser_headers_tool_schema(),
+        browser_offline_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -1467,6 +1469,79 @@ fn browser_request_detail_tool_schema() -> Value {
     })
 }
 
+fn browser_headers_tool_schema() -> Value {
+    json!({
+        "name": "browser_headers",
+        "title": "Set browser extra HTTP headers",
+        "description": "Queue setting extra HTTP headers for the active browser session. Use this for session-shaping and site-specific policy before navigation. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Required map of HTTP header names to string values."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued headers job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["headers"]
+        }
+    })
+}
+
+fn browser_offline_tool_schema() -> Value {
+    json!({
+        "name": "browser_offline",
+        "title": "Set browser offline mode",
+        "description": "Queue changing network offline emulation for the active browser session. Pass offline false to restore connectivity after a test. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "offline": {
+                    "type": "boolean",
+                    "description": "Whether to emulate offline network state. Defaults to true when omitted."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued offline-mode job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
 fn browser_command_tool_schema() -> Value {
     json!({
         "name": "browser_command",
@@ -1667,6 +1742,8 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_navigate" => call_browser_navigate(arguments, session),
         "browser_requests" => call_browser_requests(arguments, session),
         "browser_request_detail" => call_browser_request_detail(arguments, session),
+        "browser_headers" => call_browser_headers(arguments, session),
+        "browser_offline" => call_browser_offline(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -1966,6 +2043,65 @@ fn call_browser_request_detail(arguments: &Value, session: &str) -> Result<Value
     })?;
     Ok(tool_response_from_daemon(
         "browser_request_detail",
+        session,
+        trace,
+        response,
+    ))
+}
+
+fn call_browser_headers(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let headers = arguments
+        .get("headers")
+        .and_then(|value| value.as_object())
+        .ok_or_else(|| JsonRpcError::invalid_params("headers must be an object"))?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command =
+        browser_headers_command(headers, job_timeout_ms, service_name, agent_name, task_name);
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_headers",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_headers",
+        session,
+        trace,
+        response,
+    ))
+}
+
+fn call_browser_offline(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let offline = optional_bool_argument(arguments, "offline")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command =
+        browser_offline_command(offline, job_timeout_ms, service_name, agent_name, task_name);
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_offline",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_offline",
         session,
         trace,
         response,
@@ -2807,6 +2943,62 @@ fn browser_request_detail_command(
         "action": "request_detail",
         "requestId": request_id,
     });
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_headers_command(
+    headers: &serde_json::Map<String, Value>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-headers-{}", uuid::Uuid::new_v4()),
+        "action": "headers",
+        "headers": headers,
+    });
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_offline_command(
+    offline: Option<bool>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-offline-{}", uuid::Uuid::new_v4()),
+        "action": "offline",
+    });
+    if let Some(offline) = offline {
+        command["offline"] = json!(offline);
+    }
     if let Some(job_timeout_ms) = job_timeout_ms {
         command["jobTimeoutMs"] = json!(job_timeout_ms);
     }
@@ -4363,6 +4555,23 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_headers"
+                && tool["inputSchema"]["required"][0] == "headers"
+                && tool["inputSchema"]["properties"]["headers"].is_object()
+                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_offline"
+                && tool["inputSchema"]["properties"]["offline"].is_object()
+                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -4485,6 +4694,39 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 46);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_headers_requires_headers_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":47,"method":"tools/call","params":{"name":"browser_headers","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 47);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":48,"method":"tools/call","params":{"name":"browser_headers","arguments":{"headers":"X-Test: ok","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 48);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_offline_rejects_invalid_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":49,"method":"tools/call","params":{"name":"browser_offline","arguments":{"offline":"true","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 49);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -5058,6 +5300,45 @@ mod tests {
 
         assert_eq!(command["action"], "request_detail");
         assert_eq!(command["requestId"], "request-1");
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_headers_command_forwards_headers_and_trace_fields() {
+        let headers = json!({
+            "X-Agent-Browser-Smoke": "typed-headers",
+        });
+        let command = browser_headers_command(
+            headers.as_object().unwrap(),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "headers");
+        assert_eq!(command["headers"]["X-Agent-Browser-Smoke"], "typed-headers");
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_offline_command_forwards_state_and_trace_fields() {
+        let command = browser_offline_command(
+            Some(false),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "offline");
+        assert_eq!(command["offline"], false);
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
