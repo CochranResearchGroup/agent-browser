@@ -1258,6 +1258,7 @@ fn service_mcp_tools() -> Vec<Value> {
         }),
         browser_navigate_tool_schema(),
         browser_requests_tool_schema(),
+        browser_request_detail_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -1426,6 +1427,42 @@ fn browser_requests_tool_schema() -> Value {
                 }
             },
             "required": []
+        }
+    })
+}
+
+fn browser_request_detail_tool_schema() -> Value {
+    json!({
+        "name": "browser_request_detail",
+        "title": "Inspect one browser network request",
+        "description": "Queue detailed inspection for one tracked browser network request. Call browser_requests first to enable tracking and discover requestId values. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "requestId": {
+                    "type": "string",
+                    "description": "Required tracked request id returned by browser_requests."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued request-detail job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["requestId"]
         }
     })
 }
@@ -1629,6 +1666,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
         "browser_requests" => call_browser_requests(arguments, session),
+        "browser_request_detail" => call_browser_request_detail(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -1895,6 +1933,39 @@ fn call_browser_requests(arguments: &Value, session: &str) -> Result<Value, Json
     })?;
     Ok(tool_response_from_daemon(
         "browser_requests",
+        session,
+        trace,
+        response,
+    ))
+}
+
+fn call_browser_request_detail(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let request_id = required_string_argument(arguments, "requestId")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_request_detail_command(
+        request_id,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_request_detail",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_request_detail",
         session,
         trace,
         response,
@@ -2719,6 +2790,33 @@ fn browser_requests_command(args: BrowserRequestsCommandArgs<'_>) -> Value {
         command["agentName"] = json!(agent_name);
     }
     if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_request_detail_command(
+    request_id: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-request-detail-{}", uuid::Uuid::new_v4()),
+        "action": "request_detail",
+        "requestId": request_id,
+    });
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
         command["taskName"] = json!(task_name);
     }
     command
@@ -4256,6 +4354,15 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_request_detail"
+                && tool["inputSchema"]["required"][0] == "requestId"
+                && tool["inputSchema"]["properties"]["requestId"].is_object()
+                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -4366,6 +4473,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 45);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_request_detail_requires_request_id_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":46,"method":"tools/call","params":{"name":"browser_request_detail","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 46);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -4921,6 +5040,24 @@ mod tests {
         assert_eq!(command["type"], "fetch,xhr");
         assert_eq!(command["method"], "GET");
         assert_eq!(command["status"], "2xx");
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_request_detail_command_forwards_request_id_and_trace_fields() {
+        let command = browser_request_detail_command(
+            "request-1",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "request_detail");
+        assert_eq!(command["requestId"], "request-1");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");

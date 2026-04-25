@@ -269,6 +269,17 @@ try {
     ),
     `browser_requests did not capture the local asset request: ${JSON.stringify(commandRequests)}`,
   );
+  const assetRequest = commandRequests.find(
+    (request) =>
+      typeof request.url === 'string' &&
+      request.url.includes('/asset.png?probe=1') &&
+      request.method === 'GET' &&
+      request.status === 200,
+  );
+  assert(
+    typeof assetRequest?.requestId === 'string' && assetRequest.requestId.length > 0,
+    `browser_requests did not include a requestId for the local asset request: ${JSON.stringify(assetRequest)}`,
+  );
   assert(
     commandRequestsPayload.trace?.serviceName === serviceName,
     'browser_requests trace missing serviceName',
@@ -280,6 +291,50 @@ try {
   assert(
     commandRequestsPayload.trace?.taskName === taskName,
     'browser_requests trace missing taskName',
+  );
+
+  const commandRequestDetailResult = await send('tools/call', {
+    name: 'browser_request_detail',
+    arguments: {
+      requestId: assetRequest.requestId,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandRequestDetailPayload = parseToolPayload(commandRequestDetailResult);
+  assert(
+    commandRequestDetailPayload.success === true,
+    `browser_request_detail failed: ${JSON.stringify(commandRequestDetailPayload)}`,
+  );
+  assert(
+    commandRequestDetailPayload.data?.requestId === assetRequest.requestId,
+    'browser_request_detail did not return the requested requestId',
+  );
+  assert(
+    typeof commandRequestDetailPayload.data?.url === 'string' &&
+      commandRequestDetailPayload.data.url.includes('/asset.png?probe=1'),
+    'browser_request_detail did not return the local asset URL',
+  );
+  assert(
+    commandRequestDetailPayload.data?.status === 200,
+    'browser_request_detail did not return the local asset status',
+  );
+  assert(
+    typeof commandRequestDetailPayload.data?.responseBody === 'string',
+    'browser_request_detail did not include a responseBody field',
+  );
+  assert(
+    commandRequestDetailPayload.trace?.serviceName === serviceName,
+    'browser_request_detail trace missing serviceName',
+  );
+  assert(
+    commandRequestDetailPayload.trace?.agentName === agentName,
+    'browser_request_detail trace missing agentName',
+  );
+  assert(
+    commandRequestDetailPayload.trace?.taskName === taskName,
+    'browser_request_detail trace missing taskName',
   );
 
   const commandReturnResult = await send('tools/call', {
@@ -1118,6 +1173,21 @@ try {
   assert(
     browserCommandRequestsJob.state === 'succeeded',
     `Browser command requests service job state was ${browserCommandRequestsJob.state}`,
+  );
+  const browserRequestDetailJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'request_detail' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(
+    browserRequestDetailJob,
+    'Retained service job with browser_request_detail caller context was not found',
+  );
+  assert(
+    browserRequestDetailJob.state === 'succeeded',
+    `Browser request detail service job state was ${browserRequestDetailJob.state}`,
   );
   const urlJob = jobPayload.jobs?.find(
     (job) =>
