@@ -68,16 +68,18 @@ primitive for selector, text, URL, function, load-state, and fixed-duration
 waits. `browser_type` adds keyboard-style text entry for fields that should be
 exercised through typed input instead of direct value assignment.
 `browser_press` adds key and key-chord support for submit, tab traversal,
-escape, and shortcut-driven flows. More invasive browser tools should wait
-until profile and session policy are first-class in the service model, and they
-should always supply job caller context.
+escape, and shortcut-driven flows. `browser_hover` adds pointer movement for
+menus and controls that reveal state on hover. More invasive browser tools
+should wait until profile and session policy are first-class in the service
+model, and they should always supply job caller context.
 
 ## Live Validation
 
 `pnpm test:mcp-live` launches an isolated temp-home browser session, calls
 `browser_snapshot`, `browser_get_url`, `browser_get_title`, `browser_tabs`, and
 `browser_screenshot` over MCP stdio, calls `browser_click`, `browser_fill`,
-`browser_type`, `browser_press`, and `browser_wait`, verifies the mutations
-through a follow-up snapshot, and verifies that the retained `snapshot`, `url`,
-`title`, `tab_list`, `screenshot`, `click`, `fill`, `type`, `press`, and `wait`
-service jobs record `serviceName`, `agentName`, and `taskName`.
+`browser_type`, `browser_press`, `browser_hover`, and `browser_wait`, verifies
+the mutations through a follow-up snapshot, and verifies that the retained
+`snapshot`, `url`, `title`, `tab_list`, `screenshot`, `click`, `fill`, `type`,
+`press`, `hover`, and `wait` service jobs record `serviceName`, `agentName`, and
+`taskName`.

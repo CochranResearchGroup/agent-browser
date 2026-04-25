@@ -218,6 +218,8 @@ try {
     '<label for="name">Name</label>',
     '<input id="name" name="name" value="" onkeydown="if (event.key === \'Enter\') { document.getElementById(\'press-output\').textContent = \'Pressed Enter\'; }">',
     '<p id="press-output"></p>',
+    '<button id="hover-target" onmouseover="document.getElementById(\'hover-output\').textContent = \'Hovered menu\'">Hover menu</button>',
+    '<p id="hover-output"></p>',
     '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value; setTimeout(() => { document.getElementById(\'wait-status\').textContent = \'Name copied\'; }, 100)">Copy name</button>',
     '<p id="name-output"></p>',
     '<p id="wait-status"></p>',
@@ -441,6 +443,25 @@ try {
   assert(pressPayload.trace?.agentName === agentName, 'browser_press trace missing agentName');
   assert(pressPayload.trace?.taskName === taskName, 'browser_press trace missing taskName');
 
+  const hoverResult = await send('tools/call', {
+    name: 'browser_hover',
+    arguments: {
+      selector: '#hover-target',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const hoverPayload = parseToolPayload(hoverResult);
+  assert(hoverPayload.success === true, `browser_hover failed: ${JSON.stringify(hoverPayload)}`);
+  assert(
+    hoverPayload.data?.hovered === '#hover-target',
+    'browser_hover did not report hovered selector',
+  );
+  assert(hoverPayload.trace?.serviceName === serviceName, 'browser_hover trace missing serviceName');
+  assert(hoverPayload.trace?.agentName === agentName, 'browser_hover trace missing agentName');
+  assert(hoverPayload.trace?.taskName === taskName, 'browser_hover trace missing taskName');
+
   const copyNameResult = await send('tools/call', {
     name: 'browser_click',
     arguments: {
@@ -506,6 +527,11 @@ try {
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
       clickedSnapshotPayload.data.snapshot.includes('Pressed Enter'),
     'browser_press did not mutate the page state visible to a follow-up snapshot',
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('Hovered menu'),
+    'browser_hover did not mutate the page state visible to a follow-up snapshot',
   );
 
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
@@ -597,6 +623,15 @@ try {
   );
   assert(pressJob, 'Retained service job with browser_press caller context was not found');
   assert(pressJob.state === 'succeeded', `Press service job state was ${pressJob.state}`);
+  const hoverJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'hover' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(hoverJob, 'Retained service job with browser_hover caller context was not found');
+  assert(hoverJob.state === 'succeeded', `Hover service job state was ${hoverJob.state}`);
   const waitJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'wait' &&
