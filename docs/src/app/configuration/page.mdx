@@ -101,7 +101,10 @@ ownership, profile binding, lease state, and cleanup policy. These records are
 exposed through service status, MCP resources, and the HTTP service APIs.
 Current browser launch behavior still comes from <code>runtimeProfiles</code>,
 <code>--runtime-profile</code>, <code>--profile</code>, and existing launch
-flags.
+flags. Launches that select a runtime profile or custom profile path bind the
+active browser record to a service profile. When commands include
+<code>serviceName</code>, <code>agentName</code>, or <code>taskName</code>, the
+active session record also captures that caller context for traceability.
 
 Use <code>agent-browser runtime list</code> to inspect the merged runtime-profile
 view from config plus on-disk managed profiles. If a profile sets

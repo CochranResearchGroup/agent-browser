@@ -541,7 +541,10 @@ metadata for profile allocation, keyring posture, caller ownership, profile
 binding, lease state, and cleanup policy. These records are exposed through
 service status, MCP resources, and the HTTP service APIs. Current browser
 launch behavior still comes from `runtimeProfiles`, `--runtime-profile`,
-`--profile`, and existing launch flags.
+`--profile`, and existing launch flags. Launches that select a runtime profile
+or custom profile path now bind the active browser record to a service profile.
+When commands include `serviceName`, `agentName`, or `taskName`, the active
+session record also captures that caller context for traceability.
 
 You can register a runtime profile into user config explicitly:
 
@@ -1270,7 +1273,7 @@ agent-browser service events --kind browser_health_changed --browser-id browser-
 agent-browser service events --kind tab_lifecycle_changed
 ```
 
-The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode profiles, sessions, site policies, and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, unreachable CDP endpoints without a PID are marked `unreachable`, and endpoints that answer health probes but fail target-list discovery are marked `degraded`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active. Configured profiles, sessions, site policies, and providers override entries with the same IDs from the persisted state. Browser launch, auto-launching browser commands such as `open`, and close commands update the persisted browser health records for the active session.
+The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode profiles, sessions, site policies, and providers from `agent-browser.json` and `~/.agent-browser/config.json`. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, unreachable CDP endpoints without a PID are marked `unreachable`, and endpoints that answer health probes but fail target-list discovery are marked `degraded`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active. Configured profiles, sessions, site policies, and providers override entries with the same IDs from the persisted state. Browser launch, auto-launching browser commands such as `open`, and close commands update the persisted browser health records for the active session. Runtime profile and custom profile launches also populate linked service profile and session records, including `serviceName`, `agentName`, and `taskName` when the caller provides them.
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 

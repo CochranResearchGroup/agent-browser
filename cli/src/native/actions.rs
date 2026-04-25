@@ -12,7 +12,9 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::{broadcast, oneshot, RwLock};
 
 use crate::connection::get_socket_dir;
-use crate::runtime_profile::{clear_runtime_state, pid_is_running, read_runtime_state};
+use crate::runtime_profile::{
+    clear_runtime_state, pid_is_running, read_runtime_state, runtime_profile_user_data_dir,
+};
 
 use super::auth;
 use super::browser::{should_track_target, BrowserManager, WaitUntil};
@@ -39,7 +41,9 @@ use super::service_activity::service_incident_activity_response;
 use super::service_health::{reconcile_service_state, record_browser_health_changed_event};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
-    JobState as ServiceJobState, ServiceEvent, ServiceEventKind, ServiceState,
+    BrowserProfile, BrowserSession, JobState as ServiceJobState, LeaseState,
+    ProfileAllocationPolicy, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind, ServiceState,
+    SessionCleanupPolicy,
 };
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 use super::snapshot::{self, SnapshotOptions};
@@ -114,7 +118,7 @@ async fn relaunch_and_restore_page(
     state.screencasting = false;
     state.reset_input_state();
     state.update_stream_client().await;
-    auto_launch(state).await?;
+    auto_launch(state, &json!({})).await?;
 
     if let Some(url) = desired_url.as_deref() {
         if !url.is_empty() && url != "about:blank" {
@@ -311,6 +315,94 @@ fn service_browser_id(session_id: &str) -> String {
     format!("session:{}", session_id)
 }
 
+#[derive(Debug, Clone, Default)]
+struct ServiceLaunchMetadata {
+    profile_id: Option<String>,
+    profile_name: Option<String>,
+    user_data_dir: Option<String>,
+    persistent_profile: bool,
+    keyring: ProfileKeyringPolicy,
+    service_name: Option<String>,
+    agent_name: Option<String>,
+    task_name: Option<String>,
+    cleanup: SessionCleanupPolicy,
+}
+
+impl ServiceLaunchMetadata {
+    /// Captures the service-model metadata that can be inferred from a launch
+    /// command before Chrome starts, so every launch path writes the same
+    /// browser/profile/session relationships into persisted service state.
+    fn from_launch_options(options: &LaunchOptions, command: Option<&Value>) -> Self {
+        let profile_id = service_profile_id(
+            options.profile.as_deref(),
+            options.runtime_profile.as_deref(),
+        );
+        let user_data_dir = options.profile.clone().or_else(|| {
+            options.runtime_profile.as_ref().and_then(|name| {
+                runtime_profile_user_data_dir(name)
+                    .ok()
+                    .map(|path| path.to_string_lossy().to_string())
+            })
+        });
+        Self {
+            profile_name: options.runtime_profile.clone().or(options.profile.clone()),
+            user_data_dir,
+            persistent_profile: profile_id.is_some(),
+            keyring: if options.use_real_keychain {
+                ProfileKeyringPolicy::RealOsKeychain
+            } else {
+                ProfileKeyringPolicy::BasicPasswordStore
+            },
+            profile_id,
+            service_name: command.and_then(|cmd| optional_command_string(cmd, "serviceName")),
+            agent_name: command.and_then(|cmd| optional_command_string(cmd, "agentName")),
+            task_name: command.and_then(|cmd| optional_command_string(cmd, "taskName")),
+            cleanup: if command
+                .and_then(|cmd| cmd.get("leaveOpen"))
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            {
+                SessionCleanupPolicy::Detach
+            } else {
+                SessionCleanupPolicy::CloseBrowser
+            },
+        }
+    }
+}
+
+fn service_profile_id(profile: Option<&str>, runtime_profile: Option<&str>) -> Option<String> {
+    if let Some(runtime_profile) = runtime_profile.filter(|value| !value.trim().is_empty()) {
+        return Some(runtime_profile.to_string());
+    }
+    profile
+        .filter(|value| !value.trim().is_empty())
+        .map(|profile| format!("custom:{}", stable_short_hash(profile)))
+}
+
+fn optional_command_string(command: &Value, name: &str) -> Option<String> {
+    command
+        .get(name)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn merge_unique(values: &mut Vec<String>, value: String) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
+}
+
+fn stable_short_hash(value: &str) -> u64 {
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    value.as_bytes().iter().fold(FNV_OFFSET, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(FNV_PRIME)
+    })
+}
+
 fn service_browser_host_for_launch(cmd: &Value, headless: bool) -> ServiceBrowserHost {
     if cmd.get("provider").is_some() {
         ServiceBrowserHost::CloudProvider
@@ -336,6 +428,7 @@ fn persist_service_browser_record(
     pid: Option<u32>,
     cdp_endpoint: Option<String>,
     last_error: Option<String>,
+    metadata: Option<ServiceLaunchMetadata>,
 ) {
     let Ok(path) = JsonServiceStateStore::default_path() else {
         return;
@@ -344,9 +437,17 @@ fn persist_service_browser_record(
     let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
     let id = service_browser_id(session_id);
     let previous = service_state.browsers.get(&id).cloned();
+    let profile_id = metadata
+        .as_ref()
+        .and_then(|metadata| metadata.profile_id.clone())
+        .or_else(|| {
+            previous
+                .as_ref()
+                .and_then(|browser| browser.profile_id.clone())
+        });
     let browser = BrowserProcess {
         id: id.clone(),
-        profile_id: None,
+        profile_id: profile_id.clone(),
         host,
         health,
         pid,
@@ -355,22 +456,104 @@ fn persist_service_browser_record(
         active_session_ids: vec![session_id.to_string()],
         last_error,
     };
+    if let Some(metadata) = metadata {
+        upsert_service_profile_and_session(&mut service_state, session_id, profile_id, &metadata);
+    }
     record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
     service_state.browsers.insert(id, browser);
     let _ = store.save(&service_state);
+}
+
+fn upsert_service_profile_and_session(
+    service_state: &mut ServiceState,
+    session_id: &str,
+    profile_id: Option<String>,
+    metadata: &ServiceLaunchMetadata,
+) {
+    if let Some(profile_id) = profile_id.as_ref() {
+        let profile = service_state
+            .profiles
+            .entry(profile_id.clone())
+            .or_insert_with(|| BrowserProfile {
+                id: profile_id.clone(),
+                name: metadata
+                    .profile_name
+                    .clone()
+                    .unwrap_or_else(|| profile_id.clone()),
+                ..BrowserProfile::default()
+            });
+        if profile.name.is_empty() {
+            profile.name = metadata
+                .profile_name
+                .clone()
+                .unwrap_or_else(|| profile_id.clone());
+        }
+        if profile.user_data_dir.is_none() {
+            profile.user_data_dir = metadata.user_data_dir.clone();
+        }
+        if metadata.service_name.is_some()
+            && profile.allocation == ProfileAllocationPolicy::SharedService
+        {
+            profile.allocation = ProfileAllocationPolicy::PerService;
+        }
+        if profile.keyring == ProfileKeyringPolicy::BasicPasswordStore
+            || metadata.keyring != ProfileKeyringPolicy::BasicPasswordStore
+        {
+            profile.keyring = metadata.keyring;
+        }
+        profile.persistent = profile.persistent || metadata.persistent_profile;
+        if metadata.service_name.is_some() {
+            profile.manual_login_preferred = profile.manual_login_preferred
+                || metadata.keyring == ProfileKeyringPolicy::RealOsKeychain;
+        }
+        if let Some(service_name) = metadata.service_name.as_ref() {
+            merge_unique(&mut profile.shared_service_ids, service_name.clone());
+        }
+    }
+
+    let session = service_state
+        .sessions
+        .entry(session_id.to_string())
+        .or_insert_with(|| BrowserSession {
+            id: session_id.to_string(),
+            ..BrowserSession::default()
+        });
+    session.service_name = metadata
+        .service_name
+        .clone()
+        .or(session.service_name.clone());
+    session.agent_name = metadata.agent_name.clone().or(session.agent_name.clone());
+    session.task_name = metadata.task_name.clone().or(session.task_name.clone());
+    session.profile_id = profile_id.or(session.profile_id.clone());
+    session.lease = if session.profile_id.is_some() {
+        LeaseState::Exclusive
+    } else {
+        session.lease
+    };
+    session.cleanup = metadata.cleanup;
+    merge_unique(&mut session.browser_ids, service_browser_id(session_id));
 }
 
 fn persist_current_browser_health(
     state: &DaemonState,
     host: ServiceBrowserHost,
     health: ServiceBrowserHealth,
+    metadata: Option<ServiceLaunchMetadata>,
 ) {
     let (pid, cdp_endpoint) = state
         .browser
         .as_ref()
         .map(|mgr| (mgr.browser_pid(), Some(mgr.get_cdp_url().to_string())))
         .unwrap_or((None, None));
-    persist_service_browser_record(&state.session_id, host, health, pid, cdp_endpoint, None);
+    persist_service_browser_record(
+        &state.session_id,
+        host,
+        health,
+        pid,
+        cdp_endpoint,
+        None,
+        metadata,
+    );
 }
 
 fn persist_closed_browser_health(state: &DaemonState) {
@@ -1635,7 +1818,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                 state.reset_input_state();
                 state.update_stream_client().await;
             }
-            if let Err(e) = auto_launch(state).await {
+            if let Err(e) = auto_launch(state, cmd).await {
                 return error_response(&id, &format!("Auto-launch failed: {}", e));
             }
         }
@@ -1910,7 +2093,7 @@ async fn connect_auto_with_fresh_tab() -> Result<BrowserManager, String> {
     Ok(mgr)
 }
 
-async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
+async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), String> {
     let mut options = launch_options_from_env();
     let leave_open = env::var("AGENT_BROWSER_LEAVE_OPEN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""));
@@ -1923,6 +2106,7 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         options.viewport_size = Some(server.viewport().await);
     }
     let engine = env::var("AGENT_BROWSER_ENGINE").ok();
+    let metadata = ServiceLaunchMetadata::from_launch_options(&options, Some(command));
 
     // Store proxy credentials for Fetch.authRequired handling
     let has_proxy_auth = options.proxy_username.is_some();
@@ -1962,6 +2146,7 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
             state,
             ServiceBrowserHost::AttachedExisting,
             ServiceBrowserHealth::Ready,
+            Some(metadata),
         );
         try_auto_restore_state(state).await;
         return Ok(());
@@ -1981,6 +2166,7 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
             state,
             ServiceBrowserHost::AttachedExisting,
             ServiceBrowserHealth::Ready,
+            None,
         );
         try_auto_restore_state(state).await;
         return Ok(());
@@ -2023,6 +2209,7 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
                         state,
                         ServiceBrowserHost::CloudProvider,
                         ServiceBrowserHealth::Ready,
+                        None,
                     );
                     try_auto_restore_state(state).await;
                     return Ok(());
@@ -2055,7 +2242,12 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
-    persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
+    persist_current_browser_health(
+        state,
+        service_host,
+        ServiceBrowserHealth::Ready,
+        Some(metadata),
+    );
 
     // Enable Fetch with handleAuthRequests for proxy authentication
     if has_proxy_auth {
@@ -2247,6 +2439,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         manual_login: false,
         attachable: false,
     };
+    let metadata = ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd));
 
     let new_hash = launch_hash(&launch_options);
 
@@ -2278,7 +2471,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             state.update_stream_client().await;
         }
     } else {
-        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
+        persist_current_browser_health(
+            state,
+            service_host,
+            ServiceBrowserHealth::Ready,
+            Some(metadata),
+        );
         return Ok(json!({ "launched": true, "reused": true }));
     }
     state.ref_map.clear();
@@ -2312,7 +2510,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
-        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
+        persist_current_browser_health(
+            state,
+            service_host,
+            ServiceBrowserHealth::Ready,
+            Some(metadata),
+        );
         return Ok(json!({ "launched": true }));
     }
 
@@ -2335,7 +2538,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
-        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
+        persist_current_browser_health(
+            state,
+            service_host,
+            ServiceBrowserHealth::Ready,
+            Some(metadata),
+        );
         return Ok(json!({ "launched": true }));
     }
 
@@ -2349,7 +2557,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
-        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
+        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready, None);
         return Ok(json!({ "launched": true }));
     }
 
@@ -2393,6 +2601,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
                             state,
                             service_host,
                             ServiceBrowserHealth::Ready,
+                            None,
                         );
 
                         if let Some(info) = providers::get_agentcore_info() {
@@ -2461,7 +2670,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
-    persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready);
+    persist_current_browser_health(
+        state,
+        service_host,
+        ServiceBrowserHealth::Ready,
+        Some(metadata),
+    );
 
     // Enable Fetch interception (domain filtering and/or proxy auth).
     // Only call Fetch.enable once to avoid overwriting handleAuthRequests.
@@ -10600,6 +10814,17 @@ mod tests {
             Some(1234),
             Some("http://127.0.0.1:9222".to_string()),
             None,
+            Some(ServiceLaunchMetadata {
+                profile_id: Some("work".to_string()),
+                profile_name: Some("Work".to_string()),
+                user_data_dir: Some("/tmp/agent-browser-work".to_string()),
+                persistent_profile: true,
+                keyring: ProfileKeyringPolicy::RealOsKeychain,
+                service_name: Some("JournalDownloader".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("probe-acs-website".to_string()),
+                cleanup: SessionCleanupPolicy::Detach,
+            }),
         );
 
         let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
@@ -10613,8 +10838,48 @@ mod tests {
             browser.cdp_endpoint.as_deref(),
             Some("http://127.0.0.1:9222")
         );
+        assert_eq!(browser.profile_id.as_deref(), Some("work"));
+        let profile = &state.profiles["work"];
+        assert_eq!(profile.name, "Work");
+        assert_eq!(
+            profile.user_data_dir.as_deref(),
+            Some("/tmp/agent-browser-work")
+        );
+        assert_eq!(profile.allocation, ProfileAllocationPolicy::PerService);
+        assert_eq!(profile.keyring, ProfileKeyringPolicy::RealOsKeychain);
+        assert!(profile.persistent);
+        assert!(profile.manual_login_preferred);
+        assert_eq!(profile.shared_service_ids, vec!["JournalDownloader"]);
+        let session = &state.sessions["persist-session"];
+        assert_eq!(session.service_name.as_deref(), Some("JournalDownloader"));
+        assert_eq!(session.agent_name.as_deref(), Some("codex"));
+        assert_eq!(session.task_name.as_deref(), Some("probe-acs-website"));
+        assert_eq!(session.profile_id.as_deref(), Some("work"));
+        assert_eq!(session.lease, LeaseState::Exclusive);
+        assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
+        assert_eq!(session.browser_ids, vec!["session:persist-session"]);
 
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_profile_id_prefers_runtime_profile() {
+        assert_eq!(
+            service_profile_id(Some("/tmp/browser-profile"), Some("work")),
+            Some("work".to_string())
+        );
+    }
+
+    #[test]
+    fn test_service_profile_id_hashes_custom_profile_path() {
+        let profile_id = service_profile_id(Some("/tmp/browser-profile"), None).unwrap();
+
+        assert!(profile_id.starts_with("custom:"));
+        assert_ne!(profile_id, "/tmp/browser-profile");
+        assert_eq!(
+            profile_id,
+            service_profile_id(Some("/tmp/browser-profile"), None).unwrap()
+        );
     }
 
     #[tokio::test]
