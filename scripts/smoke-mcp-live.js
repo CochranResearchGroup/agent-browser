@@ -220,6 +220,9 @@ try {
     '<p id="press-output"></p>',
     '<button id="hover-target" onmouseover="document.getElementById(\'hover-output\').textContent = \'Hovered menu\'">Hover menu</button>',
     '<p id="hover-output"></p>',
+    '<label for="org">Organization</label>',
+    '<select id="org" onchange="document.getElementById(\'org-output\').textContent = this.value"><option value="">Choose</option><option value="org-a">Org A</option><option value="org-b">Org B</option></select>',
+    '<p id="org-output"></p>',
     '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value; setTimeout(() => { document.getElementById(\'wait-status\').textContent = \'Name copied\'; }, 100)">Copy name</button>',
     '<p id="name-output"></p>',
     '<p id="wait-status"></p>',
@@ -462,6 +465,32 @@ try {
   assert(hoverPayload.trace?.agentName === agentName, 'browser_hover trace missing agentName');
   assert(hoverPayload.trace?.taskName === taskName, 'browser_hover trace missing taskName');
 
+  const selectResult = await send('tools/call', {
+    name: 'browser_select',
+    arguments: {
+      selector: '#org',
+      values: ['org-b'],
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const selectPayload = parseToolPayload(selectResult);
+  assert(
+    selectPayload.success === true,
+    `browser_select failed: ${JSON.stringify(selectPayload)}`,
+  );
+  assert(
+    Array.isArray(selectPayload.data?.selected) && selectPayload.data.selected[0] === 'org-b',
+    'browser_select did not report selected value',
+  );
+  assert(
+    selectPayload.trace?.serviceName === serviceName,
+    'browser_select trace missing serviceName',
+  );
+  assert(selectPayload.trace?.agentName === agentName, 'browser_select trace missing agentName');
+  assert(selectPayload.trace?.taskName === taskName, 'browser_select trace missing taskName');
+
   const copyNameResult = await send('tools/call', {
     name: 'browser_click',
     arguments: {
@@ -532,6 +561,11 @@ try {
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
       clickedSnapshotPayload.data.snapshot.includes('Hovered menu'),
     'browser_hover did not mutate the page state visible to a follow-up snapshot',
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('org-b'),
+    'browser_select did not mutate the page state visible to a follow-up snapshot',
   );
 
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
@@ -632,6 +666,15 @@ try {
   );
   assert(hoverJob, 'Retained service job with browser_hover caller context was not found');
   assert(hoverJob.state === 'succeeded', `Hover service job state was ${hoverJob.state}`);
+  const selectJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'select' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(selectJob, 'Retained service job with browser_select caller context was not found');
+  assert(selectJob.state === 'succeeded', `Select service job state was ${selectJob.state}`);
   const waitJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'wait' &&

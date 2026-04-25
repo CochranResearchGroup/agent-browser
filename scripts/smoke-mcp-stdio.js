@@ -432,6 +432,32 @@ try {
     hoverTool.inputSchema?.properties?.taskName,
     'MCP browser_hover missing taskName trace field',
   );
+  const selectTool = tools.tools?.find((tool) => tool.name === 'browser_select');
+  assert(selectTool, 'MCP browser_select tool missing');
+  assert(
+    selectTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_select missing selector requirement',
+  );
+  assert(
+    selectTool.inputSchema?.required?.includes('values'),
+    'MCP browser_select missing values requirement',
+  );
+  assert(
+    selectTool.inputSchema?.properties?.values,
+    'MCP browser_select missing values property',
+  );
+  assert(
+    selectTool.inputSchema?.properties?.serviceName,
+    'MCP browser_select missing serviceName trace field',
+  );
+  assert(
+    selectTool.inputSchema?.properties?.agentName,
+    'MCP browser_select missing agentName trace field',
+  );
+  assert(
+    selectTool.inputSchema?.properties?.taskName,
+    'MCP browser_select missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

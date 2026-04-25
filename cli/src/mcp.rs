@@ -848,6 +848,45 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector"]
             }
         }),
+        json!({
+            "name": "browser_select",
+            "title": "Select browser option",
+            "description": "Queue selection of one or more values in a select control in the active browser session. This mutates page state, so include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Required CSS selector or cached ref for the select control."
+                    },
+                    "values": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "minItems": 1,
+                        "description": "Required option value or values to select."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued select job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["selector", "values"]
+            }
+        }),
     ]
 }
 
@@ -930,6 +969,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_type" => call_browser_type(arguments, session),
         "browser_press" => call_browser_press(arguments, session),
         "browser_hover" => call_browser_hover(arguments, session),
+        "browser_select" => call_browser_select(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -1329,6 +1369,41 @@ fn call_browser_hover(arguments: &Value, session: &str) -> Result<Value, JsonRpc
     ))
 }
 
+fn call_browser_select(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let values = required_string_array_argument(arguments, "values")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_select_command(
+        selector,
+        &values,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_select",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_select",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -1604,6 +1679,35 @@ fn browser_hover_command(
     command
 }
 
+fn browser_select_command(
+    selector: &str,
+    values: &[String],
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-select-{}", uuid::Uuid::new_v4()),
+        "action": "select",
+        "selector": selector,
+        "values": values,
+    });
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
 struct BrowserScreenshotCommandArgs<'a> {
     selector: Option<&'a str>,
     path: Option<&'a str>,
@@ -1781,6 +1885,40 @@ fn optional_string_argument<'a>(
 fn required_string_argument<'a>(arguments: &'a Value, name: &str) -> Result<&'a str, JsonRpcError> {
     optional_string_argument(arguments, name)?
         .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
+}
+
+fn required_string_array_argument(
+    arguments: &Value,
+    name: &str,
+) -> Result<Vec<String>, JsonRpcError> {
+    let value = arguments
+        .get(name)
+        .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))?;
+    let values = value.as_array().ok_or_else(|| {
+        JsonRpcError::invalid_params(&format!("{} must be a non-empty array of strings", name))
+    })?;
+    if values.is_empty() {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "{} must be a non-empty array of strings",
+            name
+        )));
+    }
+
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|value| !value.trim().is_empty())
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| {
+                    JsonRpcError::invalid_params(&format!(
+                        "{} must be a non-empty array of strings",
+                        name
+                    ))
+                })
+        })
+        .collect()
 }
 
 fn optional_bool_argument(arguments: &Value, name: &str) -> Result<Option<bool>, JsonRpcError> {
@@ -2241,6 +2379,19 @@ mod tests {
         assert!(
             response["result"]["tools"][11]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][12]["name"], "browser_select");
+        assert_eq!(
+            response["result"]["tools"][12]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert_eq!(
+            response["result"]["tools"][12]["inputSchema"]["required"][1],
+            "values"
+        );
+        assert!(response["result"]["tools"][12]["inputSchema"]["properties"]["values"].is_object());
+        assert!(
+            response["result"]["tools"][12]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -2459,6 +2610,36 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 22);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_select_requires_selector_and_values_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"browser_select","arguments":{"values":["org-a"],"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 23);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"browser_select","arguments":{"selector":"#org","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 24);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"browser_select","arguments":{"selector":"#org","values":"org-a","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 25);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -2794,6 +2975,27 @@ mod tests {
 
         assert_eq!(command["action"], "hover");
         assert_eq!(command["selector"], "#menu");
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_select_command_forwards_values_and_trace_fields() {
+        let command = browser_select_command(
+            "#org",
+            &["org-a".to_string(), "org-b".to_string()],
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "select");
+        assert_eq!(command["selector"], "#org");
+        assert_eq!(command["values"][0], "org-a");
+        assert_eq!(command["values"][1], "org-b");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
