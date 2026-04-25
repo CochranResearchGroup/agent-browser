@@ -299,6 +299,55 @@ try {
     `Event browserId was ${launchEvent.browserId}`,
   );
 
+  const trace = await httpJson(
+    port,
+    'GET',
+    `/api/service/trace?profile-id=${encodeURIComponent(
+      runtimeProfile,
+    )}&session-id=${encodeURIComponent(session)}&service-name=${encodeURIComponent(
+      serviceName,
+    )}&agent-name=${encodeURIComponent(agentName)}&task-name=${encodeURIComponent(
+      taskName,
+    )}&limit=20`,
+  );
+  assert(trace.success === true, `HTTP service trace failed: ${JSON.stringify(trace)}`);
+  assert(
+    trace.data?.filters?.profileId === runtimeProfile,
+    `Trace profile filter was ${trace.data?.filters?.profileId}`,
+  );
+  assert(
+    trace.data?.filters?.sessionId === session,
+    `Trace session filter was ${trace.data?.filters?.sessionId}`,
+  );
+  assert(
+    trace.data?.filters?.serviceName === serviceName,
+    `Trace service filter was ${trace.data?.filters?.serviceName}`,
+  );
+  assert(
+    trace.data?.filters?.agentName === agentName,
+    `Trace agent filter was ${trace.data?.filters?.agentName}`,
+  );
+  assert(
+    trace.data?.filters?.taskName === taskName,
+    `Trace task filter was ${trace.data?.filters?.taskName}`,
+  );
+  assert(Array.isArray(trace.data?.events), 'HTTP service trace missing events array');
+  assert(Array.isArray(trace.data?.jobs), 'HTTP service trace missing jobs array');
+  assert(Array.isArray(trace.data?.incidents), 'HTTP service trace missing incidents array');
+  assert(Array.isArray(trace.data?.activity), 'HTTP service trace missing activity array');
+  assert(
+    trace.data.events.some((event) => event.id === launchEvent.id),
+    `HTTP service trace did not include launch event ${launchEvent.id}: ${JSON.stringify(trace)}`,
+  );
+  assert(
+    trace.data.matched?.events >= trace.data.events.length,
+    'HTTP service trace matched event count is inconsistent with returned events',
+  );
+  assert(
+    trace.data.counts?.events === trace.data.events.length,
+    'HTTP service trace event count does not match returned events',
+  );
+
   await cleanup();
   console.log('Service profile HTTP smoke passed');
 } catch (err) {
