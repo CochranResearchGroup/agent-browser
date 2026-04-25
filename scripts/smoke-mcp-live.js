@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   assert,
-  cargoArgs,
   closeSession,
+  createMcpStdioClient,
   createSmokeContext,
   parseJsonOutput,
-  rootDir,
   runCli,
 } from './smoke-utils.js';
 
@@ -19,7 +17,7 @@ const context = createSmokeContext({
   session: `mcp-live-${process.pid}-${Date.now()}`,
   socketDir: ({ agentHome }) => join(agentHome, 'sockets'),
 });
-const { env, session, tempHome } = context;
+const { session, tempHome } = context;
 const profileDir = join(tempHome, 'chrome-profile');
 const screenshotDir = join(tempHome, 'screenshots');
 const serviceName = 'McpLiveSmoke';
@@ -29,90 +27,25 @@ const taskName = 'browserSnapshotSmoke';
 mkdirSync(profileDir, { recursive: true });
 mkdirSync(screenshotDir, { recursive: true });
 
-let child;
-let stdout = '';
-let stderr = '';
-let nextId = 1;
-const pending = new Map();
+let mcp;
 const timeout = setTimeout(() => {
   fail('Timed out waiting for live MCP smoke to complete');
 }, 90000);
 
 function startMcpServer() {
-  child = spawn('cargo', cargoArgs(['--session', session, 'mcp', 'serve']), {
-    cwd: rootDir,
-    env,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-
-  child.stdout.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => {
-    stdout += chunk;
-    let newline = stdout.indexOf('\n');
-    while (newline >= 0) {
-      const line = stdout.slice(0, newline).trim();
-      stdout = stdout.slice(newline + 1);
-      if (line) handleLine(line);
-      newline = stdout.indexOf('\n');
-    }
-  });
-
-  child.stderr.setEncoding('utf8');
-  child.stderr.on('data', (chunk) => {
-    stderr += chunk;
-  });
-
-  child.on('error', (err) => {
-    fail(`Failed to spawn MCP server: ${err.message}`);
-  });
-
-  child.on('exit', (code, signal) => {
-    if (pending.size > 0) {
-      fail(`MCP server exited before all responses arrived: code=${code} signal=${signal}`);
-    }
+  mcp = createMcpStdioClient({
+    context,
+    args: ['--session', session, 'mcp', 'serve'],
+    onFatal: fail,
   });
 }
 
 function send(method, params) {
-  const id = nextId++;
-  const request = { jsonrpc: '2.0', id, method };
-  if (params !== undefined) request.params = params;
-  const promise = new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject, method });
-  });
-  child.stdin.write(`${JSON.stringify(request)}\n`);
-  return promise;
+  return mcp.send(method, params);
 }
 
 function notify(method, params) {
-  const notification = { jsonrpc: '2.0', method };
-  if (params !== undefined) notification.params = params;
-  child.stdin.write(`${JSON.stringify(notification)}\n`);
-}
-
-function handleLine(line) {
-  let message;
-  try {
-    message = JSON.parse(line);
-  } catch (err) {
-    fail(`MCP server emitted non-JSON stdout line: ${line}\n${err.message}`);
-    return;
-  }
-
-  const pendingRequest = pending.get(message.id);
-  if (!pendingRequest) {
-    fail(`Received unexpected MCP response id: ${message.id}`);
-    return;
-  }
-
-  pending.delete(message.id);
-  if (message.error) {
-    pendingRequest.reject(
-      new Error(`${pendingRequest.method} failed: ${JSON.stringify(message.error)}`),
-    );
-    return;
-  }
-  pendingRequest.resolve(message.result);
+  mcp.notify(method, params);
 }
 
 function parseToolPayload(result) {
@@ -123,10 +56,7 @@ function parseToolPayload(result) {
 
 async function cleanup() {
   clearTimeout(timeout);
-  if (child) {
-    child.stdin.end();
-    child.kill('SIGTERM');
-  }
+  if (mcp) mcp.close();
   try {
     await closeSession(context);
   } finally {
@@ -135,10 +65,10 @@ async function cleanup() {
 }
 
 async function fail(message) {
-  for (const { reject } of pending.values()) reject(new Error(message));
-  pending.clear();
+  if (mcp) mcp.rejectPending(message);
   await cleanup();
   console.error(message);
+  const stderr = mcp?.stderr() ?? '';
   if (stderr.trim()) console.error(stderr.trim());
   process.exit(1);
 }

@@ -187,6 +187,105 @@ export function sendRawCommand(context, command) {
   });
 }
 
+export function createMcpStdioClient({ context, args, onFatal }) {
+  const child = spawn('cargo', cargoArgs(args), {
+    cwd: rootDir,
+    env: context.env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  let nextId = 1;
+  const pending = new Map();
+
+  function fatal(message) {
+    for (const { reject } of pending.values()) reject(new Error(message));
+    pending.clear();
+    void onFatal(message, stderr);
+  }
+
+  function handleLine(line) {
+    let message;
+    try {
+      message = JSON.parse(line);
+    } catch (err) {
+      fatal(`MCP server emitted non-JSON stdout line: ${line}\n${err.message}`);
+      return;
+    }
+
+    const pendingRequest = pending.get(message.id);
+    if (!pendingRequest) {
+      fatal(`Received unexpected MCP response id: ${message.id}`);
+      return;
+    }
+
+    pending.delete(message.id);
+    if (message.error) {
+      pendingRequest.reject(
+        new Error(`${pendingRequest.method} failed: ${JSON.stringify(message.error)}`),
+      );
+      return;
+    }
+    pendingRequest.resolve(message.result);
+  }
+
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk;
+    let newline = stdout.indexOf('\n');
+    while (newline >= 0) {
+      const line = stdout.slice(0, newline).trim();
+      stdout = stdout.slice(newline + 1);
+      if (line) handleLine(line);
+      newline = stdout.indexOf('\n');
+    }
+  });
+
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+
+  child.on('error', (err) => {
+    fatal(`Failed to spawn MCP server: ${err.message}`);
+  });
+
+  child.on('exit', (code, signal) => {
+    if (pending.size > 0) {
+      fatal(`MCP server exited before all responses arrived: code=${code} signal=${signal}`);
+    }
+  });
+
+  return {
+    close() {
+      child.stdin.end();
+      child.kill('SIGTERM');
+    },
+    notify(method, params) {
+      const notification = { jsonrpc: '2.0', method };
+      if (params !== undefined) notification.params = params;
+      child.stdin.write(`${JSON.stringify(notification)}\n`);
+    },
+    rejectPending(message) {
+      for (const { reject } of pending.values()) reject(new Error(message));
+      pending.clear();
+    },
+    send(method, params) {
+      const id = nextId++;
+      const request = { jsonrpc: '2.0', id, method };
+      if (params !== undefined) request.params = params;
+      const promise = new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject, method });
+      });
+      child.stdin.write(`${JSON.stringify(request)}\n`);
+      return promise;
+    },
+    stderr() {
+      return stderr;
+    },
+  };
+}
+
 export async function closeSession(context) {
   try {
     await runCli(context, ['--json', '--session', context.session, 'close']);
