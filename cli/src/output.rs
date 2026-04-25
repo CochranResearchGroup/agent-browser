@@ -2985,7 +2985,7 @@ Usage:
   agent-browser service activity <incident-id>
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--since <timestamp>]
   agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
-  agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]
+  agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
 
 Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
@@ -3017,7 +3017,7 @@ Notes:
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser launch metadata, browser health transitions, and tab lifecycle changes.
-  - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
+  - Event filters match kind, browser ID, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.

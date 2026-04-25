@@ -1270,6 +1270,7 @@ agent-browser service incidents --state active --kind service_job_timeout
 agent-browser service incidents --state recovered --handling-state resolved --browser-id browser-1
 agent-browser service events --limit 20
 agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
+agent-browser service events --service-name JournalDownloader --task-name probeACSwebsite
 agent-browser service events --kind tab_lifecycle_changed
 ```
 
@@ -1297,7 +1298,7 @@ Use `service jobs --limit <n>` to inspect recent control-plane jobs without pars
 
 Use `service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service state. Use `service incidents --id <incident-id>` to fetch one retained incident together with its expanded related events and jobs. Incident detail also includes acknowledgement and resolution metadata when present. Add `--state <state>`, `--handling-state <state>`, `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter incidents before the limit is applied. Valid incident states are `active`, `recovered`, and `service`. Valid handling states are `unacknowledged`, `acknowledged`, and `resolved`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` compares the incident `latestTimestamp` using RFC 3339 timestamps.
 
-Use `service events --limit <n>` to inspect recent reconciliation summaries, browser launch metadata, browser health transitions, tab lifecycle changes, and incident handling events without parsing the full service state. Launch and health events include `profileId`, `sessionId`, `serviceName`, `agentName`, and `taskName` when that context is known. Add `--kind <kind>`, `--browser-id <id>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_launch_recorded`, `browser_health_changed`, `tab_lifecycle_changed`, `reconciliation_error`, `incident_acknowledged`, and `incident_resolved`. `--since` accepts RFC 3339 timestamps.
+Use `service events --limit <n>` to inspect recent reconciliation summaries, browser launch metadata, browser health transitions, tab lifecycle changes, and incident handling events without parsing the full service state. Launch and health events include `profileId`, `sessionId`, `serviceName`, `agentName`, and `taskName` when that context is known. Add `--kind <kind>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_launch_recorded`, `browser_health_changed`, `tab_lifecycle_changed`, `reconciliation_error`, `incident_acknowledged`, and `incident_resolved`. `--since` accepts RFC 3339 timestamps.
 
 When the session stream server is running, agents can read the same service surface over HTTP without shelling out:
 

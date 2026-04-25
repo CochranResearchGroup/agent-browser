@@ -6244,6 +6244,11 @@ async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
         .unwrap_or(20);
     let kind = cmd.get("kind").and_then(|value| value.as_str());
     let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+    let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+    let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+    let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+    let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+    let task_name = cmd.get("taskName").and_then(|value| value.as_str());
     let since = cmd
         .get("since")
         .and_then(|value| value.as_str())
@@ -6256,6 +6261,12 @@ async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
         .filter(|event| {
             kind.is_none_or(|expected| service_event_kind_name(event.kind) == expected)
                 && browser_id.is_none_or(|expected| event.browser_id.as_deref() == Some(expected))
+                && profile_id.is_none_or(|expected| event.profile_id.as_deref() == Some(expected))
+                && session_id.is_none_or(|expected| event.session_id.as_deref() == Some(expected))
+                && service_name
+                    .is_none_or(|expected| event.service_name.as_deref() == Some(expected))
+                && agent_name.is_none_or(|expected| event.agent_name.as_deref() == Some(expected))
+                && task_name.is_none_or(|expected| event.task_name.as_deref() == Some(expected))
                 && since.is_none_or(|minimum| service_event_at_or_after(event, minimum))
         })
         .collect::<Vec<_>>();
@@ -10199,6 +10210,11 @@ mod tests {
             "id": "svc-events-2",
             "kind": "browser_health_changed",
             "browserId": "browser-1",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
             "since": "2026-04-22T00:01:00Z",
             "serviceState": {
                 "events": [
@@ -10207,28 +10223,60 @@ mod tests {
                         "timestamp": "2026-04-22T00:00:00Z",
                         "kind": "browser_health_changed",
                         "message": "too old",
-                        "browserId": "browser-1"
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
                     },
                     {
                         "id": "event-2",
                         "timestamp": "2026-04-22T00:01:00Z",
                         "kind": "browser_health_changed",
                         "message": "matching",
-                        "browserId": "browser-1"
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
                     },
                     {
                         "id": "event-3",
                         "timestamp": "2026-04-22T00:02:00Z",
                         "kind": "browser_health_changed",
                         "message": "different browser",
-                        "browserId": "browser-2"
+                        "browserId": "browser-2",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
                     },
                     {
                         "id": "event-4",
                         "timestamp": "2026-04-22T00:03:00Z",
                         "kind": "reconciliation",
                         "message": "different kind",
-                        "browserId": "browser-1"
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-5",
+                        "timestamp": "2026-04-22T00:04:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "different context",
+                        "browserId": "browser-1",
+                        "profileId": "other",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
                     }
                 ]
             }
@@ -10239,7 +10287,7 @@ mod tests {
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 1);
-        assert_eq!(result["data"]["total"], 4);
+        assert_eq!(result["data"]["total"], 5);
         assert_eq!(result["data"]["events"][0]["id"], "event-2");
         assert!(state.browser.is_none());
     }

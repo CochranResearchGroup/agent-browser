@@ -442,6 +442,21 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
             "browserId" | "browser_id" | "browser-id" => {
                 cmd["browserId"] = json!(value);
             }
+            "profileId" | "profile_id" | "profile-id" => {
+                cmd["profileId"] = json!(value);
+            }
+            "sessionId" | "session_id" | "session-id" => {
+                cmd["sessionId"] = json!(value);
+            }
+            "serviceName" | "service_name" | "service-name" => {
+                cmd["serviceName"] = json!(value);
+            }
+            "agentName" | "agent_name" | "agent-name" => {
+                cmd["agentName"] = json!(value);
+            }
+            "taskName" | "task_name" | "task-name" => {
+                cmd["taskName"] = json!(value);
+            }
             "since" => {
                 cmd["since"] = json!(value);
             }
@@ -686,7 +701,7 @@ mod tests {
     #[test]
     fn service_events_command_maps_query_filters() {
         let cmd = service_events_command(Some(
-            "limit=7&kind=browser_health_changed&browser-id=browser-1&since=2026-04-22T00%3A00%3A00Z",
+            "limit=7&kind=browser_health_changed&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
         ))
         .unwrap();
 
@@ -694,6 +709,11 @@ mod tests {
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["kind"], "browser_health_changed");
         assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["profileId"], "work");
+        assert_eq!(cmd["sessionId"], "session-1");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
         assert!(cmd.get("serviceState").is_some());
     }

@@ -292,6 +292,33 @@ try {
     `Event browserId was ${launchEvent.browserId}`,
   );
 
+  const filteredEventsResult = await runCli([
+    '--json',
+    'service',
+    'events',
+    '--kind',
+    'browser_launch_recorded',
+    '--profile-id',
+    runtimeProfile,
+    '--session-id',
+    session,
+    '--service-name',
+    serviceName,
+    '--agent-name',
+    agentName,
+    '--task-name',
+    taskName,
+  ]);
+  const filteredEvents = parseJsonOutput(filteredEventsResult.stdout, 'filtered service events');
+  assert(
+    filteredEvents.success === true,
+    `Filtered service events failed: ${filteredEventsResult.stdout}${filteredEventsResult.stderr}`,
+  );
+  assert(
+    filteredEvents.data?.events?.some((event) => event.id === launchEvent.id),
+    `Filtered service events did not include launch event: ${JSON.stringify(filteredEvents)}`,
+  );
+
   await cleanup();
   console.log('Service profile MCP smoke passed');
 } catch (err) {

@@ -270,7 +270,13 @@ try {
   const events = await httpJson(
     port,
     'GET',
-    '/api/service/events?kind=browser_launch_recorded&limit=20',
+    `/api/service/events?kind=browser_launch_recorded&profile-id=${encodeURIComponent(
+      runtimeProfile,
+    )}&session-id=${encodeURIComponent(session)}&service-name=${encodeURIComponent(
+      serviceName,
+    )}&agent-name=${encodeURIComponent(agentName)}&task-name=${encodeURIComponent(
+      taskName,
+    )}&limit=20`,
   );
   assert(events.success === true, `HTTP service events failed: ${JSON.stringify(events)}`);
   const launchEvent = events.data?.events?.find(

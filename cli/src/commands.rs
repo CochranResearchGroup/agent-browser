@@ -1308,7 +1308,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }
             Some("events") => {
                 let usage =
-                    "service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--since <timestamp>]";
+                    "service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
                 let mut cmd = json!({
                     "id": id,
                     "action": "service_events",
@@ -1366,6 +1366,56 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 });
                             };
                             cmd["browserId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--profile-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --profile-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["profileId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--session-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --session-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["sessionId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--service-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --service-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["serviceName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--agent-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --agent-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["agentName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--task-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --task-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["taskName"] = json!(raw);
                             i += 1;
                         }
                         "--since" => {
@@ -4719,7 +4769,7 @@ mod tests {
     fn test_service_events_filters() {
         let cmd = parse_command(
             &args(
-                "service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z",
+                "service events --kind browser_health_changed --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
             ),
             &default_flags(),
         )
@@ -4728,6 +4778,11 @@ mod tests {
         assert_eq!(cmd["action"], "service_events");
         assert_eq!(cmd["kind"], "browser_health_changed");
         assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["profileId"], "work");
+        assert_eq!(cmd["sessionId"], "session-1");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
     }
 
