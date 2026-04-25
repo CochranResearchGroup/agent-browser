@@ -1313,11 +1313,14 @@ curl "http://127.0.0.1:<stream-port>/api/browser/url"
 curl "http://127.0.0.1:<stream-port>/api/browser/title"
 curl "http://127.0.0.1:<stream-port>/api/browser/tabs?verbose=true"
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/snapshot" -H "content-type: application/json" -d '{"selector":"main","interactive":true}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/screenshot" -H "content-type: application/json" -d '{"selector":"main","path":"page.png"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/click" -H "content-type: application/json" -d '{"selector":"#submit","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/fill" -H "content-type: application/json" -d '{"selector":"#query","value":"search text","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/wait" -H "content-type: application/json" -d '{"selector":"#result","text":"Ready","timeoutMs":5000}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/type" -H "content-type: application/json" -d '{"selector":"#query","text":" more","delayMs":10}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/press" -H "content-type: application/json" -d '{"key":"Enter"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/hover" -H "content-type: application/json" -d '{"selector":"#menu"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/select" -H "content-type: application/json" -d '{"selector":"#state","values":["CA"]}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-text" -H "content-type: application/json" -d '{"selector":"#result"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-value" -H "content-type: application/json" -d '{"selector":"#query"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-visible" -H "content-type: application/json" -d '{"selector":"#result"}'
@@ -1327,8 +1330,13 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-styles" -H "content
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/count" -H "content-type: application/json" -d '{"selector":".row"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-box" -H "content-type: application/json" -d '{"selector":"#result"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-enabled" -H "content-type: application/json" -d '{"selector":"#submit"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-checked" -H "content-type: application/json" -d '{"selector":"#remember"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/check" -H "content-type: application/json" -d '{"selector":"#remember"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/uncheck" -H "content-type: application/json" -d '{"selector":"#remember"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/scroll" -H "content-type: application/json" -d '{"direction":"down","amount":500}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/scroll-into-view" -H "content-type: application/json" -d '{"selector":"#footer"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/focus" -H "content-type: application/json" -d '{"selector":"#query"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/clear" -H "content-type: application/json" -d '{"selector":"#query"}'
 curl "http://127.0.0.1:<stream-port>/api/service/status"
 curl "http://127.0.0.1:<stream-port>/api/service/profiles"
 curl "http://127.0.0.1:<stream-port>/api/service/sessions"

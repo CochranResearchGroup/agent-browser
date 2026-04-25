@@ -453,6 +453,11 @@ fn browser_api_command(
             "http-browser-snapshot",
             body,
         )),
+        ("POST", "/api/browser/screenshot") => Some(browser_body_command(
+            "screenshot",
+            "http-browser-screenshot",
+            body,
+        )),
         ("POST", "/api/browser/click") => {
             Some(browser_body_command("click", "http-browser-click", body))
         }
@@ -467,6 +472,12 @@ fn browser_api_command(
         }
         ("POST", "/api/browser/press") => {
             Some(browser_body_command("press", "http-browser-press", body))
+        }
+        ("POST", "/api/browser/hover") => {
+            Some(browser_body_command("hover", "http-browser-hover", body))
+        }
+        ("POST", "/api/browser/select") => {
+            Some(browser_body_command("select", "http-browser-select", body))
         }
         ("POST", "/api/browser/get-text") => Some(browser_body_command(
             "gettext",
@@ -511,6 +522,11 @@ fn browser_api_command(
             "http-browser-is-enabled",
             body,
         )),
+        ("POST", "/api/browser/is-checked") => Some(browser_body_command(
+            "ischecked",
+            "http-browser-is-checked",
+            body,
+        )),
         ("POST", "/api/browser/check") => {
             Some(browser_body_command("check", "http-browser-check", body))
         }
@@ -519,6 +535,20 @@ fn browser_api_command(
             "http-browser-uncheck",
             body,
         )),
+        ("POST", "/api/browser/scroll") => {
+            Some(browser_body_command("scroll", "http-browser-scroll", body))
+        }
+        ("POST", "/api/browser/scroll-into-view") => Some(browser_body_command(
+            "scrollintoview",
+            "http-browser-scroll-into-view",
+            body,
+        )),
+        ("POST", "/api/browser/focus") => {
+            Some(browser_body_command("focus", "http-browser-focus", body))
+        }
+        ("POST", "/api/browser/clear") => {
+            Some(browser_body_command("clear", "http-browser-clear", body))
+        }
         _ => None,
     }
 }
@@ -1352,6 +1382,14 @@ mod tests {
         )
         .unwrap()
         .unwrap();
+        let screenshot = browser_api_command(
+            "POST",
+            "/api/browser/screenshot",
+            None,
+            r#"{"selector":"main","fullPage":true}"#,
+        )
+        .unwrap()
+        .unwrap();
         let wait = browser_api_command(
             "POST",
             "/api/browser/wait",
@@ -1371,6 +1409,22 @@ mod tests {
         let press = browser_api_command("POST", "/api/browser/press", None, r#"{"key":"Enter"}"#)
             .unwrap()
             .unwrap();
+        let hover = browser_api_command(
+            "POST",
+            "/api/browser/hover",
+            None,
+            r##"{"selector":"#ready"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let select = browser_api_command(
+            "POST",
+            "/api/browser/select",
+            None,
+            r##"{"selector":"#choice","values":["b"]}"##,
+        )
+        .unwrap()
+        .unwrap();
         let get_text = browser_api_command(
             "POST",
             "/api/browser/get-text",
@@ -1443,6 +1497,14 @@ mod tests {
         )
         .unwrap()
         .unwrap();
+        let is_checked = browser_api_command(
+            "POST",
+            "/api/browser/is-checked",
+            None,
+            r##"{"selector":"#remember"}"##,
+        )
+        .unwrap()
+        .unwrap();
         let check = browser_api_command(
             "POST",
             "/api/browser/check",
@@ -1459,6 +1521,38 @@ mod tests {
         )
         .unwrap()
         .unwrap();
+        let scroll = browser_api_command(
+            "POST",
+            "/api/browser/scroll",
+            None,
+            r##"{"direction":"down","amount":200}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let scroll_into_view = browser_api_command(
+            "POST",
+            "/api/browser/scroll-into-view",
+            None,
+            r##"{"selector":"#box"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let focus = browser_api_command(
+            "POST",
+            "/api/browser/focus",
+            None,
+            r##"{"selector":"#name"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let clear = browser_api_command(
+            "POST",
+            "/api/browser/clear",
+            None,
+            r##"{"selector":"#name"}"##,
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(click["action"], "click");
         assert_eq!(click["selector"], "#ready");
@@ -1467,12 +1561,17 @@ mod tests {
         assert_eq!(fill["value"], "Ada");
         assert_eq!(snapshot["action"], "snapshot");
         assert_eq!(snapshot["interactive"], true);
+        assert_eq!(screenshot["action"], "screenshot");
+        assert_eq!(screenshot["fullPage"], true);
         assert_eq!(wait["action"], "wait");
         assert_eq!(wait["state"], "visible");
         assert_eq!(type_text["action"], "type");
         assert_eq!(type_text["text"], " Jr");
         assert_eq!(press["action"], "press");
         assert_eq!(press["key"], "Enter");
+        assert_eq!(hover["action"], "hover");
+        assert_eq!(select["action"], "select");
+        assert_eq!(select["values"][0], "b");
         assert_eq!(get_text["action"], "gettext");
         assert_eq!(get_value["action"], "inputvalue");
         assert_eq!(is_visible["action"], "isvisible");
@@ -1483,8 +1582,14 @@ mod tests {
         assert_eq!(count["action"], "count");
         assert_eq!(get_box["action"], "boundingbox");
         assert_eq!(is_enabled["action"], "isenabled");
+        assert_eq!(is_checked["action"], "ischecked");
         assert_eq!(check["action"], "check");
         assert_eq!(uncheck["action"], "uncheck");
+        assert_eq!(scroll["action"], "scroll");
+        assert_eq!(scroll["direction"], "down");
+        assert_eq!(scroll_into_view["action"], "scrollintoview");
+        assert_eq!(focus["action"], "focus");
+        assert_eq!(clear["action"], "clear");
     }
 
     #[test]
