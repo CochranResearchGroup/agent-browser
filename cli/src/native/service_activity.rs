@@ -14,7 +14,7 @@ pub(crate) fn service_incident_activity_response(
         .find(|incident| incident.id == incident_id)
         .cloned()
         .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
-    let activity = service_incident_activity(service_state, &incident);
+    let activity = service_incident_activity_items(service_state, &incident);
 
     Ok(json!({
         "incident": incident,
@@ -23,7 +23,7 @@ pub(crate) fn service_incident_activity_response(
     }))
 }
 
-fn service_incident_activity(
+pub(crate) fn service_incident_activity_items(
     service_state: &ServiceState,
     incident: &ServiceIncident,
 ) -> Vec<Value> {

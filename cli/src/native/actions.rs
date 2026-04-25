@@ -37,7 +37,9 @@ use super::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use super::providers;
 use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
-use super::service_activity::service_incident_activity_response;
+use super::service_activity::{
+    service_incident_activity_items, service_incident_activity_response,
+};
 use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
     record_browser_launch_recorded_event,
@@ -1806,6 +1808,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_incident_acknowledge"
             | "service_incident_resolve"
             | "service_incident_activity"
+            | "service_trace"
             | "service_jobs"
             | "service_incidents"
             | "service_events"
@@ -1976,6 +1979,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
         "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
         "service_incident_activity" => handle_service_incident_activity(cmd).await,
+        "service_trace" => handle_service_trace(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
         "service_incidents" => handle_service_incidents(cmd).await,
         "service_events" => handle_service_events(cmd).await,
@@ -6471,6 +6475,186 @@ async fn handle_service_incident_activity(cmd: &Value) -> Result<Value, String> 
     service_incident_activity_response(&service_state, incident_id)
 }
 
+async fn handle_service_trace(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let limit = cmd
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+    let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+    let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+    let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+    let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+    let task_name = cmd.get("taskName").and_then(|value| value.as_str());
+    let since = cmd
+        .get("since")
+        .and_then(|value| value.as_str())
+        .map(parse_service_event_timestamp)
+        .transpose()?;
+
+    // Trace view joins the retained service indexes so clients can debug one
+    // service/task without issuing separate jobs, incidents, events, and
+    // activity requests.
+    let total_events = service_state.events.len();
+    let mut events = service_state
+        .events
+        .iter()
+        .filter(|event| {
+            browser_id.is_none_or(|expected| event.browser_id.as_deref() == Some(expected))
+                && service_event_matches_trace_filters(
+                    event,
+                    profile_id,
+                    session_id,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )
+                && since.is_none_or(|minimum| service_event_at_or_after(event, minimum))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let matched_events = events.len();
+    events = tail_limit(events, limit);
+
+    let total_jobs = service_state.jobs.len();
+    let mut jobs = service_state.jobs.values().cloned().collect::<Vec<_>>();
+    jobs.sort_by(|left, right| {
+        let left_time = left.submitted_at.as_deref().unwrap_or_default();
+        let right_time = right.submitted_at.as_deref().unwrap_or_default();
+        left_time
+            .cmp(right_time)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let jobs = jobs
+        .into_iter()
+        .filter(|job| {
+            browser_id.is_none_or(|expected| {
+                service_job_browser_id(job, &service_state) == Some(expected)
+            }) && service_job_matches_trace_filters(
+                job,
+                &service_state,
+                profile_id,
+                session_id,
+                service_name,
+                agent_name,
+                task_name,
+            ) && since.is_none_or(|minimum| service_job_at_or_after(job, minimum))
+        })
+        .collect::<Vec<_>>();
+    let matched_jobs = jobs.len();
+    let jobs = tail_limit(jobs, limit);
+
+    let total_incidents = service_state.incidents.len();
+    let incidents = service_state
+        .incidents
+        .iter()
+        .filter(|incident| {
+            browser_id.is_none_or(|expected| incident.browser_id.as_deref() == Some(expected))
+                && service_incident_matches_trace_filters(
+                    incident,
+                    &service_state,
+                    profile_id,
+                    session_id,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )
+                && since.is_none_or(|minimum| service_incident_at_or_after(incident, minimum))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let matched_incidents = incidents.len();
+    let incidents = tail_limit(incidents, limit);
+
+    let mut activity = incidents
+        .iter()
+        .flat_map(|incident| service_incident_activity_items(&service_state, incident))
+        .filter(|item| {
+            since.is_none_or(|minimum| {
+                item.get("timestamp")
+                    .and_then(|value| value.as_str())
+                    .and_then(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
+                    .is_some_and(|timestamp| timestamp >= minimum)
+            })
+        })
+        .collect::<Vec<_>>();
+    activity.sort_by(|left, right| {
+        let left_timestamp = left
+            .get("timestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let right_timestamp = right
+            .get("timestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let left_id = left
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let right_id = right
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        left_timestamp
+            .cmp(right_timestamp)
+            .then_with(|| left_id.cmp(right_id))
+    });
+    activity.dedup_by(|left, right| left.get("id") == right.get("id"));
+    let matched_activity = activity.len();
+    activity = tail_limit(activity, limit);
+    let event_count = events.len();
+    let job_count = jobs.len();
+    let incident_count = incidents.len();
+    let activity_count = activity.len();
+
+    Ok(json!({
+        "filters": {
+            "browserId": browser_id,
+            "profileId": profile_id,
+            "sessionId": session_id,
+            "serviceName": service_name,
+            "agentName": agent_name,
+            "taskName": task_name,
+            "since": cmd.get("since").and_then(|value| value.as_str()),
+            "limit": limit,
+        },
+        "events": events,
+        "jobs": jobs,
+        "incidents": incidents,
+        "activity": activity,
+        "counts": {
+            "events": event_count,
+            "jobs": job_count,
+            "incidents": incident_count,
+            "activity": activity_count,
+        },
+        "matched": {
+            "events": matched_events,
+            "jobs": matched_jobs,
+            "incidents": matched_incidents,
+            "activity": matched_activity,
+        },
+        "total": {
+            "events": total_events,
+            "jobs": total_jobs,
+            "incidents": total_incidents,
+        },
+    }))
+}
+
+fn tail_limit<T: Clone>(items: Vec<T>, limit: usize) -> Vec<T> {
+    let start = items.len().saturating_sub(limit);
+    items[start..].to_vec()
+}
+
 fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
     match kind {
         ServiceEventKind::Reconciliation => "reconciliation",
@@ -6613,6 +6797,23 @@ fn service_job_matches_trace_filters(
         && service_name.is_none_or(|expected| job.service_name.as_deref() == Some(expected))
         && agent_name.is_none_or(|expected| job.agent_name.as_deref() == Some(expected))
         && task_name.is_none_or(|expected| job.task_name.as_deref() == Some(expected))
+}
+
+fn service_job_browser_id<'a>(
+    job: &'a super::service_model::ServiceJob,
+    service_state: &'a ServiceState,
+) -> Option<&'a str> {
+    match &job.target {
+        super::service_model::JobTarget::Browser(browser_id) => Some(browser_id.as_str()),
+        super::service_model::JobTarget::Tab(tab_id) => service_state
+            .tabs
+            .get(tab_id)
+            .map(|tab| tab.browser_id.as_str()),
+        super::service_model::JobTarget::Service
+        | super::service_model::JobTarget::Profile(_)
+        | super::service_model::JobTarget::Monitor(_)
+        | super::service_model::JobTarget::Challenge(_) => None,
+    }
 }
 
 fn service_job_profile_id<'a>(
@@ -10853,6 +11054,111 @@ mod tests {
         assert_eq!(result["data"]["activity"][2]["source"], "event");
         assert_eq!(result["data"]["activity"][3]["kind"], "incident_resolved");
         assert_eq!(result["data"]["activity"][3]["source"], "metadata");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_trace_returns_related_records_and_activity() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_trace",
+            "id": "svc-trace-1",
+            "serviceName": "JournalDownloader",
+            "taskName": "probeACSwebsite",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser failed",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-2",
+                        "timestamp": "2026-04-22T00:01:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Wrong task",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "otherTask"
+                    }
+                ],
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "timed_out",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:02:00Z",
+                        "error": "Timed out"
+                    },
+                    "job-2": {
+                        "id": "job-2",
+                        "action": "navigate",
+                        "state": "timed_out",
+                        "target": {"profile": "other"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:03:00Z",
+                        "error": "Wrong profile"
+                    }
+                },
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "profileId": "work",
+                        "activeSessionIds": ["session-1"]
+                    }
+                },
+                "sessions": {
+                    "session-1": {
+                        "id": "session-1",
+                        "profileId": "work",
+                        "browserIds": ["browser-1"]
+                    }
+                },
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "latestTimestamp": "2026-04-22T00:02:00Z",
+                        "latestMessage": "Timed out",
+                        "latestKind": "service_job_timeout",
+                        "eventIds": ["event-1"],
+                        "jobIds": ["job-1"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["counts"]["events"], 1);
+        assert_eq!(result["data"]["counts"]["jobs"], 1);
+        assert_eq!(result["data"]["counts"]["incidents"], 1);
+        assert_eq!(result["data"]["counts"]["activity"], 2);
+        assert_eq!(result["data"]["events"][0]["id"], "event-1");
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
+        assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
         assert!(state.browser.is_none());
     }
 

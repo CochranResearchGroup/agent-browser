@@ -317,9 +317,65 @@ fn format_service_incident_activity_text(data: &serde_json::Value) -> Option<Str
                 .and_then(|value| value.as_str())
                 .map(|value| format!(" browser={value}"))
                 .unwrap_or_default();
-            format!("{timestamp} {kind} source={source} id={id}{browser} {message}")
+            let profile = item
+                .get("profileId")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" profile={value}"))
+                .unwrap_or_default();
+            let session = item
+                .get("sessionId")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" session={value}"))
+                .unwrap_or_default();
+            let service = item
+                .get("serviceName")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" service={value}"))
+                .unwrap_or_default();
+            let agent = item
+                .get("agentName")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" agent={value}"))
+                .unwrap_or_default();
+            let task = item
+                .get("taskName")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" task={value}"))
+                .unwrap_or_default();
+            format!(
+                "{timestamp} {kind} source={source} id={id}{browser}{profile}{session}{service}{agent}{task} {message}"
+            )
         })
         .collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
+fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
+    let counts = data.get("counts")?;
+    let events = counts
+        .get("events")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let jobs = counts
+        .get("jobs")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let incidents = counts
+        .get("incidents")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let activity = counts
+        .get("activity")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let mut lines = vec![format!(
+        "Trace: events={events} jobs={jobs} incidents={incidents} activity={activity}"
+    )];
+    if let Some(activity_text) = format_service_incident_activity_text(data) {
+        if activity > 0 {
+            lines.push(activity_text);
+        }
+    }
     Some(lines.join("\n"))
 }
 
@@ -618,6 +674,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_incident_activity") {
             if let Some(output) = format_service_incident_activity_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_trace") {
+            if let Some(output) = format_service_trace_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -2983,6 +3045,7 @@ Usage:
   agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
   agent-browser service resolve <incident-id> [--by <text>] [--note <text>]
   agent-browser service activity <incident-id>
+  agent-browser service trace [--limit <n>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
@@ -2995,6 +3058,7 @@ Commands:
   acknowledge           Record that an operator has seen a retained incident
   resolve               Mark a retained incident handled with operator metadata
   activity              Show a normalized incident timeline from related events, jobs, and handling metadata
+  trace                 Show events, jobs, incidents, and activity for one service/task trace
   jobs                  Show recent service control-plane jobs
   incidents             Show grouped retained service incidents
   events                Show recent service reconciliation, launch, browser health, and tab lifecycle events
@@ -3012,13 +3076,14 @@ Notes:
   - Incident filters match incident state, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
+  - Trace returns related events, jobs, incidents, and normalized activity in one response for a browser, profile, session, service, agent, task, or time window.
   - Text service status includes profile and session summary lines for operator traceability.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
   - The bounded events log records reconciliation summaries, browser launch metadata, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
-  - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
+  - The stream server exposes the same surface at /api/service/status, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch and close update the active session's persisted browser health record.
   - Runtime profile and custom profile launches populate linked service profile and session records.
@@ -3038,6 +3103,7 @@ Examples:
   agent-browser service acknowledge browser-1 --by operator --note triaged
   agent-browser service resolve browser-1 --by operator --note recovered
   agent-browser service activity browser-1
+  agent-browser service trace --service-name JournalDownloader --task-name probeACSwebsite
   agent-browser service jobs --limit 20
   agent-browser service jobs --id <job-id>
   agent-browser service jobs --state failed --action navigate
@@ -3453,6 +3519,7 @@ Service:
   service acknowledge        Record that an operator has seen a retained incident
   service resolve            Mark a retained incident handled
   service activity           Show a normalized retained incident timeline
+  service trace              Show related service trace records in one response
   service jobs               Show recent service control-plane jobs
   service incidents          Show grouped retained service incidents
   service events             Show recent service events
@@ -3726,6 +3793,7 @@ Examples:
   agent-browser service acknowledge      # Mark a retained incident acknowledged
   agent-browser service resolve          # Mark a retained incident resolved
   agent-browser service activity         # Inspect a retained incident timeline
+  agent-browser service trace            # Inspect related service trace records
   agent-browser service jobs             # Inspect recent service control jobs
   agent-browser service incidents        # Inspect grouped retained service incidents
   agent-browser service events           # Inspect recent service events
@@ -3843,7 +3911,10 @@ pub fn print_version() {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_service_events_text, format_service_status_text, format_storage_text};
+    use super::{
+        format_service_events_text, format_service_status_text, format_service_trace_text,
+        format_storage_text,
+    };
     use serde_json::json;
 
     #[test]
@@ -3995,6 +4066,38 @@ mod tests {
         assert_eq!(
             rendered,
             "2026-04-25T00:00:00Z browser_launch_recorded browser=session:runtime-session profile=work session=runtime-session service=JournalDownloader agent=codex task=probeACSwebsite Browser session:runtime-session launch metadata recorded"
+        );
+    }
+
+    #[test]
+    fn test_format_service_trace_text_includes_activity_trace_context() {
+        let data = json!({
+            "counts": {
+                "events": 1,
+                "jobs": 1,
+                "incidents": 1,
+                "activity": 1
+            },
+            "activity": [{
+                "id": "activity-1",
+                "source": "event",
+                "timestamp": "2026-04-25T00:00:00Z",
+                "kind": "browser_health_changed",
+                "browserId": "browser-1",
+                "profileId": "work",
+                "sessionId": "session-1",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "message": "Browser failed"
+            }]
+        });
+
+        let rendered = format_service_trace_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Trace: events=1 jobs=1 incidents=1 activity=1\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 

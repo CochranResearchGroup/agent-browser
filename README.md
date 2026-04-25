@@ -139,6 +139,7 @@ agent-browser service cancel <job-id> # Cancel a queued or running service contr
 agent-browser service acknowledge <incident-id> # Mark a retained incident acknowledged
 agent-browser service resolve <incident-id>     # Mark a retained incident resolved
 agent-browser service activity <incident-id>    # Show a retained incident timeline
+agent-browser service trace                     # Show related service trace records
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service incidents       # Show grouped retained service incidents
 agent-browser service events          # Show recent service events
@@ -1260,6 +1261,7 @@ agent-browser service cancel <job-id> --reason stale
 agent-browser service acknowledge browser-1 --by operator --note triaged
 agent-browser service resolve browser-1 --by operator --note recovered
 agent-browser service activity browser-1
+agent-browser service trace --service-name JournalDownloader --task-name probeACSwebsite
 agent-browser service jobs --limit 20
 agent-browser service jobs --id <job-id>
 agent-browser service jobs --state failed --action navigate --since 2026-04-22T00:00:00Z
@@ -1296,6 +1298,8 @@ Acknowledgement and resolution also append retained service events with `inciden
 
 The activity response is the canonical agent-facing incident timeline. It returns `{ incident, activity, count }`. Each activity item includes `id`, `source`, `timestamp`, `kind`, `title`, and `message`, plus `eventId` or `jobId` when it came from a retained event or job. Event and job items include trace context fields such as `browserId`, `profileId`, `sessionId`, `serviceName`, `agentName`, and `taskName` when known, so clients can display one timeline without rejoining raw records. Older retained incidents can include `source: "metadata"` acknowledgement or resolution items when handling metadata predates retained handling events.
 
+Use `service trace --service-name <name> --task-name <name>` to inspect related events, jobs, incidents, and normalized activity in one response. Add `--limit <n>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--agent-name <name>`, or `--since <timestamp>` to narrow a trace view for one service, agent, task, browser, profile, session, or time window. This is the preferred service debugging surface when a client needs a complete timeline without issuing separate jobs, incidents, events, and incident activity requests.
+
 Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 
 Use `service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service state. Use `service incidents --id <incident-id>` to fetch one retained incident together with its expanded related events and jobs. Incident detail also includes acknowledgement and resolution metadata when present. Add `--state <state>`, `--handling-state <state>`, `--kind <kind>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter incidents before the limit is applied. Trace-context filters match related events and jobs. Valid incident states are `active`, `recovered`, and `service`. Valid handling states are `unacknowledged`, `acknowledged`, and `resolved`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` compares the incident `latestTimestamp` using RFC 3339 timestamps.
@@ -1306,6 +1310,7 @@ When the session stream server is running, agents can read the same service surf
 
 ```bash
 curl "http://127.0.0.1:<stream-port>/api/service/status"
+curl "http://127.0.0.1:<stream-port>/api/service/trace?service-name=JournalDownloader&task-name=probeACSwebsite"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs?limit=20&state=failed"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>/cancel"

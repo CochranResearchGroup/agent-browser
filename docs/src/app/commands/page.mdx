@@ -40,6 +40,7 @@ agent-browser service cancel <job-id> # Cancel a queued or running service contr
 agent-browser service acknowledge <incident-id> # Mark a retained incident acknowledged
 agent-browser service resolve <incident-id>     # Mark a retained incident resolved
 agent-browser service activity <incident-id>    # Show a retained incident timeline
+agent-browser service trace                     # Show related service trace records
 agent-browser service jobs            # Show recent service control jobs
 agent-browser service incidents       # Show grouped retained service incidents
 agent-browser service events          # Show recent service events
@@ -286,6 +287,7 @@ agent-browser service incidents --state active --kind service_job_timeout
 agent-browser service incidents --state recovered --handling-state resolved --browser-id browser-1
 agent-browser service incidents --service-name JournalDownloader --task-name probeACSwebsite
 agent-browser service activity browser-1
+agent-browser service trace --service-name JournalDownloader --task-name probeACSwebsite
 agent-browser service acknowledge browser-1 --by operator --note triaged
 agent-browser service resolve browser-1 --by operator --note recovered
 agent-browser service events --limit 20
@@ -313,6 +315,8 @@ The persisted service state also includes bounded audit records for recent contr
 Acknowledgement and resolution also append retained service events with `incident_acknowledged` and `incident_resolved` kinds. Incident detail includes those handling events alongside the health and job events that define the grouped incident. Use `service activity <incident-id>` to fetch a normalized chronological timeline for one retained incident without reconstructing it client-side.
 
 The activity response is the canonical agent-facing incident timeline. It returns <code>{"{ incident, activity, count }"}</code>. Each activity item includes <code>id</code>, <code>source</code>, <code>timestamp</code>, <code>kind</code>, <code>title</code>, and <code>message</code>, plus <code>eventId</code> or <code>jobId</code> when it came from a retained event or job. Event and job items include trace context fields such as <code>browserId</code>, <code>profileId</code>, <code>sessionId</code>, <code>serviceName</code>, <code>agentName</code>, and <code>taskName</code> when known, so clients can display one timeline without rejoining raw records. Older retained incidents can include <code>source: "metadata"</code> acknowledgement or resolution items when handling metadata predates retained handling events.
+
+`service trace --service-name <name> --task-name <name>` returns related events, jobs, incidents, and normalized activity in one response. Add `--limit <n>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--agent-name <name>`, or `--since <timestamp>` to narrow a trace view for one service, agent, task, browser, profile, session, or time window. Use this when clients need a complete service/task timeline without issuing separate jobs, incidents, events, and incident activity requests.
 
 `service jobs --limit <n>` prints recent control-plane jobs without requiring operators to parse the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 

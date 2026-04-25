@@ -172,6 +172,19 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" && path == "/api/service/trace" {
+        let cmd = match service_trace_command(query) {
+            Ok(cmd) => cmd,
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                return;
+            }
+        };
+        let result = relay_service_command(session_name, cmd).await;
+        write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
+    }
+
     if method == "GET" && path == "/api/service/events" {
         let cmd = match service_events_command(query) {
             Ok(cmd) => cmd,
@@ -411,6 +424,49 @@ fn service_incident_activity_command(incident_id: &str) -> Value {
         "incidentId": incident_id,
         "serviceState": load_service_state_snapshot(),
     })
+}
+
+fn service_trace_command(query: Option<&str>) -> Result<Value, String> {
+    let mut cmd = json!({
+        "action": "service_trace",
+        "serviceState": load_service_state_snapshot(),
+    });
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "limit" => {
+                let limit = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("Invalid limit value: {}", value))?;
+                cmd["limit"] = json!(limit);
+            }
+            "browserId" | "browser_id" | "browser-id" => {
+                cmd["browserId"] = json!(value);
+            }
+            "profileId" | "profile_id" | "profile-id" => {
+                cmd["profileId"] = json!(value);
+            }
+            "sessionId" | "session_id" | "session-id" => {
+                cmd["sessionId"] = json!(value);
+            }
+            "serviceName" | "service_name" | "service-name" => {
+                cmd["serviceName"] = json!(value);
+            }
+            "agentName" | "agent_name" | "agent-name" => {
+                cmd["agentName"] = json!(value);
+            }
+            "taskName" | "task_name" | "task-name" => {
+                cmd["taskName"] = json!(value);
+            }
+            "since" => {
+                cmd["since"] = json!(value);
+            }
+            "" => {}
+            _ => return Err(format!("Unknown service trace query parameter: {}", key)),
+        }
+    }
+
+    Ok(cmd)
 }
 
 fn service_events_command(query: Option<&str>) -> Result<Value, String> {
@@ -872,6 +928,25 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_incident_activity");
         assert_eq!(cmd["incidentId"], "incident-123");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn service_trace_command_maps_query_filters() {
+        let cmd = service_trace_command(Some(
+            "limit=7&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
+        ))
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_trace");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["profileId"], "work");
+        assert_eq!(cmd["sessionId"], "session-1");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
         assert!(cmd["serviceState"].is_object());
     }
 

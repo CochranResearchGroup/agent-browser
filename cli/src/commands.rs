@@ -1085,6 +1085,113 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "serviceState": flags.service_state.clone(),
                 }))
             }
+            Some("trace") => {
+                let usage =
+                    "service trace [--limit <n>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_trace",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--limit" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --limit".to_string(),
+                                    usage,
+                                });
+                            };
+                            let limit =
+                                raw.parse::<usize>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --limit value: {}", raw),
+                                    usage,
+                                })?;
+                            cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        "--browser-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --browser-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["browserId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--profile-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --profile-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["profileId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--session-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --session-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["sessionId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--service-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --service-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["serviceName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--agent-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --agent-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["agentName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--task-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --task-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["taskName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--since" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --since".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["since"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service trace: {}", flag),
+                                usage,
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
             Some("jobs") => {
                 let usage =
                     "service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
@@ -1548,6 +1655,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "cancel",
                     "acknowledge",
                     "resolve",
+                    "trace",
                     "jobs",
                     "incidents",
                     "events",
@@ -1555,7 +1663,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|cancel|acknowledge|resolve|jobs|incidents|events>",
+                usage: "service <status|watch|reconcile|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
             }),
         },
 
@@ -4832,6 +4940,27 @@ mod tests {
         assert_eq!(cmd["action"], "service_incident_activity");
         assert_eq!(cmd["incidentId"], "incident-123");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_trace_filters() {
+        let cmd = parse_command(
+            &args(
+                "service trace --limit 7 --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_trace");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["profileId"], "work");
+        assert_eq!(cmd["sessionId"], "session-1");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
     }
 
     #[test]
