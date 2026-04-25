@@ -512,6 +512,44 @@ fn browser_api_command(
             "http-browser-permissions",
             body,
         )),
+        ("POST", "/api/browser/cookies/get") => Some(browser_body_command(
+            "cookies_get",
+            "http-browser-cookies-get",
+            body,
+        )),
+        ("POST", "/api/browser/cookies/set") => Some(browser_body_command(
+            "cookies_set",
+            "http-browser-cookies-set",
+            body,
+        )),
+        ("POST", "/api/browser/cookies/clear") => Some(browser_body_command(
+            "cookies_clear",
+            "http-browser-cookies-clear",
+            body,
+        )),
+        ("POST", "/api/browser/storage/get") => Some(browser_body_command(
+            "storage_get",
+            "http-browser-storage-get",
+            body,
+        )),
+        ("POST", "/api/browser/storage/set") => Some(browser_body_command(
+            "storage_set",
+            "http-browser-storage-set",
+            body,
+        )),
+        ("POST", "/api/browser/storage/clear") => Some(browser_body_command(
+            "storage_clear",
+            "http-browser-storage-clear",
+            body,
+        )),
+        ("POST", "/api/browser/console") => Some(browser_body_command(
+            "console",
+            "http-browser-console",
+            body,
+        )),
+        ("POST", "/api/browser/errors") => {
+            Some(browser_body_command("errors", "http-browser-errors", body))
+        }
         ("POST", "/api/browser/snapshot") => Some(browser_body_command(
             "snapshot",
             "http-browser-snapshot",
@@ -1511,6 +1549,51 @@ mod tests {
         )
         .unwrap()
         .unwrap();
+        let cookies_get = browser_api_command("POST", "/api/browser/cookies/get", None, "{}")
+            .unwrap()
+            .unwrap();
+        let cookies_set = browser_api_command(
+            "POST",
+            "/api/browser/cookies/set",
+            None,
+            r##"{"name":"smoke","value":"ok"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let cookies_clear = browser_api_command("POST", "/api/browser/cookies/clear", None, "{}")
+            .unwrap()
+            .unwrap();
+        let storage_get = browser_api_command(
+            "POST",
+            "/api/browser/storage/get",
+            None,
+            r##"{"type":"local","key":"smoke"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let storage_set = browser_api_command(
+            "POST",
+            "/api/browser/storage/set",
+            None,
+            r##"{"type":"local","key":"smoke","value":"ok"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let storage_clear = browser_api_command(
+            "POST",
+            "/api/browser/storage/clear",
+            None,
+            r##"{"type":"local"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let console =
+            browser_api_command("POST", "/api/browser/console", None, r##"{"clear":true}"##)
+                .unwrap()
+                .unwrap();
+        let errors = browser_api_command("POST", "/api/browser/errors", None, "{}")
+            .unwrap()
+            .unwrap();
         let click = browser_api_command(
             "POST",
             "/api/browser/click",
@@ -1737,6 +1820,18 @@ mod tests {
         assert_eq!(geolocation["latitude"], 41.8781);
         assert_eq!(permissions["action"], "permissions");
         assert_eq!(permissions["permissions"][0], "geolocation");
+        assert_eq!(cookies_get["action"], "cookies_get");
+        assert_eq!(cookies_set["action"], "cookies_set");
+        assert_eq!(cookies_set["name"], "smoke");
+        assert_eq!(cookies_clear["action"], "cookies_clear");
+        assert_eq!(storage_get["action"], "storage_get");
+        assert_eq!(storage_get["type"], "local");
+        assert_eq!(storage_set["action"], "storage_set");
+        assert_eq!(storage_set["key"], "smoke");
+        assert_eq!(storage_clear["action"], "storage_clear");
+        assert_eq!(console["action"], "console");
+        assert_eq!(console["clear"], true);
+        assert_eq!(errors["action"], "errors");
         assert_eq!(click["action"], "click");
         assert_eq!(click["selector"], "#ready");
         assert_eq!(click["serviceName"], "JournalDownloader");

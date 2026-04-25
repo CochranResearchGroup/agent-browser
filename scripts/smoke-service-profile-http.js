@@ -9,6 +9,7 @@ import {
   runCli,
 } from './smoke-utils.js';
 import { existsSync } from 'node:fs';
+import { createServer } from 'node:http';
 
 const context = createSmokeContext({ prefix: 'ab-sph-', sessionPrefix: 'sph' });
 const { session } = context;
@@ -17,6 +18,7 @@ const serviceName = 'RuntimeProfileHttpSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'profileSessionHttpStatusSmoke';
 const traceFields = { serviceName, agentName, taskName };
+let fixtureServer;
 
 const timeout = setTimeout(() => {
   fail('Timed out waiting for service profile HTTP smoke to complete');
@@ -24,13 +26,19 @@ const timeout = setTimeout(() => {
 
 async function cleanup() {
   clearTimeout(timeout);
+  if (fixtureServer) {
+    fixtureServer.closeAllConnections?.();
+    fixtureServer.closeIdleConnections?.();
+    await new Promise((resolve) => fixtureServer.close(resolve));
+    fixtureServer = undefined;
+  }
   await closeSession(context);
   context.cleanupTempHome();
 }
 
 async function fail(message) {
-  await cleanup();
   console.error(message);
+  await cleanup();
   process.exit(1);
 }
 
@@ -40,6 +48,23 @@ async function browserPost(port, endpoint, body = {}) {
 
 function assertHttpSuccess(response, label) {
   assert(response.success === true, `${label} failed: ${JSON.stringify(response)}`);
+}
+
+function listenFixtureServer(routes) {
+  const server = createServer((req, res) => {
+    const body = routes.get(req.url) ?? routes.get('/');
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(body);
+  });
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      fixtureServer = server;
+      const address = server.address();
+      resolve(`http://127.0.0.1:${address.port}`);
+    });
+  });
 }
 
 try {
@@ -69,11 +94,19 @@ try {
     '</body>',
     '</html>',
   ].join('');
-  const pageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(pageHtml)}`;
   const secondPageHtml = '<!doctype html><title>Second HTTP Page</title><h1 id="second-ready">Second HTTP Page</h1>';
-  const secondPageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(secondPageHtml)}`;
   const tabPageHtml = '<!doctype html><title>HTTP Tab Page</title><h1 id="tab-ready">HTTP Tab Page</h1>';
-  const tabPageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(tabPageHtml)}`;
+  const fixtureOrigin = await listenFixtureServer(
+    new Map([
+      ['/', pageHtml],
+      ['/main', pageHtml],
+      ['/second', secondPageHtml],
+      ['/tab', tabPageHtml],
+    ]),
+  );
+  const pageUrl = `${fixtureOrigin}/main`;
+  const secondPageUrl = `${fixtureOrigin}/second`;
+  const tabPageUrl = `${fixtureOrigin}/tab`;
 
   const openResult = await runCli(context, [
     '--json',
@@ -210,6 +243,80 @@ try {
     browserPermissions.data?.granted?.[0] === 'geolocation',
     `HTTP browser permissions returned ${JSON.stringify(browserPermissions.data)}`,
   );
+
+  const browserCookieSet = await browserPost(port, 'cookies/set', {
+    name: 'http_smoke',
+    value: 'cookie-ok',
+    url: pageUrl,
+  });
+  assertHttpSuccess(browserCookieSet, 'HTTP browser cookies set');
+  assert(browserCookieSet.data?.set === true, 'HTTP browser cookies set did not report set');
+
+  const browserCookieGet = await browserPost(port, 'cookies/get', {
+    urls: [pageUrl],
+  });
+  assertHttpSuccess(browserCookieGet, 'HTTP browser cookies get');
+  assert(
+    browserCookieGet.data?.cookies?.some(
+      (cookie) => cookie.name === 'http_smoke' && cookie.value === 'cookie-ok',
+    ),
+    `HTTP browser cookies get missing cookie: ${JSON.stringify(browserCookieGet)}`,
+  );
+
+  const browserCookieClear = await browserPost(port, 'cookies/clear');
+  assertHttpSuccess(browserCookieClear, 'HTTP browser cookies clear');
+  assert(browserCookieClear.data?.cleared === true, 'HTTP browser cookies clear did not report cleared');
+
+  const browserStorageSet = await browserPost(port, 'storage/set', {
+    type: 'local',
+    key: 'httpSmoke',
+    value: 'storage-ok',
+  });
+  assertHttpSuccess(browserStorageSet, 'HTTP browser storage set');
+  assert(browserStorageSet.data?.set === true, 'HTTP browser storage set did not report set');
+
+  const browserStorageGet = await browserPost(port, 'storage/get', {
+    type: 'local',
+    key: 'httpSmoke',
+  });
+  assertHttpSuccess(browserStorageGet, 'HTTP browser storage get');
+  assert(
+    browserStorageGet.data?.value === 'storage-ok',
+    `HTTP browser storage get returned ${JSON.stringify(browserStorageGet.data)}`,
+  );
+
+  const browserStorageClear = await browserPost(port, 'storage/clear', {
+    type: 'local',
+  });
+  assertHttpSuccess(browserStorageClear, 'HTTP browser storage clear');
+  assert(browserStorageClear.data?.cleared === true, 'HTTP browser storage clear did not report cleared');
+
+  const browserConsoleClear = await browserPost(port, 'console', {
+    clear: true,
+  });
+  assertHttpSuccess(browserConsoleClear, 'HTTP browser console clear');
+  assert(browserConsoleClear.data?.cleared === true, 'HTTP browser console clear did not report cleared');
+
+  const consoleProbe = await httpJson(port, 'POST', '/api/command', {
+    id: 'service-profile-http-console-probe',
+    action: 'evaluate',
+    script: 'console.log("http console smoke")',
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assertHttpSuccess(consoleProbe, 'HTTP browser console probe');
+
+  const browserConsole = await browserPost(port, 'console');
+  assertHttpSuccess(browserConsole, 'HTTP browser console');
+  assert(
+    browserConsole.data?.messages?.some((message) => message.text.includes('http console smoke')),
+    `HTTP browser console missing probe message: ${JSON.stringify(browserConsole)}`,
+  );
+
+  const browserErrors = await browserPost(port, 'errors');
+  assertHttpSuccess(browserErrors, 'HTTP browser errors');
+  assert(Array.isArray(browserErrors.data?.errors), 'HTTP browser errors missing errors array');
 
   const browserNavigate = await browserPost(port, 'navigate', {
     url: secondPageUrl,
