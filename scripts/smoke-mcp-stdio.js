@@ -388,6 +388,28 @@ try {
     typeTool.inputSchema?.properties?.taskName,
     'MCP browser_type missing taskName trace field',
   );
+  const pressTool = tools.tools?.find((tool) => tool.name === 'browser_press');
+  assert(pressTool, 'MCP browser_press tool missing');
+  assert(
+    pressTool.inputSchema?.required?.includes('key'),
+    'MCP browser_press missing key requirement',
+  );
+  assert(
+    pressTool.inputSchema?.properties?.key,
+    'MCP browser_press missing key property',
+  );
+  assert(
+    pressTool.inputSchema?.properties?.serviceName,
+    'MCP browser_press missing serviceName trace field',
+  );
+  assert(
+    pressTool.inputSchema?.properties?.agentName,
+    'MCP browser_press missing agentName trace field',
+  );
+  assert(
+    pressTool.inputSchema?.properties?.taskName,
+    'MCP browser_press missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

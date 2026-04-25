@@ -216,7 +216,8 @@ try {
     '<button id="ready" onclick="document.getElementById(\'status\').textContent = \'Clicked\'">Ready</button>',
     '<p id="status">Not clicked</p>',
     '<label for="name">Name</label>',
-    '<input id="name" name="name" value="">',
+    '<input id="name" name="name" value="" onkeydown="if (event.key === \'Enter\') { document.getElementById(\'press-output\').textContent = \'Pressed Enter\'; }">',
+    '<p id="press-output"></p>',
     '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value; setTimeout(() => { document.getElementById(\'wait-status\').textContent = \'Name copied\'; }, 100)">Copy name</button>',
     '<p id="name-output"></p>',
     '<p id="wait-status"></p>',
@@ -424,6 +425,22 @@ try {
   assert(typePayload.trace?.agentName === agentName, 'browser_type trace missing agentName');
   assert(typePayload.trace?.taskName === taskName, 'browser_type trace missing taskName');
 
+  const pressResult = await send('tools/call', {
+    name: 'browser_press',
+    arguments: {
+      key: 'Enter',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const pressPayload = parseToolPayload(pressResult);
+  assert(pressPayload.success === true, `browser_press failed: ${JSON.stringify(pressPayload)}`);
+  assert(pressPayload.data?.pressed === 'Enter', 'browser_press did not report pressed key');
+  assert(pressPayload.trace?.serviceName === serviceName, 'browser_press trace missing serviceName');
+  assert(pressPayload.trace?.agentName === agentName, 'browser_press trace missing agentName');
+  assert(pressPayload.trace?.taskName === taskName, 'browser_press trace missing taskName');
+
   const copyNameResult = await send('tools/call', {
     name: 'browser_click',
     arguments: {
@@ -484,6 +501,11 @@ try {
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
       clickedSnapshotPayload.data.snapshot.includes('Ada Lovelace Jr'),
     'browser_fill did not mutate the page state visible to a follow-up snapshot',
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('Pressed Enter'),
+    'browser_press did not mutate the page state visible to a follow-up snapshot',
   );
 
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
@@ -566,6 +588,15 @@ try {
   );
   assert(typeJob, 'Retained service job with browser_type caller context was not found');
   assert(typeJob.state === 'succeeded', `Type service job state was ${typeJob.state}`);
+  const pressJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'press' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(pressJob, 'Retained service job with browser_press caller context was not found');
+  assert(pressJob.state === 'succeeded', `Press service job state was ${pressJob.state}`);
   const waitJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'wait' &&

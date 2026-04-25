@@ -782,6 +782,39 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector", "text"]
             }
         }),
+        json!({
+            "name": "browser_press",
+            "title": "Press browser key",
+            "description": "Queue a key press in the active browser session. Supports key names and chords such as Enter, Tab, Escape, Control+a, or Shift+Enter. This mutates page state, so include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Required key name or modifier chord, for example Enter, Tab, Escape, Control+a, or Shift+Enter."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued press job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["key"]
+            }
+        }),
     ]
 }
 
@@ -862,6 +895,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_fill" => call_browser_fill(arguments, session),
         "browser_wait" => call_browser_wait(arguments, session),
         "browser_type" => call_browser_type(arguments, session),
+        "browser_press" => call_browser_press(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -1201,6 +1235,33 @@ fn call_browser_type(arguments: &Value, session: &str) -> Result<Value, JsonRpcE
     ))
 }
 
+fn call_browser_press(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let key = required_string_argument(arguments, "key")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_press_command(key, job_timeout_ms, service_name, agent_name, task_name);
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_press",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_press",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -1417,6 +1478,33 @@ fn browser_type_command(args: BrowserTypeCommandArgs<'_>) -> Value {
         command["agentName"] = json!(agent_name);
     }
     if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_press_command(
+    key: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-press-{}", uuid::Uuid::new_v4()),
+        "action": "press",
+        "key": key,
+    });
+    if let Some(job_timeout_ms) = job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
         command["taskName"] = json!(task_name);
     }
     command
@@ -2031,6 +2119,19 @@ mod tests {
         assert!(
             response["result"]["tools"][9]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][10]["name"], "browser_press");
+        assert_eq!(
+            response["result"]["tools"][10]["inputSchema"]["required"][0],
+            "key"
+        );
+        assert!(response["result"]["tools"][10]["inputSchema"]["properties"]["key"].is_object());
+        assert!(
+            response["result"]["tools"][10]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
+            response["result"]["tools"][10]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -2225,6 +2326,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 20);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_press_requires_key_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"browser_press","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 21);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -2524,6 +2637,24 @@ mod tests {
         assert_eq!(command["text"], " Jr");
         assert_eq!(command["clear"], false);
         assert_eq!(command["delay"], 25);
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_press_command_forwards_key_and_trace_fields() {
+        let command = browser_press_command(
+            "Control+a",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "press");
+        assert_eq!(command["key"], "Control+a");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
