@@ -93,6 +93,16 @@ try {
   const serviceState = status.data?.service_state;
   assert(serviceState && typeof serviceState === 'object', 'HTTP service status missing service_state');
 
+  const profileCollection = await httpJson(port, 'GET', '/api/service/profiles');
+  assert(
+    profileCollection.success === true,
+    `HTTP service profiles failed: ${JSON.stringify(profileCollection)}`,
+  );
+  assert(
+    Array.isArray(profileCollection.data?.profiles),
+    'HTTP service profiles missing profiles array',
+  );
+
   const profile = Object.values(serviceState.profiles || {}).find(
     (profile) => profile.id === runtimeProfile,
   );
@@ -114,7 +124,22 @@ try {
     typeof profile.userDataDir === 'string' && profile.userDataDir.includes(runtimeProfile),
     `Profile userDataDir did not include runtime profile name: ${JSON.stringify(profile)}`,
   );
+  assert(
+    profileCollection.data.profiles.some((item) => item.id === runtimeProfile),
+    `HTTP service profiles did not include runtime profile ${runtimeProfile}: ${JSON.stringify(
+      profileCollection,
+    )}`,
+  );
 
+  const sessionCollection = await httpJson(port, 'GET', '/api/service/sessions');
+  assert(
+    sessionCollection.success === true,
+    `HTTP service sessions failed: ${JSON.stringify(sessionCollection)}`,
+  );
+  assert(
+    Array.isArray(sessionCollection.data?.sessions),
+    'HTTP service sessions missing sessions array',
+  );
   const persistedSession = Object.values(serviceState.sessions || {}).find(
     (item) => item.id === session,
   );
@@ -143,6 +168,28 @@ try {
     persistedSession.browserIds?.includes(`session:${session}`),
     `Session browserIds missing active browser: ${JSON.stringify(persistedSession)}`,
   );
+  assert(
+    sessionCollection.data.sessions.some((item) => item.id === session),
+    `HTTP service sessions did not include active session ${session}: ${JSON.stringify(
+      sessionCollection,
+    )}`,
+  );
+
+  for (const [path, key] of [
+    ['/api/service/browsers', 'browsers'],
+    ['/api/service/tabs', 'tabs'],
+    ['/api/service/site-policies', 'sitePolicies'],
+    ['/api/service/providers', 'providers'],
+    ['/api/service/challenges', 'challenges'],
+  ]) {
+    const collection = await httpJson(port, 'GET', path);
+    assert(collection.success === true, `HTTP ${path} failed: ${JSON.stringify(collection)}`);
+    assert(Array.isArray(collection.data?.[key]), `HTTP ${path} missing ${key} array`);
+    assert(
+      Number.isInteger(collection.data?.count),
+      `HTTP ${path} missing numeric count: ${JSON.stringify(collection)}`,
+    );
+  }
 
   const events = await httpJson(
     port,

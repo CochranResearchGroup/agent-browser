@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 use crate::connection::resolve_port;
 use crate::connection::{attach_daemon_auth_token, get_socket_dir};
 use crate::flags::parse_flags;
+use crate::native::service_model::ServiceState;
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
@@ -170,6 +171,21 @@ pub(super) async fn handle_http_request(
         let result = relay_service_command(session_name, service_status_command()).await;
         write_json_result(&mut stream, result, "502 Bad Gateway").await;
         return;
+    }
+
+    if method == "GET" {
+        if let Some(contents) = service_collection_contents(path) {
+            write_json_value(
+                &mut stream,
+                "200 OK",
+                json!({
+                    "success": true,
+                    "data": contents,
+                }),
+            )
+            .await;
+            return;
+        }
     }
 
     if method == "GET" && path == "/api/service/trace" {
@@ -363,6 +379,18 @@ async fn write_json_result(
     let _ = stream.write_all(resp_body.as_bytes()).await;
 }
 
+async fn write_json_value(stream: &mut tokio::net::TcpStream, status: &str, value: Value) {
+    let resp_body = serde_json::to_string(&value).unwrap_or_else(|_| {
+        r#"{"success":false,"error":"Failed to serialize JSON response"}"#.to_string()
+    });
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
+        resp_body.len()
+    );
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.write_all(resp_body.as_bytes()).await;
+}
+
 fn service_status_command() -> Value {
     json!({
         "action": "service_status",
@@ -375,6 +403,74 @@ fn service_reconcile_command() -> Value {
         "action": "service_reconcile",
         "serviceState": load_service_state_snapshot(),
     })
+}
+
+fn service_collection_contents(path: &str) -> Option<Value> {
+    let service_state = load_service_state();
+    match path {
+        "/api/service/profiles" => {
+            let profiles = service_state.profiles.values().cloned().collect::<Vec<_>>();
+            Some(json!({
+                "profiles": profiles,
+                "count": profiles.len(),
+            }))
+        }
+        "/api/service/sessions" => {
+            let sessions = service_state.sessions.values().cloned().collect::<Vec<_>>();
+            Some(json!({
+                "sessions": sessions,
+                "count": sessions.len(),
+            }))
+        }
+        "/api/service/browsers" => {
+            let browsers = service_state.browsers.values().cloned().collect::<Vec<_>>();
+            Some(json!({
+                "browsers": browsers,
+                "count": browsers.len(),
+            }))
+        }
+        "/api/service/tabs" => {
+            let tabs = service_state.tabs.values().cloned().collect::<Vec<_>>();
+            Some(json!({
+                "tabs": tabs,
+                "count": tabs.len(),
+            }))
+        }
+        "/api/service/site-policies" => {
+            let site_policies = service_state
+                .site_policies
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            Some(json!({
+                "sitePolicies": site_policies,
+                "count": site_policies.len(),
+            }))
+        }
+        "/api/service/providers" => {
+            let providers = service_state
+                .providers
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            Some(json!({
+                "providers": providers,
+                "count": providers.len(),
+            }))
+        }
+        "/api/service/challenges" => {
+            let challenges = service_state
+                .challenges
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            Some(json!({
+                "challenges": challenges,
+                "count": challenges.len(),
+            }))
+        }
+        _ => None,
+    }
 }
 
 fn service_job_cancel_id(path: &str) -> Option<&str> {
@@ -663,6 +759,10 @@ fn load_service_state_snapshot() -> Value {
     serde_json::to_value(parse_flags(&args).service_state).unwrap_or_else(|_| json!({}))
 }
 
+fn load_service_state() -> ServiceState {
+    serde_json::from_value(load_service_state_snapshot()).unwrap_or_default()
+}
+
 fn find_header_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4)
         .position(|w| w == b"\r\n\r\n")
@@ -948,6 +1048,26 @@ mod tests {
         assert_eq!(cmd["taskName"], "probeACSwebsite");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn service_collection_contents_maps_known_resource_routes() {
+        let profiles = service_collection_contents("/api/service/profiles").unwrap();
+        let sessions = service_collection_contents("/api/service/sessions").unwrap();
+        let browsers = service_collection_contents("/api/service/browsers").unwrap();
+        let tabs = service_collection_contents("/api/service/tabs").unwrap();
+        let site_policies = service_collection_contents("/api/service/site-policies").unwrap();
+        let providers = service_collection_contents("/api/service/providers").unwrap();
+        let challenges = service_collection_contents("/api/service/challenges").unwrap();
+
+        assert!(profiles["profiles"].is_array());
+        assert!(sessions["sessions"].is_array());
+        assert!(browsers["browsers"].is_array());
+        assert!(tabs["tabs"].is_array());
+        assert!(site_policies["sitePolicies"].is_array());
+        assert!(providers["providers"].is_array());
+        assert!(challenges["challenges"].is_array());
+        assert_eq!(service_collection_contents("/api/service/unknown"), None);
     }
 
     #[test]
