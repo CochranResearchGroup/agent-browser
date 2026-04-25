@@ -225,6 +225,8 @@ try {
     '<p id="org-output"></p>',
     '<label for="remember"><input id="remember" type="checkbox" onchange="document.getElementById(\'remember-output\').textContent = this.checked ? \'Remember checked\' : \'Remember unchecked\'">Remember me</label>',
     '<p id="remember-output"></p>',
+    '<div style="height: 1600px" aria-label="scroll spacer"></div>',
+    '<p id="scroll-target">Scroll target</p>',
     '<button id="copy-name" onclick="document.getElementById(\'name-output\').textContent = document.getElementById(\'name\').value; setTimeout(() => { document.getElementById(\'wait-status\').textContent = \'Name copied\'; }, 100)">Copy name</button>',
     '<p id="name-output"></p>',
     '<p id="wait-status"></p>',
@@ -534,6 +536,46 @@ try {
   assert(uncheckPayload.trace?.agentName === agentName, 'browser_uncheck trace missing agentName');
   assert(uncheckPayload.trace?.taskName === taskName, 'browser_uncheck trace missing taskName');
 
+  const scrollResult = await send('tools/call', {
+    name: 'browser_scroll',
+    arguments: {
+      direction: 'down',
+      amount: 800,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const scrollPayload = parseToolPayload(scrollResult);
+  assert(scrollPayload.success === true, `browser_scroll failed: ${JSON.stringify(scrollPayload)}`);
+  assert(scrollPayload.data?.scrolled === true, 'browser_scroll did not report scrolled state');
+  assert(
+    scrollPayload.trace?.serviceName === serviceName,
+    'browser_scroll trace missing serviceName',
+  );
+  assert(scrollPayload.trace?.agentName === agentName, 'browser_scroll trace missing agentName');
+  assert(scrollPayload.trace?.taskName === taskName, 'browser_scroll trace missing taskName');
+
+  const scrollWaitResult = await send('tools/call', {
+    name: 'browser_wait',
+    arguments: {
+      function: 'window.scrollY > 0',
+      timeoutMs: 5000,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const scrollWaitPayload = parseToolPayload(scrollWaitResult);
+  assert(
+    scrollWaitPayload.success === true,
+    `post-scroll browser_wait failed: ${JSON.stringify(scrollWaitPayload)}`,
+  );
+  assert(
+    scrollWaitPayload.data?.result === true,
+    'post-scroll browser_wait did not confirm scroll position',
+  );
+
   const copyNameResult = await send('tools/call', {
     name: 'browser_click',
     arguments: {
@@ -741,6 +783,15 @@ try {
   );
   assert(uncheckJob, 'Retained service job with browser_uncheck caller context was not found');
   assert(uncheckJob.state === 'succeeded', `Uncheck service job state was ${uncheckJob.state}`);
+  const scrollJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'scroll' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(scrollJob, 'Retained service job with browser_scroll caller context was not found');
+  assert(scrollJob.state === 'succeeded', `Scroll service job state was ${scrollJob.state}`);
   const waitJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'wait' &&

@@ -953,6 +953,57 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector"]
             }
         }),
+        json!({
+            "name": "browser_scroll",
+            "title": "Scroll browser page",
+            "description": "Queue page or container scrolling in the active browser session. Use direction plus amount, or explicit deltaX and deltaY. This mutates viewport state, so include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Optional CSS selector or cached ref for a scrollable container. Omit to scroll the page."
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["up", "down", "left", "right"],
+                        "description": "Optional scroll direction. Defaults to down when no deltaX or deltaY is supplied."
+                    },
+                    "amount": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Optional pixels to scroll with direction. Defaults to 300."
+                    },
+                    "deltaX": {
+                        "type": "number",
+                        "description": "Optional horizontal scroll delta in pixels. Use instead of direction."
+                    },
+                    "deltaY": {
+                        "type": "number",
+                        "description": "Optional vertical scroll delta in pixels. Use instead of direction."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued scroll job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": []
+            }
+        }),
     ]
 }
 
@@ -1038,6 +1089,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_select" => call_browser_select(arguments, session),
         "browser_check" => call_browser_check(arguments, session),
         "browser_uncheck" => call_browser_uncheck(arguments, session),
+        "browser_scroll" => call_browser_scroll(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -1516,6 +1568,47 @@ fn call_browser_checked_tool(
     ))
 }
 
+fn call_browser_scroll(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = optional_string_argument(arguments, "selector")?;
+    let direction = optional_scroll_direction_argument(arguments)?;
+    let amount = optional_non_negative_f64_argument(arguments, "amount")?;
+    let delta_x = optional_f64_argument(arguments, "deltaX")?;
+    let delta_y = optional_f64_argument(arguments, "deltaY")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_scroll_command(BrowserScrollCommandArgs {
+        selector,
+        direction,
+        amount,
+        delta_x,
+        delta_y,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    })?;
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_scroll",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_scroll",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -1848,6 +1941,60 @@ fn browser_checked_command(
     command
 }
 
+struct BrowserScrollCommandArgs<'a> {
+    selector: Option<&'a str>,
+    direction: Option<&'a str>,
+    amount: Option<f64>,
+    delta_x: Option<f64>,
+    delta_y: Option<f64>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+fn browser_scroll_command(args: BrowserScrollCommandArgs<'_>) -> Result<Value, JsonRpcError> {
+    let uses_direction = args.direction.is_some() || args.amount.is_some();
+    let uses_delta = args.delta_x.is_some() || args.delta_y.is_some();
+    if uses_direction && uses_delta {
+        return Err(JsonRpcError::invalid_params(
+            "browser_scroll accepts direction/amount or deltaX/deltaY, not both",
+        ));
+    }
+
+    let mut command = json!({
+        "id": format!("mcp-browser-scroll-{}", uuid::Uuid::new_v4()),
+        "action": "scroll",
+    });
+    if let Some(selector) = args.selector {
+        command["selector"] = json!(selector);
+    }
+    if uses_delta {
+        if let Some(delta_x) = args.delta_x {
+            command["x"] = json!(delta_x);
+        }
+        if let Some(delta_y) = args.delta_y {
+            command["y"] = json!(delta_y);
+        }
+    } else {
+        command["direction"] = json!(args.direction.unwrap_or("down"));
+        command["amount"] = json!(args.amount.unwrap_or(300.0));
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    Ok(command)
+}
+
 struct BrowserScreenshotCommandArgs<'a> {
     selector: Option<&'a str>,
     path: Option<&'a str>,
@@ -2107,6 +2254,46 @@ fn optional_bounded_u64_argument(
             name, min, max
         ))),
         value => Ok(value),
+    }
+}
+
+fn optional_f64_argument(arguments: &Value, name: &str) -> Result<Option<f64>, JsonRpcError> {
+    match arguments.get(name) {
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => value
+            .as_f64()
+            .filter(|value| value.is_finite())
+            .map(Some)
+            .ok_or_else(|| {
+                JsonRpcError::invalid_params(&format!("{} must be a finite number", name))
+            }),
+        None => Ok(None),
+    }
+}
+
+fn optional_non_negative_f64_argument(
+    arguments: &Value,
+    name: &str,
+) -> Result<Option<f64>, JsonRpcError> {
+    match optional_f64_argument(arguments, name)? {
+        Some(value) if value < 0.0 => Err(JsonRpcError::invalid_params(&format!(
+            "{} must be a non-negative number",
+            name
+        ))),
+        value => Ok(value),
+    }
+}
+
+fn optional_scroll_direction_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
+    match optional_string_argument(arguments, "direction")? {
+        Some("up") => Ok(Some("up")),
+        Some("down") => Ok(Some("down")),
+        Some("left") => Ok(Some("left")),
+        Some("right") => Ok(Some("right")),
+        Some(_) => Err(JsonRpcError::invalid_params(
+            "direction must be one of up, down, left, or right",
+        )),
+        None => Ok(None),
     }
 }
 
@@ -2554,6 +2741,19 @@ mod tests {
         assert!(
             response["result"]["tools"][14]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][15]["name"], "browser_scroll");
+        assert!(
+            response["result"]["tools"][15]["inputSchema"]["properties"]["direction"].is_object()
+        );
+        assert!(response["result"]["tools"][15]["inputSchema"]["properties"]["amount"].is_object());
+        assert!(response["result"]["tools"][15]["inputSchema"]["properties"]["deltaX"].is_object());
+        assert!(response["result"]["tools"][15]["inputSchema"]["properties"]["deltaY"].is_object());
+        assert!(
+            response["result"]["tools"][15]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][15]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -2823,6 +3023,36 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 27);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_scroll_rejects_invalid_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":28,"method":"tools/call","params":{"name":"browser_scroll","arguments":{"direction":"diagonal","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 28);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":29,"method":"tools/call","params":{"name":"browser_scroll","arguments":{"amount":-1,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 29);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"browser_scroll","arguments":{"direction":"down","deltaY":100,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 30);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -3210,6 +3440,66 @@ mod tests {
         assert_eq!(uncheck_command["selector"], "#remember");
         assert!(uncheck_command.get("jobTimeoutMs").is_none());
         assert!(uncheck_command.get("serviceName").is_none());
+    }
+
+    #[test]
+    fn browser_scroll_command_forwards_direction_delta_and_trace_fields() {
+        let direction_command = browser_scroll_command(BrowserScrollCommandArgs {
+            selector: Some("#panel"),
+            direction: Some("down"),
+            amount: Some(500.0),
+            delta_x: None,
+            delta_y: None,
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        })
+        .unwrap();
+
+        assert_eq!(direction_command["action"], "scroll");
+        assert_eq!(direction_command["selector"], "#panel");
+        assert_eq!(direction_command["direction"], "down");
+        assert_eq!(direction_command["amount"], 500.0);
+        assert_eq!(direction_command["jobTimeoutMs"], 1000);
+        assert_eq!(direction_command["serviceName"], "JournalDownloader");
+        assert_eq!(direction_command["agentName"], "agent-a");
+        assert_eq!(direction_command["taskName"], "probeACSwebsite");
+
+        let delta_command = browser_scroll_command(BrowserScrollCommandArgs {
+            selector: None,
+            direction: None,
+            amount: None,
+            delta_x: Some(12.5),
+            delta_y: Some(250.0),
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        })
+        .unwrap();
+
+        assert_eq!(delta_command["action"], "scroll");
+        assert_eq!(delta_command["x"], 12.5);
+        assert_eq!(delta_command["y"], 250.0);
+        assert!(delta_command.get("direction").is_none());
+        assert!(delta_command.get("amount").is_none());
+
+        let default_command = browser_scroll_command(BrowserScrollCommandArgs {
+            selector: None,
+            direction: None,
+            amount: None,
+            delta_x: None,
+            delta_y: None,
+            job_timeout_ms: None,
+            service_name: None,
+            agent_name: None,
+            task_name: None,
+        })
+        .unwrap();
+
+        assert_eq!(default_command["direction"], "down");
+        assert_eq!(default_command["amount"], 300.0);
     }
 
     #[test]

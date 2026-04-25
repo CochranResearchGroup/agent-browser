@@ -72,9 +72,11 @@ escape, and shortcut-driven flows. `browser_hover` adds pointer movement for
 menus and controls that reveal state on hover. `browser_select` adds dropdown
 and multi-select option selection for account, tenant, role, and region
 switchers. `browser_check` and `browser_uncheck` cover checkbox and radio
-controls for consent, remember-me, terms, and preference flows. More invasive
-browser tools should wait until profile and session policy are first-class in
-the service model, and they should always supply job caller context.
+controls for consent, remember-me, terms, and preference flows.
+`browser_scroll` covers page and container scrolling for long forms,
+offscreen controls, and infinite-scroll workflows. More invasive browser tools
+should wait until profile and session policy are first-class in the service
+model, and they should always supply job caller context.
 
 ## Live Validation
 
@@ -82,8 +84,9 @@ the service model, and they should always supply job caller context.
 `browser_snapshot`, `browser_get_url`, `browser_get_title`, `browser_tabs`, and
 `browser_screenshot` over MCP stdio, calls `browser_click`, `browser_fill`,
 `browser_type`, `browser_press`, `browser_hover`, `browser_select`,
-`browser_check`, `browser_uncheck`, and `browser_wait`, verifies the mutations
-through a follow-up snapshot, and verifies that the retained `snapshot`, `url`,
-`title`, `tab_list`, `screenshot`, `click`, `fill`, `type`, `press`, `hover`,
-`select`, `check`, `uncheck`, and `wait` service jobs record `serviceName`,
+`browser_check`, `browser_uncheck`, `browser_scroll`, and `browser_wait`,
+verifies the mutations through a follow-up snapshot or post-scroll function
+wait, and verifies that the retained `snapshot`, `url`, `title`, `tab_list`,
+`screenshot`, `click`, `fill`, `type`, `press`, `hover`, `select`, `check`,
+`uncheck`, `scroll`, and `wait` service jobs record `serviceName`,
 `agentName`, and `taskName`.

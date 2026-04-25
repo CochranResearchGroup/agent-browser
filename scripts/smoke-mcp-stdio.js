@@ -502,6 +502,31 @@ try {
     uncheckTool.inputSchema?.properties?.taskName,
     'MCP browser_uncheck missing taskName trace field',
   );
+  const scrollTool = tools.tools?.find((tool) => tool.name === 'browser_scroll');
+  assert(scrollTool, 'MCP browser_scroll tool missing');
+  assert(
+    scrollTool.inputSchema?.properties?.direction,
+    'MCP browser_scroll missing direction property',
+  );
+  assert(scrollTool.inputSchema?.properties?.amount, 'MCP browser_scroll missing amount property');
+  assert(scrollTool.inputSchema?.properties?.deltaX, 'MCP browser_scroll missing deltaX property');
+  assert(scrollTool.inputSchema?.properties?.deltaY, 'MCP browser_scroll missing deltaY property');
+  assert(
+    scrollTool.inputSchema?.properties?.selector,
+    'MCP browser_scroll missing selector property',
+  );
+  assert(
+    scrollTool.inputSchema?.properties?.serviceName,
+    'MCP browser_scroll missing serviceName trace field',
+  );
+  assert(
+    scrollTool.inputSchema?.properties?.agentName,
+    'MCP browser_scroll missing agentName trace field',
+  );
+  assert(
+    scrollTool.inputSchema?.properties?.taskName,
+    'MCP browser_scroll missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];
