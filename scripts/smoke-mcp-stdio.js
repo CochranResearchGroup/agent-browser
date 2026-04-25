@@ -820,6 +820,32 @@ try {
     clearTool.inputSchema?.properties?.taskName,
     'MCP browser_clear missing taskName trace field',
   );
+  const traceTool = tools.tools?.find((tool) => tool.name === 'service_trace');
+  assert(traceTool, 'MCP service_trace tool missing');
+  assert(
+    traceTool.inputSchema?.properties?.serviceName,
+    'MCP service_trace missing serviceName filter',
+  );
+  assert(
+    traceTool.inputSchema?.properties?.taskName,
+    'MCP service_trace missing taskName filter',
+  );
+  assert(
+    traceTool.inputSchema?.properties?.since,
+    'MCP service_trace missing since filter',
+  );
+
+  const trace = await send('tools/call', {
+    name: 'service_trace',
+    arguments: { serviceName: 'JournalDownloader', taskName: 'probeACSwebsite' },
+  });
+  const tracePayload = JSON.parse(trace.content?.[0]?.text || '{}');
+  assert(tracePayload.tool === 'service_trace', 'MCP service_trace payload tool mismatch');
+  assert(tracePayload.success === true, 'MCP service_trace should succeed on fresh state');
+  assert(Array.isArray(tracePayload.data?.events), 'MCP service_trace missing events array');
+  assert(Array.isArray(tracePayload.data?.jobs), 'MCP service_trace missing jobs array');
+  assert(Array.isArray(tracePayload.data?.incidents), 'MCP service_trace missing incidents array');
+  assert(Array.isArray(tracePayload.data?.activity), 'MCP service_trace missing activity array');
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

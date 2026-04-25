@@ -6,6 +6,7 @@ use crate::connection::{send_command, Response};
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
 
 const BROWSERS_RESOURCE: &str = "agent-browser://browsers";
 const EVENTS_RESOURCE: &str = "agent-browser://events";
@@ -1187,6 +1188,51 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector"]
             }
         }),
+        json!({
+            "name": "service_trace",
+            "title": "Read service trace",
+            "description": "Read related service events, jobs, incidents, and normalized activity from persisted service state in one response. Use serviceName, agentName, and taskName to debug one service/task trace without shelling out.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum records to return per trace section. Defaults to 20."
+                    },
+                    "browserId": {
+                        "type": "string",
+                        "description": "Filter trace records by browser id."
+                    },
+                    "profileId": {
+                        "type": "string",
+                        "description": "Filter trace records by profile id."
+                    },
+                    "sessionId": {
+                        "type": "string",
+                        "description": "Filter trace records by session id."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Filter trace records by service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Filter trace records by agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Filter trace records by task name, for example probeACSwebsite."
+                    },
+                    "since": {
+                        "type": "string",
+                        "description": "RFC 3339 timestamp. Only records at or after this time are returned."
+                    }
+                },
+                "required": []
+            }
+        }),
     ]
 }
 
@@ -1368,6 +1414,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
 
     match name {
         "service_job_cancel" => call_service_job_cancel(arguments, session),
+        "service_trace" => call_service_trace(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -1434,6 +1481,59 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
             data: Some(json!({ "message": format!("Unknown MCP tool: {}", name) })),
         }),
     }
+}
+
+fn call_service_trace(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let limit = optional_positive_u64_argument(arguments, "limit")?
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let browser_id = optional_string_argument(arguments, "browserId")?;
+    let profile_id = optional_string_argument(arguments, "profileId")?;
+    let session_id = optional_string_argument(arguments, "sessionId")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let since = optional_string_argument(arguments, "since")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let store =
+        JsonServiceStateStore::new(JsonServiceStateStore::default_path().map_err(|err| {
+            JsonRpcError {
+                code: -32603,
+                message: "Internal error",
+                data: Some(json!({ "message": err, "tool": "service_trace" })),
+            }
+        })?);
+    let state = store.load().map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({ "message": err, "tool": "service_trace" })),
+    })?;
+    let data = service_trace_response(
+        &state,
+        ServiceTraceFilters {
+            limit,
+            browser_id,
+            profile_id,
+            session_id,
+            service_name,
+            agent_name,
+            task_name,
+            since,
+        },
+    )
+    .map_err(|err| JsonRpcError {
+        code: -32602,
+        message: "Invalid params",
+        data: Some(json!({ "message": err, "tool": "service_trace" })),
+    })?;
+
+    Ok(tool_response_from_payload(
+        "service_trace",
+        session,
+        trace,
+        data,
+        false,
+    ))
 }
 
 fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -3038,6 +3138,32 @@ fn tool_response_from_daemon(
     })
 }
 
+fn tool_response_from_payload(
+    tool_name: &str,
+    session: &str,
+    trace: Value,
+    data: Value,
+    is_error: bool,
+) -> Value {
+    let payload = json!({
+        "tool": tool_name,
+        "session": session,
+        "trace": trace,
+        "success": !is_error,
+        "data": data,
+        "error": Value::Null,
+    });
+    json!({
+        "content": [
+            {
+                "type": "text",
+                "text": serde_json::to_string_pretty(&payload).unwrap_or_default(),
+            }
+        ],
+        "isError": is_error,
+    })
+}
+
 fn resource_read_error(uri: &str, err: String) -> JsonRpcError {
     if err.contains("not found") || err.contains("Unknown MCP resource URI") {
         JsonRpcError {
@@ -3629,6 +3755,20 @@ mod tests {
         assert!(
             response["result"]["tools"][28]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        let trace_tool = response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap();
+        assert_eq!(trace_tool["name"], "service_trace");
+        assert!(trace_tool["inputSchema"]["properties"]["limit"].is_object());
+        assert!(trace_tool["inputSchema"]["properties"]["browserId"].is_object());
+        assert!(trace_tool["inputSchema"]["properties"]["profileId"].is_object());
+        assert!(trace_tool["inputSchema"]["properties"]["sessionId"].is_object());
+        assert!(trace_tool["inputSchema"]["properties"]["serviceName"].is_object());
+        assert!(trace_tool["inputSchema"]["properties"]["agentName"].is_object());
+        assert!(trace_tool["inputSchema"]["properties"]["taskName"].is_object());
+        assert!(trace_tool["inputSchema"]["properties"]["since"].is_object());
     }
 
     #[test]
@@ -3652,6 +3792,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 4);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn service_trace_rejects_invalid_limit_before_store_read() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":40,"method":"tools/call","params":{"name":"service_trace","arguments":{"limit":0,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 40);
         assert_eq!(response["error"]["code"], -32602);
     }
 
