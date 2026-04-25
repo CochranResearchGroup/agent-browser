@@ -74,7 +74,10 @@ pub(super) async fn handle_http_request(
     if method == "POST" {
         let full_body = read_full_body(&mut stream, peeked).await;
         if full_body.is_none()
-            && (path == "/api/chat" || path == "/api/sessions" || path == "/api/command")
+            && (path == "/api/chat"
+                || path == "/api/sessions"
+                || path == "/api/command"
+                || path.starts_with("/api/browser/"))
         {
             let body = r#"{"error":"Request body too large"}"#;
             let response = format!(
@@ -129,6 +132,17 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(command) = browser_api_command(method, path, query, body_str) {
+            match command {
+                Ok(cmd) => {
+                    let result = relay_service_command(session_name, cmd).await;
+                    write_json_result(&mut stream, result, "502 Bad Gateway").await;
+                }
+                Err(err) => write_json_result(&mut stream, Err(err), "400 Bad Request").await,
+            }
+            return;
+        }
+
         if path == "/api/service/reconcile" {
             let result = relay_service_command(session_name, service_reconcile_command()).await;
             write_json_result(&mut stream, result, "502 Bad Gateway").await;
@@ -171,6 +185,19 @@ pub(super) async fn handle_http_request(
         let result = relay_service_command(session_name, service_status_command()).await;
         write_json_result(&mut stream, result, "502 Bad Gateway").await;
         return;
+    }
+
+    if method == "GET" {
+        if let Some(command) = browser_api_command(method, path, query, "") {
+            match command {
+                Ok(cmd) => {
+                    let result = relay_service_command(session_name, cmd).await;
+                    write_json_result(&mut stream, result, "502 Bad Gateway").await;
+                }
+                Err(err) => write_json_result(&mut stream, Err(err), "400 Bad Request").await,
+            }
+            return;
+        }
     }
 
     if method == "GET" {
@@ -403,6 +430,139 @@ fn service_reconcile_command() -> Value {
         "action": "service_reconcile",
         "serviceState": load_service_state_snapshot(),
     })
+}
+
+fn browser_api_command(
+    method: &str,
+    path: &str,
+    query: Option<&str>,
+    body: &str,
+) -> Option<Result<Value, String>> {
+    match (method, path) {
+        ("GET", "/api/browser/url") => {
+            Some(browser_read_api_command("url", "http-browser-url", query))
+        }
+        ("GET", "/api/browser/title") => Some(browser_read_api_command(
+            "title",
+            "http-browser-title",
+            query,
+        )),
+        ("GET", "/api/browser/tabs") => Some(browser_tabs_api_command(query)),
+        ("POST", "/api/browser/snapshot") => Some(browser_body_command(
+            "snapshot",
+            "http-browser-snapshot",
+            body,
+        )),
+        ("POST", "/api/browser/click") => {
+            Some(browser_body_command("click", "http-browser-click", body))
+        }
+        ("POST", "/api/browser/fill") => {
+            Some(browser_body_command("fill", "http-browser-fill", body))
+        }
+        _ => None,
+    }
+}
+
+fn browser_get_command(action: &str, id_prefix: &str) -> Value {
+    json!({
+        "id": format!("{}-{}", id_prefix, uuid::Uuid::new_v4()),
+        "action": action,
+    })
+}
+
+fn browser_read_api_command(
+    action: &str,
+    id_prefix: &str,
+    query: Option<&str>,
+) -> Result<Value, String> {
+    let mut command = browser_get_command(action, id_prefix);
+    apply_browser_common_query(&mut command, query, "browser read")?;
+    Ok(command)
+}
+
+fn browser_tabs_api_command(query: Option<&str>) -> Result<Value, String> {
+    let mut command = browser_get_command("tab_list", "http-browser-tabs");
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "verbose" => {
+                command["verbose"] = json!(parse_query_bool("verbose", &value)?);
+            }
+            "jobTimeoutMs" | "job_timeout_ms" | "job-timeout-ms" => {
+                command["jobTimeoutMs"] = json!(parse_positive_query_u64("jobTimeoutMs", &value)?)
+            }
+            "serviceName" | "service_name" | "service-name" => {
+                command["serviceName"] = json!(value)
+            }
+            "agentName" | "agent_name" | "agent-name" => command["agentName"] = json!(value),
+            "taskName" | "task_name" | "task-name" => command["taskName"] = json!(value),
+            "" => {}
+            _ => return Err(format!("Unknown browser tabs query parameter: {}", key)),
+        }
+    }
+
+    Ok(command)
+}
+
+fn apply_browser_common_query(
+    command: &mut Value,
+    query: Option<&str>,
+    label: &str,
+) -> Result<(), String> {
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "jobTimeoutMs" | "job_timeout_ms" | "job-timeout-ms" => {
+                command["jobTimeoutMs"] = json!(parse_positive_query_u64("jobTimeoutMs", &value)?);
+            }
+            "serviceName" | "service_name" | "service-name" => {
+                command["serviceName"] = json!(value);
+            }
+            "agentName" | "agent_name" | "agent-name" => {
+                command["agentName"] = json!(value);
+            }
+            "taskName" | "task_name" | "task-name" => {
+                command["taskName"] = json!(value);
+            }
+            "" => {}
+            _ => return Err(format!("Unknown {} query parameter: {}", label, key)),
+        }
+    }
+    Ok(())
+}
+
+fn browser_body_command(action: &str, id_prefix: &str, body: &str) -> Result<Value, String> {
+    let mut command = if body.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str::<Value>(body).map_err(|err| format!("Invalid JSON: {}", err))?
+    };
+
+    if !command.is_object() {
+        return Err("Browser API request body must be a JSON object".to_string());
+    }
+    if command.get("id").is_none() {
+        command["id"] = json!(format!("{}-{}", id_prefix, uuid::Uuid::new_v4()));
+    }
+    command["action"] = json!(action);
+    Ok(command)
+}
+
+fn parse_query_bool(name: &str, value: &str) -> Result<bool, String> {
+    match value {
+        "true" | "1" => Ok(true),
+        "false" | "0" => Ok(false),
+        _ => Err(format!("Invalid {} value: {}", name, value)),
+    }
+}
+
+fn parse_positive_query_u64(name: &str, value: &str) -> Result<u64, String> {
+    let parsed = value
+        .parse::<u64>()
+        .map_err(|_| format!("Invalid {} value: {}", name, value))?;
+    if parsed == 0 {
+        return Err(format!("{} must be a positive integer", name));
+    }
+    Ok(parsed)
 }
 
 fn service_collection_contents(path: &str) -> Option<Value> {
@@ -1068,6 +1228,92 @@ mod tests {
         assert!(providers["providers"].is_array());
         assert!(challenges["challenges"].is_array());
         assert_eq!(service_collection_contents("/api/service/unknown"), None);
+    }
+
+    #[test]
+    fn browser_api_command_maps_named_get_routes() {
+        let url = browser_api_command(
+            "GET",
+            "/api/browser/url",
+            Some("service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&job-timeout-ms=1000"),
+            "",
+        )
+        .unwrap()
+        .unwrap();
+        let title = browser_api_command("GET", "/api/browser/title", None, "")
+            .unwrap()
+            .unwrap();
+        let tabs = browser_api_command(
+            "GET",
+            "/api/browser/tabs",
+            Some("verbose=true&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&job-timeout-ms=1000"),
+            "",
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(url["action"], "url");
+        assert_eq!(url["serviceName"], "JournalDownloader");
+        assert_eq!(url["agentName"], "codex");
+        assert_eq!(url["taskName"], "probeACSwebsite");
+        assert_eq!(url["jobTimeoutMs"], 1000);
+        assert_eq!(title["action"], "title");
+        assert_eq!(tabs["action"], "tab_list");
+        assert_eq!(tabs["verbose"], true);
+        assert_eq!(tabs["serviceName"], "JournalDownloader");
+        assert_eq!(tabs["agentName"], "codex");
+        assert_eq!(tabs["taskName"], "probeACSwebsite");
+        assert_eq!(tabs["jobTimeoutMs"], 1000);
+    }
+
+    #[test]
+    fn browser_api_command_maps_named_post_routes() {
+        let click = browser_api_command(
+            "POST",
+            "/api/browser/click",
+            None,
+            r##"{"selector":"#ready","serviceName":"JournalDownloader"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let fill = browser_api_command(
+            "POST",
+            "/api/browser/fill",
+            None,
+            r##"{"selector":"#name","value":"Ada"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let snapshot = browser_api_command(
+            "POST",
+            "/api/browser/snapshot",
+            None,
+            r#"{"selector":"main","interactive":true}"#,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(click["action"], "click");
+        assert_eq!(click["selector"], "#ready");
+        assert_eq!(click["serviceName"], "JournalDownloader");
+        assert_eq!(fill["action"], "fill");
+        assert_eq!(fill["value"], "Ada");
+        assert_eq!(snapshot["action"], "snapshot");
+        assert_eq!(snapshot["interactive"], true);
+    }
+
+    #[test]
+    fn browser_api_command_rejects_invalid_arguments() {
+        let tabs_err = browser_api_command("GET", "/api/browser/tabs", Some("verbose=maybe"), "")
+            .unwrap()
+            .unwrap_err();
+        let body_err = browser_api_command("POST", "/api/browser/click", None, "[]")
+            .unwrap()
+            .unwrap_err();
+
+        assert!(tabs_err.contains("Invalid verbose value"));
+        assert!(body_err.contains("JSON object"));
+        assert!(browser_api_command("GET", "/api/browser/unknown", None, "").is_none());
     }
 
     #[test]

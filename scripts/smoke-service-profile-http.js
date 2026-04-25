@@ -37,7 +37,15 @@ try {
     '<!doctype html>',
     '<html>',
     '<head><title>Service Profile HTTP Smoke</title></head>',
-    '<body><h1 id="ready">Service Profile HTTP Smoke</h1></body>',
+    '<body>',
+    '<main id="main">',
+    '<h1 id="ready">Service Profile HTTP Smoke</h1>',
+    '<label for="name">Name</label>',
+    '<input id="name" value="stale">',
+    '<button id="mark-ready" onclick="document.getElementById(\'click-output\').textContent = \'Clicked\'">Mark ready</button>',
+    '<p id="click-output">Not clicked</p>',
+    '</main>',
+    '</body>',
     '</html>',
   ].join('');
   const pageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(pageHtml)}`;
@@ -86,6 +94,68 @@ try {
   assert(
     launchResult.success === true,
     `HTTP metadata launch command failed: ${JSON.stringify(launchResult)}`,
+  );
+
+  const browserUrl = await httpJson(port, 'GET', '/api/browser/url');
+  assert(browserUrl.success === true, `HTTP browser URL failed: ${JSON.stringify(browserUrl)}`);
+  assert(browserUrl.data?.url === pageUrl, `HTTP browser URL was ${browserUrl.data?.url}`);
+
+  const browserTitle = await httpJson(port, 'GET', '/api/browser/title');
+  assert(
+    browserTitle.success === true,
+    `HTTP browser title failed: ${JSON.stringify(browserTitle)}`,
+  );
+  assert(
+    browserTitle.data?.title === 'Service Profile HTTP Smoke',
+    `HTTP browser title was ${browserTitle.data?.title}`,
+  );
+
+  const browserTabs = await httpJson(port, 'GET', '/api/browser/tabs?verbose=true');
+  assert(browserTabs.success === true, `HTTP browser tabs failed: ${JSON.stringify(browserTabs)}`);
+  assert(
+    browserTabs.data?.tabs?.some((tab) => tab.url === pageUrl && tab.active === true),
+    `HTTP browser tabs did not include active smoke page: ${JSON.stringify(browserTabs)}`,
+  );
+
+  const browserSnapshot = await httpJson(port, 'POST', '/api/browser/snapshot', {
+    selector: '#main',
+    interactive: true,
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(
+    browserSnapshot.success === true,
+    `HTTP browser snapshot failed: ${JSON.stringify(browserSnapshot)}`,
+  );
+  assert(
+    browserSnapshot.data?.snapshot?.includes('Service Profile HTTP Smoke'),
+    `HTTP browser snapshot missing page content: ${JSON.stringify(browserSnapshot)}`,
+  );
+
+  const browserFill = await httpJson(port, 'POST', '/api/browser/fill', {
+    selector: '#name',
+    value: 'Ada Lovelace',
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(browserFill.success === true, `HTTP browser fill failed: ${JSON.stringify(browserFill)}`);
+  assert(browserFill.data?.filled === '#name', 'HTTP browser fill did not report filled selector');
+
+  const browserClick = await httpJson(port, 'POST', '/api/browser/click', {
+    selector: '#mark-ready',
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(
+    browserClick.success === true,
+    `HTTP browser click failed: ${JSON.stringify(browserClick)}`,
+  );
+  assert(
+    browserClick.data?.clicked === '#mark-ready',
+    'HTTP browser click did not report clicked selector',
   );
 
   const status = await httpJson(port, 'GET', '/api/service/status');
