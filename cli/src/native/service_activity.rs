@@ -100,6 +100,11 @@ fn service_event_activity(event: &ServiceEvent) -> Value {
         "title": service_activity_title(kind),
         "message": event.message,
         "browserId": event.browser_id,
+        "profileId": event.profile_id,
+        "sessionId": event.session_id,
+        "serviceName": event.service_name,
+        "agentName": event.agent_name,
+        "taskName": event.task_name,
         "details": event.details,
     })
 }
@@ -171,6 +176,7 @@ fn service_incident_metadata_activity(incident: &ServiceIncident, action: &str) 
 
 fn service_activity_title(kind: &str) -> &'static str {
     match kind {
+        "browser_launch_recorded" => "Browser launch recorded",
         "browser_health_changed" => "Browser health changed",
         "tab_lifecycle_changed" => "Tab lifecycle changed",
         "reconciliation_error" => "Reconciliation error",
@@ -186,6 +192,7 @@ fn service_activity_title(kind: &str) -> &'static str {
 fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
     match kind {
         ServiceEventKind::Reconciliation => "reconciliation",
+        ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",

@@ -38,7 +38,10 @@ use super::providers;
 use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
-use super::service_health::{reconcile_service_state, record_browser_health_changed_event};
+use super::service_health::{
+    reconcile_service_state, record_browser_health_changed_event,
+    record_browser_launch_recorded_event,
+};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     BrowserProfile, BrowserSession, JobState as ServiceJobState, LeaseState,
@@ -456,10 +459,29 @@ fn persist_service_browser_record(
         active_session_ids: vec![session_id.to_string()],
         last_error,
     };
-    if let Some(metadata) = metadata {
-        upsert_service_profile_and_session(&mut service_state, session_id, profile_id, &metadata);
-    }
+    let metadata_changed = if let Some(metadata) = metadata {
+        let previous_profile = profile_id
+            .as_ref()
+            .and_then(|profile_id| service_state.profiles.get(profile_id).cloned());
+        let previous_session = service_state.sessions.get(session_id).cloned();
+        upsert_service_profile_and_session(
+            &mut service_state,
+            session_id,
+            profile_id.clone(),
+            &metadata,
+        );
+        let current_profile = profile_id
+            .as_ref()
+            .and_then(|profile_id| service_state.profiles.get(profile_id).cloned());
+        let current_session = service_state.sessions.get(session_id).cloned();
+        previous_profile != current_profile || previous_session != current_session
+    } else {
+        false
+    };
     record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    if metadata_changed {
+        record_browser_launch_recorded_event(&mut service_state, &id, previous.as_ref(), &browser);
+    }
     service_state.browsers.insert(id, browser);
     let _ = store.save(&service_state);
 }
@@ -6412,6 +6434,7 @@ async fn handle_service_incident_activity(cmd: &Value) -> Result<Value, String> 
 fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
     match kind {
         ServiceEventKind::Reconciliation => "reconciliation",
+        ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",

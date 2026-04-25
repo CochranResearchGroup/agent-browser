@@ -261,6 +261,37 @@ try {
     `Session browserIds missing active browser: ${JSON.stringify(persistedSession)}`,
   );
 
+  const eventsResourceResult = await runCli([
+    '--json',
+    'mcp',
+    'read',
+    'agent-browser://events',
+  ]);
+  const eventsResource = readResourceContents(
+    parseJsonOutput(eventsResourceResult.stdout, 'mcp events resource'),
+    'events',
+  );
+  const launchEvent = eventsResource.events?.find(
+    (event) =>
+      event.kind === 'browser_launch_recorded' &&
+      event.sessionId === session &&
+      event.profileId === runtimeProfile &&
+      event.serviceName === serviceName &&
+      event.agentName === agentName &&
+      event.taskName === taskName,
+  );
+  assert(
+    launchEvent,
+    `MCP events resource missing launch event context: ${JSON.stringify(eventsResource)}`,
+  );
+  assert(launchEvent.serviceName === serviceName, `Event serviceName was ${launchEvent.serviceName}`);
+  assert(launchEvent.agentName === agentName, `Event agentName was ${launchEvent.agentName}`);
+  assert(launchEvent.taskName === taskName, `Event taskName was ${launchEvent.taskName}`);
+  assert(
+    launchEvent.browserId === `session:${session}`,
+    `Event browserId was ${launchEvent.browserId}`,
+  );
+
   await cleanup();
   console.log('Service profile MCP smoke passed');
 } catch (err) {

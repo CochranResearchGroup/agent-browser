@@ -1341,6 +1341,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                             };
                             match *raw {
                                 "reconciliation"
+                                | "browser_launch_recorded"
                                 | "browser_health_changed"
                                 | "tab_lifecycle_changed"
                                 | "reconciliation_error"
@@ -4739,6 +4740,17 @@ mod tests {
         .unwrap();
 
         assert_eq!(cmd["kind"], "tab_lifecycle_changed");
+    }
+
+    #[test]
+    fn test_service_events_accepts_browser_launch_kind() {
+        let cmd = parse_command(
+            &args("service events --kind browser_launch_recorded"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["kind"], "browser_launch_recorded");
     }
 
     #[test]

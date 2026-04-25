@@ -156,7 +156,32 @@ fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
                 .and_then(|value| value.as_str())
                 .map(|id| format!(" browser={id}"))
                 .unwrap_or_default();
-            format!("{timestamp} {kind}{browser} {message}")
+            let profile = event
+                .get("profileId")
+                .and_then(|value| value.as_str())
+                .map(|id| format!(" profile={id}"))
+                .unwrap_or_default();
+            let session = event
+                .get("sessionId")
+                .and_then(|value| value.as_str())
+                .map(|id| format!(" session={id}"))
+                .unwrap_or_default();
+            let service = event
+                .get("serviceName")
+                .and_then(|value| value.as_str())
+                .map(|name| format!(" service={name}"))
+                .unwrap_or_default();
+            let agent = event
+                .get("agentName")
+                .and_then(|value| value.as_str())
+                .map(|name| format!(" agent={name}"))
+                .unwrap_or_default();
+            let task = event
+                .get("taskName")
+                .and_then(|value| value.as_str())
+                .map(|name| format!(" task={name}"))
+                .unwrap_or_default();
+            format!("{timestamp} {kind}{browser}{profile}{session}{service}{agent}{task} {message}")
         })
         .collect::<Vec<_>>();
     Some(lines.join("\n"))
@@ -2972,7 +2997,7 @@ Commands:
   activity              Show a normalized incident timeline from related events, jobs, and handling metadata
   jobs                  Show recent service control-plane jobs
   incidents             Show grouped retained service incidents
-  events                Show recent service reconciliation, browser health, and tab lifecycle events
+  events                Show recent service reconciliation, launch, browser health, and tab lifecycle events
 
 Notes:
   - It does not launch a browser.
@@ -2991,7 +3016,7 @@ Notes:
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
-  - The bounded events log records reconciliation summaries, browser health transitions, and tab lifecycle changes.
+  - The bounded events log records reconciliation summaries, browser launch metadata, browser health transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes the same surface at /api/service/status, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
@@ -3818,7 +3843,7 @@ pub fn print_version() {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_service_status_text, format_storage_text};
+    use super::{format_service_events_text, format_service_status_text, format_storage_text};
     use serde_json::json;
 
     #[test]
@@ -3947,6 +3972,30 @@ mod tests {
         assert!(rendered.contains(
             "runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work lease=exclusive cleanup=close_browser browsers=session:runtime-session"
         ));
+    }
+
+    #[test]
+    fn test_format_service_events_text_includes_trace_context() {
+        let data = json!({
+            "events": [{
+                "timestamp": "2026-04-25T00:00:00Z",
+                "kind": "browser_launch_recorded",
+                "browserId": "session:runtime-session",
+                "profileId": "work",
+                "sessionId": "runtime-session",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "message": "Browser session:runtime-session launch metadata recorded"
+            }]
+        });
+
+        let rendered = format_service_events_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "2026-04-25T00:00:00Z browser_launch_recorded browser=session:runtime-session profile=work session=runtime-session service=JournalDownloader agent=codex task=probeACSwebsite Browser session:runtime-session launch metadata recorded"
+        );
     }
 
     #[test]

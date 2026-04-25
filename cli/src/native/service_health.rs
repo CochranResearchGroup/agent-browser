@@ -323,24 +323,86 @@ pub fn record_browser_health_changed_event(
     if previous.health == current.health && previous.last_error == current.last_error {
         return;
     }
-    push_service_event(
-        state,
-        ServiceEvent {
-            kind: ServiceEventKind::BrowserHealthChanged,
-            message: format!(
-                "Browser {} health changed from {:?} to {:?}",
-                browser_id, previous.health, current.health
-            ),
-            browser_id: Some(browser_id.to_string()),
-            previous_health: Some(previous.health),
-            current_health: Some(current.health),
-            details: Some(serde_json::json!({
-                "previousError": previous.last_error,
-                "currentError": current.last_error,
-            })),
-            ..new_service_event()
-        },
-    );
+    let mut event = ServiceEvent {
+        kind: ServiceEventKind::BrowserHealthChanged,
+        message: format!(
+            "Browser {} health changed from {:?} to {:?}",
+            browser_id, previous.health, current.health
+        ),
+        browser_id: Some(browser_id.to_string()),
+        previous_health: Some(previous.health),
+        current_health: Some(current.health),
+        details: Some(serde_json::json!({
+            "previousError": previous.last_error,
+            "currentError": current.last_error,
+        })),
+        ..new_service_event()
+    };
+    enrich_service_event_with_browser_context(&mut event, state, browser_id, current);
+    push_service_event(state, event);
+}
+
+pub fn record_browser_launch_recorded_event(
+    state: &mut ServiceState,
+    browser_id: &str,
+    previous: Option<&BrowserProcess>,
+    current: &BrowserProcess,
+) {
+    let mut event = ServiceEvent {
+        kind: ServiceEventKind::BrowserLaunchRecorded,
+        message: format!("Browser {} launch metadata recorded", browser_id),
+        browser_id: Some(browser_id.to_string()),
+        current_health: Some(current.health),
+        details: Some(serde_json::json!({
+            "previousProfileId": previous.and_then(|browser| browser.profile_id.clone()),
+            "currentProfileId": current.profile_id,
+            "previousSessionIds": previous
+                .map(|browser| browser.active_session_ids.clone())
+                .unwrap_or_default(),
+            "currentSessionIds": current.active_session_ids,
+            "host": current.host,
+            "pid": current.pid,
+            "cdpEndpoint": current.cdp_endpoint,
+        })),
+        ..new_service_event()
+    };
+    enrich_service_event_with_browser_context(&mut event, state, browser_id, current);
+    push_service_event(state, event);
+}
+
+fn enrich_service_event_with_browser_context(
+    event: &mut ServiceEvent,
+    state: &ServiceState,
+    browser_id: &str,
+    browser: &BrowserProcess,
+) {
+    let session_id = browser
+        .active_session_ids
+        .first()
+        .cloned()
+        .or_else(|| session_id_for_browser(state, browser_id));
+    let session = session_id
+        .as_ref()
+        .and_then(|session_id| state.sessions.get(session_id));
+
+    event.profile_id = browser
+        .profile_id
+        .clone()
+        .or_else(|| session.and_then(|session| session.profile_id.clone()));
+    event.session_id = session_id;
+    event.service_name = session.and_then(|session| session.service_name.clone());
+    event.agent_name = session.and_then(|session| session.agent_name.clone());
+    event.task_name = session.and_then(|session| session.task_name.clone());
+}
+
+fn session_id_for_browser(state: &ServiceState, browser_id: &str) -> Option<String> {
+    state.sessions.iter().find_map(|(session_id, session)| {
+        session
+            .browser_ids
+            .iter()
+            .any(|id| id == browser_id)
+            .then(|| session_id.clone())
+    })
 }
 
 fn record_health_transition_events(state: &mut ServiceState, before: &ServiceState) {
@@ -477,6 +539,43 @@ mod tests {
             browsers: BTreeMap::from([(browser.id.clone(), browser)]),
             ..ServiceState::default()
         }
+    }
+
+    #[test]
+    fn launch_recorded_event_copies_browser_session_context() {
+        let mut state = ServiceState {
+            sessions: BTreeMap::from([(
+                "session-1".to_string(),
+                BrowserSession {
+                    id: "session-1".to_string(),
+                    profile_id: Some("work".to_string()),
+                    service_name: Some("JournalDownloader".to_string()),
+                    agent_name: Some("codex".to_string()),
+                    task_name: Some("probeACSwebsite".to_string()),
+                    browser_ids: vec!["browser-1".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            profile_id: Some("work".to_string()),
+            active_session_ids: vec!["session-1".to_string()],
+            health: BrowserHealth::Ready,
+            ..BrowserProcess::default()
+        };
+
+        record_browser_launch_recorded_event(&mut state, "browser-1", None, &browser);
+
+        let event = state.events.first().unwrap();
+        assert_eq!(event.kind, ServiceEventKind::BrowserLaunchRecorded);
+        assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(event.profile_id.as_deref(), Some("work"));
+        assert_eq!(event.session_id.as_deref(), Some("session-1"));
+        assert_eq!(event.service_name.as_deref(), Some("JournalDownloader"));
+        assert_eq!(event.agent_name.as_deref(), Some("codex"));
+        assert_eq!(event.task_name.as_deref(), Some("probeACSwebsite"));
     }
 
     async fn serve_json_version(listener: TcpListener) {

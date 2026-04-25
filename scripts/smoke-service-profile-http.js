@@ -267,6 +267,32 @@ try {
     `Session browserIds missing active browser: ${JSON.stringify(persistedSession)}`,
   );
 
+  const events = await httpJson(
+    port,
+    'GET',
+    '/api/service/events?kind=browser_launch_recorded&limit=20',
+  );
+  assert(events.success === true, `HTTP service events failed: ${JSON.stringify(events)}`);
+  const launchEvent = events.data?.events?.find(
+    (event) =>
+      event.sessionId === session &&
+      event.profileId === runtimeProfile &&
+      event.serviceName === serviceName &&
+      event.agentName === agentName &&
+      event.taskName === taskName,
+  );
+  assert(
+    launchEvent,
+    `HTTP service events missing launch event context: ${JSON.stringify(events)}`,
+  );
+  assert(launchEvent.serviceName === serviceName, `Event serviceName was ${launchEvent.serviceName}`);
+  assert(launchEvent.agentName === agentName, `Event agentName was ${launchEvent.agentName}`);
+  assert(launchEvent.taskName === taskName, `Event taskName was ${launchEvent.taskName}`);
+  assert(
+    launchEvent.browserId === `session:${session}`,
+    `Event browserId was ${launchEvent.browserId}`,
+  );
+
   await cleanup();
   console.log('Service profile HTTP smoke passed');
 } catch (err) {

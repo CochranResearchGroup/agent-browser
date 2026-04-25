@@ -87,6 +87,11 @@ pub struct ServiceEvent {
     pub kind: ServiceEventKind,
     pub message: String,
     pub browser_id: Option<String>,
+    pub profile_id: Option<String>,
+    pub session_id: Option<String>,
+    pub service_name: Option<String>,
+    pub agent_name: Option<String>,
+    pub task_name: Option<String>,
     pub previous_health: Option<BrowserHealth>,
     pub current_health: Option<BrowserHealth>,
     pub details: Option<serde_json::Value>,
@@ -129,6 +134,7 @@ pub enum ServiceIncidentState {
 pub enum ServiceEventKind {
     #[default]
     Reconciliation,
+    BrowserLaunchRecorded,
     BrowserHealthChanged,
     TabLifecycleChanged,
     ReconciliationError,
@@ -313,7 +319,9 @@ fn service_event_is_incident(event: &ServiceEvent) -> bool {
             browser_health_is_bad(event.current_health)
                 || browser_health_is_recovery(event.previous_health, event.current_health)
         }
-        ServiceEventKind::Reconciliation | ServiceEventKind::TabLifecycleChanged => false,
+        ServiceEventKind::Reconciliation
+        | ServiceEventKind::BrowserLaunchRecorded
+        | ServiceEventKind::TabLifecycleChanged => false,
     }
 }
 
@@ -402,6 +410,7 @@ fn service_job_browser_id(job: &ServiceJob, state: &ServiceState) -> Option<Stri
 fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
     match kind {
         ServiceEventKind::Reconciliation => "reconciliation",
+        ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
@@ -1092,6 +1101,12 @@ mod tests {
                 timestamp: "2026-04-22T00:01:00Z".to_string(),
                 kind: ServiceEventKind::Reconciliation,
                 message: "Reconciled 1 browser records, 0 changed".to_string(),
+                browser_id: Some("browser-1".to_string()),
+                profile_id: Some("work".to_string()),
+                session_id: Some("session-1".to_string()),
+                service_name: Some("JournalDownloader".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("probeACSwebsite".to_string()),
                 details: Some(json!({"browserCount": 1, "changedBrowsers": 0})),
                 ..ServiceEvent::default()
             }],
@@ -1182,6 +1197,17 @@ mod tests {
         );
         assert_eq!(decoded.events.len(), 1);
         assert_eq!(decoded.events[0].kind, ServiceEventKind::Reconciliation);
+        assert_eq!(decoded.events[0].profile_id.as_deref(), Some("work"));
+        assert_eq!(decoded.events[0].session_id.as_deref(), Some("session-1"));
+        assert_eq!(
+            decoded.events[0].service_name.as_deref(),
+            Some("JournalDownloader")
+        );
+        assert_eq!(decoded.events[0].agent_name.as_deref(), Some("codex"));
+        assert_eq!(
+            decoded.events[0].task_name.as_deref(),
+            Some("probeACSwebsite")
+        );
         assert_eq!(
             decoded.profiles["work"].allocation,
             ProfileAllocationPolicy::PerService

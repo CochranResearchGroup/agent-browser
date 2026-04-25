@@ -429,6 +429,7 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
             }
             "kind" => match value.as_str() {
                 "reconciliation"
+                | "browser_launch_recorded"
                 | "browser_health_changed"
                 | "tab_lifecycle_changed"
                 | "reconciliation_error"
@@ -702,6 +703,13 @@ mod tests {
         let cmd = service_events_command(Some("kind=tab_lifecycle_changed")).unwrap();
 
         assert_eq!(cmd["kind"], "tab_lifecycle_changed");
+    }
+
+    #[test]
+    fn service_events_command_accepts_browser_launch_kind() {
+        let cmd = service_events_command(Some("kind=browser_launch_recorded")).unwrap();
+
+        assert_eq!(cmd["kind"], "browser_launch_recorded");
     }
 
     #[test]
