@@ -111,6 +111,18 @@ try {
     '</html>',
   ].join('');
   const pageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(pageHtml)}`;
+  const browserCommandHtml = [
+    '<!doctype html>',
+    '<html>',
+    '<head><title>MCP Browser Command Smoke</title></head>',
+    '<body>',
+    '<main id="browser-command-main">',
+    '<h1>MCP Browser Command Smoke</h1>',
+    '</main>',
+    '</body>',
+    '</html>',
+  ].join('');
+  const browserCommandUrl = `data:text/html;charset=utf-8,${encodeURIComponent(browserCommandHtml)}`;
 
   const openResult = await runCli(context, [
     '--json',
@@ -134,6 +146,64 @@ try {
   });
   assert(initialize.capabilities?.tools, 'MCP tools capability missing');
   notify('notifications/initialized');
+
+  const commandNavigateResult = await send('tools/call', {
+    name: 'browser_command',
+    arguments: {
+      action: 'navigate',
+      params: {
+        url: browserCommandUrl,
+        waitUntil: 'load',
+      },
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandNavigatePayload = parseToolPayload(commandNavigateResult);
+  assert(
+    commandNavigatePayload.success === true,
+    `browser_command navigate failed: ${JSON.stringify(commandNavigatePayload)}`,
+  );
+  assert(
+    commandNavigatePayload.data?.url === browserCommandUrl,
+    'browser_command navigate did not report the requested URL',
+  );
+  assert(
+    commandNavigatePayload.trace?.serviceName === serviceName,
+    'browser_command navigate trace missing serviceName',
+  );
+  assert(
+    commandNavigatePayload.trace?.agentName === agentName,
+    'browser_command navigate trace missing agentName',
+  );
+  assert(
+    commandNavigatePayload.trace?.taskName === taskName,
+    'browser_command navigate trace missing taskName',
+  );
+
+  const commandReturnResult = await send('tools/call', {
+    name: 'browser_command',
+    arguments: {
+      action: 'navigate',
+      params: {
+        url: pageUrl,
+        waitUntil: 'load',
+      },
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandReturnPayload = parseToolPayload(commandReturnResult);
+  assert(
+    commandReturnPayload.success === true,
+    `browser_command return navigate failed: ${JSON.stringify(commandReturnPayload)}`,
+  );
+  assert(
+    commandReturnPayload.data?.url === pageUrl,
+    'browser_command return navigate did not restore the fixture page',
+  );
 
   const toolResult = await send('tools/call', {
     name: 'browser_snapshot',
@@ -922,6 +992,18 @@ try {
   );
   assert(snapshotJob, 'Retained service job with browser_snapshot caller context was not found');
   assert(snapshotJob.state === 'succeeded', `Snapshot service job state was ${snapshotJob.state}`);
+  const browserCommandJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'navigate' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(browserCommandJob, 'Retained service job with browser_command caller context was not found');
+  assert(
+    browserCommandJob.state === 'succeeded',
+    `Browser command service job state was ${browserCommandJob.state}`,
+  );
   const urlJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'url' &&
