@@ -214,9 +214,11 @@ try {
     '<main id="main">',
     '<h1>MCP Live Smoke</h1>',
     '<button id="ready" onclick="document.getElementById(\'status\').textContent = \'Clicked\'">Ready</button>',
+    '<button id="hidden-control" style="display: none">Hidden</button>',
     '<p id="status">Not clicked</p>',
     '<label for="name">Name</label>',
     '<input id="name" name="name" value="stale" onfocus="document.getElementById(\'focus-output\').textContent = \'Focused name\'" oninput="if (this.value === \'\') { document.getElementById(\'clear-output\').textContent = \'Name cleared\'; }" onkeydown="if (event.key === \'Enter\') { document.getElementById(\'press-output\').textContent = \'Pressed Enter\'; }">',
+    '<input id="disabled-name" value="locked" disabled>',
     '<p id="focus-output"></p>',
     '<p id="clear-output"></p>',
     '<p id="press-output"></p>',
@@ -401,6 +403,76 @@ try {
   assert(clickPayload.trace?.serviceName === serviceName, 'browser_click trace missing serviceName');
   assert(clickPayload.trace?.agentName === agentName, 'browser_click trace missing agentName');
   assert(clickPayload.trace?.taskName === taskName, 'browser_click trace missing taskName');
+
+  const visibleResult = await send('tools/call', {
+    name: 'browser_is_visible',
+    arguments: {
+      selector: '#ready',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const visiblePayload = parseToolPayload(visibleResult);
+  assert(
+    visiblePayload.success === true,
+    `browser_is_visible failed: ${JSON.stringify(visiblePayload)}`,
+  );
+  assert(visiblePayload.data?.visible === true, 'browser_is_visible did not report visible state');
+  assert(
+    visiblePayload.trace?.serviceName === serviceName,
+    'browser_is_visible trace missing serviceName',
+  );
+  assert(visiblePayload.trace?.agentName === agentName, 'browser_is_visible trace missing agentName');
+  assert(visiblePayload.trace?.taskName === taskName, 'browser_is_visible trace missing taskName');
+
+  const hiddenResult = await send('tools/call', {
+    name: 'browser_is_visible',
+    arguments: {
+      selector: '#hidden-control',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const hiddenPayload = parseToolPayload(hiddenResult);
+  assert(hiddenPayload.success === true, `hidden browser_is_visible failed: ${JSON.stringify(hiddenPayload)}`);
+  assert(hiddenPayload.data?.visible === false, 'browser_is_visible did not report hidden state');
+
+  const enabledResult = await send('tools/call', {
+    name: 'browser_is_enabled',
+    arguments: {
+      selector: '#name',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const enabledPayload = parseToolPayload(enabledResult);
+  assert(
+    enabledPayload.success === true,
+    `browser_is_enabled failed: ${JSON.stringify(enabledPayload)}`,
+  );
+  assert(enabledPayload.data?.enabled === true, 'browser_is_enabled did not report enabled state');
+  assert(
+    enabledPayload.trace?.serviceName === serviceName,
+    'browser_is_enabled trace missing serviceName',
+  );
+  assert(enabledPayload.trace?.agentName === agentName, 'browser_is_enabled trace missing agentName');
+  assert(enabledPayload.trace?.taskName === taskName, 'browser_is_enabled trace missing taskName');
+
+  const disabledResult = await send('tools/call', {
+    name: 'browser_is_enabled',
+    arguments: {
+      selector: '#disabled-name',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const disabledPayload = parseToolPayload(disabledResult);
+  assert(disabledPayload.success === true, `disabled browser_is_enabled failed: ${JSON.stringify(disabledPayload)}`);
+  assert(disabledPayload.data?.enabled === false, 'browser_is_enabled did not report disabled state');
 
   const focusResult = await send('tools/call', {
     name: 'browser_focus',
@@ -885,6 +957,30 @@ try {
   );
   assert(clickJob, 'Retained service job with browser_click caller context was not found');
   assert(clickJob.state === 'succeeded', `Click service job state was ${clickJob.state}`);
+  const isVisibleJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'isvisible' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(isVisibleJob, 'Retained service job with browser_is_visible caller context was not found');
+  assert(
+    isVisibleJob.state === 'succeeded',
+    `Visible-state service job state was ${isVisibleJob.state}`,
+  );
+  const isEnabledJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'isenabled' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(isEnabledJob, 'Retained service job with browser_is_enabled caller context was not found');
+  assert(
+    isEnabledJob.state === 'succeeded',
+    `Enabled-state service job state was ${isEnabledJob.state}`,
+  );
   const focusJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'focus' &&

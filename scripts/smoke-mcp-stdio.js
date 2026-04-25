@@ -458,6 +458,50 @@ try {
     selectTool.inputSchema?.properties?.taskName,
     'MCP browser_select missing taskName trace field',
   );
+  const isVisibleTool = tools.tools?.find((tool) => tool.name === 'browser_is_visible');
+  assert(isVisibleTool, 'MCP browser_is_visible tool missing');
+  assert(
+    isVisibleTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_is_visible missing selector requirement',
+  );
+  assert(
+    isVisibleTool.inputSchema?.properties?.selector,
+    'MCP browser_is_visible missing selector property',
+  );
+  assert(
+    isVisibleTool.inputSchema?.properties?.serviceName,
+    'MCP browser_is_visible missing serviceName trace field',
+  );
+  assert(
+    isVisibleTool.inputSchema?.properties?.agentName,
+    'MCP browser_is_visible missing agentName trace field',
+  );
+  assert(
+    isVisibleTool.inputSchema?.properties?.taskName,
+    'MCP browser_is_visible missing taskName trace field',
+  );
+  const isEnabledTool = tools.tools?.find((tool) => tool.name === 'browser_is_enabled');
+  assert(isEnabledTool, 'MCP browser_is_enabled tool missing');
+  assert(
+    isEnabledTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_is_enabled missing selector requirement',
+  );
+  assert(
+    isEnabledTool.inputSchema?.properties?.selector,
+    'MCP browser_is_enabled missing selector property',
+  );
+  assert(
+    isEnabledTool.inputSchema?.properties?.serviceName,
+    'MCP browser_is_enabled missing serviceName trace field',
+  );
+  assert(
+    isEnabledTool.inputSchema?.properties?.agentName,
+    'MCP browser_is_enabled missing agentName trace field',
+  );
+  assert(
+    isEnabledTool.inputSchema?.properties?.taskName,
+    'MCP browser_is_enabled missing taskName trace field',
+  );
   const checkTool = tools.tools?.find((tool) => tool.name === 'browser_check');
   assert(checkTool, 'MCP browser_check tool missing');
   assert(
