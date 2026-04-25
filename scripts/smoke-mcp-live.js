@@ -216,8 +216,9 @@ try {
     '<button id="ready" onclick="document.getElementById(\'status\').textContent = \'Clicked\'">Ready</button>',
     '<p id="status">Not clicked</p>',
     '<label for="name">Name</label>',
-    '<input id="name" name="name" value="" onfocus="document.getElementById(\'focus-output\').textContent = \'Focused name\'" onkeydown="if (event.key === \'Enter\') { document.getElementById(\'press-output\').textContent = \'Pressed Enter\'; }">',
+    '<input id="name" name="name" value="stale" onfocus="document.getElementById(\'focus-output\').textContent = \'Focused name\'" oninput="if (this.value === \'\') { document.getElementById(\'clear-output\').textContent = \'Name cleared\'; }" onkeydown="if (event.key === \'Enter\') { document.getElementById(\'press-output\').textContent = \'Pressed Enter\'; }">',
     '<p id="focus-output"></p>',
+    '<p id="clear-output"></p>',
     '<p id="press-output"></p>',
     '<button id="hover-target" onmouseover="document.getElementById(\'hover-output\').textContent = \'Hovered menu\'">Hover menu</button>',
     '<p id="hover-output"></p>',
@@ -416,6 +417,22 @@ try {
   assert(focusPayload.trace?.serviceName === serviceName, 'browser_focus trace missing serviceName');
   assert(focusPayload.trace?.agentName === agentName, 'browser_focus trace missing agentName');
   assert(focusPayload.trace?.taskName === taskName, 'browser_focus trace missing taskName');
+
+  const clearResult = await send('tools/call', {
+    name: 'browser_clear',
+    arguments: {
+      selector: '#name',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const clearPayload = parseToolPayload(clearResult);
+  assert(clearPayload.success === true, `browser_clear failed: ${JSON.stringify(clearPayload)}`);
+  assert(clearPayload.data?.cleared === '#name', 'browser_clear did not report cleared selector');
+  assert(clearPayload.trace?.serviceName === serviceName, 'browser_clear trace missing serviceName');
+  assert(clearPayload.trace?.agentName === agentName, 'browser_clear trace missing agentName');
+  assert(clearPayload.trace?.taskName === taskName, 'browser_clear trace missing taskName');
 
   const fillResult = await send('tools/call', {
     name: 'browser_fill',
@@ -708,6 +725,11 @@ try {
   );
   assert(
     typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
+      clickedSnapshotPayload.data.snapshot.includes('Name cleared'),
+    'browser_clear did not mutate the page state visible to a follow-up snapshot',
+  );
+  assert(
+    typeof clickedSnapshotPayload.data?.snapshot === 'string' &&
       clickedSnapshotPayload.data.snapshot.includes('Pressed Enter'),
     'browser_press did not mutate the page state visible to a follow-up snapshot',
   );
@@ -803,6 +825,15 @@ try {
   );
   assert(focusJob, 'Retained service job with browser_focus caller context was not found');
   assert(focusJob.state === 'succeeded', `Focus service job state was ${focusJob.state}`);
+  const clearJob = jobPayload.jobs?.find(
+    (job) =>
+      job.action === 'clear' &&
+      job.serviceName === serviceName &&
+      job.agentName === agentName &&
+      job.taskName === taskName,
+  );
+  assert(clearJob, 'Retained service job with browser_clear caller context was not found');
+  assert(clearJob.state === 'succeeded', `Clear service job state was ${clearJob.state}`);
   const fillJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'fill' &&

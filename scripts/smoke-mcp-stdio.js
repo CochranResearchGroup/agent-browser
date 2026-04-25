@@ -573,6 +573,28 @@ try {
     focusTool.inputSchema?.properties?.taskName,
     'MCP browser_focus missing taskName trace field',
   );
+  const clearTool = tools.tools?.find((tool) => tool.name === 'browser_clear');
+  assert(clearTool, 'MCP browser_clear tool missing');
+  assert(
+    clearTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_clear missing selector requirement',
+  );
+  assert(
+    clearTool.inputSchema?.properties?.selector,
+    'MCP browser_clear missing selector property',
+  );
+  assert(
+    clearTool.inputSchema?.properties?.serviceName,
+    'MCP browser_clear missing serviceName trace field',
+  );
+  assert(
+    clearTool.inputSchema?.properties?.agentName,
+    'MCP browser_clear missing agentName trace field',
+  );
+  assert(
+    clearTool.inputSchema?.properties?.taskName,
+    'MCP browser_clear missing taskName trace field',
+  );
 
   const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
   const incidentContent = incidents.contents?.[0];

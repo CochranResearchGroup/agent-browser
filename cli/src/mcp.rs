@@ -1070,6 +1070,39 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector"]
             }
         }),
+        json!({
+            "name": "browser_clear",
+            "title": "Clear browser field",
+            "description": "Queue clearing an input or editable field in the active browser session. This mutates field state, so include serviceName, agentName, and taskName when available for traceability.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Required CSS selector or cached ref for the field to clear."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued clear job."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["selector"]
+            }
+        }),
     ]
 }
 
@@ -1158,6 +1191,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_scroll" => call_browser_scroll(arguments, session),
         "browser_scroll_into_view" => call_browser_scroll_into_view(arguments, session),
         "browser_focus" => call_browser_focus(arguments, session),
+        "browser_clear" => call_browser_clear(arguments, session),
         _ => Err(JsonRpcError {
             code: -32602,
             message: "Invalid params",
@@ -1711,13 +1745,27 @@ fn call_browser_scroll_into_view(arguments: &Value, session: &str) -> Result<Val
 }
 
 fn call_browser_focus(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    call_browser_field_tool(arguments, session, "browser_focus", "focus")
+}
+
+fn call_browser_clear(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    call_browser_field_tool(arguments, session, "browser_clear", "clear")
+}
+
+fn call_browser_field_tool(
+    arguments: &Value,
+    session: &str,
+    tool_name: &str,
+    action: &str,
+) -> Result<Value, JsonRpcError> {
     let selector = required_string_argument(arguments, "selector")?;
     let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
     let service_name = optional_string_argument(arguments, "serviceName")?;
     let agent_name = optional_string_argument(arguments, "agentName")?;
     let task_name = optional_string_argument(arguments, "taskName")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
-    let command = browser_focus_command(
+    let command = browser_field_command(
+        action,
         selector,
         job_timeout_ms,
         service_name,
@@ -1731,15 +1779,12 @@ fn call_browser_focus(arguments: &Value, session: &str) -> Result<Value, JsonRpc
         data: Some(json!({
             "message": err,
             "session": session,
-            "tool": "browser_focus",
+            "tool": tool_name,
             "trace": trace,
         })),
     })?;
     Ok(tool_response_from_daemon(
-        "browser_focus",
-        session,
-        trace,
-        response,
+        tool_name, session, trace, response,
     ))
 }
 
@@ -2156,7 +2201,8 @@ fn browser_scroll_into_view_command(
     command
 }
 
-fn browser_focus_command(
+fn browser_field_command(
+    action: &str,
     selector: &str,
     job_timeout_ms: Option<u64>,
     service_name: Option<&str>,
@@ -2164,8 +2210,8 @@ fn browser_focus_command(
     task_name: Option<&str>,
 ) -> Value {
     let mut command = json!({
-        "id": format!("mcp-browser-focus-{}", uuid::Uuid::new_v4()),
-        "action": "focus",
+        "id": format!("mcp-browser-{}-{}", action, uuid::Uuid::new_v4()),
+        "action": action,
         "selector": selector,
     });
     if let Some(job_timeout_ms) = job_timeout_ms {
@@ -2975,6 +3021,21 @@ mod tests {
         assert!(
             response["result"]["tools"][17]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][18]["name"], "browser_clear");
+        assert_eq!(
+            response["result"]["tools"][18]["inputSchema"]["required"][0],
+            "selector"
+        );
+        assert!(
+            response["result"]["tools"][18]["inputSchema"]["properties"]["selector"].is_object()
+        );
+        assert!(
+            response["result"]["tools"][18]["inputSchema"]["properties"]["jobTimeoutMs"]
+                .is_object()
+        );
+        assert!(
+            response["result"]["tools"][18]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
     }
 
     #[test]
@@ -3298,6 +3359,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 32);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_clear_requires_selector_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":33,"method":"tools/call","params":{"name":"browser_clear","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 33);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -3766,8 +3839,9 @@ mod tests {
     }
 
     #[test]
-    fn browser_focus_command_forwards_selector_and_trace_fields() {
-        let command = browser_focus_command(
+    fn browser_field_command_forwards_action_selector_and_trace_fields() {
+        let command = browser_field_command(
+            "focus",
             "#name",
             Some(1000),
             Some("JournalDownloader"),
@@ -3781,6 +3855,13 @@ mod tests {
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
         assert_eq!(command["taskName"], "probeACSwebsite");
+
+        let clear_command = browser_field_command("clear", "#name", None, None, None, None);
+
+        assert_eq!(clear_command["action"], "clear");
+        assert_eq!(clear_command["selector"], "#name");
+        assert!(clear_command.get("jobTimeoutMs").is_none());
+        assert!(clear_command.get("serviceName").is_none());
     }
 
     #[test]
