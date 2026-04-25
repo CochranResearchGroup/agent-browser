@@ -459,6 +459,30 @@ fn browser_api_command(
         ("POST", "/api/browser/fill") => {
             Some(browser_body_command("fill", "http-browser-fill", body))
         }
+        ("POST", "/api/browser/wait") => {
+            Some(browser_body_command("wait", "http-browser-wait", body))
+        }
+        ("POST", "/api/browser/type") => {
+            Some(browser_body_command("type", "http-browser-type", body))
+        }
+        ("POST", "/api/browser/press") => {
+            Some(browser_body_command("press", "http-browser-press", body))
+        }
+        ("POST", "/api/browser/get-text") => Some(browser_body_command(
+            "gettext",
+            "http-browser-get-text",
+            body,
+        )),
+        ("POST", "/api/browser/get-value") => Some(browser_body_command(
+            "inputvalue",
+            "http-browser-get-value",
+            body,
+        )),
+        ("POST", "/api/browser/is-visible") => Some(browser_body_command(
+            "isvisible",
+            "http-browser-is-visible",
+            body,
+        )),
         _ => None,
     }
 }
@@ -1292,6 +1316,49 @@ mod tests {
         )
         .unwrap()
         .unwrap();
+        let wait = browser_api_command(
+            "POST",
+            "/api/browser/wait",
+            None,
+            r##"{"selector":"#ready","state":"visible","timeoutMs":1000}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let type_text = browser_api_command(
+            "POST",
+            "/api/browser/type",
+            None,
+            r##"{"selector":"#name","text":" Jr","delayMs":1}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let press = browser_api_command("POST", "/api/browser/press", None, r#"{"key":"Enter"}"#)
+            .unwrap()
+            .unwrap();
+        let get_text = browser_api_command(
+            "POST",
+            "/api/browser/get-text",
+            None,
+            r##"{"selector":"#ready"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let get_value = browser_api_command(
+            "POST",
+            "/api/browser/get-value",
+            None,
+            r##"{"selector":"#name"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let is_visible = browser_api_command(
+            "POST",
+            "/api/browser/is-visible",
+            None,
+            r##"{"selector":"#ready"}"##,
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(click["action"], "click");
         assert_eq!(click["selector"], "#ready");
@@ -1300,6 +1367,15 @@ mod tests {
         assert_eq!(fill["value"], "Ada");
         assert_eq!(snapshot["action"], "snapshot");
         assert_eq!(snapshot["interactive"], true);
+        assert_eq!(wait["action"], "wait");
+        assert_eq!(wait["state"], "visible");
+        assert_eq!(type_text["action"], "type");
+        assert_eq!(type_text["text"], " Jr");
+        assert_eq!(press["action"], "press");
+        assert_eq!(press["key"], "Enter");
+        assert_eq!(get_text["action"], "gettext");
+        assert_eq!(get_value["action"], "inputvalue");
+        assert_eq!(is_visible["action"], "isvisible");
     }
 
     #[test]

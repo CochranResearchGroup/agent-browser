@@ -41,9 +41,10 @@ try {
     '<main id="main">',
     '<h1 id="ready">Service Profile HTTP Smoke</h1>',
     '<label for="name">Name</label>',
-    '<input id="name" value="stale">',
+    '<input id="name" value="stale" onkeydown="if (event.key === \'Enter\') { document.getElementById(\'press-output\').textContent = \'Pressed Enter\'; }">',
     '<button id="mark-ready" onclick="document.getElementById(\'click-output\').textContent = \'Clicked\'">Mark ready</button>',
     '<p id="click-output">Not clicked</p>',
+    '<p id="press-output"></p>',
     '</main>',
     '</body>',
     '</html>',
@@ -143,6 +144,41 @@ try {
   assert(browserFill.success === true, `HTTP browser fill failed: ${JSON.stringify(browserFill)}`);
   assert(browserFill.data?.filled === '#name', 'HTTP browser fill did not report filled selector');
 
+  const browserType = await httpJson(port, 'POST', '/api/browser/type', {
+    selector: '#name',
+    text: ' Jr',
+    delayMs: 1,
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(browserType.success === true, `HTTP browser type failed: ${JSON.stringify(browserType)}`);
+  assert(browserType.data?.typed === ' Jr', 'HTTP browser type did not report typed text');
+
+  const browserPress = await httpJson(port, 'POST', '/api/browser/press', {
+    key: 'Enter',
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(browserPress.success === true, `HTTP browser press failed: ${JSON.stringify(browserPress)}`);
+  assert(browserPress.data?.pressed === 'Enter', 'HTTP browser press did not report pressed key');
+
+  const browserValue = await httpJson(port, 'POST', '/api/browser/get-value', {
+    selector: '#name',
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(
+    browserValue.success === true,
+    `HTTP browser get-value failed: ${JSON.stringify(browserValue)}`,
+  );
+  assert(
+    browserValue.data?.value === 'Ada Lovelace Jr',
+    `HTTP browser get-value returned ${browserValue.data?.value}`,
+  );
+
   const browserClick = await httpJson(port, 'POST', '/api/browser/click', {
     selector: '#mark-ready',
     serviceName,
@@ -157,6 +193,42 @@ try {
     browserClick.data?.clicked === '#mark-ready',
     'HTTP browser click did not report clicked selector',
   );
+
+  const browserWait = await httpJson(port, 'POST', '/api/browser/wait', {
+    selector: '#click-output',
+    text: 'Clicked',
+    timeoutMs: 2000,
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(browserWait.success === true, `HTTP browser wait failed: ${JSON.stringify(browserWait)}`);
+  assert(browserWait.data?.waited === 'text', 'HTTP browser wait did not report text wait');
+  assert(browserWait.data?.text === 'Clicked', 'HTTP browser wait did not report waited text');
+
+  const browserText = await httpJson(port, 'POST', '/api/browser/get-text', {
+    selector: '#click-output',
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(
+    browserText.success === true,
+    `HTTP browser get-text failed: ${JSON.stringify(browserText)}`,
+  );
+  assert(browserText.data?.text === 'Clicked', `HTTP browser get-text returned ${browserText.data?.text}`);
+
+  const browserVisible = await httpJson(port, 'POST', '/api/browser/is-visible', {
+    selector: '#ready',
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(
+    browserVisible.success === true,
+    `HTTP browser is-visible failed: ${JSON.stringify(browserVisible)}`,
+  );
+  assert(browserVisible.data?.visible === true, 'HTTP browser is-visible did not report visible');
 
   const status = await httpJson(port, 'GET', '/api/service/status');
   assert(status.success === true, `HTTP service status failed: ${JSON.stringify(status)}`);

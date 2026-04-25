@@ -333,6 +333,12 @@ curl "http://127.0.0.1:<stream-port>/api/browser/tabs?verbose=true"
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/snapshot" -H "content-type: application/json" -d '{"selector":"main","interactive":true}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/click" -H "content-type: application/json" -d '{"selector":"#submit","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/fill" -H "content-type: application/json" -d '{"selector":"#query","value":"search text","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/wait" -H "content-type: application/json" -d '{"selector":"#result","text":"Ready","timeoutMs":5000}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/type" -H "content-type: application/json" -d '{"selector":"#query","text":" more","delayMs":10}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/press" -H "content-type: application/json" -d '{"key":"Enter"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-text" -H "content-type: application/json" -d '{"selector":"#result"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-value" -H "content-type: application/json" -d '{"selector":"#query"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-visible" -H "content-type: application/json" -d '{"selector":"#result"}'
 curl "http://127.0.0.1:<stream-port>/api/service/status"
 curl "http://127.0.0.1:<stream-port>/api/service/profiles"
 curl "http://127.0.0.1:<stream-port>/api/service/sessions"
