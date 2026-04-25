@@ -336,6 +336,170 @@ fn format_service_job_line(job: &serde_json::Value) -> String {
     format!("{timestamp} {state} action={action} id={id}{error}")
 }
 
+fn value_str<'a>(value: &'a serde_json::Value, key: &str, fallback: &'a str) -> &'a str {
+    value
+        .get(key)
+        .and_then(|value| value.as_str())
+        .unwrap_or(fallback)
+}
+
+fn value_bool_label(value: &serde_json::Value, key: &str) -> &'static str {
+    if value
+        .get(key)
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        "yes"
+    } else {
+        "no"
+    }
+}
+
+fn sorted_object_values(value: &serde_json::Value, key: &str) -> Vec<serde_json::Value> {
+    let mut values = value
+        .get(key)
+        .and_then(|value| value.as_object())
+        .map(|items| items.values().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    values.sort_by(|left, right| value_str(left, "id", "").cmp(value_str(right, "id", "")));
+    values
+}
+
+fn format_service_profile_line(profile: &serde_json::Value) -> String {
+    let id = value_str(profile, "id", "unknown-profile");
+    let name = value_str(profile, "name", id);
+    let allocation = value_str(profile, "allocation", "unknown");
+    let keyring = value_str(profile, "keyring", "unknown");
+    let persistent = value_bool_label(profile, "persistent");
+    let manual_login = value_bool_label(profile, "manualLoginPreferred");
+    let services = profile
+        .get("sharedServiceIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+    let user_data = profile
+        .get("userDataDir")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+
+    format!(
+        "{id} name={name} allocation={allocation} keyring={keyring} persistent={persistent} manual_login={manual_login} services={services} user_data={user_data}"
+    )
+}
+
+fn format_service_session_line(session: &serde_json::Value) -> String {
+    let id = value_str(session, "id", "unknown-session");
+    let service = value_str(session, "serviceName", "none");
+    let agent = value_str(session, "agentName", "none");
+    let task = value_str(session, "taskName", "none");
+    let profile = value_str(session, "profileId", "none");
+    let lease = value_str(session, "lease", "unknown");
+    let cleanup = value_str(session, "cleanup", "unknown");
+    let browsers = session
+        .get("browserIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+
+    format!(
+        "{id} service={service} agent={agent} task={task} profile={profile} lease={lease} cleanup={cleanup} browsers={browsers}"
+    )
+}
+
+fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
+    let service_state = data.get("service_state")?;
+    let control_plane = service_state.get("controlPlane");
+    let reconciliation = service_state.get("reconciliation");
+    let profiles = sorted_object_values(service_state, "profiles");
+    let sessions = sorted_object_values(service_state, "sessions");
+    let browser_count = service_state
+        .get("browsers")
+        .and_then(|value| value.as_object())
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let tab_count = service_state
+        .get("tabs")
+        .and_then(|value| value.as_object())
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let queue_depth = control_plane
+        .and_then(|value| value.get("queueDepth"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let queue_capacity = control_plane
+        .and_then(|value| value.get("queueCapacity"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let worker_state = control_plane
+        .map(|value| value_str(value, "workerState", "unknown"))
+        .unwrap_or("unknown");
+    let browser_health = control_plane
+        .map(|value| value_str(value, "browserHealth", "unknown"))
+        .unwrap_or("unknown");
+
+    let mut lines = vec![
+        format!(
+            "Service: worker={worker_state} browser={browser_health} queue={queue_depth}/{queue_capacity} browsers={browser_count} tabs={tab_count}"
+        ),
+        format!(
+            "Reconciliation: last={} browsers={} changed={} error={}",
+            reconciliation
+                .map(|value| value_str(value, "lastReconciledAt", "never"))
+                .unwrap_or("never"),
+            reconciliation
+                .and_then(|value| value.get("browserCount"))
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            reconciliation
+                .and_then(|value| value.get("changedBrowsers"))
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            reconciliation
+                .and_then(|value| value.get("lastError"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("none")
+        ),
+        format!("Profiles: {}", profiles.len()),
+    ];
+
+    if profiles.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            profiles
+                .iter()
+                .map(|profile| format!("  {}", format_service_profile_line(profile))),
+        );
+    }
+
+    lines.push(format!("Sessions: {}", sessions.len()));
+    if sessions.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            sessions
+                .iter()
+                .map(|session| format!("  {}", format_service_session_line(session))),
+        );
+    }
+
+    Some(lines.join("\n"))
+}
+
 pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &OutputOptions) {
     if opts.json {
         if opts.content_boundaries {
@@ -411,6 +575,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_events") {
             if let Some(output) = format_service_events_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_status") {
+            if let Some(output) = format_service_status_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -2817,6 +2987,7 @@ Notes:
   - Incident filters match incident state, operator handling state, latest kind, browser ID, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
+  - Text service status includes profile and session summary lines for operator traceability.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
@@ -3647,7 +3818,7 @@ pub fn print_version() {
 
 #[cfg(test)]
 mod tests {
-    use super::format_storage_text;
+    use super::{format_service_status_text, format_storage_text};
     use serde_json::json;
 
     #[test]
@@ -3712,5 +3883,86 @@ mod tests {
         let rendered = format_storage_text(&data).unwrap();
 
         assert_eq!(rendered, "No storage entries");
+    }
+
+    #[test]
+    fn test_format_service_status_text_includes_profile_and_session_summaries() {
+        let data = json!({
+            "service_state": {
+                "controlPlane": {
+                    "workerState": "idle",
+                    "browserHealth": "ready",
+                    "queueDepth": 1,
+                    "queueCapacity": 64
+                },
+                "reconciliation": {
+                    "lastReconciledAt": "2026-04-25T00:00:00Z",
+                    "browserCount": 1,
+                    "changedBrowsers": 0,
+                    "lastError": null
+                },
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "allocation": "per_service",
+                        "keyring": "basic_password_store",
+                        "persistent": true,
+                        "manualLoginPreferred": false,
+                        "sharedServiceIds": ["JournalDownloader"],
+                        "userDataDir": "/tmp/work-profile"
+                    }
+                },
+                "sessions": {
+                    "runtime-session": {
+                        "id": "runtime-session",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "profileId": "work",
+                        "lease": "exclusive",
+                        "cleanup": "close_browser",
+                        "browserIds": ["session:runtime-session"]
+                    }
+                },
+                "browsers": {
+                    "session:runtime-session": {
+                        "id": "session:runtime-session"
+                    }
+                },
+                "tabs": {}
+            }
+        });
+
+        let rendered = format_service_status_text(&data).unwrap();
+
+        assert!(
+            rendered.contains("Service: worker=idle browser=ready queue=1/64 browsers=1 tabs=0")
+        );
+        assert!(rendered.contains("Profiles: 1"));
+        assert!(rendered.contains(
+            "work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader user_data=/tmp/work-profile"
+        ));
+        assert!(rendered.contains("Sessions: 1"));
+        assert!(rendered.contains(
+            "runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work lease=exclusive cleanup=close_browser browsers=session:runtime-session"
+        ));
+    }
+
+    #[test]
+    fn test_format_service_status_text_handles_empty_profiles_and_sessions() {
+        let data = json!({
+            "service_state": {
+                "profiles": {},
+                "sessions": {},
+                "browsers": {},
+                "tabs": {}
+            }
+        });
+
+        let rendered = format_service_status_text(&data).unwrap();
+
+        assert!(rendered.contains("Profiles: 0\n  none"));
+        assert!(rendered.contains("Sessions: 0\n  none"));
     }
 }
