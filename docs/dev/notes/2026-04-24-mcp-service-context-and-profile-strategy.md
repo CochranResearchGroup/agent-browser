@@ -71,8 +71,9 @@ exercised through typed input instead of direct value assignment.
 escape, and shortcut-driven flows. `browser_hover` adds pointer movement for
 menus and controls that reveal state on hover. `browser_select` adds dropdown
 and multi-select option selection for account, tenant, role, and region
-switchers. `browser_check` and `browser_uncheck` cover checkbox and radio
-controls for consent, remember-me, terms, and preference flows.
+switchers. `browser_check`, `browser_is_checked`, and `browser_uncheck` cover
+checkbox and radio controls for consent, remember-me, terms, and preference
+flows, including read-side assertions before and after state changes.
 `browser_scroll` covers page and container scrolling for long forms,
 offscreen controls, and infinite-scroll workflows. `browser_scroll_into_view`
 targets specific offscreen elements without requiring callers to guess pixel
@@ -89,10 +90,11 @@ supply job caller context.
 `browser_snapshot`, `browser_get_url`, `browser_get_title`, `browser_tabs`, and
 `browser_screenshot` over MCP stdio, calls `browser_click`, `browser_fill`,
 `browser_type`, `browser_press`, `browser_hover`, `browser_select`,
-`browser_check`, `browser_uncheck`, `browser_scroll`,
+`browser_check`, `browser_is_checked`, `browser_uncheck`, `browser_scroll`,
 `browser_scroll_into_view`, `browser_focus`, `browser_clear`, and
 `browser_wait`, verifies the mutations through a follow-up snapshot or
 post-scroll function wait, and verifies that the retained `snapshot`, `url`,
 `title`, `tab_list`, `screenshot`, `click`, `fill`, `type`, `press`, `hover`,
-`select`, `check`, `uncheck`, `scroll`, `scrollintoview`, `focus`, `clear`, and
-`wait` service jobs record `serviceName`, `agentName`, and `taskName`.
+`select`, `check`, `ischecked`, `uncheck`, `scroll`, `scrollintoview`, `focus`,
+`clear`, and `wait` service jobs record `serviceName`, `agentName`, and
+`taskName`.

@@ -480,6 +480,28 @@ try {
     checkTool.inputSchema?.properties?.taskName,
     'MCP browser_check missing taskName trace field',
   );
+  const isCheckedTool = tools.tools?.find((tool) => tool.name === 'browser_is_checked');
+  assert(isCheckedTool, 'MCP browser_is_checked tool missing');
+  assert(
+    isCheckedTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_is_checked missing selector requirement',
+  );
+  assert(
+    isCheckedTool.inputSchema?.properties?.selector,
+    'MCP browser_is_checked missing selector property',
+  );
+  assert(
+    isCheckedTool.inputSchema?.properties?.serviceName,
+    'MCP browser_is_checked missing serviceName trace field',
+  );
+  assert(
+    isCheckedTool.inputSchema?.properties?.agentName,
+    'MCP browser_is_checked missing agentName trace field',
+  );
+  assert(
+    isCheckedTool.inputSchema?.properties?.taskName,
+    'MCP browser_is_checked missing taskName trace field',
+  );
   const uncheckTool = tools.tools?.find((tool) => tool.name === 'browser_uncheck');
   assert(uncheckTool, 'MCP browser_uncheck tool missing');
   assert(
