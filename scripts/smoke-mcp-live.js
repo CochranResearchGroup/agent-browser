@@ -1,37 +1,33 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const rootDir = new URL('..', import.meta.url).pathname;
-const tempHome = mkdtempSync(join(tmpdir(), 'agent-browser-mcp-live-'));
-const realHome = process.env.HOME;
-const cargoHome = process.env.CARGO_HOME || (realHome ? join(realHome, '.cargo') : undefined);
-const rustupHome = process.env.RUSTUP_HOME || (realHome ? join(realHome, '.rustup') : undefined);
-const session = `mcp-live-${process.pid}-${Date.now()}`;
-const agentHome = join(tempHome, '.agent-browser');
-const socketDir = join(agentHome, 'sockets');
+import {
+  assert,
+  cargoArgs,
+  closeSession,
+  createSmokeContext,
+  parseJsonOutput,
+  rootDir,
+  runCli,
+} from './smoke-utils.js';
+
+const context = createSmokeContext({
+  prefix: 'agent-browser-mcp-live-',
+  session: `mcp-live-${process.pid}-${Date.now()}`,
+  socketDir: ({ agentHome }) => join(agentHome, 'sockets'),
+});
+const { env, session, tempHome } = context;
 const profileDir = join(tempHome, 'chrome-profile');
 const screenshotDir = join(tempHome, 'screenshots');
 const serviceName = 'McpLiveSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'browserSnapshotSmoke';
 
-mkdirSync(socketDir, { recursive: true });
 mkdirSync(profileDir, { recursive: true });
 mkdirSync(screenshotDir, { recursive: true });
-
-const env = {
-  ...process.env,
-  HOME: tempHome,
-  AGENT_BROWSER_HOME: agentHome,
-  AGENT_BROWSER_SOCKET_DIR: socketDir,
-  AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS: '0',
-  ...(cargoHome ? { CARGO_HOME: cargoHome } : {}),
-  ...(rustupHome ? { RUSTUP_HOME: rustupHome } : {}),
-};
 
 let child;
 let stdout = '';
@@ -41,50 +37,6 @@ const pending = new Map();
 const timeout = setTimeout(() => {
   fail('Timed out waiting for live MCP smoke to complete');
 }, 90000);
-
-function cargoArgs(args) {
-  return ['run', '--quiet', '--manifest-path', 'cli/Cargo.toml', '--', ...args];
-}
-
-function runCli(args) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('cargo', cargoArgs(args), {
-      cwd: rootDir,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const procTimeout = setTimeout(() => {
-      proc.kill('SIGTERM');
-      reject(new Error(`agent-browser ${args.join(' ')} timed out`));
-    }, 60000);
-    let out = '';
-    let err = '';
-    proc.stdout.setEncoding('utf8');
-    proc.stderr.setEncoding('utf8');
-    proc.stdout.on('data', (chunk) => {
-      out += chunk;
-    });
-    proc.stderr.on('data', (chunk) => {
-      err += chunk;
-    });
-    proc.on('error', (err) => {
-      clearTimeout(procTimeout);
-      reject(err);
-    });
-    proc.on('exit', (code, signal) => {
-      clearTimeout(procTimeout);
-      if (code === 0) {
-        resolve({ stdout: out, stderr: err });
-      } else {
-        reject(
-          new Error(
-            `agent-browser ${args.join(' ')} failed: code=${code} signal=${signal}\n${out}${err}`,
-          ),
-        );
-      }
-    });
-  });
-}
 
 function startMcpServer() {
   child = spawn('cargo', cargoArgs(['--session', session, 'mcp', 'serve']), {
@@ -163,19 +115,6 @@ function handleLine(line) {
   pendingRequest.resolve(message.result);
 }
 
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
-
-function parseJsonOutput(output, label) {
-  const text = output.trim();
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    throw new Error(`Failed to parse ${label} JSON output: ${err.message}\n${output}`);
-  }
-}
-
 function parseToolPayload(result) {
   const text = result.content?.[0]?.text;
   assert(typeof text === 'string', 'MCP tool response missing text content');
@@ -189,11 +128,10 @@ async function cleanup() {
     child.kill('SIGTERM');
   }
   try {
-    await runCli(['--json', '--session', session, 'close']);
-  } catch {
-    // The smoke may fail before the daemon starts; cleanup must stay best-effort.
+    await closeSession(context);
+  } finally {
+    context.cleanupTempHome();
   }
-  rmSync(tempHome, { recursive: true, force: true });
 }
 
 async function fail(message) {
@@ -244,7 +182,7 @@ try {
   ].join('');
   const pageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(pageHtml)}`;
 
-  const openResult = await runCli([
+  const openResult = await runCli(context, [
     '--json',
     '--session',
     session,

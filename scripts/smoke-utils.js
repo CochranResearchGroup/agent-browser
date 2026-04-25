@@ -7,14 +7,16 @@ import { join } from 'node:path';
 
 export const rootDir = new URL('..', import.meta.url).pathname;
 
-export function createSmokeContext({ prefix, sessionPrefix, socketSubdir = 's' }) {
+export function createSmokeContext({ prefix, session, sessionPrefix, socketDir: customSocketDir, socketSubdir = 's' }) {
   const tempHome = mkdtempSync(join(tmpdir(), prefix));
   const realHome = process.env.HOME;
   const cargoHome = process.env.CARGO_HOME || (realHome ? join(realHome, '.cargo') : undefined);
   const rustupHome = process.env.RUSTUP_HOME || (realHome ? join(realHome, '.rustup') : undefined);
-  const session = `${sessionPrefix}-${process.pid}`;
+  const smokeSession = session ?? `${sessionPrefix}-${process.pid}`;
   const agentHome = join(tempHome, '.agent-browser');
-  const socketDir = join(tempHome, socketSubdir);
+  const socketDir = customSocketDir
+    ? customSocketDir({ agentHome, tempHome })
+    : join(tempHome, socketSubdir);
 
   mkdirSync(socketDir, { recursive: true });
 
@@ -31,7 +33,7 @@ export function createSmokeContext({ prefix, sessionPrefix, socketSubdir = 's' }
   return {
     agentHome,
     env,
-    session,
+    session: smokeSession,
     socketDir,
     tempHome,
     cleanupTempHome() {
