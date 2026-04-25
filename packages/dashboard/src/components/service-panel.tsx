@@ -57,6 +57,11 @@ type ServiceEvent = {
     | string;
   message: string;
   browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
   previousHealth?: string | null;
   currentHealth?: string | null;
   details?: unknown;
@@ -78,6 +83,10 @@ type ServiceSession = {
   id: string;
   owner?: unknown;
   lease?: string;
+  profileId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
   browserIds?: string[];
   tabIds?: string[];
   createdAt?: string | null;
@@ -105,6 +114,9 @@ type ServiceJob = {
   priority?: string;
   target?: unknown;
   owner?: unknown;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
   timeoutMs?: number | null;
   request?: unknown;
   response?: unknown;
@@ -159,6 +171,31 @@ type ServiceIncidentActivityData = {
   incident?: ServiceIncident;
   activity?: IncidentTimelineItem[];
   count?: number;
+};
+
+type ServiceTraceData = {
+  filters?: Record<string, unknown>;
+  events?: ServiceEvent[];
+  jobs?: ServiceJob[];
+  incidents?: ServiceIncident[];
+  activity?: IncidentTimelineItem[];
+  counts?: {
+    events?: number;
+    jobs?: number;
+    incidents?: number;
+    activity?: number;
+  };
+  matched?: {
+    events?: number;
+    jobs?: number;
+    incidents?: number;
+    activity?: number;
+  };
+  total?: {
+    events?: number;
+    jobs?: number;
+    incidents?: number;
+  };
 };
 
 type ApiResponse<T> = {
@@ -223,6 +260,23 @@ type IncidentTimelineItem = {
   message?: string | null;
   source?: string;
   browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  eventId?: string | null;
+  jobId?: string | null;
+};
+
+type TraceFilters = {
+  serviceName: string;
+  agentName: string;
+  taskName: string;
+  browserId: string;
+  profileId: string;
+  sessionId: string;
+  limit: EventLimit;
 };
 
 const EVENT_KIND_OPTIONS: Array<{ value: EventKindFilter; label: string }> = [
@@ -307,6 +361,27 @@ function formatActor(value: unknown): string {
   if (entries.length === 0) return "unknown";
   const [kind, detail] = entries[0];
   return detail ? `${kind}: ${String(detail)}` : kind;
+}
+
+function traceContextLabel(item: {
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+  browserId?: string | null;
+}): string {
+  const parts = [
+    item.serviceName,
+    item.agentName,
+    item.taskName,
+    item.profileId,
+    item.sessionId,
+    item.browserId,
+  ]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .slice(0, 4);
+  return parts.length > 0 ? parts.join(" / ") : "No trace context";
 }
 
 function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
@@ -477,6 +552,64 @@ function deriveIncidentRecords(
     );
 }
 
+function serviceJobTimestamp(job: ServiceJob): string {
+  return job.completedAt ?? job.startedAt ?? job.submittedAt ?? "";
+}
+
+function traceTimelineItems(trace: ServiceTraceData | null): IncidentTimelineItem[] {
+  if (!trace) return [];
+  const seenEventIds = new Set(
+    (trace.activity ?? [])
+      .map((item) => item.eventId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+  const seenJobIds = new Set(
+    (trace.activity ?? [])
+      .map((item) => item.jobId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+  const activityItems = (trace.activity ?? []).map((item) => ({
+    ...item,
+    source: item.source ?? "activity",
+    title: item.title || formatEventKind(item.kind),
+  }));
+  const eventItems = (trace.events ?? [])
+    .filter((event) => !seenEventIds.has(event.id))
+    .map((event) => ({
+      id: `trace-event-${event.id}`,
+      eventId: event.id,
+      source: "event",
+      timestamp: event.timestamp,
+      kind: event.kind,
+      title: formatEventKind(event.kind),
+      message: event.message,
+      browserId: event.browserId,
+      profileId: event.profileId,
+      sessionId: event.sessionId,
+      serviceName: event.serviceName,
+      agentName: event.agentName,
+      taskName: event.taskName,
+    }));
+  const jobItems = (trace.jobs ?? [])
+    .filter((job) => !seenJobIds.has(job.id))
+    .map((job) => ({
+      id: `trace-job-${job.id}`,
+      jobId: job.id,
+      source: "job",
+      timestamp: serviceJobTimestamp(job),
+      kind: job.state ?? "service_job",
+      title: job.action ?? "Service job",
+      message: job.error || job.id,
+      serviceName: job.serviceName,
+      agentName: job.agentName,
+      taskName: job.taskName,
+    }));
+
+  return [...activityItems, ...eventItems, ...jobItems].sort(
+    (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
+  );
+}
+
 function HealthCard({
   label,
   value,
@@ -624,6 +757,201 @@ function HealthTransitionTimeline({
           })
         )}
       </div>
+    </div>
+  );
+}
+
+function TraceExplorer({
+  filters,
+  trace,
+  loading,
+  error,
+  timeline,
+  onFiltersChange,
+  onLoad,
+  onClear,
+}: {
+  filters: TraceFilters;
+  trace: ServiceTraceData | null;
+  loading: boolean;
+  error: string;
+  timeline: IncidentTimelineItem[];
+  onFiltersChange: (filters: TraceFilters) => void;
+  onLoad: () => void;
+  onClear: () => void;
+}) {
+  const counts = trace?.counts;
+  const matched = trace?.matched;
+  const hasFilters =
+    !!filters.serviceName.trim() ||
+    !!filters.agentName.trim() ||
+    !!filters.taskName.trim() ||
+    !!filters.browserId.trim() ||
+    !!filters.profileId.trim() ||
+    !!filters.sessionId.trim();
+
+  return (
+    <div className="service-trace-card">
+      <div className="flex items-center gap-2">
+        <History className="size-4 text-muted-foreground" />
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Trace explorer
+          </p>
+          <p className="truncate text-[11px] text-muted-foreground">
+            Combined events, jobs, incidents, and activity from the service trace API
+          </p>
+        </div>
+        {loading && <Loader2 className="ml-auto size-3.5 animate-spin text-muted-foreground" />}
+      </div>
+      <div className="service-trace-grid" aria-label="Trace filters">
+        <input
+          aria-label="Trace service name"
+          className="service-filter-input service-trace-input"
+          placeholder="service name"
+          value={filters.serviceName}
+          onChange={(event) => onFiltersChange({ ...filters, serviceName: event.target.value })}
+        />
+        <input
+          aria-label="Trace task name"
+          className="service-filter-input service-trace-input"
+          placeholder="task name"
+          value={filters.taskName}
+          onChange={(event) => onFiltersChange({ ...filters, taskName: event.target.value })}
+        />
+        <input
+          aria-label="Trace agent name"
+          className="service-filter-input service-trace-input"
+          placeholder="agent name"
+          value={filters.agentName}
+          onChange={(event) => onFiltersChange({ ...filters, agentName: event.target.value })}
+        />
+        <input
+          aria-label="Trace browser ID"
+          className="service-filter-input service-trace-input"
+          placeholder="browser id"
+          value={filters.browserId}
+          onChange={(event) => onFiltersChange({ ...filters, browserId: event.target.value })}
+        />
+        <input
+          aria-label="Trace profile ID"
+          className="service-filter-input service-trace-input"
+          placeholder="profile id"
+          value={filters.profileId}
+          onChange={(event) => onFiltersChange({ ...filters, profileId: event.target.value })}
+        />
+        <input
+          aria-label="Trace session ID"
+          className="service-filter-input service-trace-input"
+          placeholder="session id"
+          value={filters.sessionId}
+          onChange={(event) => onFiltersChange({ ...filters, sessionId: event.target.value })}
+        />
+      </div>
+      <div className="service-filter-bar">
+        <div className="service-filter-group">
+          {EVENT_LIMIT_OPTIONS.map((limit) => (
+            <button
+              key={limit}
+              type="button"
+              className={cn("service-filter-chip", filters.limit === limit && "service-filter-chip-active")}
+              onClick={() => onFiltersChange({ ...filters, limit })}
+            >
+              {limit}
+            </button>
+          ))}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="rounded-full"
+          onClick={onLoad}
+          disabled={loading || !hasFilters}
+        >
+          {loading ? <Loader2 className="size-3.5 animate-spin" /> : <History className="size-3.5" />}
+          Load trace
+        </Button>
+        {(trace || hasFilters) && (
+          <button type="button" className="service-filter-reset" onClick={onClear}>
+            Clear trace
+          </button>
+        )}
+      </div>
+      {error && (
+        <div className="service-browser-error">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+      {trace && (
+        <div className="service-trace-counts">
+          <div>
+            <strong>{counts?.events ?? 0}</strong>
+            <span>events</span>
+          </div>
+          <div>
+            <strong>{counts?.jobs ?? 0}</strong>
+            <span>jobs</span>
+          </div>
+          <div>
+            <strong>{counts?.incidents ?? 0}</strong>
+            <span>incidents</span>
+          </div>
+          <div>
+            <strong>{counts?.activity ?? 0}</strong>
+            <span>activity</span>
+          </div>
+        </div>
+      )}
+      {trace && matched && (
+        <p className="px-1 text-[10px] leading-4 text-muted-foreground">
+          Matched {matched.events ?? 0} events, {matched.jobs ?? 0} jobs, {matched.incidents ?? 0} incidents,
+          and {matched.activity ?? 0} activity entries before per-section limits.
+        </p>
+      )}
+      {trace && (
+        <div className="service-trace-timeline">
+          {timeline.length === 0 ? (
+            <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+              No trace records matched these filters.
+            </p>
+          ) : (
+            timeline.map((item) => (
+              <div key={item.id} className="service-incident-history-item">
+                <EventDot kind={item.kind} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-xs font-bold text-foreground">
+                      {item.title || formatEventKind(item.kind)}
+                    </span>
+                    {item.source && (
+                      <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px] uppercase">
+                        {item.source}
+                      </Badge>
+                    )}
+                    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                      {formatAbsoluteTime(item.timestamp)}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                    {traceContextLabel(item)}
+                  </p>
+                  {item.message && (
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {item.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+      {!trace && !error && (
+        <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+          Enter a service, task, agent, browser, profile, or session filter to load one combined trace.
+        </p>
+      )}
     </div>
   );
 }
@@ -1356,6 +1684,18 @@ export function ServicePanel() {
   const [status, setStatus] = useState<ServiceStatusData | null>(null);
   const [events, setEvents] = useState<ServiceEventsData | null>(null);
   const [jobs, setJobs] = useState<ServiceJobsData | null>(null);
+  const [trace, setTrace] = useState<ServiceTraceData | null>(null);
+  const [traceLoading, setTraceLoading] = useState(false);
+  const [traceError, setTraceError] = useState("");
+  const [traceFilters, setTraceFilters] = useState<TraceFilters>({
+    serviceName: "",
+    agentName: "",
+    taskName: "",
+    browserId: "",
+    profileId: "",
+    sessionId: "",
+    limit: 20,
+  });
   const [loading, setLoading] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [error, setError] = useState("");
@@ -1422,6 +1762,8 @@ export function ServicePanel() {
     setStatus(null);
     setJobs(null);
     setEvents(null);
+    setTrace(null);
+    setTraceError("");
     setError("");
     if (!canFetch) return;
     fetchService(true);
@@ -1439,6 +1781,43 @@ export function ServicePanel() {
       window.localStorage.removeItem(OPERATOR_STORAGE_KEY);
     }
   }, [operatorIdentity]);
+
+  const loadTrace = useCallback(async () => {
+    if (!canFetch || traceLoading) return;
+    setTraceLoading(true);
+    setTraceError("");
+    try {
+      const params = new URLSearchParams({ limit: String(traceFilters.limit) });
+      if (traceFilters.serviceName.trim()) params.set("service-name", traceFilters.serviceName.trim());
+      if (traceFilters.agentName.trim()) params.set("agent-name", traceFilters.agentName.trim());
+      if (traceFilters.taskName.trim()) params.set("task-name", traceFilters.taskName.trim());
+      if (traceFilters.browserId.trim()) params.set("browser-id", traceFilters.browserId.trim());
+      if (traceFilters.profileId.trim()) params.set("profile-id", traceFilters.profileId.trim());
+      if (traceFilters.sessionId.trim()) params.set("session-id", traceFilters.sessionId.trim());
+      const resp = await fetch(`${serviceBase(activePort)}/trace?${params.toString()}`);
+      const json = (await resp.json()) as ApiResponse<ServiceTraceData>;
+      if (!json.success) throw new Error(json.error || "Service trace failed");
+      setTrace(json.data ?? null);
+    } catch (err) {
+      setTraceError(err instanceof Error ? err.message : "Service trace unavailable");
+    } finally {
+      setTraceLoading(false);
+    }
+  }, [activePort, canFetch, traceFilters, traceLoading]);
+
+  const clearTrace = useCallback(() => {
+    setTrace(null);
+    setTraceError("");
+    setTraceFilters({
+      serviceName: "",
+      agentName: "",
+      taskName: "",
+      browserId: "",
+      profileId: "",
+      sessionId: "",
+      limit: 20,
+    });
+  }, []);
 
   useEffect(() => {
     setSelectedIncidentActivity(null);
@@ -1592,6 +1971,7 @@ export function ServicePanel() {
     () => Object.values(serviceState?.jobs ?? {}),
     [serviceState?.jobs],
   );
+  const traceTimeline = useMemo(() => traceTimelineItems(trace), [trace]);
   const incidentRecords = useMemo(
     () =>
       deriveIncidentRecords(
@@ -1836,6 +2216,17 @@ export function ServicePanel() {
           <HealthTransitionTimeline
             events={healthTransitionEvents}
             onSelect={setSelectedEvent}
+          />
+
+          <TraceExplorer
+            filters={traceFilters}
+            trace={trace}
+            loading={traceLoading}
+            error={traceError}
+            timeline={traceTimeline}
+            onFiltersChange={setTraceFilters}
+            onLoad={loadTrace}
+            onClear={clearTrace}
           />
 
           <div className="service-summary-card">
