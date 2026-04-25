@@ -483,6 +483,42 @@ fn browser_api_command(
             "http-browser-is-visible",
             body,
         )),
+        ("POST", "/api/browser/get-attribute") => Some(browser_body_command(
+            "getattribute",
+            "http-browser-get-attribute",
+            body,
+        )),
+        ("POST", "/api/browser/get-html") => Some(browser_body_command(
+            "innerhtml",
+            "http-browser-get-html",
+            body,
+        )),
+        ("POST", "/api/browser/get-styles") => Some(browser_body_command(
+            "styles",
+            "http-browser-get-styles",
+            body,
+        )),
+        ("POST", "/api/browser/count") => {
+            Some(browser_body_command("count", "http-browser-count", body))
+        }
+        ("POST", "/api/browser/get-box") => Some(browser_body_command(
+            "boundingbox",
+            "http-browser-get-box",
+            body,
+        )),
+        ("POST", "/api/browser/is-enabled") => Some(browser_body_command(
+            "isenabled",
+            "http-browser-is-enabled",
+            body,
+        )),
+        ("POST", "/api/browser/check") => {
+            Some(browser_body_command("check", "http-browser-check", body))
+        }
+        ("POST", "/api/browser/uncheck") => Some(browser_body_command(
+            "uncheck",
+            "http-browser-uncheck",
+            body,
+        )),
         _ => None,
     }
 }
@@ -1359,6 +1395,70 @@ mod tests {
         )
         .unwrap()
         .unwrap();
+        let get_attribute = browser_api_command(
+            "POST",
+            "/api/browser/get-attribute",
+            None,
+            r##"{"selector":"#ready","attribute":"id"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let get_html = browser_api_command(
+            "POST",
+            "/api/browser/get-html",
+            None,
+            r##"{"selector":"#box"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let get_styles = browser_api_command(
+            "POST",
+            "/api/browser/get-styles",
+            None,
+            r##"{"selector":"#box","properties":["display","width"]}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let count = browser_api_command(
+            "POST",
+            "/api/browser/count",
+            None,
+            r##"{"selector":".item"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let get_box = browser_api_command(
+            "POST",
+            "/api/browser/get-box",
+            None,
+            r##"{"selector":"#box"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let is_enabled = browser_api_command(
+            "POST",
+            "/api/browser/is-enabled",
+            None,
+            r##"{"selector":"#name"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let check = browser_api_command(
+            "POST",
+            "/api/browser/check",
+            None,
+            r##"{"selector":"#remember"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let uncheck = browser_api_command(
+            "POST",
+            "/api/browser/uncheck",
+            None,
+            r##"{"selector":"#remember"}"##,
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(click["action"], "click");
         assert_eq!(click["selector"], "#ready");
@@ -1376,6 +1476,15 @@ mod tests {
         assert_eq!(get_text["action"], "gettext");
         assert_eq!(get_value["action"], "inputvalue");
         assert_eq!(is_visible["action"], "isvisible");
+        assert_eq!(get_attribute["action"], "getattribute");
+        assert_eq!(get_attribute["attribute"], "id");
+        assert_eq!(get_html["action"], "innerhtml");
+        assert_eq!(get_styles["action"], "styles");
+        assert_eq!(count["action"], "count");
+        assert_eq!(get_box["action"], "boundingbox");
+        assert_eq!(is_enabled["action"], "isenabled");
+        assert_eq!(check["action"], "check");
+        assert_eq!(uncheck["action"], "uncheck");
     }
 
     #[test]

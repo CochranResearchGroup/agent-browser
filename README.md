@@ -1321,6 +1321,14 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/browser/press" -H "content-type
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-text" -H "content-type: application/json" -d '{"selector":"#result"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-value" -H "content-type: application/json" -d '{"selector":"#query"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-visible" -H "content-type: application/json" -d '{"selector":"#result"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-attribute" -H "content-type: application/json" -d '{"selector":"a","attribute":"href"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-html" -H "content-type: application/json" -d '{"selector":"main"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-styles" -H "content-type: application/json" -d '{"selector":"#result","properties":["display","width"]}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/count" -H "content-type: application/json" -d '{"selector":".row"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-box" -H "content-type: application/json" -d '{"selector":"#result"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-enabled" -H "content-type: application/json" -d '{"selector":"#submit"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/check" -H "content-type: application/json" -d '{"selector":"#remember"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/uncheck" -H "content-type: application/json" -d '{"selector":"#remember"}'
 curl "http://127.0.0.1:<stream-port>/api/service/status"
 curl "http://127.0.0.1:<stream-port>/api/service/profiles"
 curl "http://127.0.0.1:<stream-port>/api/service/sessions"
