@@ -479,6 +479,39 @@ fn browser_api_command(
             "http-browser-close-tab",
             body,
         )),
+        ("POST", "/api/browser/viewport") => Some(browser_body_command(
+            "viewport",
+            "http-browser-viewport",
+            body,
+        )),
+        ("POST", "/api/browser/user-agent") => Some(browser_body_command(
+            "user_agent",
+            "http-browser-user-agent",
+            body,
+        )),
+        ("POST", "/api/browser/media") => Some(browser_body_command(
+            "emulatemedia",
+            "http-browser-media",
+            body,
+        )),
+        ("POST", "/api/browser/timezone") => Some(browser_body_command(
+            "timezone",
+            "http-browser-timezone",
+            body,
+        )),
+        ("POST", "/api/browser/locale") => {
+            Some(browser_body_command("locale", "http-browser-locale", body))
+        }
+        ("POST", "/api/browser/geolocation") => Some(browser_body_command(
+            "geolocation",
+            "http-browser-geolocation",
+            body,
+        )),
+        ("POST", "/api/browser/permissions") => Some(browser_body_command(
+            "permissions",
+            "http-browser-permissions",
+            body,
+        )),
         ("POST", "/api/browser/snapshot") => Some(browser_body_command(
             "snapshot",
             "http-browser-snapshot",
@@ -1422,6 +1455,62 @@ mod tests {
             browser_api_command("POST", "/api/browser/close-tab", None, r##"{"index":1}"##)
                 .unwrap()
                 .unwrap();
+        let viewport = browser_api_command(
+            "POST",
+            "/api/browser/viewport",
+            None,
+            r##"{"width":800,"height":600,"deviceScaleFactor":2,"mobile":true}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let user_agent = browser_api_command(
+            "POST",
+            "/api/browser/user-agent",
+            None,
+            r##"{"userAgent":"TestBot/1.0"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let media = browser_api_command(
+            "POST",
+            "/api/browser/media",
+            None,
+            r##"{"colorScheme":"dark","reducedMotion":"reduce"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let timezone = browser_api_command(
+            "POST",
+            "/api/browser/timezone",
+            None,
+            r##"{"timezoneId":"America/Chicago"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let locale = browser_api_command(
+            "POST",
+            "/api/browser/locale",
+            None,
+            r##"{"locale":"en-US"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let geolocation = browser_api_command(
+            "POST",
+            "/api/browser/geolocation",
+            None,
+            r##"{"latitude":41.8781,"longitude":-87.6298,"accuracy":10}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let permissions = browser_api_command(
+            "POST",
+            "/api/browser/permissions",
+            None,
+            r##"{"permissions":["geolocation"]}"##,
+        )
+        .unwrap()
+        .unwrap();
         let click = browser_api_command(
             "POST",
             "/api/browser/click",
@@ -1631,6 +1720,23 @@ mod tests {
         assert_eq!(switch_tab["index"], 0);
         assert_eq!(close_tab["action"], "tab_close");
         assert_eq!(close_tab["index"], 1);
+        assert_eq!(viewport["action"], "viewport");
+        assert_eq!(viewport["width"], 800);
+        assert_eq!(viewport["height"], 600);
+        assert_eq!(viewport["deviceScaleFactor"], 2);
+        assert_eq!(viewport["mobile"], true);
+        assert_eq!(user_agent["action"], "user_agent");
+        assert_eq!(user_agent["userAgent"], "TestBot/1.0");
+        assert_eq!(media["action"], "emulatemedia");
+        assert_eq!(media["colorScheme"], "dark");
+        assert_eq!(timezone["action"], "timezone");
+        assert_eq!(timezone["timezoneId"], "America/Chicago");
+        assert_eq!(locale["action"], "locale");
+        assert_eq!(locale["locale"], "en-US");
+        assert_eq!(geolocation["action"], "geolocation");
+        assert_eq!(geolocation["latitude"], 41.8781);
+        assert_eq!(permissions["action"], "permissions");
+        assert_eq!(permissions["permissions"][0], "geolocation");
         assert_eq!(click["action"], "click");
         assert_eq!(click["selector"], "#ready");
         assert_eq!(click["serviceName"], "JournalDownloader");

@@ -142,6 +142,75 @@ try {
     `HTTP browser tabs did not include active smoke page: ${JSON.stringify(browserTabs)}`,
   );
 
+  const browserViewport = await browserPost(port, 'viewport', {
+    width: 900,
+    height: 650,
+    deviceScaleFactor: 1.5,
+    mobile: false,
+  });
+  assertHttpSuccess(browserViewport, 'HTTP browser viewport');
+  assert(browserViewport.data?.width === 900, `HTTP browser viewport width was ${browserViewport.data?.width}`);
+  assert(browserViewport.data?.height === 650, `HTTP browser viewport height was ${browserViewport.data?.height}`);
+  assert(
+    browserViewport.data?.deviceScaleFactor === 1.5,
+    `HTTP browser viewport scale was ${browserViewport.data?.deviceScaleFactor}`,
+  );
+
+  const browserUserAgent = await browserPost(port, 'user-agent', {
+    userAgent: 'AgentBrowserHttpSmoke/1.0',
+  });
+  assertHttpSuccess(browserUserAgent, 'HTTP browser user-agent');
+  assert(
+    browserUserAgent.data?.userAgent === 'AgentBrowserHttpSmoke/1.0',
+    `HTTP browser user-agent returned ${browserUserAgent.data?.userAgent}`,
+  );
+
+  const browserMedia = await browserPost(port, 'media', {
+    colorScheme: 'dark',
+    reducedMotion: 'reduce',
+  });
+  assertHttpSuccess(browserMedia, 'HTTP browser media');
+  assert(browserMedia.data?.set === true, 'HTTP browser media did not report set');
+
+  const browserTimezone = await browserPost(port, 'timezone', {
+    timezoneId: 'America/Chicago',
+  });
+  assertHttpSuccess(browserTimezone, 'HTTP browser timezone');
+  assert(
+    browserTimezone.data?.timezoneId === 'America/Chicago',
+    `HTTP browser timezone returned ${browserTimezone.data?.timezoneId}`,
+  );
+
+  const browserLocale = await browserPost(port, 'locale', {
+    locale: 'en-US',
+  });
+  assertHttpSuccess(browserLocale, 'HTTP browser locale');
+  assert(browserLocale.data?.locale === 'en-US', `HTTP browser locale returned ${browserLocale.data?.locale}`);
+
+  const browserGeolocation = await browserPost(port, 'geolocation', {
+    latitude: 41.8781,
+    longitude: -87.6298,
+    accuracy: 10,
+  });
+  assertHttpSuccess(browserGeolocation, 'HTTP browser geolocation');
+  assert(
+    browserGeolocation.data?.latitude === 41.8781,
+    `HTTP browser geolocation latitude was ${browserGeolocation.data?.latitude}`,
+  );
+  assert(
+    browserGeolocation.data?.longitude === -87.6298,
+    `HTTP browser geolocation longitude was ${browserGeolocation.data?.longitude}`,
+  );
+
+  const browserPermissions = await browserPost(port, 'permissions', {
+    permissions: ['geolocation'],
+  });
+  assertHttpSuccess(browserPermissions, 'HTTP browser permissions');
+  assert(
+    browserPermissions.data?.granted?.[0] === 'geolocation',
+    `HTTP browser permissions returned ${JSON.stringify(browserPermissions.data)}`,
+  );
+
   const browserNavigate = await browserPost(port, 'navigate', {
     url: secondPageUrl,
     waitUntil: 'load',
