@@ -1256,6 +1256,8 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector"]
             }
         }),
+        browser_navigate_tool_schema(),
+        browser_requests_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -1329,6 +1331,104 @@ const BROWSER_GET_TITLE_TOOL: BrowserReadToolSpec = BrowserReadToolSpec {
     state_name: "title",
     id_prefix: "mcp-browser-get-title",
 };
+
+fn browser_navigate_tool_schema() -> Value {
+    json!({
+        "name": "browser_navigate",
+        "title": "Navigate browser",
+        "description": "Queue navigation in the active browser session. Use this typed tool instead of browser_command for ordinary page navigation. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required URL to navigate the active browser session to."
+                },
+                "waitUntil": {
+                    "type": "string",
+                    "enum": ["load", "domcontentloaded", "networkidle", "none"],
+                    "description": "Optional navigation wait condition. Defaults to load."
+                },
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Optional origin-scoped extra HTTP headers for this navigation."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued navigation job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["url"]
+        }
+    })
+}
+
+fn browser_requests_tool_schema() -> Value {
+    json!({
+        "name": "browser_requests",
+        "title": "Inspect browser network requests",
+        "description": "Queue network request inspection for the active browser session. The first call enables request tracking; later calls return tracked requests. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "clear": {
+                    "type": "boolean",
+                    "description": "Clear retained in-memory request tracking for the active browser session."
+                },
+                "filter": {
+                    "type": "string",
+                    "description": "Optional substring filter applied to request URLs."
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Optional comma-separated resource type filter, for example document,xhr,fetch."
+                },
+                "method": {
+                    "type": "string",
+                    "description": "Optional HTTP method filter, for example GET or POST."
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Optional status filter, for example 2xx, 404, or 200-299."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued request-inspection job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
 
 fn browser_command_tool_schema() -> Value {
     json!({
@@ -1527,6 +1627,8 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_job_cancel" => call_service_job_cancel(arguments, session),
         "service_trace" => call_service_trace(arguments, session),
         "browser_command" => call_browser_command(arguments, session),
+        "browser_navigate" => call_browser_navigate(arguments, session),
+        "browser_requests" => call_browser_requests(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -1715,6 +1817,84 @@ fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonR
     })?;
     Ok(tool_response_from_daemon(
         "browser_command",
+        session,
+        trace,
+        response,
+    ))
+}
+
+fn call_browser_navigate(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let url = required_string_argument(arguments, "url")?;
+    let wait_until = optional_wait_until_argument(arguments)?;
+    let headers = optional_object_argument(arguments, "headers")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_navigate_command(BrowserNavigateCommandArgs {
+        url,
+        wait_until,
+        headers,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    });
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_navigate",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_navigate",
+        session,
+        trace,
+        response,
+    ))
+}
+
+fn call_browser_requests(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let clear = optional_bool_argument(arguments, "clear")?;
+    let filter = optional_string_argument(arguments, "filter")?;
+    let resource_type = optional_string_argument(arguments, "type")?;
+    let method = optional_string_argument(arguments, "method")?;
+    let status = optional_string_argument(arguments, "status")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_requests_command(BrowserRequestsCommandArgs {
+        clear,
+        filter,
+        resource_type,
+        method,
+        status,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    });
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_requests",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_requests",
         session,
         trace,
         response,
@@ -2433,6 +2613,28 @@ struct BrowserCommandArgs<'a> {
     task_name: Option<&'a str>,
 }
 
+struct BrowserNavigateCommandArgs<'a> {
+    url: &'a str,
+    wait_until: Option<&'a str>,
+    headers: Option<&'a serde_json::Map<String, Value>>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+struct BrowserRequestsCommandArgs<'a> {
+    clear: Option<bool>,
+    filter: Option<&'a str>,
+    resource_type: Option<&'a str>,
+    method: Option<&'a str>,
+    status: Option<&'a str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
 fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
     let mut command = json!({
         "id": format!("mcp-browser-command-{}-{}", args.action, uuid::Uuid::new_v4()),
@@ -2444,6 +2646,68 @@ fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
                 command[key] = value.clone();
             }
         }
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_navigate_command(args: BrowserNavigateCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-navigate-{}", uuid::Uuid::new_v4()),
+        "action": "navigate",
+        "url": args.url,
+    });
+    if let Some(wait_until) = args.wait_until {
+        command["waitUntil"] = json!(wait_until);
+    }
+    if let Some(headers) = args.headers {
+        command["headers"] = json!(headers);
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn browser_requests_command(args: BrowserRequestsCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-requests-{}", uuid::Uuid::new_v4()),
+        "action": "requests",
+    });
+    if let Some(clear) = args.clear {
+        command["clear"] = json!(clear);
+    }
+    if let Some(filter) = args.filter {
+        command["filter"] = json!(filter);
+    }
+    if let Some(resource_type) = args.resource_type {
+        command["type"] = json!(resource_type);
+    }
+    if let Some(method) = args.method {
+        command["method"] = json!(method);
+    }
+    if let Some(status) = args.status {
+        command["status"] = json!(status);
     }
     if let Some(job_timeout_ms) = args.job_timeout_ms {
         command["jobTimeoutMs"] = json!(job_timeout_ms);
@@ -3185,6 +3449,18 @@ fn optional_bool_argument(arguments: &Value, name: &str) -> Result<Option<bool>,
             .as_bool()
             .map(Some)
             .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} must be a boolean", name))),
+        None => Ok(None),
+    }
+}
+
+fn optional_wait_until_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
+    match optional_string_argument(arguments, "waitUntil")? {
+        Some(value) if matches!(value, "load" | "domcontentloaded" | "networkidle" | "none") => {
+            Ok(Some(value))
+        }
+        Some(_) => Err(JsonRpcError::invalid_params(
+            "waitUntil must be load, domcontentloaded, networkidle, or none",
+        )),
         None => Ok(None),
     }
 }
@@ -3962,6 +4238,24 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_navigate"
+                && tool["inputSchema"]["required"][0] == "url"
+                && tool["inputSchema"]["properties"]["waitUntil"].is_object()
+                && tool["inputSchema"]["properties"]["headers"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_requests"
+                && tool["inputSchema"]["properties"]["filter"].is_object()
+                && tool["inputSchema"]["properties"]["method"].is_object()
+                && tool["inputSchema"]["properties"]["status"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -4027,6 +4321,51 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 41);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_navigate_requires_url_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"browser_navigate","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 42);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_navigate_rejects_invalid_wait_until_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":43,"method":"tools/call","params":{"name":"browser_navigate","arguments":{"url":"https://example.com","waitUntil":"paint","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 43);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_requests_rejects_invalid_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":44,"method":"tools/call","params":{"name":"browser_requests","arguments":{"clear":"true","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 44);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":45,"method":"tools/call","params":{"name":"browser_requests","arguments":{"jobTimeoutMs":0,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 45);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -4528,6 +4867,60 @@ mod tests {
         assert_ne!(command["id"], "ignored");
         assert_eq!(command["url"], "https://example.com");
         assert_eq!(command["waitUntil"], "load");
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_navigate_command_forwards_options_and_trace_fields() {
+        let headers = json!({
+            "X-Agent-Browser-Smoke": "typed-navigate",
+        });
+        let command = browser_navigate_command(BrowserNavigateCommandArgs {
+            url: "https://example.com",
+            wait_until: Some("load"),
+            headers: headers.as_object(),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(command["action"], "navigate");
+        assert_eq!(command["url"], "https://example.com");
+        assert_eq!(command["waitUntil"], "load");
+        assert_eq!(
+            command["headers"]["X-Agent-Browser-Smoke"],
+            "typed-navigate"
+        );
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_requests_command_forwards_filters_and_trace_fields() {
+        let command = browser_requests_command(BrowserRequestsCommandArgs {
+            clear: Some(false),
+            filter: Some("/api"),
+            resource_type: Some("fetch,xhr"),
+            method: Some("GET"),
+            status: Some("2xx"),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(command["action"], "requests");
+        assert_eq!(command["clear"], false);
+        assert_eq!(command["filter"], "/api");
+        assert_eq!(command["type"], "fetch,xhr");
+        assert_eq!(command["method"], "GET");
+        assert_eq!(command["status"], "2xx");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");

@@ -192,10 +192,8 @@ try {
   notify('notifications/initialized');
 
   const commandTrackRequestsResult = await send('tools/call', {
-    name: 'browser_command',
+    name: 'browser_requests',
     arguments: {
-      action: 'requests',
-      params: {},
       serviceName,
       agentName,
       taskName,
@@ -204,21 +202,18 @@ try {
   const commandTrackRequestsPayload = parseToolPayload(commandTrackRequestsResult);
   assert(
     commandTrackRequestsPayload.success === true,
-    `browser_command requests tracking failed: ${JSON.stringify(commandTrackRequestsPayload)}`,
+    `browser_requests tracking failed: ${JSON.stringify(commandTrackRequestsPayload)}`,
   );
   assert(
     Array.isArray(commandTrackRequestsPayload.data?.requests),
-    'browser_command requests did not return a request array',
+    'browser_requests did not return a request array',
   );
 
   const commandNavigateResult = await send('tools/call', {
-    name: 'browser_command',
+    name: 'browser_navigate',
     arguments: {
-      action: 'navigate',
-      params: {
-        url: browserCommandUrl,
-        waitUntil: 'load',
-      },
+      url: browserCommandUrl,
+      waitUntil: 'load',
       serviceName,
       agentName,
       taskName,
@@ -227,34 +222,31 @@ try {
   const commandNavigatePayload = parseToolPayload(commandNavigateResult);
   assert(
     commandNavigatePayload.success === true,
-    `browser_command navigate failed: ${JSON.stringify(commandNavigatePayload)}`,
+    `browser_navigate failed: ${JSON.stringify(commandNavigatePayload)}`,
   );
   assert(
     commandNavigatePayload.data?.url === browserCommandUrl,
-    'browser_command navigate did not report the requested URL',
+    'browser_navigate did not report the requested URL',
   );
   assert(
     commandNavigatePayload.trace?.serviceName === serviceName,
-    'browser_command navigate trace missing serviceName',
+    'browser_navigate trace missing serviceName',
   );
   assert(
     commandNavigatePayload.trace?.agentName === agentName,
-    'browser_command navigate trace missing agentName',
+    'browser_navigate trace missing agentName',
   );
   assert(
     commandNavigatePayload.trace?.taskName === taskName,
-    'browser_command navigate trace missing taskName',
+    'browser_navigate trace missing taskName',
   );
 
   const commandRequestsResult = await send('tools/call', {
-    name: 'browser_command',
+    name: 'browser_requests',
     arguments: {
-      action: 'requests',
-      params: {
-        filter: '/asset.png',
-        method: 'GET',
-        status: '2xx',
-      },
+      filter: '/asset.png',
+      method: 'GET',
+      status: '2xx',
       serviceName,
       agentName,
       taskName,
@@ -263,10 +255,10 @@ try {
   const commandRequestsPayload = parseToolPayload(commandRequestsResult);
   assert(
     commandRequestsPayload.success === true,
-    `browser_command requests failed: ${JSON.stringify(commandRequestsPayload)}`,
+    `browser_requests failed: ${JSON.stringify(commandRequestsPayload)}`,
   );
   const commandRequests = commandRequestsPayload.data?.requests;
-  assert(Array.isArray(commandRequests), 'browser_command requests did not return requests array');
+  assert(Array.isArray(commandRequests), 'browser_requests did not return requests array');
   assert(
     commandRequests.some(
       (request) =>
@@ -275,19 +267,19 @@ try {
         request.method === 'GET' &&
         request.status === 200,
     ),
-    `browser_command requests did not capture the local asset request: ${JSON.stringify(commandRequests)}`,
+    `browser_requests did not capture the local asset request: ${JSON.stringify(commandRequests)}`,
   );
   assert(
     commandRequestsPayload.trace?.serviceName === serviceName,
-    'browser_command requests trace missing serviceName',
+    'browser_requests trace missing serviceName',
   );
   assert(
     commandRequestsPayload.trace?.agentName === agentName,
-    'browser_command requests trace missing agentName',
+    'browser_requests trace missing agentName',
   );
   assert(
     commandRequestsPayload.trace?.taskName === taskName,
-    'browser_command requests trace missing taskName',
+    'browser_requests trace missing taskName',
   );
 
   const commandReturnResult = await send('tools/call', {
