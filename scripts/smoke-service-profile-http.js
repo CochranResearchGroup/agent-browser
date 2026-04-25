@@ -70,6 +70,10 @@ try {
     '</html>',
   ].join('');
   const pageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(pageHtml)}`;
+  const secondPageHtml = '<!doctype html><title>Second HTTP Page</title><h1 id="second-ready">Second HTTP Page</h1>';
+  const secondPageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(secondPageHtml)}`;
+  const tabPageHtml = '<!doctype html><title>HTTP Tab Page</title><h1 id="tab-ready">HTTP Tab Page</h1>';
+  const tabPageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(tabPageHtml)}`;
 
   const openResult = await runCli(context, [
     '--json',
@@ -137,6 +141,64 @@ try {
     browserTabs.data?.tabs?.some((tab) => tab.url === pageUrl && tab.active === true),
     `HTTP browser tabs did not include active smoke page: ${JSON.stringify(browserTabs)}`,
   );
+
+  const browserNavigate = await browserPost(port, 'navigate', {
+    url: secondPageUrl,
+    waitUntil: 'load',
+  });
+  assertHttpSuccess(browserNavigate, 'HTTP browser navigate');
+  assert(
+    browserNavigate.data?.url === secondPageUrl,
+    `HTTP browser navigate returned ${browserNavigate.data?.url}`,
+  );
+
+  const browserBack = await browserPost(port, 'back');
+  assertHttpSuccess(browserBack, 'HTTP browser back');
+  assert(browserBack.data?.url === pageUrl, `HTTP browser back returned ${browserBack.data?.url}`);
+
+  const browserForward = await browserPost(port, 'forward');
+  assertHttpSuccess(browserForward, 'HTTP browser forward');
+  assert(
+    browserForward.data?.url === secondPageUrl,
+    `HTTP browser forward returned ${browserForward.data?.url}`,
+  );
+
+  const browserReload = await browserPost(port, 'reload');
+  assertHttpSuccess(browserReload, 'HTTP browser reload');
+  assert(browserReload.data?.url === secondPageUrl, `HTTP browser reload returned ${browserReload.data?.url}`);
+
+  const browserNavigateHome = await browserPost(port, 'navigate', {
+    url: pageUrl,
+    waitUntil: 'load',
+  });
+  assertHttpSuccess(browserNavigateHome, 'HTTP browser navigate home');
+  assert(
+    browserNavigateHome.data?.url === pageUrl,
+    `HTTP browser navigate home returned ${browserNavigateHome.data?.url}`,
+  );
+
+  const browserNewTab = await browserPost(port, 'new-tab', {
+    url: tabPageUrl,
+  });
+  assertHttpSuccess(browserNewTab, 'HTTP browser new-tab');
+  assert(browserNewTab.data?.url === tabPageUrl, `HTTP browser new-tab returned ${browserNewTab.data?.url}`);
+  assert(browserNewTab.data?.index === 1, `HTTP browser new-tab index was ${browserNewTab.data?.index}`);
+
+  const browserSwitchTab = await browserPost(port, 'switch-tab', {
+    index: 0,
+  });
+  assertHttpSuccess(browserSwitchTab, 'HTTP browser switch-tab');
+  assert(browserSwitchTab.data?.index === 0, `HTTP browser switch-tab index was ${browserSwitchTab.data?.index}`);
+  assert(
+    browserSwitchTab.data?.url === pageUrl,
+    `HTTP browser switch-tab returned ${browserSwitchTab.data?.url}`,
+  );
+
+  const browserCloseTab = await browserPost(port, 'close-tab', {
+    index: 1,
+  });
+  assertHttpSuccess(browserCloseTab, 'HTTP browser close-tab');
+  assert(browserCloseTab.data?.closed === 1, `HTTP browser close-tab closed ${browserCloseTab.data?.closed}`);
 
   const browserSnapshot = await browserPost(port, 'snapshot', {
     selector: '#main',

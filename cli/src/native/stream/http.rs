@@ -448,6 +448,37 @@ fn browser_api_command(
             query,
         )),
         ("GET", "/api/browser/tabs") => Some(browser_tabs_api_command(query)),
+        ("POST", "/api/browser/navigate") => Some(browser_body_command(
+            "navigate",
+            "http-browser-navigate",
+            body,
+        )),
+        ("POST", "/api/browser/back") => {
+            Some(browser_body_command("back", "http-browser-back", body))
+        }
+        ("POST", "/api/browser/forward") => Some(browser_body_command(
+            "forward",
+            "http-browser-forward",
+            body,
+        )),
+        ("POST", "/api/browser/reload") => {
+            Some(browser_body_command("reload", "http-browser-reload", body))
+        }
+        ("POST", "/api/browser/new-tab") => Some(browser_body_command(
+            "tab_new",
+            "http-browser-new-tab",
+            body,
+        )),
+        ("POST", "/api/browser/switch-tab") => Some(browser_body_command(
+            "tab_switch",
+            "http-browser-switch-tab",
+            body,
+        )),
+        ("POST", "/api/browser/close-tab") => Some(browser_body_command(
+            "tab_close",
+            "http-browser-close-tab",
+            body,
+        )),
         ("POST", "/api/browser/snapshot") => Some(browser_body_command(
             "snapshot",
             "http-browser-snapshot",
@@ -1358,6 +1389,39 @@ mod tests {
 
     #[test]
     fn browser_api_command_maps_named_post_routes() {
+        let navigate = browser_api_command(
+            "POST",
+            "/api/browser/navigate",
+            None,
+            r##"{"url":"https://example.com","waitUntil":"load","serviceName":"JournalDownloader"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let back = browser_api_command("POST", "/api/browser/back", None, "{}")
+            .unwrap()
+            .unwrap();
+        let forward = browser_api_command("POST", "/api/browser/forward", None, "{}")
+            .unwrap()
+            .unwrap();
+        let reload = browser_api_command("POST", "/api/browser/reload", None, "{}")
+            .unwrap()
+            .unwrap();
+        let new_tab = browser_api_command(
+            "POST",
+            "/api/browser/new-tab",
+            None,
+            r##"{"url":"about:blank"}"##,
+        )
+        .unwrap()
+        .unwrap();
+        let switch_tab =
+            browser_api_command("POST", "/api/browser/switch-tab", None, r##"{"index":0}"##)
+                .unwrap()
+                .unwrap();
+        let close_tab =
+            browser_api_command("POST", "/api/browser/close-tab", None, r##"{"index":1}"##)
+                .unwrap()
+                .unwrap();
         let click = browser_api_command(
             "POST",
             "/api/browser/click",
@@ -1554,6 +1618,19 @@ mod tests {
         .unwrap()
         .unwrap();
 
+        assert_eq!(navigate["action"], "navigate");
+        assert_eq!(navigate["url"], "https://example.com");
+        assert_eq!(navigate["waitUntil"], "load");
+        assert_eq!(navigate["serviceName"], "JournalDownloader");
+        assert_eq!(back["action"], "back");
+        assert_eq!(forward["action"], "forward");
+        assert_eq!(reload["action"], "reload");
+        assert_eq!(new_tab["action"], "tab_new");
+        assert_eq!(new_tab["url"], "about:blank");
+        assert_eq!(switch_tab["action"], "tab_switch");
+        assert_eq!(switch_tab["index"], 0);
+        assert_eq!(close_tab["action"], "tab_close");
+        assert_eq!(close_tab["index"], 1);
         assert_eq!(click["action"], "click");
         assert_eq!(click["selector"], "#ready");
         assert_eq!(click["serviceName"], "JournalDownloader");

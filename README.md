@@ -1312,6 +1312,13 @@ When the session stream server is running, agents can read the same service surf
 curl "http://127.0.0.1:<stream-port>/api/browser/url"
 curl "http://127.0.0.1:<stream-port>/api/browser/title"
 curl "http://127.0.0.1:<stream-port>/api/browser/tabs?verbose=true"
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/navigate" -H "content-type: application/json" -d '{"url":"https://example.com","waitUntil":"load"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/back" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/forward" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/reload" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/new-tab" -H "content-type: application/json" -d '{"url":"https://example.com/next"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/switch-tab" -H "content-type: application/json" -d '{"index":0}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/close-tab" -H "content-type: application/json" -d '{"index":1}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/snapshot" -H "content-type: application/json" -d '{"selector":"main","interactive":true}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/screenshot" -H "content-type: application/json" -d '{"selector":"main","path":"page.png"}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/click" -H "content-type: application/json" -d '{"selector":"#submit","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}'
