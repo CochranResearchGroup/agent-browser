@@ -21,6 +21,74 @@ const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
+const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
+    "navigate",
+    "back",
+    "forward",
+    "reload",
+    "tab_new",
+    "tab_switch",
+    "tab_close",
+    "tab_list",
+    "url",
+    "title",
+    "viewport",
+    "user_agent",
+    "emulatemedia",
+    "timezone",
+    "locale",
+    "geolocation",
+    "permissions",
+    "cookies_get",
+    "cookies_set",
+    "cookies_clear",
+    "storage_get",
+    "storage_set",
+    "storage_clear",
+    "console",
+    "errors",
+    "setcontent",
+    "headers",
+    "offline",
+    "dialog",
+    "clipboard",
+    "upload",
+    "download",
+    "waitfordownload",
+    "pdf",
+    "responsebody",
+    "har_start",
+    "har_stop",
+    "route",
+    "unroute",
+    "requests",
+    "request_detail",
+    "snapshot",
+    "screenshot",
+    "click",
+    "fill",
+    "wait",
+    "type",
+    "press",
+    "hover",
+    "select",
+    "gettext",
+    "inputvalue",
+    "isvisible",
+    "getattribute",
+    "innerhtml",
+    "styles",
+    "count",
+    "boundingbox",
+    "isenabled",
+    "ischecked",
+    "check",
+    "uncheck",
+    "scroll",
+    "scrollintoview",
+    "focus",
+    "clear",
+];
 
 /// Run the local MCP command surface.
 ///
@@ -1188,6 +1256,7 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["selector"]
             }
         }),
+        browser_command_tool_schema(),
         json!({
             "name": "service_trace",
             "title": "Read service trace",
@@ -1260,6 +1329,48 @@ const BROWSER_GET_TITLE_TOOL: BrowserReadToolSpec = BrowserReadToolSpec {
     state_name: "title",
     id_prefix: "mcp-browser-get-title",
 };
+
+fn browser_command_tool_schema() -> Value {
+    json!({
+        "name": "browser_command",
+        "title": "Queue browser control command",
+        "description": "Queue any supported browser-control daemon action against the active session. Use typed browser_* tools for common interactions; use this parity tool for HTTP-equivalent controls such as navigate, viewport, cookies, storage, headers, offline, dialogs, files, HAR, route, and request inspection. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": BROWSER_COMMAND_ALLOWED_ACTIONS,
+                    "description": "Underlying browser-control action to queue."
+                },
+                "params": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Action parameters. These are copied into the queued daemon command after id/action are reserved."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued browser command."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["action"]
+        }
+    })
+}
 
 fn browser_read_tool_schema(spec: BrowserReadToolSpec) -> Value {
     json!({
@@ -1415,6 +1526,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
     match name {
         "service_job_cancel" => call_service_job_cancel(arguments, session),
         "service_trace" => call_service_trace(arguments, session),
+        "browser_command" => call_browser_command(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -1562,6 +1674,47 @@ fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, Js
     })?;
     Ok(tool_response_from_daemon(
         "service_job_cancel",
+        session,
+        trace,
+        response,
+    ))
+}
+
+fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let action = required_string_argument(arguments, "action")?;
+    if !BROWSER_COMMAND_ALLOWED_ACTIONS.contains(&action) {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "browser_command action '{}' is not supported",
+            action
+        )));
+    }
+    let params = optional_object_argument(arguments, "params")?;
+    let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = browser_command_command(BrowserCommandArgs {
+        action,
+        params,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    });
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "browser_command",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "browser_command",
         session,
         trace,
         response,
@@ -2271,6 +2424,42 @@ fn service_job_cancel_command(
     command
 }
 
+struct BrowserCommandArgs<'a> {
+    action: &'a str,
+    params: Option<&'a serde_json::Map<String, Value>>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-command-{}-{}", args.action, uuid::Uuid::new_v4()),
+        "action": args.action,
+    });
+    if let Some(params) = args.params {
+        for (key, value) in params {
+            if key != "id" && key != "action" {
+                command[key] = value.clone();
+            }
+        }
+    }
+    if let Some(job_timeout_ms) = args.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    if let Some(service_name) = args.service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = args.agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = args.task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
 fn browser_click_command(
     selector: &str,
     new_tab: Option<bool>,
@@ -2962,6 +3151,20 @@ fn required_string_array_argument(
                 })
         })
         .collect()
+}
+
+fn optional_object_argument<'a>(
+    arguments: &'a Value,
+    name: &str,
+) -> Result<Option<&'a serde_json::Map<String, Value>>, JsonRpcError> {
+    match arguments.get(name) {
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => value
+            .as_object()
+            .map(Some)
+            .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} must be an object", name))),
+        None => Ok(None),
+    }
 }
 
 fn optional_string_array_argument(
@@ -3755,6 +3958,14 @@ mod tests {
         assert!(
             response["result"]["tools"][28]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_command"
+                && tool["inputSchema"]["properties"]["action"].is_object()
+                && tool["inputSchema"]["properties"]["params"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
         let trace_tool = response["result"]["tools"]
             .as_array()
             .unwrap()
@@ -3804,6 +4015,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 40);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_command_rejects_unsupported_action_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"browser_command","arguments":{"action":"service_status","params":{}}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 41);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -4278,6 +4501,33 @@ mod tests {
         assert_eq!(command["compact"], true);
         assert_eq!(command["maxDepth"], 3);
         assert_eq!(command["urls"], true);
+        assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_command_command_forwards_params_timeout_and_trace_fields() {
+        let params = json!({
+            "url": "https://example.com",
+            "waitUntil": "load",
+            "action": "ignored",
+            "id": "ignored",
+        });
+        let command = browser_command_command(BrowserCommandArgs {
+            action: "navigate",
+            params: params.as_object(),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(command["action"], "navigate");
+        assert_ne!(command["id"], "ignored");
+        assert_eq!(command["url"], "https://example.com");
+        assert_eq!(command["waitUntil"], "load");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");

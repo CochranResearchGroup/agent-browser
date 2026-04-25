@@ -3138,7 +3138,7 @@ Commands:
 
 Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
-  - MCP tools include service_job_cancel, service_trace, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, browser_fill, browser_wait, browser_type, browser_press, browser_hover, browser_select, browser_get_text, browser_get_value, browser_get_attribute, browser_get_html, browser_get_styles, browser_count, browser_get_box, browser_is_visible, browser_is_enabled, browser_check, browser_is_checked, browser_uncheck, browser_scroll, browser_scroll_into_view, browser_focus, and browser_clear.
+  - MCP tools include service_job_cancel, service_trace, browser_command, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, browser_fill, browser_wait, browser_type, browser_press, browser_hover, browser_select, browser_get_text, browser_get_value, browser_get_attribute, browser_get_html, browser_get_styles, browser_count, browser_get_box, browser_is_visible, browser_is_enabled, browser_check, browser_is_checked, browser_uncheck, browser_scroll, browser_scroll_into_view, browser_focus, and browser_clear.
   - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
   - service_trace reads persisted service state and returns related events, jobs, incidents, and activity for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
