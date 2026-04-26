@@ -1510,6 +1510,25 @@ mod tests {
     }
 
     #[test]
+    fn service_browser_retry_command_maps_trace_query_aliases() {
+        let camel_case = service_browser_retry_command(
+            "browser-123",
+            Some("serviceName=JournalDownloader&agentName=codex&taskName=probeACSwebsite"),
+        );
+        assert_eq!(camel_case["serviceName"], "JournalDownloader");
+        assert_eq!(camel_case["agentName"], "codex");
+        assert_eq!(camel_case["taskName"], "probeACSwebsite");
+
+        let snake_case = service_browser_retry_command(
+            "browser-123",
+            Some("service_name=JournalDownloader&agent_name=codex&task_name=probeACSwebsite"),
+        );
+        assert_eq!(snake_case["serviceName"], "JournalDownloader");
+        assert_eq!(snake_case["agentName"], "codex");
+        assert_eq!(snake_case["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
     fn service_incident_action_id_maps_path() {
         assert_eq!(
             service_incident_action_id(
