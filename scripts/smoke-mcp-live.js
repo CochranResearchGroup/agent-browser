@@ -369,6 +369,81 @@ try {
     'browser_geolocation did not report longitude',
   );
 
+  const commandPermissionsResult = await send('tools/call', {
+    name: 'browser_permissions',
+    arguments: {
+      permissions: ['geolocation'],
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandPermissionsPayload = parseToolPayload(commandPermissionsResult);
+  assert(
+    commandPermissionsPayload.success === true,
+    `browser_permissions failed: ${JSON.stringify(commandPermissionsPayload)}`,
+  );
+  assert(
+    commandPermissionsPayload.data?.granted?.[0] === 'geolocation',
+    'browser_permissions did not report the granted permission',
+  );
+
+  const commandTimezoneResult = await send('tools/call', {
+    name: 'browser_timezone',
+    arguments: {
+      timezoneId: 'America/Chicago',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandTimezonePayload = parseToolPayload(commandTimezoneResult);
+  assert(
+    commandTimezonePayload.success === true,
+    `browser_timezone failed: ${JSON.stringify(commandTimezonePayload)}`,
+  );
+  assert(
+    commandTimezonePayload.data?.timezoneId === 'America/Chicago',
+    'browser_timezone did not report the timezone id',
+  );
+
+  const commandLocaleResult = await send('tools/call', {
+    name: 'browser_locale',
+    arguments: {
+      locale: 'en-US',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandLocalePayload = parseToolPayload(commandLocaleResult);
+  assert(
+    commandLocalePayload.success === true,
+    `browser_locale failed: ${JSON.stringify(commandLocalePayload)}`,
+  );
+  assert(commandLocalePayload.data?.locale === 'en-US', 'browser_locale did not report locale');
+
+  const commandMediaResult = await send('tools/call', {
+    name: 'browser_media',
+    arguments: {
+      media: 'screen',
+      colorScheme: 'light',
+      reducedMotion: 'no-preference',
+      features: {
+        'prefers-contrast': 'no-preference',
+      },
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandMediaPayload = parseToolPayload(commandMediaResult);
+  assert(
+    commandMediaPayload.success === true,
+    `browser_media failed: ${JSON.stringify(commandMediaPayload)}`,
+  );
+  assert(commandMediaPayload.data?.set === true, 'browser_media did not report set state');
+
   const commandCookiesSetResult = await send('tools/call', {
     name: 'browser_cookies_set',
     arguments: {
@@ -1467,6 +1542,10 @@ try {
     ['user_agent', 'browser_user_agent'],
     ['viewport', 'browser_viewport'],
     ['geolocation', 'browser_geolocation'],
+    ['permissions', 'browser_permissions'],
+    ['timezone', 'browser_timezone'],
+    ['locale', 'browser_locale'],
+    ['emulatemedia', 'browser_media'],
     ['cookies_set', 'browser_cookies_set'],
     ['cookies_get', 'browser_cookies_get'],
     ['cookies_clear', 'browser_cookies_clear'],

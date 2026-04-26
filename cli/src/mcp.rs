@@ -1270,6 +1270,10 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_user_agent_tool_schema(),
         browser_viewport_tool_schema(),
         browser_geolocation_tool_schema(),
+        browser_permissions_tool_schema(),
+        browser_timezone_tool_schema(),
+        browser_locale_tool_schema(),
+        browser_media_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -1948,6 +1952,165 @@ fn browser_geolocation_tool_schema() -> Value {
     })
 }
 
+fn browser_permissions_tool_schema() -> Value {
+    json!({
+        "name": "browser_permissions",
+        "title": "Grant browser permissions",
+        "description": "Queue granting browser permissions for the active browser session, for example geolocation. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "permissions": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "minItems": 1,
+                    "description": "Required non-empty list of permission names to grant."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued permissions job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["permissions"]
+        }
+    })
+}
+
+fn browser_timezone_tool_schema() -> Value {
+    json!({
+        "name": "browser_timezone",
+        "title": "Set browser timezone",
+        "description": "Queue timezone emulation for the active browser session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "timezoneId": {
+                    "type": "string",
+                    "description": "Required IANA timezone id, for example America/Chicago."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued timezone job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["timezoneId"]
+        }
+    })
+}
+
+fn browser_locale_tool_schema() -> Value {
+    json!({
+        "name": "browser_locale",
+        "title": "Set browser locale",
+        "description": "Queue locale emulation for the active browser session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "locale": {
+                    "type": "string",
+                    "description": "Required locale tag, for example en-US."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued locale job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["locale"]
+        }
+    })
+}
+
+fn browser_media_tool_schema() -> Value {
+    json!({
+        "name": "browser_media",
+        "title": "Set browser media emulation",
+        "description": "Queue CSS media and media-feature emulation for the active browser session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "media": {
+                    "type": "string",
+                    "description": "Optional emulated media type, for example screen, print, or no-override."
+                },
+                "colorScheme": {
+                    "type": "string",
+                    "description": "Optional prefers-color-scheme value, for example light or dark."
+                },
+                "reducedMotion": {
+                    "type": "string",
+                    "description": "Optional prefers-reduced-motion value, for example reduce or no-preference."
+                },
+                "features": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Optional map of media feature names to emulated string values."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued media-emulation job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
 fn browser_command_tool_schema() -> Value {
     json!({
         "name": "browser_command",
@@ -2159,6 +2322,10 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_user_agent" => call_browser_user_agent(arguments, session),
         "browser_viewport" => call_browser_viewport(arguments, session),
         "browser_geolocation" => call_browser_geolocation(arguments, session),
+        "browser_permissions" => call_browser_permissions(arguments, session),
+        "browser_timezone" => call_browser_timezone(arguments, session),
+        "browser_locale" => call_browser_locale(arguments, session),
+        "browser_media" => call_browser_media(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -2590,6 +2757,72 @@ fn call_browser_geolocation(arguments: &Value, session: &str) -> Result<Value, J
     );
 
     send_queued_tool_command("browser_geolocation", session, trace, command)
+}
+
+fn call_browser_permissions(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let permissions = required_string_array_argument(arguments, "permissions")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_permissions_command(
+        &permissions,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_permissions", session, trace, command)
+}
+
+fn call_browser_timezone(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let timezone_id = required_string_argument(arguments, "timezoneId")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_timezone_command(
+        timezone_id,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_timezone", session, trace, command)
+}
+
+fn call_browser_locale(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let locale = required_string_argument(arguments, "locale")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_locale_command(
+        locale,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_locale", session, trace, command)
+}
+
+fn call_browser_media(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let media = optional_string_argument(arguments, "media")?;
+    let color_scheme = optional_string_argument(arguments, "colorScheme")?;
+    let reduced_motion = optional_string_argument(arguments, "reducedMotion")?;
+    let features = optional_object_argument(arguments, "features")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_media_command(BrowserMediaCommandArgs {
+        media,
+        color_scheme,
+        reduced_motion,
+        features,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
+    });
+
+    send_queued_tool_command("browser_media", session, trace, command)
 }
 
 fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -3364,6 +3597,17 @@ struct BrowserViewportCommandArgs<'a> {
     task_name: Option<&'a str>,
 }
 
+struct BrowserMediaCommandArgs<'a> {
+    media: Option<&'a str>,
+    color_scheme: Option<&'a str>,
+    reduced_motion: Option<&'a str>,
+    features: Option<&'a serde_json::Map<String, Value>>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
 fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
     let mut command = json!({
         "id": format!("mcp-browser-command-{}-{}", args.action, uuid::Uuid::new_v4()),
@@ -3735,6 +3979,99 @@ fn browser_geolocation_command(
         service_name,
         agent_name,
         task_name,
+    );
+    command
+}
+
+fn browser_permissions_command(
+    permissions: &[String],
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-permissions-{}", uuid::Uuid::new_v4()),
+        "action": "permissions",
+        "permissions": permissions,
+    });
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_timezone_command(
+    timezone_id: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-timezone-{}", uuid::Uuid::new_v4()),
+        "action": "timezone",
+        "timezoneId": timezone_id,
+    });
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_locale_command(
+    locale: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-locale-{}", uuid::Uuid::new_v4()),
+        "action": "locale",
+        "locale": locale,
+    });
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_media_command(args: BrowserMediaCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-media-{}", uuid::Uuid::new_v4()),
+        "action": "emulatemedia",
+    });
+    if let Some(media) = args.media {
+        command["media"] = json!(media);
+    }
+    if let Some(color_scheme) = args.color_scheme {
+        command["colorScheme"] = json!(color_scheme);
+    }
+    if let Some(reduced_motion) = args.reduced_motion {
+        command["reducedMotion"] = json!(reduced_motion);
+    }
+    if let Some(features) = args.features {
+        command["features"] = json!(features);
+    }
+    apply_service_command_fields(
+        &mut command,
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
     );
     command
 }
@@ -5488,6 +5825,39 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_permissions"
+                && tool["inputSchema"]["required"][0] == "permissions"
+                && tool["inputSchema"]["properties"]["permissions"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_timezone"
+                && tool["inputSchema"]["required"][0] == "timezoneId"
+                && tool["inputSchema"]["properties"]["timezoneId"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_locale"
+                && tool["inputSchema"]["required"][0] == "locale"
+                && tool["inputSchema"]["properties"]["locale"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_media"
+                && tool["inputSchema"]["properties"]["media"].is_object()
+                && tool["inputSchema"]["properties"]["colorScheme"].is_object()
+                && tool["inputSchema"]["properties"]["reducedMotion"].is_object()
+                && tool["inputSchema"]["properties"]["features"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -5742,6 +6112,42 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 59);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":60,"method":"tools/call","params":{"name":"browser_permissions","arguments":{"permissions":[],"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 60);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":61,"method":"tools/call","params":{"name":"browser_timezone","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 61);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":62,"method":"tools/call","params":{"name":"browser_locale","arguments":{"locale":"","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 62);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":63,"method":"tools/call","params":{"name":"browser_media","arguments":{"features":["bad"],"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 63);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -6534,6 +6940,76 @@ mod tests {
         assert_eq!(geolocation_command["serviceName"], "JournalDownloader");
         assert_eq!(geolocation_command["agentName"], "agent-a");
         assert_eq!(geolocation_command["taskName"], "probeACSwebsite");
+
+        let permissions = vec!["geolocation".to_string(), "notifications".to_string()];
+        let permissions_command = browser_permissions_command(
+            &permissions,
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(permissions_command["action"], "permissions");
+        assert_eq!(permissions_command["permissions"][0], "geolocation");
+        assert_eq!(permissions_command["permissions"][1], "notifications");
+        assert_eq!(permissions_command["jobTimeoutMs"], 1000);
+        assert_eq!(permissions_command["serviceName"], "JournalDownloader");
+        assert_eq!(permissions_command["agentName"], "agent-a");
+        assert_eq!(permissions_command["taskName"], "probeACSwebsite");
+
+        let timezone_command = browser_timezone_command(
+            "America/Chicago",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(timezone_command["action"], "timezone");
+        assert_eq!(timezone_command["timezoneId"], "America/Chicago");
+        assert_eq!(timezone_command["jobTimeoutMs"], 1000);
+        assert_eq!(timezone_command["serviceName"], "JournalDownloader");
+        assert_eq!(timezone_command["agentName"], "agent-a");
+        assert_eq!(timezone_command["taskName"], "probeACSwebsite");
+
+        let locale_command = browser_locale_command(
+            "en-US",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(locale_command["action"], "locale");
+        assert_eq!(locale_command["locale"], "en-US");
+        assert_eq!(locale_command["jobTimeoutMs"], 1000);
+        assert_eq!(locale_command["serviceName"], "JournalDownloader");
+        assert_eq!(locale_command["agentName"], "agent-a");
+        assert_eq!(locale_command["taskName"], "probeACSwebsite");
+
+        let features =
+            serde_json::Map::from_iter([("prefers-contrast".to_string(), json!("more"))]);
+        let media_command = browser_media_command(BrowserMediaCommandArgs {
+            media: Some("screen"),
+            color_scheme: Some("dark"),
+            reduced_motion: Some("reduce"),
+            features: Some(&features),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(media_command["action"], "emulatemedia");
+        assert_eq!(media_command["media"], "screen");
+        assert_eq!(media_command["colorScheme"], "dark");
+        assert_eq!(media_command["reducedMotion"], "reduce");
+        assert_eq!(media_command["features"]["prefers-contrast"], "more");
+        assert_eq!(media_command["jobTimeoutMs"], 1000);
+        assert_eq!(media_command["serviceName"], "JournalDownloader");
+        assert_eq!(media_command["agentName"], "agent-a");
+        assert_eq!(media_command["taskName"], "probeACSwebsite");
     }
 
     #[test]
