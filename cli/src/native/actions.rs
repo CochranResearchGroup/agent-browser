@@ -579,6 +579,108 @@ fn persist_current_browser_health(
     );
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BrowserStaleState {
+    needs_launch: bool,
+    health: Option<ServiceBrowserHealth>,
+    message: Option<String>,
+}
+
+async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleState {
+    let Some(ref mut mgr) = state.browser else {
+        return BrowserStaleState {
+            needs_launch: true,
+            health: None,
+            message: None,
+        };
+    };
+
+    if mgr.has_process_exited() {
+        let pid = mgr.browser_pid();
+        let message = pid
+            .map(|pid| format!("Active browser PID {} exited before command dispatch", pid))
+            .unwrap_or_else(|| "Active browser process exited before command dispatch".to_string());
+        return BrowserStaleState {
+            needs_launch: true,
+            health: Some(ServiceBrowserHealth::ProcessExited),
+            message: Some(message),
+        };
+    }
+
+    if !mgr.is_connection_alive().await {
+        return BrowserStaleState {
+            needs_launch: true,
+            health: Some(ServiceBrowserHealth::CdpDisconnected),
+            message: Some(format!(
+                "Active browser CDP connection is not responding: {}",
+                mgr.get_cdp_url()
+            )),
+        };
+    }
+
+    BrowserStaleState {
+        needs_launch: false,
+        health: None,
+        message: None,
+    }
+}
+
+fn persist_current_browser_stale_health(
+    state: &DaemonState,
+    health: ServiceBrowserHealth,
+    last_error: String,
+) {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return;
+    };
+    let Some(mgr) = state.browser.as_ref() else {
+        return;
+    };
+
+    let store = JsonServiceStateStore::new(path);
+    let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
+    let id = service_browser_id(&state.session_id);
+    let previous = service_state.browsers.get(&id).cloned();
+    let browser = stale_browser_process_record(
+        &id,
+        &state.session_id,
+        previous.as_ref(),
+        mgr.browser_pid(),
+        Some(mgr.get_cdp_url().to_string()),
+        health,
+        last_error,
+    );
+    record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    service_state.browsers.insert(id, browser);
+    let _ = store.save(&service_state);
+}
+
+fn stale_browser_process_record(
+    id: &str,
+    session_id: &str,
+    previous: Option<&BrowserProcess>,
+    pid: Option<u32>,
+    cdp_endpoint: Option<String>,
+    health: ServiceBrowserHealth,
+    last_error: String,
+) -> BrowserProcess {
+    BrowserProcess {
+        id: id.to_string(),
+        profile_id: previous.and_then(|browser| browser.profile_id.clone()),
+        host: previous
+            .map(|browser| browser.host)
+            .unwrap_or(ServiceBrowserHost::AttachedExisting),
+        health,
+        pid,
+        cdp_endpoint,
+        view_streams: previous
+            .map(|browser| browser.view_streams.clone())
+            .unwrap_or_default(),
+        active_session_ids: vec![session_id.to_string()],
+        last_error: Some(last_error),
+    }
+}
+
 fn persist_closed_browser_health(state: &DaemonState) {
     let Ok(path) = JsonServiceStateStore::default_path() else {
         return;
@@ -1816,11 +1918,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         // Check if existing connection is stale and needs re-launch.
         // First do a fast, non-blocking check: did the browser process crash/exit?
         // This avoids a 3-second CDP timeout when Chrome is already dead.
-        let mut needs_launch = if let Some(ref mut mgr) = state.browser {
-            mgr.has_process_exited() || !mgr.is_connection_alive().await
-        } else {
-            true
-        };
+        let stale_state = detect_browser_stale_state(state).await;
+        let mut needs_launch = stale_state.needs_launch;
 
         if needs_launch
             && state.browser.is_some()
@@ -1834,6 +1933,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
 
         if needs_launch {
             if state.browser.is_some() {
+                if let (Some(health), Some(message)) = (stale_state.health, stale_state.message) {
+                    persist_current_browser_stale_health(state, health, message);
+                }
                 if let Some(ref mut mgr) = state.browser {
                     let _ = mgr.close().await;
                 }
@@ -10378,6 +10480,45 @@ mod tests {
         assert_eq!(persisted.events.len(), 2);
 
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_stale_browser_process_record_preserves_identity_and_marks_error() {
+        let previous = BrowserProcess {
+            id: "browser-mcp-live".to_string(),
+            profile_id: Some("profile-work".to_string()),
+            host: ServiceBrowserHost::LocalHeaded,
+            health: ServiceBrowserHealth::Ready,
+            pid: Some(1234),
+            cdp_endpoint: Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
+            active_session_ids: vec!["mcp-live".to_string()],
+            ..BrowserProcess::default()
+        };
+
+        let stale = stale_browser_process_record(
+            "browser-mcp-live",
+            "mcp-live",
+            Some(&previous),
+            Some(1234),
+            Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
+            ServiceBrowserHealth::ProcessExited,
+            "Active browser PID 1234 exited before command dispatch".to_string(),
+        );
+
+        assert_eq!(stale.id, "browser-mcp-live");
+        assert_eq!(stale.profile_id.as_deref(), Some("profile-work"));
+        assert_eq!(stale.host, ServiceBrowserHost::LocalHeaded);
+        assert_eq!(stale.health, ServiceBrowserHealth::ProcessExited);
+        assert_eq!(stale.pid, Some(1234));
+        assert_eq!(
+            stale.cdp_endpoint.as_deref(),
+            Some("ws://127.0.0.1:9222/devtools/browser/old")
+        );
+        assert_eq!(stale.active_session_ids, vec!["mcp-live".to_string()]);
+        assert_eq!(
+            stale.last_error.as_deref(),
+            Some("Active browser PID 1234 exited before command dispatch")
+        );
     }
 
     #[tokio::test]
