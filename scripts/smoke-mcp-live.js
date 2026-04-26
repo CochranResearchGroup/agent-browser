@@ -305,6 +305,124 @@ try {
     'browser_navigate trace missing taskName',
   );
 
+  const commandCookiesSetResult = await send('tools/call', {
+    name: 'browser_cookies_set',
+    arguments: {
+      name: 'mcp_typed_cookie',
+      value: 'cookie-value',
+      url: browserCommandUrl,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandCookiesSetPayload = parseToolPayload(commandCookiesSetResult);
+  assert(
+    commandCookiesSetPayload.success === true,
+    `browser_cookies_set failed: ${JSON.stringify(commandCookiesSetPayload)}`,
+  );
+  assert(commandCookiesSetPayload.data?.set === true, 'browser_cookies_set did not report set state');
+  assert(
+    commandCookiesSetPayload.trace?.serviceName === serviceName,
+    'browser_cookies_set trace missing serviceName',
+  );
+
+  const commandCookiesGetResult = await send('tools/call', {
+    name: 'browser_cookies_get',
+    arguments: {
+      urls: [browserCommandUrl],
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandCookiesGetPayload = parseToolPayload(commandCookiesGetResult);
+  assert(
+    commandCookiesGetPayload.success === true,
+    `browser_cookies_get failed: ${JSON.stringify(commandCookiesGetPayload)}`,
+  );
+  assert(
+    commandCookiesGetPayload.data?.cookies?.some(
+      (cookie) => cookie.name === 'mcp_typed_cookie' && cookie.value === 'cookie-value',
+    ),
+    `browser_cookies_get did not return the typed cookie: ${JSON.stringify(commandCookiesGetPayload)}`,
+  );
+
+  const commandStorageSetResult = await send('tools/call', {
+    name: 'browser_storage_set',
+    arguments: {
+      type: 'local',
+      key: 'mcpTypedStorage',
+      value: 'storage-value',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandStorageSetPayload = parseToolPayload(commandStorageSetResult);
+  assert(
+    commandStorageSetPayload.success === true,
+    `browser_storage_set failed: ${JSON.stringify(commandStorageSetPayload)}`,
+  );
+  assert(commandStorageSetPayload.data?.set === true, 'browser_storage_set did not report set state');
+
+  const commandStorageGetResult = await send('tools/call', {
+    name: 'browser_storage_get',
+    arguments: {
+      type: 'local',
+      key: 'mcpTypedStorage',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandStorageGetPayload = parseToolPayload(commandStorageGetResult);
+  assert(
+    commandStorageGetPayload.success === true,
+    `browser_storage_get failed: ${JSON.stringify(commandStorageGetPayload)}`,
+  );
+  assert(
+    commandStorageGetPayload.data?.value === 'storage-value',
+    `browser_storage_get did not return the typed storage value: ${JSON.stringify(commandStorageGetPayload)}`,
+  );
+
+  const commandStorageClearResult = await send('tools/call', {
+    name: 'browser_storage_clear',
+    arguments: {
+      type: 'local',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandStorageClearPayload = parseToolPayload(commandStorageClearResult);
+  assert(
+    commandStorageClearPayload.success === true,
+    `browser_storage_clear failed: ${JSON.stringify(commandStorageClearPayload)}`,
+  );
+  assert(
+    commandStorageClearPayload.data?.cleared === true,
+    'browser_storage_clear did not report cleared state',
+  );
+
+  const commandCookiesClearResult = await send('tools/call', {
+    name: 'browser_cookies_clear',
+    arguments: {
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandCookiesClearPayload = parseToolPayload(commandCookiesClearResult);
+  assert(
+    commandCookiesClearPayload.success === true,
+    `browser_cookies_clear failed: ${JSON.stringify(commandCookiesClearPayload)}`,
+  );
+  assert(
+    commandCookiesClearPayload.data?.cleared === true,
+    'browser_cookies_clear did not report cleared state',
+  );
+
   const commandRequestsResult = await send('tools/call', {
     name: 'browser_requests',
     arguments: {
@@ -1281,6 +1399,24 @@ try {
     browserOfflineJob.state === 'succeeded',
     `Browser offline service job state was ${browserOfflineJob.state}`,
   );
+  for (const [action, label] of [
+    ['cookies_set', 'browser_cookies_set'],
+    ['cookies_get', 'browser_cookies_get'],
+    ['cookies_clear', 'browser_cookies_clear'],
+    ['storage_set', 'browser_storage_set'],
+    ['storage_get', 'browser_storage_get'],
+    ['storage_clear', 'browser_storage_clear'],
+  ]) {
+    const job = jobPayload.jobs?.find(
+      (candidate) =>
+        candidate.action === action &&
+        candidate.serviceName === serviceName &&
+        candidate.agentName === agentName &&
+        candidate.taskName === taskName,
+    );
+    assert(job, `Retained service job with ${label} caller context was not found`);
+    assert(job.state === 'succeeded', `${label} service job state was ${job.state}`);
+  }
   const urlJob = jobPayload.jobs?.find(
     (job) =>
       job.action === 'url' &&

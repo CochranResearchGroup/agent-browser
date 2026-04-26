@@ -1261,6 +1261,12 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_request_detail_tool_schema(),
         browser_headers_tool_schema(),
         browser_offline_tool_schema(),
+        browser_cookies_get_tool_schema(),
+        browser_cookies_set_tool_schema(),
+        browser_cookies_clear_tool_schema(),
+        browser_storage_get_tool_schema(),
+        browser_storage_set_tool_schema(),
+        browser_storage_clear_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -1542,6 +1548,271 @@ fn browser_offline_tool_schema() -> Value {
     })
 }
 
+fn browser_cookies_get_tool_schema() -> Value {
+    json!({
+        "name": "browser_cookies_get",
+        "title": "Get browser cookies",
+        "description": "Queue reading browser cookies from the active browser session. Optionally pass urls to scope cookies by URL. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "urls": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Optional non-empty list of URLs whose cookies should be returned."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued cookie read job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_cookies_set_tool_schema() -> Value {
+    json!({
+        "name": "browser_cookies_set",
+        "title": "Set browser cookies",
+        "description": "Queue setting one or more cookies in the active browser session. Pass cookies for bulk set, or pass name and value for a single cookie. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "cookies": {
+                    "type": "array",
+                    "items": { "type": "object" },
+                    "description": "Optional non-empty list of cookie objects accepted by the daemon."
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Cookie name when setting one cookie."
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Cookie value when setting one cookie."
+                },
+                "url": {
+                    "type": "string",
+                    "description": "Optional cookie URL."
+                },
+                "domain": {
+                    "type": "string",
+                    "description": "Optional cookie domain."
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional cookie path."
+                },
+                "expires": {
+                    "type": "number",
+                    "description": "Optional cookie expiration timestamp."
+                },
+                "httpOnly": {
+                    "type": "boolean",
+                    "description": "Whether the cookie is HTTP-only."
+                },
+                "secure": {
+                    "type": "boolean",
+                    "description": "Whether the cookie is secure."
+                },
+                "sameSite": {
+                    "type": "string",
+                    "description": "Optional SameSite policy."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued cookie set job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_cookies_clear_tool_schema() -> Value {
+    json!({
+        "name": "browser_cookies_clear",
+        "title": "Clear browser cookies",
+        "description": "Queue clearing browser cookies in the active browser session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued cookie clear job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_storage_get_tool_schema() -> Value {
+    json!({
+        "name": "browser_storage_get",
+        "title": "Get browser storage",
+        "description": "Queue reading localStorage or sessionStorage from the active browser session. Defaults to local storage when type is omitted. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["local", "session"],
+                    "description": "Storage bucket to read. Defaults to local."
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Optional storage key. When omitted, all entries are returned."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued storage read job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_storage_set_tool_schema() -> Value {
+    json!({
+        "name": "browser_storage_set",
+        "title": "Set browser storage",
+        "description": "Queue setting a localStorage or sessionStorage entry in the active browser session. Defaults to local storage when type is omitted. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["local", "session"],
+                    "description": "Storage bucket to write. Defaults to local."
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Required storage key."
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Required storage value."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued storage set job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["key", "value"]
+        }
+    })
+}
+
+fn browser_storage_clear_tool_schema() -> Value {
+    json!({
+        "name": "browser_storage_clear",
+        "title": "Clear browser storage",
+        "description": "Queue clearing localStorage or sessionStorage in the active browser session. Defaults to local storage when type is omitted. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["local", "session"],
+                    "description": "Storage bucket to clear. Defaults to local."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued storage clear job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
 fn browser_command_tool_schema() -> Value {
     json!({
         "name": "browser_command",
@@ -1744,6 +2015,12 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_request_detail" => call_browser_request_detail(arguments, session),
         "browser_headers" => call_browser_headers(arguments, session),
         "browser_offline" => call_browser_offline(arguments, session),
+        "browser_cookies_get" => call_browser_cookies_get(arguments, session),
+        "browser_cookies_set" => call_browser_cookies_set(arguments, session),
+        "browser_cookies_clear" => call_browser_cookies_clear(arguments, session),
+        "browser_storage_get" => call_browser_storage_get(arguments, session),
+        "browser_storage_set" => call_browser_storage_set(arguments, session),
+        "browser_storage_clear" => call_browser_storage_clear(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -2008,6 +2285,118 @@ fn call_browser_offline(arguments: &Value, session: &str) -> Result<Value, JsonR
     );
 
     send_queued_tool_command("browser_offline", session, trace, command)
+}
+
+fn call_browser_cookies_get(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let urls = optional_string_array_argument(arguments, "urls")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_cookies_get_command(
+        urls.as_deref(),
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_cookies_get", session, trace, command)
+}
+
+fn call_browser_cookies_set(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let cookies = optional_cookie_array_argument(arguments)?;
+    let name = optional_string_argument(arguments, "name")?;
+    let value = optional_string_argument(arguments, "value")?;
+    if cookies.is_none() && (name.is_none() || value.is_none()) {
+        return Err(JsonRpcError::invalid_params(
+            "browser_cookies_set requires cookies or name and value",
+        ));
+    }
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_cookies_set_command(BrowserCookiesSetCommandArgs {
+        cookies,
+        name,
+        value,
+        url: optional_string_argument(arguments, "url")?,
+        domain: optional_string_argument(arguments, "domain")?,
+        path: optional_string_argument(arguments, "path")?,
+        expires: arguments.get("expires").filter(|value| !value.is_null()),
+        http_only: optional_bool_argument(arguments, "httpOnly")?,
+        secure: optional_bool_argument(arguments, "secure")?,
+        same_site: optional_string_argument(arguments, "sameSite")?,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
+    });
+
+    send_queued_tool_command("browser_cookies_set", session, trace, command)
+}
+
+fn call_browser_cookies_clear(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_action_command(
+        "mcp-browser-cookies-clear",
+        "cookies_clear",
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_cookies_clear", session, trace, command)
+}
+
+fn call_browser_storage_get(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let storage_type = optional_storage_type_argument(arguments)?;
+    let key = optional_string_argument(arguments, "key")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_storage_get_command(
+        storage_type,
+        key,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_storage_get", session, trace, command)
+}
+
+fn call_browser_storage_set(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let storage_type = optional_storage_type_argument(arguments)?;
+    let key = required_string_argument(arguments, "key")?;
+    let value = required_string_argument(arguments, "value")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_storage_set_command(BrowserStorageSetCommandArgs {
+        storage_type,
+        key,
+        value,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
+    });
+
+    send_queued_tool_command("browser_storage_set", session, trace, command)
+}
+
+fn call_browser_storage_clear(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let storage_type = optional_storage_type_argument(arguments)?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_storage_clear_command(
+        storage_type,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_storage_clear", session, trace, command)
 }
 
 fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -2744,6 +3133,33 @@ struct BrowserRequestsCommandArgs<'a> {
     task_name: Option<&'a str>,
 }
 
+struct BrowserCookiesSetCommandArgs<'a> {
+    cookies: Option<&'a [Value]>,
+    name: Option<&'a str>,
+    value: Option<&'a str>,
+    url: Option<&'a str>,
+    domain: Option<&'a str>,
+    path: Option<&'a str>,
+    expires: Option<&'a Value>,
+    http_only: Option<bool>,
+    secure: Option<bool>,
+    same_site: Option<&'a str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
+struct BrowserStorageSetCommandArgs<'a> {
+    storage_type: Option<&'a str>,
+    key: &'a str,
+    value: &'a str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
 fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
     let mut command = json!({
         "id": format!("mcp-browser-command-{}-{}", args.action, uuid::Uuid::new_v4()),
@@ -2876,6 +3292,166 @@ fn browser_offline_command(
     if let Some(offline) = offline {
         command["offline"] = json!(offline);
     }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_cookies_get_command(
+    urls: Option<&[String]>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-cookies-get-{}", uuid::Uuid::new_v4()),
+        "action": "cookies_get",
+    });
+    if let Some(urls) = urls {
+        command["urls"] = json!(urls);
+    }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_cookies_set_command(args: BrowserCookiesSetCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-cookies-set-{}", uuid::Uuid::new_v4()),
+        "action": "cookies_set",
+    });
+    if let Some(cookies) = args.cookies {
+        command["cookies"] = json!(cookies);
+    }
+    if let Some(name) = args.name {
+        command["name"] = json!(name);
+    }
+    if let Some(value) = args.value {
+        command["value"] = json!(value);
+    }
+    if let Some(url) = args.url {
+        command["url"] = json!(url);
+    }
+    if let Some(domain) = args.domain {
+        command["domain"] = json!(domain);
+    }
+    if let Some(path) = args.path {
+        command["path"] = json!(path);
+    }
+    if let Some(expires) = args.expires {
+        command["expires"] = expires.clone();
+    }
+    if let Some(http_only) = args.http_only {
+        command["httpOnly"] = json!(http_only);
+    }
+    if let Some(secure) = args.secure {
+        command["secure"] = json!(secure);
+    }
+    if let Some(same_site) = args.same_site {
+        command["sameSite"] = json!(same_site);
+    }
+    apply_service_command_fields(
+        &mut command,
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
+    );
+    command
+}
+
+fn browser_storage_get_command(
+    storage_type: Option<&str>,
+    key: Option<&str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-storage-get-{}", uuid::Uuid::new_v4()),
+        "action": "storage_get",
+    });
+    if let Some(storage_type) = storage_type {
+        command["type"] = json!(storage_type);
+    }
+    if let Some(key) = key {
+        command["key"] = json!(key);
+    }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_storage_set_command(args: BrowserStorageSetCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-storage-set-{}", uuid::Uuid::new_v4()),
+        "action": "storage_set",
+        "key": args.key,
+        "value": args.value,
+    });
+    if let Some(storage_type) = args.storage_type {
+        command["type"] = json!(storage_type);
+    }
+    apply_service_command_fields(
+        &mut command,
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
+    );
+    command
+}
+
+fn browser_storage_clear_command(
+    storage_type: Option<&str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-storage-clear",
+        "storage_clear",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    if let Some(storage_type) = storage_type {
+        command["type"] = json!(storage_type);
+    }
+    command
+}
+
+fn browser_action_command(
+    id_prefix: &str,
+    action: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("{}-{}", id_prefix, uuid::Uuid::new_v4()),
+        "action": action,
+    });
     apply_service_command_fields(
         &mut command,
         job_timeout_ms,
@@ -3604,6 +4180,24 @@ fn optional_string_array_argument(
     required_string_array_argument(arguments, name).map(Some)
 }
 
+fn optional_cookie_array_argument(arguments: &Value) -> Result<Option<&[Value]>, JsonRpcError> {
+    match arguments.get("cookies") {
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => {
+            let cookies = value.as_array().ok_or_else(|| {
+                JsonRpcError::invalid_params("cookies must be a non-empty array of objects")
+            })?;
+            if cookies.is_empty() || cookies.iter().any(|cookie| !cookie.is_object()) {
+                return Err(JsonRpcError::invalid_params(
+                    "cookies must be a non-empty array of objects",
+                ));
+            }
+            Ok(Some(cookies.as_slice()))
+        }
+        None => Ok(None),
+    }
+}
+
 fn optional_bool_argument(arguments: &Value, name: &str) -> Result<Option<bool>, JsonRpcError> {
     match arguments.get(name) {
         Some(value) if value.is_null() => Ok(None),
@@ -3611,6 +4205,17 @@ fn optional_bool_argument(arguments: &Value, name: &str) -> Result<Option<bool>,
             .as_bool()
             .map(Some)
             .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} must be a boolean", name))),
+        None => Ok(None),
+    }
+}
+
+fn optional_storage_type_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
+    match optional_string_argument(arguments, "type")? {
+        Some("local") => Ok(Some("local")),
+        Some("session") => Ok(Some("session")),
+        Some(_) => Err(JsonRpcError::invalid_params(
+            "type must be either local or session",
+        )),
         None => Ok(None),
     }
 }
@@ -4509,6 +5114,54 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_cookies_get"
+                && tool["inputSchema"]["properties"]["urls"].is_object()
+                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_cookies_set"
+                && tool["inputSchema"]["properties"]["cookies"].is_object()
+                && tool["inputSchema"]["properties"]["name"].is_object()
+                && tool["inputSchema"]["properties"]["value"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_cookies_clear"
+                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_storage_get"
+                && tool["inputSchema"]["properties"]["type"].is_object()
+                && tool["inputSchema"]["properties"]["key"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_storage_set"
+                && tool["inputSchema"]["required"][0] == "key"
+                && tool["inputSchema"]["required"][1] == "value"
+                && tool["inputSchema"]["properties"]["type"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_storage_clear"
+                && tool["inputSchema"]["properties"]["type"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -4664,6 +5317,66 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 49);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_cookies_tools_reject_invalid_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":50,"method":"tools/call","params":{"name":"browser_cookies_get","arguments":{"urls":"https://example.com","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 50);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":51,"method":"tools/call","params":{"name":"browser_cookies_set","arguments":{"name":"session","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 51);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":52,"method":"tools/call","params":{"name":"browser_cookies_set","arguments":{"cookies":["bad"],"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 52);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_storage_tools_reject_invalid_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":53,"method":"tools/call","params":{"name":"browser_storage_get","arguments":{"type":"indexeddb","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 53);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":54,"method":"tools/call","params":{"name":"browser_storage_set","arguments":{"key":"token","type":"local","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 54);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":55,"method":"tools/call","params":{"name":"browser_storage_clear","arguments":{"type":"cache","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 55);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -5280,6 +5993,124 @@ mod tests {
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
         assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_cookies_commands_forward_options_and_trace_fields() {
+        let urls = vec!["https://example.com".to_string()];
+        let get_command = browser_cookies_get_command(
+            Some(&urls),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(get_command["action"], "cookies_get");
+        assert_eq!(get_command["urls"][0], "https://example.com");
+        assert_eq!(get_command["jobTimeoutMs"], 1000);
+        assert_eq!(get_command["serviceName"], "JournalDownloader");
+        assert_eq!(get_command["agentName"], "agent-a");
+        assert_eq!(get_command["taskName"], "probeACSwebsite");
+
+        let expires = json!(1893456000.0);
+        let set_command = browser_cookies_set_command(BrowserCookiesSetCommandArgs {
+            cookies: None,
+            name: Some("session"),
+            value: Some("abc"),
+            url: Some("https://example.com"),
+            domain: None,
+            path: Some("/"),
+            expires: Some(&expires),
+            http_only: Some(true),
+            secure: Some(false),
+            same_site: Some("Lax"),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(set_command["action"], "cookies_set");
+        assert_eq!(set_command["name"], "session");
+        assert_eq!(set_command["value"], "abc");
+        assert_eq!(set_command["url"], "https://example.com");
+        assert_eq!(set_command["path"], "/");
+        assert_eq!(set_command["expires"], 1893456000.0);
+        assert_eq!(set_command["httpOnly"], true);
+        assert_eq!(set_command["secure"], false);
+        assert_eq!(set_command["sameSite"], "Lax");
+        assert_eq!(set_command["jobTimeoutMs"], 1000);
+        assert_eq!(set_command["serviceName"], "JournalDownloader");
+        assert_eq!(set_command["agentName"], "agent-a");
+        assert_eq!(set_command["taskName"], "probeACSwebsite");
+
+        let clear_command = browser_action_command(
+            "mcp-browser-cookies-clear",
+            "cookies_clear",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+        assert_eq!(clear_command["action"], "cookies_clear");
+        assert_eq!(clear_command["jobTimeoutMs"], 1000);
+        assert_eq!(clear_command["serviceName"], "JournalDownloader");
+        assert_eq!(clear_command["agentName"], "agent-a");
+        assert_eq!(clear_command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_storage_commands_forward_options_and_trace_fields() {
+        let get_command = browser_storage_get_command(
+            Some("local"),
+            Some("token"),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(get_command["action"], "storage_get");
+        assert_eq!(get_command["type"], "local");
+        assert_eq!(get_command["key"], "token");
+        assert_eq!(get_command["jobTimeoutMs"], 1000);
+        assert_eq!(get_command["serviceName"], "JournalDownloader");
+        assert_eq!(get_command["agentName"], "agent-a");
+        assert_eq!(get_command["taskName"], "probeACSwebsite");
+
+        let set_command = browser_storage_set_command(BrowserStorageSetCommandArgs {
+            storage_type: Some("session"),
+            key: "token",
+            value: "abc",
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(set_command["action"], "storage_set");
+        assert_eq!(set_command["type"], "session");
+        assert_eq!(set_command["key"], "token");
+        assert_eq!(set_command["value"], "abc");
+        assert_eq!(set_command["jobTimeoutMs"], 1000);
+        assert_eq!(set_command["serviceName"], "JournalDownloader");
+        assert_eq!(set_command["agentName"], "agent-a");
+        assert_eq!(set_command["taskName"], "probeACSwebsite");
+
+        let clear_command = browser_storage_clear_command(
+            Some("local"),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+        assert_eq!(clear_command["action"], "storage_clear");
+        assert_eq!(clear_command["type"], "local");
+        assert_eq!(clear_command["jobTimeoutMs"], 1000);
+        assert_eq!(clear_command["serviceName"], "JournalDownloader");
+        assert_eq!(clear_command["agentName"], "agent-a");
+        assert_eq!(clear_command["taskName"], "probeACSwebsite");
     }
 
     #[test]
