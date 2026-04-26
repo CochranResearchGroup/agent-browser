@@ -168,6 +168,10 @@ export function assertRecoveryTraceEvents(events, { browserId, label = 'Recovery
     `${label} stale browser health event`,
   );
   const staleHealth = events[staleIndex].currentHealth;
+  assert(
+    events[staleIndex].details?.currentReasonKind === RECOVERY_REASON_KIND_BY_HEALTH[staleHealth],
+    `${label} stale health event did not include structured reason kind: ${JSON.stringify(events[staleIndex])}`,
+  );
   const recoveryIndex = eventIndex(
     events,
     (event) =>

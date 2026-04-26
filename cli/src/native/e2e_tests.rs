@@ -422,6 +422,14 @@ async fn e2e_service_detects_browser_crash_and_recovers_on_next_command() {
                 && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
         })
         .expect("crash detection should record the stale browser health transition");
+    assert_eq!(
+        recovered_state.events[stale_health_event_index]
+            .details
+            .as_ref()
+            .and_then(|details| details.get("currentReasonKind"))
+            .and_then(|reason| reason.as_str()),
+        Some("process_exited")
+    );
     let recovery_event_index = recovered_state
         .events
         .iter()

@@ -11224,7 +11224,10 @@ mod tests {
                         "agentName": "codex",
                         "taskName": "probeACSwebsite",
                         "previousHealth": "ready",
-                        "currentHealth": "process_exited"
+                        "currentHealth": "process_exited",
+                        "details": {
+                            "currentReasonKind": "process_exited"
+                        }
                     },
                     {
                         "id": "event-recovery",
@@ -11283,6 +11286,10 @@ mod tests {
         );
         assert_eq!(
             result["data"]["events"][0]["currentHealth"],
+            "process_exited"
+        );
+        assert_eq!(
+            result["data"]["events"][0]["details"]["currentReasonKind"],
             "process_exited"
         );
         assert_eq!(

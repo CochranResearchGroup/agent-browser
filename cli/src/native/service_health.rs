@@ -55,6 +55,19 @@ pub fn recovery_reason_kind_for_health(health: BrowserHealth) -> BrowserRecovery
     }
 }
 
+fn recovery_reason_kind_value_for_health(health: BrowserHealth) -> Option<serde_json::Value> {
+    matches!(
+        health,
+        BrowserHealth::Degraded
+            | BrowserHealth::Unreachable
+            | BrowserHealth::ProcessExited
+            | BrowserHealth::CdpDisconnected
+            | BrowserHealth::Closing
+            | BrowserHealth::Faulted
+    )
+    .then(|| serde_json::json!(recovery_reason_kind_for_health(health).as_str()))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServiceReconcileSummary {
     pub browser_count: usize,
@@ -364,6 +377,17 @@ pub fn record_browser_health_changed_event(
     if previous.health == current.health && previous.last_error == current.last_error {
         return;
     }
+    let mut details = serde_json::json!({
+        "previousError": previous.last_error,
+        "currentError": current.last_error,
+    });
+    if let Some(reason_kind) = recovery_reason_kind_value_for_health(current.health) {
+        details["currentReasonKind"] = reason_kind;
+    }
+    if let Some(reason_kind) = recovery_reason_kind_value_for_health(previous.health) {
+        details["previousReasonKind"] = reason_kind;
+    }
+
     let mut event = ServiceEvent {
         kind: ServiceEventKind::BrowserHealthChanged,
         message: format!(
@@ -373,10 +397,7 @@ pub fn record_browser_health_changed_event(
         browser_id: Some(browser_id.to_string()),
         previous_health: Some(previous.health),
         current_health: Some(current.health),
-        details: Some(serde_json::json!({
-            "previousError": previous.last_error,
-            "currentError": current.last_error,
-        })),
+        details: Some(details),
         ..new_service_event()
     };
     enrich_service_event_with_browser_context(&mut event, state, browser_id, current);
@@ -731,6 +752,73 @@ mod tests {
             recovery_reason_kind_for_health(BrowserHealth::Ready),
             BrowserRecoveryReasonKind::PersistedUnhealthyState
         );
+    }
+
+    #[test]
+    fn health_changed_event_includes_structured_reason_kinds() {
+        let mut state = ServiceState::default();
+        let previous = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            ..BrowserProcess::default()
+        };
+        let current = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::CdpDisconnected,
+            last_error: Some("CDP endpoint is unreachable: ws://old".to_string()),
+            ..BrowserProcess::default()
+        };
+
+        record_browser_health_changed_event(&mut state, "browser-1", Some(&previous), &current);
+
+        let event = state.events.first().unwrap();
+        assert_eq!(event.kind, ServiceEventKind::BrowserHealthChanged);
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("currentReasonKind"))
+                .and_then(|reason| reason.as_str()),
+            Some("cdp_disconnected")
+        );
+        assert!(event
+            .details
+            .as_ref()
+            .and_then(|details| details.get("previousReasonKind"))
+            .is_none());
+    }
+
+    #[test]
+    fn health_changed_event_carries_previous_reason_kind_on_recovery() {
+        let mut state = ServiceState::default();
+        let previous = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::ProcessExited,
+            last_error: Some("Recorded browser PID 1234 is no longer running".to_string()),
+            ..BrowserProcess::default()
+        };
+        let current = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            ..BrowserProcess::default()
+        };
+
+        record_browser_health_changed_event(&mut state, "browser-1", Some(&previous), &current);
+
+        let event = state.events.first().unwrap();
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("previousReasonKind"))
+                .and_then(|reason| reason.as_str()),
+            Some("process_exited")
+        );
+        assert!(event
+            .details
+            .as_ref()
+            .and_then(|details| details.get("currentReasonKind"))
+            .is_none());
     }
 
     async fn serve_json_version(listener: TcpListener) {
