@@ -470,6 +470,8 @@ Service browser-health reconciliation runs in the daemon background every 60000 
 
 Service control jobs do not time out at the worker boundary by default. Set <code>service.jobTimeoutMs</code>, pass <code>--service-job-timeout &lt;ms&gt;</code>, or set <code>AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS</code> to mark long-running dispatched jobs as <code>timed_out</code>. Use <code>0</code> to disable it.
 
+Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser <code>faulted</code>. Set <code>service.recoveryRetryBudget</code>, <code>service.recoveryBaseBackoffMs</code>, and <code>service.recoveryMaxBackoffMs</code>, pass the matching <code>--service-recovery-*</code> flags, or use the <code>AGENT_BROWSER_SERVICE_RECOVERY_*</code> environment variables to tune this for a service host.
+
 ## Debug
 
 ```bash

@@ -826,6 +826,9 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--engine <name>` | Browser engine: `chrome` (default), `lightpanda` (or `AGENT_BROWSER_ENGINE` env) |
 | `--service-reconcile-interval <ms>` | Background service browser-health reconciliation interval; `0` disables it (or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` env) |
 | `--service-job-timeout <ms>` | Timeout for dispatched service control jobs; `0` disables it (or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` env) |
+| `--service-recovery-retry-budget <n>` | Browser recovery attempts before faulting (or `AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET` env) |
+| `--service-recovery-base-backoff <ms>` | Browser recovery backoff base delay (or `AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS` env) |
+| `--service-recovery-max-backoff <ms>` | Browser recovery backoff ceiling (or `AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS` env) |
 | `--no-auto-dialog` | Disable automatic dismissal of `alert`/`beforeunload` dialogs (or `AGENT_BROWSER_NO_AUTO_DIALOG` env) |
 | `--model <name>` | AI model for chat command (or `AI_GATEWAY_MODEL` env) |
 | `-v`, `--verbose` | Show tool commands and their raw output (chat) |
@@ -924,6 +927,8 @@ All options from the table above can be set in the config file using camelCase k
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
 Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, pass `--service-job-timeout <ms>`, or set `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.
+
+Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass the matching `--service-recovery-*` flags, or use the `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host.
 
 Boolean flags accept an optional `true`/`false` value to override config settings. For example, `--headed false` disables `"headed": true` from config. A bare `--headed` is equivalent to `--headed true`.
 
@@ -1450,6 +1455,8 @@ Use `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`, `br
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
 Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, `--service-job-timeout <ms>`, or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.
+
+Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass the matching `--service-recovery-*` flags, or use the `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host.
 
 ### WebSocket Protocol
 

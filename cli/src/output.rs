@@ -3634,6 +3634,9 @@ Options:
   --engine <name>            Browser engine: chrome (default), lightpanda (or AGENT_BROWSER_ENGINE)
   --service-reconcile-interval <ms> Background service browser-health reconciliation interval (default: 60000); 0 disables it
   --service-job-timeout <ms> Timeout for dispatched service control jobs; 0 disables it
+  --service-recovery-retry-budget <n> Browser recovery attempts before faulting (default: 3)
+  --service-recovery-base-backoff <ms> Browser recovery backoff base delay (default: 1000)
+  --service-recovery-max-backoff <ms> Browser recovery backoff ceiling (default: 30000)
   --no-auto-dialog           Disable automatic dismissal of alert/beforeunload dialogs (or AGENT_BROWSER_NO_AUTO_DIALOG)
   --model <name>             AI model for chat (or AI_GATEWAY_MODEL env)
   -v, --verbose              Show tool commands and their raw output
@@ -3715,6 +3718,9 @@ Configuration:
   to run persisted browser-health reconciliation in the daemon background.
   Set `service.jobTimeoutMs` or pass `--service-job-timeout` to mark
   long-running service control jobs as timed_out.
+  Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and
+  `service.recoveryMaxBackoffMs` or pass the matching service recovery flags
+  to control when repeated browser relaunch attempts become faulted.
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.

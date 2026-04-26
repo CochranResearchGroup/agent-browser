@@ -41,7 +41,8 @@ use super::service_activity::service_incident_activity_response;
 use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
     record_browser_launch_recorded_event, record_browser_recovery_started_event,
-    recovery_reason_kind_for_health, BrowserRecoveryPolicy, BrowserRecoveryReasonKind,
+    recovery_reason_kind_for_health, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
+    BrowserRecoveryReasonKind,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
@@ -580,10 +581,6 @@ fn persist_current_browser_health(
     );
 }
 
-const BROWSER_RECOVERY_RETRY_BUDGET: u64 = 3;
-const BROWSER_RECOVERY_BASE_BACKOFF_MS: u64 = 1_000;
-const BROWSER_RECOVERY_MAX_BACKOFF_MS: u64 = 30_000;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BrowserStaleState {
     needs_launch: bool,
@@ -651,6 +648,7 @@ impl BrowserRecoveryPersistence {
 fn recovery_policy_for_next_attempt(
     service_state: &ServiceState,
     browser_id: &str,
+    policy_config: BrowserRecoveryPolicyConfig,
 ) -> BrowserRecoveryPolicy {
     let prior_attempts = service_state
         .events
@@ -669,19 +667,20 @@ fn recovery_policy_for_next_attempt(
     let attempt = prior_attempts + 1;
     BrowserRecoveryPolicy {
         attempt,
-        retry_budget: BROWSER_RECOVERY_RETRY_BUDGET,
-        retry_budget_exceeded: attempt > BROWSER_RECOVERY_RETRY_BUDGET,
-        next_retry_delay_ms: recovery_backoff_delay_ms(attempt),
+        retry_budget: policy_config.retry_budget,
+        retry_budget_exceeded: attempt > policy_config.retry_budget,
+        next_retry_delay_ms: recovery_backoff_delay_ms(attempt, policy_config),
     }
 }
 
-fn recovery_backoff_delay_ms(attempt: u64) -> u64 {
+fn recovery_backoff_delay_ms(attempt: u64, policy_config: BrowserRecoveryPolicyConfig) -> u64 {
     let multiplier = 1_u64
         .checked_shl(attempt.saturating_sub(1) as u32)
         .unwrap_or(u64::MAX);
-    BROWSER_RECOVERY_BASE_BACKOFF_MS
+    policy_config
+        .base_backoff_ms
         .saturating_mul(multiplier)
-        .min(BROWSER_RECOVERY_MAX_BACKOFF_MS)
+        .min(policy_config.max_backoff_ms)
 }
 
 fn persist_current_browser_stale_health(
@@ -711,7 +710,8 @@ fn persist_current_browser_stale_health(
         last_error.clone(),
     );
     record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
-    let policy = recovery_policy_for_next_attempt(&service_state, &id);
+    let policy =
+        recovery_policy_for_next_attempt(&service_state, &id, state.browser_recovery_policy_config);
     if policy.retry_budget_exceeded {
         let faulted_error = format!(
             "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
@@ -770,7 +770,8 @@ fn persist_browser_recovery_started_from_persisted_state(
         return BrowserRecoveryPersistence::NotRecorded;
     }
     let event_reason = browser.last_error.as_deref().unwrap_or(reason);
-    let policy = recovery_policy_for_next_attempt(&service_state, &id);
+    let policy =
+        recovery_policy_for_next_attempt(&service_state, &id, state.browser_recovery_policy_config);
     if policy.retry_budget_exceeded {
         let faulted_error = format!(
             "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
@@ -918,6 +919,8 @@ pub struct DaemonState {
     pub engine: String,
     /// Default timeout for wait operations, from AGENT_BROWSER_DEFAULT_TIMEOUT env var.
     pub default_timeout_ms: u64,
+    /// Retry budget and backoff used when a stale browser is relaunched.
+    pub browser_recovery_policy_config: BrowserRecoveryPolicyConfig,
     /// Cancellation token for the currently running service job, if this
     /// command is executing inside the service control-plane worker.
     pub current_cancellation: Option<CancellationToken>,
@@ -980,6 +983,7 @@ impl DaemonState {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(30_000),
+            browser_recovery_policy_config: browser_recovery_policy_config_from_env(),
             current_cancellation: None,
             tracked_origin_storage: HashMap::new(),
         }
@@ -1890,6 +1894,31 @@ fn runtime_profile_pid(runtime_profile: Option<&str>) -> Option<u32> {
     runtime_profile
         .and_then(|name| read_runtime_state(name).ok().flatten())
         .map(|state| state.browser_pid)
+}
+
+fn env_u64_or_default(name: &str, default: u64) -> u64 {
+    env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(default)
+}
+
+fn browser_recovery_policy_config_from_env() -> BrowserRecoveryPolicyConfig {
+    let defaults = BrowserRecoveryPolicyConfig::default();
+    BrowserRecoveryPolicyConfig {
+        retry_budget: env_u64_or_default(
+            "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+            defaults.retry_budget,
+        ),
+        base_backoff_ms: env_u64_or_default(
+            "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+            defaults.base_backoff_ms,
+        ),
+        max_backoff_ms: env_u64_or_default(
+            "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+            defaults.max_backoff_ms,
+        ),
+    }
 }
 
 async fn terminate_runtime_browser(pid: u32) {
@@ -11827,10 +11856,17 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let policy = recovery_policy_for_next_attempt(&state, browser_id);
+        let policy = recovery_policy_for_next_attempt(
+            &state,
+            browser_id,
+            BrowserRecoveryPolicyConfig::default(),
+        );
 
         assert_eq!(policy.attempt, 3);
-        assert_eq!(policy.retry_budget, BROWSER_RECOVERY_RETRY_BUDGET);
+        assert_eq!(
+            policy.retry_budget,
+            BrowserRecoveryPolicyConfig::default().retry_budget
+        );
         assert!(!policy.retry_budget_exceeded);
         assert_eq!(policy.next_retry_delay_ms, 4_000);
     }
@@ -11862,11 +11898,49 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let policy = recovery_policy_for_next_attempt(&state, browser_id);
+        let policy = recovery_policy_for_next_attempt(
+            &state,
+            browser_id,
+            BrowserRecoveryPolicyConfig::default(),
+        );
 
         assert_eq!(policy.attempt, 4);
         assert!(policy.retry_budget_exceeded);
         assert_eq!(policy.next_retry_delay_ms, 8_000);
+    }
+
+    #[test]
+    fn test_recovery_policy_uses_configured_budget_and_backoff() {
+        let browser_id = "session:budget-session";
+        let policy = BrowserRecoveryPolicyConfig {
+            retry_budget: 2,
+            base_backoff_ms: 250,
+            max_backoff_ms: 1_000,
+        };
+        let state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "recovery-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-2".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+            ],
+            ..ServiceState::default()
+        };
+
+        let configured_policy = recovery_policy_for_next_attempt(&state, browser_id, policy);
+
+        assert_eq!(configured_policy.attempt, 3);
+        assert_eq!(configured_policy.retry_budget, 2);
+        assert!(configured_policy.retry_budget_exceeded);
+        assert_eq!(configured_policy.next_retry_delay_ms, 1_000);
     }
 
     #[test]
@@ -11891,7 +11965,7 @@ mod tests {
                         ..BrowserProcess::default()
                     },
                 )]),
-                events: (1..=BROWSER_RECOVERY_RETRY_BUDGET)
+                events: (1..=BrowserRecoveryPolicyConfig::default().retry_budget)
                     .map(|attempt| ServiceEvent {
                         id: format!("recovery-{attempt}"),
                         kind: ServiceEventKind::BrowserRecoveryStarted,

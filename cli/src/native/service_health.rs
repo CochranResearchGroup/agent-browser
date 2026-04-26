@@ -63,6 +63,23 @@ pub struct BrowserRecoveryPolicy {
     pub next_retry_delay_ms: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrowserRecoveryPolicyConfig {
+    pub retry_budget: u64,
+    pub base_backoff_ms: u64,
+    pub max_backoff_ms: u64,
+}
+
+impl Default for BrowserRecoveryPolicyConfig {
+    fn default() -> Self {
+        Self {
+            retry_budget: 3,
+            base_backoff_ms: 1_000,
+            max_backoff_ms: 30_000,
+        }
+    }
+}
+
 fn recovery_reason_kind_value_for_health(health: BrowserHealth) -> Option<serde_json::Value> {
     matches!(
         health,

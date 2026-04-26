@@ -30,10 +30,14 @@ ordered sequence from the service trace surface:
 3. A later `browser_health_changed` event for the same browser with
    `currentHealth: "ready"` after relaunch.
 
-If the next recovery attempt would exceed the default retained-event retry
+If the next recovery attempt would exceed the configured retained-event retry
 budget, the service marks the browser `faulted`, records the faulted health
 transition as the incident signal, and fails the command instead of relaunching
-the browser again.
+the browser again. The default policy is 3 attempts, 1000 ms base backoff, and
+30000 ms max backoff. Operators can set `service.recoveryRetryBudget`,
+`service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass the
+matching service recovery flags, or set the matching
+`AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables.
 
 HTTP clients read this sequence from `/api/service/trace`. MCP clients read
 the same persisted service state through the `service_trace` tool. The shared
@@ -61,9 +65,9 @@ sees stale health or ready health but not the recovery-started transition.
   `cdp_disconnected` are useful operator signals, but the service should later
   distinguish clean close, crash, killed process, port loss, hung DevTools,
   degraded target discovery, and browser shutdown requested by policy.
-- Recovery policy has a default retained-event retry budget, but it is not yet
-  configurable per service, site, profile, or task. The service still needs
-  explicit policy configuration and operator override behavior.
+- Recovery policy now has daemon-level config, flag, and environment overrides,
+  but it is not yet scoped per service, site, profile, or task. The service
+  still needs explicit policy-source metadata and operator override behavior.
 - Reconciliation and command-time detection are not yet unified into one
   supervisor model. Background reconciliation can mark browser health, while
   queued commands can trigger relaunch. The service should eventually centralize
@@ -80,7 +84,7 @@ sees stale health or ready health but not the recovery-started transition.
 The best next backend slice is to harden crash classification and recovery
 policy before adding more client controls. A useful definition of done:
 
-- Promote the default retry budget and backoff values into explicit service,
+- Extend the daemon-level retry budget and backoff config into explicit service,
   site, profile, or task policy.
 - Add operator override behavior for intentionally retrying a faulted browser.
 - Preserve the current public trace fields while adding policy source metadata

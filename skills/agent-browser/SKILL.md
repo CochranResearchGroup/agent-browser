@@ -484,6 +484,8 @@ Service browser-health reconciliation runs in the daemon background every 60000 
 
 Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, pass `--service-job-timeout <ms>`, or set `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.
 
+Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass `--service-recovery-retry-budget <n>`, `--service-recovery-base-backoff <ms>`, or `--service-recovery-max-backoff <ms>`, or set the matching `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host.
+
 ## Batch Execution
 
 Use `batch` when running 2 or more commands in sequence. Batch executes commands in order, so dependent commands like navigate then screenshot work correctly. Each quoted argument is a separate command.

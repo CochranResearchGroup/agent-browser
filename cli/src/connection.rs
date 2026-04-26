@@ -299,6 +299,9 @@ pub struct DaemonOptions<'a> {
     pub idle_timeout: Option<&'a str>,
     pub service_reconcile_interval_ms: Option<u64>,
     pub service_job_timeout_ms: Option<u64>,
+    pub service_recovery_retry_budget: u64,
+    pub service_recovery_base_backoff_ms: u64,
+    pub service_recovery_max_backoff_ms: u64,
     pub default_timeout: Option<u64>,
     pub cdp: Option<&'a str>,
     pub runtime_attach_managed: bool,
@@ -402,6 +405,18 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     if let Some(ms) = opts.service_job_timeout_ms {
         cmd.env("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS", ms.to_string());
     }
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+        opts.service_recovery_retry_budget.to_string(),
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+        opts.service_recovery_base_backoff_ms.to_string(),
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+        opts.service_recovery_max_backoff_ms.to_string(),
+    );
     if let Some(timeout) = opts.default_timeout {
         cmd.env("AGENT_BROWSER_DEFAULT_TIMEOUT", timeout.to_string());
     }
@@ -1003,6 +1018,9 @@ mod tests {
             idle_timeout: None,
             service_reconcile_interval_ms: Some(1234),
             service_job_timeout_ms: Some(5678),
+            service_recovery_retry_budget: 9,
+            service_recovery_base_backoff_ms: 250,
+            service_recovery_max_backoff_ms: 10_000,
             default_timeout: None,
             cdp: None,
             runtime_attach_managed: false,
@@ -1031,6 +1049,15 @@ mod tests {
         }));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS" && v.as_deref() == Some("5678")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET" && v.as_deref() == Some("9")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS" && v.as_deref() == Some("250")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS" && v.as_deref() == Some("10000")
         }));
     }
 
