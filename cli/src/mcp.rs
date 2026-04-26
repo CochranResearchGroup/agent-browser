@@ -527,6 +527,42 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_browser_retry",
+            "title": "Retry faulted service browser",
+            "description": "Enable one new recovery attempt for a faulted service browser. This is an explicit operator override and should include serviceName, agentName, and taskName when available.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "browserId": {
+                        "type": "string",
+                        "description": "Service browser id to make retryable."
+                    },
+                    "by": {
+                        "type": "string",
+                        "description": "Operator or automation identity approving the retry."
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Optional operator note explaining why retry is safe."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["browserId"]
+            }
+        }),
+        json!({
             "name": "browser_snapshot",
             "title": "Take browser snapshot",
             "description": "Queue a browser accessibility snapshot against the active session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
@@ -3035,6 +3071,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
 
     match name {
         "service_job_cancel" => call_service_job_cancel(arguments, session),
+        "service_browser_retry" => call_service_browser_retry(arguments, session),
         "service_trace" => call_service_trace(arguments, session),
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
@@ -4571,6 +4608,40 @@ fn call_browser_field_tool(
     ))
 }
 
+fn call_service_browser_retry(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let browser_id = arguments
+        .get("browserId")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| JsonRpcError::invalid_params("service_browser_retry requires browserId"))?;
+    let by = optional_string_argument(arguments, "by")?;
+    let note = optional_string_argument(arguments, "note")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+
+    let command =
+        service_browser_retry_command(browser_id, by, note, service_name, agent_name, task_name);
+
+    let response = send_command(command, session).map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({
+            "message": err,
+            "session": session,
+            "tool": "service_browser_retry",
+            "trace": trace,
+        })),
+    })?;
+    Ok(tool_response_from_daemon(
+        "service_browser_retry",
+        session,
+        trace,
+        response,
+    ))
+}
+
 fn service_job_cancel_command(
     job_id: &str,
     reason: Option<&str>,
@@ -4585,6 +4656,37 @@ fn service_job_cancel_command(
     });
     if let Some(reason) = reason {
         command["reason"] = json!(reason);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    command
+}
+
+fn service_browser_retry_command(
+    browser_id: &str,
+    by: Option<&str>,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-browser-retry-{}", uuid::Uuid::new_v4()),
+        "action": "service_browser_retry",
+        "browserId": browser_id,
+    });
+    if let Some(by) = by {
+        command["by"] = json!(by);
+    }
+    if let Some(note) = note {
+        command["note"] = json!(note);
     }
     if let Some(service_name) = service_name {
         command["serviceName"] = json!(service_name);
@@ -8329,6 +8431,26 @@ mod tests {
         assert_eq!(command["action"], "service_job_cancel");
         assert_eq!(command["jobId"], "job-1");
         assert_eq!(command["reason"], "stale");
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn service_browser_retry_command_forwards_operator_and_trace_fields() {
+        let command = service_browser_retry_command(
+            "browser-1",
+            Some("operator"),
+            Some("approved"),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(command["action"], "service_browser_retry");
+        assert_eq!(command["browserId"], "browser-1");
+        assert_eq!(command["by"], "operator");
+        assert_eq!(command["note"], "approved");
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
         assert_eq!(command["taskName"], "probeACSwebsite");

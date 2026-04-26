@@ -39,6 +39,13 @@ the browser again. The default policy is 3 attempts, 1000 ms base backoff, and
 matching service recovery flags, or set the matching
 `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables.
 
+An operator can intentionally retry a faulted browser with
+`agent-browser service retry <browser-id>` or the matching HTTP and MCP service
+surfaces. This records a `browser_recovery_override` event, moves the browser
+from `faulted` back to a retryable stale health state, and makes the next
+recovery attempt count from that override boundary rather than the previous
+crash-loop attempts.
+
 HTTP clients read this sequence from `/api/service/trace`. MCP clients read
 the same persisted service state through the `service_trace` tool. The shared
 smoke assertion in `scripts/smoke-utils.js` now enforces the same ordering and
@@ -67,7 +74,7 @@ sees stale health or ready health but not the recovery-started transition.
   degraded target discovery, and browser shutdown requested by policy.
 - Recovery policy now has daemon-level config, flag, and environment overrides,
   but it is not yet scoped per service, site, profile, or task. The service
-  still needs explicit policy-source metadata and operator override behavior.
+  still needs explicit policy-source metadata.
 - Reconciliation and command-time detection are not yet unified into one
   supervisor model. Background reconciliation can mark browser health, while
   queued commands can trigger relaunch. The service should eventually centralize
@@ -86,7 +93,8 @@ policy before adding more client controls. A useful definition of done:
 
 - Extend the daemon-level retry budget and backoff config into explicit service,
   site, profile, or task policy.
-- Add operator override behavior for intentionally retrying a faulted browser.
+- Extend live HTTP and MCP recovery smokes to cover the operator override path
+  for intentionally retrying a faulted browser.
 - Preserve the current public trace fields while adding policy source metadata
   once configurable policy exists.
 - Extend live HTTP and MCP recovery smokes to cover the blocked crash-loop path.

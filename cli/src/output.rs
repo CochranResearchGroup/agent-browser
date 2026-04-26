@@ -3044,6 +3044,7 @@ Usage:
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
   agent-browser service cancel <job-id> [--reason <text>]
+  agent-browser service retry <browser-id> [--by <text>] [--note <text>]
   agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
   agent-browser service resolve <incident-id> [--by <text>] [--note <text>]
   agent-browser service activity <incident-id>
@@ -3057,6 +3058,7 @@ Commands:
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
   cancel                Cancel a queued job or request running job cancellation
+  retry                 Enable one new recovery attempt for a faulted browser
   acknowledge           Record that an operator has seen a retained incident
   resolve               Mark a retained incident handled with operator metadata
   activity              Show a normalized incident timeline from related events, jobs, and handling metadata
@@ -3080,6 +3082,7 @@ Notes:
   - Incident activity returns a normalized chronological timeline for one retained incident.
   - Trace returns related events, jobs, incidents, and normalized activity in one response for a browser, profile, session, service, agent, task, or time window.
   - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason and retry-budget details.
+  - Service retry records a browser_recovery_override event and makes a faulted browser retryable again.
   - Text service status includes profile and session summary lines for operator traceability.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
@@ -3104,6 +3107,7 @@ Examples:
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
   agent-browser service cancel <job-id> --reason stale
+  agent-browser service retry browser-1 --by operator --note approved
   agent-browser service acknowledge browser-1 --by operator --note triaged
   agent-browser service resolve browser-1 --by operator --note recovered
   agent-browser service activity browser-1
@@ -3119,6 +3123,7 @@ Examples:
   agent-browser service events --limit 20
   agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
   agent-browser service events --kind browser_recovery_started
+  agent-browser service events --kind browser_recovery_override
   agent-browser service events --kind tab_lifecycle_changed
   agent-browser --json service status
 "##

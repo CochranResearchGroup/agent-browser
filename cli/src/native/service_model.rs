@@ -137,6 +137,7 @@ pub enum ServiceEventKind {
     BrowserLaunchRecorded,
     BrowserHealthChanged,
     BrowserRecoveryStarted,
+    BrowserRecoveryOverride,
     TabLifecycleChanged,
     ReconciliationError,
     IncidentAcknowledged,
@@ -315,7 +316,9 @@ fn incident_is_newer(candidate: &str, current: &str) -> bool {
 fn service_event_is_incident(event: &ServiceEvent) -> bool {
     match event.kind {
         ServiceEventKind::ReconciliationError => true,
-        ServiceEventKind::IncidentAcknowledged | ServiceEventKind::IncidentResolved => true,
+        ServiceEventKind::IncidentAcknowledged
+        | ServiceEventKind::IncidentResolved
+        | ServiceEventKind::BrowserRecoveryOverride => true,
         ServiceEventKind::BrowserHealthChanged => {
             browser_health_is_bad(event.current_health)
                 || browser_health_is_recovery(event.previous_health, event.current_health)
@@ -330,7 +333,9 @@ fn service_event_is_incident(event: &ServiceEvent) -> bool {
 fn service_event_is_handling(kind: ServiceEventKind) -> bool {
     matches!(
         kind,
-        ServiceEventKind::IncidentAcknowledged | ServiceEventKind::IncidentResolved
+        ServiceEventKind::IncidentAcknowledged
+            | ServiceEventKind::IncidentResolved
+            | ServiceEventKind::BrowserRecoveryOverride
     )
 }
 
@@ -415,6 +420,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
         ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
+        ServiceEventKind::BrowserRecoveryOverride => "browser_recovery_override",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",

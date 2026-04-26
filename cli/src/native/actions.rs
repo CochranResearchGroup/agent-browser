@@ -655,9 +655,12 @@ fn recovery_policy_for_next_attempt(
         .iter()
         .rev()
         .take_while(|event| {
-            !(event.kind == ServiceEventKind::BrowserHealthChanged
+            let is_ready_boundary = event.kind == ServiceEventKind::BrowserHealthChanged
                 && event.browser_id.as_deref() == Some(browser_id)
-                && event.current_health == Some(ServiceBrowserHealth::Ready))
+                && event.current_health == Some(ServiceBrowserHealth::Ready);
+            let is_override_boundary = event.kind == ServiceEventKind::BrowserRecoveryOverride
+                && event.browser_id.as_deref() == Some(browser_id);
+            !(is_ready_boundary || is_override_boundary)
         })
         .filter(|event| {
             event.kind == ServiceEventKind::BrowserRecoveryStarted
@@ -2084,6 +2087,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_status"
             | "service_reconcile"
             | "service_job_cancel"
+            | "service_browser_retry"
             | "service_incident_acknowledge"
             | "service_incident_resolve"
             | "service_incident_activity"
@@ -2270,6 +2274,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
+        "service_browser_retry" => handle_service_browser_retry(cmd).await,
         "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
         "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
         "service_incident_activity" => handle_service_incident_activity(cmd).await,
@@ -6370,6 +6375,69 @@ async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
+    let browser_id = cmd
+        .get("browserId")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("Missing browserId")?;
+    let by = cmd.get("by").and_then(|value| value.as_str());
+    let note = cmd.get("note").and_then(|value| value.as_str());
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+    let path = JsonServiceStateStore::default_path()
+        .map_err(|_| "Unable to resolve service state path".to_string())?;
+    let store = JsonServiceStateStore::new(path);
+    let mut state = store
+        .load()
+        .map_err(|err| format!("Unable to load service state: {}", err))?;
+    let previous = state
+        .browsers
+        .get(browser_id)
+        .cloned()
+        .ok_or_else(|| format!("Service browser not found: {}", browser_id))?;
+    if previous.health != ServiceBrowserHealth::Faulted {
+        return Err(format!(
+            "Service browser {} is not faulted; current health is {}",
+            browser_id,
+            service_browser_health_name(previous.health)
+        ));
+    }
+
+    let mut retryable = previous.clone();
+    retryable.health = ServiceBrowserHealth::ProcessExited;
+    retryable.last_error = Some(format!(
+        "Browser retry requested by {}; previous fault: {}",
+        actor,
+        previous
+            .last_error
+            .as_deref()
+            .unwrap_or("no fault detail recorded")
+    ));
+    record_browser_health_changed_event(&mut state, browser_id, Some(&previous), &retryable);
+    state
+        .browsers
+        .insert(browser_id.to_string(), retryable.clone());
+    push_service_event_bounded(
+        &mut state,
+        service_browser_recovery_override_event(&retryable, &timestamp, &actor, note.as_deref()),
+    );
+    state.refresh_derived_views();
+    let incident = state
+        .incidents
+        .iter()
+        .find(|incident| incident.id == browser_id)
+        .cloned();
+    store.save(&state)?;
+
+    Ok(json!({
+        "retryEnabled": true,
+        "browser": retryable,
+        "incident": incident,
+    }))
+}
+
 async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, String> {
     let incident_id = cmd
         .get("incidentId")
@@ -6487,6 +6555,52 @@ fn normalized_note(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+fn service_browser_health_name(health: ServiceBrowserHealth) -> &'static str {
+    match health {
+        ServiceBrowserHealth::NotStarted => "not_started",
+        ServiceBrowserHealth::Launching => "launching",
+        ServiceBrowserHealth::Ready => "ready",
+        ServiceBrowserHealth::Degraded => "degraded",
+        ServiceBrowserHealth::ProcessExited => "process_exited",
+        ServiceBrowserHealth::CdpDisconnected => "cdp_disconnected",
+        ServiceBrowserHealth::Unreachable => "unreachable",
+        ServiceBrowserHealth::Closing => "closing",
+        ServiceBrowserHealth::Faulted => "faulted",
+        ServiceBrowserHealth::Reconnecting => "reconnecting",
+    }
+}
+
+fn service_browser_recovery_override_event(
+    browser: &BrowserProcess,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> ServiceEvent {
+    let mut details = json!({
+        "incidentId": browser.id,
+        "actor": actor,
+        "action": "retry_enabled",
+        "previousHealth": "faulted",
+        "currentHealth": service_browser_health_name(browser.health),
+    });
+    if let Some(note) = note {
+        details["note"] = json!(note);
+    }
+    ServiceEvent {
+        id: format!("event-{}", uuid::Uuid::new_v4()),
+        timestamp: timestamp.to_string(),
+        kind: ServiceEventKind::BrowserRecoveryOverride,
+        message: format!("Browser {} recovery retry enabled by {}", browser.id, actor),
+        browser_id: Some(browser.id.clone()),
+        profile_id: browser.profile_id.clone(),
+        session_id: browser.active_session_ids.first().cloned(),
+        previous_health: Some(ServiceBrowserHealth::Faulted),
+        current_health: Some(browser.health),
+        details: Some(details),
+        ..ServiceEvent::default()
+    }
 }
 
 fn service_incident_handling_event(
@@ -6810,6 +6924,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
         ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
+        ServiceEventKind::BrowserRecoveryOverride => "browser_recovery_override",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
@@ -11941,6 +12056,106 @@ mod tests {
         assert_eq!(configured_policy.retry_budget, 2);
         assert!(configured_policy.retry_budget_exceeded);
         assert_eq!(configured_policy.next_retry_delay_ms, 1_000);
+    }
+
+    #[test]
+    fn test_recovery_policy_resets_after_operator_override() {
+        let browser_id = "session:budget-session";
+        let state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "recovery-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "override-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryOverride,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+            ],
+            ..ServiceState::default()
+        };
+
+        let policy = recovery_policy_for_next_attempt(
+            &state,
+            browser_id,
+            BrowserRecoveryPolicyConfig::default(),
+        );
+
+        assert_eq!(policy.attempt, 1);
+        assert!(!policy.retry_budget_exceeded);
+    }
+
+    #[tokio::test]
+    async fn test_service_browser_retry_marks_faulted_browser_retryable() {
+        let home = unique_socket_dir("service-browser-retry-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let browser_id = "session:retry-session";
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        profile_id: Some("work".to_string()),
+                        health: ServiceBrowserHealth::Faulted,
+                        active_session_ids: vec!["retry-session".to_string()],
+                        last_error: Some("Browser recovery retry budget exceeded".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                events: vec![ServiceEvent {
+                    id: "event-faulted".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser faulted".to_string(),
+                    browser_id: Some(browser_id.to_string()),
+                    current_health: Some(ServiceBrowserHealth::Faulted),
+                    ..ServiceEvent::default()
+                }],
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut daemon_state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "id": "retry-1",
+                "action": "service_browser_retry",
+                "browserId": browser_id,
+                "by": "operator",
+                "note": "manual retry approved"
+            }),
+            &mut daemon_state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["retryEnabled"], true);
+        assert_eq!(result["data"]["browser"]["health"], "process_exited");
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers[browser_id].health,
+            ServiceBrowserHealth::ProcessExited
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryOverride
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event
+                    .details
+                    .as_ref()
+                    .and_then(|details| details.get("actor"))
+                    == Some(&json!("operator"))
+        }));
+
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]

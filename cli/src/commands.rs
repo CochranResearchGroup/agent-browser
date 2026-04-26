@@ -979,6 +979,50 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }
                 Ok(cmd)
             }
+            Some("retry") => {
+                let browser_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service retry".to_string(),
+                    usage: "service retry <browser-id> [--by <text>] [--note <text>]",
+                })?;
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_browser_retry",
+                    "browserId": browser_id,
+                });
+                let mut i = 2;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--by" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --by".to_string(),
+                                    usage: "service retry <browser-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["by"] = json!(raw);
+                            i += 1;
+                        }
+                        "--note" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --note".to_string(),
+                                    usage: "service retry <browser-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["note"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service retry: {}", flag),
+                                usage: "service retry <browser-id> [--by <text>] [--note <text>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
             Some("acknowledge") => {
                 let incident_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
                     context: "service acknowledge".to_string(),
@@ -1550,6 +1594,8 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 "reconciliation"
                                 | "browser_launch_recorded"
                                 | "browser_health_changed"
+                                | "browser_recovery_started"
+                                | "browser_recovery_override"
                                 | "tab_lifecycle_changed"
                                 | "reconciliation_error"
                                 | "incident_acknowledged"
@@ -4857,6 +4903,20 @@ mod tests {
     }
 
     #[test]
+    fn test_service_retry_browser() {
+        let cmd = parse_command(
+            &args("service retry browser-123 --by operator --note approved"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_browser_retry");
+        assert_eq!(cmd["browserId"], "browser-123");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "approved");
+    }
+
+    #[test]
     fn test_service_acknowledge_incident() {
         let cmd = parse_command(
             &args("service acknowledge incident-123 --by operator --note triaged"),
@@ -5048,6 +5108,17 @@ mod tests {
         .unwrap();
 
         assert_eq!(cmd["kind"], "browser_launch_recorded");
+    }
+
+    #[test]
+    fn test_service_events_accepts_recovery_override_kind() {
+        let cmd = parse_command(
+            &args("service events --kind browser_recovery_override"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["kind"], "browser_recovery_override");
     }
 
     #[test]
