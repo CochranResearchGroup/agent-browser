@@ -448,6 +448,11 @@ Use `browser_dialog`, `browser_upload`, `browser_download`, `browser_wait_for_do
 {"name":"browser_har_stop","arguments":{"path":"/tmp/capture.har","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
 {"name":"browser_route","arguments":{"url":"**/api/*","response":{"status":200,"body":"{}","contentType":"application/json"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
 {"name":"browser_unroute","arguments":{"url":"**/api/*","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_console","arguments":{"clear":true,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_errors","arguments":{"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_pdf","arguments":{"path":"/tmp/page.pdf","printBackground":true,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_response_body","arguments":{"url":"/api/data","timeoutMs":5000,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_clipboard","arguments":{"operation":"write","text":"copied text","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
 {"name":"browser_command","arguments":{"action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
 {"name":"browser_command","arguments":{"action":"headers","params":{"headers":{"Authorization":"Bearer <token>"}},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
 {"name":"browser_command","arguments":{"action":"offline","params":{"offline":false},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}

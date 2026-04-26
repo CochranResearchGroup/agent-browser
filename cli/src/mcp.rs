@@ -1282,6 +1282,11 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_har_stop_tool_schema(),
         browser_route_tool_schema(),
         browser_unroute_tool_schema(),
+        browser_console_tool_schema(),
+        browser_errors_tool_schema(),
+        browser_pdf_tool_schema(),
+        browser_response_body_tool_schema(),
+        browser_clipboard_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -2432,6 +2437,204 @@ fn browser_unroute_tool_schema() -> Value {
     })
 }
 
+fn browser_console_tool_schema() -> Value {
+    json!({
+        "name": "browser_console",
+        "title": "Read browser console",
+        "description": "Queue reading or clearing retained browser console messages. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "clear": {
+                    "type": "boolean",
+                    "description": "Whether to clear retained console messages instead of reading them."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued console job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_errors_tool_schema() -> Value {
+    json!({
+        "name": "browser_errors",
+        "title": "Read browser errors",
+        "description": "Queue reading retained browser page errors. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued errors job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_pdf_tool_schema() -> Value {
+    json!({
+        "name": "browser_pdf",
+        "title": "Save browser PDF",
+        "description": "Queue printing the active browser page to PDF. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Optional destination path. When omitted the daemon writes to its temporary PDF directory."
+                },
+                "printBackground": {
+                    "type": "boolean",
+                    "description": "Whether to print background graphics. Defaults to true."
+                },
+                "landscape": {
+                    "type": "boolean",
+                    "description": "Whether to print in landscape orientation. Defaults to false."
+                },
+                "preferCSSPageSize": {
+                    "type": "boolean",
+                    "description": "Whether to prefer CSS page size. Defaults to false."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued PDF job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_response_body_tool_schema() -> Value {
+    json!({
+        "name": "browser_response_body",
+        "title": "Read browser response body",
+        "description": "Queue waiting for a network response whose URL contains the requested substring, then read its response body. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required URL substring to match."
+                },
+                "timeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional daemon-side wait timeout."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued response-body job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["url"]
+        }
+    })
+}
+
+fn browser_clipboard_tool_schema() -> Value {
+    json!({
+        "name": "browser_clipboard",
+        "title": "Use browser clipboard",
+        "description": "Queue browser clipboard read, write, copy, or paste for the active session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "enum": ["read", "write", "copy", "paste"],
+                    "description": "Clipboard operation. Defaults to read."
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Required text for write operations."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued clipboard job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
 fn browser_command_tool_schema() -> Value {
     json!({
         "name": "browser_command",
@@ -2655,6 +2858,11 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_har_stop" => call_browser_har_stop(arguments, session),
         "browser_route" => call_browser_route(arguments, session),
         "browser_unroute" => call_browser_unroute(arguments, session),
+        "browser_console" => call_browser_console(arguments, session),
+        "browser_errors" => call_browser_errors(arguments, session),
+        "browser_pdf" => call_browser_pdf(arguments, session),
+        "browser_response_body" => call_browser_response_body(arguments, session),
+        "browser_clipboard" => call_browser_clipboard(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -3284,6 +3492,96 @@ fn call_browser_unroute(arguments: &Value, session: &str) -> Result<Value, JsonR
     );
 
     send_queued_tool_command("browser_unroute", session, trace, command)
+}
+
+fn call_browser_console(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let clear = optional_bool_argument(arguments, "clear")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_console_command(
+        clear,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_console", session, trace, command)
+}
+
+fn call_browser_errors(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_action_command(
+        "mcp-browser-errors",
+        "errors",
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_errors", session, trace, command)
+}
+
+fn call_browser_pdf(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let path = optional_string_argument(arguments, "path")?;
+    let print_background = optional_bool_argument(arguments, "printBackground")?;
+    let landscape = optional_bool_argument(arguments, "landscape")?;
+    let prefer_css_page_size = optional_bool_argument(arguments, "preferCSSPageSize")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_pdf_command(BrowserPdfCommandArgs {
+        path,
+        print_background,
+        landscape,
+        prefer_css_page_size,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
+    });
+
+    send_queued_tool_command("browser_pdf", session, trace, command)
+}
+
+fn call_browser_response_body(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let url = required_string_argument(arguments, "url")?;
+    let timeout_ms = optional_positive_u64_argument(arguments, "timeoutMs")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_response_body_command(
+        url,
+        timeout_ms,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_response_body", session, trace, command)
+}
+
+fn call_browser_clipboard(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let operation = optional_clipboard_operation_argument(arguments)?;
+    let text = optional_string_argument(arguments, "text")?;
+    if operation == Some("write") && text.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "text is required when operation is write",
+        ));
+    }
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_clipboard_command(
+        operation,
+        text,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_clipboard", session, trace, command)
 }
 
 fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -4079,6 +4377,17 @@ struct BrowserRouteCommandArgs<'a> {
     task_name: Option<&'a str>,
 }
 
+struct BrowserPdfCommandArgs<'a> {
+    path: Option<&'a str>,
+    print_background: Option<bool>,
+    landscape: Option<bool>,
+    prefer_css_page_size: Option<bool>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
 fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
     let mut command = json!({
         "id": format!("mcp-browser-command-{}-{}", args.action, uuid::Uuid::new_v4()),
@@ -4709,6 +5018,102 @@ fn browser_unroute_command(
     );
     if let Some(url) = url {
         command["url"] = json!(url);
+    }
+    command
+}
+
+fn browser_console_command(
+    clear: Option<bool>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-console",
+        "console",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    if let Some(clear) = clear {
+        command["clear"] = json!(clear);
+    }
+    command
+}
+
+fn browser_pdf_command(args: BrowserPdfCommandArgs<'_>) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-pdf",
+        "pdf",
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
+    );
+    if let Some(path) = args.path {
+        command["path"] = json!(path);
+    }
+    if let Some(print_background) = args.print_background {
+        command["printBackground"] = json!(print_background);
+    }
+    if let Some(landscape) = args.landscape {
+        command["landscape"] = json!(landscape);
+    }
+    if let Some(prefer_css_page_size) = args.prefer_css_page_size {
+        command["preferCSSPageSize"] = json!(prefer_css_page_size);
+    }
+    command
+}
+
+fn browser_response_body_command(
+    url: &str,
+    timeout_ms: Option<u64>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-response-body-{}", uuid::Uuid::new_v4()),
+        "action": "responsebody",
+        "url": url,
+    });
+    if let Some(timeout_ms) = timeout_ms {
+        command["timeoutMs"] = json!(timeout_ms);
+    }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_clipboard_command(
+    operation: Option<&str>,
+    text: Option<&str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-clipboard",
+        "clipboard",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    if let Some(operation) = operation {
+        command["operation"] = json!(operation);
+    }
+    if let Some(text) = text {
+        command["text"] = json!(text);
     }
     command
 }
@@ -5501,6 +5906,16 @@ fn required_dialog_response_argument(arguments: &Value) -> Result<&str, JsonRpcE
         _ => Err(JsonRpcError::invalid_params(
             "response must be status, accept, or dismiss",
         )),
+    }
+}
+
+fn optional_clipboard_operation_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
+    match optional_string_argument(arguments, "operation")? {
+        Some(value) if matches!(value, "read" | "write" | "copy" | "paste") => Ok(Some(value)),
+        Some(_) => Err(JsonRpcError::invalid_params(
+            "operation must be read, write, copy, or paste",
+        )),
+        None => Ok(None),
     }
 }
 
@@ -6562,6 +6977,41 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_console"
+                && tool["inputSchema"]["properties"]["clear"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_errors"
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_pdf"
+                && tool["inputSchema"]["properties"]["path"].is_object()
+                && tool["inputSchema"]["properties"]["printBackground"].is_object()
+                && tool["inputSchema"]["properties"]["landscape"].is_object()
+                && tool["inputSchema"]["properties"]["preferCSSPageSize"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_response_body"
+                && tool["inputSchema"]["required"][0] == "url"
+                && tool["inputSchema"]["properties"]["timeoutMs"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_clipboard"
+                && tool["inputSchema"]["properties"]["operation"].is_object()
+                && tool["inputSchema"]["properties"]["text"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -6897,6 +7347,51 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 68);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":69,"method":"tools/call","params":{"name":"browser_console","arguments":{"clear":"true","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 69);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":70,"method":"tools/call","params":{"name":"browser_pdf","arguments":{"landscape":"false","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 70);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":71,"method":"tools/call","params":{"name":"browser_response_body","arguments":{"timeoutMs":0,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 71);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":72,"method":"tools/call","params":{"name":"browser_clipboard","arguments":{"operation":"write","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 72);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":73,"method":"tools/call","params":{"name":"browser_clipboard","arguments":{"operation":"cut","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 73);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -7887,6 +8382,79 @@ mod tests {
         assert_eq!(unroute_command["serviceName"], "JournalDownloader");
         assert_eq!(unroute_command["agentName"], "agent-a");
         assert_eq!(unroute_command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_observability_artifact_commands_forward_options_and_trace_fields() {
+        let console_command = browser_console_command(
+            Some(true),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(console_command["action"], "console");
+        assert_eq!(console_command["clear"], true);
+        assert_eq!(console_command["jobTimeoutMs"], 1000);
+        assert_eq!(console_command["serviceName"], "JournalDownloader");
+        assert_eq!(console_command["agentName"], "agent-a");
+        assert_eq!(console_command["taskName"], "probeACSwebsite");
+
+        let pdf_command = browser_pdf_command(BrowserPdfCommandArgs {
+            path: Some("/tmp/page.pdf"),
+            print_background: Some(false),
+            landscape: Some(true),
+            prefer_css_page_size: Some(true),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(pdf_command["action"], "pdf");
+        assert_eq!(pdf_command["path"], "/tmp/page.pdf");
+        assert_eq!(pdf_command["printBackground"], false);
+        assert_eq!(pdf_command["landscape"], true);
+        assert_eq!(pdf_command["preferCSSPageSize"], true);
+        assert_eq!(pdf_command["jobTimeoutMs"], 1000);
+        assert_eq!(pdf_command["serviceName"], "JournalDownloader");
+        assert_eq!(pdf_command["agentName"], "agent-a");
+        assert_eq!(pdf_command["taskName"], "probeACSwebsite");
+
+        let response_body_command = browser_response_body_command(
+            "/api/data",
+            Some(5000),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(response_body_command["action"], "responsebody");
+        assert_eq!(response_body_command["url"], "/api/data");
+        assert_eq!(response_body_command["timeoutMs"], 5000);
+        assert_eq!(response_body_command["jobTimeoutMs"], 1000);
+        assert_eq!(response_body_command["serviceName"], "JournalDownloader");
+        assert_eq!(response_body_command["agentName"], "agent-a");
+        assert_eq!(response_body_command["taskName"], "probeACSwebsite");
+
+        let clipboard_command = browser_clipboard_command(
+            Some("write"),
+            Some("clip text"),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(clipboard_command["action"], "clipboard");
+        assert_eq!(clipboard_command["operation"], "write");
+        assert_eq!(clipboard_command["text"], "clip text");
+        assert_eq!(clipboard_command["jobTimeoutMs"], 1000);
+        assert_eq!(clipboard_command["serviceName"], "JournalDownloader");
+        assert_eq!(clipboard_command["agentName"], "agent-a");
+        assert_eq!(clipboard_command["taskName"], "probeACSwebsite");
     }
 
     #[test]

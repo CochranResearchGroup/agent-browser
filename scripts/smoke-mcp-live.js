@@ -23,6 +23,7 @@ const profileDir = join(tempHome, 'chrome-profile');
 const screenshotDir = join(tempHome, 'screenshots');
 const uploadPath = join(tempHome, 'mcp-upload.txt');
 const harPath = join(tempHome, 'mcp-capture.har');
+const pdfPath = join(tempHome, 'mcp-page.pdf');
 const serviceName = 'McpLiveSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'browserSnapshotSmoke';
@@ -566,6 +567,57 @@ try {
     `browser_unroute failed: ${JSON.stringify(commandUnroutePayload)}`,
   );
   assert(commandUnroutePayload.data?.unrouted === '**/mocked-api', 'browser_unroute did not report route');
+
+  const commandConsoleResult = await send('tools/call', {
+    name: 'browser_console',
+    arguments: {
+      clear: true,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandConsolePayload = parseToolPayload(commandConsoleResult);
+  assert(
+    commandConsolePayload.success === true,
+    `browser_console failed: ${JSON.stringify(commandConsolePayload)}`,
+  );
+  assert(commandConsolePayload.data?.cleared === true, 'browser_console did not report clear state');
+
+  const commandErrorsResult = await send('tools/call', {
+    name: 'browser_errors',
+    arguments: {
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandErrorsPayload = parseToolPayload(commandErrorsResult);
+  assert(
+    commandErrorsPayload.success === true,
+    `browser_errors failed: ${JSON.stringify(commandErrorsPayload)}`,
+  );
+  assert(commandErrorsPayload.data && typeof commandErrorsPayload.data === 'object', 'browser_errors returned no data');
+
+  const commandPdfResult = await send('tools/call', {
+    name: 'browser_pdf',
+    arguments: {
+      path: pdfPath,
+      printBackground: true,
+      landscape: false,
+      preferCSSPageSize: false,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandPdfPayload = parseToolPayload(commandPdfResult);
+  assert(
+    commandPdfPayload.success === true,
+    `browser_pdf failed: ${JSON.stringify(commandPdfPayload)}`,
+  );
+  assert(commandPdfPayload.data?.path === pdfPath, 'browser_pdf did not report PDF path');
+  assert(existsSync(pdfPath), 'browser_pdf did not write PDF file');
 
   const commandCookiesSetResult = await send('tools/call', {
     name: 'browser_cookies_set',
@@ -1675,6 +1727,9 @@ try {
     ['har_stop', 'browser_har_stop'],
     ['route', 'browser_route'],
     ['unroute', 'browser_unroute'],
+    ['console', 'browser_console'],
+    ['errors', 'browser_errors'],
+    ['pdf', 'browser_pdf'],
     ['cookies_set', 'browser_cookies_set'],
     ['cookies_get', 'browser_cookies_get'],
     ['cookies_clear', 'browser_cookies_clear'],
