@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertRecoveryTraceEvents,
   closeSession,
   createMcpStdioClient,
   createSmokeContext,
@@ -19,7 +20,6 @@ const serviceName = 'RecoveryTraceMcpSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'recoverAfterCrashMcpSmoke';
 const traceFields = { serviceName, agentName, taskName };
-const staleHealthValues = new Set(['process_exited', 'cdp_disconnected']);
 
 let mcp;
 const timeout = setTimeout(() => {
@@ -41,12 +41,6 @@ function parseToolPayload(result) {
   const text = result.content?.[0]?.text;
   assert(typeof text === 'string', 'MCP tool response missing text content');
   return JSON.parse(text);
-}
-
-function eventIndex(events, predicate, label) {
-  const index = events.findIndex(predicate);
-  assert(index >= 0, `${label} missing from trace events: ${JSON.stringify(events)}`);
-  return index;
 }
 
 function send(method, params) {
@@ -174,41 +168,7 @@ try {
 
   const events = tracePayload.data.events;
   const browserId = `session:${session}`;
-  const staleIndex = eventIndex(
-    events,
-    (event) =>
-      event.kind === 'browser_health_changed' &&
-      event.browserId === browserId &&
-      staleHealthValues.has(event.currentHealth),
-    'stale browser health event',
-  );
-  const staleHealth = events[staleIndex].currentHealth;
-  const recoveryIndex = eventIndex(
-    events,
-    (event) =>
-      event.kind === 'browser_recovery_started' &&
-      event.browserId === browserId &&
-      event.currentHealth === staleHealth,
-    'browser recovery started event',
-  );
-  const readyIndex = eventIndex(
-    events,
-    (event) =>
-      event.kind === 'browser_health_changed' &&
-      event.browserId === browserId &&
-      event.currentHealth === 'ready',
-    'ready browser health event',
-  );
-
-  assert(
-    staleIndex < recoveryIndex && recoveryIndex < readyIndex,
-    `MCP recovery events were not ordered stale -> recovery -> ready: ${JSON.stringify(events)}`,
-  );
-  assert(
-    typeof events[recoveryIndex].details?.reason === 'string' &&
-      events[recoveryIndex].details.reason.length > 0,
-    `MCP recovery event did not include crash reason: ${JSON.stringify(events[recoveryIndex])}`,
-  );
+  assertRecoveryTraceEvents(events, { browserId, label: 'MCP recovery' });
   assert(
     tracePayload.data.counts?.events === events.length,
     'MCP service_trace event count does not match returned events',

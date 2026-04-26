@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertRecoveryTraceEvents,
   closeSession,
   createSmokeContext,
   httpJson,
@@ -15,7 +16,6 @@ const serviceName = 'RecoveryTraceHttpSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'recoverAfterCrashHttpSmoke';
 const traceFields = { serviceName, agentName, taskName };
-const staleHealthValues = new Set(['process_exited', 'cdp_disconnected']);
 
 const timeout = setTimeout(() => {
   fail('Timed out waiting for service recovery HTTP smoke to complete');
@@ -48,12 +48,6 @@ async function command(port, body) {
   const response = await httpJson(port, 'POST', '/api/command', { ...body, ...traceFields });
   assert(response.success === true, `HTTP command ${body.action} failed: ${JSON.stringify(response)}`);
   return response;
-}
-
-function eventIndex(events, predicate, label) {
-  const index = events.findIndex(predicate);
-  assert(index >= 0, `${label} missing from trace events: ${JSON.stringify(events)}`);
-  return index;
 }
 
 try {
@@ -142,41 +136,7 @@ try {
 
   const events = trace.data.events;
   const browserId = `session:${session}`;
-  const staleIndex = eventIndex(
-    events,
-    (event) =>
-      event.kind === 'browser_health_changed' &&
-      event.browserId === browserId &&
-      staleHealthValues.has(event.currentHealth),
-    'stale browser health event',
-  );
-  const staleHealth = events[staleIndex].currentHealth;
-  const recoveryIndex = eventIndex(
-    events,
-    (event) =>
-      event.kind === 'browser_recovery_started' &&
-      event.browserId === browserId &&
-      event.currentHealth === staleHealth,
-    'browser recovery started event',
-  );
-  const readyIndex = eventIndex(
-    events,
-    (event) =>
-      event.kind === 'browser_health_changed' &&
-      event.browserId === browserId &&
-      event.currentHealth === 'ready',
-    'ready browser health event',
-  );
-
-  assert(
-    staleIndex < recoveryIndex && recoveryIndex < readyIndex,
-    `Recovery events were not ordered stale -> recovery -> ready: ${JSON.stringify(events)}`,
-  );
-  assert(
-    typeof events[recoveryIndex].details?.reason === 'string' &&
-      events[recoveryIndex].details.reason.length > 0,
-    `Recovery event did not include crash reason: ${JSON.stringify(events[recoveryIndex])}`,
-  );
+  assertRecoveryTraceEvents(events, { browserId, label: 'HTTP recovery' });
   assert(
     trace.data.counts?.events === events.length,
     'HTTP service trace event count does not match returned events',

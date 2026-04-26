@@ -144,6 +144,60 @@ export function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+const RECOVERY_STALE_HEALTH_VALUES = new Set(['process_exited', 'cdp_disconnected']);
+
+function eventIndex(events, predicate, label) {
+  const index = events.findIndex(predicate);
+  assert(index >= 0, `${label} missing from trace events: ${JSON.stringify(events)}`);
+  return index;
+}
+
+export function assertRecoveryTraceEvents(events, { browserId, label = 'Recovery' }) {
+  assert(Array.isArray(events), `${label} trace missing events array`);
+
+  const staleIndex = eventIndex(
+    events,
+    (event) =>
+      event.kind === 'browser_health_changed' &&
+      event.browserId === browserId &&
+      RECOVERY_STALE_HEALTH_VALUES.has(event.currentHealth),
+    `${label} stale browser health event`,
+  );
+  const staleHealth = events[staleIndex].currentHealth;
+  const recoveryIndex = eventIndex(
+    events,
+    (event) =>
+      event.kind === 'browser_recovery_started' &&
+      event.browserId === browserId &&
+      event.currentHealth === staleHealth,
+    `${label} browser recovery started event`,
+  );
+  const readyIndex = eventIndex(
+    events,
+    (event) =>
+      event.kind === 'browser_health_changed' &&
+      event.browserId === browserId &&
+      event.currentHealth === 'ready',
+    `${label} ready browser health event`,
+  );
+
+  assert(
+    staleIndex < recoveryIndex && recoveryIndex < readyIndex,
+    `${label} recovery events were not ordered stale -> recovery -> ready: ${JSON.stringify(events)}`,
+  );
+  assert(
+    typeof events[recoveryIndex].details?.reason === 'string' &&
+      events[recoveryIndex].details.reason.length > 0,
+    `${label} recovery event did not include crash reason: ${JSON.stringify(events[recoveryIndex])}`,
+  );
+
+  return {
+    readyEvent: events[readyIndex],
+    recoveryEvent: events[recoveryIndex],
+    staleEvent: events[staleIndex],
+  };
+}
+
 export function readResourceContents(response, label) {
   assert(response.success === true, `${label} read failed: ${JSON.stringify(response)}`);
   const contents = response.data?.contents;
