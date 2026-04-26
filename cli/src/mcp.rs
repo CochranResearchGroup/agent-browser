@@ -1287,6 +1287,28 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_pdf_tool_schema(),
         browser_response_body_tool_schema(),
         browser_clipboard_tool_schema(),
+        browser_simple_action_tool_schema(
+            "browser_back",
+            "Go back in browser history",
+            "Queue a browser history back operation against the active session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+            "Optional worker-bound timeout for this queued back-navigation job.",
+        ),
+        browser_simple_action_tool_schema(
+            "browser_forward",
+            "Go forward in browser history",
+            "Queue a browser history forward operation against the active session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+            "Optional worker-bound timeout for this queued forward-navigation job.",
+        ),
+        browser_simple_action_tool_schema(
+            "browser_reload",
+            "Reload browser page",
+            "Queue a page reload against the active browser session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+            "Optional worker-bound timeout for this queued reload job.",
+        ),
+        browser_tab_new_tool_schema(),
+        browser_tab_switch_tool_schema(),
+        browser_tab_close_tool_schema(),
+        browser_set_content_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -2635,11 +2657,194 @@ fn browser_clipboard_tool_schema() -> Value {
     })
 }
 
+fn browser_simple_action_tool_schema(
+    name: &str,
+    title: &str,
+    description: &str,
+    timeout_description: &str,
+) -> Value {
+    json!({
+        "name": name,
+        "title": title,
+        "description": description,
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": timeout_description
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_tab_new_tool_schema() -> Value {
+    json!({
+        "name": "browser_tab_new",
+        "title": "Open browser tab",
+        "description": "Queue opening a new tab in the active browser session, optionally navigating it to a URL. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Optional URL to load in the new tab."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued new-tab job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_tab_switch_tool_schema() -> Value {
+    json!({
+        "name": "browser_tab_switch",
+        "title": "Switch browser tab",
+        "description": "Queue switching the active browser session to a tab by zero-based index. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Required zero-based tab index."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued tab-switch job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["index"]
+        }
+    })
+}
+
+fn browser_tab_close_tool_schema() -> Value {
+    json!({
+        "name": "browser_tab_close",
+        "title": "Close browser tab",
+        "description": "Queue closing the current tab or a tab by zero-based index in the active browser session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Optional zero-based tab index. Omit to close the current tab."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued tab-close job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_set_content_tool_schema() -> Value {
+    json!({
+        "name": "browser_set_content",
+        "title": "Set browser page content",
+        "description": "Queue replacing the active page document with supplied HTML. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "html": {
+                    "type": "string",
+                    "description": "Required HTML document or fragment to install in the active page."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued set-content job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["html"]
+        }
+    })
+}
+
 fn browser_command_tool_schema() -> Value {
     json!({
         "name": "browser_command",
         "title": "Queue browser control command",
-        "description": "Queue any supported browser-control daemon action against the active session. Use typed browser_* tools for common interactions; use this parity tool for HTTP-equivalent controls such as navigate, viewport, cookies, storage, headers, offline, dialogs, files, HAR, route, and request inspection. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "description": "Queue any supported browser-control daemon action against the active session. Use typed browser_* tools for common interactions; use this parity tool for advanced HTTP-equivalent controls that do not yet have a typed schema. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -2863,6 +3068,31 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_pdf" => call_browser_pdf(arguments, session),
         "browser_response_body" => call_browser_response_body(arguments, session),
         "browser_clipboard" => call_browser_clipboard(arguments, session),
+        "browser_back" => call_browser_simple_action(
+            arguments,
+            session,
+            "browser_back",
+            "mcp-browser-back",
+            "back",
+        ),
+        "browser_forward" => call_browser_simple_action(
+            arguments,
+            session,
+            "browser_forward",
+            "mcp-browser-forward",
+            "forward",
+        ),
+        "browser_reload" => call_browser_simple_action(
+            arguments,
+            session,
+            "browser_reload",
+            "mcp-browser-reload",
+            "reload",
+        ),
+        "browser_tab_new" => call_browser_tab_new(arguments, session),
+        "browser_tab_switch" => call_browser_tab_switch(arguments, session),
+        "browser_tab_close" => call_browser_tab_close(arguments, session),
+        "browser_set_content" => call_browser_set_content(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -3582,6 +3812,87 @@ fn call_browser_clipboard(arguments: &Value, session: &str) -> Result<Value, Jso
     );
 
     send_queued_tool_command("browser_clipboard", session, trace, command)
+}
+
+fn call_browser_simple_action(
+    arguments: &Value,
+    session: &str,
+    tool_name: &str,
+    id_prefix: &str,
+    action: &str,
+) -> Result<Value, JsonRpcError> {
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_action_command(
+        id_prefix,
+        action,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command(tool_name, session, trace, command)
+}
+
+fn call_browser_tab_new(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let url = optional_string_argument(arguments, "url")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_tab_new_command(
+        url,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_tab_new", session, trace, command)
+}
+
+fn call_browser_tab_switch(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let index = required_u64_argument(arguments, "index")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_tab_switch_command(
+        index,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_tab_switch", session, trace, command)
+}
+
+fn call_browser_tab_close(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let index = optional_u64_argument(arguments, "index")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_tab_close_command(
+        index,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_tab_close", session, trace, command)
+}
+
+fn call_browser_set_content(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let html = required_string_argument(arguments, "html")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_set_content_command(
+        html,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_set_content", session, trace, command)
 }
 
 fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -4690,6 +5001,86 @@ fn browser_action_command(
     command
 }
 
+fn browser_tab_new_command(
+    url: Option<&str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-tab-new",
+        "tab_new",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    if let Some(url) = url {
+        command["url"] = json!(url);
+    }
+    command
+}
+
+fn browser_tab_switch_command(
+    index: u64,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-tab-switch",
+        "tab_switch",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command["index"] = json!(index);
+    command
+}
+
+fn browser_tab_close_command(
+    index: Option<u64>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-tab-close",
+        "tab_close",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    if let Some(index) = index {
+        command["index"] = json!(index);
+    }
+    command
+}
+
+fn browser_set_content_command(
+    html: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-set-content",
+        "setcontent",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command["html"] = json!(html);
+    command
+}
+
 fn browser_user_agent_command(
     user_agent: &str,
     job_timeout_ms: Option<u64>,
@@ -5779,6 +6170,11 @@ fn required_string_argument<'a>(arguments: &'a Value, name: &str) -> Result<&'a 
 
 fn required_positive_u64_argument(arguments: &Value, name: &str) -> Result<u64, JsonRpcError> {
     optional_positive_u64_argument(arguments, name)?
+        .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
+}
+
+fn required_u64_argument(arguments: &Value, name: &str) -> Result<u64, JsonRpcError> {
+    optional_u64_argument(arguments, name)?
         .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
 }
 
@@ -7012,6 +7408,50 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_back"
+                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_reload"
+                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_tab_new"
+                && tool["inputSchema"]["properties"]["url"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_tab_switch"
+                && tool["inputSchema"]["required"][0] == "index"
+                && tool["inputSchema"]["properties"]["index"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_tab_close"
+                && tool["inputSchema"]["properties"]["index"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_set_content"
+                && tool["inputSchema"]["required"][0] == "html"
+                && tool["inputSchema"]["properties"]["html"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -7392,6 +7832,54 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 73);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_tab_and_content_tools_reject_invalid_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":74,"method":"tools/call","params":{"name":"browser_tab_new","arguments":{"url":42,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 74);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":75,"method":"tools/call","params":{"name":"browser_tab_switch","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 75);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":76,"method":"tools/call","params":{"name":"browser_tab_switch","arguments":{"index":-1,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 76);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":77,"method":"tools/call","params":{"name":"browser_tab_close","arguments":{"index":"0","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 77);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":78,"method":"tools/call","params":{"name":"browser_set_content","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 78);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -8455,6 +8943,84 @@ mod tests {
         assert_eq!(clipboard_command["serviceName"], "JournalDownloader");
         assert_eq!(clipboard_command["agentName"], "agent-a");
         assert_eq!(clipboard_command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_navigation_tab_and_content_commands_forward_options_and_trace_fields() {
+        let back_command = browser_action_command(
+            "mcp-browser-back",
+            "back",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(back_command["action"], "back");
+        assert_eq!(back_command["jobTimeoutMs"], 1000);
+        assert_eq!(back_command["serviceName"], "JournalDownloader");
+        assert_eq!(back_command["agentName"], "agent-a");
+        assert_eq!(back_command["taskName"], "probeACSwebsite");
+
+        let tab_new_command = browser_tab_new_command(
+            Some("https://example.com"),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(tab_new_command["action"], "tab_new");
+        assert_eq!(tab_new_command["url"], "https://example.com");
+        assert_eq!(tab_new_command["jobTimeoutMs"], 1000);
+        assert_eq!(tab_new_command["serviceName"], "JournalDownloader");
+        assert_eq!(tab_new_command["agentName"], "agent-a");
+        assert_eq!(tab_new_command["taskName"], "probeACSwebsite");
+
+        let tab_switch_command = browser_tab_switch_command(
+            0,
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(tab_switch_command["action"], "tab_switch");
+        assert_eq!(tab_switch_command["index"], 0);
+        assert_eq!(tab_switch_command["jobTimeoutMs"], 1000);
+        assert_eq!(tab_switch_command["serviceName"], "JournalDownloader");
+        assert_eq!(tab_switch_command["agentName"], "agent-a");
+        assert_eq!(tab_switch_command["taskName"], "probeACSwebsite");
+
+        let tab_close_command = browser_tab_close_command(
+            Some(1),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(tab_close_command["action"], "tab_close");
+        assert_eq!(tab_close_command["index"], 1);
+        assert_eq!(tab_close_command["jobTimeoutMs"], 1000);
+        assert_eq!(tab_close_command["serviceName"], "JournalDownloader");
+        assert_eq!(tab_close_command["agentName"], "agent-a");
+        assert_eq!(tab_close_command["taskName"], "probeACSwebsite");
+
+        let set_content_command = browser_set_content_command(
+            "<main>ok</main>",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(set_content_command["action"], "setcontent");
+        assert_eq!(set_content_command["html"], "<main>ok</main>");
+        assert_eq!(set_content_command["jobTimeoutMs"], 1000);
+        assert_eq!(set_content_command["serviceName"], "JournalDownloader");
+        assert_eq!(set_content_command["agentName"], "agent-a");
+        assert_eq!(set_content_command["taskName"], "probeACSwebsite");
     }
 
     #[test]

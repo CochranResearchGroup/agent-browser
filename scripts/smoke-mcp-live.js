@@ -311,6 +311,66 @@ try {
     'browser_navigate trace missing taskName',
   );
 
+  const commandReloadResult = await send('tools/call', {
+    name: 'browser_reload',
+    arguments: {
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandReloadPayload = parseToolPayload(commandReloadResult);
+  assert(
+    commandReloadPayload.success === true,
+    `browser_reload failed: ${JSON.stringify(commandReloadPayload)}`,
+  );
+  assert(
+    commandReloadPayload.data?.url === browserCommandUrl,
+    'browser_reload did not report the active URL',
+  );
+  assert(
+    commandReloadPayload.trace?.serviceName === serviceName,
+    'browser_reload trace missing serviceName',
+  );
+
+  const commandBackResult = await send('tools/call', {
+    name: 'browser_back',
+    arguments: {
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandBackPayload = parseToolPayload(commandBackResult);
+  assert(commandBackPayload.success === true, `browser_back failed: ${JSON.stringify(commandBackPayload)}`);
+  assert(
+    commandBackPayload.data?.url === pageUrl,
+    'browser_back did not return to the original fixture page',
+  );
+  assert(commandBackPayload.trace?.serviceName === serviceName, 'browser_back trace missing serviceName');
+
+  const commandForwardResult = await send('tools/call', {
+    name: 'browser_forward',
+    arguments: {
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandForwardPayload = parseToolPayload(commandForwardResult);
+  assert(
+    commandForwardPayload.success === true,
+    `browser_forward failed: ${JSON.stringify(commandForwardPayload)}`,
+  );
+  assert(
+    commandForwardPayload.data?.url === browserCommandUrl,
+    'browser_forward did not return to the network fixture page',
+  );
+  assert(
+    commandForwardPayload.trace?.serviceName === serviceName,
+    'browser_forward trace missing serviceName',
+  );
+
   const commandUserAgentResult = await send('tools/call', {
     name: 'browser_user_agent',
     arguments: {
@@ -948,6 +1008,52 @@ try {
   assert(tabsPayload.trace?.serviceName === serviceName, 'browser_tabs trace missing serviceName');
   assert(tabsPayload.trace?.agentName === agentName, 'browser_tabs trace missing agentName');
   assert(tabsPayload.trace?.taskName === taskName, 'browser_tabs trace missing taskName');
+
+  const tabNewResult = await send('tools/call', {
+    name: 'browser_tab_new',
+    arguments: {
+      url: browserCommandUrl,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const tabNewPayload = parseToolPayload(tabNewResult);
+  assert(tabNewPayload.success === true, `browser_tab_new failed: ${JSON.stringify(tabNewPayload)}`);
+  assert(
+    tabNewPayload.data?.url === browserCommandUrl,
+    'browser_tab_new did not report the requested URL',
+  );
+  assert(tabNewPayload.trace?.serviceName === serviceName, 'browser_tab_new trace missing serviceName');
+
+  const tabSwitchResult = await send('tools/call', {
+    name: 'browser_tab_switch',
+    arguments: {
+      index: 0,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const tabSwitchPayload = parseToolPayload(tabSwitchResult);
+  assert(
+    tabSwitchPayload.success === true,
+    `browser_tab_switch failed: ${JSON.stringify(tabSwitchPayload)}`,
+  );
+  assert(tabSwitchPayload.trace?.serviceName === serviceName, 'browser_tab_switch trace missing serviceName');
+
+  const tabCloseResult = await send('tools/call', {
+    name: 'browser_tab_close',
+    arguments: {
+      index: 1,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const tabClosePayload = parseToolPayload(tabCloseResult);
+  assert(tabClosePayload.success === true, `browser_tab_close failed: ${JSON.stringify(tabClosePayload)}`);
+  assert(tabClosePayload.trace?.serviceName === serviceName, 'browser_tab_close trace missing serviceName');
 
   const screenshotResult = await send('tools/call', {
     name: 'browser_screenshot',
@@ -1636,6 +1742,46 @@ try {
     'browser_scroll_into_view did not make the offscreen target interactable',
   );
 
+  const setContentResult = await send('tools/call', {
+    name: 'browser_set_content',
+    arguments: {
+      html: '<main id="replacement"><h1>Typed set content</h1></main>',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const setContentPayload = parseToolPayload(setContentResult);
+  assert(
+    setContentPayload.success === true,
+    `browser_set_content failed: ${JSON.stringify(setContentPayload)}`,
+  );
+  assert(setContentPayload.data?.set === true, 'browser_set_content did not report set state');
+  assert(
+    setContentPayload.trace?.serviceName === serviceName,
+    'browser_set_content trace missing serviceName',
+  );
+
+  const setContentSnapshotResult = await send('tools/call', {
+    name: 'browser_snapshot',
+    arguments: {
+      selector: '#replacement',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const setContentSnapshotPayload = parseToolPayload(setContentSnapshotResult);
+  assert(
+    setContentSnapshotPayload.success === true,
+    `browser_set_content snapshot failed: ${JSON.stringify(setContentSnapshotPayload)}`,
+  );
+  assert(
+    typeof setContentSnapshotPayload.data?.snapshot === 'string' &&
+      setContentSnapshotPayload.data.snapshot.includes('Typed set content'),
+    'browser_set_content did not replace the page content visible to a follow-up snapshot',
+  );
+
   const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
   const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');
   const snapshotJob = jobPayload.jobs?.find(
@@ -1714,6 +1860,9 @@ try {
     `Browser offline service job state was ${browserOfflineJob.state}`,
   );
   for (const [action, label] of [
+    ['reload', 'browser_reload'],
+    ['back', 'browser_back'],
+    ['forward', 'browser_forward'],
     ['user_agent', 'browser_user_agent'],
     ['viewport', 'browser_viewport'],
     ['geolocation', 'browser_geolocation'],
@@ -1736,6 +1885,10 @@ try {
     ['storage_set', 'browser_storage_set'],
     ['storage_get', 'browser_storage_get'],
     ['storage_clear', 'browser_storage_clear'],
+    ['tab_new', 'browser_tab_new'],
+    ['tab_switch', 'browser_tab_switch'],
+    ['tab_close', 'browser_tab_close'],
+    ['setcontent', 'browser_set_content'],
   ]) {
     const job = jobPayload.jobs?.find(
       (candidate) =>
