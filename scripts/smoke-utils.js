@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { request } from 'node:http';
 import { createConnection } from 'node:net';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -187,6 +187,69 @@ export function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+export function recoveryOverrideSmokeUrls(label) {
+  return {
+    blockedUrl: smokeDataUrl(`Blocked ${label}`, `Blocked ${label}`),
+    initialUrl: smokeDataUrl(label, label),
+    recoveredUrl: smokeDataUrl(`Recovered ${label}`, `Recovered ${label}`),
+  };
+}
+
+export function smokeDataUrl(title, heading) {
+  const html = [
+    '<!doctype html>',
+    '<html>',
+    `<head><title>${title}</title></head>`,
+    `<body><h1 id="ready">${heading}</h1></body>`,
+    '</html>',
+  ].join('');
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+export function configureRecoveryOverrideSmokeContext(context) {
+  context.env.AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET = '1';
+  context.env.AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS = '1';
+  context.env.AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS = '1';
+  return context;
+}
+
+export function parseMcpToolPayload(result, label = 'MCP tool') {
+  const text = result.content?.[0]?.text;
+  assert(typeof text === 'string', `${label} response missing text content`);
+  return JSON.parse(text);
+}
+
+export function appendPriorRecoveryAttempt(context, {
+  agentName,
+  browserId,
+  serviceName,
+  taskName,
+}) {
+  const path = join(context.agentHome, 'service', 'state.json');
+  const state = JSON.parse(readFileSync(path, 'utf8'));
+  state.events.push({
+    id: `event-smoke-prior-recovery-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    kind: 'browser_recovery_started',
+    message: `Browser ${browserId} recovery started`,
+    browserId,
+    sessionId: context.session,
+    serviceName,
+    agentName,
+    taskName,
+    currentHealth: 'process_exited',
+    details: {
+      reasonKind: 'process_exited',
+      reason: 'Synthetic prior recovery attempt for blocked recovery override smoke',
+      attempt: 1,
+      retryBudget: 1,
+      retryBudgetExceeded: false,
+      nextRetryDelayMs: 1,
+    },
+  });
+  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
+}
+
 const RECOVERY_STALE_HEALTH_VALUES = new Set(['process_exited', 'cdp_disconnected']);
 const RECOVERY_REASON_KIND_BY_HEALTH = {
   cdp_disconnected: 'cdp_disconnected',
@@ -309,6 +372,25 @@ export function assertRecoveryOverrideEvents(events, { browserId, actor, label =
   }
 
   return { overrideEvent, overrideIndex };
+}
+
+export function assertRecoveryAfterOverride(events, {
+  browserId,
+  label = 'Recovery after override',
+  overrideIndex = -1,
+}) {
+  const retryHealthIndex = events.findIndex(
+    (event) =>
+      event.kind === 'browser_health_changed' &&
+      event.browserId === browserId &&
+      event.previousHealth === 'faulted' &&
+      event.currentHealth === 'process_exited',
+  );
+  assert(
+    retryHealthIndex >= 0,
+    `Final filtered trace lost the retry health event after override index ${overrideIndex}: ${JSON.stringify(events)}`,
+  );
+  return assertRecoveryTraceEvents(events.slice(retryHealthIndex), { browserId, label });
 }
 
 export function readResourceContents(response, label) {

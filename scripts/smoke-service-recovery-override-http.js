@@ -1,25 +1,24 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import {
+  appendPriorRecoveryAttempt,
   assert,
   assertRecoveryBudgetBlockedEvents,
+  assertRecoveryAfterOverride,
   assertRecoveryOverrideEvents,
-  assertRecoveryTraceEvents,
   closeSession,
+  configureRecoveryOverrideSmokeContext,
   createSmokeContext,
   httpJson,
   httpJsonResult,
   parseJsonOutput,
+  recoveryOverrideSmokeUrls,
   runCli,
 } from './smoke-utils.js';
 
-const context = createSmokeContext({ prefix: 'ab-sroh-', sessionPrefix: 'sroh' });
-context.env.AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET = '1';
-context.env.AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS = '1';
-context.env.AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS = '1';
+const context = configureRecoveryOverrideSmokeContext(
+  createSmokeContext({ prefix: 'ab-sroh-', sessionPrefix: 'sroh' }),
+);
 
 const { session } = context;
 const serviceName = 'RecoveryOverrideHttpSmoke';
@@ -44,51 +43,10 @@ async function fail(message) {
   process.exit(1);
 }
 
-function dataUrl(title, heading) {
-  const html = [
-    '<!doctype html>',
-    '<html>',
-    `<head><title>${title}</title></head>`,
-    `<body><h1 id="ready">${heading}</h1></body>`,
-    '</html>',
-  ].join('');
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-}
-
 async function command(port, body) {
   const response = await httpJson(port, 'POST', '/api/command', { ...body, ...traceFields });
   assert(response.success === true, `HTTP command ${body.action} failed: ${JSON.stringify(response)}`);
   return response;
-}
-
-function serviceStatePath() {
-  return join(context.agentHome, 'service', 'state.json');
-}
-
-function appendPriorRecoveryAttempt(browserId) {
-  const path = serviceStatePath();
-  const state = JSON.parse(readFileSync(path, 'utf8'));
-  state.events.push({
-    id: `event-smoke-prior-recovery-${Date.now()}`,
-    timestamp: new Date().toISOString(),
-    kind: 'browser_recovery_started',
-    message: `Browser ${browserId} recovery started`,
-    browserId,
-    sessionId: session,
-    serviceName,
-    agentName,
-    taskName,
-    currentHealth: 'process_exited',
-    details: {
-      reasonKind: 'process_exited',
-      reason: 'Synthetic prior recovery attempt for blocked recovery override smoke',
-      attempt: 1,
-      retryBudget: 1,
-      retryBudgetExceeded: false,
-      nextRetryDelayMs: 1,
-    },
-  });
-  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
 }
 
 async function serviceTrace(port, { filtered = true } = {}) {
@@ -108,9 +66,9 @@ async function serviceTrace(port, { filtered = true } = {}) {
 }
 
 try {
-  const initialUrl = dataUrl('Recovery Override HTTP Smoke', 'Recovery Override HTTP Smoke');
-  const blockedUrl = dataUrl('Blocked Recovery Override HTTP Smoke', 'Blocked Recovery Override HTTP Smoke');
-  const recoveredUrl = dataUrl('Recovered Recovery Override HTTP Smoke', 'Recovered Recovery Override HTTP Smoke');
+  const { blockedUrl, initialUrl, recoveredUrl } = recoveryOverrideSmokeUrls(
+    'Recovery Override HTTP Smoke',
+  );
 
   const openResult = await runCli(context, [
     '--json',
@@ -153,7 +111,12 @@ try {
   assert(Number.isInteger(pid) && pid > 0, `browser_pid did not return a pid: ${JSON.stringify(pidResponse)}`);
 
   const browserId = `session:${session}`;
-  appendPriorRecoveryAttempt(browserId);
+  appendPriorRecoveryAttempt(context, {
+    agentName,
+    browserId,
+    serviceName,
+    taskName,
+  });
   process.kill(pid, 'SIGKILL');
 
   const blocked = await httpJsonResult(port, 'POST', '/api/browser/navigate', {
@@ -211,20 +174,10 @@ try {
 
   trace = await serviceTrace(port);
   const finalEvents = trace.data.events;
-  const retryHealthIndex = finalEvents.findIndex(
-    (event) =>
-      event.kind === 'browser_health_changed' &&
-      event.browserId === browserId &&
-      event.previousHealth === 'faulted' &&
-      event.currentHealth === 'process_exited',
-  );
-  assert(
-    retryHealthIndex >= 0,
-    `Final filtered trace lost the retry health event after override index ${overrideIndex}: ${JSON.stringify(finalEvents)}`,
-  );
-  assertRecoveryTraceEvents(finalEvents.slice(retryHealthIndex), {
+  assertRecoveryAfterOverride(finalEvents, {
     browserId,
     label: 'HTTP recovery after override',
+    overrideIndex,
   });
   assert(
     trace.data.counts?.events === finalEvents.length,

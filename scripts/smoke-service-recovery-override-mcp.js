@@ -1,28 +1,28 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import {
+  appendPriorRecoveryAttempt,
   assert,
   assertRecoveryBudgetBlockedEvents,
+  assertRecoveryAfterOverride,
   assertRecoveryOverrideEvents,
-  assertRecoveryTraceEvents,
   closeSession,
+  configureRecoveryOverrideSmokeContext,
   createMcpStdioClient,
   createSmokeContext,
+  parseMcpToolPayload,
   parseJsonOutput,
+  recoveryOverrideSmokeUrls,
   runCli,
   sendRawCommand,
 } from './smoke-utils.js';
 
-const context = createSmokeContext({
-  prefix: 'ab-srom-',
-  sessionPrefix: 'srom',
-});
-context.env.AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET = '1';
-context.env.AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS = '1';
-context.env.AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS = '1';
+const context = configureRecoveryOverrideSmokeContext(
+  createSmokeContext({
+    prefix: 'ab-srom-',
+    sessionPrefix: 'srom',
+  }),
+);
 
 const { session } = context;
 const serviceName = 'RecoveryOverrideMcpSmoke';
@@ -35,23 +35,6 @@ let mcp;
 const timeout = setTimeout(() => {
   fail('Timed out waiting for service recovery override MCP smoke to complete');
 }, 120000);
-
-function dataUrl(title, heading) {
-  const html = [
-    '<!doctype html>',
-    '<html>',
-    `<head><title>${title}</title></head>`,
-    `<body><h1 id="ready">${heading}</h1></body>`,
-    '</html>',
-  ].join('');
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-}
-
-function parseToolPayload(result) {
-  const text = result.content?.[0]?.text;
-  assert(typeof text === 'string', 'MCP tool response missing text content');
-  return JSON.parse(text);
-}
 
 function send(method, params) {
   return mcp.send(method, params);
@@ -80,36 +63,6 @@ async function fail(message) {
   process.exit(1);
 }
 
-function serviceStatePath() {
-  return join(context.agentHome, 'service', 'state.json');
-}
-
-function appendPriorRecoveryAttempt(browserId) {
-  const path = serviceStatePath();
-  const state = JSON.parse(readFileSync(path, 'utf8'));
-  state.events.push({
-    id: `event-smoke-prior-recovery-${Date.now()}`,
-    timestamp: new Date().toISOString(),
-    kind: 'browser_recovery_started',
-    message: `Browser ${browserId} recovery started`,
-    browserId,
-    sessionId: session,
-    serviceName,
-    agentName,
-    taskName,
-    currentHealth: 'process_exited',
-    details: {
-      reasonKind: 'process_exited',
-      reason: 'Synthetic prior recovery attempt for blocked recovery override smoke',
-      attempt: 1,
-      retryBudget: 1,
-      retryBudgetExceeded: false,
-      nextRetryDelayMs: 1,
-    },
-  });
-  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
-}
-
 async function serviceTrace({ filtered = true } = {}) {
   const result = await send('tools/call', {
     name: 'service_trace',
@@ -122,7 +75,7 @@ async function serviceTrace({ filtered = true } = {}) {
           limit: 80,
         },
   });
-  const payload = parseToolPayload(result);
+  const payload = parseMcpToolPayload(result);
   assert(payload.success === true, `MCP service_trace failed: ${JSON.stringify(payload)}`);
   assert(payload.tool === 'service_trace', 'service_trace payload tool mismatch');
   assert(Array.isArray(payload.data?.events), 'MCP service_trace missing events array');
@@ -130,9 +83,9 @@ async function serviceTrace({ filtered = true } = {}) {
 }
 
 try {
-  const initialUrl = dataUrl('Recovery Override MCP Smoke', 'Recovery Override MCP Smoke');
-  const blockedUrl = dataUrl('Blocked Recovery Override MCP Smoke', 'Blocked Recovery Override MCP Smoke');
-  const recoveredUrl = dataUrl('Recovered Recovery Override MCP Smoke', 'Recovered Recovery Override MCP Smoke');
+  const { blockedUrl, initialUrl, recoveredUrl } = recoveryOverrideSmokeUrls(
+    'Recovery Override MCP Smoke',
+  );
 
   const openResult = await runCli(context, [
     '--json',
@@ -178,7 +131,12 @@ try {
   assert(Number.isInteger(pid) && pid > 0, `browser_pid did not return a pid: ${JSON.stringify(pidResponse)}`);
 
   const browserId = `session:${session}`;
-  appendPriorRecoveryAttempt(browserId);
+  appendPriorRecoveryAttempt(context, {
+    agentName,
+    browserId,
+    serviceName,
+    taskName,
+  });
   process.kill(pid, 'SIGKILL');
 
   const blockedResult = await send('tools/call', {
@@ -189,7 +147,7 @@ try {
       ...traceFields,
     },
   });
-  const blockedPayload = parseToolPayload(blockedResult);
+  const blockedPayload = parseMcpToolPayload(blockedResult);
   assert(
     blockedPayload.success === false &&
       typeof blockedPayload.error === 'string' &&
@@ -211,7 +169,7 @@ try {
       note: 'MCP smoke retry after intentional budget exhaustion',
     },
   });
-  const retryPayload = parseToolPayload(retryResult);
+  const retryPayload = parseMcpToolPayload(retryResult);
   assert(retryPayload.success === true, `MCP service_browser_retry failed: ${JSON.stringify(retryPayload)}`);
   assert(
     retryPayload.data?.retryEnabled === true,
@@ -237,7 +195,7 @@ try {
       ...traceFields,
     },
   });
-  const recoveredPayload = parseToolPayload(recoveredResult);
+  const recoveredPayload = parseMcpToolPayload(recoveredResult);
   assert(
     recoveredPayload.success === true,
     `MCP browser_navigate did not recover after retry override: ${JSON.stringify(recoveredPayload)}`,
@@ -247,7 +205,7 @@ try {
     name: 'browser_get_title',
     arguments: traceFields,
   });
-  const titlePayload = parseToolPayload(titleResult);
+  const titlePayload = parseMcpToolPayload(titleResult);
   assert(titlePayload.success === true, `MCP browser_get_title failed: ${JSON.stringify(titlePayload)}`);
   assert(
     titlePayload.data?.title === 'Recovered Recovery Override MCP Smoke',
@@ -256,20 +214,10 @@ try {
 
   tracePayload = await serviceTrace();
   const finalEvents = tracePayload.data.events;
-  const retryHealthIndex = finalEvents.findIndex(
-    (event) =>
-      event.kind === 'browser_health_changed' &&
-      event.browserId === browserId &&
-      event.previousHealth === 'faulted' &&
-      event.currentHealth === 'process_exited',
-  );
-  assert(
-    retryHealthIndex >= 0,
-    `Final filtered trace lost the retry health event after override index ${overrideIndex}: ${JSON.stringify(finalEvents)}`,
-  );
-  assertRecoveryTraceEvents(finalEvents.slice(retryHealthIndex), {
+  assertRecoveryAfterOverride(finalEvents, {
     browserId,
     label: 'MCP recovery after override',
+    overrideIndex,
   });
   assert(
     tracePayload.data.counts?.events === finalEvents.length,
