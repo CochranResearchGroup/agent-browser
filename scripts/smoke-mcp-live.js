@@ -305,6 +305,70 @@ try {
     'browser_navigate trace missing taskName',
   );
 
+  const commandUserAgentResult = await send('tools/call', {
+    name: 'browser_user_agent',
+    arguments: {
+      userAgent: 'AgentBrowserMcpLiveSmoke/1.0',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandUserAgentPayload = parseToolPayload(commandUserAgentResult);
+  assert(
+    commandUserAgentPayload.success === true,
+    `browser_user_agent failed: ${JSON.stringify(commandUserAgentPayload)}`,
+  );
+  assert(
+    commandUserAgentPayload.data?.userAgent === 'AgentBrowserMcpLiveSmoke/1.0',
+    'browser_user_agent did not report the requested user agent',
+  );
+
+  const commandViewportResult = await send('tools/call', {
+    name: 'browser_viewport',
+    arguments: {
+      width: 900,
+      height: 650,
+      deviceScaleFactor: 1,
+      mobile: false,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandViewportPayload = parseToolPayload(commandViewportResult);
+  assert(
+    commandViewportPayload.success === true,
+    `browser_viewport failed: ${JSON.stringify(commandViewportPayload)}`,
+  );
+  assert(commandViewportPayload.data?.width === 900, 'browser_viewport did not report width');
+  assert(commandViewportPayload.data?.height === 650, 'browser_viewport did not report height');
+
+  const commandGeolocationResult = await send('tools/call', {
+    name: 'browser_geolocation',
+    arguments: {
+      latitude: 41.8781,
+      longitude: -87.6298,
+      accuracy: 10,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandGeolocationPayload = parseToolPayload(commandGeolocationResult);
+  assert(
+    commandGeolocationPayload.success === true,
+    `browser_geolocation failed: ${JSON.stringify(commandGeolocationPayload)}`,
+  );
+  assert(
+    commandGeolocationPayload.data?.latitude === 41.8781,
+    'browser_geolocation did not report latitude',
+  );
+  assert(
+    commandGeolocationPayload.data?.longitude === -87.6298,
+    'browser_geolocation did not report longitude',
+  );
+
   const commandCookiesSetResult = await send('tools/call', {
     name: 'browser_cookies_set',
     arguments: {
@@ -1400,6 +1464,9 @@ try {
     `Browser offline service job state was ${browserOfflineJob.state}`,
   );
   for (const [action, label] of [
+    ['user_agent', 'browser_user_agent'],
+    ['viewport', 'browser_viewport'],
+    ['geolocation', 'browser_geolocation'],
     ['cookies_set', 'browser_cookies_set'],
     ['cookies_get', 'browser_cookies_get'],
     ['cookies_clear', 'browser_cookies_clear'],

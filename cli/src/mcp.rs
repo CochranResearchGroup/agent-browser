@@ -1267,6 +1267,9 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_storage_get_tool_schema(),
         browser_storage_set_tool_schema(),
         browser_storage_clear_tool_schema(),
+        browser_user_agent_tool_schema(),
+        browser_viewport_tool_schema(),
+        browser_geolocation_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -1813,6 +1816,138 @@ fn browser_storage_clear_tool_schema() -> Value {
     })
 }
 
+fn browser_user_agent_tool_schema() -> Value {
+    json!({
+        "name": "browser_user_agent",
+        "title": "Set browser user agent",
+        "description": "Queue setting the active browser session user agent. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "userAgent": {
+                    "type": "string",
+                    "description": "Required user agent string."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued user-agent job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["userAgent"]
+        }
+    })
+}
+
+fn browser_viewport_tool_schema() -> Value {
+    json!({
+        "name": "browser_viewport",
+        "title": "Set browser viewport",
+        "description": "Queue changing the active browser session viewport and stream viewport metadata. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "width": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Required viewport width in CSS pixels."
+                },
+                "height": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Required viewport height in CSS pixels."
+                },
+                "deviceScaleFactor": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Optional device scale factor. Defaults to 1."
+                },
+                "mobile": {
+                    "type": "boolean",
+                    "description": "Whether to emulate a mobile viewport. Defaults to false."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued viewport job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["width", "height"]
+        }
+    })
+}
+
+fn browser_geolocation_tool_schema() -> Value {
+    json!({
+        "name": "browser_geolocation",
+        "title": "Set browser geolocation",
+        "description": "Queue setting geolocation emulation for the active browser session. Grant geolocation permission separately when the site requires it. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "latitude": {
+                    "type": "number",
+                    "description": "Required latitude."
+                },
+                "longitude": {
+                    "type": "number",
+                    "description": "Required longitude."
+                },
+                "accuracy": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Optional accuracy in meters."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued geolocation job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["latitude", "longitude"]
+        }
+    })
+}
+
 fn browser_command_tool_schema() -> Value {
     json!({
         "name": "browser_command",
@@ -2021,6 +2156,9 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_storage_get" => call_browser_storage_get(arguments, session),
         "browser_storage_set" => call_browser_storage_set(arguments, session),
         "browser_storage_clear" => call_browser_storage_clear(arguments, session),
+        "browser_user_agent" => call_browser_user_agent(arguments, session),
+        "browser_viewport" => call_browser_viewport(arguments, session),
+        "browser_geolocation" => call_browser_geolocation(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -2397,6 +2535,61 @@ fn call_browser_storage_clear(arguments: &Value, session: &str) -> Result<Value,
     );
 
     send_queued_tool_command("browser_storage_clear", session, trace, command)
+}
+
+fn call_browser_user_agent(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let user_agent = required_string_argument(arguments, "userAgent")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_user_agent_command(
+        user_agent,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_user_agent", session, trace, command)
+}
+
+fn call_browser_viewport(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let width = required_positive_u64_argument(arguments, "width")?;
+    let height = required_positive_u64_argument(arguments, "height")?;
+    let device_scale_factor = optional_positive_f64_argument(arguments, "deviceScaleFactor")?;
+    let mobile = optional_bool_argument(arguments, "mobile")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_viewport_command(BrowserViewportCommandArgs {
+        width,
+        height,
+        device_scale_factor,
+        mobile,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
+    });
+
+    send_queued_tool_command("browser_viewport", session, trace, command)
+}
+
+fn call_browser_geolocation(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let latitude = required_f64_argument(arguments, "latitude")?;
+    let longitude = required_f64_argument(arguments, "longitude")?;
+    let accuracy = optional_non_negative_f64_argument(arguments, "accuracy")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_geolocation_command(
+        latitude,
+        longitude,
+        accuracy,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_geolocation", session, trace, command)
 }
 
 fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -3160,6 +3353,17 @@ struct BrowserStorageSetCommandArgs<'a> {
     task_name: Option<&'a str>,
 }
 
+struct BrowserViewportCommandArgs<'a> {
+    width: u64,
+    height: u64,
+    device_scale_factor: Option<f64>,
+    mobile: Option<bool>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
 fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
     let mut command = json!({
         "id": format!("mcp-browser-command-{}-{}", args.action, uuid::Uuid::new_v4()),
@@ -3452,6 +3656,79 @@ fn browser_action_command(
         "id": format!("{}-{}", id_prefix, uuid::Uuid::new_v4()),
         "action": action,
     });
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_user_agent_command(
+    user_agent: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-user-agent-{}", uuid::Uuid::new_v4()),
+        "action": "user_agent",
+        "userAgent": user_agent,
+    });
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_viewport_command(args: BrowserViewportCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-viewport-{}", uuid::Uuid::new_v4()),
+        "action": "viewport",
+        "width": args.width,
+        "height": args.height,
+    });
+    if let Some(device_scale_factor) = args.device_scale_factor {
+        command["deviceScaleFactor"] = json!(device_scale_factor);
+    }
+    if let Some(mobile) = args.mobile {
+        command["mobile"] = json!(mobile);
+    }
+    apply_service_command_fields(
+        &mut command,
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
+    );
+    command
+}
+
+fn browser_geolocation_command(
+    latitude: f64,
+    longitude: f64,
+    accuracy: Option<f64>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-geolocation-{}", uuid::Uuid::new_v4()),
+        "action": "geolocation",
+        "latitude": latitude,
+        "longitude": longitude,
+    });
+    if let Some(accuracy) = accuracy {
+        command["accuracy"] = json!(accuracy);
+    }
     apply_service_command_fields(
         &mut command,
         job_timeout_ms,
@@ -4121,6 +4398,16 @@ fn required_string_argument<'a>(arguments: &'a Value, name: &str) -> Result<&'a 
         .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
 }
 
+fn required_positive_u64_argument(arguments: &Value, name: &str) -> Result<u64, JsonRpcError> {
+    optional_positive_u64_argument(arguments, name)?
+        .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
+}
+
+fn required_f64_argument(arguments: &Value, name: &str) -> Result<f64, JsonRpcError> {
+    optional_f64_argument(arguments, name)?
+        .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
+}
+
 fn required_string_array_argument(
     arguments: &Value,
     name: &str,
@@ -4291,6 +4578,19 @@ fn optional_non_negative_f64_argument(
     match optional_f64_argument(arguments, name)? {
         Some(value) if value < 0.0 => Err(JsonRpcError::invalid_params(&format!(
             "{} must be a non-negative number",
+            name
+        ))),
+        value => Ok(value),
+    }
+}
+
+fn optional_positive_f64_argument(
+    arguments: &Value,
+    name: &str,
+) -> Result<Option<f64>, JsonRpcError> {
+    match optional_f64_argument(arguments, name)? {
+        Some(value) if value <= 0.0 => Err(JsonRpcError::invalid_params(&format!(
+            "{} must be a positive number",
             name
         ))),
         value => Ok(value),
@@ -5162,6 +5462,32 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_user_agent"
+                && tool["inputSchema"]["required"][0] == "userAgent"
+                && tool["inputSchema"]["properties"]["userAgent"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_viewport"
+                && tool["inputSchema"]["required"][0] == "width"
+                && tool["inputSchema"]["required"][1] == "height"
+                && tool["inputSchema"]["properties"]["deviceScaleFactor"].is_object()
+                && tool["inputSchema"]["properties"]["mobile"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_geolocation"
+                && tool["inputSchema"]["required"][0] == "latitude"
+                && tool["inputSchema"]["required"][1] == "longitude"
+                && tool["inputSchema"]["properties"]["accuracy"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -5377,6 +5703,45 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 55);
+        assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn browser_session_shaping_tools_reject_invalid_arguments_before_daemon_call() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":56,"method":"tools/call","params":{"name":"browser_user_agent","arguments":{"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 56);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":57,"method":"tools/call","params":{"name":"browser_viewport","arguments":{"width":0,"height":720,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 57);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":58,"method":"tools/call","params":{"name":"browser_viewport","arguments":{"width":1280,"height":720,"deviceScaleFactor":0,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 58);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":59,"method":"tools/call","params":{"name":"browser_geolocation","arguments":{"latitude":41.8781,"accuracy":-1,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 59);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -6111,6 +6476,64 @@ mod tests {
         assert_eq!(clear_command["serviceName"], "JournalDownloader");
         assert_eq!(clear_command["agentName"], "agent-a");
         assert_eq!(clear_command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_session_shaping_commands_forward_options_and_trace_fields() {
+        let user_agent_command = browser_user_agent_command(
+            "TestBot/1.0",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(user_agent_command["action"], "user_agent");
+        assert_eq!(user_agent_command["userAgent"], "TestBot/1.0");
+        assert_eq!(user_agent_command["jobTimeoutMs"], 1000);
+        assert_eq!(user_agent_command["serviceName"], "JournalDownloader");
+        assert_eq!(user_agent_command["agentName"], "agent-a");
+        assert_eq!(user_agent_command["taskName"], "probeACSwebsite");
+
+        let viewport_command = browser_viewport_command(BrowserViewportCommandArgs {
+            width: 800,
+            height: 600,
+            device_scale_factor: Some(2.0),
+            mobile: Some(true),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(viewport_command["action"], "viewport");
+        assert_eq!(viewport_command["width"], 800);
+        assert_eq!(viewport_command["height"], 600);
+        assert_eq!(viewport_command["deviceScaleFactor"], 2.0);
+        assert_eq!(viewport_command["mobile"], true);
+        assert_eq!(viewport_command["jobTimeoutMs"], 1000);
+        assert_eq!(viewport_command["serviceName"], "JournalDownloader");
+        assert_eq!(viewport_command["agentName"], "agent-a");
+        assert_eq!(viewport_command["taskName"], "probeACSwebsite");
+
+        let geolocation_command = browser_geolocation_command(
+            41.8781,
+            -87.6298,
+            Some(10.0),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(geolocation_command["action"], "geolocation");
+        assert_eq!(geolocation_command["latitude"], 41.8781);
+        assert_eq!(geolocation_command["longitude"], -87.6298);
+        assert_eq!(geolocation_command["accuracy"], 10.0);
+        assert_eq!(geolocation_command["jobTimeoutMs"], 1000);
+        assert_eq!(geolocation_command["serviceName"], "JournalDownloader");
+        assert_eq!(geolocation_command["agentName"], "agent-a");
+        assert_eq!(geolocation_command["taskName"], "probeACSwebsite");
     }
 
     #[test]
