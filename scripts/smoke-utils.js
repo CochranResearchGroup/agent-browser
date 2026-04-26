@@ -140,6 +140,49 @@ export function httpJson(port, method, path, body) {
   });
 }
 
+export function httpJsonResult(port, method, path, body) {
+  return new Promise((resolve, reject) => {
+    const rawBody = body === undefined ? undefined : JSON.stringify(body);
+    const req = request(
+      {
+        host: '127.0.0.1',
+        port,
+        method,
+        path,
+        headers: rawBody
+          ? {
+              'content-type': 'application/json',
+              'content-length': Buffer.byteLength(rawBody),
+            }
+          : undefined,
+      },
+      (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          text += chunk;
+        });
+        res.on('end', () => {
+          try {
+            resolve({
+              body: text ? JSON.parse(text) : undefined,
+              statusCode: res.statusCode,
+            });
+          } catch (err) {
+            reject(new Error(`Failed to parse HTTP ${method} ${path}: ${err.message}\n${text}`));
+          }
+        });
+      },
+    );
+    req.setTimeout(30000, () => {
+      req.destroy(new Error(`HTTP ${method} ${path} timed out`));
+    });
+    req.on('error', reject);
+    if (rawBody) req.write(rawBody);
+    req.end();
+  });
+}
+
 export function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -222,6 +265,50 @@ export function assertRecoveryTraceEvents(events, { browserId, label = 'Recovery
     recoveryEvent: events[recoveryIndex],
     staleEvent: events[staleIndex],
   };
+}
+
+export function assertRecoveryBudgetBlockedEvents(events, { browserId, label = 'Recovery budget' }) {
+  assert(Array.isArray(events), `${label} trace missing events array`);
+
+  const faultedIndex = eventIndex(
+    events,
+    (event) =>
+      event.kind === 'browser_health_changed' &&
+      event.browserId === browserId &&
+      event.currentHealth === 'faulted',
+    `${label} faulted browser health event`,
+  );
+  const faultedEvent = events[faultedIndex];
+  assert(
+    typeof faultedEvent.details?.currentError === 'string' &&
+      faultedEvent.details.currentError.includes('retry budget exceeded'),
+    `${label} faulted event did not include retry budget failure: ${JSON.stringify(faultedEvent)}`,
+  );
+
+  return { faultedEvent, faultedIndex };
+}
+
+export function assertRecoveryOverrideEvents(events, { browserId, actor, label = 'Recovery override' }) {
+  assert(Array.isArray(events), `${label} trace missing events array`);
+
+  const overrideIndex = eventIndex(
+    events,
+    (event) => event.kind === 'browser_recovery_override' && event.browserId === browserId,
+    `${label} browser recovery override event`,
+  );
+  const overrideEvent = events[overrideIndex];
+  assert(
+    overrideEvent.details?.action === 'retry_enabled',
+    `${label} override event did not record retry_enabled action: ${JSON.stringify(overrideEvent)}`,
+  );
+  if (actor !== undefined) {
+    assert(
+      overrideEvent.details?.actor === actor,
+      `${label} override actor was ${overrideEvent.details?.actor}`,
+    );
+  }
+
+  return { overrideEvent, overrideIndex };
 }
 
 export function readResourceContents(response, label) {
