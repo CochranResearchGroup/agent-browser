@@ -41,7 +41,7 @@ use super::service_activity::service_incident_activity_response;
 use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
     record_browser_launch_recorded_event, record_browser_recovery_started_event,
-    recovery_reason_kind_for_health, BrowserRecoveryReasonKind,
+    recovery_reason_kind_for_health, BrowserRecoveryPolicy, BrowserRecoveryReasonKind,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
@@ -580,6 +580,10 @@ fn persist_current_browser_health(
     );
 }
 
+const BROWSER_RECOVERY_RETRY_BUDGET: u64 = 3;
+const BROWSER_RECOVERY_BASE_BACKOFF_MS: u64 = 1_000;
+const BROWSER_RECOVERY_MAX_BACKOFF_MS: u64 = 30_000;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BrowserStaleState {
     needs_launch: bool,
@@ -631,17 +635,66 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BrowserRecoveryPersistence {
+    NotRecorded,
+    Recorded,
+    Blocked(String),
+}
+
+impl BrowserRecoveryPersistence {
+    fn recorded(&self) -> bool {
+        matches!(self, Self::Recorded | Self::Blocked(_))
+    }
+}
+
+fn recovery_policy_for_next_attempt(
+    service_state: &ServiceState,
+    browser_id: &str,
+) -> BrowserRecoveryPolicy {
+    let prior_attempts = service_state
+        .events
+        .iter()
+        .rev()
+        .take_while(|event| {
+            !(event.kind == ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.current_health == Some(ServiceBrowserHealth::Ready))
+        })
+        .filter(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryStarted
+                && event.browser_id.as_deref() == Some(browser_id)
+        })
+        .count() as u64;
+    let attempt = prior_attempts + 1;
+    BrowserRecoveryPolicy {
+        attempt,
+        retry_budget: BROWSER_RECOVERY_RETRY_BUDGET,
+        retry_budget_exceeded: attempt > BROWSER_RECOVERY_RETRY_BUDGET,
+        next_retry_delay_ms: recovery_backoff_delay_ms(attempt),
+    }
+}
+
+fn recovery_backoff_delay_ms(attempt: u64) -> u64 {
+    let multiplier = 1_u64
+        .checked_shl(attempt.saturating_sub(1) as u32)
+        .unwrap_or(u64::MAX);
+    BROWSER_RECOVERY_BASE_BACKOFF_MS
+        .saturating_mul(multiplier)
+        .min(BROWSER_RECOVERY_MAX_BACKOFF_MS)
+}
+
 fn persist_current_browser_stale_health(
     state: &DaemonState,
     health: ServiceBrowserHealth,
     reason_kind: BrowserRecoveryReasonKind,
     last_error: String,
-) -> bool {
+) -> BrowserRecoveryPersistence {
     let Ok(path) = JsonServiceStateStore::default_path() else {
-        return false;
+        return BrowserRecoveryPersistence::NotRecorded;
     };
     let Some(mgr) = state.browser.as_ref() else {
-        return false;
+        return BrowserRecoveryPersistence::NotRecorded;
     };
 
     let store = JsonServiceStateStore::new(path);
@@ -658,29 +711,53 @@ fn persist_current_browser_stale_health(
         last_error.clone(),
     );
     record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    let policy = recovery_policy_for_next_attempt(&service_state, &id);
+    if policy.retry_budget_exceeded {
+        let faulted_error = format!(
+            "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
+            policy.retry_budget, policy.next_retry_delay_ms
+        );
+        let faulted = BrowserProcess {
+            health: ServiceBrowserHealth::Faulted,
+            last_error: Some(faulted_error.clone()),
+            ..browser.clone()
+        };
+        record_browser_health_changed_event(&mut service_state, &id, Some(&browser), &faulted);
+        service_state.browsers.insert(id, faulted);
+        return if store.save(&service_state).is_ok() {
+            BrowserRecoveryPersistence::Blocked(faulted_error)
+        } else {
+            BrowserRecoveryPersistence::NotRecorded
+        };
+    }
     record_browser_recovery_started_event(
         &mut service_state,
         &id,
         &browser,
         reason_kind,
         &last_error,
+        Some(policy),
     );
     service_state.browsers.insert(id, browser);
-    store.save(&service_state).is_ok()
+    if store.save(&service_state).is_ok() {
+        BrowserRecoveryPersistence::Recorded
+    } else {
+        BrowserRecoveryPersistence::NotRecorded
+    }
 }
 
 fn persist_browser_recovery_started_from_persisted_state(
     state: &DaemonState,
     reason: &str,
-) -> bool {
+) -> BrowserRecoveryPersistence {
     let Ok(path) = JsonServiceStateStore::default_path() else {
-        return false;
+        return BrowserRecoveryPersistence::NotRecorded;
     };
     let store = JsonServiceStateStore::new(path);
     let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
     let id = service_browser_id(&state.session_id);
     let Some(browser) = service_state.browsers.get(&id).cloned() else {
-        return false;
+        return BrowserRecoveryPersistence::NotRecorded;
     };
     if !matches!(
         browser.health,
@@ -690,17 +767,41 @@ fn persist_browser_recovery_started_from_persisted_state(
             | ServiceBrowserHealth::Unreachable
             | ServiceBrowserHealth::Faulted
     ) {
-        return false;
+        return BrowserRecoveryPersistence::NotRecorded;
     }
     let event_reason = browser.last_error.as_deref().unwrap_or(reason);
+    let policy = recovery_policy_for_next_attempt(&service_state, &id);
+    if policy.retry_budget_exceeded {
+        let faulted_error = format!(
+            "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
+            policy.retry_budget, policy.next_retry_delay_ms
+        );
+        let faulted = BrowserProcess {
+            health: ServiceBrowserHealth::Faulted,
+            last_error: Some(faulted_error.clone()),
+            ..browser.clone()
+        };
+        record_browser_health_changed_event(&mut service_state, &id, Some(&browser), &faulted);
+        service_state.browsers.insert(id, faulted);
+        return if store.save(&service_state).is_ok() {
+            BrowserRecoveryPersistence::Blocked(faulted_error)
+        } else {
+            BrowserRecoveryPersistence::NotRecorded
+        };
+    }
     record_browser_recovery_started_event(
         &mut service_state,
         &id,
         &browser,
         recovery_reason_kind_for_health(browser.health),
         event_reason,
+        Some(policy),
     );
-    store.save(&service_state).is_ok()
+    if store.save(&service_state).is_ok() {
+        BrowserRecoveryPersistence::Recorded
+    } else {
+        BrowserRecoveryPersistence::NotRecorded
+    }
 }
 
 fn stale_browser_process_record(
@@ -1980,14 +2081,14 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         }
 
         if needs_launch {
-            let mut recovery_started_recorded = false;
+            let mut recovery_persistence = BrowserRecoveryPersistence::NotRecorded;
             if state.browser.is_some() {
                 if let (Some(health), Some(reason_kind), Some(message)) = (
                     stale_state.health,
                     stale_state.recovery_reason_kind,
                     stale_state.message,
                 ) {
-                    recovery_started_recorded =
+                    recovery_persistence =
                         persist_current_browser_stale_health(state, health, reason_kind, message);
                 }
                 if let Some(ref mut mgr) = state.browser {
@@ -1998,11 +2099,14 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                 state.reset_input_state();
                 state.update_stream_client().await;
             }
-            if !recovery_started_recorded {
-                persist_browser_recovery_started_from_persisted_state(
+            if !recovery_persistence.recorded() {
+                recovery_persistence = persist_browser_recovery_started_from_persisted_state(
                     state,
                     "Browser relaunch requested from persisted unhealthy state",
                 );
+            }
+            if let BrowserRecoveryPersistence::Blocked(reason) = recovery_persistence {
+                return error_response(&id, &reason);
             }
             if let Err(e) = auto_launch(state, cmd).await {
                 return error_response(&id, &format!("Auto-launch failed: {}", e));
@@ -9678,6 +9782,7 @@ fn error_response(id: &str, error: &str) -> Value {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+    use std::collections::BTreeMap;
     use std::fs;
 
     fn unique_socket_dir(label: &str) -> PathBuf {
@@ -11690,6 +11795,132 @@ mod tests {
         assert_eq!(session.lease, LeaseState::Exclusive);
         assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
         assert_eq!(session.browser_ids, vec!["session:persist-session"]);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_recovery_policy_counts_attempts_since_ready() {
+        let browser_id = "session:budget-session";
+        let state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "ready".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    browser_id: Some(browser_id.to_string()),
+                    current_health: Some(ServiceBrowserHealth::Ready),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-2".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+            ],
+            ..ServiceState::default()
+        };
+
+        let policy = recovery_policy_for_next_attempt(&state, browser_id);
+
+        assert_eq!(policy.attempt, 3);
+        assert_eq!(policy.retry_budget, BROWSER_RECOVERY_RETRY_BUDGET);
+        assert!(!policy.retry_budget_exceeded);
+        assert_eq!(policy.next_retry_delay_ms, 4_000);
+    }
+
+    #[test]
+    fn test_recovery_policy_blocks_after_budget() {
+        let browser_id = "session:budget-session";
+        let state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "recovery-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-2".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-3".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+            ],
+            ..ServiceState::default()
+        };
+
+        let policy = recovery_policy_for_next_attempt(&state, browser_id);
+
+        assert_eq!(policy.attempt, 4);
+        assert!(policy.retry_budget_exceeded);
+        assert_eq!(policy.next_retry_delay_ms, 8_000);
+    }
+
+    #[test]
+    fn test_persisted_recovery_blocks_and_marks_browser_faulted_after_budget() {
+        let home = unique_socket_dir("service-recovery-budget-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let browser_id = "session:budget-session";
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        health: ServiceBrowserHealth::ProcessExited,
+                        last_error: Some(
+                            "Recorded browser PID 1234 is no longer running".to_string(),
+                        ),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                events: (1..=BROWSER_RECOVERY_RETRY_BUDGET)
+                    .map(|attempt| ServiceEvent {
+                        id: format!("recovery-{attempt}"),
+                        kind: ServiceEventKind::BrowserRecoveryStarted,
+                        browser_id: Some(browser_id.to_string()),
+                        ..ServiceEvent::default()
+                    })
+                    .collect(),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut daemon_state = DaemonState::new();
+        daemon_state.session_id = "budget-session".to_string();
+
+        let result = persist_browser_recovery_started_from_persisted_state(
+            &daemon_state,
+            "Browser relaunch requested from persisted unhealthy state",
+        );
+
+        assert!(matches!(result, BrowserRecoveryPersistence::Blocked(_)));
+        let state = store.load().unwrap();
+        assert_eq!(
+            state.browsers[browser_id].health,
+            ServiceBrowserHealth::Faulted
+        );
+        assert!(state.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.current_health == Some(ServiceBrowserHealth::Faulted)
+        }));
 
         let _ = fs::remove_dir_all(&home);
     }

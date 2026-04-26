@@ -22,16 +22,23 @@ ordered sequence from the service trace surface:
 
 1. A `browser_health_changed` event for the affected browser with
    `currentHealth` set to a stale value such as `process_exited` or
-   `cdp_disconnected`.
+   `cdp_disconnected` and `details.currentReasonKind` set to the same
+   structured recovery vocabulary.
 2. A `browser_recovery_started` event for the same browser with
-   `details.reason` populated.
+   `details.reasonKind`, `details.reason`, `details.attempt`,
+   `details.retryBudget`, and `details.nextRetryDelayMs` populated.
 3. A later `browser_health_changed` event for the same browser with
    `currentHealth: "ready"` after relaunch.
+
+If the next recovery attempt would exceed the default retained-event retry
+budget, the service marks the browser `faulted`, records the faulted health
+transition as the incident signal, and fails the command instead of relaunching
+the browser again.
 
 HTTP clients read this sequence from `/api/service/trace`. MCP clients read
 the same persisted service state through the `service_trace` tool. The shared
 smoke assertion in `scripts/smoke-utils.js` now enforces the same ordering and
-reason contract for both clients.
+reason and retry-budget contract for both clients.
 
 ## What The Live Smokes Prove
 
@@ -54,10 +61,9 @@ sees stale health or ready health but not the recovery-started transition.
   `cdp_disconnected` are useful operator signals, but the service should later
   distinguish clean close, crash, killed process, port loss, hung DevTools,
   degraded target discovery, and browser shutdown requested by policy.
-- Recovery policy is still implicit. The current path relaunches when a queued
-  command discovers a stale active browser, but the service still needs explicit
-  retry budgets, backoff, per-site or per-service policy, and a way to decide
-  when to stop and require operator intervention.
+- Recovery policy has a default retained-event retry budget, but it is not yet
+  configurable per service, site, profile, or task. The service still needs
+  explicit policy configuration and operator override behavior.
 - Reconciliation and command-time detection are not yet unified into one
   supervisor model. Background reconciliation can mark browser health, while
   queued commands can trigger relaunch. The service should eventually centralize
@@ -74,14 +80,12 @@ sees stale health or ready health but not the recovery-started transition.
 The best next backend slice is to harden crash classification and recovery
 policy before adding more client controls. A useful definition of done:
 
-- Add a small internal crash classification enum or equivalent typed reason
-  model that separates process exit, CDP disconnect, unreachable endpoint,
-  degraded targets, and operator-requested close.
-- Preserve the existing public health states and trace contract while enriching
-  `browser_recovery_started.details` with structured reason fields.
-- Add unit coverage for classification and retained event shape.
-- Extend the live HTTP and MCP recovery smokes to assert the structured reason
-  once it exists.
+- Promote the default retry budget and backoff values into explicit service,
+  site, profile, or task policy.
+- Add operator override behavior for intentionally retrying a faulted browser.
+- Preserve the current public trace fields while adding policy source metadata
+  once configurable policy exists.
+- Extend live HTTP and MCP recovery smokes to cover the blocked crash-loop path.
 - Keep the dashboard as a consumer, not the authority. It should display the
   trace and incident state produced by the service rather than inventing its
   own crash interpretation.

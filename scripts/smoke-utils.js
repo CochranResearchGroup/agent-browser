@@ -202,6 +202,20 @@ export function assertRecoveryTraceEvents(events, { browserId, label = 'Recovery
     events[recoveryIndex].details?.reasonKind === RECOVERY_REASON_KIND_BY_HEALTH[staleHealth],
     `${label} recovery event did not include structured reason kind: ${JSON.stringify(events[recoveryIndex])}`,
   );
+  assert(
+    Number.isInteger(events[recoveryIndex].details?.attempt) &&
+      events[recoveryIndex].details.attempt >= 1,
+    `${label} recovery event did not include retry attempt: ${JSON.stringify(events[recoveryIndex])}`,
+  );
+  assert(
+    Number.isInteger(events[recoveryIndex].details?.retryBudget) &&
+      events[recoveryIndex].details.retryBudget >= events[recoveryIndex].details.attempt,
+    `${label} recovery event did not include retry budget: ${JSON.stringify(events[recoveryIndex])}`,
+  );
+  assert(
+    events[recoveryIndex].details?.retryBudgetExceeded === false,
+    `${label} recovery event unexpectedly exceeded retry budget: ${JSON.stringify(events[recoveryIndex])}`,
+  );
 
   return {
     readyEvent: events[readyIndex],

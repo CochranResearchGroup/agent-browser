@@ -55,6 +55,14 @@ pub fn recovery_reason_kind_for_health(health: BrowserHealth) -> BrowserRecovery
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrowserRecoveryPolicy {
+    pub attempt: u64,
+    pub retry_budget: u64,
+    pub retry_budget_exceeded: bool,
+    pub next_retry_delay_ms: u64,
+}
+
 fn recovery_reason_kind_value_for_health(health: BrowserHealth) -> Option<serde_json::Value> {
     matches!(
         health,
@@ -438,18 +446,27 @@ pub fn record_browser_recovery_started_event(
     current: &BrowserProcess,
     reason_kind: BrowserRecoveryReasonKind,
     reason: &str,
+    policy: Option<BrowserRecoveryPolicy>,
 ) {
+    let mut details = serde_json::json!({
+        "reasonKind": reason_kind.as_str(),
+        "reason": reason,
+        "pid": current.pid,
+        "cdpEndpoint": current.cdp_endpoint,
+    });
+    if let Some(policy) = policy {
+        details["attempt"] = serde_json::json!(policy.attempt);
+        details["retryBudget"] = serde_json::json!(policy.retry_budget);
+        details["retryBudgetExceeded"] = serde_json::json!(policy.retry_budget_exceeded);
+        details["nextRetryDelayMs"] = serde_json::json!(policy.next_retry_delay_ms);
+    }
+
     let mut event = ServiceEvent {
         kind: ServiceEventKind::BrowserRecoveryStarted,
         message: format!("Browser {} recovery started", browser_id),
         browser_id: Some(browser_id.to_string()),
         current_health: Some(current.health),
-        details: Some(serde_json::json!({
-            "reasonKind": reason_kind.as_str(),
-            "reason": reason,
-            "pid": current.pid,
-            "cdpEndpoint": current.cdp_endpoint,
-        })),
+        details: Some(details),
         ..new_service_event()
     };
     enrich_service_event_with_browser_context(&mut event, state, browser_id, current);
@@ -697,6 +714,12 @@ mod tests {
             &browser,
             BrowserRecoveryReasonKind::CdpDisconnected,
             "cdp lost",
+            Some(BrowserRecoveryPolicy {
+                attempt: 2,
+                retry_budget: 3,
+                retry_budget_exceeded: false,
+                next_retry_delay_ms: 2_000,
+            }),
         );
 
         let event = state.events.first().unwrap();
@@ -723,6 +746,38 @@ mod tests {
                 .and_then(|details| details.get("reason"))
                 .and_then(|reason| reason.as_str()),
             Some("cdp lost")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("attempt"))
+                .and_then(|attempt| attempt.as_u64()),
+            Some(2)
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("retryBudget"))
+                .and_then(|budget| budget.as_u64()),
+            Some(3)
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("retryBudgetExceeded"))
+                .and_then(|exceeded| exceeded.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("nextRetryDelayMs"))
+                .and_then(|delay| delay.as_u64()),
+            Some(2_000)
         );
     }
 
