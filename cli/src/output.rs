@@ -3079,6 +3079,7 @@ Notes:
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
   - Trace returns related events, jobs, incidents, and normalized activity in one response for a browser, profile, session, service, agent, task, or time window.
+  - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order.
   - Text service status includes profile and session summary lines for operator traceability.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.

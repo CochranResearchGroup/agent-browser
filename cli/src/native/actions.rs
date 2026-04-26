@@ -11179,6 +11179,105 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_service_trace_returns_browser_recovery_sequence() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_trace",
+            "id": "svc-trace-recovery-1",
+            "browserId": "browser-1",
+            "serviceName": "JournalDownloader",
+            "taskName": "probeACSwebsite",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-stale",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser browser-1 health changed from Ready to ProcessExited",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "previousHealth": "ready",
+                        "currentHealth": "process_exited"
+                    },
+                    {
+                        "id": "event-recovery",
+                        "timestamp": "2026-04-22T00:00:01Z",
+                        "kind": "browser_recovery_started",
+                        "message": "Browser browser-1 recovery started",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "currentHealth": "process_exited",
+                        "details": {
+                            "reason": "Active browser PID 1234 exited before command dispatch"
+                        }
+                    },
+                    {
+                        "id": "event-ready",
+                        "timestamp": "2026-04-22T00:00:02Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser browser-1 health changed from ProcessExited to Ready",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "previousHealth": "process_exited",
+                        "currentHealth": "ready"
+                    }
+                ],
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:00:02Z",
+                        "latestMessage": "Browser browser-1 health changed from ProcessExited to Ready",
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-stale", "event-ready"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["counts"]["events"], 3);
+        assert_eq!(
+            result["data"]["events"][0]["kind"],
+            "browser_health_changed"
+        );
+        assert_eq!(
+            result["data"]["events"][0]["currentHealth"],
+            "process_exited"
+        );
+        assert_eq!(
+            result["data"]["events"][1]["kind"],
+            "browser_recovery_started"
+        );
+        assert_eq!(
+            result["data"]["events"][1]["details"]["reason"],
+            "Active browser PID 1234 exited before command dispatch"
+        );
+        assert_eq!(
+            result["data"]["events"][2]["kind"],
+            "browser_health_changed"
+        );
+        assert_eq!(result["data"]["events"][2]["currentHealth"], "ready");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
     async fn test_service_incident_acknowledge_persists_metadata() {
         let guard = EnvGuard::new(&["HOME"]);
         let home = unique_socket_dir("service-incident-ack-home");
