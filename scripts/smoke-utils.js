@@ -145,6 +145,10 @@ export function assert(condition, message) {
 }
 
 const RECOVERY_STALE_HEALTH_VALUES = new Set(['process_exited', 'cdp_disconnected']);
+const RECOVERY_REASON_KIND_BY_HEALTH = {
+  cdp_disconnected: 'cdp_disconnected',
+  process_exited: 'process_exited',
+};
 
 function eventIndex(events, predicate, label) {
   const index = events.findIndex(predicate);
@@ -189,6 +193,10 @@ export function assertRecoveryTraceEvents(events, { browserId, label = 'Recovery
     typeof events[recoveryIndex].details?.reason === 'string' &&
       events[recoveryIndex].details.reason.length > 0,
     `${label} recovery event did not include crash reason: ${JSON.stringify(events[recoveryIndex])}`,
+  );
+  assert(
+    events[recoveryIndex].details?.reasonKind === RECOVERY_REASON_KIND_BY_HEALTH[staleHealth],
+    `${label} recovery event did not include structured reason kind: ${JSON.stringify(events[recoveryIndex])}`,
   );
 
   return {

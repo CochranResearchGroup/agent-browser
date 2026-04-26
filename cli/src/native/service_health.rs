@@ -14,6 +14,47 @@ use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
 const MAX_SERVICE_EVENTS: usize = 100;
 
+/// Structured reason for browser recovery, preserved in event details for clients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserRecoveryReasonKind {
+    ProcessExited,
+    CdpDisconnected,
+    UnreachableEndpoint,
+    DegradedTargets,
+    OperatorRequestedClose,
+    PersistedUnhealthyState,
+    Unknown,
+}
+
+impl BrowserRecoveryReasonKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ProcessExited => "process_exited",
+            Self::CdpDisconnected => "cdp_disconnected",
+            Self::UnreachableEndpoint => "unreachable_endpoint",
+            Self::DegradedTargets => "degraded_targets",
+            Self::OperatorRequestedClose => "operator_requested_close",
+            Self::PersistedUnhealthyState => "persisted_unhealthy_state",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+pub fn recovery_reason_kind_for_health(health: BrowserHealth) -> BrowserRecoveryReasonKind {
+    match health {
+        BrowserHealth::ProcessExited => BrowserRecoveryReasonKind::ProcessExited,
+        BrowserHealth::CdpDisconnected => BrowserRecoveryReasonKind::CdpDisconnected,
+        BrowserHealth::Unreachable => BrowserRecoveryReasonKind::UnreachableEndpoint,
+        BrowserHealth::Degraded => BrowserRecoveryReasonKind::DegradedTargets,
+        BrowserHealth::Closing => BrowserRecoveryReasonKind::OperatorRequestedClose,
+        BrowserHealth::Faulted => BrowserRecoveryReasonKind::Unknown,
+        BrowserHealth::NotStarted
+        | BrowserHealth::Launching
+        | BrowserHealth::Ready
+        | BrowserHealth::Reconnecting => BrowserRecoveryReasonKind::PersistedUnhealthyState,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServiceReconcileSummary {
     pub browser_count: usize,
@@ -374,6 +415,7 @@ pub fn record_browser_recovery_started_event(
     state: &mut ServiceState,
     browser_id: &str,
     current: &BrowserProcess,
+    reason_kind: BrowserRecoveryReasonKind,
     reason: &str,
 ) {
     let mut event = ServiceEvent {
@@ -382,6 +424,7 @@ pub fn record_browser_recovery_started_event(
         browser_id: Some(browser_id.to_string()),
         current_health: Some(current.health),
         details: Some(serde_json::json!({
+            "reasonKind": reason_kind.as_str(),
             "reason": reason,
             "pid": current.pid,
             "cdpEndpoint": current.cdp_endpoint,
@@ -627,7 +670,13 @@ mod tests {
             ..BrowserProcess::default()
         };
 
-        record_browser_recovery_started_event(&mut state, "browser-1", &browser, "cdp lost");
+        record_browser_recovery_started_event(
+            &mut state,
+            "browser-1",
+            &browser,
+            BrowserRecoveryReasonKind::CdpDisconnected,
+            "cdp lost",
+        );
 
         let event = state.events.first().unwrap();
         assert_eq!(event.kind, ServiceEventKind::BrowserRecoveryStarted);
@@ -642,9 +691,45 @@ mod tests {
             event
                 .details
                 .as_ref()
+                .and_then(|details| details.get("reasonKind"))
+                .and_then(|reason| reason.as_str()),
+            Some("cdp_disconnected")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
                 .and_then(|details| details.get("reason"))
                 .and_then(|reason| reason.as_str()),
             Some("cdp lost")
+        );
+    }
+
+    #[test]
+    fn recovery_reason_kind_tracks_browser_health() {
+        assert_eq!(
+            recovery_reason_kind_for_health(BrowserHealth::ProcessExited),
+            BrowserRecoveryReasonKind::ProcessExited
+        );
+        assert_eq!(
+            recovery_reason_kind_for_health(BrowserHealth::CdpDisconnected),
+            BrowserRecoveryReasonKind::CdpDisconnected
+        );
+        assert_eq!(
+            recovery_reason_kind_for_health(BrowserHealth::Unreachable),
+            BrowserRecoveryReasonKind::UnreachableEndpoint
+        );
+        assert_eq!(
+            recovery_reason_kind_for_health(BrowserHealth::Degraded),
+            BrowserRecoveryReasonKind::DegradedTargets
+        );
+        assert_eq!(
+            recovery_reason_kind_for_health(BrowserHealth::Closing),
+            BrowserRecoveryReasonKind::OperatorRequestedClose
+        );
+        assert_eq!(
+            recovery_reason_kind_for_health(BrowserHealth::Ready),
+            BrowserRecoveryReasonKind::PersistedUnhealthyState
         );
     }
 

@@ -41,6 +41,7 @@ use super::service_activity::service_incident_activity_response;
 use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
     record_browser_launch_recorded_event, record_browser_recovery_started_event,
+    recovery_reason_kind_for_health, BrowserRecoveryReasonKind,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
@@ -583,6 +584,7 @@ fn persist_current_browser_health(
 struct BrowserStaleState {
     needs_launch: bool,
     health: Option<ServiceBrowserHealth>,
+    recovery_reason_kind: Option<BrowserRecoveryReasonKind>,
     message: Option<String>,
 }
 
@@ -591,6 +593,7 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
         return BrowserStaleState {
             needs_launch: true,
             health: None,
+            recovery_reason_kind: None,
             message: None,
         };
     };
@@ -603,6 +606,7 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
         return BrowserStaleState {
             needs_launch: true,
             health: Some(ServiceBrowserHealth::ProcessExited),
+            recovery_reason_kind: Some(BrowserRecoveryReasonKind::ProcessExited),
             message: Some(message),
         };
     }
@@ -611,6 +615,7 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
         return BrowserStaleState {
             needs_launch: true,
             health: Some(ServiceBrowserHealth::CdpDisconnected),
+            recovery_reason_kind: Some(BrowserRecoveryReasonKind::CdpDisconnected),
             message: Some(format!(
                 "Active browser CDP connection is not responding: {}",
                 mgr.get_cdp_url()
@@ -621,6 +626,7 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
     BrowserStaleState {
         needs_launch: false,
         health: None,
+        recovery_reason_kind: None,
         message: None,
     }
 }
@@ -628,6 +634,7 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
 fn persist_current_browser_stale_health(
     state: &DaemonState,
     health: ServiceBrowserHealth,
+    reason_kind: BrowserRecoveryReasonKind,
     last_error: String,
 ) -> bool {
     let Ok(path) = JsonServiceStateStore::default_path() else {
@@ -651,7 +658,13 @@ fn persist_current_browser_stale_health(
         last_error.clone(),
     );
     record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
-    record_browser_recovery_started_event(&mut service_state, &id, &browser, &last_error);
+    record_browser_recovery_started_event(
+        &mut service_state,
+        &id,
+        &browser,
+        reason_kind,
+        &last_error,
+    );
     service_state.browsers.insert(id, browser);
     store.save(&service_state).is_ok()
 }
@@ -680,7 +693,13 @@ fn persist_browser_recovery_started_from_persisted_state(
         return false;
     }
     let event_reason = browser.last_error.as_deref().unwrap_or(reason);
-    record_browser_recovery_started_event(&mut service_state, &id, &browser, event_reason);
+    record_browser_recovery_started_event(
+        &mut service_state,
+        &id,
+        &browser,
+        recovery_reason_kind_for_health(browser.health),
+        event_reason,
+    );
     store.save(&service_state).is_ok()
 }
 
@@ -1963,9 +1982,13 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         if needs_launch {
             let mut recovery_started_recorded = false;
             if state.browser.is_some() {
-                if let (Some(health), Some(message)) = (stale_state.health, stale_state.message) {
+                if let (Some(health), Some(reason_kind), Some(message)) = (
+                    stale_state.health,
+                    stale_state.recovery_reason_kind,
+                    stale_state.message,
+                ) {
                     recovery_started_recorded =
-                        persist_current_browser_stale_health(state, health, message);
+                        persist_current_browser_stale_health(state, health, reason_kind, message);
                 }
                 if let Some(ref mut mgr) = state.browser {
                     let _ = mgr.close().await;
@@ -11216,6 +11239,7 @@ mod tests {
                         "taskName": "probeACSwebsite",
                         "currentHealth": "process_exited",
                         "details": {
+                            "reasonKind": "process_exited",
                             "reason": "Active browser PID 1234 exited before command dispatch"
                         }
                     },
@@ -11268,6 +11292,10 @@ mod tests {
         assert_eq!(
             result["data"]["events"][1]["details"]["reason"],
             "Active browser PID 1234 exited before command dispatch"
+        );
+        assert_eq!(
+            result["data"]["events"][1]["details"]["reasonKind"],
+            "process_exited"
         );
         assert_eq!(
             result["data"]["events"][2]["kind"],
