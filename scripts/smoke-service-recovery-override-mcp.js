@@ -167,6 +167,7 @@ try {
       browserId,
       by: retryActor,
       note: 'MCP smoke retry after intentional budget exhaustion',
+      ...traceFields,
     },
   });
   const retryPayload = parseMcpToolPayload(retryResult);
@@ -180,7 +181,7 @@ try {
     `MCP service_browser_retry did not move browser back to process_exited: ${JSON.stringify(retryPayload)}`,
   );
 
-  tracePayload = await serviceTrace({ filtered: false });
+  tracePayload = await serviceTrace();
   const { overrideIndex } = assertRecoveryOverrideEvents(tracePayload.data.events, {
     browserId,
     actor: retryActor,

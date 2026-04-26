@@ -937,6 +937,15 @@ fn service_browser_retry_command(browser_id: &str, query: Option<&str>) -> Value
         match key.as_str() {
             "by" => cmd["by"] = json!(value),
             "note" => cmd["note"] = json!(value),
+            "serviceName" | "service_name" | "service-name" => {
+                cmd["serviceName"] = json!(value);
+            }
+            "agentName" | "agent_name" | "agent-name" => {
+                cmd["agentName"] = json!(value);
+            }
+            "taskName" | "task_name" | "task-name" => {
+                cmd["taskName"] = json!(value);
+            }
             "" => {}
             _ => {}
         }
@@ -1486,12 +1495,18 @@ mod tests {
 
     #[test]
     fn service_browser_retry_command_maps_query() {
-        let cmd = service_browser_retry_command("browser-123", Some("by=operator&note=approved"));
+        let cmd = service_browser_retry_command(
+            "browser-123",
+            Some("by=operator&note=approved&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite"),
+        );
 
         assert_eq!(cmd["action"], "service_browser_retry");
         assert_eq!(cmd["browserId"], "browser-123");
         assert_eq!(cmd["by"], "operator");
         assert_eq!(cmd["note"], "approved");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
     }
 
     #[test]

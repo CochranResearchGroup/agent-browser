@@ -6383,6 +6383,9 @@ async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
         .ok_or("Missing browserId")?;
     let by = cmd.get("by").and_then(|value| value.as_str());
     let note = cmd.get("note").and_then(|value| value.as_str());
+    let service_name = optional_command_string(cmd, "serviceName");
+    let agent_name = optional_command_string(cmd, "agentName");
+    let task_name = optional_command_string(cmd, "taskName");
     let actor = normalized_operator(by);
     let note = normalized_note(note);
     let timestamp = service_now_timestamp();
@@ -6421,7 +6424,15 @@ async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
         .insert(browser_id.to_string(), retryable.clone());
     push_service_event_bounded(
         &mut state,
-        service_browser_recovery_override_event(&retryable, &timestamp, &actor, note.as_deref()),
+        service_browser_recovery_override_event(
+            &retryable,
+            &timestamp,
+            &actor,
+            note.as_deref(),
+            service_name.as_deref(),
+            agent_name.as_deref(),
+            task_name.as_deref(),
+        ),
     );
     state.refresh_derived_views();
     let incident = state
@@ -6577,6 +6588,9 @@ fn service_browser_recovery_override_event(
     timestamp: &str,
     actor: &str,
     note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
 ) -> ServiceEvent {
     let mut details = json!({
         "incidentId": browser.id,
@@ -6596,6 +6610,9 @@ fn service_browser_recovery_override_event(
         browser_id: Some(browser.id.clone()),
         profile_id: browser.profile_id.clone(),
         session_id: browser.active_session_ids.first().cloned(),
+        service_name: service_name.map(str::to_string),
+        agent_name: agent_name.map(str::to_string),
+        task_name: task_name.map(str::to_string),
         previous_health: Some(ServiceBrowserHealth::Faulted),
         current_health: Some(browser.health),
         details: Some(details),
@@ -12131,7 +12148,10 @@ mod tests {
                 "action": "service_browser_retry",
                 "browserId": browser_id,
                 "by": "operator",
-                "note": "manual retry approved"
+                "note": "manual retry approved",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite"
             }),
             &mut daemon_state,
         )
@@ -12148,6 +12168,9 @@ mod tests {
         assert!(persisted.events.iter().any(|event| {
             event.kind == ServiceEventKind::BrowserRecoveryOverride
                 && event.browser_id.as_deref() == Some(browser_id)
+                && event.service_name.as_deref() == Some("JournalDownloader")
+                && event.agent_name.as_deref() == Some("codex")
+                && event.task_name.as_deref() == Some("probeACSwebsite")
                 && event
                     .details
                     .as_ref()

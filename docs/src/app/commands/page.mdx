@@ -311,7 +311,7 @@ The persisted service state also includes bounded audit records for recent contr
 
 `service cancel <job-id>` marks a queued service job cancelled before it dispatches or requests cooperative cancellation for a running job. Running cancellation drops the active service future, records the job as <code>cancelled</code>, and cleans up browser state before the worker accepts more work. Terminal jobs are rejected rather than rewritten. Add <code>--reason &lt;text&gt;</code> to record an operator-readable reason for queued cancellation.
 
-`service retry <browser-id>` explicitly allows one new recovery attempt for a faulted browser. It records a <code>browser_recovery_override</code> event, moves the browser back to a retryable stale health state, and resets retry counting from that override boundary. Add <code>--by &lt;text&gt;</code> and <code>--note &lt;text&gt;</code> for operator auditability.
+`service retry <browser-id>` explicitly allows one new recovery attempt for a faulted browser. It records a <code>browser_recovery_override</code> event, moves the browser back to a retryable stale health state, and resets retry counting from that override boundary. Add <code>--by &lt;text&gt;</code> and <code>--note &lt;text&gt;</code> for operator auditability. HTTP retry requests accept <code>service-name</code>, <code>agent-name</code>, and <code>task-name</code> query parameters, and MCP <code>service_browser_retry</code> accepts <code>serviceName</code>, <code>agentName</code>, and <code>taskName</code>, so override events appear in filtered service traces.
 
 `service acknowledge <incident-id>` marks a retained incident seen by an operator. Add `--by <text>` to record who acknowledged it and `--note <text>` to persist a short operator note.
 
@@ -409,7 +409,7 @@ curl "http://127.0.0.1:<stream-port>/api/service/challenges"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs?limit=20&state=failed"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>/cancel"
-curl -X POST "http://127.0.0.1:<stream-port>/api/service/browsers/<browser-id>/retry?by=operator&note=approved"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/browsers/<browser-id>/retry?by=operator&note=approved&service-name=JournalDownloader&task-name=probeACSwebsite"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents?limit=20&handling-state=unacknowledged"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/activity"

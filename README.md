@@ -1308,7 +1308,7 @@ The activity response is the canonical agent-facing incident timeline. It return
 
 Use `service trace --service-name <name> --task-name <name>` to inspect related events, jobs, incidents, and normalized activity in one response. Add `--limit <n>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--agent-name <name>`, or `--since <timestamp>` to narrow a trace view for one service, agent, task, browser, profile, session, or time window. This is the preferred service debugging surface when a client needs a complete timeline without issuing separate jobs, incidents, events, and incident activity requests. Browser crash recovery traces expose the canonical sequence in `events`: a `browser_health_changed` event with `currentHealth` such as `process_exited` or `cdp_disconnected` and `details.currentReasonKind`, then `browser_recovery_started` with `details.reasonKind`, `details.reason`, `details.attempt`, `details.retryBudget`, and `details.nextRetryDelayMs`, then a `browser_health_changed` event with `currentHealth: "ready"` after relaunch. If the next attempt would exceed the default retry budget, the browser is marked `faulted` and the command fails instead of relaunching. HTTP clients read the same payload from `/api/service/trace`, and MCP clients read it through the `service_trace` tool.
 
-Use `service retry <browser-id> --by <operator> --note <text>` to explicitly allow one new recovery attempt for a faulted browser. It records a `browser_recovery_override` event, moves the browser back to a retryable stale health state, and resets retry counting from that override boundary.
+Use `service retry <browser-id> --by <operator> --note <text>` to explicitly allow one new recovery attempt for a faulted browser. It records a `browser_recovery_override` event, moves the browser back to a retryable stale health state, and resets retry counting from that override boundary. HTTP retry requests accept `service-name`, `agent-name`, and `task-name` query parameters, and MCP `service_browser_retry` accepts `serviceName`, `agentName`, and `taskName`, so override events appear in filtered service traces.
 
 Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps.
 
@@ -1397,7 +1397,7 @@ curl "http://127.0.0.1:<stream-port>/api/service/trace?service-name=JournalDownl
 curl "http://127.0.0.1:<stream-port>/api/service/jobs?limit=20&state=failed"
 curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>/cancel"
-curl -X POST "http://127.0.0.1:<stream-port>/api/service/browsers/<browser-id>/retry?by=operator&note=approved"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/browsers/<browser-id>/retry?by=operator&note=approved&service-name=JournalDownloader&task-name=probeACSwebsite"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents?limit=20&handling-state=unacknowledged"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>"
 curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/activity"

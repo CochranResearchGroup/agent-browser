@@ -140,7 +140,11 @@ try {
     'POST',
     `/api/service/browsers/${browserId}/retry?by=${encodeURIComponent(
       retryActor,
-    )}&note=${encodeURIComponent('HTTP smoke retry after intentional budget exhaustion')}`,
+    )}&note=${encodeURIComponent(
+      'HTTP smoke retry after intentional budget exhaustion',
+    )}&service-name=${encodeURIComponent(serviceName)}&agent-name=${encodeURIComponent(
+      agentName,
+    )}&task-name=${encodeURIComponent(taskName)}`,
   );
   assert(retry.success === true, `HTTP retry failed: ${JSON.stringify(retry)}`);
   assert(retry.data?.retryEnabled === true, `HTTP retry did not enable recovery: ${JSON.stringify(retry)}`);
@@ -149,7 +153,7 @@ try {
     `HTTP retry did not move browser back to process_exited: ${JSON.stringify(retry)}`,
   );
 
-  trace = await serviceTrace(port, { filtered: false });
+  trace = await serviceTrace(port);
   const { overrideIndex } = assertRecoveryOverrideEvents(trace.data.events, {
     browserId,
     actor: retryActor,
