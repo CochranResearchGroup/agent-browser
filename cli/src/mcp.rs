@@ -6872,7 +6872,7 @@ mod tests {
 
     #[test]
     fn tools_list_returns_service_job_cancel() {
-        let response = handle_jsonrpc_line(
+        let mut response = handle_jsonrpc_line(
             r#"{"jsonrpc":"2.0","id":"tools","method":"tools/list"}"#,
             "default",
         )
@@ -6893,6 +6893,18 @@ mod tests {
         assert!(
             response["result"]["tools"][0]["inputSchema"]["properties"]["taskName"].is_object()
         );
+        assert_eq!(
+            response["result"]["tools"][1]["name"],
+            "service_browser_retry"
+        );
+        assert!(response["result"]["tools"][1]["inputSchema"]["required"][0] == "browserId");
+        assert!(
+            response["result"]["tools"][1]["inputSchema"]["properties"]["serviceName"].is_object()
+        );
+        response["result"]["tools"]
+            .as_array_mut()
+            .unwrap()
+            .remove(1);
         assert_eq!(response["result"]["tools"][1]["name"], "browser_snapshot");
         assert!(
             response["result"]["tools"][1]["inputSchema"]["properties"]["interactive"].is_object()
