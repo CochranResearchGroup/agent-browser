@@ -11579,6 +11579,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_service_trace_filters_browser_recovery_override_events() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_trace",
+            "id": "svc-trace-recovery-override-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-override",
+                        "timestamp": "2026-04-22T00:00:03Z",
+                        "kind": "browser_recovery_override",
+                        "message": "Browser browser-1 recovery retry enabled by operator",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "previousHealth": "faulted",
+                        "currentHealth": "process_exited",
+                        "details": {
+                            "actor": "operator",
+                            "action": "retry_enabled"
+                        }
+                    },
+                    {
+                        "id": "event-other-task",
+                        "timestamp": "2026-04-22T00:00:04Z",
+                        "kind": "browser_recovery_override",
+                        "message": "Browser browser-1 recovery retry enabled by operator",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "otherTask",
+                        "previousHealth": "faulted",
+                        "currentHealth": "process_exited",
+                        "details": {
+                            "actor": "operator",
+                            "action": "retry_enabled"
+                        }
+                    }
+                ],
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "latestTimestamp": "2026-04-22T00:00:03Z",
+                        "latestMessage": "Browser browser-1 recovery retry enabled by operator",
+                        "latestKind": "browser_recovery_override",
+                        "eventIds": ["event-override"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["counts"]["events"], 1);
+        assert_eq!(result["data"]["events"][0]["id"], "event-override");
+        assert_eq!(
+            result["data"]["events"][0]["kind"],
+            "browser_recovery_override"
+        );
+        assert_eq!(
+            result["data"]["events"][0]["details"]["action"],
+            "retry_enabled"
+        );
+        assert_eq!(result["data"]["counts"]["incidents"], 1);
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
     async fn test_service_incident_acknowledge_persists_metadata() {
         let guard = EnvGuard::new(&["HOME"]);
         let home = unique_socket_dir("service-incident-ack-home");
