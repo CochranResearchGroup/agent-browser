@@ -412,6 +412,46 @@ async fn e2e_service_detects_browser_crash_and_recovers_on_next_command() {
             && event.previous_health == Some(ServiceBrowserHealth::ProcessExited)
             && event.current_health == Some(ServiceBrowserHealth::Ready)
     }));
+    let stale_health_event_index = recovered_state
+        .events
+        .iter()
+        .position(|event| {
+            event.kind == super::service_model::ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.previous_health == Some(ServiceBrowserHealth::Ready)
+                && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+        })
+        .expect("crash detection should record the stale browser health transition");
+    let recovery_event_index = recovered_state
+        .events
+        .iter()
+        .position(|event| {
+            event.kind == super::service_model::ServiceEventKind::BrowserRecoveryStarted
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+        })
+        .expect("relaunch should record that browser recovery started");
+    let ready_health_event_index = recovered_state
+        .events
+        .iter()
+        .position(|event| {
+            event.kind == super::service_model::ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.previous_health == Some(ServiceBrowserHealth::ProcessExited)
+                && event.current_health == Some(ServiceBrowserHealth::Ready)
+        })
+        .expect("relaunch should record the recovered browser health transition");
+    assert!(
+        stale_health_event_index < recovery_event_index
+            && recovery_event_index < ready_health_event_index,
+        "recovery should be logged between stale and ready browser health transitions"
+    );
+    assert!(recovered_state.events[recovery_event_index]
+        .details
+        .as_ref()
+        .and_then(|details| details.get("reason"))
+        .and_then(|reason| reason.as_str())
+        .is_some_and(|reason| reason.contains("exited")));
     assert_eq!(
         recovered_state.jobs["e2e-crash-recovered-navigate"].state,
         JobState::Succeeded

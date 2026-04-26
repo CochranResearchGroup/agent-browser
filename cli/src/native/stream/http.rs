@@ -1005,6 +1005,7 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
                 "reconciliation"
                 | "browser_launch_recorded"
                 | "browser_health_changed"
+                | "browser_recovery_started"
                 | "tab_lifecycle_changed"
                 | "reconciliation_error"
                 | "incident_acknowledged"
@@ -1338,6 +1339,13 @@ mod tests {
         let cmd = service_events_command(Some("kind=browser_launch_recorded")).unwrap();
 
         assert_eq!(cmd["kind"], "browser_launch_recorded");
+    }
+
+    #[test]
+    fn service_events_command_accepts_browser_recovery_kind() {
+        let cmd = service_events_command(Some("kind=browser_recovery_started")).unwrap();
+
+        assert_eq!(cmd["kind"], "browser_recovery_started");
     }
 
     #[test]

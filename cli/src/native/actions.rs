@@ -40,7 +40,7 @@ use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
 use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
-    record_browser_launch_recorded_event,
+    record_browser_launch_recorded_event, record_browser_recovery_started_event,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
@@ -629,12 +629,12 @@ fn persist_current_browser_stale_health(
     state: &DaemonState,
     health: ServiceBrowserHealth,
     last_error: String,
-) {
+) -> bool {
     let Ok(path) = JsonServiceStateStore::default_path() else {
-        return;
+        return false;
     };
     let Some(mgr) = state.browser.as_ref() else {
-        return;
+        return false;
     };
 
     let store = JsonServiceStateStore::new(path);
@@ -648,11 +648,40 @@ fn persist_current_browser_stale_health(
         mgr.browser_pid(),
         Some(mgr.get_cdp_url().to_string()),
         health,
-        last_error,
+        last_error.clone(),
     );
     record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    record_browser_recovery_started_event(&mut service_state, &id, &browser, &last_error);
     service_state.browsers.insert(id, browser);
-    let _ = store.save(&service_state);
+    store.save(&service_state).is_ok()
+}
+
+fn persist_browser_recovery_started_from_persisted_state(
+    state: &DaemonState,
+    reason: &str,
+) -> bool {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return false;
+    };
+    let store = JsonServiceStateStore::new(path);
+    let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
+    let id = service_browser_id(&state.session_id);
+    let Some(browser) = service_state.browsers.get(&id).cloned() else {
+        return false;
+    };
+    if !matches!(
+        browser.health,
+        ServiceBrowserHealth::Degraded
+            | ServiceBrowserHealth::ProcessExited
+            | ServiceBrowserHealth::CdpDisconnected
+            | ServiceBrowserHealth::Unreachable
+            | ServiceBrowserHealth::Faulted
+    ) {
+        return false;
+    }
+    let event_reason = browser.last_error.as_deref().unwrap_or(reason);
+    record_browser_recovery_started_event(&mut service_state, &id, &browser, event_reason);
+    store.save(&service_state).is_ok()
 }
 
 fn stale_browser_process_record(
@@ -1932,9 +1961,11 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         }
 
         if needs_launch {
+            let mut recovery_started_recorded = false;
             if state.browser.is_some() {
                 if let (Some(health), Some(message)) = (stale_state.health, stale_state.message) {
-                    persist_current_browser_stale_health(state, health, message);
+                    recovery_started_recorded =
+                        persist_current_browser_stale_health(state, health, message);
                 }
                 if let Some(ref mut mgr) = state.browser {
                     let _ = mgr.close().await;
@@ -1943,6 +1974,12 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                 state.screencasting = false;
                 state.reset_input_state();
                 state.update_stream_client().await;
+            }
+            if !recovery_started_recorded {
+                persist_browser_recovery_started_from_persisted_state(
+                    state,
+                    "Browser relaunch requested from persisted unhealthy state",
+                );
             }
             if let Err(e) = auto_launch(state, cmd).await {
                 return error_response(&id, &format!("Auto-launch failed: {}", e));
@@ -6616,6 +6653,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::Reconciliation => "reconciliation",
         ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
+        ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",

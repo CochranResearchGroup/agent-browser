@@ -136,6 +136,7 @@ pub enum ServiceEventKind {
     Reconciliation,
     BrowserLaunchRecorded,
     BrowserHealthChanged,
+    BrowserRecoveryStarted,
     TabLifecycleChanged,
     ReconciliationError,
     IncidentAcknowledged,
@@ -321,6 +322,7 @@ fn service_event_is_incident(event: &ServiceEvent) -> bool {
         }
         ServiceEventKind::Reconciliation
         | ServiceEventKind::BrowserLaunchRecorded
+        | ServiceEventKind::BrowserRecoveryStarted
         | ServiceEventKind::TabLifecycleChanged => false,
     }
 }
@@ -412,6 +414,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::Reconciliation => "reconciliation",
         ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
+        ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",

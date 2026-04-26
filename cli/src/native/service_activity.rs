@@ -252,6 +252,7 @@ fn service_activity_title(kind: &str) -> &'static str {
     match kind {
         "browser_launch_recorded" => "Browser launch recorded",
         "browser_health_changed" => "Browser health changed",
+        "browser_recovery_started" => "Browser recovery started",
         "tab_lifecycle_changed" => "Tab lifecycle changed",
         "reconciliation_error" => "Reconciliation error",
         "incident_acknowledged" => "Incident acknowledged",
@@ -268,6 +269,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::Reconciliation => "reconciliation",
         ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
         ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
+        ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",

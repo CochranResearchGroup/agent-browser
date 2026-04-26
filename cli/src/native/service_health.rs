@@ -370,6 +370,28 @@ pub fn record_browser_launch_recorded_event(
     push_service_event(state, event);
 }
 
+pub fn record_browser_recovery_started_event(
+    state: &mut ServiceState,
+    browser_id: &str,
+    current: &BrowserProcess,
+    reason: &str,
+) {
+    let mut event = ServiceEvent {
+        kind: ServiceEventKind::BrowserRecoveryStarted,
+        message: format!("Browser {} recovery started", browser_id),
+        browser_id: Some(browser_id.to_string()),
+        current_health: Some(current.health),
+        details: Some(serde_json::json!({
+            "reason": reason,
+            "pid": current.pid,
+            "cdpEndpoint": current.cdp_endpoint,
+        })),
+        ..new_service_event()
+    };
+    enrich_service_event_with_browser_context(&mut event, state, browser_id, current);
+    push_service_event(state, event);
+}
+
 fn enrich_service_event_with_browser_context(
     event: &mut ServiceEvent,
     state: &ServiceState,
@@ -576,6 +598,54 @@ mod tests {
         assert_eq!(event.service_name.as_deref(), Some("JournalDownloader"));
         assert_eq!(event.agent_name.as_deref(), Some("codex"));
         assert_eq!(event.task_name.as_deref(), Some("probeACSwebsite"));
+    }
+
+    #[test]
+    fn recovery_started_event_copies_browser_session_context() {
+        let mut state = ServiceState {
+            sessions: BTreeMap::from([(
+                "session-1".to_string(),
+                BrowserSession {
+                    id: "session-1".to_string(),
+                    profile_id: Some("work".to_string()),
+                    service_name: Some("JournalDownloader".to_string()),
+                    agent_name: Some("codex".to_string()),
+                    task_name: Some("probeACSwebsite".to_string()),
+                    browser_ids: vec!["browser-1".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            profile_id: Some("work".to_string()),
+            active_session_ids: vec!["session-1".to_string()],
+            health: BrowserHealth::CdpDisconnected,
+            pid: Some(1234),
+            cdp_endpoint: Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
+            ..BrowserProcess::default()
+        };
+
+        record_browser_recovery_started_event(&mut state, "browser-1", &browser, "cdp lost");
+
+        let event = state.events.first().unwrap();
+        assert_eq!(event.kind, ServiceEventKind::BrowserRecoveryStarted);
+        assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(event.profile_id.as_deref(), Some("work"));
+        assert_eq!(event.session_id.as_deref(), Some("session-1"));
+        assert_eq!(event.service_name.as_deref(), Some("JournalDownloader"));
+        assert_eq!(event.agent_name.as_deref(), Some("codex"));
+        assert_eq!(event.task_name.as_deref(), Some("probeACSwebsite"));
+        assert_eq!(event.current_health, Some(BrowserHealth::CdpDisconnected));
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("reason"))
+                .and_then(|reason| reason.as_str()),
+            Some("cdp lost")
+        );
     }
 
     async fn serve_json_version(listener: TcpListener) {
