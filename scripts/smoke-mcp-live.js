@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 
@@ -21,12 +21,15 @@ const context = createSmokeContext({
 const { session, tempHome } = context;
 const profileDir = join(tempHome, 'chrome-profile');
 const screenshotDir = join(tempHome, 'screenshots');
+const uploadPath = join(tempHome, 'mcp-upload.txt');
+const harPath = join(tempHome, 'mcp-capture.har');
 const serviceName = 'McpLiveSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'browserSnapshotSmoke';
 
 mkdirSync(profileDir, { recursive: true });
 mkdirSync(screenshotDir, { recursive: true });
+writeFileSync(uploadPath, 'mcp upload smoke\n');
 
 let mcp;
 let networkServer;
@@ -103,6 +106,8 @@ async function startNetworkServer() {
       '<main id="browser-command-main">',
       '<h1>MCP Browser Command Smoke</h1>',
       '<img id="network-probe" src="/asset.png?probe=1" alt="network probe">',
+      '<label for="file">Upload</label>',
+      '<input id="file" type="file">',
       '</main>',
       '</body>',
       '</html>',
@@ -444,6 +449,124 @@ try {
   );
   assert(commandMediaPayload.data?.set === true, 'browser_media did not report set state');
 
+  const commandDialogResult = await send('tools/call', {
+    name: 'browser_dialog',
+    arguments: {
+      response: 'status',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandDialogPayload = parseToolPayload(commandDialogResult);
+  assert(
+    commandDialogPayload.success === true,
+    `browser_dialog status failed: ${JSON.stringify(commandDialogPayload)}`,
+  );
+  assert(commandDialogPayload.data?.hasDialog === false, 'browser_dialog reported an unexpected dialog');
+
+  const commandUploadResult = await send('tools/call', {
+    name: 'browser_upload',
+    arguments: {
+      selector: '#file',
+      files: [uploadPath],
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandUploadPayload = parseToolPayload(commandUploadResult);
+  assert(
+    commandUploadPayload.success === true,
+    `browser_upload failed: ${JSON.stringify(commandUploadPayload)}`,
+  );
+  assert(commandUploadPayload.data?.uploaded === 1, 'browser_upload did not report one uploaded file');
+
+  const commandHarStartResult = await send('tools/call', {
+    name: 'browser_har_start',
+    arguments: {
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandHarStartPayload = parseToolPayload(commandHarStartResult);
+  assert(
+    commandHarStartPayload.success === true,
+    `browser_har_start failed: ${JSON.stringify(commandHarStartPayload)}`,
+  );
+  assert(commandHarStartPayload.data?.started === true, 'browser_har_start did not report started state');
+
+  const commandHarNavigateResult = await send('tools/call', {
+    name: 'browser_navigate',
+    arguments: {
+      url: `${browserCommandUrl}&har=1`,
+      waitUntil: 'load',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandHarNavigatePayload = parseToolPayload(commandHarNavigateResult);
+  assert(
+    commandHarNavigatePayload.success === true,
+    `browser_navigate during HAR failed: ${JSON.stringify(commandHarNavigatePayload)}`,
+  );
+
+  const commandHarStopResult = await send('tools/call', {
+    name: 'browser_har_stop',
+    arguments: {
+      path: harPath,
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandHarStopPayload = parseToolPayload(commandHarStopResult);
+  assert(
+    commandHarStopPayload.success === true,
+    `browser_har_stop failed: ${JSON.stringify(commandHarStopPayload)}`,
+  );
+  assert(commandHarStopPayload.data?.path === harPath, 'browser_har_stop did not report HAR path');
+  assert(existsSync(harPath), 'browser_har_stop did not write HAR file');
+
+  const commandRouteResult = await send('tools/call', {
+    name: 'browser_route',
+    arguments: {
+      url: '**/mocked-api',
+      response: {
+        status: 200,
+        body: '{"mocked":true}',
+        contentType: 'application/json',
+      },
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandRoutePayload = parseToolPayload(commandRouteResult);
+  assert(
+    commandRoutePayload.success === true,
+    `browser_route failed: ${JSON.stringify(commandRoutePayload)}`,
+  );
+  assert(commandRoutePayload.data?.routed === '**/mocked-api', 'browser_route did not report route');
+
+  const commandUnrouteResult = await send('tools/call', {
+    name: 'browser_unroute',
+    arguments: {
+      url: '**/mocked-api',
+      serviceName,
+      agentName,
+      taskName,
+    },
+  });
+  const commandUnroutePayload = parseToolPayload(commandUnrouteResult);
+  assert(
+    commandUnroutePayload.success === true,
+    `browser_unroute failed: ${JSON.stringify(commandUnroutePayload)}`,
+  );
+  assert(commandUnroutePayload.data?.unrouted === '**/mocked-api', 'browser_unroute did not report route');
+
   const commandCookiesSetResult = await send('tools/call', {
     name: 'browser_cookies_set',
     arguments: {
@@ -590,7 +713,7 @@ try {
     ),
     `browser_requests did not capture the local asset request: ${JSON.stringify(commandRequests)}`,
   );
-  const assetRequest = commandRequests.find(
+  const assetRequest = commandRequests.findLast(
     (request) =>
       typeof request.url === 'string' &&
       request.url.includes('/asset.png?probe=1') &&
@@ -1546,6 +1669,12 @@ try {
     ['timezone', 'browser_timezone'],
     ['locale', 'browser_locale'],
     ['emulatemedia', 'browser_media'],
+    ['dialog', 'browser_dialog'],
+    ['upload', 'browser_upload'],
+    ['har_start', 'browser_har_start'],
+    ['har_stop', 'browser_har_stop'],
+    ['route', 'browser_route'],
+    ['unroute', 'browser_unroute'],
     ['cookies_set', 'browser_cookies_set'],
     ['cookies_get', 'browser_cookies_get'],
     ['cookies_clear', 'browser_cookies_clear'],

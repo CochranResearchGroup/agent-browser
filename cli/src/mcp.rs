@@ -1274,6 +1274,14 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_timezone_tool_schema(),
         browser_locale_tool_schema(),
         browser_media_tool_schema(),
+        browser_dialog_tool_schema(),
+        browser_upload_tool_schema(),
+        browser_download_tool_schema(),
+        browser_wait_for_download_tool_schema(),
+        browser_har_start_tool_schema(),
+        browser_har_stop_tool_schema(),
+        browser_route_tool_schema(),
+        browser_unroute_tool_schema(),
         browser_command_tool_schema(),
         json!({
             "name": "service_trace",
@@ -2111,6 +2119,319 @@ fn browser_media_tool_schema() -> Value {
     })
 }
 
+fn browser_dialog_tool_schema() -> Value {
+    json!({
+        "name": "browser_dialog",
+        "title": "Handle browser dialog",
+        "description": "Queue dialog status or response handling for the active browser session. Use status before deciding whether to accept or dismiss. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "response": {
+                    "type": "string",
+                    "enum": ["status", "accept", "dismiss"],
+                    "description": "Required dialog action."
+                },
+                "promptText": {
+                    "type": "string",
+                    "description": "Optional prompt text when accepting a prompt dialog."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued dialog job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["response"]
+        }
+    })
+}
+
+fn browser_upload_tool_schema() -> Value {
+    json!({
+        "name": "browser_upload",
+        "title": "Upload files",
+        "description": "Queue setting files on an input element in the active browser session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "Required CSS selector or cached ref for the file input."
+                },
+                "files": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "minItems": 1,
+                    "description": "Required non-empty list of file paths to upload."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued upload job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["selector", "files"]
+        }
+    })
+}
+
+fn browser_download_tool_schema() -> Value {
+    json!({
+        "name": "browser_download",
+        "title": "Download by clicking",
+        "description": "Queue clicking an element that triggers a browser download and save it to the requested path. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "Required CSS selector or cached ref for the element that triggers the download."
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Required destination path for the downloaded file."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued download job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["selector", "path"]
+        }
+    })
+}
+
+fn browser_wait_for_download_tool_schema() -> Value {
+    json!({
+        "name": "browser_wait_for_download",
+        "title": "Wait for browser download",
+        "description": "Queue waiting for a browser download event or a destination path change. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Optional expected download path to watch for changes."
+                },
+                "timeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional daemon-side download wait timeout."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued download-wait job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_har_start_tool_schema() -> Value {
+    json!({
+        "name": "browser_har_start",
+        "title": "Start HAR capture",
+        "description": "Queue starting HAR capture for the active browser session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued HAR start job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_har_stop_tool_schema() -> Value {
+    json!({
+        "name": "browser_har_stop",
+        "title": "Stop HAR capture",
+        "description": "Queue stopping HAR capture and writing the HAR file. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Optional destination path for the HAR file."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued HAR stop job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
+fn browser_route_tool_schema() -> Value {
+    json!({
+        "name": "browser_route",
+        "title": "Route browser requests",
+        "description": "Queue adding a request route for the active browser session. Use abort to block matches or response to fulfill matches. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required URL pattern to intercept, for example **/api/*."
+                },
+                "abort": {
+                    "type": "boolean",
+                    "description": "Whether matching requests should be aborted."
+                },
+                "response": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Optional response object with status, body, contentType, and headers fields."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued route job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": ["url"]
+        }
+    })
+}
+
+fn browser_unroute_tool_schema() -> Value {
+    json!({
+        "name": "browser_unroute",
+        "title": "Remove browser request routes",
+        "description": "Queue removing one request route pattern, or all routes when url is omitted. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Optional URL pattern to remove. Omit to remove all routes."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for this queued unroute job."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name, for example JournalDownloader."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name, for example probeACSwebsite."
+                }
+            },
+            "required": []
+        }
+    })
+}
+
 fn browser_command_tool_schema() -> Value {
     json!({
         "name": "browser_command",
@@ -2326,6 +2647,14 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "browser_timezone" => call_browser_timezone(arguments, session),
         "browser_locale" => call_browser_locale(arguments, session),
         "browser_media" => call_browser_media(arguments, session),
+        "browser_dialog" => call_browser_dialog(arguments, session),
+        "browser_upload" => call_browser_upload(arguments, session),
+        "browser_download" => call_browser_download(arguments, session),
+        "browser_wait_for_download" => call_browser_wait_for_download(arguments, session),
+        "browser_har_start" => call_browser_har_start(arguments, session),
+        "browser_har_stop" => call_browser_har_stop(arguments, session),
+        "browser_route" => call_browser_route(arguments, session),
+        "browser_unroute" => call_browser_unroute(arguments, session),
         "browser_snapshot" => call_browser_snapshot(arguments, session),
         "browser_get_url" => call_browser_read_tool(arguments, session, BROWSER_GET_URL_TOOL),
         "browser_get_title" => call_browser_read_tool(arguments, session, BROWSER_GET_TITLE_TOOL),
@@ -2823,6 +3152,138 @@ fn call_browser_media(arguments: &Value, session: &str) -> Result<Value, JsonRpc
     });
 
     send_queued_tool_command("browser_media", session, trace, command)
+}
+
+fn call_browser_dialog(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let response = required_dialog_response_argument(arguments)?;
+    let prompt_text = optional_string_argument(arguments, "promptText")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_dialog_command(
+        response,
+        prompt_text,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_dialog", session, trace, command)
+}
+
+fn call_browser_upload(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let files = required_string_array_argument(arguments, "files")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_upload_command(
+        selector,
+        &files,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_upload", session, trace, command)
+}
+
+fn call_browser_download(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let selector = required_string_argument(arguments, "selector")?;
+    let path = required_string_argument(arguments, "path")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_download_command(
+        selector,
+        path,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_download", session, trace, command)
+}
+
+fn call_browser_wait_for_download(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let path = optional_string_argument(arguments, "path")?;
+    let timeout_ms = optional_positive_u64_argument(arguments, "timeoutMs")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_wait_for_download_command(
+        path,
+        timeout_ms,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_wait_for_download", session, trace, command)
+}
+
+fn call_browser_har_start(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_action_command(
+        "mcp-browser-har-start",
+        "har_start",
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_har_start", session, trace, command)
+}
+
+fn call_browser_har_stop(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let path = optional_string_argument(arguments, "path")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_har_stop_command(
+        path,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_har_stop", session, trace, command)
+}
+
+fn call_browser_route(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let url = required_string_argument(arguments, "url")?;
+    let abort = optional_bool_argument(arguments, "abort")?;
+    let response = optional_object_argument(arguments, "response")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_route_command(BrowserRouteCommandArgs {
+        url,
+        abort,
+        response,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
+    });
+
+    send_queued_tool_command("browser_route", session, trace, command)
+}
+
+fn call_browser_unroute(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let url = optional_string_argument(arguments, "url")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = browser_unroute_command(
+        url,
+        context.job_timeout_ms,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+
+    send_queued_tool_command("browser_unroute", session, trace, command)
 }
 
 fn call_browser_snapshot(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -3608,6 +4069,16 @@ struct BrowserMediaCommandArgs<'a> {
     task_name: Option<&'a str>,
 }
 
+struct BrowserRouteCommandArgs<'a> {
+    url: &'a str,
+    abort: Option<bool>,
+    response: Option<&'a serde_json::Map<String, Value>>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
 fn browser_command_command(args: BrowserCommandArgs<'_>) -> Value {
     let mut command = json!({
         "id": format!("mcp-browser-command-{}-{}", args.action, uuid::Uuid::new_v4()),
@@ -4073,6 +4544,172 @@ fn browser_media_command(args: BrowserMediaCommandArgs<'_>) -> Value {
         args.agent_name,
         args.task_name,
     );
+    command
+}
+
+fn browser_dialog_command(
+    response: &str,
+    prompt_text: Option<&str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-dialog-{}", uuid::Uuid::new_v4()),
+        "action": "dialog",
+        "response": response,
+    });
+    if let Some(prompt_text) = prompt_text {
+        command["promptText"] = json!(prompt_text);
+    }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_upload_command(
+    selector: &str,
+    files: &[String],
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-upload-{}", uuid::Uuid::new_v4()),
+        "action": "upload",
+        "selector": selector,
+        "files": files,
+    });
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_download_command(
+    selector: &str,
+    path: &str,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-download-{}", uuid::Uuid::new_v4()),
+        "action": "download",
+        "selector": selector,
+        "path": path,
+    });
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_wait_for_download_command(
+    path: Option<&str>,
+    timeout_ms: Option<u64>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-wait-for-download-{}", uuid::Uuid::new_v4()),
+        "action": "waitfordownload",
+    });
+    if let Some(path) = path {
+        command["path"] = json!(path);
+    }
+    if let Some(timeout_ms) = timeout_ms {
+        command["timeoutMs"] = json!(timeout_ms);
+    }
+    apply_service_command_fields(
+        &mut command,
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    command
+}
+
+fn browser_har_stop_command(
+    path: Option<&str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-har-stop",
+        "har_stop",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    if let Some(path) = path {
+        command["path"] = json!(path);
+    }
+    command
+}
+
+fn browser_route_command(args: BrowserRouteCommandArgs<'_>) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-browser-route-{}", uuid::Uuid::new_v4()),
+        "action": "route",
+        "url": args.url,
+    });
+    if let Some(abort) = args.abort {
+        command["abort"] = json!(abort);
+    }
+    if let Some(response) = args.response {
+        command["response"] = json!(response);
+    }
+    apply_service_command_fields(
+        &mut command,
+        args.job_timeout_ms,
+        args.service_name,
+        args.agent_name,
+        args.task_name,
+    );
+    command
+}
+
+fn browser_unroute_command(
+    url: Option<&str>,
+    job_timeout_ms: Option<u64>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = browser_action_command(
+        "mcp-browser-unroute",
+        "unroute",
+        job_timeout_ms,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    if let Some(url) = url {
+        command["url"] = json!(url);
+    }
     command
 }
 
@@ -4853,6 +5490,17 @@ fn optional_wait_until_argument(arguments: &Value) -> Result<Option<&str>, JsonR
             "waitUntil must be load, domcontentloaded, networkidle, or none",
         )),
         None => Ok(None),
+    }
+}
+
+fn required_dialog_response_argument(arguments: &Value) -> Result<&str, JsonRpcError> {
+    match required_string_argument(arguments, "response")? {
+        "status" => Ok("status"),
+        "accept" => Ok("accept"),
+        "dismiss" => Ok("dismiss"),
+        _ => Err(JsonRpcError::invalid_params(
+            "response must be status, accept, or dismiss",
+        )),
     }
 }
 
@@ -5858,6 +6506,62 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "browser_dialog"
+                && tool["inputSchema"]["required"][0] == "response"
+                && tool["inputSchema"]["properties"]["promptText"].is_object()
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_upload"
+                && tool["inputSchema"]["required"][0] == "selector"
+                && tool["inputSchema"]["required"][1] == "files"
+                && tool["inputSchema"]["properties"]["files"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_download"
+                && tool["inputSchema"]["required"][0] == "selector"
+                && tool["inputSchema"]["required"][1] == "path"
+                && tool["inputSchema"]["properties"]["path"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_wait_for_download"
+                && tool["inputSchema"]["properties"]["path"].is_object()
+                && tool["inputSchema"]["properties"]["timeoutMs"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_har_start"
+                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_har_stop"
+                && tool["inputSchema"]["properties"]["path"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_route"
+                && tool["inputSchema"]["required"][0] == "url"
+                && tool["inputSchema"]["properties"]["response"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "browser_unroute"
+                && tool["inputSchema"]["properties"]["url"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "browser_command"
                 && tool["inputSchema"]["properties"]["action"].is_object()
                 && tool["inputSchema"]["properties"]["params"].is_object()
@@ -6148,6 +6852,51 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], 63);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":64,"method":"tools/call","params":{"name":"browser_dialog","arguments":{"response":"close","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 64);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":65,"method":"tools/call","params":{"name":"browser_upload","arguments":{"selector":"#file","files":[],"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 65);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r##"{"jsonrpc":"2.0","id":66,"method":"tools/call","params":{"name":"browser_download","arguments":{"selector":"#download","serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"##,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 66);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":67,"method":"tools/call","params":{"name":"browser_wait_for_download","arguments":{"timeoutMs":0,"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 67);
+        assert_eq!(response["error"]["code"], -32602);
+
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":68,"method":"tools/call","params":{"name":"browser_route","arguments":{"response":[],"serviceName":"JournalDownloader","agentName":"agent-a","taskName":"probeACSwebsite"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 68);
         assert_eq!(response["error"]["code"], -32602);
     }
 
@@ -7010,6 +7759,134 @@ mod tests {
         assert_eq!(media_command["serviceName"], "JournalDownloader");
         assert_eq!(media_command["agentName"], "agent-a");
         assert_eq!(media_command["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_file_dialog_har_and_route_commands_forward_options_and_trace_fields() {
+        let dialog_command = browser_dialog_command(
+            "accept",
+            Some("prompt value"),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(dialog_command["action"], "dialog");
+        assert_eq!(dialog_command["response"], "accept");
+        assert_eq!(dialog_command["promptText"], "prompt value");
+        assert_eq!(dialog_command["jobTimeoutMs"], 1000);
+        assert_eq!(dialog_command["serviceName"], "JournalDownloader");
+        assert_eq!(dialog_command["agentName"], "agent-a");
+        assert_eq!(dialog_command["taskName"], "probeACSwebsite");
+
+        let files = vec!["/tmp/one.txt".to_string(), "/tmp/two.txt".to_string()];
+        let upload_command = browser_upload_command(
+            "#file",
+            &files,
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(upload_command["action"], "upload");
+        assert_eq!(upload_command["selector"], "#file");
+        assert_eq!(upload_command["files"][0], "/tmp/one.txt");
+        assert_eq!(upload_command["files"][1], "/tmp/two.txt");
+        assert_eq!(upload_command["jobTimeoutMs"], 1000);
+        assert_eq!(upload_command["serviceName"], "JournalDownloader");
+        assert_eq!(upload_command["agentName"], "agent-a");
+        assert_eq!(upload_command["taskName"], "probeACSwebsite");
+
+        let download_command = browser_download_command(
+            "#download",
+            "/tmp/download.txt",
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(download_command["action"], "download");
+        assert_eq!(download_command["selector"], "#download");
+        assert_eq!(download_command["path"], "/tmp/download.txt");
+        assert_eq!(download_command["jobTimeoutMs"], 1000);
+        assert_eq!(download_command["serviceName"], "JournalDownloader");
+        assert_eq!(download_command["agentName"], "agent-a");
+        assert_eq!(download_command["taskName"], "probeACSwebsite");
+
+        let wait_command = browser_wait_for_download_command(
+            Some("/tmp/download.txt"),
+            Some(5000),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(wait_command["action"], "waitfordownload");
+        assert_eq!(wait_command["path"], "/tmp/download.txt");
+        assert_eq!(wait_command["timeoutMs"], 5000);
+        assert_eq!(wait_command["jobTimeoutMs"], 1000);
+        assert_eq!(wait_command["serviceName"], "JournalDownloader");
+        assert_eq!(wait_command["agentName"], "agent-a");
+        assert_eq!(wait_command["taskName"], "probeACSwebsite");
+
+        let har_stop_command = browser_har_stop_command(
+            Some("/tmp/capture.har"),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(har_stop_command["action"], "har_stop");
+        assert_eq!(har_stop_command["path"], "/tmp/capture.har");
+        assert_eq!(har_stop_command["jobTimeoutMs"], 1000);
+        assert_eq!(har_stop_command["serviceName"], "JournalDownloader");
+        assert_eq!(har_stop_command["agentName"], "agent-a");
+        assert_eq!(har_stop_command["taskName"], "probeACSwebsite");
+
+        let route_response = serde_json::Map::from_iter([
+            ("status".to_string(), json!(200)),
+            ("body".to_string(), json!("{}")),
+            ("contentType".to_string(), json!("application/json")),
+        ]);
+        let route_command = browser_route_command(BrowserRouteCommandArgs {
+            url: "**/api/*",
+            abort: Some(false),
+            response: Some(&route_response),
+            job_timeout_ms: Some(1000),
+            service_name: Some("JournalDownloader"),
+            agent_name: Some("agent-a"),
+            task_name: Some("probeACSwebsite"),
+        });
+
+        assert_eq!(route_command["action"], "route");
+        assert_eq!(route_command["url"], "**/api/*");
+        assert_eq!(route_command["abort"], false);
+        assert_eq!(route_command["response"]["status"], 200);
+        assert_eq!(route_command["response"]["body"], "{}");
+        assert_eq!(route_command["jobTimeoutMs"], 1000);
+        assert_eq!(route_command["serviceName"], "JournalDownloader");
+        assert_eq!(route_command["agentName"], "agent-a");
+        assert_eq!(route_command["taskName"], "probeACSwebsite");
+
+        let unroute_command = browser_unroute_command(
+            Some("**/api/*"),
+            Some(1000),
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeACSwebsite"),
+        );
+
+        assert_eq!(unroute_command["action"], "unroute");
+        assert_eq!(unroute_command["url"], "**/api/*");
+        assert_eq!(unroute_command["jobTimeoutMs"], 1000);
+        assert_eq!(unroute_command["serviceName"], "JournalDownloader");
+        assert_eq!(unroute_command["agentName"], "agent-a");
+        assert_eq!(unroute_command["taskName"], "probeACSwebsite");
     }
 
     #[test]
