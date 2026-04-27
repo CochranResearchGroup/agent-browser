@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+
 use crate::runtime_profile::{
     read_devtools_port as read_runtime_devtools_port, resolve_profile, write_runtime_state,
     RuntimeState,
@@ -37,6 +40,16 @@ pub struct ProcessShutdownOutcome {
     pub force_kill_attempted: bool,
     pub force_kill_succeeded: bool,
     pub errors: Vec<String>,
+}
+
+/// Non-blocking child-process exit evidence captured from `try_wait()`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessExitObservation {
+    pub pid: u32,
+    pub exit_code: Option<i32>,
+    #[cfg(unix)]
+    pub signal: Option<i32>,
+    pub poll_error: Option<String>,
 }
 
 impl ChromeProcess {
@@ -116,10 +129,32 @@ impl ChromeProcess {
         self.runtime_profile.as_deref()
     }
 
+    /// Non-blocking check whether Chrome has exited and capture observable exit evidence.
+    pub fn poll_exit(&mut self) -> Option<ProcessExitObservation> {
+        let pid = self.child.id();
+        match self.child.try_wait() {
+            Ok(Some(status)) => Some(ProcessExitObservation {
+                pid,
+                exit_code: status.code(),
+                #[cfg(unix)]
+                signal: status.signal(),
+                poll_error: None,
+            }),
+            Ok(None) => None,
+            Err(err) => Some(ProcessExitObservation {
+                pid,
+                exit_code: None,
+                #[cfg(unix)]
+                signal: None,
+                poll_error: Some(err.to_string()),
+            }),
+        }
+    }
+
     /// Non-blocking check whether Chrome has exited.
-    /// Returns `true` if the process has exited (and reaps it), `false` if still running.
+    /// Returns `true` if the process has exited, `false` if still running.
     pub fn has_exited(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(Some(_)) | Err(_))
+        self.poll_exit().is_some()
     }
 
     /// Wait for Chrome to exit on its own (after Browser.close CDP command),

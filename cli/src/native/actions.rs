@@ -17,7 +17,9 @@ use crate::runtime_profile::{
 };
 
 use super::auth;
-use super::browser::{should_track_target, BrowserManager, BrowserShutdownOutcome, WaitUntil};
+use super::browser::{
+    should_track_target, BrowserManager, BrowserShutdownOutcome, ProcessExitObservation, WaitUntil,
+};
 use super::cancellation::CancellationToken;
 use super::cdp::chrome::LaunchOptions;
 use super::cdp::client::CdpClient;
@@ -41,9 +43,10 @@ use super::service_activity::service_incident_activity_response;
 use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
     record_browser_health_changed_event_with_details, record_browser_launch_recorded_event,
-    record_browser_recovery_started_event, recovery_reason_kind_for_health,
-    BrowserProcessExitCause, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
-    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    record_browser_recovery_started_event, record_browser_recovery_started_event_with_details,
+    recovery_reason_kind_for_health, BrowserProcessExitCause, BrowserRecoveryPolicy,
+    BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource,
+    BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_model::{
@@ -589,6 +592,7 @@ struct BrowserStaleState {
     health: Option<ServiceBrowserHealth>,
     recovery_reason_kind: Option<BrowserRecoveryReasonKind>,
     message: Option<String>,
+    event_details: Option<Value>,
 }
 
 async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleState {
@@ -598,19 +602,21 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
             health: None,
             recovery_reason_kind: None,
             message: None,
+            event_details: None,
         };
     };
 
-    if mgr.has_process_exited() {
-        let pid = mgr.browser_pid();
-        let message = pid
-            .map(|pid| format!("Active browser PID {} exited before command dispatch", pid))
-            .unwrap_or_else(|| "Active browser process exited before command dispatch".to_string());
+    if let Some(exit) = mgr.poll_process_exit() {
+        let message = format!(
+            "Active browser PID {} exited before command dispatch",
+            exit.pid
+        );
         return BrowserStaleState {
             needs_launch: true,
             health: Some(ServiceBrowserHealth::ProcessExited),
             recovery_reason_kind: Some(BrowserRecoveryReasonKind::ProcessExited),
             message: Some(message),
+            event_details: Some(process_exit_observation_details(&exit)),
         };
     }
 
@@ -623,6 +629,10 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
                 "Active browser CDP connection is not responding: {}",
                 mgr.get_cdp_url()
             )),
+            event_details: Some(json!({
+                "cdpProbe": "Browser.getVersion",
+                "cdpEndpoint": mgr.get_cdp_url(),
+            })),
         };
     }
 
@@ -631,7 +641,26 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
         health: None,
         recovery_reason_kind: None,
         message: None,
+        event_details: None,
     }
+}
+
+fn process_exit_observation_details(exit: &ProcessExitObservation) -> Value {
+    let mut details = json!({
+        "processExitDetection": "local_child_try_wait",
+        "processExitPid": exit.pid,
+    });
+    if let Some(code) = exit.exit_code {
+        details["processExitCode"] = json!(code);
+    }
+    #[cfg(unix)]
+    if let Some(signal) = exit.signal {
+        details["processExitSignal"] = json!(signal);
+    }
+    if let Some(error) = exit.poll_error.as_deref() {
+        details["processExitPollError"] = json!(error);
+    }
+    details
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -694,6 +723,7 @@ fn persist_current_browser_stale_health(
     health: ServiceBrowserHealth,
     reason_kind: BrowserRecoveryReasonKind,
     last_error: String,
+    event_details: Option<Value>,
 ) -> BrowserRecoveryPersistence {
     let Ok(path) = JsonServiceStateStore::default_path() else {
         return BrowserRecoveryPersistence::NotRecorded;
@@ -715,7 +745,13 @@ fn persist_current_browser_stale_health(
         health,
         last_error.clone(),
     );
-    record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    record_browser_health_changed_event_with_details(
+        &mut service_state,
+        &id,
+        previous.as_ref(),
+        &browser,
+        event_details.clone(),
+    );
     let policy =
         recovery_policy_for_next_attempt(&service_state, &id, state.browser_recovery_policy_config);
     if policy.retry_budget_exceeded {
@@ -736,13 +772,14 @@ fn persist_current_browser_stale_health(
             BrowserRecoveryPersistence::NotRecorded
         };
     }
-    record_browser_recovery_started_event(
+    record_browser_recovery_started_event_with_details(
         &mut service_state,
         &id,
         &browser,
         reason_kind,
         &last_error,
         Some(policy),
+        event_details,
     );
     service_state.browsers.insert(id, browser);
     if store.save(&service_state).is_ok() {
@@ -2265,8 +2302,13 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                     stale_state.recovery_reason_kind,
                     stale_state.message,
                 ) {
-                    recovery_persistence =
-                        persist_current_browser_stale_health(state, health, reason_kind, message);
+                    recovery_persistence = persist_current_browser_stale_health(
+                        state,
+                        health,
+                        reason_kind,
+                        message,
+                        stale_state.event_details,
+                    );
                 }
                 if let Some(ref mut mgr) = state.browser {
                     let _ = mgr.close().await;
@@ -12617,6 +12659,25 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_process_exit_observation_details_include_exit_evidence() {
+        let observation = ProcessExitObservation {
+            pid: 1234,
+            exit_code: Some(137),
+            #[cfg(unix)]
+            signal: Some(9),
+            poll_error: None,
+        };
+
+        let details = process_exit_observation_details(&observation);
+
+        assert_eq!(details["processExitDetection"], "local_child_try_wait");
+        assert_eq!(details["processExitPid"], 1234);
+        assert_eq!(details["processExitCode"], 137);
+        #[cfg(unix)]
+        assert_eq!(details["processExitSignal"], 9);
     }
 
     #[test]

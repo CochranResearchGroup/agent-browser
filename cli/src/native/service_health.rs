@@ -179,6 +179,30 @@ fn process_exit_cause_for_recovery_reason(
     }
 }
 
+fn failure_class_for_health(health: BrowserHealth) -> Option<&'static str> {
+    match health {
+        BrowserHealth::ProcessExited => Some("browser_process_exited"),
+        BrowserHealth::CdpDisconnected => Some("cdp_unresponsive"),
+        BrowserHealth::Unreachable => Some("cdp_endpoint_unreachable"),
+        BrowserHealth::Degraded => Some("target_discovery_failed"),
+        BrowserHealth::Faulted => Some("browser_recovery_faulted"),
+        _ => None,
+    }
+}
+
+fn failure_class_for_recovery_reason(
+    reason_kind: BrowserRecoveryReasonKind,
+) -> Option<&'static str> {
+    match reason_kind {
+        BrowserRecoveryReasonKind::ProcessExited => Some("browser_process_exited"),
+        BrowserRecoveryReasonKind::CdpDisconnected => Some("cdp_unresponsive"),
+        BrowserRecoveryReasonKind::UnreachableEndpoint => Some("cdp_endpoint_unreachable"),
+        BrowserRecoveryReasonKind::DegradedTargets => Some("target_discovery_failed"),
+        BrowserRecoveryReasonKind::Unknown => Some("browser_recovery_faulted"),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServiceReconcileSummary {
     pub browser_count: usize,
@@ -505,6 +529,9 @@ pub fn record_browser_health_changed_event_with_details(
     if let Some(reason_kind) = recovery_reason_kind_value_for_health(current.health) {
         details["currentReasonKind"] = reason_kind;
     }
+    if let Some(failure_class) = failure_class_for_health(current.health) {
+        details["failureClass"] = serde_json::json!(failure_class);
+    }
     if let Some(cause) = process_exit_cause_for_health(current.health) {
         details["processExitCause"] = serde_json::json!(cause.as_str());
     }
@@ -571,6 +598,26 @@ pub fn record_browser_recovery_started_event(
     reason: &str,
     policy: Option<BrowserRecoveryPolicy>,
 ) {
+    record_browser_recovery_started_event_with_details(
+        state,
+        browser_id,
+        current,
+        reason_kind,
+        reason,
+        policy,
+        None,
+    );
+}
+
+pub fn record_browser_recovery_started_event_with_details(
+    state: &mut ServiceState,
+    browser_id: &str,
+    current: &BrowserProcess,
+    reason_kind: BrowserRecoveryReasonKind,
+    reason: &str,
+    policy: Option<BrowserRecoveryPolicy>,
+    extra_details: Option<serde_json::Value>,
+) {
     let mut details = serde_json::json!({
         "reasonKind": reason_kind.as_str(),
         "reason": reason,
@@ -579,6 +626,9 @@ pub fn record_browser_recovery_started_event(
     });
     if let Some(cause) = process_exit_cause_for_recovery_reason(reason_kind) {
         details["processExitCause"] = serde_json::json!(cause.as_str());
+    }
+    if let Some(failure_class) = failure_class_for_recovery_reason(reason_kind) {
+        details["failureClass"] = serde_json::json!(failure_class);
     }
     if let Some(policy) = policy {
         details["attempt"] = serde_json::json!(policy.attempt);
@@ -590,6 +640,13 @@ pub fn record_browser_recovery_started_event(
             "baseBackoffMs": policy.source.base_backoff_ms.as_str(),
             "maxBackoffMs": policy.source.max_backoff_ms.as_str(),
         });
+    }
+    if let Some(serde_json::Value::Object(extra)) = extra_details {
+        if let Some(details) = details.as_object_mut() {
+            for (key, value) in extra {
+                details.insert(key, value);
+            }
+        }
     }
 
     let mut event = ServiceEvent {
@@ -972,6 +1029,14 @@ mod tests {
                 .and_then(|cause| cause.as_str()),
             Some("unexpected_process_exit")
         );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("failureClass"))
+                .and_then(|class| class.as_str()),
+            Some("browser_process_exited")
+        );
     }
 
     #[test]
@@ -1042,6 +1107,14 @@ mod tests {
                 .and_then(|reason| reason.as_str()),
             Some("cdp_disconnected")
         );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("failureClass"))
+                .and_then(|class| class.as_str()),
+            Some("cdp_unresponsive")
+        );
         assert!(event
             .details
             .as_ref()
@@ -1074,6 +1147,14 @@ mod tests {
                 .and_then(|details| details.get("processExitCause"))
                 .and_then(|cause| cause.as_str()),
             Some("unexpected_process_exit")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("failureClass"))
+                .and_then(|class| class.as_str()),
+            Some("browser_process_exited")
         );
     }
 

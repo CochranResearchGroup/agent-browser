@@ -24,14 +24,19 @@ ordered sequence from the service trace surface:
    `currentHealth` set to a stale value such as `process_exited` or
    `cdp_disconnected` and `details.currentReasonKind` set to the same
    structured recovery vocabulary. Unexpected process exits also include
-   `details.processExitCause: "unexpected_process_exit"`.
+   `details.processExitCause: "unexpected_process_exit"` and
+   `details.failureClass: "browser_process_exited"`. Active local Chrome
+   process exits also include `details.processExitDetection`, with value
+   `local_child_try_wait`, `details.processExitPid`, and exit code or signal
+   fields when available.
 2. A `browser_recovery_started` event for the same browser with
    `details.reasonKind`, `details.reason`, `details.attempt`,
    `details.retryBudget`, `details.nextRetryDelayMs`, and
    `details.policySource` populated. `policySource` reports `default`,
    `config`, `env`, or `cli` separately for the retry budget, base backoff, and
    max backoff values. Recovery-started events for process exits include the
-   same `details.processExitCause: "unexpected_process_exit"` value.
+   same `details.processExitCause: "unexpected_process_exit"` and
+   `details.failureClass` values.
 3. A later `browser_health_changed` event for the same browser with
    `currentHealth: "ready"` after relaunch.
 
@@ -80,9 +85,10 @@ sees stale health or ready health but not the recovery-started transition.
 ## Known Gaps
 
 - Crash classification is still coarse. The service now separates
-  `unexpected_process_exit` from `operator_requested_close`, but it should later
-  distinguish clean close, crash, killed process, port loss, hung DevTools,
-  degraded target discovery, and browser shutdown requested by policy.
+  `unexpected_process_exit` from `operator_requested_close` and adds
+  `failureClass` plus local child exit evidence when available, but it should
+  later distinguish clean close, crash, killed process, port loss, hung
+  DevTools, degraded target discovery, and browser shutdown requested by policy.
 - Recovery policy now has daemon-level config, flag, and environment overrides,
   but it is not yet scoped per service, site, profile, or task. The service
   still needs explicit policy-source metadata.

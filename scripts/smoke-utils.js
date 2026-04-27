@@ -283,11 +283,22 @@ export function assertRecoveryTraceEvents(events, { browserId, label = 'Recovery
     events[staleIndex].details?.currentReasonKind === RECOVERY_REASON_KIND_BY_HEALTH[staleHealth],
     `${label} stale health event did not include structured reason kind: ${JSON.stringify(events[staleIndex])}`,
   );
+  assert(
+    typeof events[staleIndex].details?.failureClass === 'string' &&
+      events[staleIndex].details.failureClass.length > 0,
+    `${label} stale health event did not include failure class: ${JSON.stringify(events[staleIndex])}`,
+  );
   if (staleHealth === 'process_exited') {
     assert(
       events[staleIndex].details?.processExitCause === 'unexpected_process_exit',
       `${label} process-exited health event did not include stable exit cause: ${JSON.stringify(events[staleIndex])}`,
     );
+    if (events[staleIndex].details?.processExitDetection === 'local_child_try_wait') {
+      assert(
+        Number.isInteger(events[staleIndex].details?.processExitPid),
+        `${label} process-exited health event did not include local process exit PID: ${JSON.stringify(events[staleIndex])}`,
+      );
+    }
   }
   const recoveryIndex = eventIndex(
     events,
@@ -319,11 +330,22 @@ export function assertRecoveryTraceEvents(events, { browserId, label = 'Recovery
     events[recoveryIndex].details?.reasonKind === RECOVERY_REASON_KIND_BY_HEALTH[staleHealth],
     `${label} recovery event did not include structured reason kind: ${JSON.stringify(events[recoveryIndex])}`,
   );
+  assert(
+    typeof events[recoveryIndex].details?.failureClass === 'string' &&
+      events[recoveryIndex].details.failureClass.length > 0,
+    `${label} recovery event did not include failure class: ${JSON.stringify(events[recoveryIndex])}`,
+  );
   if (staleHealth === 'process_exited') {
     assert(
       events[recoveryIndex].details?.processExitCause === 'unexpected_process_exit',
       `${label} process-exited recovery event did not include stable exit cause: ${JSON.stringify(events[recoveryIndex])}`,
     );
+    if (events[recoveryIndex].details?.processExitDetection === 'local_child_try_wait') {
+      assert(
+        Number.isInteger(events[recoveryIndex].details?.processExitPid),
+        `${label} process-exited recovery event did not include local process exit PID: ${JSON.stringify(events[recoveryIndex])}`,
+      );
+    }
   }
   assert(
     Number.isInteger(events[recoveryIndex].details?.attempt) &&

@@ -15,6 +15,8 @@ use super::cdp::types::*;
 use super::element::{resolve_element_object_id, RefMap};
 use std::path::Path;
 
+pub use super::cdp::chrome::ProcessExitObservation;
+
 // ---------------------------------------------------------------------------
 // Launch validation
 // ---------------------------------------------------------------------------
@@ -251,6 +253,14 @@ impl BrowserProcess {
         match self {
             BrowserProcess::Chrome(p) => p.has_exited(),
             BrowserProcess::Lightpanda(_) => false,
+        }
+    }
+
+    /// Non-blocking check whether the browser process has exited with process evidence.
+    pub fn poll_exit(&mut self) -> Option<ProcessExitObservation> {
+        match self {
+            BrowserProcess::Chrome(p) => p.poll_exit(),
+            BrowserProcess::Lightpanda(_) => None,
         }
     }
 
@@ -930,6 +940,13 @@ impl BrowserManager {
         } else {
             false
         }
+    }
+
+    /// Non-blocking process-exit observation for locally launched browsers.
+    pub fn poll_process_exit(&mut self) -> Option<ProcessExitObservation> {
+        self.browser_process
+            .as_mut()
+            .and_then(|process| process.poll_exit())
     }
 
     pub fn get_cdp_url(&self) -> &str {
