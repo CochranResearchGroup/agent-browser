@@ -41,9 +41,9 @@ use super::service_activity::service_incident_activity_response;
 use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
     record_browser_health_changed_event_with_details, record_browser_launch_recorded_event,
-    record_browser_recovery_started_event, recovery_reason_kind_for_health, BrowserRecoveryPolicy,
-    BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource,
-    BrowserRecoveryReasonKind,
+    record_browser_recovery_started_event, recovery_reason_kind_for_health,
+    BrowserProcessExitCause, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
+    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_model::{
@@ -888,6 +888,7 @@ fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserSh
     let shutdown_details = outcome.map(|outcome| {
         json!({
             "shutdownReasonKind": BrowserRecoveryReasonKind::OperatorRequestedClose.as_str(),
+            "processExitCause": BrowserProcessExitCause::OperatorRequestedClose.as_str(),
             "shutdownRequested": true,
             "politeCloseAttempted": outcome.polite_close_attempted,
             "politeCloseSucceeded": outcome.polite_close_succeeded,
@@ -12588,6 +12589,14 @@ mod tests {
                 .as_ref()
                 .and_then(|details| details.get("shutdownReasonKind"))
                 .and_then(|reason| reason.as_str()),
+            Some("operator_requested_close")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("processExitCause"))
+                .and_then(|cause| cause.as_str()),
             Some("operator_requested_close")
         );
         assert_eq!(

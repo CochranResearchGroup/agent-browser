@@ -23,20 +23,23 @@ ordered sequence from the service trace surface:
 1. A `browser_health_changed` event for the affected browser with
    `currentHealth` set to a stale value such as `process_exited` or
    `cdp_disconnected` and `details.currentReasonKind` set to the same
-   structured recovery vocabulary.
+   structured recovery vocabulary. Unexpected process exits also include
+   `details.processExitCause: "unexpected_process_exit"`.
 2. A `browser_recovery_started` event for the same browser with
    `details.reasonKind`, `details.reason`, `details.attempt`,
    `details.retryBudget`, `details.nextRetryDelayMs`, and
    `details.policySource` populated. `policySource` reports `default`,
    `config`, `env`, or `cli` separately for the retry budget, base backoff, and
-   max backoff values.
+   max backoff values. Recovery-started events for process exits include the
+   same `details.processExitCause: "unexpected_process_exit"` value.
 3. A later `browser_health_changed` event for the same browser with
    `currentHealth: "ready"` after relaunch.
 
 Operator-requested close events use the same `browser_health_changed` event kind
-but include `details.shutdownReasonKind: "operator_requested_close"` plus
-polite-close and force-kill outcome flags. Clients should use that metadata to
-separate expected shutdowns from unexpected `process_exited` recovery traces.
+but include `details.shutdownReasonKind: "operator_requested_close"`,
+`details.processExitCause: "operator_requested_close"`, and polite-close and
+force-kill outcome flags. Clients should use that metadata to separate expected
+shutdowns from unexpected `process_exited` recovery traces.
 
 If the next recovery attempt would exceed the configured retained-event retry
 budget, the service marks the browser `faulted`, records the faulted health
@@ -76,8 +79,8 @@ sees stale health or ready health but not the recovery-started transition.
 
 ## Known Gaps
 
-- Crash classification is still coarse. `process_exited` and
-  `cdp_disconnected` are useful operator signals, but the service should later
+- Crash classification is still coarse. The service now separates
+  `unexpected_process_exit` from `operator_requested_close`, but it should later
   distinguish clean close, crash, killed process, port loss, hung DevTools,
   degraded target discovery, and browser shutdown requested by policy.
 - Recovery policy now has daemon-level config, flag, and environment overrides,

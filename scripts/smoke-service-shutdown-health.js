@@ -93,6 +93,7 @@ try {
   );
   assert(
     degradedEvent.details?.shutdownReasonKind === 'operator_requested_close' &&
+      degradedEvent.details?.processExitCause === 'operator_requested_close' &&
       degradedEvent.details?.shutdownRequested === true,
     `Degraded shutdown event missing operator-requested close metadata: ${JSON.stringify(degradedEvent)}`,
   );

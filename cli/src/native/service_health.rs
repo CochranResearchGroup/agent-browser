@@ -40,6 +40,22 @@ impl BrowserRecoveryReasonKind {
     }
 }
 
+/// Stable client-facing cause for browser process exits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserProcessExitCause {
+    UnexpectedProcessExit,
+    OperatorRequestedClose,
+}
+
+impl BrowserProcessExitCause {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UnexpectedProcessExit => "unexpected_process_exit",
+            Self::OperatorRequestedClose => "operator_requested_close",
+        }
+    }
+}
+
 pub fn recovery_reason_kind_for_health(health: BrowserHealth) -> BrowserRecoveryReasonKind {
     match health {
         BrowserHealth::ProcessExited => BrowserRecoveryReasonKind::ProcessExited,
@@ -139,6 +155,28 @@ fn recovery_reason_kind_value_for_health(health: BrowserHealth) -> Option<serde_
             | BrowserHealth::Faulted
     )
     .then(|| serde_json::json!(recovery_reason_kind_for_health(health).as_str()))
+}
+
+fn process_exit_cause_for_health(health: BrowserHealth) -> Option<BrowserProcessExitCause> {
+    match health {
+        BrowserHealth::ProcessExited => Some(BrowserProcessExitCause::UnexpectedProcessExit),
+        BrowserHealth::Closing => Some(BrowserProcessExitCause::OperatorRequestedClose),
+        _ => None,
+    }
+}
+
+fn process_exit_cause_for_recovery_reason(
+    reason_kind: BrowserRecoveryReasonKind,
+) -> Option<BrowserProcessExitCause> {
+    match reason_kind {
+        BrowserRecoveryReasonKind::ProcessExited => {
+            Some(BrowserProcessExitCause::UnexpectedProcessExit)
+        }
+        BrowserRecoveryReasonKind::OperatorRequestedClose => {
+            Some(BrowserProcessExitCause::OperatorRequestedClose)
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -467,6 +505,9 @@ pub fn record_browser_health_changed_event_with_details(
     if let Some(reason_kind) = recovery_reason_kind_value_for_health(current.health) {
         details["currentReasonKind"] = reason_kind;
     }
+    if let Some(cause) = process_exit_cause_for_health(current.health) {
+        details["processExitCause"] = serde_json::json!(cause.as_str());
+    }
     if let Some(reason_kind) = recovery_reason_kind_value_for_health(previous.health) {
         details["previousReasonKind"] = reason_kind;
     }
@@ -536,6 +577,9 @@ pub fn record_browser_recovery_started_event(
         "pid": current.pid,
         "cdpEndpoint": current.cdp_endpoint,
     });
+    if let Some(cause) = process_exit_cause_for_recovery_reason(reason_kind) {
+        details["processExitCause"] = serde_json::json!(cause.as_str());
+    }
     if let Some(policy) = policy {
         details["attempt"] = serde_json::json!(policy.attempt);
         details["retryBudget"] = serde_json::json!(policy.retry_budget);
@@ -901,6 +945,36 @@ mod tests {
     }
 
     #[test]
+    fn recovery_started_event_marks_unexpected_process_exit_cause() {
+        let mut state = ServiceState::default();
+        let browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::ProcessExited,
+            pid: Some(1234),
+            ..BrowserProcess::default()
+        };
+
+        record_browser_recovery_started_event(
+            &mut state,
+            "browser-1",
+            &browser,
+            BrowserRecoveryReasonKind::ProcessExited,
+            "browser process exited",
+            None,
+        );
+
+        let event = state.events.first().unwrap();
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("processExitCause"))
+                .and_then(|cause| cause.as_str()),
+            Some("unexpected_process_exit")
+        );
+    }
+
+    #[test]
     fn recovery_reason_kind_tracks_browser_health() {
         assert_eq!(
             recovery_reason_kind_for_health(BrowserHealth::ProcessExited),
@@ -926,6 +1000,19 @@ mod tests {
             recovery_reason_kind_for_health(BrowserHealth::Ready),
             BrowserRecoveryReasonKind::PersistedUnhealthyState
         );
+    }
+
+    #[test]
+    fn process_exit_cause_tracks_client_facing_exit_vocabulary() {
+        assert_eq!(
+            process_exit_cause_for_health(BrowserHealth::ProcessExited),
+            Some(BrowserProcessExitCause::UnexpectedProcessExit)
+        );
+        assert_eq!(
+            process_exit_cause_for_health(BrowserHealth::Closing),
+            Some(BrowserProcessExitCause::OperatorRequestedClose)
+        );
+        assert_eq!(process_exit_cause_for_health(BrowserHealth::Ready), None);
     }
 
     #[test]
@@ -960,6 +1047,34 @@ mod tests {
             .as_ref()
             .and_then(|details| details.get("previousReasonKind"))
             .is_none());
+    }
+
+    #[test]
+    fn health_changed_event_marks_unexpected_process_exit_cause() {
+        let mut state = ServiceState::default();
+        let previous = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            ..BrowserProcess::default()
+        };
+        let current = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::ProcessExited,
+            last_error: Some("Recorded browser PID 1234 is no longer running".to_string()),
+            ..BrowserProcess::default()
+        };
+
+        record_browser_health_changed_event(&mut state, "browser-1", Some(&previous), &current);
+
+        let event = state.events.first().unwrap();
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("processExitCause"))
+                .and_then(|cause| cause.as_str()),
+            Some("unexpected_process_exit")
+        );
     }
 
     #[test]
