@@ -26,6 +26,12 @@ The persisted browser health mapping is intentionally conservative:
 This matches the operating rule for service mode: if polite kill fails, the
 browser is degraded; if force kill fails, the OS may be degraded.
 
+Grouped service incidents now carry `severity`, `escalation`, and
+`recommendedAction` fields so clients do not have to infer operator priority
+from browser health strings. The shutdown ladder maps polite close failure to
+`warning` plus `browser_degraded`, and force-kill failure to `critical` plus
+`os_degraded_possible`.
+
 ## Validation
 
 The live shutdown-health smoke now validates the polite-shutdown failure remedy:
@@ -38,6 +44,8 @@ It launches an owned Chrome in an isolated `AGENT_BROWSER_HOME`, forces the
 polite close path to fail through an internal smoke-only hook, lets the daemon
 force-kill the owned browser process, and verifies the persisted service
 browser record is `degraded` with shutdown-remedy details in `lastError`.
+It also verifies the derived incident exposes `severity: "warning"`,
+`escalation: "browser_degraded"`, and a browser-health recommended action.
 
 The last full native validation passed when run serially:
 

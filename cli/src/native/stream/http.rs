@@ -1107,6 +1107,23 @@ fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
                 }
                 _ => return Err(format!("Invalid state value: {}", value)),
             },
+            "severity" => match value.as_str() {
+                "info" | "warning" | "error" | "critical" => {
+                    cmd["severity"] = json!(value);
+                }
+                _ => return Err(format!("Invalid severity value: {}", value)),
+            },
+            "escalation" => match value.as_str() {
+                "none"
+                | "browser_degraded"
+                | "browser_recovery"
+                | "job_attention"
+                | "service_triage"
+                | "os_degraded_possible" => {
+                    cmd["escalation"] = json!(value);
+                }
+                _ => return Err(format!("Invalid escalation value: {}", value)),
+            },
             "handlingState" | "handling_state" | "handling-state" => match value.as_str() {
                 "unacknowledged" | "acknowledged" | "resolved" => {
                     cmd["handlingState"] = json!(value);
@@ -1408,7 +1425,7 @@ mod tests {
     #[test]
     fn service_incidents_command_maps_query_filters() {
         let cmd = service_incidents_command(Some(
-            "id=incident-1&limit=7&state=active&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
+            "id=incident-1&limit=7&state=active&severity=critical&escalation=os_degraded_possible&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
         ))
         .unwrap();
 
@@ -1416,6 +1433,8 @@ mod tests {
         assert_eq!(cmd["incidentId"], "incident-1");
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");
+        assert_eq!(cmd["severity"], "critical");
+        assert_eq!(cmd["escalation"], "os_degraded_possible");
         assert_eq!(cmd["handlingState"], "unacknowledged");
         assert_eq!(cmd["kind"], "service_job_timeout");
         assert_eq!(cmd["browserId"], "browser-1");
@@ -2263,6 +2282,20 @@ mod tests {
         let err = service_incidents_command(Some("state=failed")).unwrap_err();
 
         assert!(err.contains("Invalid state value"));
+    }
+
+    #[test]
+    fn service_incidents_command_rejects_invalid_severity() {
+        let err = service_incidents_command(Some("severity=panic")).unwrap_err();
+
+        assert!(err.contains("Invalid severity value"));
+    }
+
+    #[test]
+    fn service_incidents_command_rejects_invalid_escalation() {
+        let err = service_incidents_command(Some("escalation=panic")).unwrap_err();
+
+        assert!(err.contains("Invalid escalation value"));
     }
 
     #[test]

@@ -1376,7 +1376,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }
             Some("incidents") => {
                 let usage =
-                    "service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
+                    "service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
                 let mut cmd = json!({
                     "id": id,
                     "action": "service_incidents",
@@ -1424,6 +1424,51 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 _ => {
                                     return Err(ParseError::InvalidValue {
                                         message: format!("Invalid --state value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--severity" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --severity".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "info" | "warning" | "error" | "critical" => {
+                                    cmd["severity"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --severity value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--escalation" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --escalation".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "none"
+                                | "browser_degraded"
+                                | "browser_recovery"
+                                | "job_attention"
+                                | "service_triage"
+                                | "os_degraded_possible" => {
+                                    cmd["escalation"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --escalation value: {}", raw),
                                         usage,
                                     });
                                 }
@@ -4964,7 +5009,7 @@ mod tests {
     fn test_service_incidents_filters() {
         let cmd = parse_command(
             &args(
-                "service incidents --limit 7 --state active --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
+                "service incidents --limit 7 --state active --severity critical --escalation os_degraded_possible --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
             ),
             &default_flags(),
         )
@@ -4973,6 +5018,8 @@ mod tests {
         assert_eq!(cmd["action"], "service_incidents");
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");
+        assert_eq!(cmd["severity"], "critical");
+        assert_eq!(cmd["escalation"], "os_degraded_possible");
         assert_eq!(cmd["handlingState"], "unacknowledged");
         assert_eq!(cmd["kind"], "service_job_timeout");
         assert_eq!(cmd["browserId"], "browser-1");
@@ -5041,6 +5088,28 @@ mod tests {
     fn test_service_incidents_reject_invalid_state() {
         let err =
             parse_command(&args("service incidents --state failed"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_severity() {
+        let err = parse_command(
+            &args("service incidents --severity panic"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_escalation() {
+        let err = parse_command(
+            &args("service incidents --escalation panic"),
+            &default_flags(),
+        )
+        .unwrap_err();
 
         assert!(matches!(err, ParseError::InvalidValue { .. }));
     }

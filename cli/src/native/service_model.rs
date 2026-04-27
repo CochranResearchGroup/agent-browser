@@ -105,6 +105,9 @@ pub struct ServiceIncident {
     pub browser_id: Option<String>,
     pub label: String,
     pub state: ServiceIncidentState,
+    pub severity: ServiceIncidentSeverity,
+    pub escalation: ServiceIncidentEscalation,
+    pub recommended_action: String,
     pub acknowledged_at: Option<String>,
     pub acknowledged_by: Option<String>,
     pub acknowledgement_note: Option<String>,
@@ -127,6 +130,30 @@ pub enum ServiceIncidentState {
     Active,
     Recovered,
     Service,
+}
+
+/// Operator-facing severity for a grouped incident.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServiceIncidentSeverity {
+    #[default]
+    Info,
+    Warning,
+    Error,
+    Critical,
+}
+
+/// Operator escalation bucket for a grouped incident.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServiceIncidentEscalation {
+    #[default]
+    None,
+    BrowserDegraded,
+    BrowserRecovery,
+    JobAttention,
+    ServiceTriage,
+    OsDegradedPossible,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -295,6 +322,10 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
         } else {
             incident.state = ServiceIncidentState::Service;
         }
+        let (severity, escalation, recommended_action) = classify_incident_escalation(incident);
+        incident.severity = severity;
+        incident.escalation = escalation;
+        incident.recommended_action = recommended_action.to_string();
     }
     incidents.sort_by(|left, right| {
         left.latest_timestamp
@@ -303,6 +334,62 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
             .then_with(|| left.id.cmp(&right.id))
     });
     incidents
+}
+
+fn classify_incident_escalation(
+    incident: &ServiceIncident,
+) -> (
+    ServiceIncidentSeverity,
+    ServiceIncidentEscalation,
+    &'static str,
+) {
+    if incident.state == ServiceIncidentState::Recovered {
+        return (
+            ServiceIncidentSeverity::Info,
+            ServiceIncidentEscalation::None,
+            "No operator action required.",
+        );
+    }
+
+    match incident.current_health {
+        Some(BrowserHealth::Faulted) => (
+            ServiceIncidentSeverity::Critical,
+            ServiceIncidentEscalation::OsDegradedPossible,
+            "Inspect the host OS and process table before retrying browser automation.",
+        ),
+        Some(BrowserHealth::Degraded) => (
+            ServiceIncidentSeverity::Warning,
+            ServiceIncidentEscalation::BrowserDegraded,
+            "Inspect browser health and retry or relaunch the affected browser if needed.",
+        ),
+        Some(BrowserHealth::ProcessExited)
+        | Some(BrowserHealth::CdpDisconnected)
+        | Some(BrowserHealth::Unreachable) => (
+            ServiceIncidentSeverity::Error,
+            ServiceIncidentEscalation::BrowserRecovery,
+            "Review recovery trace and retry or relaunch the affected browser.",
+        ),
+        _ if incident.latest_kind == "service_job_timeout" => (
+            ServiceIncidentSeverity::Error,
+            ServiceIncidentEscalation::JobAttention,
+            "Inspect the timed-out service job and retry only after checking browser state.",
+        ),
+        _ if incident.latest_kind == "service_job_cancelled" => (
+            ServiceIncidentSeverity::Warning,
+            ServiceIncidentEscalation::JobAttention,
+            "Confirm the cancellation was intentional before resubmitting the task.",
+        ),
+        _ if incident.state == ServiceIncidentState::Service => (
+            ServiceIncidentSeverity::Error,
+            ServiceIncidentEscalation::ServiceTriage,
+            "Inspect service logs, reconciliation state, and recent jobs.",
+        ),
+        _ => (
+            ServiceIncidentSeverity::Warning,
+            ServiceIncidentEscalation::ServiceTriage,
+            "Inspect the incident activity timeline.",
+        ),
+    }
 }
 
 fn job_or_event_timestamp<'a>(timestamps: &'a BTreeMap<&str, &'a str>, id: &str) -> &'a str {
@@ -1334,12 +1421,25 @@ mod tests {
         assert_eq!(state.incidents.len(), 2);
         assert_eq!(state.incidents[0].id, "service");
         assert_eq!(state.incidents[0].state, ServiceIncidentState::Service);
+        assert_eq!(state.incidents[0].severity, ServiceIncidentSeverity::Error);
+        assert_eq!(
+            state.incidents[0].escalation,
+            ServiceIncidentEscalation::JobAttention
+        );
         assert_eq!(state.incidents[0].latest_kind, "service_job_timeout");
         assert_eq!(state.incidents[0].event_ids, vec!["event-reconcile-error"]);
         assert_eq!(state.incidents[0].job_ids, vec!["job-timeout"]);
         assert_eq!(state.incidents[1].id, "browser-1");
         assert_eq!(state.incidents[1].browser_id.as_deref(), Some("browser-1"));
         assert_eq!(state.incidents[1].state, ServiceIncidentState::Active);
+        assert_eq!(
+            state.incidents[1].severity,
+            ServiceIncidentSeverity::Warning
+        );
+        assert_eq!(
+            state.incidents[1].escalation,
+            ServiceIncidentEscalation::JobAttention
+        );
         assert_eq!(state.incidents[1].latest_kind, "service_job_cancelled");
         assert_eq!(
             state.incidents[1].event_ids,
@@ -1350,6 +1450,80 @@ mod tests {
             state.incidents[1].current_health,
             Some(BrowserHealth::Ready)
         );
+    }
+
+    #[test]
+    fn refresh_derived_views_classifies_shutdown_remedy_severity() {
+        let mut state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "event-degraded".to_string(),
+                    timestamp: "2026-04-27T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from Ready to Degraded".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(BrowserHealth::Ready),
+                    current_health: Some(BrowserHealth::Degraded),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "event-faulted".to_string(),
+                    timestamp: "2026-04-27T00:01:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-2 health changed from Degraded to Faulted"
+                        .to_string(),
+                    browser_id: Some("browser-2".to_string()),
+                    previous_health: Some(BrowserHealth::Degraded),
+                    current_health: Some(BrowserHealth::Faulted),
+                    ..ServiceEvent::default()
+                },
+            ],
+            browsers: BTreeMap::from([
+                (
+                    "browser-1".to_string(),
+                    BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: BrowserHealth::Degraded,
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "browser-2".to_string(),
+                    BrowserProcess {
+                        id: "browser-2".to_string(),
+                        health: BrowserHealth::Faulted,
+                        ..BrowserProcess::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_derived_views();
+
+        let degraded = state
+            .incidents
+            .iter()
+            .find(|incident| incident.id == "browser-1")
+            .unwrap();
+        assert_eq!(degraded.severity, ServiceIncidentSeverity::Warning);
+        assert_eq!(
+            degraded.escalation,
+            ServiceIncidentEscalation::BrowserDegraded
+        );
+        assert!(degraded.recommended_action.contains("browser health"));
+
+        let faulted = state
+            .incidents
+            .iter()
+            .find(|incident| incident.id == "browser-2")
+            .unwrap();
+        assert_eq!(faulted.severity, ServiceIncidentSeverity::Critical);
+        assert_eq!(
+            faulted.escalation,
+            ServiceIncidentEscalation::OsDegradedPossible
+        );
+        assert!(faulted.recommended_action.contains("host OS"));
     }
 
     #[test]

@@ -201,6 +201,14 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
             .get("latestKind")
             .and_then(|value| value.as_str())
             .unwrap_or("unknown");
+        let severity = incident
+            .get("severity")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let escalation = incident
+            .get("escalation")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
         let id = incident
             .get("id")
             .and_then(|value| value.as_str())
@@ -212,6 +220,10 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
             .unwrap_or_default();
         let message = incident
             .get("latestMessage")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let recommended_action = incident
+            .get("recommendedAction")
             .and_then(|value| value.as_str())
             .unwrap_or("");
         let events = data
@@ -241,7 +253,7 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
             .and_then(|value| value.as_str())
             .unwrap_or("never");
         return Some(format!(
-            "{timestamp} {state} kind={kind} id={id}\n{browser}message={message}\nacknowledged_by={acknowledged_by} acknowledged_at={acknowledged_at}\nresolved_by={resolved_by} resolved_at={resolved_at}\nrelated_events={events} related_jobs={jobs}"
+            "{timestamp} {state} severity={severity} escalation={escalation} kind={kind} id={id}\n{browser}message={message}\nrecommended_action={recommended_action}\nacknowledged_by={acknowledged_by} acknowledged_at={acknowledged_at}\nresolved_by={resolved_by} resolved_at={resolved_at}\nrelated_events={events} related_jobs={jobs}"
         ));
     }
     let incidents = data.get("incidents").and_then(|value| value.as_array())?;
@@ -264,6 +276,14 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
                 .get("latestKind")
                 .and_then(|value| value.as_str())
                 .unwrap_or("unknown");
+            let severity = incident
+                .get("severity")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let escalation = incident
+                .get("escalation")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
             let id = incident
                 .get("id")
                 .and_then(|value| value.as_str())
@@ -277,7 +297,9 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
                 .get("latestMessage")
                 .and_then(|value| value.as_str())
                 .unwrap_or("");
-            format!("{timestamp} {state} kind={kind} id={id}{browser} {message}")
+            format!(
+                "{timestamp} {state} severity={severity} escalation={escalation} kind={kind} id={id}{browser} {message}"
+            )
         })
         .collect::<Vec<_>>();
     Some(lines.join("\n"))
@@ -3050,7 +3072,7 @@ Usage:
   agent-browser service activity <incident-id>
   agent-browser service trace [--limit <n>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
-  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
 
 Commands:
@@ -3077,7 +3099,8 @@ Notes:
   - Acknowledgement and resolution append incident_acknowledged and incident_resolved service events.
   - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
-  - Incident filters match incident state, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
+  - Incidents include severity, escalation, and recommendedAction so clients share one operator priority contract.
+  - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
   - Trace returns related events, jobs, incidents, and normalized activity in one response for a browser, profile, session, service, agent, task, or time window.
@@ -3120,6 +3143,7 @@ Examples:
   agent-browser service incidents --limit 20
   agent-browser service incidents --id browser-1
   agent-browser service incidents --handling-state unacknowledged
+  agent-browser service incidents --severity critical --escalation os_degraded_possible
   agent-browser service incidents --state active --kind service_job_timeout
   agent-browser service incidents --state recovered --handling-state resolved --browser-id browser-1
   agent-browser service events --limit 20

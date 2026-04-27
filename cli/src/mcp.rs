@@ -172,7 +172,7 @@ fn service_mcp_resources() -> Vec<Value> {
             "uri": INCIDENTS_RESOURCE,
             "name": "Service incidents",
             "mimeType": "application/json",
-            "description": "Grouped retained service incidents derived from service events and jobs"
+            "description": "Grouped retained service incidents with severity and escalation derived from service events and jobs"
         }),
         json!({
             "uri": PROFILES_RESOURCE,

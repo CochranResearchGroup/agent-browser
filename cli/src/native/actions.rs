@@ -6832,6 +6832,8 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         .map(|value| value as usize)
         .unwrap_or(20);
     let state = cmd.get("state").and_then(|value| value.as_str());
+    let severity = cmd.get("severity").and_then(|value| value.as_str());
+    let escalation = cmd.get("escalation").and_then(|value| value.as_str());
     let handling_state = cmd.get("handlingState").and_then(|value| value.as_str());
     let kind = cmd.get("kind").and_then(|value| value.as_str());
     let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
@@ -6884,6 +6886,12 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         .iter()
         .filter(|incident| {
             state.is_none_or(|expected| service_incident_state_name(incident.state) == expected)
+                && severity.is_none_or(|expected| {
+                    service_incident_severity_name(incident.severity) == expected
+                })
+                && escalation.is_none_or(|expected| {
+                    service_incident_escalation_name(incident.escalation) == expected
+                })
                 && handling_state.is_none_or(|expected| {
                     service_incident_handling_state_name(incident) == expected
                 })
@@ -7072,6 +7080,32 @@ fn service_incident_state_name(state: super::service_model::ServiceIncidentState
         super::service_model::ServiceIncidentState::Active => "active",
         super::service_model::ServiceIncidentState::Recovered => "recovered",
         super::service_model::ServiceIncidentState::Service => "service",
+    }
+}
+
+fn service_incident_severity_name(
+    severity: super::service_model::ServiceIncidentSeverity,
+) -> &'static str {
+    match severity {
+        super::service_model::ServiceIncidentSeverity::Info => "info",
+        super::service_model::ServiceIncidentSeverity::Warning => "warning",
+        super::service_model::ServiceIncidentSeverity::Error => "error",
+        super::service_model::ServiceIncidentSeverity::Critical => "critical",
+    }
+}
+
+fn service_incident_escalation_name(
+    escalation: super::service_model::ServiceIncidentEscalation,
+) -> &'static str {
+    match escalation {
+        super::service_model::ServiceIncidentEscalation::None => "none",
+        super::service_model::ServiceIncidentEscalation::BrowserDegraded => "browser_degraded",
+        super::service_model::ServiceIncidentEscalation::BrowserRecovery => "browser_recovery",
+        super::service_model::ServiceIncidentEscalation::JobAttention => "job_attention",
+        super::service_model::ServiceIncidentEscalation::ServiceTriage => "service_triage",
+        super::service_model::ServiceIncidentEscalation::OsDegradedPossible => {
+            "os_degraded_possible"
+        }
     }
 }
 
@@ -11308,6 +11342,60 @@ mod tests {
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["incidents"][0]["id"], "incident-ack");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_filter_by_severity_and_escalation() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-severity",
+            "severity": "critical",
+            "escalation": "os_degraded_possible",
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "browser-degraded",
+                        "browserId": "browser-degraded",
+                        "label": "browser-degraded",
+                        "state": "active",
+                        "severity": "warning",
+                        "escalation": "browser_degraded",
+                        "recommendedAction": "Inspect browser health.",
+                        "latestTimestamp": "2026-04-27T00:00:00Z",
+                        "latestMessage": "Polite close failed",
+                        "latestKind": "browser_health_changed",
+                        "currentHealth": "degraded"
+                    },
+                    {
+                        "id": "browser-faulted",
+                        "browserId": "browser-faulted",
+                        "label": "browser-faulted",
+                        "state": "active",
+                        "severity": "critical",
+                        "escalation": "os_degraded_possible",
+                        "recommendedAction": "Inspect the host OS.",
+                        "latestTimestamp": "2026-04-27T00:01:00Z",
+                        "latestMessage": "Force kill failed",
+                        "latestKind": "browser_health_changed",
+                        "currentHealth": "faulted"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-faulted");
+        assert_eq!(result["data"]["incidents"][0]["severity"], "critical");
+        assert_eq!(
+            result["data"]["incidents"][0]["escalation"],
+            "os_degraded_possible"
+        );
         assert!(state.browser.is_none());
     }
 

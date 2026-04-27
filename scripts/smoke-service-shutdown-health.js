@@ -92,6 +92,23 @@ try {
     `Service events missing degraded shutdown health transition: ${JSON.stringify(events)}`,
   );
 
+  const incidents = status.data?.service_state?.incidents ?? [];
+  assert(Array.isArray(incidents), 'Service state missing incidents array');
+  const incident = incidents.find((item) => item.id === browserId);
+  assert(incident, `Service incidents missing ${browserId}: ${JSON.stringify(incidents)}`);
+  assert(
+    incident.severity === 'warning',
+    `Degraded browser incident should be warning severity: ${JSON.stringify(incident)}`,
+  );
+  assert(
+    incident.escalation === 'browser_degraded',
+    `Degraded browser incident should use browser_degraded escalation: ${JSON.stringify(incident)}`,
+  );
+  assert(
+    typeof incident.recommendedAction === 'string' && incident.recommendedAction.includes('browser health'),
+    `Degraded browser incident missing recommendedAction: ${JSON.stringify(incident)}`,
+  );
+
   await cleanup();
   console.log('Service shutdown health smoke passed');
 } catch (err) {
