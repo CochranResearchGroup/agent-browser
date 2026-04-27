@@ -191,6 +191,9 @@ type IncidentRecord = {
   id: string;
   browserId?: string | null;
   label: string;
+  severity?: ServiceIncidentSeverity | null;
+  escalation?: ServiceIncidentEscalation | null;
+  recommendedAction?: string | null;
   latestTimestamp: string;
   latestMessage: string;
   latestKind: string;
@@ -206,10 +209,23 @@ type IncidentRecord = {
   jobEvents: ServiceEvent[];
 };
 
+type ServiceIncidentSeverity = "info" | "warning" | "error" | "critical";
+
+type ServiceIncidentEscalation =
+  | "none"
+  | "browser_degraded"
+  | "browser_recovery"
+  | "job_attention"
+  | "service_triage"
+  | "os_degraded_possible";
+
 type ServiceIncident = {
   id: string;
   browserId?: string | null;
   label: string;
+  severity?: ServiceIncidentSeverity | null;
+  escalation?: ServiceIncidentEscalation | null;
+  recommendedAction?: string | null;
   latestTimestamp: string;
   latestMessage: string;
   latestKind: string;
@@ -363,6 +379,15 @@ function formatHealthLabel(value?: string | null): string {
   return value ? value.replaceAll("_", " ") : "unknown";
 }
 
+function formatIncidentField(value?: string | null): string {
+  return value ? value.replaceAll("_", " ") : "unknown";
+}
+
+function incidentSeverityTone(value?: ServiceIncidentSeverity | null): "info" | "warning" | "error" | "critical" {
+  if (value === "warning" || value === "error" || value === "critical") return value;
+  return "info";
+}
+
 function isBadHealth(value?: string | null): boolean {
   return ["process_exited", "cdp_disconnected", "unreachable"].includes((value ?? "").toLowerCase());
 }
@@ -498,6 +523,9 @@ function deriveIncidentRecords(
         id: incident.id,
         browserId: incident.browserId,
         label: incident.label,
+        severity: incident.severity,
+        escalation: incident.escalation,
+        recommendedAction: incident.recommendedAction,
         latestTimestamp: incident.latestTimestamp,
         latestMessage: incident.latestMessage,
         latestKind: incident.latestKind,
@@ -886,6 +914,7 @@ function IncidentRow({
   onSelect: (incident: IncidentRecord) => void;
 }) {
   const tone = healthTone(incident.currentHealth ?? undefined);
+  const severityTone = incidentSeverityTone(incident.severity);
   const incidentCount = incident.transitionEvents.length + incident.jobEvents.length;
   const handlingState = incidentHandlingState(incident);
   return (
@@ -893,12 +922,24 @@ function IncidentRow({
       type="button"
       className="service-browser-row"
       onClick={() => onSelect(incident)}
-      aria-label={`Inspect incidents for ${incident.label}`}
+      aria-label={`Inspect ${formatIncidentField(incident.severity)} incident for ${incident.label}`}
     >
       <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-xs font-bold text-foreground">{incident.label}</span>
+          <Badge
+            variant="outline"
+            className={cn(
+              "h-4 shrink-0 px-1.5 text-[9px]",
+              `service-incident-severity-${severityTone}`,
+            )}
+          >
+            {formatIncidentField(incident.severity)}
+          </Badge>
+          <Badge variant="outline" className="h-4 max-w-32 truncate px-1.5 text-[9px]">
+            {formatIncidentField(incident.escalation)}
+          </Badge>
           <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
             {incidentCount} incidents
           </Badge>
@@ -917,6 +958,11 @@ function IncidentRow({
         <p className="mt-1 truncate text-xs text-muted-foreground">
           {incident.latestMessage}
         </p>
+        {incident.recommendedAction && (
+          <p className="mt-1 truncate text-[11px] font-medium text-muted-foreground">
+            Recommended: {incident.recommendedAction}
+          </p>
+        )}
       </div>
       <span className="text-[10px] font-bold text-muted-foreground">
         {formatRelativeTime(incident.latestTimestamp)}
@@ -1390,6 +1436,7 @@ function IncidentDetailDialog({
   const incidentCount = timeline.length;
   const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
   const handlingState = incident ? incidentHandlingState(incident) : "unacknowledged";
+  const severityTone = incidentSeverityTone(incident?.severity);
 
   useEffect(() => {
     setActionNote("");
@@ -1410,8 +1457,29 @@ function IncidentDetailDialog({
             </DialogHeader>
             <div className="service-event-dialog-body">
               <p className="service-event-dialog-message">{incident.latestMessage}</p>
+              <div className="service-incident-priority-row">
+                <div className={cn("service-incident-priority-card", `service-incident-priority-${severityTone}`)}>
+                  <span>Severity</span>
+                  <strong>{formatIncidentField(incident.severity)}</strong>
+                </div>
+                <div className="service-incident-priority-card service-incident-priority-escalation">
+                  <span>Escalation</span>
+                  <strong>{formatIncidentField(incident.escalation)}</strong>
+                </div>
+              </div>
+              {incident.recommendedAction && (
+                <div className={cn("service-incident-recommended-action", `service-incident-priority-${severityTone}`)}>
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <div>
+                    <span>Recommended action</span>
+                    <p>{incident.recommendedAction}</p>
+                  </div>
+                </div>
+              )}
               <div className="service-event-detail-grid">
                 <EventDetailItem label="Browser" value={incident.browserId} />
+                <EventDetailItem label="Severity" value={formatIncidentField(incident.severity)} />
+                <EventDetailItem label="Escalation" value={formatIncidentField(incident.escalation)} />
                 <EventDetailItem label="Latest kind" value={formatEventKind(incident.latestKind)} />
                 <EventDetailItem label="Current health" value={incident.currentHealth} />
                 <EventDetailItem label="Handling state" value={incidentHandlingLabel(incident)} />
