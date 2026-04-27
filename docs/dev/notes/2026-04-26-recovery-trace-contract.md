@@ -26,7 +26,10 @@ ordered sequence from the service trace surface:
    structured recovery vocabulary.
 2. A `browser_recovery_started` event for the same browser with
    `details.reasonKind`, `details.reason`, `details.attempt`,
-   `details.retryBudget`, and `details.nextRetryDelayMs` populated.
+   `details.retryBudget`, `details.nextRetryDelayMs`, and
+   `details.policySource` populated. `policySource` reports `default`,
+   `config`, `env`, or `cli` separately for the retry budget, base backoff, and
+   max backoff values.
 3. A later `browser_health_changed` event for the same browser with
    `currentHealth: "ready"` after relaunch.
 

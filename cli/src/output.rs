@@ -3104,7 +3104,7 @@ Notes:
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
   - Trace returns related events, jobs, incidents, and normalized activity in one response for a browser, profile, session, service, agent, task, or time window.
-  - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason and retry-budget details.
+  - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, retry-budget details, and recovery policy source metadata.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile and session summary lines for operator traceability.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
@@ -3752,7 +3752,9 @@ Configuration:
   long-running service control jobs as timed_out.
   Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and
   `service.recoveryMaxBackoffMs` or pass the matching service recovery flags
-  to control when repeated browser relaunch attempts become faulted.
+  to control when repeated browser relaunch attempts become faulted. Recovery
+  trace events include policySource fields showing whether active recovery
+  values came from defaults, config, environment, or CLI flags.
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.
@@ -3789,6 +3791,9 @@ Environment:
   AGENT_BROWSER_IDLE_TIMEOUT_MS  Auto-shutdown daemon after N ms of inactivity (disabled by default)
   AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS Background service browser-health reconciliation interval in ms (default: 60000; 0 disables it)
   AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS Timeout for dispatched service control jobs in ms (disabled by default; 0 disables it)
+  AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET Browser recovery attempts before faulting (default: 3)
+  AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS Browser recovery backoff base delay in ms (default: 1000)
+  AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS Browser recovery backoff ceiling in ms (default: 30000)
   AGENT_BROWSER_IOS_DEVICE       Default iOS device name
   AGENT_BROWSER_IOS_UDID         Default iOS device UDID
   AGENT_BROWSER_RUNTIME_PROFILE  Managed runtime profile name

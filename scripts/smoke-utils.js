@@ -245,6 +245,11 @@ export function appendPriorRecoveryAttempt(context, {
       retryBudget: 1,
       retryBudgetExceeded: false,
       nextRetryDelayMs: 1,
+      policySource: {
+        retryBudget: 'env',
+        baseBackoffMs: 'env',
+        maxBackoffMs: 'env',
+      },
     },
   });
   writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
@@ -321,6 +326,13 @@ export function assertRecoveryTraceEvents(events, { browserId, label = 'Recovery
   assert(
     events[recoveryIndex].details?.retryBudgetExceeded === false,
     `${label} recovery event unexpectedly exceeded retry budget: ${JSON.stringify(events[recoveryIndex])}`,
+  );
+  assert(
+    events[recoveryIndex].details?.policySource &&
+      typeof events[recoveryIndex].details.policySource.retryBudget === 'string' &&
+      typeof events[recoveryIndex].details.policySource.baseBackoffMs === 'string' &&
+      typeof events[recoveryIndex].details.policySource.maxBackoffMs === 'string',
+    `${label} recovery event did not include policy source metadata: ${JSON.stringify(events[recoveryIndex])}`,
   );
 
   return {

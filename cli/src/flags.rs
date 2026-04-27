@@ -1,5 +1,7 @@
 use crate::color;
-use crate::native::service_health::BrowserRecoveryPolicyConfig;
+use crate::native::service_health::{
+    BrowserRecoveryPolicyConfig, BrowserRecoveryPolicyValueSource,
+};
 use crate::native::service_model::{
     BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SitePolicy,
 };
@@ -113,10 +115,10 @@ fn service_recovery_value_from_sources(
     env_name: &str,
     config_value: Option<u64>,
     default_value: u64,
-) -> u64 {
+) -> (u64, BrowserRecoveryPolicyValueSource) {
     if let Ok(raw) = env::var(env_name) {
         return match raw.parse::<u64>() {
-            Ok(value) => value,
+            Ok(value) => (value, BrowserRecoveryPolicyValueSource::Env),
             Err(_) => {
                 eprintln!(
                     "{} invalid service recovery value from {}: expected unsigned integer, got {}",
@@ -124,12 +126,16 @@ fn service_recovery_value_from_sources(
                     env_name,
                     raw
                 );
-                default_value
+                (default_value, BrowserRecoveryPolicyValueSource::Default)
             }
         };
     }
 
-    config_value.unwrap_or(default_value)
+    if let Some(value) = config_value {
+        (value, BrowserRecoveryPolicyValueSource::Config)
+    } else {
+        (default_value, BrowserRecoveryPolicyValueSource::Default)
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -895,6 +901,9 @@ pub struct Flags {
     pub service_recovery_retry_budget: u64,
     pub service_recovery_base_backoff_ms: u64,
     pub service_recovery_max_backoff_ms: u64,
+    pub service_recovery_retry_budget_source: BrowserRecoveryPolicyValueSource,
+    pub service_recovery_base_backoff_ms_source: BrowserRecoveryPolicyValueSource,
+    pub service_recovery_max_backoff_ms_source: BrowserRecoveryPolicyValueSource,
     pub runtime_profile: Option<String>,
     pub headers: Option<String>,
     pub executable_path: Option<String>,
@@ -973,30 +982,33 @@ pub fn parse_flags(args: &[String]) -> Flags {
     let service_reconcile_interval_ms = service_reconcile_interval_from_sources(&config);
     let service_job_timeout_ms = service_job_timeout_from_sources(&config);
     let recovery_defaults = BrowserRecoveryPolicyConfig::default();
-    let service_recovery_retry_budget = service_recovery_value_from_sources(
-        "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
-        config
-            .service
-            .as_ref()
-            .and_then(|service| service.recovery_retry_budget),
-        recovery_defaults.retry_budget,
-    );
-    let service_recovery_base_backoff_ms = service_recovery_value_from_sources(
-        "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
-        config
-            .service
-            .as_ref()
-            .and_then(|service| service.recovery_base_backoff_ms),
-        recovery_defaults.base_backoff_ms,
-    );
-    let service_recovery_max_backoff_ms = service_recovery_value_from_sources(
-        "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
-        config
-            .service
-            .as_ref()
-            .and_then(|service| service.recovery_max_backoff_ms),
-        recovery_defaults.max_backoff_ms,
-    );
+    let (service_recovery_retry_budget, service_recovery_retry_budget_source) =
+        service_recovery_value_from_sources(
+            "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+            config
+                .service
+                .as_ref()
+                .and_then(|service| service.recovery_retry_budget),
+            recovery_defaults.retry_budget,
+        );
+    let (service_recovery_base_backoff_ms, service_recovery_base_backoff_ms_source) =
+        service_recovery_value_from_sources(
+            "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+            config
+                .service
+                .as_ref()
+                .and_then(|service| service.recovery_base_backoff_ms),
+            recovery_defaults.base_backoff_ms,
+        );
+    let (service_recovery_max_backoff_ms, service_recovery_max_backoff_ms_source) =
+        service_recovery_value_from_sources(
+            "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+            config
+                .service
+                .as_ref()
+                .and_then(|service| service.recovery_max_backoff_ms),
+            recovery_defaults.max_backoff_ms,
+        );
 
     let extensions_env = env::var("AGENT_BROWSER_EXTENSIONS")
         .ok()
@@ -1032,6 +1044,9 @@ pub fn parse_flags(args: &[String]) -> Flags {
         service_recovery_retry_budget,
         service_recovery_base_backoff_ms,
         service_recovery_max_backoff_ms,
+        service_recovery_retry_budget_source,
+        service_recovery_base_backoff_ms_source,
+        service_recovery_max_backoff_ms_source,
         runtime_profile: env::var("AGENT_BROWSER_RUNTIME_PROFILE")
             .ok()
             .or(config.runtime_profile),
@@ -1234,7 +1249,11 @@ pub fn parse_flags(args: &[String]) -> Flags {
             "--service-recovery-retry-budget" => {
                 if let Some(s) = args.get(i + 1) {
                     match s.parse::<u64>() {
-                        Ok(value) => flags.service_recovery_retry_budget = value,
+                        Ok(value) => {
+                            flags.service_recovery_retry_budget = value;
+                            flags.service_recovery_retry_budget_source =
+                                BrowserRecoveryPolicyValueSource::Cli;
+                        }
                         Err(_) => eprintln!(
                             "{} Invalid --service-recovery-retry-budget: expected unsigned integer, got {}",
                             color::warning_indicator(),
@@ -1247,7 +1266,11 @@ pub fn parse_flags(args: &[String]) -> Flags {
             "--service-recovery-base-backoff" => {
                 if let Some(s) = args.get(i + 1) {
                     match s.parse::<u64>() {
-                        Ok(ms) => flags.service_recovery_base_backoff_ms = ms,
+                        Ok(ms) => {
+                            flags.service_recovery_base_backoff_ms = ms;
+                            flags.service_recovery_base_backoff_ms_source =
+                                BrowserRecoveryPolicyValueSource::Cli;
+                        }
                         Err(_) => eprintln!(
                             "{} Invalid --service-recovery-base-backoff: expected milliseconds, got {}",
                             color::warning_indicator(),
@@ -1260,7 +1283,11 @@ pub fn parse_flags(args: &[String]) -> Flags {
             "--service-recovery-max-backoff" => {
                 if let Some(s) = args.get(i + 1) {
                     match s.parse::<u64>() {
-                        Ok(ms) => flags.service_recovery_max_backoff_ms = ms,
+                        Ok(ms) => {
+                            flags.service_recovery_max_backoff_ms = ms;
+                            flags.service_recovery_max_backoff_ms_source =
+                                BrowserRecoveryPolicyValueSource::Cli;
+                        }
                         Err(_) => eprintln!(
                             "{} Invalid --service-recovery-max-backoff: expected milliseconds, got {}",
                             color::warning_indicator(),
@@ -2643,6 +2670,18 @@ mod tests {
         assert_eq!(flags.service_recovery_retry_budget, 5);
         assert_eq!(flags.service_recovery_base_backoff_ms, 250);
         assert_eq!(flags.service_recovery_max_backoff_ms, 10_000);
+        assert_eq!(
+            flags.service_recovery_retry_budget_source,
+            BrowserRecoveryPolicyValueSource::Config
+        );
+        assert_eq!(
+            flags.service_recovery_base_backoff_ms_source,
+            BrowserRecoveryPolicyValueSource::Config
+        );
+        assert_eq!(
+            flags.service_recovery_max_backoff_ms_source,
+            BrowserRecoveryPolicyValueSource::Config
+        );
         let _ = fs::remove_file(&config_path);
         let _ = fs::remove_dir(&dir);
     }
@@ -2656,6 +2695,18 @@ mod tests {
         assert_eq!(flags.service_recovery_retry_budget, 7);
         assert_eq!(flags.service_recovery_base_backoff_ms, 500);
         assert_eq!(flags.service_recovery_max_backoff_ms, 15_000);
+        assert_eq!(
+            flags.service_recovery_retry_budget_source,
+            BrowserRecoveryPolicyValueSource::Cli
+        );
+        assert_eq!(
+            flags.service_recovery_base_backoff_ms_source,
+            BrowserRecoveryPolicyValueSource::Cli
+        );
+        assert_eq!(
+            flags.service_recovery_max_backoff_ms_source,
+            BrowserRecoveryPolicyValueSource::Cli
+        );
     }
 
     #[test]

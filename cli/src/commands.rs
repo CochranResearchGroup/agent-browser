@@ -3283,6 +3283,12 @@ mod tests {
             service_recovery_retry_budget: 3,
             service_recovery_base_backoff_ms: 1_000,
             service_recovery_max_backoff_ms: 30_000,
+            service_recovery_retry_budget_source:
+                crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
+            service_recovery_base_backoff_ms_source:
+                crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
+            service_recovery_max_backoff_ms_source:
+                crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
             runtime_profile: None,
             json: false,
             headed: false,

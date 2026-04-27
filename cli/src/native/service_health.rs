@@ -61,6 +61,52 @@ pub struct BrowserRecoveryPolicy {
     pub retry_budget: u64,
     pub retry_budget_exceeded: bool,
     pub next_retry_delay_ms: u64,
+    pub source: BrowserRecoveryPolicySource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserRecoveryPolicyValueSource {
+    Default,
+    Config,
+    Env,
+    Cli,
+}
+
+impl BrowserRecoveryPolicyValueSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Config => "config",
+            Self::Env => "env",
+            Self::Cli => "cli",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "config" => Self::Config,
+            "env" => Self::Env,
+            "cli" => Self::Cli,
+            _ => Self::Default,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrowserRecoveryPolicySource {
+    pub retry_budget: BrowserRecoveryPolicyValueSource,
+    pub base_backoff_ms: BrowserRecoveryPolicyValueSource,
+    pub max_backoff_ms: BrowserRecoveryPolicyValueSource,
+}
+
+impl Default for BrowserRecoveryPolicySource {
+    fn default() -> Self {
+        Self {
+            retry_budget: BrowserRecoveryPolicyValueSource::Default,
+            base_backoff_ms: BrowserRecoveryPolicyValueSource::Default,
+            max_backoff_ms: BrowserRecoveryPolicyValueSource::Default,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +114,7 @@ pub struct BrowserRecoveryPolicyConfig {
     pub retry_budget: u64,
     pub base_backoff_ms: u64,
     pub max_backoff_ms: u64,
+    pub source: BrowserRecoveryPolicySource,
 }
 
 impl Default for BrowserRecoveryPolicyConfig {
@@ -76,6 +123,7 @@ impl Default for BrowserRecoveryPolicyConfig {
             retry_budget: 3,
             base_backoff_ms: 1_000,
             max_backoff_ms: 30_000,
+            source: BrowserRecoveryPolicySource::default(),
         }
     }
 }
@@ -476,6 +524,11 @@ pub fn record_browser_recovery_started_event(
         details["retryBudget"] = serde_json::json!(policy.retry_budget);
         details["retryBudgetExceeded"] = serde_json::json!(policy.retry_budget_exceeded);
         details["nextRetryDelayMs"] = serde_json::json!(policy.next_retry_delay_ms);
+        details["policySource"] = serde_json::json!({
+            "retryBudget": policy.source.retry_budget.as_str(),
+            "baseBackoffMs": policy.source.base_backoff_ms.as_str(),
+            "maxBackoffMs": policy.source.max_backoff_ms.as_str(),
+        });
     }
 
     let mut event = ServiceEvent {
@@ -736,6 +789,11 @@ mod tests {
                 retry_budget: 3,
                 retry_budget_exceeded: false,
                 next_retry_delay_ms: 2_000,
+                source: BrowserRecoveryPolicySource {
+                    retry_budget: BrowserRecoveryPolicyValueSource::Config,
+                    base_backoff_ms: BrowserRecoveryPolicyValueSource::Env,
+                    max_backoff_ms: BrowserRecoveryPolicyValueSource::Cli,
+                },
             }),
         );
 
@@ -795,6 +853,33 @@ mod tests {
                 .and_then(|details| details.get("nextRetryDelayMs"))
                 .and_then(|delay| delay.as_u64()),
             Some(2_000)
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("policySource"))
+                .and_then(|source| source.get("retryBudget"))
+                .and_then(|source| source.as_str()),
+            Some("config")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("policySource"))
+                .and_then(|source| source.get("baseBackoffMs"))
+                .and_then(|source| source.as_str()),
+            Some("env")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("policySource"))
+                .and_then(|source| source.get("maxBackoffMs"))
+                .and_then(|source| source.as_str()),
+            Some("cli")
         );
     }
 

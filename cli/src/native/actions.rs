@@ -42,7 +42,7 @@ use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
     record_browser_launch_recorded_event, record_browser_recovery_started_event,
     recovery_reason_kind_for_health, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
-    BrowserRecoveryReasonKind,
+    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_model::{
@@ -674,6 +674,7 @@ fn recovery_policy_for_next_attempt(
         retry_budget: policy_config.retry_budget,
         retry_budget_exceeded: attempt > policy_config.retry_budget,
         next_retry_delay_ms: recovery_backoff_delay_ms(attempt, policy_config),
+        source: policy_config.source,
     }
 }
 
@@ -1951,7 +1952,37 @@ fn browser_recovery_policy_config_from_env() -> BrowserRecoveryPolicyConfig {
             "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
             defaults.max_backoff_ms,
         ),
+        source: BrowserRecoveryPolicySource {
+            retry_budget: browser_recovery_policy_source_from_env(
+                "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+                "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET_SOURCE",
+            ),
+            base_backoff_ms: browser_recovery_policy_source_from_env(
+                "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+                "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS_SOURCE",
+            ),
+            max_backoff_ms: browser_recovery_policy_source_from_env(
+                "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+                "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS_SOURCE",
+            ),
+        },
     }
+}
+
+fn browser_recovery_policy_source_from_env(
+    value_name: &str,
+    source_name: &str,
+) -> BrowserRecoveryPolicyValueSource {
+    env::var(source_name)
+        .ok()
+        .map(|value| BrowserRecoveryPolicyValueSource::from_str(&value))
+        .unwrap_or_else(|| {
+            if env::var(value_name).is_ok() {
+                BrowserRecoveryPolicyValueSource::Env
+            } else {
+                BrowserRecoveryPolicyValueSource::Default
+            }
+        })
 }
 
 async fn terminate_runtime_browser(pid: u32) -> BrowserShutdownOutcome {
@@ -12254,6 +12285,7 @@ mod tests {
             retry_budget: 2,
             base_backoff_ms: 250,
             max_backoff_ms: 1_000,
+            source: BrowserRecoveryPolicySource::default(),
         };
         let state = ServiceState {
             events: vec![

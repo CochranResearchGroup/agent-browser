@@ -302,6 +302,9 @@ pub struct DaemonOptions<'a> {
     pub service_recovery_retry_budget: u64,
     pub service_recovery_base_backoff_ms: u64,
     pub service_recovery_max_backoff_ms: u64,
+    pub service_recovery_retry_budget_source: &'a str,
+    pub service_recovery_base_backoff_ms_source: &'a str,
+    pub service_recovery_max_backoff_ms_source: &'a str,
     pub default_timeout: Option<u64>,
     pub cdp: Option<&'a str>,
     pub runtime_attach_managed: bool,
@@ -416,6 +419,18 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     cmd.env(
         "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
         opts.service_recovery_max_backoff_ms.to_string(),
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET_SOURCE",
+        opts.service_recovery_retry_budget_source,
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS_SOURCE",
+        opts.service_recovery_base_backoff_ms_source,
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS_SOURCE",
+        opts.service_recovery_max_backoff_ms_source,
     );
     if let Some(timeout) = opts.default_timeout {
         cmd.env("AGENT_BROWSER_DEFAULT_TIMEOUT", timeout.to_string());
@@ -1021,6 +1036,9 @@ mod tests {
             service_recovery_retry_budget: 9,
             service_recovery_base_backoff_ms: 250,
             service_recovery_max_backoff_ms: 10_000,
+            service_recovery_retry_budget_source: "cli",
+            service_recovery_base_backoff_ms_source: "cli",
+            service_recovery_max_backoff_ms_source: "cli",
             default_timeout: None,
             cdp: None,
             runtime_attach_managed: false,
@@ -1058,6 +1076,17 @@ mod tests {
         }));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS" && v.as_deref() == Some("10000")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET_SOURCE" && v.as_deref() == Some("cli")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS_SOURCE"
+                && v.as_deref() == Some("cli")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS_SOURCE"
+                && v.as_deref() == Some("cli")
         }));
     }
 

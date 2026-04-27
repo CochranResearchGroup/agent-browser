@@ -751,6 +751,15 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 service_recovery_retry_budget: flags.service_recovery_retry_budget,
                 service_recovery_base_backoff_ms: flags.service_recovery_base_backoff_ms,
                 service_recovery_max_backoff_ms: flags.service_recovery_max_backoff_ms,
+                service_recovery_retry_budget_source: flags
+                    .service_recovery_retry_budget_source
+                    .as_str(),
+                service_recovery_base_backoff_ms_source: flags
+                    .service_recovery_base_backoff_ms_source
+                    .as_str(),
+                service_recovery_max_backoff_ms_source: flags
+                    .service_recovery_max_backoff_ms_source
+                    .as_str(),
                 default_timeout: flags.default_timeout,
                 cdp: cdp_port_str.as_deref(),
                 runtime_attach_managed: attach_to_existing,
@@ -1540,6 +1549,13 @@ fn main() {
         service_recovery_retry_budget: flags.service_recovery_retry_budget,
         service_recovery_base_backoff_ms: flags.service_recovery_base_backoff_ms,
         service_recovery_max_backoff_ms: flags.service_recovery_max_backoff_ms,
+        service_recovery_retry_budget_source: flags.service_recovery_retry_budget_source.as_str(),
+        service_recovery_base_backoff_ms_source: flags
+            .service_recovery_base_backoff_ms_source
+            .as_str(),
+        service_recovery_max_backoff_ms_source: flags
+            .service_recovery_max_backoff_ms_source
+            .as_str(),
         default_timeout: flags.default_timeout,
         cdp: flags.cdp.as_deref().or(live_runtime_cdp.as_deref()),
         runtime_attach_managed: live_runtime_status.is_some(),
