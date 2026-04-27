@@ -523,11 +523,42 @@ fn format_service_session_line(session: &serde_json::Value) -> String {
     )
 }
 
+fn format_service_browser_line(browser: &serde_json::Value) -> String {
+    let id = value_str(browser, "id", "unknown-browser");
+    let health = value_str(browser, "health", "unknown");
+    let host = value_str(browser, "host", "unknown");
+    let profile = value_str(browser, "profileId", "none");
+    let pid = browser
+        .get("pid")
+        .and_then(|value| value.as_u64())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".to_string());
+    let observation = browser.get("lastHealthObservation");
+    let failure_class = observation
+        .map(|value| value_str(value, "failureClass", "none"))
+        .unwrap_or("none");
+    let process_exit_cause = observation
+        .map(|value| value_str(value, "processExitCause", "none"))
+        .unwrap_or("none");
+    let observed_at = observation
+        .map(|value| value_str(value, "observedAt", "never"))
+        .unwrap_or("never");
+    let last_error = browser
+        .get("lastError")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+
+    format!(
+        "{id} health={health} host={host} profile={profile} pid={pid} observed={observed_at} failure={failure_class} exit_cause={process_exit_cause} error={last_error}"
+    )
+}
+
 fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
     let service_state = data.get("service_state")?;
     let control_plane = service_state.get("controlPlane");
     let reconciliation = service_state.get("reconciliation");
     let profiles = sorted_object_values(service_state, "profiles");
+    let browsers = sorted_object_values(service_state, "browsers");
     let sessions = sorted_object_values(service_state, "sessions");
     let browser_count = service_state
         .get("browsers")
@@ -586,6 +617,17 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
             profiles
                 .iter()
                 .map(|profile| format!("  {}", format_service_profile_line(profile))),
+        );
+    }
+
+    lines.push(format!("Browsers: {}", browsers.len()));
+    if browsers.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            browsers
+                .iter()
+                .map(|browser| format!("  {}", format_service_browser_line(browser))),
         );
     }
 
@@ -3107,7 +3149,7 @@ Notes:
   - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, failureClass, processExitCause for process exits, retry-budget details, and recovery policy source metadata.
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
-  - Text service status includes profile and session summary lines for operator traceability.
+  - Text service status includes profile, browser, and session summary lines for operator traceability.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.

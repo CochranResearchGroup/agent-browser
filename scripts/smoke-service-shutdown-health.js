@@ -78,6 +78,11 @@ try {
       browser.lastError.includes('force kill was required'),
     `Degraded browser did not record shutdown remedy details: ${JSON.stringify(browser)}`,
   );
+  assert(
+    browser.lastHealthObservation?.failureClass === 'browser_shutdown_degraded' &&
+      browser.lastHealthObservation?.processExitCause === 'operator_requested_close',
+    `Degraded browser did not retain last health observation: ${JSON.stringify(browser)}`,
+  );
 
   const events = status.data?.service_state?.events ?? [];
   assert(Array.isArray(events), 'Service state missing events array');

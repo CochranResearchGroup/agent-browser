@@ -9,7 +9,9 @@ use tokio::sync::{mpsc, oneshot};
 use super::actions::{execute_command, DaemonState};
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{
-    reconcile_persisted_service_state, reconcile_service_state, record_browser_health_changed_event,
+    apply_browser_health_observation, browser_health_observation_details,
+    reconcile_persisted_service_state, reconcile_service_state,
+    record_browser_health_changed_event,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
@@ -375,7 +377,7 @@ fn persist_process_exited_browser_health(state: &DaemonState) {
         .unwrap_or((None, None));
     let last_error = pid.map(|pid| format!("Browser process {} exited", pid));
 
-    let browser = BrowserProcess {
+    let mut browser = BrowserProcess {
         id: id.clone(),
         profile_id: previous
             .as_ref()
@@ -390,7 +392,10 @@ fn persist_process_exited_browser_health(state: &DaemonState) {
             .unwrap_or_default(),
         active_session_ids: vec![state.session_id.clone()],
         last_error,
+        last_health_observation: None,
     };
+    let observation_details = browser_health_observation_details(&browser, None);
+    apply_browser_health_observation(&mut browser, Some(&observation_details));
     record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
     service_state.browsers.insert(id, browser);
     let _ = store.save(&service_state);

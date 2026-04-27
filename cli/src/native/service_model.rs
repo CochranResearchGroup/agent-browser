@@ -590,6 +590,7 @@ pub struct BrowserProcess {
     pub view_streams: Vec<ViewStream>,
     pub active_session_ids: Vec<String>,
     pub last_error: Option<String>,
+    pub last_health_observation: Option<BrowserHealthObservation>,
 }
 
 impl Default for BrowserProcess {
@@ -604,6 +605,34 @@ impl Default for BrowserProcess {
             view_streams: Vec::new(),
             active_session_ids: Vec::new(),
             last_error: None,
+            last_health_observation: None,
+        }
+    }
+}
+
+/// Latest service-owned browser health evidence retained on the browser record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct BrowserHealthObservation {
+    pub observed_at: String,
+    pub health: BrowserHealth,
+    pub reason_kind: Option<String>,
+    pub failure_class: Option<String>,
+    pub process_exit_cause: Option<String>,
+    pub message: Option<String>,
+    pub details: Option<serde_json::Value>,
+}
+
+impl Default for BrowserHealthObservation {
+    fn default() -> Self {
+        Self {
+            observed_at: String::new(),
+            health: BrowserHealth::NotStarted,
+            reason_kind: None,
+            failure_class: None,
+            process_exit_cause: None,
+            message: None,
+            details: None,
         }
     }
 }

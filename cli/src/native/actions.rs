@@ -41,12 +41,12 @@ use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
 use super::service_health::{
-    reconcile_service_state, record_browser_health_changed_event,
-    record_browser_health_changed_event_with_details, record_browser_launch_recorded_event,
-    record_browser_recovery_started_event, record_browser_recovery_started_event_with_details,
-    recovery_reason_kind_for_health, BrowserProcessExitCause, BrowserRecoveryPolicy,
-    BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource,
-    BrowserRecoveryReasonKind,
+    apply_browser_health_observation, browser_health_observation_details, reconcile_service_state,
+    record_browser_health_changed_event, record_browser_health_changed_event_with_details,
+    record_browser_launch_recorded_event, record_browser_recovery_started_event,
+    record_browser_recovery_started_event_with_details, recovery_reason_kind_for_health,
+    BrowserProcessExitCause, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
+    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_model::{
@@ -456,7 +456,7 @@ fn persist_service_browser_record(
                 .as_ref()
                 .and_then(|browser| browser.profile_id.clone())
         });
-    let browser = BrowserProcess {
+    let mut browser = BrowserProcess {
         id: id.clone(),
         profile_id: profile_id.clone(),
         host,
@@ -466,7 +466,10 @@ fn persist_service_browser_record(
         view_streams: Vec::new(),
         active_session_ids: vec![session_id.to_string()],
         last_error,
+        last_health_observation: None,
     };
+    let observation_details = browser_health_observation_details(&browser, None);
+    apply_browser_health_observation(&mut browser, Some(&observation_details));
     let metadata_changed = if let Some(metadata) = metadata {
         let previous_profile = profile_id
             .as_ref()
@@ -736,7 +739,7 @@ fn persist_current_browser_stale_health(
     let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
     let id = service_browser_id(&state.session_id);
     let previous = service_state.browsers.get(&id).cloned();
-    let browser = stale_browser_process_record(
+    let mut browser = stale_browser_process_record(
         &id,
         &state.session_id,
         previous.as_ref(),
@@ -745,6 +748,8 @@ fn persist_current_browser_stale_health(
         health,
         last_error.clone(),
     );
+    let observation_details = browser_health_observation_details(&browser, event_details.clone());
+    apply_browser_health_observation(&mut browser, Some(&observation_details));
     record_browser_health_changed_event_with_details(
         &mut service_state,
         &id,
@@ -759,11 +764,13 @@ fn persist_current_browser_stale_health(
             "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
             policy.retry_budget, policy.next_retry_delay_ms
         );
-        let faulted = BrowserProcess {
+        let mut faulted = BrowserProcess {
             health: ServiceBrowserHealth::Faulted,
             last_error: Some(faulted_error.clone()),
             ..browser.clone()
         };
+        let observation_details = browser_health_observation_details(&faulted, None);
+        apply_browser_health_observation(&mut faulted, Some(&observation_details));
         record_browser_health_changed_event(&mut service_state, &id, Some(&browser), &faulted);
         service_state.browsers.insert(id, faulted);
         return if store.save(&service_state).is_ok() {
@@ -820,11 +827,13 @@ fn persist_browser_recovery_started_from_persisted_state(
             "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
             policy.retry_budget, policy.next_retry_delay_ms
         );
-        let faulted = BrowserProcess {
+        let mut faulted = BrowserProcess {
             health: ServiceBrowserHealth::Faulted,
             last_error: Some(faulted_error.clone()),
             ..browser.clone()
         };
+        let observation_details = browser_health_observation_details(&faulted, None);
+        apply_browser_health_observation(&mut faulted, Some(&observation_details));
         record_browser_health_changed_event(&mut service_state, &id, Some(&browser), &faulted);
         service_state.browsers.insert(id, faulted);
         return if store.save(&service_state).is_ok() {
@@ -871,6 +880,7 @@ fn stale_browser_process_record(
             .unwrap_or_default(),
         active_session_ids: vec![session_id.to_string()],
         last_error: Some(last_error),
+        last_health_observation: None,
     }
 }
 
@@ -914,7 +924,7 @@ fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserSh
         .map(|browser| browser.host)
         .unwrap_or(ServiceBrowserHost::LocalHeaded);
     let (health, last_error) = close_health_from_outcome(outcome);
-    let browser = BrowserProcess {
+    let mut browser = BrowserProcess {
         id: id.clone(),
         host,
         health,
@@ -923,9 +933,17 @@ fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserSh
         ..BrowserProcess::default()
     };
     let shutdown_details = outcome.map(|outcome| {
+        let failure_class = if outcome.os_degraded_possible() {
+            "browser_shutdown_force_kill_failed"
+        } else if outcome.browser_degraded() {
+            "browser_shutdown_degraded"
+        } else {
+            "operator_requested_close"
+        };
         json!({
             "shutdownReasonKind": BrowserRecoveryReasonKind::OperatorRequestedClose.as_str(),
             "processExitCause": BrowserProcessExitCause::OperatorRequestedClose.as_str(),
+            "failureClass": failure_class,
             "shutdownRequested": true,
             "politeCloseAttempted": outcome.polite_close_attempted,
             "politeCloseSucceeded": outcome.polite_close_succeeded,
@@ -935,6 +953,14 @@ fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserSh
             "forceKillFailed": outcome.force_kill_failed,
         })
     });
+    if let Some(details) = shutdown_details.as_ref() {
+        let observation_details =
+            browser_health_observation_details(&browser, Some(details.clone()));
+        apply_browser_health_observation(&mut browser, Some(&observation_details));
+    } else {
+        let observation_details = browser_health_observation_details(&browser, None);
+        apply_browser_health_observation(&mut browser, Some(&observation_details));
+    }
     record_browser_health_changed_event_with_details(
         &mut service_state,
         &id,
@@ -6619,6 +6645,8 @@ async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
             .as_deref()
             .unwrap_or("no fault detail recorded")
     ));
+    let observation_details = browser_health_observation_details(&retryable, None);
+    apply_browser_health_observation(&mut retryable, Some(&observation_details));
     record_browser_health_changed_event(&mut state, browser_id, Some(&previous), &retryable);
     state
         .browsers
@@ -12657,6 +12685,9 @@ mod tests {
                 .and_then(|succeeded| succeeded.as_bool()),
             Some(true)
         );
+        assert!(persisted.browsers[browser_id]
+            .last_health_observation
+            .is_none());
 
         let _ = fs::remove_dir_all(&home);
     }

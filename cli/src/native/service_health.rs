@@ -6,8 +6,8 @@ use std::time::Duration;
 use serde::Deserialize;
 
 use super::service_model::{
-    BrowserHealth, BrowserProcess, BrowserSession, BrowserTab, ServiceEvent, ServiceEventKind,
-    ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
+    BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserSession, BrowserTab,
+    ServiceEvent, ServiceEventKind, ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
 };
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
@@ -203,6 +203,70 @@ fn failure_class_for_recovery_reason(
     }
 }
 
+fn browser_health_observation(
+    current: &BrowserProcess,
+    details: Option<&serde_json::Value>,
+) -> BrowserHealthObservation {
+    BrowserHealthObservation {
+        observed_at: current_timestamp(),
+        health: current.health,
+        reason_kind: details
+            .and_then(|value| value.get("currentReasonKind"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        failure_class: details
+            .and_then(|value| value.get("failureClass"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        process_exit_cause: details
+            .and_then(|value| value.get("processExitCause"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        message: current.last_error.clone(),
+        details: details.cloned(),
+    }
+}
+
+pub fn browser_health_observation_details(
+    current: &BrowserProcess,
+    extra_details: Option<serde_json::Value>,
+) -> serde_json::Value {
+    let mut details = serde_json::json!({
+        "currentError": current.last_error,
+    });
+    if let Some(reason_kind) = recovery_reason_kind_value_for_health(current.health) {
+        details["currentReasonKind"] = reason_kind;
+    }
+    if let Some(failure_class) = failure_class_for_health(current.health) {
+        details["failureClass"] = serde_json::json!(failure_class);
+    }
+    if let Some(cause) = process_exit_cause_for_health(current.health) {
+        details["processExitCause"] = serde_json::json!(cause.as_str());
+    }
+    if let Some(serde_json::Value::Object(extra)) = extra_details {
+        if let Some(details) = details.as_object_mut() {
+            for (key, value) in extra {
+                details.insert(key, value);
+            }
+        }
+    }
+    details
+}
+
+pub fn apply_browser_health_observation(
+    browser: &mut BrowserProcess,
+    details: Option<&serde_json::Value>,
+) {
+    if matches!(
+        browser.health,
+        BrowserHealth::Ready | BrowserHealth::NotStarted
+    ) {
+        browser.last_health_observation = None;
+    } else {
+        browser.last_health_observation = Some(browser_health_observation(browser, details));
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServiceReconcileSummary {
     pub browser_count: usize,
@@ -286,6 +350,14 @@ async fn refresh_browser_record_health(browser: &mut BrowserProcess) {
         if !pid_is_running(pid) {
             browser.health = BrowserHealth::ProcessExited;
             browser.last_error = Some(format!("Recorded browser PID {} is no longer running", pid));
+            let details = serde_json::json!({
+                "currentReasonKind": recovery_reason_kind_for_health(browser.health).as_str(),
+                "failureClass": "browser_process_exited",
+                "processExitCause": BrowserProcessExitCause::UnexpectedProcessExit.as_str(),
+                "processExitDetection": "persisted_pid_probe",
+                "processExitPid": pid,
+            });
+            apply_browser_health_observation(browser, Some(&details));
             return;
         }
     }
@@ -294,12 +366,27 @@ async fn refresh_browser_record_health(browser: &mut BrowserProcess) {
         if cdp_endpoint_reachable(endpoint).await {
             browser.health = BrowserHealth::Ready;
             browser.last_error = None;
+            browser.last_health_observation = None;
         } else if browser.pid.is_some() {
             browser.health = BrowserHealth::CdpDisconnected;
             browser.last_error = Some(format!("CDP endpoint is unreachable: {}", endpoint));
+            let details = serde_json::json!({
+                "currentReasonKind": recovery_reason_kind_for_health(browser.health).as_str(),
+                "failureClass": "cdp_unresponsive",
+                "cdpProbe": "Browser.getVersion",
+                "cdpEndpoint": endpoint,
+            });
+            apply_browser_health_observation(browser, Some(&details));
         } else {
             browser.health = BrowserHealth::Unreachable;
             browser.last_error = Some(format!("CDP endpoint is unreachable: {}", endpoint));
+            let details = serde_json::json!({
+                "currentReasonKind": recovery_reason_kind_for_health(browser.health).as_str(),
+                "failureClass": "cdp_endpoint_unreachable",
+                "cdpProbe": "Browser.getVersion",
+                "cdpEndpoint": endpoint,
+            });
+            apply_browser_health_observation(browser, Some(&details));
         }
     }
 }
@@ -325,7 +412,14 @@ async fn reconcile_live_browser_targets(state: &mut ServiceState) {
             Err(err) => {
                 if let Some(browser) = state.browsers.get_mut(&browser_id) {
                     browser.health = BrowserHealth::Degraded;
-                    browser.last_error = Some(err);
+                    browser.last_error = Some(err.clone());
+                    let details = serde_json::json!({
+                        "currentReasonKind": recovery_reason_kind_for_health(browser.health).as_str(),
+                        "failureClass": "target_discovery_failed",
+                        "cdpProbe": "/json/list",
+                        "cdpEndpoint": endpoint,
+                    });
+                    apply_browser_health_observation(browser, Some(&details));
                 }
                 close_browser_tabs(state, &browser_id);
                 continue;
@@ -545,7 +639,6 @@ pub fn record_browser_health_changed_event_with_details(
             }
         }
     }
-
     let mut event = ServiceEvent {
         kind: ServiceEventKind::BrowserHealthChanged,
         message: format!(
@@ -1156,6 +1249,65 @@ mod tests {
                 .and_then(|class| class.as_str()),
             Some("browser_process_exited")
         );
+    }
+
+    #[test]
+    fn health_observation_retains_failure_evidence_on_browser_record() {
+        let mut browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::ProcessExited,
+            last_error: Some("Recorded browser PID 1234 is no longer running".to_string()),
+            ..BrowserProcess::default()
+        };
+        let details = browser_health_observation_details(
+            &browser,
+            Some(serde_json::json!({
+                "processExitDetection": "persisted_pid_probe",
+                "processExitPid": 1234,
+            })),
+        );
+
+        apply_browser_health_observation(&mut browser, Some(&details));
+
+        let observation = browser.last_health_observation.as_ref().unwrap();
+        assert_eq!(observation.health, BrowserHealth::ProcessExited);
+        assert_eq!(observation.reason_kind.as_deref(), Some("process_exited"));
+        assert_eq!(
+            observation.failure_class.as_deref(),
+            Some("browser_process_exited")
+        );
+        assert_eq!(
+            observation.process_exit_cause.as_deref(),
+            Some("unexpected_process_exit")
+        );
+        assert_eq!(
+            observation
+                .details
+                .as_ref()
+                .and_then(|details| details.get("processExitPid"))
+                .and_then(|pid| pid.as_u64()),
+            Some(1234)
+        );
+    }
+
+    #[test]
+    fn health_observation_clears_when_browser_is_ready() {
+        let mut browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::ProcessExited,
+            last_health_observation: Some(BrowserHealthObservation {
+                observed_at: "2026-04-27T00:00:00Z".to_string(),
+                health: BrowserHealth::ProcessExited,
+                failure_class: Some("browser_process_exited".to_string()),
+                ..BrowserHealthObservation::default()
+            }),
+            ..BrowserProcess::default()
+        };
+        browser.health = BrowserHealth::Ready;
+
+        apply_browser_health_observation(&mut browser, None);
+
+        assert!(browser.last_health_observation.is_none());
     }
 
     #[test]
