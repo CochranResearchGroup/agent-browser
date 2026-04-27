@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 
 use crate::connection::{send_command, Response};
 use crate::native::service_activity::service_incident_activity_response;
+use crate::native::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
@@ -560,6 +561,80 @@ fn service_mcp_tools() -> Vec<Value> {
                     }
                 },
                 "required": ["browserId"]
+            }
+        }),
+        json!({
+            "name": "service_incidents",
+            "title": "Read service incidents",
+            "description": "Read grouped retained service incidents with the same filters as the HTTP and CLI service incidents surfaces, including severity and escalation.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "incidentId": {
+                        "type": "string",
+                        "description": "Read one incident by id and include related retained events and jobs."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum incident records to return. Defaults to 20."
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": ["active", "recovered", "service"],
+                        "description": "Filter by incident lifecycle state."
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["info", "warning", "error", "critical"],
+                        "description": "Filter by service-derived incident severity."
+                    },
+                    "escalation": {
+                        "type": "string",
+                        "enum": ["none", "browser_degraded", "browser_recovery", "job_attention", "service_triage", "os_degraded_possible"],
+                        "description": "Filter by service-derived escalation bucket."
+                    },
+                    "handlingState": {
+                        "type": "string",
+                        "enum": ["unacknowledged", "acknowledged", "resolved"],
+                        "description": "Filter by operator handling state."
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["browser_health_changed", "reconciliation_error", "service_job_timeout", "service_job_cancelled"],
+                        "description": "Filter by latest incident kind."
+                    },
+                    "browserId": {
+                        "type": "string",
+                        "description": "Filter by browser id."
+                    },
+                    "profileId": {
+                        "type": "string",
+                        "description": "Filter incidents by related profile id."
+                    },
+                    "sessionId": {
+                        "type": "string",
+                        "description": "Filter incidents by related session id."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Filter incidents by related service name."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Filter incidents by related agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Filter incidents by related task name."
+                    },
+                    "since": {
+                        "type": "string",
+                        "description": "RFC 3339 timestamp. Only incidents with latestTimestamp at or after this time are returned."
+                    }
+                },
+                "required": []
             }
         }),
         json!({
@@ -3072,6 +3147,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
     match name {
         "service_job_cancel" => call_service_job_cancel(arguments, session),
         "service_browser_retry" => call_service_browser_retry(arguments, session),
+        "service_incidents" => call_service_incidents(arguments, session),
         "service_trace" => call_service_trace(arguments, session),
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
@@ -3244,6 +3320,93 @@ fn call_service_trace(arguments: &Value, session: &str) -> Result<Value, JsonRpc
 
     Ok(tool_response_from_payload(
         "service_trace",
+        session,
+        trace,
+        data,
+        false,
+    ))
+}
+
+fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let limit = optional_positive_u64_argument(arguments, "limit")?
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let store =
+        JsonServiceStateStore::new(JsonServiceStateStore::default_path().map_err(|err| {
+            JsonRpcError {
+                code: -32603,
+                message: "Internal error",
+                data: Some(json!({ "message": err, "tool": "service_incidents" })),
+            }
+        })?);
+    let state = store.load().map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({ "message": err, "tool": "service_incidents" })),
+    })?;
+    let data = service_incidents_response(
+        &state,
+        ServiceIncidentFilters {
+            limit,
+            incident_id: optional_string_argument(arguments, "incidentId")?,
+            state: optional_enum_string_argument(
+                arguments,
+                "state",
+                &["active", "recovered", "service"],
+            )?,
+            severity: optional_enum_string_argument(
+                arguments,
+                "severity",
+                &["info", "warning", "error", "critical"],
+            )?,
+            escalation: optional_enum_string_argument(
+                arguments,
+                "escalation",
+                &[
+                    "none",
+                    "browser_degraded",
+                    "browser_recovery",
+                    "job_attention",
+                    "service_triage",
+                    "os_degraded_possible",
+                ],
+            )?,
+            handling_state: optional_enum_string_argument(
+                arguments,
+                "handlingState",
+                &["unacknowledged", "acknowledged", "resolved"],
+            )?,
+            kind: optional_enum_string_argument(
+                arguments,
+                "kind",
+                &[
+                    "browser_health_changed",
+                    "reconciliation_error",
+                    "service_job_timeout",
+                    "service_job_cancelled",
+                ],
+            )?,
+            browser_id: optional_string_argument(arguments, "browserId")?,
+            profile_id: optional_string_argument(arguments, "profileId")?,
+            session_id: optional_string_argument(arguments, "sessionId")?,
+            service_name,
+            agent_name,
+            task_name,
+            since: optional_string_argument(arguments, "since")?,
+        },
+    )
+    .map_err(|err| JsonRpcError {
+        code: -32602,
+        message: "Invalid params",
+        data: Some(json!({ "message": err, "tool": "service_incidents" })),
+    })?;
+
+    Ok(tool_response_from_payload(
+        "service_incidents",
         session,
         trace,
         data,
@@ -6265,6 +6428,24 @@ fn optional_string_argument<'a>(
     }
 }
 
+fn optional_enum_string_argument<'a>(
+    arguments: &'a Value,
+    name: &str,
+    allowed: &[&str],
+) -> Result<Option<&'a str>, JsonRpcError> {
+    let value = optional_string_argument(arguments, name)?;
+    if let Some(value) = value {
+        if !allowed.contains(&value) {
+            return Err(JsonRpcError::invalid_params(&format!(
+                "{} must be one of {}",
+                name,
+                allowed.join(", ")
+            )));
+        }
+    }
+    Ok(value)
+}
+
 fn required_string_argument<'a>(arguments: &'a Value, name: &str) -> Result<&'a str, JsonRpcError> {
     optional_string_argument(arguments, name)?
         .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
@@ -6901,6 +7082,23 @@ mod tests {
         assert!(
             response["result"]["tools"][1]["inputSchema"]["properties"]["serviceName"].is_object()
         );
+        assert_eq!(response["result"]["tools"][2]["name"], "service_incidents");
+        assert!(
+            response["result"]["tools"][2]["inputSchema"]["properties"]["severity"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("critical"))
+        );
+        assert!(
+            response["result"]["tools"][2]["inputSchema"]["properties"]["escalation"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("os_degraded_possible"))
+        );
+        response["result"]["tools"]
+            .as_array_mut()
+            .unwrap()
+            .remove(1);
         response["result"]["tools"]
             .as_array_mut()
             .unwrap()
@@ -7620,6 +7818,22 @@ mod tests {
 
         assert_eq!(response["id"], 40);
         assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn service_incidents_rejects_invalid_severity_before_store_read() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"service_incidents","arguments":{"severity":"panic","escalation":"os_degraded_possible"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 42);
+        assert_eq!(response["error"]["code"], -32602);
+        assert!(response["error"]["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("severity must be one of"));
     }
 
     #[test]

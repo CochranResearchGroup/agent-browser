@@ -758,6 +758,51 @@ try {
     traceTool.inputSchema?.properties?.since,
     'MCP service_trace missing since filter',
   );
+  const incidentsTool = tools.tools?.find((tool) => tool.name === 'service_incidents');
+  assert(incidentsTool, 'MCP service_incidents tool missing');
+  assert(
+    incidentsTool.inputSchema?.properties?.severity?.enum?.includes('critical'),
+    'MCP service_incidents missing critical severity filter',
+  );
+  assert(
+    incidentsTool.inputSchema?.properties?.escalation?.enum?.includes('os_degraded_possible'),
+    'MCP service_incidents missing os_degraded_possible escalation filter',
+  );
+  assert(
+    incidentsTool.inputSchema?.properties?.serviceName,
+    'MCP service_incidents missing serviceName filter',
+  );
+
+  const filteredIncidents = await send('tools/call', {
+    name: 'service_incidents',
+    arguments: {
+      severity: 'critical',
+      escalation: 'os_degraded_possible',
+      serviceName: 'JournalDownloader',
+      taskName: 'probeACSwebsite',
+    },
+  });
+  const filteredIncidentPayload = JSON.parse(filteredIncidents.content?.[0]?.text || '{}');
+  assert(
+    filteredIncidentPayload.tool === 'service_incidents',
+    'MCP service_incidents payload tool mismatch',
+  );
+  assert(
+    filteredIncidentPayload.success === true,
+    'MCP service_incidents should succeed on fresh state',
+  );
+  assert(
+    Array.isArray(filteredIncidentPayload.data?.incidents),
+    'MCP service_incidents missing incidents array',
+  );
+  assert(
+    filteredIncidentPayload.data?.filters?.severity === 'critical',
+    'MCP service_incidents did not retain severity filter',
+  );
+  assert(
+    filteredIncidentPayload.data?.filters?.escalation === 'os_degraded_possible',
+    'MCP service_incidents did not retain escalation filter',
+  );
 
   const trace = await send('tools/call', {
     name: 'service_trace',

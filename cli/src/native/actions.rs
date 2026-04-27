@@ -44,6 +44,7 @@ use super::service_health::{
     recovery_reason_kind_for_health, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
     BrowserRecoveryReasonKind,
 };
+use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     BrowserProfile, BrowserSession, JobState as ServiceJobState, LeaseState,
@@ -6831,96 +6832,25 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         .and_then(|value| value.as_u64())
         .map(|value| value as usize)
         .unwrap_or(20);
-    let state = cmd.get("state").and_then(|value| value.as_str());
-    let severity = cmd.get("severity").and_then(|value| value.as_str());
-    let escalation = cmd.get("escalation").and_then(|value| value.as_str());
-    let handling_state = cmd.get("handlingState").and_then(|value| value.as_str());
-    let kind = cmd.get("kind").and_then(|value| value.as_str());
-    let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
-    let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
-    let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
-    let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
-    let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
-    let task_name = cmd.get("taskName").and_then(|value| value.as_str());
-    let since = cmd
-        .get("since")
-        .and_then(|value| value.as_str())
-        .map(parse_service_event_timestamp)
-        .transpose()?;
-    let total = service_state.incidents.len();
-    if let Some(incident_id) = cmd.get("incidentId").and_then(|value| value.as_str()) {
-        let incident = service_state
-            .incidents
-            .iter()
-            .find(|incident| incident.id == incident_id)
-            .cloned()
-            .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
-        let events = incident
-            .event_ids
-            .iter()
-            .filter_map(|event_id| {
-                service_state
-                    .events
-                    .iter()
-                    .find(|event| &event.id == event_id)
-                    .cloned()
-            })
-            .collect::<Vec<_>>();
-        let jobs = incident
-            .job_ids
-            .iter()
-            .filter_map(|job_id| service_state.jobs.get(job_id).cloned())
-            .collect::<Vec<_>>();
-        return Ok(json!({
-            "incident": incident,
-            "incidents": [incident],
-            "events": events,
-            "jobs": jobs,
-            "count": 1,
-            "matched": 1,
-            "total": total,
-        }));
-    }
-    let mut incidents = service_state
-        .incidents
-        .iter()
-        .filter(|incident| {
-            state.is_none_or(|expected| service_incident_state_name(incident.state) == expected)
-                && severity.is_none_or(|expected| {
-                    service_incident_severity_name(incident.severity) == expected
-                })
-                && escalation.is_none_or(|expected| {
-                    service_incident_escalation_name(incident.escalation) == expected
-                })
-                && handling_state.is_none_or(|expected| {
-                    service_incident_handling_state_name(incident) == expected
-                })
-                && kind.is_none_or(|expected| incident.latest_kind == expected)
-                && browser_id
-                    .is_none_or(|expected| incident.browser_id.as_deref() == Some(expected))
-                && service_incident_matches_trace_filters(
-                    incident,
-                    &service_state,
-                    profile_id,
-                    session_id,
-                    service_name,
-                    agent_name,
-                    task_name,
-                )
-                && since.is_none_or(|minimum| service_incident_at_or_after(incident, minimum))
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    let matched = incidents.len();
-    let start = matched.saturating_sub(limit);
-    incidents = incidents[start..].to_vec();
-
-    Ok(json!({
-        "incidents": incidents,
-        "count": incidents.len(),
-        "matched": matched,
-        "total": total,
-    }))
+    service_incidents_response(
+        &service_state,
+        ServiceIncidentFilters {
+            limit,
+            incident_id: cmd.get("incidentId").and_then(|value| value.as_str()),
+            state: cmd.get("state").and_then(|value| value.as_str()),
+            severity: cmd.get("severity").and_then(|value| value.as_str()),
+            escalation: cmd.get("escalation").and_then(|value| value.as_str()),
+            handling_state: cmd.get("handlingState").and_then(|value| value.as_str()),
+            kind: cmd.get("kind").and_then(|value| value.as_str()),
+            browser_id: cmd.get("browserId").and_then(|value| value.as_str()),
+            profile_id: cmd.get("profileId").and_then(|value| value.as_str()),
+            session_id: cmd.get("sessionId").and_then(|value| value.as_str()),
+            service_name: cmd.get("serviceName").and_then(|value| value.as_str()),
+            agent_name: cmd.get("agentName").and_then(|value| value.as_str()),
+            task_name: cmd.get("taskName").and_then(|value| value.as_str()),
+            since: cmd.get("since").and_then(|value| value.as_str()),
+        },
+    )
 }
 
 async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
