@@ -33,6 +33,7 @@
     "test:service-recovery-mcp-live": "node scripts/smoke-service-recovery-mcp.js",
     "test:service-recovery-override-http-live": "node scripts/smoke-service-recovery-override-http.js",
     "test:service-recovery-override-mcp-live": "node scripts/smoke-service-recovery-override-mcp.js",
+    "test:service-incident-parity-live": "node scripts/smoke-service-incident-parity.js",
     "test:service-shutdown-health-live": "node scripts/smoke-service-shutdown-health.js"
   },
   "keywords": [
