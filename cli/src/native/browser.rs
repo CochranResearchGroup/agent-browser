@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, Mutex};
 
-use super::cdp::chrome::{auto_connect_cdp, launch_chrome, ChromeProcess, LaunchOptions};
+use super::cdp::chrome::{
+    auto_connect_cdp, launch_chrome, ChromeProcess, LaunchOptions, ProcessShutdownOutcome,
+};
 use super::cdp::client::CdpClient;
 use super::cdp::discovery::discover_cdp_url;
 use super::cdp::lightpanda::{launch_lightpanda, LightpandaLaunchOptions, LightpandaProcess};
@@ -170,18 +172,77 @@ pub enum BrowserProcess {
     Lightpanda(LightpandaProcess),
 }
 
+/// Shutdown remedy outcome used to classify browser health after close.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BrowserShutdownOutcome {
+    pub polite_close_attempted: bool,
+    pub polite_close_succeeded: bool,
+    pub polite_close_failed: bool,
+    pub force_kill_attempted: bool,
+    pub force_kill_succeeded: bool,
+    pub force_kill_failed: bool,
+    pub errors: Vec<String>,
+}
+
+impl BrowserShutdownOutcome {
+    pub fn browser_degraded(&self) -> bool {
+        self.polite_close_failed
+    }
+
+    pub fn os_degraded_possible(&self) -> bool {
+        self.force_kill_failed
+    }
+
+    fn merge_process_outcome(&mut self, outcome: ProcessShutdownOutcome) {
+        self.force_kill_attempted |= outcome.force_kill_attempted;
+        if outcome.force_kill_succeeded {
+            self.force_kill_succeeded = true;
+        }
+        if outcome.force_kill_attempted && !outcome.force_kill_succeeded {
+            self.force_kill_failed = true;
+        }
+        self.errors.extend(outcome.errors);
+    }
+}
+
 impl BrowserProcess {
     pub fn kill(&mut self) {
+        let _ = self.kill_with_outcome();
+    }
+
+    pub fn kill_with_outcome(&mut self) -> BrowserShutdownOutcome {
         match self {
-            BrowserProcess::Chrome(p) => p.kill(),
-            BrowserProcess::Lightpanda(p) => p.kill(),
+            BrowserProcess::Chrome(p) => {
+                let mut outcome = BrowserShutdownOutcome::default();
+                outcome.merge_process_outcome(p.kill_with_outcome());
+                outcome
+            }
+            BrowserProcess::Lightpanda(p) => {
+                p.kill();
+                BrowserShutdownOutcome {
+                    force_kill_attempted: true,
+                    force_kill_succeeded: true,
+                    ..BrowserShutdownOutcome::default()
+                }
+            }
         }
     }
 
-    pub fn wait_or_kill(&mut self, timeout: std::time::Duration) {
+    pub fn wait_or_kill(&mut self, timeout: std::time::Duration) -> BrowserShutdownOutcome {
         match self {
-            BrowserProcess::Chrome(p) => p.wait_or_kill(timeout),
-            BrowserProcess::Lightpanda(p) => p.kill(),
+            BrowserProcess::Chrome(p) => {
+                let mut outcome = BrowserShutdownOutcome::default();
+                outcome.merge_process_outcome(p.wait_or_kill(timeout));
+                outcome
+            }
+            BrowserProcess::Lightpanda(p) => {
+                p.kill();
+                BrowserShutdownOutcome {
+                    force_kill_attempted: true,
+                    force_kill_succeeded: true,
+                    ..BrowserShutdownOutcome::default()
+                }
+            }
         }
     }
 
@@ -767,26 +828,49 @@ impl BrowserManager {
             .await
     }
 
-    pub async fn close(&mut self) -> Result<(), String> {
+    pub async fn close_with_outcome(&mut self) -> Result<BrowserShutdownOutcome, String> {
+        let mut outcome = BrowserShutdownOutcome::default();
         if self.browser_process.is_some() {
             // Only send Browser.close when we launched the browser ourselves.
             // For external connections (--auto-connect, --cdp) we just disconnect
             // without shutting down the user's browser.
-            let _ = self
+            outcome.polite_close_attempted = true;
+            match self
                 .client
                 .send_command_no_params("Browser.close", None)
-                .await;
+                .await
+            {
+                Ok(_) => outcome.polite_close_succeeded = true,
+                Err(err) => {
+                    outcome.polite_close_failed = true;
+                    outcome
+                        .errors
+                        .push(format!("Polite browser close failed: {}", err));
+                }
+            }
         }
 
         if let Some(mut process) = self.browser_process.take() {
             let timeout = std::time::Duration::from_secs(5);
-            let _ = tokio::task::spawn_blocking(move || {
-                process.wait_or_kill(timeout);
-            })
-            .await;
+            let process_outcome =
+                tokio::task::spawn_blocking(move || process.wait_or_kill(timeout))
+                    .await
+                    .map_err(|err| format!("Failed to join browser shutdown task: {}", err))?;
+            outcome.force_kill_attempted |= process_outcome.force_kill_attempted;
+            if process_outcome.force_kill_succeeded {
+                outcome.force_kill_succeeded = true;
+            }
+            if process_outcome.force_kill_failed {
+                outcome.force_kill_failed = true;
+            }
+            outcome.errors.extend(process_outcome.errors);
         }
 
-        Ok(())
+        Ok(outcome)
+    }
+
+    pub async fn close(&mut self) -> Result<(), String> {
+        self.close_with_outcome().await.map(|_| ())
     }
 
     /// Disconnect from a launched persistent runtime-profile browser without

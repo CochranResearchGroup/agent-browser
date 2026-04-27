@@ -17,7 +17,7 @@ use crate::runtime_profile::{
 };
 
 use super::auth;
-use super::browser::{should_track_target, BrowserManager, WaitUntil};
+use super::browser::{should_track_target, BrowserManager, BrowserShutdownOutcome, WaitUntil};
 use super::cancellation::CancellationToken;
 use super::cdp::chrome::LaunchOptions;
 use super::cdp::client::CdpClient;
@@ -834,7 +834,34 @@ fn stale_browser_process_record(
     }
 }
 
-fn persist_closed_browser_health(state: &DaemonState) {
+fn close_health_from_outcome(
+    outcome: Option<&BrowserShutdownOutcome>,
+) -> (ServiceBrowserHealth, Option<String>) {
+    let Some(outcome) = outcome else {
+        return (ServiceBrowserHealth::NotStarted, None);
+    };
+    if outcome.os_degraded_possible() {
+        return (
+            ServiceBrowserHealth::Faulted,
+            Some(format!(
+                "Force kill failed; OS may be degraded. {}",
+                outcome.errors.join("; ")
+            )),
+        );
+    }
+    if outcome.browser_degraded() {
+        return (
+            ServiceBrowserHealth::Degraded,
+            Some(format!(
+                "Polite browser close failed; force kill was required. {}",
+                outcome.errors.join("; ")
+            )),
+        );
+    }
+    (ServiceBrowserHealth::NotStarted, None)
+}
+
+fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserShutdownOutcome>) {
     let Ok(path) = JsonServiceStateStore::default_path() else {
         return;
     };
@@ -846,10 +873,12 @@ fn persist_closed_browser_health(state: &DaemonState) {
         .as_ref()
         .map(|browser| browser.host)
         .unwrap_or(ServiceBrowserHost::LocalHeaded);
+    let (health, last_error) = close_health_from_outcome(outcome);
     let browser = BrowserProcess {
         id: id.clone(),
         host,
-        health: ServiceBrowserHealth::NotStarted,
+        health,
+        last_error,
         active_session_ids: vec![state.session_id.clone()],
         ..BrowserProcess::default()
     };
@@ -1924,40 +1953,103 @@ fn browser_recovery_policy_config_from_env() -> BrowserRecoveryPolicyConfig {
     }
 }
 
-async fn terminate_runtime_browser(pid: u32) {
-    let _ = tokio::task::spawn_blocking(move || {
+async fn terminate_runtime_browser(pid: u32) -> BrowserShutdownOutcome {
+    tokio::task::spawn_blocking(move || {
+        let mut outcome = BrowserShutdownOutcome::default();
         #[cfg(unix)]
         {
             for _ in 0..20 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 if !pid_is_running(pid) {
-                    return;
+                    return outcome;
                 }
             }
-            unsafe {
-                libc::kill(pid as i32, libc::SIGTERM);
+            outcome.polite_close_attempted = true;
+            let term_rc = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+            if term_rc != 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::ESRCH) {
+                    outcome.polite_close_succeeded = true;
+                    return outcome;
+                }
+                outcome.errors.push(format!(
+                    "Failed to politely terminate runtime browser PID {}: {}",
+                    pid, err
+                ));
+                outcome.polite_close_failed = true;
             }
             for _ in 0..20 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 if !pid_is_running(pid) {
-                    return;
+                    outcome.polite_close_succeeded = true;
+                    return outcome;
                 }
             }
-            unsafe {
-                libc::kill(pid as i32, libc::SIGKILL);
+            outcome.polite_close_failed = true;
+            outcome.force_kill_attempted = true;
+            let kill_rc = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+            if kill_rc != 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::ESRCH) {
+                    outcome.force_kill_succeeded = true;
+                    return outcome;
+                }
+                outcome.errors.push(format!(
+                    "Failed to force kill runtime browser PID {}: {}",
+                    pid, err
+                ));
+                outcome.force_kill_failed = true;
+                return outcome;
             }
+            for _ in 0..20 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                if !pid_is_running(pid) {
+                    outcome.force_kill_succeeded = true;
+                    return outcome;
+                }
+            }
+            outcome.errors.push(format!(
+                "Runtime browser PID {} survived force kill; OS may be degraded",
+                pid
+            ));
+            outcome.force_kill_failed = true;
         }
 
         #[cfg(windows)]
         {
-            let _ = std::process::Command::new("taskkill")
+            outcome.force_kill_attempted = true;
+            let status = std::process::Command::new("taskkill")
                 .args(["/PID", &pid.to_string(), "/T", "/F"])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status();
+            match status {
+                Ok(status) if status.success() => outcome.force_kill_succeeded = true,
+                Ok(status) => outcome.errors.push(format!(
+                    "taskkill failed for runtime browser PID {} with status {}",
+                    pid, status
+                )),
+                Err(err) => outcome.errors.push(format!(
+                    "Failed to start taskkill for runtime browser PID {}: {}",
+                    pid, err
+                )),
+            }
+            if outcome.force_kill_attempted && !outcome.force_kill_succeeded {
+                outcome.force_kill_failed = true;
+            }
         }
+        outcome
     })
-    .await;
+    .await
+    .unwrap_or_else(|err| BrowserShutdownOutcome {
+        force_kill_attempted: true,
+        force_kill_failed: true,
+        errors: vec![format!(
+            "Failed to join runtime browser termination task: {}",
+            err
+        )],
+        ..BrowserShutdownOutcome::default()
+    })
 }
 
 impl Drop for DaemonState {
@@ -3436,6 +3528,7 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     let attached_runtime_profile = state.attached_runtime_profile.take();
     let attached_browser_pid = state.attached_browser_pid.take();
     let close_behavior = std::mem::take(&mut state.close_behavior);
+    let mut shutdown_outcome = BrowserShutdownOutcome::default();
 
     if let Some(ref mgr) = state.browser {
         if let Some(ref session_name) = state.session_name {
@@ -3469,7 +3562,14 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
         if close_behavior == CloseBehavior::Detach && runtime_profile.is_some() {
             mgr.detach_runtime_browser()?;
         } else {
-            mgr.close().await?;
+            let outcome = mgr.close_with_outcome().await?;
+            shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
+            shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
+            shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
+            shutdown_outcome.force_kill_attempted |= outcome.force_kill_attempted;
+            shutdown_outcome.force_kill_succeeded |= outcome.force_kill_succeeded;
+            shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
+            shutdown_outcome.errors.extend(outcome.errors);
             if let Some(runtime_profile) = runtime_profile {
                 let _ = clear_runtime_state(&runtime_profile);
             }
@@ -3479,7 +3579,14 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
         if close_behavior == CloseBehavior::CloseBrowser {
             let pid = attached_browser_pid.or_else(|| runtime_profile_pid(Some(&runtime_profile)));
             if let Some(pid) = pid {
-                terminate_runtime_browser(pid).await;
+                let outcome = terminate_runtime_browser(pid).await;
+                shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
+                shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
+                shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
+                shutdown_outcome.force_kill_attempted |= outcome.force_kill_attempted;
+                shutdown_outcome.force_kill_succeeded |= outcome.force_kill_succeeded;
+                shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
+                shutdown_outcome.errors.extend(outcome.errors);
             }
             let _ = clear_runtime_state(&runtime_profile);
         }
@@ -3489,7 +3596,7 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     state.screencasting = false;
     state.reset_input_state();
     state.update_stream_client().await;
-    persist_closed_browser_health(state);
+    persist_closed_browser_health(state, Some(&shutdown_outcome));
 
     // Stop background Fetch handler
     if let Some(task) = state.fetch_handler_task.take() {
@@ -12359,6 +12466,49 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_close_health_marks_polite_close_failure_degraded() {
+        let outcome = BrowserShutdownOutcome {
+            polite_close_attempted: true,
+            polite_close_succeeded: false,
+            polite_close_failed: true,
+            force_kill_attempted: true,
+            force_kill_succeeded: true,
+            errors: vec!["CDP connection closed".to_string()],
+            ..BrowserShutdownOutcome::default()
+        };
+
+        let (health, last_error) = close_health_from_outcome(Some(&outcome));
+
+        assert_eq!(health, ServiceBrowserHealth::Degraded);
+        assert!(last_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Polite browser close failed"));
+    }
+
+    #[test]
+    fn test_close_health_marks_force_kill_failure_faulted() {
+        let outcome = BrowserShutdownOutcome {
+            polite_close_attempted: true,
+            polite_close_succeeded: false,
+            polite_close_failed: true,
+            force_kill_attempted: true,
+            force_kill_succeeded: false,
+            force_kill_failed: true,
+            errors: vec!["permission denied".to_string()],
+            ..BrowserShutdownOutcome::default()
+        };
+
+        let (health, last_error) = close_health_from_outcome(Some(&outcome));
+
+        assert_eq!(health, ServiceBrowserHealth::Faulted);
+        assert!(last_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("OS may be degraded"));
     }
 
     #[tokio::test]

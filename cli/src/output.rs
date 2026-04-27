@@ -3093,6 +3093,7 @@ Notes:
   - The stream server exposes the service surface at /api/service/status, /api/service/profiles, /api/service/sessions, /api/service/browsers, /api/service/tabs, /api/service/site-policies, /api/service/providers, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Browser launch, close, and command-time stale-browser detection update the active session's persisted browser health record before relaunch.
+  - Close first attempts polite browser shutdown, then force kill for owned browser processes. Polite shutdown failure records degraded browser health; force-kill failure records faulted health with an OS-degraded warning.
   - Runtime profile and custom profile launches populate linked service profile and session records.
   - Commands should include serviceName, agentName, and taskName when available for traceability.
   - Configured profiles, sessions, site policies, and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
