@@ -6,6 +6,9 @@ import {
   traceFilterSummary,
   traceTimelineItems,
 } from '../packages/dashboard/src/lib/service-trace.ts';
+import {
+  incidentPriorityView,
+} from '../packages/dashboard/src/lib/service-incidents.ts';
 
 const traceData = {
   filters: {
@@ -134,5 +137,23 @@ assert.equal(
 assert.equal(timeline[0].source, 'event');
 assert.equal(timeline[1].source, 'job');
 assert.equal(timeline[1].message, 'Wait timed out');
+
+const criticalIncidentPriority = incidentPriorityView({
+  label: 'browser-1',
+  severity: 'critical',
+  escalation: 'os_degraded_possible',
+  recommendedAction: 'Inspect the host OS and process table before retrying browser automation.',
+});
+assert.equal(criticalIncidentPriority.severityTone, 'critical');
+assert.equal(criticalIncidentPriority.severityLabel, 'critical');
+assert.equal(criticalIncidentPriority.escalationLabel, 'os degraded possible');
+assert.equal(
+  criticalIncidentPriority.recommendedAction,
+  'Inspect the host OS and process table before retrying browser automation.',
+);
+assert.equal(
+  criticalIncidentPriority.ariaLabel,
+  'Inspect critical incident for browser-1',
+);
 
 console.log('Dashboard service trace contract smoke passed');

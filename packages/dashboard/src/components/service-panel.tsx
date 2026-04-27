@@ -36,6 +36,12 @@ import {
   type ServiceTraceTimelineItem,
   type ServiceTraceToolPayload,
 } from "@/lib/service-trace";
+import {
+  formatIncidentField,
+  incidentPriorityView,
+  type ServiceIncidentEscalation,
+  type ServiceIncidentSeverity,
+} from "@/lib/service-incidents";
 
 type ControlPlaneSnapshot = {
   worker_state?: string;
@@ -209,16 +215,6 @@ type IncidentRecord = {
   jobEvents: ServiceEvent[];
 };
 
-type ServiceIncidentSeverity = "info" | "warning" | "error" | "critical";
-
-type ServiceIncidentEscalation =
-  | "none"
-  | "browser_degraded"
-  | "browser_recovery"
-  | "job_attention"
-  | "service_triage"
-  | "os_degraded_possible";
-
 type ServiceIncident = {
   id: string;
   browserId?: string | null;
@@ -377,15 +373,6 @@ function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
 
 function formatHealthLabel(value?: string | null): string {
   return value ? value.replaceAll("_", " ") : "unknown";
-}
-
-function formatIncidentField(value?: string | null): string {
-  return value ? value.replaceAll("_", " ") : "unknown";
-}
-
-function incidentSeverityTone(value?: ServiceIncidentSeverity | null): "info" | "warning" | "error" | "critical" {
-  if (value === "warning" || value === "error" || value === "critical") return value;
-  return "info";
 }
 
 function isBadHealth(value?: string | null): boolean {
@@ -914,7 +901,7 @@ function IncidentRow({
   onSelect: (incident: IncidentRecord) => void;
 }) {
   const tone = healthTone(incident.currentHealth ?? undefined);
-  const severityTone = incidentSeverityTone(incident.severity);
+  const priority = incidentPriorityView(incident);
   const incidentCount = incident.transitionEvents.length + incident.jobEvents.length;
   const handlingState = incidentHandlingState(incident);
   return (
@@ -922,7 +909,7 @@ function IncidentRow({
       type="button"
       className="service-browser-row"
       onClick={() => onSelect(incident)}
-      aria-label={`Inspect ${formatIncidentField(incident.severity)} incident for ${incident.label}`}
+      aria-label={priority.ariaLabel}
     >
       <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
       <div className="min-w-0 flex-1">
@@ -932,13 +919,13 @@ function IncidentRow({
             variant="outline"
             className={cn(
               "h-4 shrink-0 px-1.5 text-[9px]",
-              `service-incident-severity-${severityTone}`,
+              `service-incident-severity-${priority.severityTone}`,
             )}
           >
-            {formatIncidentField(incident.severity)}
+            {priority.severityLabel}
           </Badge>
           <Badge variant="outline" className="h-4 max-w-32 truncate px-1.5 text-[9px]">
-            {formatIncidentField(incident.escalation)}
+            {priority.escalationLabel}
           </Badge>
           <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
             {incidentCount} incidents
@@ -958,9 +945,9 @@ function IncidentRow({
         <p className="mt-1 truncate text-xs text-muted-foreground">
           {incident.latestMessage}
         </p>
-        {incident.recommendedAction && (
+        {priority.recommendedAction && (
           <p className="mt-1 truncate text-[11px] font-medium text-muted-foreground">
-            Recommended: {incident.recommendedAction}
+            Recommended: {priority.recommendedAction}
           </p>
         )}
       </div>
@@ -1436,7 +1423,15 @@ function IncidentDetailDialog({
   const incidentCount = timeline.length;
   const serviceOnlyEvents = incident?.serviceEvents.filter((event) => event.kind !== "browser_health_changed") ?? [];
   const handlingState = incident ? incidentHandlingState(incident) : "unacknowledged";
-  const severityTone = incidentSeverityTone(incident?.severity);
+  const priority = incident
+    ? incidentPriorityView(incident)
+    : {
+        severityTone: "info" as const,
+        severityLabel: "unknown",
+        escalationLabel: "unknown",
+        recommendedAction: null,
+        ariaLabel: "",
+      };
 
   useEffect(() => {
     setActionNote("");
@@ -1458,28 +1453,28 @@ function IncidentDetailDialog({
             <div className="service-event-dialog-body">
               <p className="service-event-dialog-message">{incident.latestMessage}</p>
               <div className="service-incident-priority-row">
-                <div className={cn("service-incident-priority-card", `service-incident-priority-${severityTone}`)}>
+                <div className={cn("service-incident-priority-card", `service-incident-priority-${priority.severityTone}`)}>
                   <span>Severity</span>
-                  <strong>{formatIncidentField(incident.severity)}</strong>
+                  <strong>{priority.severityLabel}</strong>
                 </div>
                 <div className="service-incident-priority-card service-incident-priority-escalation">
                   <span>Escalation</span>
-                  <strong>{formatIncidentField(incident.escalation)}</strong>
+                  <strong>{priority.escalationLabel}</strong>
                 </div>
               </div>
-              {incident.recommendedAction && (
-                <div className={cn("service-incident-recommended-action", `service-incident-priority-${severityTone}`)}>
+              {priority.recommendedAction && (
+                <div className={cn("service-incident-recommended-action", `service-incident-priority-${priority.severityTone}`)}>
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                   <div>
                     <span>Recommended action</span>
-                    <p>{incident.recommendedAction}</p>
+                    <p>{priority.recommendedAction}</p>
                   </div>
                 </div>
               )}
               <div className="service-event-detail-grid">
                 <EventDetailItem label="Browser" value={incident.browserId} />
-                <EventDetailItem label="Severity" value={formatIncidentField(incident.severity)} />
-                <EventDetailItem label="Escalation" value={formatIncidentField(incident.escalation)} />
+                <EventDetailItem label="Severity" value={priority.severityLabel} />
+                <EventDetailItem label="Escalation" value={priority.escalationLabel} />
                 <EventDetailItem label="Latest kind" value={formatEventKind(incident.latestKind)} />
                 <EventDetailItem label="Current health" value={incident.currentHealth} />
                 <EventDetailItem label="Handling state" value={incidentHandlingLabel(incident)} />
