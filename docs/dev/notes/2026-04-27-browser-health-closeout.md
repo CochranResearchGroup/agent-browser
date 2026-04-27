@@ -64,8 +64,14 @@ the release-quality native regression check.
 ## Service Health Acceptance Gate
 
 Before merging service-health, browser recovery, incident, or service-control
-changes, run the live service-health smokes serially so Chrome and service state
-do not contend across tests:
+changes, run the aggregate live service-health gate. It runs the underlying
+smokes serially so Chrome and service state do not contend across tests:
+
+```bash
+pnpm test:service-health-live
+```
+
+For targeted troubleshooting, the gate expands to:
 
 ```bash
 pnpm test:service-shutdown-health-live
