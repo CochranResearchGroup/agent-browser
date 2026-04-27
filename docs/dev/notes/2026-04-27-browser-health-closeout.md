@@ -28,6 +28,17 @@ browser is degraded; if force kill fails, the OS may be degraded.
 
 ## Validation
 
+The live shutdown-health smoke now validates the polite-shutdown failure remedy:
+
+```bash
+pnpm test:service-shutdown-health-live
+```
+
+It launches an owned Chrome in an isolated `AGENT_BROWSER_HOME`, forces the
+polite close path to fail through an internal smoke-only hook, lets the daemon
+force-kill the owned browser process, and verifies the persisted service
+browser record is `degraded` with shutdown-remedy details in `lastError`.
+
 The last full native validation passed when run serially:
 
 ```bash
@@ -44,7 +55,8 @@ the release-quality native regression check.
 
 ## Best Next Step
 
-Add a focused live smoke that launches a real owned Chrome, forces the polite
-shutdown path to fail, verifies `degraded`, then simulates a force-kill failure
-boundary in a controlled helper test. That will make the remedy ladder visible
-in live service-state artifacts, not only unit-level shutdown classification.
+The best next step is to move from closeout classification into service-owned
+supervision: add an explicit browser incident severity model so `degraded`
+browser remedies and `faulted` possible-OS remedies can drive operator
+acknowledgement, retries, and escalation without each client inventing its own
+interpretation.

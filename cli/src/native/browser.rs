@@ -835,17 +835,24 @@ impl BrowserManager {
             // For external connections (--auto-connect, --cdp) we just disconnect
             // without shutting down the user's browser.
             outcome.polite_close_attempted = true;
-            match self
-                .client
-                .send_command_no_params("Browser.close", None)
-                .await
-            {
-                Ok(_) => outcome.polite_close_succeeded = true,
-                Err(err) => {
-                    outcome.polite_close_failed = true;
-                    outcome
-                        .errors
-                        .push(format!("Polite browser close failed: {}", err));
+            if std::env::var_os("AGENT_BROWSER_TEST_FORCE_POLITE_CLOSE_FAILURE").is_some() {
+                outcome.polite_close_failed = true;
+                outcome
+                    .errors
+                    .push("Polite browser close failed: forced by smoke test".to_string());
+            } else {
+                match self
+                    .client
+                    .send_command_no_params("Browser.close", None)
+                    .await
+                {
+                    Ok(_) => outcome.polite_close_succeeded = true,
+                    Err(err) => {
+                        outcome.polite_close_failed = true;
+                        outcome
+                            .errors
+                            .push(format!("Polite browser close failed: {}", err));
+                    }
                 }
             }
         }
