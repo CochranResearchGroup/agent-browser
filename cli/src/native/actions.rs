@@ -40,9 +40,10 @@ use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
 use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
-    record_browser_launch_recorded_event, record_browser_recovery_started_event,
-    recovery_reason_kind_for_health, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
-    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    record_browser_health_changed_event_with_details, record_browser_launch_recorded_event,
+    record_browser_recovery_started_event, recovery_reason_kind_for_health, BrowserRecoveryPolicy,
+    BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource,
+    BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_model::{
@@ -884,7 +885,25 @@ fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserSh
         active_session_ids: vec![state.session_id.clone()],
         ..BrowserProcess::default()
     };
-    record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
+    let shutdown_details = outcome.map(|outcome| {
+        json!({
+            "shutdownReasonKind": BrowserRecoveryReasonKind::OperatorRequestedClose.as_str(),
+            "shutdownRequested": true,
+            "politeCloseAttempted": outcome.polite_close_attempted,
+            "politeCloseSucceeded": outcome.polite_close_succeeded,
+            "politeCloseFailed": outcome.polite_close_failed,
+            "forceKillAttempted": outcome.force_kill_attempted,
+            "forceKillSucceeded": outcome.force_kill_succeeded,
+            "forceKillFailed": outcome.force_kill_failed,
+        })
+    });
+    record_browser_health_changed_event_with_details(
+        &mut service_state,
+        &id,
+        previous.as_ref(),
+        &browser,
+        shutdown_details,
+    );
     service_state.browsers.insert(id, browser);
     let _ = store.save(&service_state);
 }
@@ -12513,6 +12532,79 @@ mod tests {
         assert_eq!(
             persisted.browsers["session:close-session"].health,
             ServiceBrowserHealth::NotStarted
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_close_health_event_marks_operator_requested_close() {
+        let home = unique_socket_dir("service-browser-close-reason-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SESSION"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_SESSION", "close-reason-session");
+        let browser_id = "session:close-reason-session";
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["close-reason-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = "close-reason-session".to_string();
+
+        persist_closed_browser_health(
+            &state,
+            Some(&BrowserShutdownOutcome {
+                polite_close_attempted: true,
+                polite_close_succeeded: true,
+                ..BrowserShutdownOutcome::default()
+            }),
+        );
+
+        let persisted = store.load().unwrap();
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| {
+                event.kind == ServiceEventKind::BrowserHealthChanged
+                    && event.browser_id.as_deref() == Some(browser_id)
+            })
+            .expect("close should record a browser health event");
+        assert_eq!(event.current_health, Some(ServiceBrowserHealth::NotStarted));
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("shutdownReasonKind"))
+                .and_then(|reason| reason.as_str()),
+            Some("operator_requested_close")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("shutdownRequested"))
+                .and_then(|requested| requested.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("politeCloseSucceeded"))
+                .and_then(|succeeded| succeeded.as_bool()),
+            Some(true)
         );
 
         let _ = fs::remove_dir_all(&home);

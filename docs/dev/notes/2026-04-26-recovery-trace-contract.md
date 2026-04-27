@@ -33,6 +33,11 @@ ordered sequence from the service trace surface:
 3. A later `browser_health_changed` event for the same browser with
    `currentHealth: "ready"` after relaunch.
 
+Operator-requested close events use the same `browser_health_changed` event kind
+but include `details.shutdownReasonKind: "operator_requested_close"` plus
+polite-close and force-kill outcome flags. Clients should use that metadata to
+separate expected shutdowns from unexpected `process_exited` recovery traces.
+
 If the next recovery attempt would exceed the configured retained-event retry
 budget, the service marks the browser `faulted`, records the faulted health
 transition as the incident signal, and fails the command instead of relaunching

@@ -91,6 +91,17 @@ try {
     degradedEvent,
     `Service events missing degraded shutdown health transition: ${JSON.stringify(events)}`,
   );
+  assert(
+    degradedEvent.details?.shutdownReasonKind === 'operator_requested_close' &&
+      degradedEvent.details?.shutdownRequested === true,
+    `Degraded shutdown event missing operator-requested close metadata: ${JSON.stringify(degradedEvent)}`,
+  );
+  assert(
+    degradedEvent.details?.politeCloseFailed === true &&
+      degradedEvent.details?.forceKillAttempted === true &&
+      degradedEvent.details?.forceKillSucceeded === true,
+    `Degraded shutdown event missing shutdown outcome metadata: ${JSON.stringify(degradedEvent)}`,
+  );
 
   const incidents = status.data?.service_state?.incidents ?? [];
   assert(Array.isArray(incidents), 'Service state missing incidents array');

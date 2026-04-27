@@ -444,6 +444,16 @@ pub fn record_browser_health_changed_event(
     previous: Option<&BrowserProcess>,
     current: &BrowserProcess,
 ) {
+    record_browser_health_changed_event_with_details(state, browser_id, previous, current, None);
+}
+
+pub fn record_browser_health_changed_event_with_details(
+    state: &mut ServiceState,
+    browser_id: &str,
+    previous: Option<&BrowserProcess>,
+    current: &BrowserProcess,
+    extra_details: Option<serde_json::Value>,
+) {
     let Some(previous) = previous else {
         return;
     };
@@ -459,6 +469,13 @@ pub fn record_browser_health_changed_event(
     }
     if let Some(reason_kind) = recovery_reason_kind_value_for_health(previous.health) {
         details["previousReasonKind"] = reason_kind;
+    }
+    if let Some(serde_json::Value::Object(extra)) = extra_details {
+        if let Some(details) = details.as_object_mut() {
+            for (key, value) in extra {
+                details.insert(key, value);
+            }
+        }
     }
 
     let mut event = ServiceEvent {
