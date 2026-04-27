@@ -61,6 +61,34 @@ Chrome-profile tests, while the individual failing selectors pass and the full
 serial suite passes. Until those tests are isolated, use the serial command as
 the release-quality native regression check.
 
+## Service Health Acceptance Gate
+
+Before merging service-health, browser recovery, incident, or service-control
+changes, run the live service-health smokes serially so Chrome and service state
+do not contend across tests:
+
+```bash
+pnpm test:service-shutdown-health-live
+pnpm test:service-recovery-http-live
+pnpm test:service-recovery-mcp-live
+pnpm test:service-recovery-override-http-live
+pnpm test:service-recovery-override-mcp-live
+pnpm test:service-incident-parity-live
+```
+
+This gate proves the minimum always-on service behavior expected for the
+current roadmap slice:
+
+- shutdown remedies classify polite close failure as browser degradation
+- HTTP exposes recovery traces, retry override behavior, and retained incidents
+- MCP exposes the same recovery traces, retry override behavior, and retained
+  incidents for agent clients
+- incident severity, escalation, and recommended action stay consistent across
+  HTTP and MCP filters
+
+The gate passed on 2026-04-27 with all six scripts run serially from the repo
+checkout.
+
 ## Best Next Step
 
 The best next step is to move from closeout classification into service-owned
