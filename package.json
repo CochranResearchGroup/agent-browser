@@ -26,6 +26,7 @@
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
     "test:mcp-stdio": "node scripts/smoke-mcp-stdio.js",
     "test:mcp-live": "node scripts/smoke-mcp-live.js",
+    "test:service-collections-live": "node scripts/smoke-service-collections.js",
     "test:service-reconcile-live": "node scripts/smoke-service-reconcile-mcp.js",
     "test:service-profile-live": "node scripts/smoke-service-profile-mcp.js",
     "test:service-profile-http-live": "node scripts/smoke-service-profile-http.js",
