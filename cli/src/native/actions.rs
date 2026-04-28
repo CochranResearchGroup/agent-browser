@@ -7039,29 +7039,45 @@ fn mutate_persisted_service_incident(
     incident_id: &str,
     mutator: impl FnOnce(&mut ServiceState, usize),
 ) -> Result<super::service_model::ServiceIncident, String> {
-    mutate_default_service_state(|state| {
-        state.refresh_derived_views();
-        let incident_index = state
-            .incidents
-            .iter()
-            .position(|incident| incident.id == incident_id)
-            .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
-        mutator(state, incident_index);
-        state.refresh_derived_views();
-        state
-            .incidents
-            .iter()
-            .find(|incident| incident.id == incident_id)
-            .cloned()
-            .ok_or_else(|| format!("Service incident not found: {}", incident_id))
-    })
-    .map_err(|err| {
+    let repository = LockedServiceStateRepository::default_json().map_err(|err| {
         if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
             format!("Unable to load service state: {}", err)
         } else {
             err
         }
-    })
+    })?;
+    mutate_persisted_service_incident_in_repository(&repository, incident_id, mutator)
+}
+
+fn mutate_persisted_service_incident_in_repository(
+    repository: &impl ServiceStateRepository,
+    incident_id: &str,
+    mutator: impl FnOnce(&mut ServiceState, usize),
+) -> Result<super::service_model::ServiceIncident, String> {
+    repository
+        .mutate(|state| {
+            state.refresh_derived_views();
+            let incident_index = state
+                .incidents
+                .iter()
+                .position(|incident| incident.id == incident_id)
+                .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
+            mutator(state, incident_index);
+            state.refresh_derived_views();
+            state
+                .incidents
+                .iter()
+                .find(|incident| incident.id == incident_id)
+                .cloned()
+                .ok_or_else(|| format!("Service incident not found: {}", incident_id))
+        })
+        .map_err(|err| {
+            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+                format!("Unable to load service state: {}", err)
+            } else {
+                err
+            }
+        })
 }
 
 fn normalized_operator(value: Option<&str>) -> String {
@@ -12540,6 +12556,65 @@ mod tests {
         assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
         assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
         assert_eq!(event.details.as_ref().unwrap()["note"], "triaged");
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_mutate_service_incident_in_repository_persists_metadata() {
+        let home = unique_socket_dir("service-incident-repository-home");
+        fs::create_dir_all(&home).unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                events: vec![ServiceEvent {
+                    id: "event-1".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from Ready to ProcessExited"
+                        .to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(ServiceBrowserHealth::Ready),
+                    current_health: Some(ServiceBrowserHealth::ProcessExited),
+                    ..ServiceEvent::default()
+                }],
+                browsers: BTreeMap::from([(
+                    "browser-1".to_string(),
+                    BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: ServiceBrowserHealth::ProcessExited,
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let incident = mutate_persisted_service_incident_in_repository(
+            &repository,
+            "browser-1",
+            |state, incident_index| {
+                let incident = &mut state.incidents[incident_index];
+                incident.acknowledged_at = Some("2026-04-22T01:00:00Z".to_string());
+                incident.acknowledged_by = Some("operator".to_string());
+                incident.acknowledgement_note = Some("triaged".to_string());
+            },
+        )
+        .unwrap();
+
+        assert_eq!(incident.id, "browser-1");
+        assert_eq!(incident.acknowledged_by.as_deref(), Some("operator"));
+        assert_eq!(incident.acknowledgement_note.as_deref(), Some("triaged"));
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.incidents[0].acknowledged_by.as_deref(),
+            Some("operator")
+        );
+        assert_eq!(
+            persisted.incidents[0].acknowledgement_note.as_deref(),
+            Some("triaged")
+        );
+
         let _ = fs::remove_dir_all(&home);
     }
 
