@@ -45,18 +45,16 @@ use super::service_config::{
 };
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
-    persist_reconciled_service_state_in_repository, reconcile_service_state,
-    record_browser_health_changed_event, record_browser_health_changed_event_with_details,
-    record_browser_launch_recorded_event, record_browser_recovery_started_event,
+    persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
+    reconcile_service_state, record_browser_health_changed_event,
+    record_browser_health_changed_event_with_details, record_browser_recovery_started_event,
     record_browser_recovery_started_event_with_details, recovery_reason_kind_for_health,
     BrowserProcessExitCause, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
     BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_jobs::cancel_persisted_service_job;
-use super::service_lifecycle::{
-    service_profile_id, upsert_service_profile_and_session, ServiceLaunchMetadata,
-};
+use super::service_lifecycle::{service_profile_id, ServiceLaunchMetadata};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     JobState as ServiceJobState, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind,
@@ -425,69 +423,6 @@ fn persist_service_browser_record(
             metadata,
         );
     }
-}
-
-fn persist_service_browser_record_in_repository(
-    repository: &impl ServiceStateRepository,
-    session_id: &str,
-    host: ServiceBrowserHost,
-    health: ServiceBrowserHealth,
-    pid: Option<u32>,
-    cdp_endpoint: Option<String>,
-    last_error: Option<String>,
-    metadata: Option<ServiceLaunchMetadata>,
-) -> Result<(), String> {
-    repository.mutate(|service_state| {
-        let id = service_browser_id(session_id);
-        let previous = service_state.browsers.get(&id).cloned();
-        let profile_id = metadata
-            .as_ref()
-            .and_then(|metadata| metadata.profile_id.clone())
-            .or_else(|| {
-                previous
-                    .as_ref()
-                    .and_then(|browser| browser.profile_id.clone())
-            });
-        let mut browser = BrowserProcess {
-            id: id.clone(),
-            profile_id: profile_id.clone(),
-            host,
-            health,
-            pid,
-            cdp_endpoint,
-            view_streams: Vec::new(),
-            active_session_ids: vec![session_id.to_string()],
-            last_error,
-            last_health_observation: None,
-        };
-        let observation_details = browser_health_observation_details(&browser, None);
-        apply_browser_health_observation(&mut browser, Some(&observation_details));
-        let metadata_changed = if let Some(metadata) = metadata {
-            let previous_profile = profile_id
-                .as_ref()
-                .and_then(|profile_id| service_state.profiles.get(profile_id).cloned());
-            let previous_session = service_state.sessions.get(session_id).cloned();
-            upsert_service_profile_and_session(
-                service_state,
-                session_id,
-                profile_id.clone(),
-                &metadata,
-            );
-            let current_profile = profile_id
-                .as_ref()
-                .and_then(|profile_id| service_state.profiles.get(profile_id).cloned());
-            let current_session = service_state.sessions.get(session_id).cloned();
-            previous_profile != current_profile || previous_session != current_session
-        } else {
-            false
-        };
-        record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
-        if metadata_changed {
-            record_browser_launch_recorded_event(service_state, &id, previous.as_ref(), &browser);
-        }
-        service_state.browsers.insert(id, browser);
-        Ok(())
-    })
 }
 
 fn persist_current_browser_health(
