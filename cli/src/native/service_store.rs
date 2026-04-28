@@ -18,9 +18,22 @@ pub trait ServiceStateStore {
     fn save(&self, state: &ServiceState) -> Result<(), String>;
 }
 
+pub trait ServiceStateRepository {
+    fn load_snapshot(&self) -> Result<ServiceState, String>;
+    fn mutate<R>(
+        &self,
+        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+    ) -> Result<R, String>;
+}
+
 #[derive(Debug, Clone)]
 pub struct JsonServiceStateStore {
     path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct LockedServiceStateRepository<S> {
+    store: S,
 }
 
 impl JsonServiceStateStore {
@@ -35,6 +48,20 @@ impl JsonServiceStateStore {
     #[cfg(test)]
     fn path(&self) -> &Path {
         &self.path
+    }
+}
+
+impl<S> LockedServiceStateRepository<S> {
+    pub fn new(store: S) -> Self {
+        Self { store }
+    }
+}
+
+impl LockedServiceStateRepository<JsonServiceStateStore> {
+    pub fn default_json() -> Result<Self, String> {
+        Ok(Self::new(JsonServiceStateStore::new(
+            default_service_state_path()?,
+        )))
     }
 }
 
@@ -101,6 +128,33 @@ impl ServiceStateStore for JsonServiceStateStore {
     }
 }
 
+impl<S> ServiceStateRepository for LockedServiceStateRepository<S>
+where
+    S: ServiceStateStore,
+{
+    fn load_snapshot(&self) -> Result<ServiceState, String> {
+        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        let _guard = lock
+            .lock()
+            .map_err(|_| "Service state mutation lock was poisoned".to_string())?;
+        self.store.load()
+    }
+
+    fn mutate<R>(
+        &self,
+        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+    ) -> Result<R, String> {
+        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        let _guard = lock
+            .lock()
+            .map_err(|_| "Service state mutation lock was poisoned".to_string())?;
+        let mut state = self.store.load()?;
+        let result = mutator(&mut state)?;
+        self.store.save(&state)?;
+        Ok(result)
+    }
+}
+
 pub fn default_service_state_path() -> Result<PathBuf, String> {
     let Some(home) = dirs::home_dir() else {
         return Err("Could not determine home directory for service state".to_string());
@@ -118,12 +172,7 @@ pub fn default_service_state_path() -> Result<PathBuf, String> {
 /// not make the snapshot live after it is returned; callers that later write
 /// must still use merge-aware mutation helpers.
 pub fn load_default_service_state_snapshot() -> Result<ServiceState, String> {
-    let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-    let _guard = lock
-        .lock()
-        .map_err(|_| "Service state mutation lock was poisoned".to_string())?;
-    let store = JsonServiceStateStore::new(default_service_state_path()?);
-    store.load()
+    LockedServiceStateRepository::default_json()?.load_snapshot()
 }
 
 /// Serialize read-modify-write operations against the default JSON service state.
@@ -135,15 +184,7 @@ pub fn load_default_service_state_snapshot() -> Result<ServiceState, String> {
 pub fn mutate_default_service_state<R>(
     mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
 ) -> Result<R, String> {
-    let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-    let _guard = lock
-        .lock()
-        .map_err(|_| "Service state mutation lock was poisoned".to_string())?;
-    let store = JsonServiceStateStore::new(default_service_state_path()?);
-    let mut state = store.load()?;
-    let result = mutator(&mut state)?;
-    store.save(&state)?;
-    Ok(result)
+    LockedServiceStateRepository::default_json()?.mutate(mutator)
 }
 
 fn temp_state_path(path: &Path) -> PathBuf {
@@ -213,6 +254,35 @@ mod tests {
 
         assert_eq!(loaded, state);
         assert_eq!(store.path(), path.as_path());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn locked_repository_mutates_and_loads_snapshot() {
+        let path = unique_state_path("repository-service-state");
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+
+        let result = repository
+            .mutate(|state| {
+                state.browsers.insert(
+                    "browser-1".to_string(),
+                    BrowserProcess {
+                        id: "browser-1".to_string(),
+                        host: BrowserHost::LocalHeaded,
+                        health: BrowserHealth::Ready,
+                        ..BrowserProcess::default()
+                    },
+                );
+                Ok("mutated")
+            })
+            .expect("repository mutation should save");
+
+        let state = repository
+            .load_snapshot()
+            .expect("repository snapshot should load");
+
+        assert_eq!(result, "mutated");
+        assert_eq!(state.browsers["browser-1"].health, BrowserHealth::Ready);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
