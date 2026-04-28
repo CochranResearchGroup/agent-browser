@@ -10,8 +10,7 @@ use super::service_model::{
     ServiceEvent, ServiceEventKind, ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
 };
 use super::service_store::{
-    load_default_service_state_snapshot, mutate_default_service_state, JsonServiceStateStore,
-    ServiceStateStore,
+    JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
 };
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
@@ -328,10 +327,17 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
 }
 
 pub async fn reconcile_persisted_service_state() -> Result<ServiceReconcileSummary, String> {
-    let before = load_default_service_state_snapshot()?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    reconcile_service_state_in_repository(&repository).await
+}
+
+pub async fn reconcile_service_state_in_repository(
+    repository: &impl ServiceStateRepository,
+) -> Result<ServiceReconcileSummary, String> {
+    let before = repository.load_snapshot()?;
     let mut reconciled_state = before.clone();
     let summary = reconcile_service_state(&mut reconciled_state).await;
-    mutate_default_service_state(|state| {
+    repository.mutate(|state| {
         merge_reconciled_service_state(state, &before, &reconciled_state);
         Ok(())
     })?;
@@ -988,6 +994,7 @@ fn pid_is_running(pid: u32) -> bool {
 mod tests {
     use super::*;
     use crate::native::service_model::{JobState, ServiceJob, ServiceProvider, SitePolicy};
+    use crate::native::service_store::mutate_default_service_state;
     use crate::test_utils::EnvGuard;
     use std::collections::BTreeMap;
     use std::fs;
@@ -1169,6 +1176,63 @@ mod tests {
                 .map(|snapshot| snapshot.changed_browsers),
             Some(1)
         );
+    }
+
+    #[tokio::test]
+    async fn reconcile_service_state_in_repository_persists_summary() {
+        let home = temp_home("service-health-reconcile-repository");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    "browser-1".to_string(),
+                    BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: BrowserHealth::Ready,
+                        active_session_ids: vec!["session-1".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                sessions: BTreeMap::from([(
+                    "session-1".to_string(),
+                    BrowserSession {
+                        id: "session-1".to_string(),
+                        browser_ids: vec!["browser-1".to_string()],
+                        ..BrowserSession::default()
+                    },
+                )]),
+                site_policies: BTreeMap::from([(
+                    "google".to_string(),
+                    SitePolicy {
+                        id: "google".to_string(),
+                        origin_pattern: "https://accounts.google.com".to_string(),
+                        ..SitePolicy::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let summary = reconcile_service_state_in_repository(&repository)
+            .await
+            .unwrap();
+
+        let persisted = store.load().unwrap();
+        assert_eq!(summary.browser_count, 1);
+        assert_eq!(
+            persisted
+                .reconciliation
+                .as_ref()
+                .map(|snapshot| snapshot.browser_count),
+            Some(1)
+        );
+        assert!(persisted.site_policies.contains_key("google"));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::Reconciliation));
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[tokio::test]
