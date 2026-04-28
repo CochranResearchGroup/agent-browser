@@ -13,9 +13,7 @@ use super::service_model::{
     BrowserTab, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceReconciliationSnapshot,
     ServiceState, TabLifecycle,
 };
-use super::service_store::{
-    JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
-};
+use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
 const MAX_SERVICE_EVENTS: usize = 100;
@@ -1487,7 +1485,9 @@ fn pid_is_running(pid: u32) -> bool {
 mod tests {
     use super::*;
     use crate::native::service_model::{JobState, ServiceJob, ServiceProvider, SitePolicy};
-    use crate::native::service_store::mutate_default_service_state;
+    use crate::native::service_store::{
+        mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
+    };
     use crate::test_utils::EnvGuard;
     use std::collections::BTreeMap;
     use std::fs;

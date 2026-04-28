@@ -14,16 +14,13 @@ use super::service_health::{
     reconcile_service_state, record_browser_health_changed_event,
 };
 use super::service_jobs::{
-    cancel_persisted_service_job, cancel_service_job_in_repository, load_service_job_in_repository,
-    mutate_persisted_service_jobs, mutate_service_jobs_in_repository, MAX_SERVICE_JOBS,
+    cancel_persisted_service_job, load_service_job_in_repository, mutate_persisted_service_jobs,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
 };
-use super::service_store::{
-    JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
-};
+use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
 
@@ -875,6 +872,10 @@ async fn refresh_browser_health(state: &mut DaemonState, status: &ControlPlaneSt
 
 #[cfg(test)]
 mod tests {
+    use super::super::service_jobs::{
+        cancel_service_job_in_repository, mutate_service_jobs_in_repository, MAX_SERVICE_JOBS,
+    };
+    use super::super::service_store::{JsonServiceStateStore, ServiceStateStore};
     use super::*;
     use crate::test_utils::EnvGuard;
 
