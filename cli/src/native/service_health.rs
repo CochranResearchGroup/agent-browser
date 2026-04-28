@@ -10,8 +10,8 @@ use super::browser::BrowserShutdownOutcome;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
 use super::service_model::{
     BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserSession,
-    BrowserTab, ServiceEvent, ServiceEventKind, ServiceReconciliationSnapshot, ServiceState,
-    TabLifecycle,
+    BrowserTab, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceReconciliationSnapshot,
+    ServiceState, TabLifecycle,
 };
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
@@ -711,6 +711,76 @@ pub(crate) fn persist_closed_browser_health_in_repository(
     })
 }
 
+pub(crate) fn retry_persisted_service_browser_in_repository(
+    repository: &impl ServiceStateRepository,
+    browser_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Result<(BrowserProcess, Option<ServiceIncident>), String> {
+    repository
+        .mutate(|state| {
+            let previous = state
+                .browsers
+                .get(browser_id)
+                .cloned()
+                .ok_or_else(|| format!("Service browser not found: {}", browser_id))?;
+            if previous.health != BrowserHealth::Faulted {
+                return Err(format!(
+                    "Service browser {} is not faulted; current health is {}",
+                    browser_id,
+                    service_browser_health_name(previous.health)
+                ));
+            }
+
+            let mut retryable = previous.clone();
+            retryable.health = BrowserHealth::ProcessExited;
+            retryable.last_error = Some(format!(
+                "Browser retry requested by {}; previous fault: {}",
+                actor,
+                previous
+                    .last_error
+                    .as_deref()
+                    .unwrap_or("no fault detail recorded")
+            ));
+            let observation_details = browser_health_observation_details(&retryable, None);
+            apply_browser_health_observation(&mut retryable, Some(&observation_details));
+            record_browser_health_changed_event(state, browser_id, Some(&previous), &retryable);
+            state
+                .browsers
+                .insert(browser_id.to_string(), retryable.clone());
+            push_service_event(
+                state,
+                service_browser_recovery_override_event(
+                    &retryable,
+                    timestamp,
+                    actor,
+                    note,
+                    service_name,
+                    agent_name,
+                    task_name,
+                ),
+            );
+            state.refresh_derived_views();
+            let incident = state
+                .incidents
+                .iter()
+                .find(|incident| incident.id == browser_id)
+                .cloned();
+            Ok((retryable, incident))
+        })
+        .map_err(|err| {
+            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+                format!("Unable to load service state: {}", err)
+            } else {
+                err
+            }
+        })
+}
+
 /// Merge async reconciliation results without clobbering newer state mutations.
 ///
 /// Reconciliation may spend time probing PIDs and CDP endpoints. During that
@@ -1037,6 +1107,58 @@ fn push_service_event(state: &mut ServiceState, event: ServiceEvent) {
     if state.events.len() > MAX_SERVICE_EVENTS {
         let excess = state.events.len() - MAX_SERVICE_EVENTS;
         state.events.drain(0..excess);
+    }
+}
+
+fn service_browser_health_name(health: BrowserHealth) -> &'static str {
+    match health {
+        BrowserHealth::NotStarted => "not_started",
+        BrowserHealth::Launching => "launching",
+        BrowserHealth::Ready => "ready",
+        BrowserHealth::Degraded => "degraded",
+        BrowserHealth::ProcessExited => "process_exited",
+        BrowserHealth::CdpDisconnected => "cdp_disconnected",
+        BrowserHealth::Unreachable => "unreachable",
+        BrowserHealth::Closing => "closing",
+        BrowserHealth::Faulted => "faulted",
+        BrowserHealth::Reconnecting => "reconnecting",
+    }
+}
+
+fn service_browser_recovery_override_event(
+    browser: &BrowserProcess,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> ServiceEvent {
+    let mut details = serde_json::json!({
+        "incidentId": browser.id,
+        "actor": actor,
+        "action": "retry_enabled",
+        "previousHealth": "faulted",
+        "currentHealth": service_browser_health_name(browser.health),
+    });
+    if let Some(note) = note {
+        details["note"] = serde_json::json!(note);
+    }
+    ServiceEvent {
+        id: format!("event-{}", uuid::Uuid::new_v4()),
+        timestamp: timestamp.to_string(),
+        kind: ServiceEventKind::BrowserRecoveryOverride,
+        message: format!("Browser {} recovery retry enabled by {}", browser.id, actor),
+        browser_id: Some(browser.id.clone()),
+        profile_id: browser.profile_id.clone(),
+        session_id: browser.active_session_ids.first().cloned(),
+        service_name: service_name.map(str::to_string),
+        agent_name: agent_name.map(str::to_string),
+        task_name: task_name.map(str::to_string),
+        previous_health: Some(BrowserHealth::Faulted),
+        current_health: Some(browser.health),
+        details: Some(details),
+        ..ServiceEvent::default()
     }
 }
 

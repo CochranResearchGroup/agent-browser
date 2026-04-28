@@ -44,14 +44,14 @@ use super::service_config::{
     upsert_persisted_site_policy,
 };
 use super::service_health::{
-    apply_browser_health_observation, browser_health_observation_details,
     close_health_from_outcome, persist_browser_recovery_started_in_repository,
     persist_closed_browser_health_in_repository,
     persist_current_browser_stale_health_in_repository,
     persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
-    reconcile_service_state, record_browser_health_changed_event, recovery_policy_for_next_attempt,
-    stale_browser_process_record, BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig,
-    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    reconcile_service_state, recovery_policy_for_next_attempt,
+    retry_persisted_service_browser_in_repository, stale_browser_process_record,
+    BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
+    BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_jobs::cancel_persisted_service_job;
@@ -59,7 +59,7 @@ use super::service_lifecycle::{service_profile_id, ServiceLaunchMetadata};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     JobState as ServiceJobState, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind,
-    ServiceIncident, ServiceState, SessionCleanupPolicy,
+    ServiceState, SessionCleanupPolicy,
 };
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
@@ -6457,76 +6457,6 @@ async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
-fn retry_persisted_service_browser_in_repository(
-    repository: &impl ServiceStateRepository,
-    browser_id: &str,
-    timestamp: &str,
-    actor: &str,
-    note: Option<&str>,
-    service_name: Option<&str>,
-    agent_name: Option<&str>,
-    task_name: Option<&str>,
-) -> Result<(BrowserProcess, Option<ServiceIncident>), String> {
-    repository
-        .mutate(|state| {
-            let previous = state
-                .browsers
-                .get(browser_id)
-                .cloned()
-                .ok_or_else(|| format!("Service browser not found: {}", browser_id))?;
-            if previous.health != ServiceBrowserHealth::Faulted {
-                return Err(format!(
-                    "Service browser {} is not faulted; current health is {}",
-                    browser_id,
-                    service_browser_health_name(previous.health)
-                ));
-            }
-
-            let mut retryable = previous.clone();
-            retryable.health = ServiceBrowserHealth::ProcessExited;
-            retryable.last_error = Some(format!(
-                "Browser retry requested by {}; previous fault: {}",
-                actor,
-                previous
-                    .last_error
-                    .as_deref()
-                    .unwrap_or("no fault detail recorded")
-            ));
-            let observation_details = browser_health_observation_details(&retryable, None);
-            apply_browser_health_observation(&mut retryable, Some(&observation_details));
-            record_browser_health_changed_event(state, browser_id, Some(&previous), &retryable);
-            state
-                .browsers
-                .insert(browser_id.to_string(), retryable.clone());
-            push_service_event_bounded(
-                state,
-                service_browser_recovery_override_event(
-                    &retryable,
-                    timestamp,
-                    actor,
-                    note,
-                    service_name,
-                    agent_name,
-                    task_name,
-                ),
-            );
-            state.refresh_derived_views();
-            let incident = state
-                .incidents
-                .iter()
-                .find(|incident| incident.id == browser_id)
-                .cloned();
-            Ok((retryable, incident))
-        })
-        .map_err(|err| {
-            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
-                format!("Unable to load service state: {}", err)
-            } else {
-                err
-            }
-        })
-}
-
 async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, String> {
     let incident_id = cmd
         .get("incidentId")
@@ -6661,58 +6591,6 @@ fn normalized_note(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-}
-
-fn service_browser_health_name(health: ServiceBrowserHealth) -> &'static str {
-    match health {
-        ServiceBrowserHealth::NotStarted => "not_started",
-        ServiceBrowserHealth::Launching => "launching",
-        ServiceBrowserHealth::Ready => "ready",
-        ServiceBrowserHealth::Degraded => "degraded",
-        ServiceBrowserHealth::ProcessExited => "process_exited",
-        ServiceBrowserHealth::CdpDisconnected => "cdp_disconnected",
-        ServiceBrowserHealth::Unreachable => "unreachable",
-        ServiceBrowserHealth::Closing => "closing",
-        ServiceBrowserHealth::Faulted => "faulted",
-        ServiceBrowserHealth::Reconnecting => "reconnecting",
-    }
-}
-
-fn service_browser_recovery_override_event(
-    browser: &BrowserProcess,
-    timestamp: &str,
-    actor: &str,
-    note: Option<&str>,
-    service_name: Option<&str>,
-    agent_name: Option<&str>,
-    task_name: Option<&str>,
-) -> ServiceEvent {
-    let mut details = json!({
-        "incidentId": browser.id,
-        "actor": actor,
-        "action": "retry_enabled",
-        "previousHealth": "faulted",
-        "currentHealth": service_browser_health_name(browser.health),
-    });
-    if let Some(note) = note {
-        details["note"] = json!(note);
-    }
-    ServiceEvent {
-        id: format!("event-{}", uuid::Uuid::new_v4()),
-        timestamp: timestamp.to_string(),
-        kind: ServiceEventKind::BrowserRecoveryOverride,
-        message: format!("Browser {} recovery retry enabled by {}", browser.id, actor),
-        browser_id: Some(browser.id.clone()),
-        profile_id: browser.profile_id.clone(),
-        session_id: browser.active_session_ids.first().cloned(),
-        service_name: service_name.map(str::to_string),
-        agent_name: agent_name.map(str::to_string),
-        task_name: task_name.map(str::to_string),
-        previous_health: Some(ServiceBrowserHealth::Faulted),
-        current_health: Some(browser.health),
-        details: Some(details),
-        ..ServiceEvent::default()
-    }
 }
 
 fn service_incident_handling_event(
