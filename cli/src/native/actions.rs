@@ -761,62 +761,86 @@ fn persist_current_browser_stale_health(
         return BrowserRecoveryPersistence::NotRecorded;
     };
 
-    mutate_default_service_state(|service_state| {
-        let id = service_browser_id(&state.session_id);
-        let previous = service_state.browsers.get(&id).cloned();
-        let mut browser = stale_browser_process_record(
-            &id,
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        return persist_current_browser_stale_health_in_repository(
+            &repository,
             &state.session_id,
-            previous.as_ref(),
             mgr.browser_pid(),
             Some(mgr.get_cdp_url().to_string()),
-            health,
-            last_error.clone(),
-        );
-        let observation_details =
-            browser_health_observation_details(&browser, event_details.clone());
-        apply_browser_health_observation(&mut browser, Some(&observation_details));
-        record_browser_health_changed_event_with_details(
-            service_state,
-            &id,
-            previous.as_ref(),
-            &browser,
-            event_details.clone(),
-        );
-        let policy = recovery_policy_for_next_attempt(
-            service_state,
-            &id,
             state.browser_recovery_policy_config,
-        );
-        if policy.retry_budget_exceeded {
-            let faulted_error = format!(
-                "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
-                policy.retry_budget, policy.next_retry_delay_ms
-            );
-            let mut faulted = BrowserProcess {
-                health: ServiceBrowserHealth::Faulted,
-                last_error: Some(faulted_error.clone()),
-                ..browser.clone()
-            };
-            let observation_details = browser_health_observation_details(&faulted, None);
-            apply_browser_health_observation(&mut faulted, Some(&observation_details));
-            record_browser_health_changed_event(service_state, &id, Some(&browser), &faulted);
-            service_state.browsers.insert(id, faulted);
-            return Ok(BrowserRecoveryPersistence::Blocked(faulted_error));
-        }
-        record_browser_recovery_started_event_with_details(
-            service_state,
-            &id,
-            &browser,
+            health,
             reason_kind,
-            &last_error,
-            Some(policy),
+            last_error,
             event_details,
         );
-        service_state.browsers.insert(id, browser);
-        Ok(BrowserRecoveryPersistence::Recorded)
-    })
-    .unwrap_or(BrowserRecoveryPersistence::NotRecorded)
+    }
+    BrowserRecoveryPersistence::NotRecorded
+}
+
+fn persist_current_browser_stale_health_in_repository(
+    repository: &impl ServiceStateRepository,
+    session_id: &str,
+    pid: Option<u32>,
+    cdp_endpoint: Option<String>,
+    policy_config: BrowserRecoveryPolicyConfig,
+    health: ServiceBrowserHealth,
+    reason_kind: BrowserRecoveryReasonKind,
+    last_error: String,
+    event_details: Option<Value>,
+) -> BrowserRecoveryPersistence {
+    repository
+        .mutate(|service_state| {
+            let id = service_browser_id(session_id);
+            let previous = service_state.browsers.get(&id).cloned();
+            let mut browser = stale_browser_process_record(
+                &id,
+                session_id,
+                previous.as_ref(),
+                pid,
+                cdp_endpoint.clone(),
+                health,
+                last_error.clone(),
+            );
+            let observation_details =
+                browser_health_observation_details(&browser, event_details.clone());
+            apply_browser_health_observation(&mut browser, Some(&observation_details));
+            record_browser_health_changed_event_with_details(
+                service_state,
+                &id,
+                previous.as_ref(),
+                &browser,
+                event_details.clone(),
+            );
+            let policy = recovery_policy_for_next_attempt(service_state, &id, policy_config);
+            if policy.retry_budget_exceeded {
+                let faulted_error = format!(
+                    "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
+                    policy.retry_budget, policy.next_retry_delay_ms
+                );
+                let mut faulted = BrowserProcess {
+                    health: ServiceBrowserHealth::Faulted,
+                    last_error: Some(faulted_error.clone()),
+                    ..browser.clone()
+                };
+                let observation_details = browser_health_observation_details(&faulted, None);
+                apply_browser_health_observation(&mut faulted, Some(&observation_details));
+                record_browser_health_changed_event(service_state, &id, Some(&browser), &faulted);
+                service_state.browsers.insert(id, faulted);
+                return Ok(BrowserRecoveryPersistence::Blocked(faulted_error));
+            }
+            record_browser_recovery_started_event_with_details(
+                service_state,
+                &id,
+                &browser,
+                reason_kind,
+                &last_error,
+                Some(policy),
+                event_details,
+            );
+            service_state.browsers.insert(id, browser);
+            Ok(BrowserRecoveryPersistence::Recorded)
+        })
+        .unwrap_or(BrowserRecoveryPersistence::NotRecorded)
 }
 
 fn persist_browser_recovery_started_from_persisted_state(
@@ -13096,6 +13120,65 @@ mod tests {
             event.kind == ServiceEventKind::BrowserHealthChanged
                 && event.browser_id.as_deref() == Some(browser_id)
                 && event.current_health == Some(ServiceBrowserHealth::Faulted)
+        }));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_current_stale_health_in_repository_records_recovery_started() {
+        let home = unique_socket_dir("service-current-stale-health-repository");
+        fs::create_dir_all(&home).unwrap();
+
+        let browser_id = "session:stale-session";
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        profile_id: Some("work".to_string()),
+                        host: ServiceBrowserHost::LocalHeaded,
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["stale-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let result = persist_current_browser_stale_health_in_repository(
+            &repository,
+            "stale-session",
+            Some(1234),
+            Some("ws://127.0.0.1:9222/devtools/browser/stale".to_string()),
+            BrowserRecoveryPolicyConfig::default(),
+            ServiceBrowserHealth::CdpDisconnected,
+            BrowserRecoveryReasonKind::CdpDisconnected,
+            "CDP response channel closed".to_string(),
+            Some(json!({"failureClass": "cdp_disconnected"})),
+        );
+
+        assert_eq!(result, BrowserRecoveryPersistence::Recorded);
+        let state = store.load().unwrap();
+        let browser = &state.browsers[browser_id];
+        assert_eq!(browser.health, ServiceBrowserHealth::CdpDisconnected);
+        assert_eq!(browser.pid, Some(1234));
+        assert_eq!(
+            browser.cdp_endpoint.as_deref(),
+            Some("ws://127.0.0.1:9222/devtools/browser/stale")
+        );
+        assert_eq!(browser.profile_id.as_deref(), Some("work"));
+        assert!(state.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+        }));
+        assert!(state.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryStarted
+                && event.browser_id.as_deref() == Some(browser_id)
         }));
 
         let _ = fs::remove_dir_all(&home);
