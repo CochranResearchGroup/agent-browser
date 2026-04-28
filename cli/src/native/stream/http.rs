@@ -9,7 +9,11 @@ use tokio::sync::RwLock;
 use crate::connection::resolve_port;
 use crate::connection::{attach_daemon_auth_token, get_socket_dir};
 use crate::flags::parse_flags;
+use crate::native::service_config::{
+    delete_provider, delete_site_policy, upsert_provider, upsert_site_policy,
+};
 use crate::native::service_model::ServiceState;
+use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
@@ -19,7 +23,7 @@ use super::discovery::discover_sessions;
 #[folder = "../packages/dashboard/out/"]
 struct DashboardAssets;
 
-pub(super) const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n";
+pub(super) const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n";
 
 /// Build CORS headers that reflect the request origin only when it passes
 /// `is_allowed_origin`. Used for sensitive endpoints (chat, models) so the
@@ -30,7 +34,7 @@ pub(super) fn cors_headers_for_origin(origin: Option<&str>) -> String {
         _ => "http://localhost",
     };
     format!(
-        "Access-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n",
+        "Access-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n",
         allowed_origin
     )
 }
@@ -182,8 +186,34 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(site_policy_id) = service_site_policy_id(path) {
+            let result = upsert_service_site_policy(site_policy_id, body_str);
+            write_json_result(&mut stream, result, "400 Bad Request").await;
+            return;
+        }
+
+        if let Some(provider_id) = service_provider_id(path) {
+            let result = upsert_service_provider(provider_id, body_str);
+            write_json_result(&mut stream, result, "400 Bad Request").await;
+            return;
+        }
+
         if path == "/api/chat" {
             handle_chat_request(&mut stream, body_str, origin.as_deref()).await;
+            return;
+        }
+    }
+
+    if method == "DELETE" {
+        if let Some(site_policy_id) = service_site_policy_id(path) {
+            let result = delete_service_site_policy(site_policy_id);
+            write_json_result(&mut stream, result, "400 Bad Request").await;
+            return;
+        }
+
+        if let Some(provider_id) = service_provider_id(path) {
+            let result = delete_service_provider(provider_id);
+            write_json_result(&mut stream, result, "400 Bad Request").await;
             return;
         }
     }
@@ -902,6 +932,94 @@ fn service_collection_contents(path: &str) -> Option<Value> {
     }
 }
 
+fn service_site_policy_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/site-policies/")
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
+fn service_provider_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/providers/")
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
+fn service_state_store() -> Result<JsonServiceStateStore, String> {
+    Ok(JsonServiceStateStore::new(
+        JsonServiceStateStore::default_path()?,
+    ))
+}
+
+fn parse_json_body(body: &str, label: &str) -> Result<Value, String> {
+    serde_json::from_str::<Value>(body).map_err(|err| format!("Invalid {label} JSON: {err}"))
+}
+
+fn upsert_service_site_policy(site_policy_id: &str, body: &str) -> Result<String, String> {
+    let store = service_state_store()?;
+    let mut state = store.load()?;
+    let site_policy = upsert_site_policy(
+        &mut state,
+        site_policy_id,
+        parse_json_body(body, "site policy")?,
+    )?;
+    store.save(&state)?;
+    Ok(json!({
+        "success": true,
+        "data": {
+            "sitePolicy": site_policy,
+            "id": site_policy_id,
+            "upserted": true,
+        },
+    })
+    .to_string())
+}
+
+fn delete_service_site_policy(site_policy_id: &str) -> Result<String, String> {
+    let store = service_state_store()?;
+    let mut state = store.load()?;
+    let removed = delete_site_policy(&mut state, site_policy_id)?;
+    store.save(&state)?;
+    Ok(json!({
+        "success": true,
+        "data": {
+            "id": site_policy_id,
+            "deleted": removed.is_some(),
+            "sitePolicy": removed,
+        },
+    })
+    .to_string())
+}
+
+fn upsert_service_provider(provider_id: &str, body: &str) -> Result<String, String> {
+    let store = service_state_store()?;
+    let mut state = store.load()?;
+    let provider = upsert_provider(&mut state, provider_id, parse_json_body(body, "provider")?)?;
+    store.save(&state)?;
+    Ok(json!({
+        "success": true,
+        "data": {
+            "provider": provider,
+            "id": provider_id,
+            "upserted": true,
+        },
+    })
+    .to_string())
+}
+
+fn delete_service_provider(provider_id: &str) -> Result<String, String> {
+    let store = service_state_store()?;
+    let mut state = store.load()?;
+    let removed = delete_provider(&mut state, provider_id)?;
+    store.save(&state)?;
+    Ok(json!({
+        "success": true,
+        "data": {
+            "id": provider_id,
+            "deleted": removed.is_some(),
+            "provider": removed,
+        },
+    })
+    .to_string())
+}
+
 fn service_job_cancel_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/jobs/")
         .and_then(|rest| rest.strip_suffix("/cancel"))
@@ -1616,6 +1734,28 @@ mod tests {
         assert!(providers["providers"].is_array());
         assert!(challenges["challenges"].is_array());
         assert_eq!(service_collection_contents("/api/service/unknown"), None);
+    }
+
+    #[test]
+    fn service_config_entity_ids_map_mutation_paths() {
+        assert_eq!(
+            service_site_policy_id("/api/service/site-policies/google"),
+            Some("google")
+        );
+        assert_eq!(
+            service_provider_id("/api/service/providers/manual"),
+            Some("manual")
+        );
+        assert_eq!(service_site_policy_id("/api/service/site-policies/"), None);
+        assert_eq!(
+            service_site_policy_id("/api/service/site-policies/google/extra"),
+            None
+        );
+        assert_eq!(service_provider_id("/api/service/providers/"), None);
+        assert_eq!(
+            service_provider_id("/api/service/providers/manual/extra"),
+            None
+        );
     }
 
     #[test]
