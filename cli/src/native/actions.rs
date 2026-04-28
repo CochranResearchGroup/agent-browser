@@ -61,8 +61,7 @@ use super::service_model::{
     ServiceState, SessionCleanupPolicy,
 };
 use super::service_store::{
-    mutate_default_service_state, JsonServiceStateStore, LockedServiceStateRepository,
-    ServiceStateRepository, ServiceStateStore,
+    JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
 };
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
 use super::snapshot::{self, SnapshotOptions};
@@ -6799,10 +6798,8 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
     let summary = reconcile_service_state(&mut service_state).await;
 
     let reconciled_state = service_state.clone();
-    mutate_default_service_state(|state| {
-        merge_reconciled_service_state(state, &before, &reconciled_state);
-        Ok(())
-    })?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    persist_reconciled_service_state_in_repository(&repository, &before, &reconciled_state)?;
 
     Ok(json!({
         "reconciled": true,
@@ -6810,6 +6807,19 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
         "changedBrowsers": summary.changed_browsers,
         "service_state": service_state,
     }))
+}
+
+fn persist_reconciled_service_state_in_repository(
+    repository: &impl ServiceStateRepository,
+    before: &ServiceState,
+    reconciled: &ServiceState,
+) -> Result<(), String> {
+    let before = before.clone();
+    let reconciled = reconciled.clone();
+    repository.mutate(|state| {
+        merge_reconciled_service_state(state, &before, &reconciled);
+        Ok(())
+    })
 }
 
 async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
@@ -11535,6 +11545,60 @@ mod tests {
             Some(1)
         );
         assert_eq!(persisted.events.len(), 2);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_reconciled_service_state_in_repository_preserves_current_fields() {
+        let home = unique_socket_dir("service-reconcile-repository-home");
+        fs::create_dir_all(&home).unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let before = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("work-before".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    active_session_ids: vec!["session-1".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let mut persisted_current = before.clone();
+        persisted_current
+            .browsers
+            .get_mut("browser-1")
+            .unwrap()
+            .profile_id = Some("work-current".to_string());
+        store.save(&persisted_current).unwrap();
+
+        let mut reconciled = before.clone();
+        reconciled.browsers.insert(
+            "browser-1".to_string(),
+            BrowserProcess {
+                id: "browser-1".to_string(),
+                profile_id: Some("work-before".to_string()),
+                health: ServiceBrowserHealth::Unreachable,
+                last_error: Some("CDP endpoint is unreachable".to_string()),
+                active_session_ids: vec!["session-1".to_string()],
+                ..BrowserProcess::default()
+            },
+        );
+
+        persist_reconciled_service_state_in_repository(&repository, &before, &reconciled).unwrap();
+
+        let persisted = store.load().unwrap();
+        let browser = &persisted.browsers["browser-1"];
+        assert_eq!(browser.profile_id.as_deref(), Some("work-current"));
+        assert_eq!(browser.health, ServiceBrowserHealth::Unreachable);
+        assert_eq!(
+            browser.last_error.as_deref(),
+            Some("CDP endpoint is unreachable")
+        );
 
         let _ = fs::remove_dir_all(&home);
     }
