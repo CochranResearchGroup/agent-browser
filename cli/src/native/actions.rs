@@ -61,7 +61,8 @@ use super::service_model::{
     SessionCleanupPolicy,
 };
 use super::service_store::{
-    mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
+    mutate_default_service_state, JsonServiceStateStore, LockedServiceStateRepository,
+    ServiceStateRepository, ServiceStateStore,
 };
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
 use super::snapshot::{self, SnapshotOptions};
@@ -448,7 +449,31 @@ fn persist_service_browser_record(
     last_error: Option<String>,
     metadata: Option<ServiceLaunchMetadata>,
 ) {
-    let _ = mutate_default_service_state(|service_state| {
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        let _ = persist_service_browser_record_in_repository(
+            &repository,
+            session_id,
+            host,
+            health,
+            pid,
+            cdp_endpoint,
+            last_error,
+            metadata,
+        );
+    }
+}
+
+fn persist_service_browser_record_in_repository(
+    repository: &impl ServiceStateRepository,
+    session_id: &str,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+    pid: Option<u32>,
+    cdp_endpoint: Option<String>,
+    last_error: Option<String>,
+    metadata: Option<ServiceLaunchMetadata>,
+) -> Result<(), String> {
+    repository.mutate(|service_state| {
         let id = service_browser_id(session_id);
         let previous = service_state.browsers.get(&id).cloned();
         let profile_id = metadata
@@ -498,7 +523,7 @@ fn persist_service_browser_record(
         }
         service_state.browsers.insert(id, browser);
         Ok(())
-    });
+    })
 }
 
 fn upsert_service_profile_and_session(
@@ -12715,10 +12740,11 @@ mod tests {
     fn test_persist_service_browser_record_round_trips() {
         let home = unique_socket_dir("service-browser-record-home");
         fs::create_dir_all(&home).unwrap();
-        let guard = EnvGuard::new(&["HOME"]);
-        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
 
-        persist_service_browser_record(
+        persist_service_browser_record_in_repository(
+            &repository,
             "persist-session",
             ServiceBrowserHost::LocalHeadless,
             ServiceBrowserHealth::Ready,
@@ -12736,9 +12762,9 @@ mod tests {
                 task_name: Some("probe-acs-website".to_string()),
                 cleanup: SessionCleanupPolicy::Detach,
             }),
-        );
+        )
+        .unwrap();
 
-        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
         let state = store.load().unwrap();
         let browser = &state.browsers["session:persist-session"];
 
