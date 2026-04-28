@@ -44,26 +44,25 @@ use super::service_config::{
     upsert_persisted_site_policy,
 };
 use super::service_health::{
-    close_health_from_outcome, persist_browser_recovery_started_in_repository,
-    persist_closed_browser_health_in_repository,
+    persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
     persist_current_browser_stale_health_in_repository,
     persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
-    reconcile_service_state, recovery_policy_for_next_attempt,
-    retry_persisted_service_browser_in_repository, stale_browser_process_record,
+    reconcile_service_state, retry_persisted_service_browser_in_repository,
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
-use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
+use super::service_incidents::{
+    acknowledge_persisted_service_incident, resolve_persisted_service_incident,
+    service_incidents_response, ServiceIncidentFilters,
+};
 use super::service_jobs::cancel_persisted_service_job;
 use super::service_lifecycle::{service_profile_id, ServiceLaunchMetadata};
 use super::service_model::{
-    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
+    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
     JobState as ServiceJobState, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind,
     ServiceState, SessionCleanupPolicy,
 };
-use super::service_store::{
-    JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
-};
+use super::service_store::LockedServiceStateRepository;
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
 use super::snapshot::{self, SnapshotOptions};
 use super::state;
@@ -91,8 +90,6 @@ const AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS: u64 = 100;
 /// Time spent trying targeted username selectors before broad text-input
 /// fallback selectors are allowed.
 const AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS: u64 = 5_000;
-const MAX_SERVICE_EVENTS: usize = 100;
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum CloseBehavior {
     #[default]
@@ -6467,25 +6464,8 @@ async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, Strin
     let actor = normalized_operator(by);
     let note = normalized_note(note);
     let timestamp = service_now_timestamp();
-    let incident = mutate_persisted_service_incident(incident_id, |state, incident_index| {
-        let incident = &mut state.incidents[incident_index];
-        if incident.acknowledged_at.is_none() {
-            incident.acknowledged_at = Some(timestamp.clone());
-        }
-        incident.acknowledged_by = Some(actor.clone());
-        incident.acknowledgement_note = note.clone();
-        let incident = incident.clone();
-        push_service_event_bounded(
-            state,
-            service_incident_handling_event(
-                &incident,
-                ServiceEventKind::IncidentAcknowledged,
-                &timestamp,
-                &actor,
-                note.as_deref(),
-            ),
-        );
-    })?;
+    let incident =
+        acknowledge_persisted_service_incident(incident_id, &timestamp, &actor, note.as_deref())?;
 
     Ok(json!({
         "acknowledged": true,
@@ -6503,79 +6483,13 @@ async fn handle_service_incident_resolve(cmd: &Value) -> Result<Value, String> {
     let actor = normalized_operator(by);
     let note = normalized_note(note);
     let timestamp = service_now_timestamp();
-    let incident = mutate_persisted_service_incident(incident_id, |state, incident_index| {
-        let incident = &mut state.incidents[incident_index];
-        if incident.acknowledged_at.is_none() {
-            incident.acknowledged_at = Some(timestamp.clone());
-        }
-        if incident.acknowledged_by.is_none() {
-            incident.acknowledged_by = Some(actor.clone());
-        }
-        incident.resolved_at = Some(timestamp.clone());
-        incident.resolved_by = Some(actor.clone());
-        incident.resolution_note = note.clone();
-        let incident = incident.clone();
-        push_service_event_bounded(
-            state,
-            service_incident_handling_event(
-                &incident,
-                ServiceEventKind::IncidentResolved,
-                &timestamp,
-                &actor,
-                note.as_deref(),
-            ),
-        );
-    })?;
+    let incident =
+        resolve_persisted_service_incident(incident_id, &timestamp, &actor, note.as_deref())?;
 
     Ok(json!({
         "resolved": true,
         "incident": incident,
     }))
-}
-
-fn mutate_persisted_service_incident(
-    incident_id: &str,
-    mutator: impl FnOnce(&mut ServiceState, usize),
-) -> Result<super::service_model::ServiceIncident, String> {
-    let repository = LockedServiceStateRepository::default_json().map_err(|err| {
-        if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
-            format!("Unable to load service state: {}", err)
-        } else {
-            err
-        }
-    })?;
-    mutate_persisted_service_incident_in_repository(&repository, incident_id, mutator)
-}
-
-fn mutate_persisted_service_incident_in_repository(
-    repository: &impl ServiceStateRepository,
-    incident_id: &str,
-    mutator: impl FnOnce(&mut ServiceState, usize),
-) -> Result<super::service_model::ServiceIncident, String> {
-    repository
-        .mutate(|state| {
-            state.refresh_derived_views();
-            let incident_index = state
-                .incidents
-                .iter()
-                .position(|incident| incident.id == incident_id)
-                .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
-            mutator(state, incident_index);
-            state.refresh_derived_views();
-            state
-                .incidents
-                .iter()
-                .find(|incident| incident.id == incident_id)
-                .cloned()
-                .ok_or_else(|| format!("Service incident not found: {}", incident_id))
-        })
-        .map_err(|err| {
-            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
-                format!("Unable to load service state: {}", err)
-            } else {
-                err
-            }
-        })
 }
 
 fn normalized_operator(value: Option<&str>) -> String {
@@ -6591,44 +6505,6 @@ fn normalized_note(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-}
-
-fn service_incident_handling_event(
-    incident: &super::service_model::ServiceIncident,
-    kind: ServiceEventKind,
-    timestamp: &str,
-    actor: &str,
-    note: Option<&str>,
-) -> ServiceEvent {
-    let action = match kind {
-        ServiceEventKind::IncidentResolved => "resolved",
-        _ => "acknowledged",
-    };
-    let mut details = json!({
-        "incidentId": incident.id,
-        "actor": actor,
-        "action": action,
-    });
-    if let Some(note) = note {
-        details["note"] = json!(note);
-    }
-    ServiceEvent {
-        id: format!("event-{}", uuid::Uuid::new_v4()),
-        timestamp: timestamp.to_string(),
-        kind,
-        message: format!("Incident {} {}", incident.label, action),
-        browser_id: incident.browser_id.clone(),
-        details: Some(details),
-        ..ServiceEvent::default()
-    }
-}
-
-fn push_service_event_bounded(state: &mut ServiceState, event: ServiceEvent) {
-    state.events.push(event);
-    if state.events.len() > MAX_SERVICE_EVENTS {
-        let excess = state.events.len() - MAX_SERVICE_EVENTS;
-        state.events.drain(0..excess);
-    }
 }
 
 async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
@@ -9878,7 +9754,12 @@ fn error_response(id: &str, error: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_health::{
+        close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
+    };
+    use crate::native::service_model::BrowserProcess;
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::test_utils::EnvGuard;
     use std::collections::BTreeMap;
     use std::fs;
@@ -12061,7 +11942,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mutate_service_incident_in_repository_persists_metadata() {
+    fn test_acknowledge_service_incident_in_repository_persists_metadata() {
         let home = unique_socket_dir("service-incident-repository-home");
         fs::create_dir_all(&home).unwrap();
         let store = JsonServiceStateStore::new(home.join("state.json"));
@@ -12091,17 +11972,15 @@ mod tests {
             })
             .unwrap();
 
-        let incident = mutate_persisted_service_incident_in_repository(
-            &repository,
-            "browser-1",
-            |state, incident_index| {
-                let incident = &mut state.incidents[incident_index];
-                incident.acknowledged_at = Some("2026-04-22T01:00:00Z".to_string());
-                incident.acknowledged_by = Some("operator".to_string());
-                incident.acknowledgement_note = Some("triaged".to_string());
-            },
-        )
-        .unwrap();
+        let incident =
+            crate::native::service_incidents::acknowledge_service_incident_in_repository(
+                &repository,
+                "browser-1",
+                "2026-04-22T01:00:00Z",
+                "operator",
+                Some("triaged"),
+            )
+            .unwrap();
 
         assert_eq!(incident.id, "browser-1");
         assert_eq!(incident.acknowledged_by.as_deref(), Some("operator"));

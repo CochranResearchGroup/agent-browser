@@ -2,9 +2,14 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
 
 use super::service_model::{
-    JobTarget, ServiceEvent, ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity,
-    ServiceIncidentState, ServiceJob, ServiceState,
+    JobTarget, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceIncidentEscalation,
+    ServiceIncidentSeverity, ServiceIncidentState, ServiceJob, ServiceState,
 };
+use super::service_store::{
+    JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
+};
+
+const MAX_SERVICE_EVENTS: usize = 100;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct ServiceIncidentFilters<'a> {
@@ -114,6 +119,138 @@ pub(crate) fn service_incidents_response(
     }))
 }
 
+pub(crate) fn acknowledge_persisted_service_incident(
+    incident_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<ServiceIncident, String> {
+    let repository = default_incident_repository()?;
+    acknowledge_service_incident_in_repository(&repository, incident_id, timestamp, actor, note)
+}
+
+pub(crate) fn acknowledge_service_incident_in_repository(
+    repository: &impl ServiceStateRepository,
+    incident_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<ServiceIncident, String> {
+    let note = note.map(str::to_string);
+    mutate_persisted_service_incident_in_repository(
+        repository,
+        incident_id,
+        |state, incident_index| {
+            let incident = &mut state.incidents[incident_index];
+            if incident.acknowledged_at.is_none() {
+                incident.acknowledged_at = Some(timestamp.to_string());
+            }
+            incident.acknowledged_by = Some(actor.to_string());
+            incident.acknowledgement_note = note.clone();
+            let incident = incident.clone();
+            push_service_event_bounded(
+                state,
+                service_incident_handling_event(
+                    &incident,
+                    ServiceEventKind::IncidentAcknowledged,
+                    timestamp,
+                    actor,
+                    note.as_deref(),
+                ),
+            );
+        },
+    )
+}
+
+pub(crate) fn resolve_persisted_service_incident(
+    incident_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<ServiceIncident, String> {
+    let repository = default_incident_repository()?;
+    resolve_service_incident_in_repository(&repository, incident_id, timestamp, actor, note)
+}
+
+pub(crate) fn resolve_service_incident_in_repository(
+    repository: &impl ServiceStateRepository,
+    incident_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<ServiceIncident, String> {
+    let note = note.map(str::to_string);
+    mutate_persisted_service_incident_in_repository(
+        repository,
+        incident_id,
+        |state, incident_index| {
+            let incident = &mut state.incidents[incident_index];
+            if incident.acknowledged_at.is_none() {
+                incident.acknowledged_at = Some(timestamp.to_string());
+            }
+            if incident.acknowledged_by.is_none() {
+                incident.acknowledged_by = Some(actor.to_string());
+            }
+            incident.resolved_at = Some(timestamp.to_string());
+            incident.resolved_by = Some(actor.to_string());
+            incident.resolution_note = note.clone();
+            let incident = incident.clone();
+            push_service_event_bounded(
+                state,
+                service_incident_handling_event(
+                    &incident,
+                    ServiceEventKind::IncidentResolved,
+                    timestamp,
+                    actor,
+                    note.as_deref(),
+                ),
+            );
+        },
+    )
+}
+
+pub(crate) fn mutate_persisted_service_incident_in_repository(
+    repository: &impl ServiceStateRepository,
+    incident_id: &str,
+    mutator: impl FnOnce(&mut ServiceState, usize),
+) -> Result<ServiceIncident, String> {
+    repository
+        .mutate(|state| {
+            state.refresh_derived_views();
+            let incident_index = state
+                .incidents
+                .iter()
+                .position(|incident| incident.id == incident_id)
+                .ok_or_else(|| format!("Service incident not found: {}", incident_id))?;
+            mutator(state, incident_index);
+            state.refresh_derived_views();
+            state
+                .incidents
+                .iter()
+                .find(|incident| incident.id == incident_id)
+                .cloned()
+                .ok_or_else(|| format!("Service incident not found: {}", incident_id))
+        })
+        .map_err(|err| {
+            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+                format!("Unable to load service state: {}", err)
+            } else {
+                err
+            }
+        })
+}
+
+fn default_incident_repository(
+) -> Result<LockedServiceStateRepository<JsonServiceStateStore>, String> {
+    LockedServiceStateRepository::default_json().map_err(|err| {
+        if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+            format!("Unable to load service state: {}", err)
+        } else {
+            err
+        }
+    })
+}
+
 pub(crate) fn service_incident_state_name(state: ServiceIncidentState) -> &'static str {
     match state {
         ServiceIncidentState::Active => "active",
@@ -141,6 +278,44 @@ pub(crate) fn service_incident_escalation_name(
         ServiceIncidentEscalation::JobAttention => "job_attention",
         ServiceIncidentEscalation::ServiceTriage => "service_triage",
         ServiceIncidentEscalation::OsDegradedPossible => "os_degraded_possible",
+    }
+}
+
+fn service_incident_handling_event(
+    incident: &ServiceIncident,
+    kind: ServiceEventKind,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> ServiceEvent {
+    let action = match kind {
+        ServiceEventKind::IncidentResolved => "resolved",
+        _ => "acknowledged",
+    };
+    let mut details = json!({
+        "incidentId": incident.id,
+        "actor": actor,
+        "action": action,
+    });
+    if let Some(note) = note {
+        details["note"] = json!(note);
+    }
+    ServiceEvent {
+        id: format!("event-{}", uuid::Uuid::new_v4()),
+        timestamp: timestamp.to_string(),
+        kind,
+        message: format!("Incident {} {}", incident.label, action),
+        browser_id: incident.browser_id.clone(),
+        details: Some(details),
+        ..ServiceEvent::default()
+    }
+}
+
+fn push_service_event_bounded(state: &mut ServiceState, event: ServiceEvent) {
+    state.events.push(event);
+    if state.events.len() > MAX_SERVICE_EVENTS {
+        let excess = state.events.len() - MAX_SERVICE_EVENTS;
+        state.events.drain(0..excess);
     }
 }
 
