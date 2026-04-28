@@ -46,12 +46,12 @@ use super::service_config::{
 };
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
-    merge_reconciled_service_state, reconcile_service_state, record_browser_health_changed_event,
-    record_browser_health_changed_event_with_details, record_browser_launch_recorded_event,
-    record_browser_recovery_started_event, record_browser_recovery_started_event_with_details,
-    recovery_reason_kind_for_health, BrowserProcessExitCause, BrowserRecoveryPolicy,
-    BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource,
-    BrowserRecoveryReasonKind,
+    persist_reconciled_service_state_in_repository, reconcile_service_state,
+    record_browser_health_changed_event, record_browser_health_changed_event_with_details,
+    record_browser_launch_recorded_event, record_browser_recovery_started_event,
+    record_browser_recovery_started_event_with_details, recovery_reason_kind_for_health,
+    BrowserProcessExitCause, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
+    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_model::{
@@ -6807,19 +6807,6 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
         "changedBrowsers": summary.changed_browsers,
         "service_state": service_state,
     }))
-}
-
-fn persist_reconciled_service_state_in_repository(
-    repository: &impl ServiceStateRepository,
-    before: &ServiceState,
-    reconciled: &ServiceState,
-) -> Result<(), String> {
-    let before = before.clone();
-    let reconciled = reconciled.clone();
-    repository.mutate(|state| {
-        merge_reconciled_service_state(state, &before, &reconciled);
-        Ok(())
-    })
 }
 
 async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {

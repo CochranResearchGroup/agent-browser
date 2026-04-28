@@ -10,8 +10,8 @@ use super::actions::{execute_command, DaemonState};
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
-    merge_reconciled_service_state, reconcile_persisted_service_state, reconcile_service_state,
-    record_browser_health_changed_event,
+    persist_reconciled_service_state_in_repository, reconcile_persisted_service_state,
+    reconcile_service_state, record_browser_health_changed_event,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
@@ -355,19 +355,6 @@ fn persist_reconciled_service_state(before: &ServiceState, reconciled: &ServiceS
     if let Ok(repository) = LockedServiceStateRepository::default_json() {
         let _ = persist_reconciled_service_state_in_repository(&repository, &before, &reconciled);
     }
-}
-
-fn persist_reconciled_service_state_in_repository(
-    repository: &impl ServiceStateRepository,
-    before: &ServiceState,
-    reconciled: &ServiceState,
-) -> Result<(), String> {
-    let before = before.clone();
-    let reconciled = reconciled.clone();
-    repository.mutate(|state| {
-        merge_reconciled_service_state(state, &before, &reconciled);
-        Ok(())
-    })
 }
 
 fn service_browser_id(session_id: &str) -> String {

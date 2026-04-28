@@ -337,11 +337,21 @@ pub async fn reconcile_service_state_in_repository(
     let before = repository.load_snapshot()?;
     let mut reconciled_state = before.clone();
     let summary = reconcile_service_state(&mut reconciled_state).await;
-    repository.mutate(|state| {
-        merge_reconciled_service_state(state, &before, &reconciled_state);
-        Ok(())
-    })?;
+    persist_reconciled_service_state_in_repository(repository, &before, &reconciled_state)?;
     Ok(summary)
+}
+
+pub fn persist_reconciled_service_state_in_repository(
+    repository: &impl ServiceStateRepository,
+    before: &ServiceState,
+    reconciled: &ServiceState,
+) -> Result<(), String> {
+    let before = before.clone();
+    let reconciled = reconciled.clone();
+    repository.mutate(|state| {
+        merge_reconciled_service_state(state, &before, &reconciled);
+        Ok(())
+    })
 }
 
 /// Merge async reconciliation results without clobbering newer state mutations.
