@@ -19,7 +19,7 @@ use super::service_model::{
 };
 use super::service_store::{
     load_default_service_state_snapshot, mutate_default_service_state, JsonServiceStateStore,
-    ServiceStateStore,
+    LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
 };
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
@@ -566,7 +566,17 @@ pub fn cancel_persisted_service_job(
     job_id: &str,
     reason: Option<&str>,
 ) -> Result<ServiceJob, String> {
-    mutate_default_service_state(|state| {
+    LockedServiceStateRepository::default_json()
+        .and_then(|repository| cancel_service_job_in_repository(&repository, job_id, reason))
+        .map_err(cancel_persisted_service_job_response_error)
+}
+
+pub fn cancel_service_job_in_repository(
+    repository: &impl ServiceStateRepository,
+    job_id: &str,
+    reason: Option<&str>,
+) -> Result<ServiceJob, String> {
+    repository.mutate(|state| {
         let job = state
             .jobs
             .get_mut(job_id)
@@ -597,13 +607,14 @@ pub fn cancel_persisted_service_job(
             )),
         }
     })
-    .map_err(|err| {
-        if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
-            format!("Unable to load service state: {}", err)
-        } else {
-            err
-        }
-    })
+}
+
+fn cancel_persisted_service_job_response_error(err: String) -> String {
+    if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+        format!("Unable to load service state: {}", err)
+    } else {
+        err
+    }
 }
 
 fn service_job_cancelled(job_id: &str) -> bool {
@@ -1157,6 +1168,39 @@ mod tests {
         assert_eq!(job.error.as_deref(), Some("stale"));
         assert_eq!(job.result.as_ref().unwrap()["cancelled"], true);
         assert!(job.completed_at.is_some());
+
+        let persisted = store.load().unwrap();
+        assert_eq!(persisted.jobs["job-queued"].state, JobState::Cancelled);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn cancel_service_job_in_repository_marks_queued_job_cancelled() {
+        let home = temp_home("control-plane-cancel-repository");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                jobs: std::collections::BTreeMap::from([(
+                    "job-queued".to_string(),
+                    ServiceJob {
+                        id: "job-queued".to_string(),
+                        action: "navigate".to_string(),
+                        state: JobState::Queued,
+                        submitted_at: Some("2026-04-22T00:00:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let job =
+            cancel_service_job_in_repository(&repository, "job-queued", Some("stale")).unwrap();
+
+        assert_eq!(job.state, JobState::Cancelled);
+        assert_eq!(job.error.as_deref(), Some("stale"));
+        assert_eq!(job.result.as_ref().unwrap()["cancelled"], true);
 
         let persisted = store.load().unwrap();
         assert_eq!(persisted.jobs["job-queued"].state, JobState::Cancelled);
