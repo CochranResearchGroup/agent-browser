@@ -976,6 +976,38 @@ fn reconcile_browser_targets(
         }
     }
 
+    refresh_session_tab_relationships_for_browser(
+        state,
+        browser_id,
+        owner_session_id,
+        &live_tab_ids,
+    );
+}
+
+fn refresh_session_tab_relationships_for_browser(
+    state: &mut ServiceState,
+    browser_id: &str,
+    owner_session_id: Option<String>,
+    live_tab_ids: &BTreeSet<String>,
+) {
+    let browser_tab_ids = state
+        .tabs
+        .iter()
+        .filter_map(|(tab_id, tab)| {
+            if tab.browser_id == browser_id {
+                Some(tab_id.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<BTreeSet<_>>();
+
+    for session in state.sessions.values_mut() {
+        session
+            .tab_ids
+            .retain(|tab_id| !browser_tab_ids.contains(tab_id));
+    }
+
     if let Some(owner_session_id) = owner_session_id {
         let session = state
             .sessions
@@ -985,14 +1017,8 @@ fn reconcile_browser_targets(
                 ..BrowserSession::default()
             });
         merge_unique(&mut session.browser_ids, browser_id.to_string());
-        session.tab_ids.retain(|tab_id| {
-            state
-                .tabs
-                .get(tab_id)
-                .is_none_or(|tab| tab.browser_id != browser_id)
-        });
         for tab_id in live_tab_ids {
-            merge_unique(&mut session.tab_ids, tab_id);
+            merge_unique(&mut session.tab_ids, tab_id.clone());
         }
     }
 }
@@ -2438,6 +2464,106 @@ mod tests {
             tab_event.details.as_ref().unwrap()["currentLifecycle"],
             "ready"
         );
+    }
+
+    #[test]
+    fn reconcile_reassigns_tab_relationships_when_owner_session_changes() {
+        let browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            active_session_ids: vec!["session-new".to_string()],
+            ..BrowserProcess::default()
+        };
+        let mut state = service_state_with_browser(browser.clone());
+        state.tabs.insert(
+            "target:page-1".to_string(),
+            BrowserTab {
+                id: "target:page-1".to_string(),
+                browser_id: "browser-1".to_string(),
+                target_id: Some("page-1".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                owner_session_id: Some("session-old".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+        state.sessions.insert(
+            "session-old".to_string(),
+            BrowserSession {
+                id: "session-old".to_string(),
+                browser_ids: vec!["browser-1".to_string()],
+                tab_ids: vec!["target:page-1".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+
+        reconcile_browser_targets(
+            &mut state,
+            "browser-1",
+            &browser,
+            vec![CdpHttpTargetInfo {
+                id: "page-1".to_string(),
+                target_type: "page".to_string(),
+                title: "Example".to_string(),
+                url: "https://example.com".to_string(),
+            }],
+        );
+
+        assert!(state.sessions["session-old"].tab_ids.is_empty());
+        assert_eq!(
+            state.sessions["session-new"].tab_ids,
+            vec!["target:page-1".to_string()]
+        );
+        assert_eq!(
+            state.tabs["target:page-1"].owner_session_id.as_deref(),
+            Some("session-new")
+        );
+    }
+
+    #[test]
+    fn reconcile_removes_session_tab_relationships_without_owner_session() {
+        let browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            active_session_ids: Vec::new(),
+            ..BrowserProcess::default()
+        };
+        let mut state = service_state_with_browser(browser.clone());
+        state.tabs.insert(
+            "target:page-1".to_string(),
+            BrowserTab {
+                id: "target:page-1".to_string(),
+                browser_id: "browser-1".to_string(),
+                target_id: Some("page-1".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                owner_session_id: Some("session-old".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+        state.sessions.insert(
+            "session-old".to_string(),
+            BrowserSession {
+                id: "session-old".to_string(),
+                browser_ids: vec!["browser-1".to_string()],
+                tab_ids: vec!["target:page-1".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+
+        reconcile_browser_targets(
+            &mut state,
+            "browser-1",
+            &browser,
+            vec![CdpHttpTargetInfo {
+                id: "page-1".to_string(),
+                target_type: "page".to_string(),
+                title: "Example".to_string(),
+                url: "https://example.com".to_string(),
+            }],
+        );
+
+        assert!(state.sessions["session-old"].tab_ids.is_empty());
+        assert!(!state.sessions.contains_key(""));
+        assert_eq!(state.tabs["target:page-1"].owner_session_id, None);
     }
 
     #[tokio::test]
