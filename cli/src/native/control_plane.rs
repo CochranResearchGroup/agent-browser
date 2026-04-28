@@ -18,8 +18,7 @@ use super::service_model::{
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
 };
 use super::service_store::{
-    mutate_default_service_state, JsonServiceStateStore, LockedServiceStateRepository,
-    ServiceStateRepository, ServiceStateStore,
+    JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
 };
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
@@ -353,10 +352,22 @@ impl ControlPlaneHandle {
 fn persist_reconciled_service_state(before: &ServiceState, reconciled: &ServiceState) {
     let before = before.clone();
     let reconciled = reconciled.clone();
-    let _ = mutate_default_service_state(|state| {
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        let _ = persist_reconciled_service_state_in_repository(&repository, &before, &reconciled);
+    }
+}
+
+fn persist_reconciled_service_state_in_repository(
+    repository: &impl ServiceStateRepository,
+    before: &ServiceState,
+    reconciled: &ServiceState,
+) -> Result<(), String> {
+    let before = before.clone();
+    let reconciled = reconciled.clone();
+    repository.mutate(|state| {
         merge_reconciled_service_state(state, &before, &reconciled);
         Ok(())
-    });
+    })
 }
 
 fn service_browser_id(session_id: &str) -> String {
@@ -364,7 +375,16 @@ fn service_browser_id(session_id: &str) -> String {
 }
 
 fn persist_process_exited_browser_health(state: &DaemonState) {
-    let _ = mutate_default_service_state(|service_state| {
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        let _ = persist_process_exited_browser_health_in_repository(&repository, state);
+    }
+}
+
+fn persist_process_exited_browser_health_in_repository(
+    repository: &impl ServiceStateRepository,
+    state: &DaemonState,
+) -> Result<(), String> {
+    repository.mutate(|service_state| {
         let id = service_browser_id(&state.session_id);
         let previous = service_state.browsers.get(&id).cloned();
         let host = previous
@@ -400,7 +420,7 @@ fn persist_process_exited_browser_health(state: &DaemonState) {
         record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
         service_state.browsers.insert(id, browser);
         Ok(())
-    });
+    })
 }
 
 /// Persist a bounded audit record for each control-plane request.
@@ -1258,6 +1278,106 @@ mod tests {
 
         let loaded = load_service_job_in_repository(&repository, "job-200").unwrap();
         assert_eq!(loaded.id, "job-200");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn reconciled_service_state_persists_through_repository() {
+        let home = temp_home("control-plane-reconcile-repository");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let before = ServiceState {
+            browsers: std::collections::BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("work-before".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    active_session_ids: vec!["session-1".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let mut target = before.clone();
+        target.browsers.get_mut("browser-1").unwrap().profile_id = Some("work-current".to_string());
+        store.save(&target).unwrap();
+
+        let mut reconciled = before.clone();
+        reconciled.control_plane = Some(ControlPlaneSnapshot {
+            worker_state: "ready".to_string(),
+            queue_capacity: DEFAULT_QUEUE_CAPACITY,
+            ..ControlPlaneSnapshot::default()
+        });
+        reconciled.browsers.insert(
+            "browser-1".to_string(),
+            BrowserProcess {
+                id: "browser-1".to_string(),
+                profile_id: Some("work-before".to_string()),
+                health: ServiceBrowserHealth::Unreachable,
+                last_error: Some("CDP endpoint is unreachable".to_string()),
+                active_session_ids: vec!["session-1".to_string()],
+                ..BrowserProcess::default()
+            },
+        );
+
+        persist_reconciled_service_state_in_repository(&repository, &before, &reconciled).unwrap();
+
+        let persisted = store.load().unwrap();
+        let browser = &persisted.browsers["browser-1"];
+        assert_eq!(browser.profile_id.as_deref(), Some("work-current"));
+        assert_eq!(browser.health, ServiceBrowserHealth::Unreachable);
+        assert_eq!(
+            browser.last_error.as_deref(),
+            Some("CDP endpoint is unreachable")
+        );
+        assert_eq!(
+            persisted
+                .control_plane
+                .as_ref()
+                .map(|snapshot| snapshot.queue_capacity),
+            Some(DEFAULT_QUEUE_CAPACITY)
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn process_exited_browser_health_persists_through_repository() {
+        let home = temp_home("control-plane-process-exited-repository");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let browser_id = service_browser_id("session-1");
+        store
+            .save(&ServiceState {
+                browsers: std::collections::BTreeMap::from([(
+                    browser_id.clone(),
+                    BrowserProcess {
+                        id: browser_id.clone(),
+                        profile_id: Some("work".to_string()),
+                        host: ServiceBrowserHost::AttachedExisting,
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["session-1".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = "session-1".to_string();
+
+        persist_process_exited_browser_health_in_repository(&repository, &state).unwrap();
+
+        let persisted = store.load().unwrap();
+        let browser = &persisted.browsers[&browser_id];
+        assert_eq!(browser.profile_id.as_deref(), Some("work"));
+        assert_eq!(browser.host, ServiceBrowserHost::AttachedExisting);
+        assert_eq!(browser.health, ServiceBrowserHealth::ProcessExited);
+        assert!(browser.last_health_observation.is_some());
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.browser_id.as_deref() == Some(browser_id.as_str())));
         let _ = std::fs::remove_dir_all(&home);
     }
 
