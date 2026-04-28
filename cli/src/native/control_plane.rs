@@ -13,6 +13,10 @@ use super::service_health::{
     persist_reconciled_service_state_in_repository, reconcile_persisted_service_state,
     reconcile_service_state, record_browser_health_changed_event,
 };
+use super::service_jobs::{
+    cancel_persisted_service_job, cancel_service_job_in_repository, load_service_job_in_repository,
+    mutate_persisted_service_jobs, mutate_service_jobs_in_repository, MAX_SERVICE_JOBS,
+};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
@@ -22,7 +26,6 @@ use super::service_store::{
 };
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
-const MAX_SERVICE_JOBS: usize = 200;
 
 #[derive(Clone)]
 pub struct ControlPlaneHandle {
@@ -417,23 +420,6 @@ fn persist_service_job(job: ServiceJob) {
     });
 }
 
-fn mutate_persisted_service_jobs(mutator: impl FnOnce(&mut ServiceState)) {
-    if let Ok(repository) = LockedServiceStateRepository::default_json() {
-        let _ = mutate_service_jobs_in_repository(&repository, mutator);
-    }
-}
-
-fn mutate_service_jobs_in_repository(
-    repository: &impl ServiceStateRepository,
-    mutator: impl FnOnce(&mut ServiceState),
-) -> Result<(), String> {
-    repository.mutate(|state| {
-        mutator(state);
-        prune_service_jobs(state);
-        Ok(())
-    })
-}
-
 fn persist_service_job_queued(request: &ControlRequest) {
     persist_service_job(ServiceJob {
         id: service_job_id(request),
@@ -578,61 +564,6 @@ fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) 
     });
 }
 
-pub fn cancel_persisted_service_job(
-    job_id: &str,
-    reason: Option<&str>,
-) -> Result<ServiceJob, String> {
-    LockedServiceStateRepository::default_json()
-        .and_then(|repository| cancel_service_job_in_repository(&repository, job_id, reason))
-        .map_err(cancel_persisted_service_job_response_error)
-}
-
-pub fn cancel_service_job_in_repository(
-    repository: &impl ServiceStateRepository,
-    job_id: &str,
-    reason: Option<&str>,
-) -> Result<ServiceJob, String> {
-    repository.mutate(|state| {
-        let job = state
-            .jobs
-            .get_mut(job_id)
-            .ok_or_else(|| format!("Service job not found: {}", job_id))?;
-
-        match job.state {
-            JobState::Queued => {
-                job.state = JobState::Cancelled;
-                job.completed_at = Some(current_timestamp());
-                job.error = Some(
-                    reason
-                        .filter(|value| !value.trim().is_empty())
-                        .unwrap_or("Cancelled by operator")
-                        .to_string(),
-                );
-                job.result = Some(json!({ "success": false, "cancelled": true }));
-                Ok(job.clone())
-            }
-            JobState::Cancelled => Ok(job.clone()),
-            JobState::Running => Err(format!(
-                "Service job {} is already running and cannot be cancelled safely",
-                job_id
-            )),
-            JobState::Succeeded | JobState::Failed | JobState::TimedOut => Err(format!(
-                "Service job {} is already terminal with state {}",
-                job_id,
-                job_state_name(job.state)
-            )),
-        }
-    })
-}
-
-fn cancel_persisted_service_job_response_error(err: String) -> String {
-    if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
-        format!("Unable to load service state: {}", err)
-    } else {
-        err
-    }
-}
-
 fn service_job_cancelled(job_id: &str) -> bool {
     load_service_job(job_id).is_some_and(|job| job.state == JobState::Cancelled)
 }
@@ -640,24 +571,6 @@ fn service_job_cancelled(job_id: &str) -> bool {
 fn load_service_job(id: &str) -> Option<ServiceJob> {
     let repository = LockedServiceStateRepository::default_json().ok()?;
     load_service_job_in_repository(&repository, id)
-}
-
-fn load_service_job_in_repository(
-    repository: &impl ServiceStateRepository,
-    id: &str,
-) -> Option<ServiceJob> {
-    repository.load_snapshot().ok()?.jobs.remove(id)
-}
-
-fn job_state_name(state: JobState) -> &'static str {
-    match state {
-        JobState::Queued => "queued",
-        JobState::Running => "running",
-        JobState::Succeeded => "succeeded",
-        JobState::Failed => "failed",
-        JobState::Cancelled => "cancelled",
-        JobState::TimedOut => "timed_out",
-    }
 }
 
 fn service_job_id(request: &ControlRequest) -> String {
@@ -678,22 +591,6 @@ fn optional_command_string(command: &Value, name: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-}
-
-fn prune_service_jobs(state: &mut ServiceState) {
-    if state.jobs.len() <= MAX_SERVICE_JOBS {
-        return;
-    }
-    let mut jobs = state
-        .jobs
-        .values()
-        .map(|job| (job.submitted_at.clone().unwrap_or_default(), job.id.clone()))
-        .collect::<Vec<_>>();
-    jobs.sort();
-    let excess = state.jobs.len() - MAX_SERVICE_JOBS;
-    for (_, id) in jobs.into_iter().take(excess) {
-        state.jobs.remove(&id);
-    }
 }
 
 fn current_timestamp() -> String {

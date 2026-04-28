@@ -41,6 +41,8 @@ pub mod service_health;
 #[allow(dead_code)]
 pub mod service_incidents;
 #[allow(dead_code)]
+pub mod service_jobs;
+#[allow(dead_code)]
 pub mod service_model;
 #[allow(dead_code)]
 pub mod service_store;

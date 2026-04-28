@@ -28,7 +28,6 @@ use super::cdp::types::{
     DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
     TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
 };
-use super::control_plane::cancel_persisted_service_job;
 use super::cookies;
 use super::diff;
 use super::element::RefMap;
@@ -54,6 +53,7 @@ use super::service_health::{
     BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
+use super::service_jobs::cancel_persisted_service_job;
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     BrowserProfile, BrowserSession, JobState as ServiceJobState, LeaseState,
