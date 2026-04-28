@@ -2303,6 +2303,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_sessions"
             | "service_browsers"
             | "service_tabs"
+            | "service_site_policies"
+            | "service_providers"
+            | "service_challenges"
             | "service_jobs"
             | "service_incidents"
             | "service_events"
@@ -2499,6 +2502,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_sessions" => handle_service_sessions(cmd).await,
         "service_browsers" => handle_service_browsers(cmd).await,
         "service_tabs" => handle_service_tabs(cmd).await,
+        "service_site_policies" => handle_service_site_policies(cmd).await,
+        "service_providers" => handle_service_providers(cmd).await,
+        "service_challenges" => handle_service_challenges(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
         "service_incidents" => handle_service_incidents(cmd).await,
         "service_events" => handle_service_events(cmd).await,
@@ -6647,6 +6653,66 @@ async fn handle_service_tabs(cmd: &Value) -> Result<Value, String> {
 
     Ok(json!({
         "tabs": tabs,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned site-policy collection without the full status payload.
+async fn handle_service_site_policies(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut site_policies = service_state
+        .site_policies
+        .into_values()
+        .collect::<Vec<_>>();
+    site_policies.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = site_policies.len();
+
+    Ok(json!({
+        "sitePolicies": site_policies,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned provider collection without the full status payload.
+async fn handle_service_providers(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut providers = service_state.providers.into_values().collect::<Vec<_>>();
+    providers.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = providers.len();
+
+    Ok(json!({
+        "providers": providers,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned challenge collection without the full status payload.
+async fn handle_service_challenges(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut challenges = service_state.challenges.into_values().collect::<Vec<_>>();
+    challenges.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = challenges.len();
+
+    Ok(json!({
+        "challenges": challenges,
         "count": count,
     }))
 }
@@ -11138,6 +11204,95 @@ mod tests {
         assert_eq!(result["data"]["tabs"][0]["id"], "tab-1");
         assert_eq!(result["data"]["tabs"][0]["lifecycle"], "ready");
         assert_eq!(result["data"]["tabs"][0]["browserId"], "browser-1");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_site_policies_via_actions_returns_policy_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_site_policies",
+            "id": "svc-site-policies-1",
+            "serviceState": {
+                "sitePolicies": {
+                    "google": {
+                        "id": "google",
+                        "originPattern": "https://accounts.google.com",
+                        "interactionMode": "human_like_input",
+                        "manualLoginPreferred": true,
+                        "profileRequired": true,
+                        "challengePolicy": "avoid_first"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["sitePolicies"][0]["id"], "google");
+        assert_eq!(
+            result["data"]["sitePolicies"][0]["originPattern"],
+            "https://accounts.google.com"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_providers_via_actions_returns_provider_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_providers",
+            "id": "svc-providers-1",
+            "serviceState": {
+                "providers": {
+                    "manual": {
+                        "id": "manual",
+                        "kind": "manual_approval",
+                        "displayName": "Dashboard approval",
+                        "enabled": true,
+                        "capabilities": ["human_approval"]
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["providers"][0]["id"], "manual");
+        assert_eq!(
+            result["data"]["providers"][0]["displayName"],
+            "Dashboard approval"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_challenges_via_actions_returns_challenge_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_challenges",
+            "id": "svc-challenges-1",
+            "serviceState": {
+                "challenges": {
+                    "challenge-1": {
+                        "id": "challenge-1",
+                        "tabId": "tab-1",
+                        "kind": "captcha",
+                        "state": "waiting_for_provider",
+                        "providerId": "captcha-api",
+                        "policyDecision": "provider_allowed"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["challenges"][0]["id"], "challenge-1");
+        assert_eq!(result["data"]["challenges"][0]["kind"], "captcha");
         assert!(state.browser.is_none());
     }
 

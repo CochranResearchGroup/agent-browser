@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
   assert,
   closeSession,
@@ -54,6 +57,49 @@ function assertContains(collection, key, predicate, label) {
     collection[key]?.some(predicate),
     `${label} missing expected item in ${key}: ${JSON.stringify(collection)}`,
   );
+}
+
+function seedConfigCollections(context, expectedTabId) {
+  const statePath = join(context.agentHome, 'service', 'state.json');
+  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  state.sitePolicies = {
+    ...(state.sitePolicies || {}),
+    google: {
+      id: 'google',
+      originPattern: 'https://accounts.google.com',
+      browserHost: 'local_headed',
+      interactionMode: 'human_like_input',
+      manualLoginPreferred: true,
+      profileRequired: true,
+      challengePolicy: 'avoid_first',
+      allowedChallengeProviders: ['manual'],
+    },
+  };
+  state.providers = {
+    ...(state.providers || {}),
+    manual: {
+      id: 'manual',
+      kind: 'manual_approval',
+      displayName: 'Dashboard approval',
+      enabled: true,
+      configRef: 'service.providers.manual',
+      capabilities: ['human_approval'],
+    },
+  };
+  state.challenges = {
+    ...(state.challenges || {}),
+    'challenge-1': {
+      id: 'challenge-1',
+      tabId: expectedTabId,
+      kind: 'captcha',
+      state: 'waiting_for_human',
+      providerId: 'manual',
+      policyDecision: 'manual_approval_required',
+      humanApproved: false,
+      result: 'pending',
+    },
+  };
+  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
 try {
@@ -115,6 +161,7 @@ try {
       tab.title === 'Service Collections Smoke',
   );
   assert(expectedTab, `service reconcile did not retain the smoke tab: ${JSON.stringify(state.tabs)}`);
+  seedConfigCollections(context, expectedTab.id);
 
   const checks = [
     {
@@ -154,6 +201,39 @@ try {
         item.browserId === expectedBrowserId &&
         item.lifecycle === 'ready' &&
         item.title === expectedTab.title,
+    },
+    {
+      command: 'site-policies',
+      endpoint: '/api/service/site-policies',
+      key: 'sitePolicies',
+      mcpUri: 'agent-browser://site-policies',
+      predicate: (item) =>
+        item.id === 'google' &&
+        item.originPattern === 'https://accounts.google.com' &&
+        item.interactionMode === 'human_like_input' &&
+        item.challengePolicy === 'avoid_first',
+    },
+    {
+      command: 'providers',
+      endpoint: '/api/service/providers',
+      key: 'providers',
+      mcpUri: 'agent-browser://providers',
+      predicate: (item) =>
+        item.id === 'manual' &&
+        item.kind === 'manual_approval' &&
+        item.displayName === 'Dashboard approval' &&
+        item.capabilities?.includes('human_approval'),
+    },
+    {
+      command: 'challenges',
+      endpoint: '/api/service/challenges',
+      key: 'challenges',
+      mcpUri: 'agent-browser://challenges',
+      predicate: (item) =>
+        item.id === 'challenge-1' &&
+        item.tabId === expectedTab.id &&
+        item.kind === 'captcha' &&
+        item.providerId === 'manual',
     },
   ];
 

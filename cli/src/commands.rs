@@ -997,6 +997,45 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "serviceState": flags.service_state.clone(),
                 }))
             }
+            Some("site-policies") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service site-policies: {}", rest[1]),
+                        usage: "service site-policies",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_site_policies",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("providers") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service providers: {}", rest[1]),
+                        usage: "service providers",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_providers",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("challenges") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service challenges: {}", rest[1]),
+                        usage: "service challenges",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_challenges",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
             Some("cancel") => {
                 let job_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
                     context: "service cancel".to_string(),
@@ -5100,6 +5139,30 @@ mod tests {
     }
 
     #[test]
+    fn test_service_site_policies() {
+        let cmd = parse_command(&args("service site-policies"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_site_policies");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_providers() {
+        let cmd = parse_command(&args("service providers"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_providers");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_challenges() {
+        let cmd = parse_command(&args("service challenges"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_challenges");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
     fn test_service_browsers_rejects_extra_argument() {
         let err = parse_command(&args("service browsers extra"), &default_flags()).unwrap_err();
 
@@ -5123,6 +5186,28 @@ mod tests {
     #[test]
     fn test_service_sessions_rejects_extra_argument() {
         let err = parse_command(&args("service sessions extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_site_policies_rejects_extra_argument() {
+        let err =
+            parse_command(&args("service site-policies extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_providers_rejects_extra_argument() {
+        let err = parse_command(&args("service providers extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_challenges_rejects_extra_argument() {
+        let err = parse_command(&args("service challenges extra"), &default_flags()).unwrap_err();
 
         assert!(matches!(err, ParseError::InvalidValue { .. }));
     }

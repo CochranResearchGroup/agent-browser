@@ -627,6 +627,105 @@ fn format_service_tabs_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_site_policy_line(policy: &serde_json::Value) -> String {
+    let id = value_str(policy, "id", "unknown-policy");
+    let origin = value_str(policy, "originPattern", "none");
+    let host = value_str(policy, "browserHost", "default");
+    let interaction = value_str(policy, "interactionMode", "unknown");
+    let challenge = value_str(policy, "challengePolicy", "unknown");
+    let manual_login = value_bool_label(policy, "manualLoginPreferred");
+    let profile_required = value_bool_label(policy, "profileRequired");
+
+    format!(
+        "{id} origin={origin} host={host} interaction={interaction} challenge={challenge} manual_login={manual_login} profile_required={profile_required}"
+    )
+}
+
+fn format_service_site_policies_text(data: &serde_json::Value) -> Option<String> {
+    let site_policies = data.get("sitePolicies")?.as_array()?;
+    let mut lines = vec![format!("Site policies: {}", site_policies.len())];
+    if site_policies.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            site_policies
+                .iter()
+                .map(|policy| format!("  {}", format_service_site_policy_line(policy))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_provider_line(provider: &serde_json::Value) -> String {
+    let id = value_str(provider, "id", "unknown-provider");
+    let kind = value_str(provider, "kind", "unknown");
+    let name = value_str(provider, "displayName", id);
+    let enabled = value_bool_label(provider, "enabled");
+    let config = provider
+        .get("configRef")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let capabilities = provider
+        .get("capabilities")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+
+    format!("{id} name={name} kind={kind} enabled={enabled} config={config} capabilities={capabilities}")
+}
+
+fn format_service_providers_text(data: &serde_json::Value) -> Option<String> {
+    let providers = data.get("providers")?.as_array()?;
+    let mut lines = vec![format!("Providers: {}", providers.len())];
+    if providers.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            providers
+                .iter()
+                .map(|provider| format!("  {}", format_service_provider_line(provider))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_challenge_line(challenge: &serde_json::Value) -> String {
+    let id = value_str(challenge, "id", "unknown-challenge");
+    let kind = value_str(challenge, "kind", "unknown");
+    let state = value_str(challenge, "state", "unknown");
+    let tab = value_str(challenge, "tabId", "none");
+    let provider = value_str(challenge, "providerId", "none");
+    let decision = value_str(challenge, "policyDecision", "none");
+    let human_approved = value_bool_label(challenge, "humanApproved");
+    let result = value_str(challenge, "result", "none");
+
+    format!(
+        "{id} kind={kind} state={state} tab={tab} provider={provider} decision={decision} human_approved={human_approved} result={result}"
+    )
+}
+
+fn format_service_challenges_text(data: &serde_json::Value) -> Option<String> {
+    let challenges = data.get("challenges")?.as_array()?;
+    let mut lines = vec![format!("Challenges: {}", challenges.len())];
+    if challenges.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            challenges
+                .iter()
+                .map(|challenge| format!("  {}", format_service_challenge_line(challenge))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
     let service_state = data.get("service_state")?;
     let control_plane = service_state.get("controlPlane");
@@ -824,6 +923,24 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_tabs") {
             if let Some(output) = format_service_tabs_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_site_policies") {
+            if let Some(output) = format_service_site_policies_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_providers") {
+            if let Some(output) = format_service_providers_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_challenges") {
+            if let Some(output) = format_service_challenges_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -3209,6 +3326,9 @@ Usage:
   agent-browser service sessions
   agent-browser service browsers
   agent-browser service tabs
+  agent-browser service site-policies
+  agent-browser service providers
+  agent-browser service challenges
   agent-browser service cancel <job-id> [--reason <text>]
   agent-browser service retry <browser-id> [--by <text>] [--note <text>]
   agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
@@ -3227,6 +3347,9 @@ Commands:
   sessions              Show retained service session records
   browsers              Show retained service browser records and latest health evidence
   tabs                  Show retained service tab records
+  site-policies         Show configured service site-policy records
+  providers             Show configured service provider records
+  challenges            Show retained auth, 2FA, captcha, passkey, and blocked-flow challenge records
   cancel                Cancel a queued job or request running job cancellation
   retry                 Enable one new recovery attempt for a faulted browser
   acknowledge           Record that an operator has seen a retained incident
@@ -3259,6 +3382,9 @@ Notes:
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
+  - Text service site-policies focuses origin, host, interaction, challenge, login, and profile-required policy fields.
+  - Text service providers focuses provider identity, kind, enabled state, config reference, and capabilities.
+  - Text service challenges focuses detected challenge kind, state, tab, provider, policy decision, human approval, and result.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
@@ -3287,6 +3413,9 @@ Examples:
   agent-browser service sessions
   agent-browser service browsers
   agent-browser service tabs
+  agent-browser service site-policies
+  agent-browser service providers
+  agent-browser service challenges
   agent-browser service cancel <job-id> --reason stale
   agent-browser service retry browser-1 --by operator --note approved
   agent-browser service acknowledge browser-1 --by operator --note triaged
@@ -3716,6 +3845,9 @@ Service:
   service sessions           Show retained service session records
   service browsers           Show retained browser health records
   service tabs               Show retained service tab records
+  service site-policies      Show configured service site-policy records
+  service providers          Show configured service provider records
+  service challenges         Show retained service challenge records
   service cancel             Cancel a queued job or request running job cancellation
   service acknowledge        Record that an operator has seen a retained incident
   service resolve            Mark a retained incident handled
@@ -4005,6 +4137,9 @@ Examples:
   agent-browser service sessions         # Inspect retained service session records
   agent-browser service browsers         # Inspect retained browser health records
   agent-browser service tabs             # Inspect retained service tab records
+  agent-browser service site-policies    # Inspect configured service site-policy records
+  agent-browser service providers        # Inspect configured service provider records
+  agent-browser service challenges       # Inspect retained service challenge records
   agent-browser service cancel <job-id>  # Cancel a queued or running service job
   agent-browser service acknowledge      # Mark a retained incident acknowledged
   agent-browser service resolve          # Mark a retained incident resolved
@@ -4128,8 +4263,9 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_service_browsers_text, format_service_events_text, format_service_profiles_text,
-        format_service_sessions_text, format_service_status_text, format_service_tabs_text,
+        format_service_browsers_text, format_service_challenges_text, format_service_events_text,
+        format_service_profiles_text, format_service_providers_text, format_service_sessions_text,
+        format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
         format_service_trace_text, format_storage_text,
     };
     use serde_json::json;
@@ -4378,6 +4514,72 @@ mod tests {
         assert_eq!(
             rendered,
             "Tabs: 1\n  tab-1 browser=browser-1 session=cdp-session-1 owner=runtime-session lifecycle=ready target=target-1 title=Example url=https://example.com/"
+        );
+    }
+
+    #[test]
+    fn test_format_service_site_policies_text_includes_policy_fields() {
+        let data = json!({
+            "sitePolicies": [{
+                "id": "google",
+                "originPattern": "https://accounts.google.com",
+                "browserHost": "local_headed",
+                "interactionMode": "human_like_input",
+                "challengePolicy": "avoid_first",
+                "manualLoginPreferred": true,
+                "profileRequired": true
+            }]
+        });
+
+        let rendered = format_service_site_policies_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Site policies: 1\n  google origin=https://accounts.google.com host=local_headed interaction=human_like_input challenge=avoid_first manual_login=yes profile_required=yes"
+        );
+    }
+
+    #[test]
+    fn test_format_service_providers_text_includes_provider_fields() {
+        let data = json!({
+            "providers": [{
+                "id": "manual",
+                "kind": "manual_approval",
+                "displayName": "Dashboard approval",
+                "enabled": true,
+                "configRef": "service.providers.manual",
+                "capabilities": ["human_approval"]
+            }]
+        });
+
+        let rendered = format_service_providers_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Providers: 1\n  manual name=Dashboard approval kind=manual_approval enabled=yes config=service.providers.manual capabilities=human_approval"
+        );
+    }
+
+    #[test]
+    fn test_format_service_challenges_text_includes_challenge_fields() {
+        let data = json!({
+            "challenges": [{
+                "id": "challenge-1",
+                "kind": "captcha",
+                "state": "waiting_for_provider",
+                "tabId": "tab-1",
+                "providerId": "captcha-api",
+                "policyDecision": "provider_allowed",
+                "humanApproved": false,
+                "result": "pending"
+            }]
+        });
+
+        let rendered = format_service_challenges_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Challenges: 1\n  challenge-1 kind=captcha state=waiting_for_provider tab=tab-1 provider=captcha-api decision=provider_allowed human_approved=no result=pending"
         );
     }
 
