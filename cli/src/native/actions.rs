@@ -40,6 +40,10 @@ use super::providers;
 use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
+use super::service_config::{
+    delete_persisted_provider, delete_persisted_site_policy, upsert_persisted_provider,
+    upsert_persisted_site_policy,
+};
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details, reconcile_service_state,
     record_browser_health_changed_event, record_browser_health_changed_event_with_details,
@@ -2295,6 +2299,10 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_reconcile"
             | "service_job_cancel"
             | "service_browser_retry"
+            | "service_site_policy_upsert"
+            | "service_site_policy_delete"
+            | "service_provider_upsert"
+            | "service_provider_delete"
             | "service_incident_acknowledge"
             | "service_incident_resolve"
             | "service_incident_activity"
@@ -2494,6 +2502,10 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_reconcile" => handle_service_reconcile(cmd).await,
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_browser_retry" => handle_service_browser_retry(cmd).await,
+        "service_site_policy_upsert" => handle_service_site_policy_upsert(cmd).await,
+        "service_site_policy_delete" => handle_service_site_policy_delete(cmd).await,
+        "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
+        "service_provider_delete" => handle_service_provider_delete(cmd).await,
         "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
         "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
         "service_incident_activity" => handle_service_incident_activity(cmd).await,
@@ -6750,6 +6762,60 @@ async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
         "cancelled": true,
         "job": job,
     }))
+}
+
+async fn handle_service_site_policy_upsert(cmd: &Value) -> Result<Value, String> {
+    let site_policy_id = required_service_config_id(cmd, "sitePolicyId")?;
+    let body = cmd.get("sitePolicy").cloned().ok_or("Missing sitePolicy")?;
+    let site_policy = upsert_persisted_site_policy(site_policy_id, body)?;
+
+    Ok(json!({
+        "id": site_policy_id,
+        "sitePolicy": site_policy,
+        "upserted": true,
+    }))
+}
+
+async fn handle_service_site_policy_delete(cmd: &Value) -> Result<Value, String> {
+    let site_policy_id = required_service_config_id(cmd, "sitePolicyId")?;
+    let removed = delete_persisted_site_policy(site_policy_id)?;
+
+    Ok(json!({
+        "id": site_policy_id,
+        "deleted": removed.is_some(),
+        "sitePolicy": removed,
+    }))
+}
+
+async fn handle_service_provider_upsert(cmd: &Value) -> Result<Value, String> {
+    let provider_id = required_service_config_id(cmd, "providerId")?;
+    let body = cmd.get("provider").cloned().ok_or("Missing provider")?;
+    let provider = upsert_persisted_provider(provider_id, body)?;
+
+    Ok(json!({
+        "id": provider_id,
+        "provider": provider,
+        "upserted": true,
+    }))
+}
+
+async fn handle_service_provider_delete(cmd: &Value) -> Result<Value, String> {
+    let provider_id = required_service_config_id(cmd, "providerId")?;
+    let removed = delete_persisted_provider(provider_id)?;
+
+    Ok(json!({
+        "id": provider_id,
+        "deleted": removed.is_some(),
+        "provider": removed,
+    }))
+}
+
+fn required_service_config_id<'a>(cmd: &'a Value, field: &str) -> Result<&'a str, String> {
+    cmd.get(field)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("Missing {field}"))
 }
 
 async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
@@ -12263,6 +12329,74 @@ mod tests {
         assert_eq!(result["data"]["counts"]["incidents"], 1);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
         assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_config_actions_mutate_persisted_state() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-config-actions-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let mut state = DaemonState::new();
+
+        let upsert_policy = execute_command(
+            &json!({
+                "action": "service_site_policy_upsert",
+                "id": "svc-policy-upsert-1",
+                "sitePolicyId": "google",
+                "sitePolicy": {
+                    "originPattern": "https://accounts.google.com",
+                    "interactionMode": "human_like_input"
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(upsert_policy["success"], true);
+        assert_eq!(upsert_policy["data"]["sitePolicy"]["id"], "google");
+
+        let upsert_provider = execute_command(
+            &json!({
+                "action": "service_provider_upsert",
+                "id": "svc-provider-upsert-1",
+                "providerId": "manual",
+                "provider": {
+                    "kind": "manual_approval",
+                    "displayName": "Dashboard approval",
+                    "capabilities": ["human_approval"]
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(upsert_provider["success"], true);
+        assert_eq!(upsert_provider["data"]["provider"]["id"], "manual");
+
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.site_policies["google"].origin_pattern,
+            "https://accounts.google.com"
+        );
+        assert_eq!(
+            persisted.providers["manual"].display_name,
+            "Dashboard approval"
+        );
+
+        let delete_provider = execute_command(
+            &json!({
+                "action": "service_provider_delete",
+                "id": "svc-provider-delete-1",
+                "providerId": "manual"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(delete_provider["success"], true);
+        assert_eq!(delete_provider["data"]["deleted"], true);
+        assert!(!store.load().unwrap().providers.contains_key("manual"));
+
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[tokio::test]

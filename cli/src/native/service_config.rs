@@ -6,6 +6,7 @@
 use serde_json::Value;
 
 use super::service_model::{ServiceProvider, ServiceState, SitePolicy};
+use super::service_store::mutate_default_service_state;
 
 fn validate_entity_id(id: &str, label: &str) -> Result<(), String> {
     if id.trim().is_empty() {
@@ -79,6 +80,26 @@ pub fn delete_provider(
 ) -> Result<Option<ServiceProvider>, String> {
     validate_entity_id(id, "provider")?;
     Ok(state.providers.remove(id))
+}
+
+/// Upsert one persisted site-policy record under the serialized state mutator.
+pub fn upsert_persisted_site_policy(id: &str, body: Value) -> Result<SitePolicy, String> {
+    mutate_default_service_state(|state| upsert_site_policy(state, id, body))
+}
+
+/// Delete one persisted site-policy record under the serialized state mutator.
+pub fn delete_persisted_site_policy(id: &str) -> Result<Option<SitePolicy>, String> {
+    mutate_default_service_state(|state| delete_site_policy(state, id))
+}
+
+/// Upsert one persisted provider record under the serialized state mutator.
+pub fn upsert_persisted_provider(id: &str, body: Value) -> Result<ServiceProvider, String> {
+    mutate_default_service_state(|state| upsert_provider(state, id, body))
+}
+
+/// Delete one persisted provider record under the serialized state mutator.
+pub fn delete_persisted_provider(id: &str) -> Result<Option<ServiceProvider>, String> {
+    mutate_default_service_state(|state| delete_provider(state, id))
 }
 
 #[cfg(test)]

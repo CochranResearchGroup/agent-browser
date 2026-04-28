@@ -4,9 +4,6 @@ use serde_json::{json, Value};
 
 use crate::connection::{send_command, Response};
 use crate::native::service_activity::service_incident_activity_response;
-use crate::native::service_config::{
-    delete_provider, delete_site_policy, upsert_provider, upsert_site_policy,
-};
 use crate::native::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -3553,39 +3550,10 @@ fn call_service_site_policy_upsert(
     let agent_name = optional_string_argument(arguments, "agentName")?;
     let task_name = optional_string_argument(arguments, "taskName")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
-    let store =
-        JsonServiceStateStore::new(JsonServiceStateStore::default_path().map_err(|err| {
-            JsonRpcError {
-                code: -32603,
-                message: "Internal error",
-                data: Some(json!({ "message": err, "tool": "service_site_policy_upsert" })),
-            }
-        })?);
-    let mut state = store.load().map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({ "message": err, "tool": "service_site_policy_upsert" })),
-    })?;
-    let site_policy = upsert_site_policy(&mut state, id, site_policy).map_err(|err| {
-        JsonRpcError::invalid_params(&format!("service_site_policy_upsert failed: {err}"))
-    })?;
-    store.save(&state).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({ "message": err, "tool": "service_site_policy_upsert" })),
-    })?;
+    let command =
+        service_site_policy_upsert_command(id, &site_policy, service_name, agent_name, task_name);
 
-    Ok(tool_response_from_payload(
-        "service_site_policy_upsert",
-        session,
-        trace,
-        json!({
-            "id": id,
-            "sitePolicy": site_policy,
-            "upserted": true,
-        }),
-        false,
-    ))
+    send_queued_tool_command("service_site_policy_upsert", session, trace, command)
 }
 
 fn call_service_site_policy_delete(
@@ -3597,39 +3565,9 @@ fn call_service_site_policy_delete(
     let agent_name = optional_string_argument(arguments, "agentName")?;
     let task_name = optional_string_argument(arguments, "taskName")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
-    let store =
-        JsonServiceStateStore::new(JsonServiceStateStore::default_path().map_err(|err| {
-            JsonRpcError {
-                code: -32603,
-                message: "Internal error",
-                data: Some(json!({ "message": err, "tool": "service_site_policy_delete" })),
-            }
-        })?);
-    let mut state = store.load().map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({ "message": err, "tool": "service_site_policy_delete" })),
-    })?;
-    let removed = delete_site_policy(&mut state, id).map_err(|err| {
-        JsonRpcError::invalid_params(&format!("service_site_policy_delete failed: {err}"))
-    })?;
-    store.save(&state).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({ "message": err, "tool": "service_site_policy_delete" })),
-    })?;
+    let command = service_site_policy_delete_command(id, service_name, agent_name, task_name);
 
-    Ok(tool_response_from_payload(
-        "service_site_policy_delete",
-        session,
-        trace,
-        json!({
-            "id": id,
-            "deleted": removed.is_some(),
-            "sitePolicy": removed,
-        }),
-        false,
-    ))
+    send_queued_tool_command("service_site_policy_delete", session, trace, command)
 }
 
 fn call_service_provider_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -3639,39 +3577,10 @@ fn call_service_provider_upsert(arguments: &Value, session: &str) -> Result<Valu
     let agent_name = optional_string_argument(arguments, "agentName")?;
     let task_name = optional_string_argument(arguments, "taskName")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
-    let store =
-        JsonServiceStateStore::new(JsonServiceStateStore::default_path().map_err(|err| {
-            JsonRpcError {
-                code: -32603,
-                message: "Internal error",
-                data: Some(json!({ "message": err, "tool": "service_provider_upsert" })),
-            }
-        })?);
-    let mut state = store.load().map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({ "message": err, "tool": "service_provider_upsert" })),
-    })?;
-    let provider = upsert_provider(&mut state, id, provider).map_err(|err| {
-        JsonRpcError::invalid_params(&format!("service_provider_upsert failed: {err}"))
-    })?;
-    store.save(&state).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({ "message": err, "tool": "service_provider_upsert" })),
-    })?;
+    let command =
+        service_provider_upsert_command(id, &provider, service_name, agent_name, task_name);
 
-    Ok(tool_response_from_payload(
-        "service_provider_upsert",
-        session,
-        trace,
-        json!({
-            "id": id,
-            "provider": provider,
-            "upserted": true,
-        }),
-        false,
-    ))
+    send_queued_tool_command("service_provider_upsert", session, trace, command)
 }
 
 fn call_service_provider_delete(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -3680,39 +3589,9 @@ fn call_service_provider_delete(arguments: &Value, session: &str) -> Result<Valu
     let agent_name = optional_string_argument(arguments, "agentName")?;
     let task_name = optional_string_argument(arguments, "taskName")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
-    let store =
-        JsonServiceStateStore::new(JsonServiceStateStore::default_path().map_err(|err| {
-            JsonRpcError {
-                code: -32603,
-                message: "Internal error",
-                data: Some(json!({ "message": err, "tool": "service_provider_delete" })),
-            }
-        })?);
-    let mut state = store.load().map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({ "message": err, "tool": "service_provider_delete" })),
-    })?;
-    let removed = delete_provider(&mut state, id).map_err(|err| {
-        JsonRpcError::invalid_params(&format!("service_provider_delete failed: {err}"))
-    })?;
-    store.save(&state).map_err(|err| JsonRpcError {
-        code: -32603,
-        message: "Internal error",
-        data: Some(json!({ "message": err, "tool": "service_provider_delete" })),
-    })?;
+    let command = service_provider_delete_command(id, service_name, agent_name, task_name);
 
-    Ok(tool_response_from_payload(
-        "service_provider_delete",
-        session,
-        trace,
-        json!({
-            "id": id,
-            "deleted": removed.is_some(),
-            "provider": removed,
-        }),
-        false,
-    ))
+    send_queued_tool_command("service_provider_delete", session, trace, command)
 }
 
 fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -5131,6 +5010,87 @@ fn service_job_cancel_command(
         command["taskName"] = json!(task_name);
     }
     command
+}
+
+fn service_site_policy_upsert_command(
+    site_policy_id: &str,
+    site_policy: &Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-site-policy-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_site_policy_upsert",
+        "sitePolicyId": site_policy_id,
+        "sitePolicy": site_policy,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_site_policy_delete_command(
+    site_policy_id: &str,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-site-policy-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_site_policy_delete",
+        "sitePolicyId": site_policy_id,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_provider_upsert_command(
+    provider_id: &str,
+    provider: &Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-provider-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_provider_upsert",
+        "providerId": provider_id,
+        "provider": provider,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_provider_delete_command(
+    provider_id: &str,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-provider-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_provider_delete",
+        "providerId": provider_id,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn apply_service_trace_fields(
+    command: &mut Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) {
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
 }
 
 fn service_browser_retry_command(
@@ -7235,19 +7195,6 @@ fn incident_activity_resource_id(uri: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::EnvGuard;
-    use std::fs;
-
-    fn unique_home(label: &str) -> std::path::PathBuf {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        std::env::temp_dir().join(format!(
-            "agent-browser-mcp-{label}-{}-{nanos}",
-            std::process::id()
-        ))
-    }
 
     #[test]
     fn mcp_resources_lists_read_only_service_resources() {
@@ -8180,50 +8127,22 @@ mod tests {
     }
 
     #[test]
-    fn service_config_tools_mutate_persisted_state() {
-        let guard = EnvGuard::new(&["HOME"]);
-        let home = unique_home("service-config-tools");
-        fs::create_dir_all(&home).unwrap();
-        guard.set("HOME", home.to_str().unwrap());
-
-        let upsert_policy = handle_jsonrpc_line(
-            r#"{"jsonrpc":"2.0","id":"policy","method":"tools/call","params":{"name":"service_site_policy_upsert","arguments":{"id":"google","sitePolicy":{"originPattern":"https://accounts.google.com","interactionMode":"human_like_input"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite"}}}"#,
+    fn service_config_tools_validate_required_args_before_daemon_call() {
+        let missing_policy = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":"policy","method":"tools/call","params":{"name":"service_site_policy_upsert","arguments":{"id":"google"}}}"#,
             "default",
         )
         .unwrap();
-        assert_eq!(upsert_policy["id"], "policy");
-        assert_eq!(upsert_policy["result"]["isError"], false);
+        assert_eq!(missing_policy["id"], "policy");
+        assert_eq!(missing_policy["error"]["code"], -32602);
 
-        let upsert_provider = handle_jsonrpc_line(
-            r#"{"jsonrpc":"2.0","id":"provider","method":"tools/call","params":{"name":"service_provider_upsert","arguments":{"id":"manual","provider":{"kind":"manual_approval","displayName":"Dashboard approval","capabilities":["human_approval"]}}}}"#,
+        let missing_provider = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":"provider","method":"tools/call","params":{"name":"service_provider_upsert","arguments":{"id":"manual"}}}"#,
             "default",
         )
         .unwrap();
-        assert_eq!(upsert_provider["id"], "provider");
-        assert_eq!(upsert_provider["result"]["isError"], false);
-
-        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
-        let persisted = store.load().unwrap();
-        assert_eq!(
-            persisted.site_policies["google"].origin_pattern,
-            "https://accounts.google.com"
-        );
-        assert_eq!(
-            persisted.providers["manual"].display_name,
-            "Dashboard approval"
-        );
-
-        let delete_provider = handle_jsonrpc_line(
-            r#"{"jsonrpc":"2.0","id":"delete-provider","method":"tools/call","params":{"name":"service_provider_delete","arguments":{"id":"manual"}}}"#,
-            "default",
-        )
-        .unwrap();
-        assert_eq!(delete_provider["result"]["isError"], false);
-
-        let persisted = store.load().unwrap();
-        assert!(!persisted.providers.contains_key("manual"));
-
-        let _ = fs::remove_dir_all(&home);
+        assert_eq!(missing_provider["id"], "provider");
+        assert_eq!(missing_provider["error"]["code"], -32602);
     }
 
     #[test]

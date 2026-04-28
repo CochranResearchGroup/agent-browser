@@ -9,11 +9,7 @@ use tokio::sync::RwLock;
 use crate::connection::resolve_port;
 use crate::connection::{attach_daemon_auth_token, get_socket_dir};
 use crate::flags::parse_flags;
-use crate::native::service_config::{
-    delete_provider, delete_site_policy, upsert_provider, upsert_site_policy,
-};
 use crate::native::service_model::ServiceState;
-use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
@@ -187,14 +183,28 @@ pub(super) async fn handle_http_request(
         }
 
         if let Some(site_policy_id) = service_site_policy_id(path) {
-            let result = upsert_service_site_policy(site_policy_id, body_str);
-            write_json_result(&mut stream, result, "400 Bad Request").await;
+            let cmd = match service_site_policy_upsert_command(site_policy_id, body_str) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
 
         if let Some(provider_id) = service_provider_id(path) {
-            let result = upsert_service_provider(provider_id, body_str);
-            write_json_result(&mut stream, result, "400 Bad Request").await;
+            let cmd = match service_provider_upsert_command(provider_id, body_str) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
 
@@ -206,14 +216,20 @@ pub(super) async fn handle_http_request(
 
     if method == "DELETE" {
         if let Some(site_policy_id) = service_site_policy_id(path) {
-            let result = delete_service_site_policy(site_policy_id);
-            write_json_result(&mut stream, result, "400 Bad Request").await;
+            let result = relay_service_command(
+                session_name,
+                service_site_policy_delete_command(site_policy_id),
+            )
+            .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
 
         if let Some(provider_id) = service_provider_id(path) {
-            let result = delete_service_provider(provider_id);
-            write_json_result(&mut stream, result, "400 Bad Request").await;
+            let result =
+                relay_service_command(session_name, service_provider_delete_command(provider_id))
+                    .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
     }
@@ -942,84 +958,6 @@ fn service_provider_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
-fn service_state_store() -> Result<JsonServiceStateStore, String> {
-    Ok(JsonServiceStateStore::new(
-        JsonServiceStateStore::default_path()?,
-    ))
-}
-
-fn parse_json_body(body: &str, label: &str) -> Result<Value, String> {
-    serde_json::from_str::<Value>(body).map_err(|err| format!("Invalid {label} JSON: {err}"))
-}
-
-fn upsert_service_site_policy(site_policy_id: &str, body: &str) -> Result<String, String> {
-    let store = service_state_store()?;
-    let mut state = store.load()?;
-    let site_policy = upsert_site_policy(
-        &mut state,
-        site_policy_id,
-        parse_json_body(body, "site policy")?,
-    )?;
-    store.save(&state)?;
-    Ok(json!({
-        "success": true,
-        "data": {
-            "sitePolicy": site_policy,
-            "id": site_policy_id,
-            "upserted": true,
-        },
-    })
-    .to_string())
-}
-
-fn delete_service_site_policy(site_policy_id: &str) -> Result<String, String> {
-    let store = service_state_store()?;
-    let mut state = store.load()?;
-    let removed = delete_site_policy(&mut state, site_policy_id)?;
-    store.save(&state)?;
-    Ok(json!({
-        "success": true,
-        "data": {
-            "id": site_policy_id,
-            "deleted": removed.is_some(),
-            "sitePolicy": removed,
-        },
-    })
-    .to_string())
-}
-
-fn upsert_service_provider(provider_id: &str, body: &str) -> Result<String, String> {
-    let store = service_state_store()?;
-    let mut state = store.load()?;
-    let provider = upsert_provider(&mut state, provider_id, parse_json_body(body, "provider")?)?;
-    store.save(&state)?;
-    Ok(json!({
-        "success": true,
-        "data": {
-            "provider": provider,
-            "id": provider_id,
-            "upserted": true,
-        },
-    })
-    .to_string())
-}
-
-fn delete_service_provider(provider_id: &str) -> Result<String, String> {
-    let store = service_state_store()?;
-    let mut state = store.load()?;
-    let removed = delete_provider(&mut state, provider_id)?;
-    store.save(&state)?;
-    Ok(json!({
-        "success": true,
-        "data": {
-            "id": provider_id,
-            "deleted": removed.is_some(),
-            "provider": removed,
-        },
-    })
-    .to_string())
-}
-
 fn service_job_cancel_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/jobs/")
         .and_then(|rest| rest.strip_suffix("/cancel"))
@@ -1043,6 +981,46 @@ fn service_job_cancel_command(job_id: &str) -> Value {
         "action": "service_job_cancel",
         "jobId": job_id,
     })
+}
+
+fn service_site_policy_upsert_command(site_policy_id: &str, body: &str) -> Result<Value, String> {
+    let site_policy = parse_service_config_body(body, "site policy")?;
+    Ok(json!({
+        "id": format!("http-service-site-policy-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_site_policy_upsert",
+        "sitePolicyId": site_policy_id,
+        "sitePolicy": site_policy,
+    }))
+}
+
+fn service_site_policy_delete_command(site_policy_id: &str) -> Value {
+    json!({
+        "id": format!("http-service-site-policy-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_site_policy_delete",
+        "sitePolicyId": site_policy_id,
+    })
+}
+
+fn service_provider_upsert_command(provider_id: &str, body: &str) -> Result<Value, String> {
+    let provider = parse_service_config_body(body, "provider")?;
+    Ok(json!({
+        "id": format!("http-service-provider-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_provider_upsert",
+        "providerId": provider_id,
+        "provider": provider,
+    }))
+}
+
+fn service_provider_delete_command(provider_id: &str) -> Value {
+    json!({
+        "id": format!("http-service-provider-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_provider_delete",
+        "providerId": provider_id,
+    })
+}
+
+fn parse_service_config_body(body: &str, label: &str) -> Result<Value, String> {
+    serde_json::from_str::<Value>(body).map_err(|err| format!("Invalid {label} JSON: {err}"))
 }
 
 fn service_browser_retry_command(browser_id: &str, query: Option<&str>) -> Value {

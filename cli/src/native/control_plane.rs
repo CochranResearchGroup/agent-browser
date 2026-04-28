@@ -17,7 +17,9 @@ use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
 };
-use super::service_store::{JsonServiceStateStore, ServiceStateStore};
+use super::service_store::{
+    mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
+};
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
 const MAX_SERVICE_JOBS: usize = 200;
@@ -409,14 +411,11 @@ fn persist_service_job(job: ServiceJob) {
 }
 
 fn mutate_service_jobs(mutator: impl FnOnce(&mut ServiceState)) {
-    let Ok(path) = JsonServiceStateStore::default_path() else {
-        return;
-    };
-    let store = JsonServiceStateStore::new(path);
-    let mut state = store.load().unwrap_or_else(|_| ServiceState::default());
-    mutator(&mut state);
-    prune_service_jobs(&mut state);
-    let _ = store.save(&state);
+    let _ = mutate_default_service_state(|state| {
+        mutator(state);
+        prune_service_jobs(state);
+        Ok(())
+    });
 }
 
 fn persist_service_job_queued(request: &ControlRequest) {
@@ -1284,6 +1283,64 @@ mod tests {
         assert_eq!(handle.queue_depth(), 0);
 
         handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn parallel_service_config_mutations_are_serialized() {
+        let home = temp_home("control-plane-config-parallel");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let handle = ControlPlaneWorker::start(DaemonState::new());
+        let mut tasks = Vec::new();
+
+        for idx in 0..48 {
+            let handle = handle.clone();
+            tasks.push(tokio::spawn(async move {
+                handle
+                    .submit(json!({
+                        "id": format!("test-provider-upsert-{idx}"),
+                        "action": "service_provider_upsert",
+                        "providerId": format!("provider-{idx}"),
+                        "provider": {
+                            "kind": "manual_approval",
+                            "displayName": format!("Provider {idx}"),
+                            "capabilities": ["human_approval"]
+                        },
+                        "serviceName": "ConfigMutationSmoke",
+                        "agentName": "unit-test",
+                        "taskName": "parallelConfigMutation"
+                    }))
+                    .await
+            }));
+        }
+
+        for task in tasks {
+            let response = task.await.expect("config submit task should complete");
+            assert_eq!(
+                response.get("success").and_then(|value| value.as_bool()),
+                Some(true)
+            );
+        }
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert_eq!(handle.queue_depth(), 0);
+        handle.shutdown().await;
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        for idx in 0..48 {
+            let id = format!("provider-{idx}");
+            assert_eq!(
+                persisted.providers[&id].display_name,
+                format!("Provider {idx}")
+            );
+            assert_eq!(
+                persisted.jobs[&format!("test-provider-upsert-{idx}")].state,
+                JobState::Succeeded
+            );
+        }
+
         let _ = std::fs::remove_dir_all(&home);
     }
 

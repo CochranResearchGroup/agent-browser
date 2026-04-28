@@ -5,11 +5,13 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use super::service_model::ServiceState;
 
 const SERVICE_DIR: &str = "service";
 const SERVICE_STATE_FILENAME: &str = "state.json";
+static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub trait ServiceStateStore {
     fn load(&self) -> Result<ServiceState, String>;
@@ -107,6 +109,26 @@ pub fn default_service_state_path() -> Result<PathBuf, String> {
         .join(".agent-browser")
         .join(SERVICE_DIR)
         .join(SERVICE_STATE_FILENAME))
+}
+
+/// Serialize read-modify-write operations against the default JSON service state.
+///
+/// The JSON store is intentionally simple, but callers that mutate state must
+/// not race independent load/save cycles. This helper provides the narrow
+/// service-state control point used by queued service mutations and job audit
+/// updates until a dedicated service database exists.
+pub fn mutate_default_service_state<R>(
+    mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+) -> Result<R, String> {
+    let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock
+        .lock()
+        .map_err(|_| "Service state mutation lock was poisoned".to_string())?;
+    let store = JsonServiceStateStore::new(default_service_state_path()?);
+    let mut state = store.load()?;
+    let result = mutator(&mut state)?;
+    store.save(&state)?;
+    Ok(result)
 }
 
 fn temp_state_path(path: &Path) -> PathBuf {
