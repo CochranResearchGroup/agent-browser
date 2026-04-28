@@ -9,7 +9,9 @@ use super::service_model::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserSession, BrowserTab,
     ServiceEvent, ServiceEventKind, ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
 };
-use super::service_store::{JsonServiceStateStore, ServiceStateStore};
+use super::service_store::{
+    mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
+};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
 const MAX_SERVICE_EVENTS: usize = 100;
@@ -328,7 +330,11 @@ pub async fn reconcile_persisted_service_state() -> Result<ServiceReconcileSumma
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?);
     let mut state = store.load()?;
     let summary = reconcile_service_state(&mut state).await;
-    store.save(&state)?;
+    let reconciled_state = state;
+    mutate_default_service_state(|state| {
+        *state = reconciled_state;
+        Ok(())
+    })?;
     Ok(summary)
 }
 

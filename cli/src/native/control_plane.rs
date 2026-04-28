@@ -349,11 +349,11 @@ impl ControlPlaneHandle {
 }
 
 fn persist_service_state_snapshot(state: &ServiceState) {
-    let Ok(path) = JsonServiceStateStore::default_path() else {
-        return;
-    };
-    let store = JsonServiceStateStore::new(path);
-    let _ = store.save(state);
+    let snapshot = state.clone();
+    let _ = mutate_default_service_state(|state| {
+        *state = snapshot;
+        Ok(())
+    });
 }
 
 fn service_browser_id(session_id: &str) -> String {
@@ -361,46 +361,43 @@ fn service_browser_id(session_id: &str) -> String {
 }
 
 fn persist_process_exited_browser_health(state: &DaemonState) {
-    let Ok(path) = JsonServiceStateStore::default_path() else {
-        return;
-    };
-    let store = JsonServiceStateStore::new(path);
-    let mut service_state = store.load().unwrap_or_else(|_| ServiceState::default());
-    let id = service_browser_id(&state.session_id);
-    let previous = service_state.browsers.get(&id).cloned();
-    let host = previous
-        .as_ref()
-        .map(|browser| browser.host)
-        .unwrap_or(ServiceBrowserHost::LocalHeaded);
-    let (pid, cdp_endpoint) = state
-        .browser
-        .as_ref()
-        .map(|mgr| (mgr.browser_pid(), Some(mgr.get_cdp_url().to_string())))
-        .unwrap_or((None, None));
-    let last_error = pid.map(|pid| format!("Browser process {} exited", pid));
+    let _ = mutate_default_service_state(|service_state| {
+        let id = service_browser_id(&state.session_id);
+        let previous = service_state.browsers.get(&id).cloned();
+        let host = previous
+            .as_ref()
+            .map(|browser| browser.host)
+            .unwrap_or(ServiceBrowserHost::LocalHeaded);
+        let (pid, cdp_endpoint) = state
+            .browser
+            .as_ref()
+            .map(|mgr| (mgr.browser_pid(), Some(mgr.get_cdp_url().to_string())))
+            .unwrap_or((None, None));
+        let last_error = pid.map(|pid| format!("Browser process {} exited", pid));
 
-    let mut browser = BrowserProcess {
-        id: id.clone(),
-        profile_id: previous
-            .as_ref()
-            .and_then(|browser| browser.profile_id.clone()),
-        host,
-        health: ServiceBrowserHealth::ProcessExited,
-        pid,
-        cdp_endpoint,
-        view_streams: previous
-            .as_ref()
-            .map(|browser| browser.view_streams.clone())
-            .unwrap_or_default(),
-        active_session_ids: vec![state.session_id.clone()],
-        last_error,
-        last_health_observation: None,
-    };
-    let observation_details = browser_health_observation_details(&browser, None);
-    apply_browser_health_observation(&mut browser, Some(&observation_details));
-    record_browser_health_changed_event(&mut service_state, &id, previous.as_ref(), &browser);
-    service_state.browsers.insert(id, browser);
-    let _ = store.save(&service_state);
+        let mut browser = BrowserProcess {
+            id: id.clone(),
+            profile_id: previous
+                .as_ref()
+                .and_then(|browser| browser.profile_id.clone()),
+            host,
+            health: ServiceBrowserHealth::ProcessExited,
+            pid,
+            cdp_endpoint,
+            view_streams: previous
+                .as_ref()
+                .map(|browser| browser.view_streams.clone())
+                .unwrap_or_default(),
+            active_session_ids: vec![state.session_id.clone()],
+            last_error,
+            last_health_observation: None,
+        };
+        let observation_details = browser_health_observation_details(&browser, None);
+        apply_browser_health_observation(&mut browser, Some(&observation_details));
+        record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
+        service_state.browsers.insert(id, browser);
+        Ok(())
+    });
 }
 
 /// Persist a bounded audit record for each control-plane request.
@@ -566,44 +563,44 @@ pub fn cancel_persisted_service_job(
     job_id: &str,
     reason: Option<&str>,
 ) -> Result<ServiceJob, String> {
-    let Ok(path) = JsonServiceStateStore::default_path() else {
-        return Err("Unable to resolve service state path".to_string());
-    };
-    let store = JsonServiceStateStore::new(path);
-    let mut state = store
-        .load()
-        .map_err(|err| format!("Unable to load service state: {}", err))?;
-    let job = state
-        .jobs
-        .get_mut(job_id)
-        .ok_or_else(|| format!("Service job not found: {}", job_id))?;
+    mutate_default_service_state(|state| {
+        let job = state
+            .jobs
+            .get_mut(job_id)
+            .ok_or_else(|| format!("Service job not found: {}", job_id))?;
 
-    match job.state {
-        JobState::Queued => {
-            job.state = JobState::Cancelled;
-            job.completed_at = Some(current_timestamp());
-            job.error = Some(
-                reason
-                    .filter(|value| !value.trim().is_empty())
-                    .unwrap_or("Cancelled by operator")
-                    .to_string(),
-            );
-            job.result = Some(json!({ "success": false, "cancelled": true }));
-            let job = job.clone();
-            store.save(&state)?;
-            Ok(job)
+        match job.state {
+            JobState::Queued => {
+                job.state = JobState::Cancelled;
+                job.completed_at = Some(current_timestamp());
+                job.error = Some(
+                    reason
+                        .filter(|value| !value.trim().is_empty())
+                        .unwrap_or("Cancelled by operator")
+                        .to_string(),
+                );
+                job.result = Some(json!({ "success": false, "cancelled": true }));
+                Ok(job.clone())
+            }
+            JobState::Cancelled => Ok(job.clone()),
+            JobState::Running => Err(format!(
+                "Service job {} is already running and cannot be cancelled safely",
+                job_id
+            )),
+            JobState::Succeeded | JobState::Failed | JobState::TimedOut => Err(format!(
+                "Service job {} is already terminal with state {}",
+                job_id,
+                job_state_name(job.state)
+            )),
         }
-        JobState::Cancelled => Ok(job.clone()),
-        JobState::Running => Err(format!(
-            "Service job {} is already running and cannot be cancelled safely",
-            job_id
-        )),
-        JobState::Succeeded | JobState::Failed | JobState::TimedOut => Err(format!(
-            "Service job {} is already terminal with state {}",
-            job_id,
-            job_state_name(job.state)
-        )),
-    }
+    })
+    .map_err(|err| {
+        if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+            format!("Unable to load service state: {}", err)
+        } else {
+            err
+        }
+    })
 }
 
 fn service_job_cancelled(job_id: &str) -> bool {
