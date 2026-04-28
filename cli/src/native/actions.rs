@@ -54,11 +54,13 @@ use super::service_health::{
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_jobs::cancel_persisted_service_job;
+use super::service_lifecycle::{
+    service_profile_id, upsert_service_profile_and_session, ServiceLaunchMetadata,
+};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
-    BrowserProfile, BrowserSession, JobState as ServiceJobState, LeaseState,
-    ProfileAllocationPolicy, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind, ServiceIncident,
-    ServiceState, SessionCleanupPolicy,
+    JobState as ServiceJobState, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind,
+    ServiceIncident, ServiceState, SessionCleanupPolicy,
 };
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
@@ -333,19 +335,6 @@ fn service_browser_id(session_id: &str) -> String {
     format!("session:{}", session_id)
 }
 
-#[derive(Debug, Clone, Default)]
-struct ServiceLaunchMetadata {
-    profile_id: Option<String>,
-    profile_name: Option<String>,
-    user_data_dir: Option<String>,
-    persistent_profile: bool,
-    keyring: ProfileKeyringPolicy,
-    service_name: Option<String>,
-    agent_name: Option<String>,
-    task_name: Option<String>,
-    cleanup: SessionCleanupPolicy,
-}
-
 impl ServiceLaunchMetadata {
     /// Captures the service-model metadata that can be inferred from a launch
     /// command before Chrome starts, so every launch path writes the same
@@ -388,15 +377,6 @@ impl ServiceLaunchMetadata {
     }
 }
 
-fn service_profile_id(profile: Option<&str>, runtime_profile: Option<&str>) -> Option<String> {
-    if let Some(runtime_profile) = runtime_profile.filter(|value| !value.trim().is_empty()) {
-        return Some(runtime_profile.to_string());
-    }
-    profile
-        .filter(|value| !value.trim().is_empty())
-        .map(|profile| format!("custom:{}", stable_short_hash(profile)))
-}
-
 fn optional_command_string(command: &Value, name: &str) -> Option<String> {
     command
         .get(name)
@@ -404,21 +384,6 @@ fn optional_command_string(command: &Value, name: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-}
-
-fn merge_unique(values: &mut Vec<String>, value: String) {
-    if !values.contains(&value) {
-        values.push(value);
-    }
-}
-
-fn stable_short_hash(value: &str) -> u64 {
-    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
-    const FNV_PRIME: u64 = 0x100000001b3;
-
-    value.as_bytes().iter().fold(FNV_OFFSET, |hash, byte| {
-        (hash ^ u64::from(*byte)).wrapping_mul(FNV_PRIME)
-    })
 }
 
 fn service_browser_host_for_launch(cmd: &Value, headless: bool) -> ServiceBrowserHost {
@@ -523,76 +488,6 @@ fn persist_service_browser_record_in_repository(
         service_state.browsers.insert(id, browser);
         Ok(())
     })
-}
-
-fn upsert_service_profile_and_session(
-    service_state: &mut ServiceState,
-    session_id: &str,
-    profile_id: Option<String>,
-    metadata: &ServiceLaunchMetadata,
-) {
-    if let Some(profile_id) = profile_id.as_ref() {
-        let profile = service_state
-            .profiles
-            .entry(profile_id.clone())
-            .or_insert_with(|| BrowserProfile {
-                id: profile_id.clone(),
-                name: metadata
-                    .profile_name
-                    .clone()
-                    .unwrap_or_else(|| profile_id.clone()),
-                ..BrowserProfile::default()
-            });
-        if profile.name.is_empty() {
-            profile.name = metadata
-                .profile_name
-                .clone()
-                .unwrap_or_else(|| profile_id.clone());
-        }
-        if profile.user_data_dir.is_none() {
-            profile.user_data_dir = metadata.user_data_dir.clone();
-        }
-        if metadata.service_name.is_some()
-            && profile.allocation == ProfileAllocationPolicy::SharedService
-        {
-            profile.allocation = ProfileAllocationPolicy::PerService;
-        }
-        if profile.keyring == ProfileKeyringPolicy::BasicPasswordStore
-            || metadata.keyring != ProfileKeyringPolicy::BasicPasswordStore
-        {
-            profile.keyring = metadata.keyring;
-        }
-        profile.persistent = profile.persistent || metadata.persistent_profile;
-        if metadata.service_name.is_some() {
-            profile.manual_login_preferred = profile.manual_login_preferred
-                || metadata.keyring == ProfileKeyringPolicy::RealOsKeychain;
-        }
-        if let Some(service_name) = metadata.service_name.as_ref() {
-            merge_unique(&mut profile.shared_service_ids, service_name.clone());
-        }
-    }
-
-    let session = service_state
-        .sessions
-        .entry(session_id.to_string())
-        .or_insert_with(|| BrowserSession {
-            id: session_id.to_string(),
-            ..BrowserSession::default()
-        });
-    session.service_name = metadata
-        .service_name
-        .clone()
-        .or(session.service_name.clone());
-    session.agent_name = metadata.agent_name.clone().or(session.agent_name.clone());
-    session.task_name = metadata.task_name.clone().or(session.task_name.clone());
-    session.profile_id = profile_id.or(session.profile_id.clone());
-    session.lease = if session.profile_id.is_some() {
-        LeaseState::Exclusive
-    } else {
-        session.lease
-    };
-    session.cleanup = metadata.cleanup;
-    merge_unique(&mut session.browser_ids, service_browser_id(session_id));
 }
 
 fn persist_current_browser_health(
@@ -10459,6 +10354,7 @@ fn error_response(id: &str, error: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::test_utils::EnvGuard;
     use std::collections::BTreeMap;
     use std::fs;
@@ -13410,26 +13306,6 @@ mod tests {
         }));
 
         let _ = fs::remove_dir_all(&home);
-    }
-
-    #[test]
-    fn test_service_profile_id_prefers_runtime_profile() {
-        assert_eq!(
-            service_profile_id(Some("/tmp/browser-profile"), Some("work")),
-            Some("work".to_string())
-        );
-    }
-
-    #[test]
-    fn test_service_profile_id_hashes_custom_profile_path() {
-        let profile_id = service_profile_id(Some("/tmp/browser-profile"), None).unwrap();
-
-        assert!(profile_id.starts_with("custom:"));
-        assert_ne!(profile_id, "/tmp/browser-profile");
-        assert_eq!(
-            profile_id,
-            service_profile_id(Some("/tmp/browser-profile"), None).unwrap()
-        );
     }
 
     #[tokio::test]
