@@ -928,8 +928,19 @@ fn close_health_from_outcome(
 }
 
 fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserShutdownOutcome>) {
-    let _ = mutate_default_service_state(|service_state| {
-        let id = service_browser_id(&state.session_id);
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        let _ =
+            persist_closed_browser_health_in_repository(&repository, &state.session_id, outcome);
+    }
+}
+
+fn persist_closed_browser_health_in_repository(
+    repository: &impl ServiceStateRepository,
+    session_id: &str,
+    outcome: Option<&BrowserShutdownOutcome>,
+) -> Result<(), String> {
+    repository.mutate(|service_state| {
+        let id = service_browser_id(session_id);
         let previous = service_state.browsers.get(&id).cloned();
         let host = previous
             .as_ref()
@@ -941,7 +952,7 @@ fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserSh
             host,
             health,
             last_error,
-            active_session_ids: vec![state.session_id.clone()],
+            active_session_ids: vec![session_id.to_string()],
             ..BrowserProcess::default()
         };
         let shutdown_details = outcome.map(|outcome| {
@@ -982,7 +993,7 @@ fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserSh
         );
         service_state.browsers.insert(id, browser);
         Ok(())
-    });
+    })
 }
 
 pub struct DaemonState {
@@ -13124,11 +13135,9 @@ mod tests {
     fn test_close_health_event_marks_operator_requested_close() {
         let home = unique_socket_dir("service-browser-close-reason-home");
         fs::create_dir_all(&home).unwrap();
-        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SESSION"]);
-        guard.set("HOME", home.to_str().unwrap());
-        guard.set("AGENT_BROWSER_SESSION", "close-reason-session");
         let browser_id = "session:close-reason-session";
-        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
         store
             .save(&ServiceState {
                 browsers: BTreeMap::from([(
@@ -13143,17 +13152,17 @@ mod tests {
                 ..ServiceState::default()
             })
             .unwrap();
-        let mut state = DaemonState::new();
-        state.session_id = "close-reason-session".to_string();
 
-        persist_closed_browser_health(
-            &state,
+        persist_closed_browser_health_in_repository(
+            &repository,
+            "close-reason-session",
             Some(&BrowserShutdownOutcome {
                 polite_close_attempted: true,
                 polite_close_succeeded: true,
                 ..BrowserShutdownOutcome::default()
             }),
-        );
+        )
+        .unwrap();
 
         let persisted = store.load().unwrap();
         let event = persisted
