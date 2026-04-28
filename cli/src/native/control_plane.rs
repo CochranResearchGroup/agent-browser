@@ -18,8 +18,8 @@ use super::service_model::{
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
 };
 use super::service_store::{
-    load_default_service_state_snapshot, mutate_default_service_state, JsonServiceStateStore,
-    LockedServiceStateRepository, ServiceStateRepository, ServiceStateStore,
+    mutate_default_service_state, JsonServiceStateStore, LockedServiceStateRepository,
+    ServiceStateRepository, ServiceStateStore,
 };
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
@@ -405,17 +405,26 @@ fn persist_process_exited_browser_health(state: &DaemonState) {
 
 /// Persist a bounded audit record for each control-plane request.
 fn persist_service_job(job: ServiceJob) {
-    mutate_service_jobs(|state| {
+    mutate_persisted_service_jobs(|state| {
         state.jobs.insert(job.id.clone(), job);
     });
 }
 
-fn mutate_service_jobs(mutator: impl FnOnce(&mut ServiceState)) {
-    let _ = mutate_default_service_state(|state| {
+fn mutate_persisted_service_jobs(mutator: impl FnOnce(&mut ServiceState)) {
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        let _ = mutate_service_jobs_in_repository(&repository, mutator);
+    }
+}
+
+fn mutate_service_jobs_in_repository(
+    repository: &impl ServiceStateRepository,
+    mutator: impl FnOnce(&mut ServiceState),
+) -> Result<(), String> {
+    repository.mutate(|state| {
         mutator(state);
         prune_service_jobs(state);
         Ok(())
-    });
+    })
 }
 
 fn persist_service_job_queued(request: &ControlRequest) {
@@ -622,7 +631,15 @@ fn service_job_cancelled(job_id: &str) -> bool {
 }
 
 fn load_service_job(id: &str) -> Option<ServiceJob> {
-    load_default_service_state_snapshot().ok()?.jobs.remove(id)
+    let repository = LockedServiceStateRepository::default_json().ok()?;
+    load_service_job_in_repository(&repository, id)
+}
+
+fn load_service_job_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+) -> Option<ServiceJob> {
+    repository.load_snapshot().ok()?.jobs.remove(id)
 }
 
 fn job_state_name(state: JobState) -> &'static str {
@@ -1204,6 +1221,43 @@ mod tests {
 
         let persisted = store.load().unwrap();
         assert_eq!(persisted.jobs["job-queued"].state, JobState::Cancelled);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn service_job_repository_helpers_mutate_prune_and_load() {
+        let home = temp_home("control-plane-job-repository");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+
+        mutate_service_jobs_in_repository(&repository, |state| {
+            for index in 0..=MAX_SERVICE_JOBS {
+                let id = format!("job-{index:03}");
+                state.jobs.insert(
+                    id.clone(),
+                    ServiceJob {
+                        id,
+                        action: "navigate".to_string(),
+                        state: JobState::Queued,
+                        submitted_at: Some(format!(
+                            "2026-04-22T00:{:02}:{:02}Z",
+                            index / 60,
+                            index % 60
+                        )),
+                        ..ServiceJob::default()
+                    },
+                );
+            }
+        })
+        .unwrap();
+
+        let persisted = store.load().unwrap();
+        assert_eq!(persisted.jobs.len(), MAX_SERVICE_JOBS);
+        assert!(!persisted.jobs.contains_key("job-000"));
+        assert!(persisted.jobs.contains_key("job-200"));
+
+        let loaded = load_service_job_in_repository(&repository, "job-200").unwrap();
+        assert_eq!(loaded.id, "job-200");
         let _ = std::fs::remove_dir_all(&home);
     }
 
