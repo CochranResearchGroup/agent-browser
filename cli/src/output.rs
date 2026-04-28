@@ -553,6 +553,21 @@ fn format_service_browser_line(browser: &serde_json::Value) -> String {
     )
 }
 
+fn format_service_browsers_text(data: &serde_json::Value) -> Option<String> {
+    let browsers = data.get("browsers")?.as_array()?;
+    let mut lines = vec![format!("Browsers: {}", browsers.len())];
+    if browsers.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            browsers
+                .iter()
+                .map(|browser| format!("  {}", format_service_browser_line(browser))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
     let service_state = data.get("service_state")?;
     let control_plane = service_state.get("controlPlane");
@@ -726,6 +741,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_status") {
             if let Some(output) = format_service_status_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_browsers") {
+            if let Some(output) = format_service_browsers_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -3107,6 +3128,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
+  agent-browser service browsers
   agent-browser service cancel <job-id> [--reason <text>]
   agent-browser service retry <browser-id> [--by <text>] [--note <text>]
   agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
@@ -3121,6 +3143,7 @@ Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
+  browsers              Show retained service browser records and latest health evidence
   cancel                Cancel a queued job or request running job cancellation
   retry                 Enable one new recovery attempt for a faulted browser
   acknowledge           Record that an operator has seen a retained incident
@@ -3150,6 +3173,7 @@ Notes:
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, browser, and session summary lines for operator traceability.
+  - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
@@ -3174,6 +3198,7 @@ Examples:
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
+  agent-browser service browsers
   agent-browser service cancel <job-id> --reason stale
   agent-browser service retry browser-1 --by operator --note approved
   agent-browser service acknowledge browser-1 --by operator --note triaged
@@ -3599,6 +3624,7 @@ Service:
   service status             Show service worker health and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
+  service browsers           Show retained browser health records
   service cancel             Cancel a queued job or request running job cancellation
   service acknowledge        Record that an operator has seen a retained incident
   service resolve            Mark a retained incident handled
@@ -3884,6 +3910,7 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
+  agent-browser service browsers         # Inspect retained browser health records
   agent-browser service cancel <job-id>  # Cancel a queued or running service job
   agent-browser service acknowledge      # Mark a retained incident acknowledged
   agent-browser service resolve          # Mark a retained incident resolved
@@ -4007,8 +4034,8 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_service_events_text, format_service_status_text, format_service_trace_text,
-        format_storage_text,
+        format_service_browsers_text, format_service_events_text, format_service_status_text,
+        format_service_trace_text, format_storage_text,
     };
     use serde_json::json;
 
@@ -4161,6 +4188,32 @@ mod tests {
         assert_eq!(
             rendered,
             "2026-04-25T00:00:00Z browser_launch_recorded browser=session:runtime-session profile=work session=runtime-session service=JournalDownloader agent=codex task=probeACSwebsite Browser session:runtime-session launch metadata recorded"
+        );
+    }
+
+    #[test]
+    fn test_format_service_browsers_text_includes_last_health_observation() {
+        let data = json!({
+            "browsers": [{
+                "id": "session:runtime-session",
+                "health": "degraded",
+                "host": "owned_process",
+                "profileId": "work",
+                "pid": 1234,
+                "lastError": "Polite browser close failed; force kill was required",
+                "lastHealthObservation": {
+                    "observedAt": "2026-04-25T00:00:00Z",
+                    "failureClass": "browser_shutdown_degraded",
+                    "processExitCause": "operator_requested_close"
+                }
+            }]
+        });
+
+        let rendered = format_service_browsers_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Browsers: 1\n  session:runtime-session health=degraded host=owned_process profile=work pid=1234 observed=2026-04-25T00:00:00Z failure=browser_shutdown_degraded exit_cause=operator_requested_close error=Polite browser close failed; force kill was required"
         );
     }
 

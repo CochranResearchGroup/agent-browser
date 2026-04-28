@@ -2299,6 +2299,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_incident_resolve"
             | "service_incident_activity"
             | "service_trace"
+            | "service_browsers"
             | "service_jobs"
             | "service_incidents"
             | "service_events"
@@ -2491,6 +2492,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
         "service_incident_activity" => handle_service_incident_activity(cmd).await,
         "service_trace" => handle_service_trace(cmd).await,
+        "service_browsers" => handle_service_browsers(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
         "service_incidents" => handle_service_incidents(cmd).await,
         "service_events" => handle_service_events(cmd).await,
@@ -6564,6 +6566,25 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
             .get("serviceState")
             .cloned()
             .unwrap_or_else(|| json!({})),
+    }))
+}
+
+/// Return the service-owned browser collection without the full status payload.
+async fn handle_service_browsers(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut browsers = service_state.browsers.into_values().collect::<Vec<_>>();
+    browsers.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = browsers.len();
+
+    Ok(json!({
+        "browsers": browsers,
+        "count": count,
     }))
 }
 
@@ -10932,6 +10953,38 @@ mod tests {
         assert_eq!(
             result["data"]["service_state"]["sitePolicies"]["google"]["id"],
             "google"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_browsers_via_actions_returns_last_health_observation() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_browsers",
+            "id": "svc-browsers-1",
+            "serviceState": {
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "health": "degraded",
+                        "lastHealthObservation": {
+                            "observedAt": "2026-04-25T00:00:00Z",
+                            "failureClass": "browser_shutdown_degraded",
+                            "processExitCause": "operator_requested_close"
+                        }
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["browsers"][0]["id"], "browser-1");
+        assert_eq!(
+            result["data"]["browsers"][0]["lastHealthObservation"]["failureClass"],
+            "browser_shutdown_degraded"
         );
         assert!(state.browser.is_none());
     }

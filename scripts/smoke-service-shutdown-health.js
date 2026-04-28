@@ -84,6 +84,19 @@ try {
     `Degraded browser did not retain last health observation: ${JSON.stringify(browser)}`,
   );
 
+  const browsersResult = await runCli(context, ['--json', '--session', session, 'service', 'browsers']);
+  const browsersResponse = parseJsonOutput(browsersResult.stdout, 'service browsers');
+  assert(
+    browsersResponse.success === true,
+    `Service browsers failed: ${browsersResult.stdout}${browsersResult.stderr}`,
+  );
+  const collectionBrowser = browsersResponse.data?.browsers?.find((item) => item.id === browserId);
+  assert(
+    collectionBrowser?.lastHealthObservation?.failureClass === 'browser_shutdown_degraded' &&
+      collectionBrowser?.lastHealthObservation?.processExitCause === 'operator_requested_close',
+    `Service browsers did not expose retained health evidence: ${JSON.stringify(browsersResponse.data)}`,
+  );
+
   const events = status.data?.service_state?.events ?? [];
   assert(Array.isArray(events), 'Service state missing events array');
   const degradedEvent = events.find(

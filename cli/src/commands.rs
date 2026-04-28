@@ -945,6 +945,19 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "action": "service_reconcile",
                 "serviceState": flags.service_state.clone(),
             })),
+            Some("browsers") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service browsers: {}", rest[1]),
+                        usage: "service browsers",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_browsers",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
             Some("cancel") => {
                 let job_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
                     context: "service cancel".to_string(),
@@ -1743,6 +1756,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "status",
                     "watch",
                     "reconcile",
+                    "browsers",
                     "cancel",
                     "acknowledge",
                     "resolve",
@@ -1754,7 +1768,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
+                usage: "service <status|watch|reconcile|browsers|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
             }),
         },
 
@@ -5009,6 +5023,21 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_events");
         assert_eq!(cmd["limit"], 7);
+    }
+
+    #[test]
+    fn test_service_browsers() {
+        let cmd = parse_command(&args("service browsers"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_browsers");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_browsers_rejects_extra_argument() {
+        let err = parse_command(&args("service browsers extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
     }
 
     #[test]
