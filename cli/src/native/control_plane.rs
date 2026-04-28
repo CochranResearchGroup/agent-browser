@@ -10,7 +10,7 @@ use super::actions::{execute_command, DaemonState};
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
-    reconcile_persisted_service_state, reconcile_service_state,
+    merge_reconciled_service_state, reconcile_persisted_service_state, reconcile_service_state,
     record_browser_health_changed_event,
 };
 use super::service_model::{
@@ -157,9 +157,10 @@ impl ControlPlaneHandle {
     pub async fn service_status_response(&self, id: &str, service_state: Value) -> Value {
         let mut service_state = serde_json::from_value::<ServiceState>(service_state)
             .unwrap_or_else(|_| ServiceState::default());
+        let before = service_state.clone();
         service_state.control_plane = Some(self.status_snapshot());
         reconcile_service_state(&mut service_state).await;
-        persist_service_state_snapshot(&service_state);
+        persist_reconciled_service_state(&before, &service_state);
 
         json!({
             "id": id,
@@ -348,10 +349,11 @@ impl ControlPlaneHandle {
     }
 }
 
-fn persist_service_state_snapshot(state: &ServiceState) {
-    let snapshot = state.clone();
+fn persist_reconciled_service_state(before: &ServiceState, reconciled: &ServiceState) {
+    let before = before.clone();
+    let reconciled = reconciled.clone();
     let _ = mutate_default_service_state(|state| {
-        *state = snapshot;
+        merge_reconciled_service_state(state, &before, &reconciled);
         Ok(())
     });
 }

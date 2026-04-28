@@ -45,12 +45,13 @@ use super::service_config::{
     upsert_persisted_site_policy,
 };
 use super::service_health::{
-    apply_browser_health_observation, browser_health_observation_details, reconcile_service_state,
-    record_browser_health_changed_event, record_browser_health_changed_event_with_details,
-    record_browser_launch_recorded_event, record_browser_recovery_started_event,
-    record_browser_recovery_started_event_with_details, recovery_reason_kind_for_health,
-    BrowserProcessExitCause, BrowserRecoveryPolicy, BrowserRecoveryPolicyConfig,
-    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    apply_browser_health_observation, browser_health_observation_details,
+    merge_reconciled_service_state, reconcile_service_state, record_browser_health_changed_event,
+    record_browser_health_changed_event_with_details, record_browser_launch_recorded_event,
+    record_browser_recovery_started_event, record_browser_recovery_started_event_with_details,
+    recovery_reason_kind_for_health, BrowserProcessExitCause, BrowserRecoveryPolicy,
+    BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource,
+    BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use super::service_model::{
@@ -6720,11 +6721,12 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
+    let before = service_state.clone();
     let summary = reconcile_service_state(&mut service_state).await;
 
     let reconciled_state = service_state.clone();
     mutate_default_service_state(|state| {
-        *state = reconciled_state;
+        merge_reconciled_service_state(state, &before, &reconciled_state);
         Ok(())
     })?;
 

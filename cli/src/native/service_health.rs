@@ -328,14 +328,81 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
 
 pub async fn reconcile_persisted_service_state() -> Result<ServiceReconcileSummary, String> {
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?);
-    let mut state = store.load()?;
-    let summary = reconcile_service_state(&mut state).await;
-    let reconciled_state = state;
+    let before = store.load()?;
+    let mut reconciled_state = before.clone();
+    let summary = reconcile_service_state(&mut reconciled_state).await;
     mutate_default_service_state(|state| {
-        *state = reconciled_state;
+        merge_reconciled_service_state(state, &before, &reconciled_state);
         Ok(())
     })?;
     Ok(summary)
+}
+
+/// Merge async reconciliation results without clobbering newer state mutations.
+///
+/// Reconciliation may spend time probing PIDs and CDP endpoints. During that
+/// window, queued service commands can append jobs, change config, or record
+/// operator events. This merge applies only the fields reconciliation owns.
+pub fn merge_reconciled_service_state(
+    target: &mut ServiceState,
+    before: &ServiceState,
+    reconciled: &ServiceState,
+) {
+    if reconciled.control_plane.is_some() {
+        target.control_plane = reconciled.control_plane.clone();
+    }
+    if reconciled.reconciliation.is_some() {
+        target.reconciliation = reconciled.reconciliation.clone();
+    }
+
+    for (id, reconciled_browser) in &reconciled.browsers {
+        match target.browsers.get_mut(id) {
+            Some(target_browser) => {
+                target_browser.health = reconciled_browser.health;
+                target_browser.last_error = reconciled_browser.last_error.clone();
+                target_browser.last_health_observation =
+                    reconciled_browser.last_health_observation.clone();
+            }
+            None => {
+                target
+                    .browsers
+                    .insert(id.clone(), reconciled_browser.clone());
+            }
+        }
+    }
+
+    for (id, reconciled_tab) in &reconciled.tabs {
+        target.tabs.insert(id.clone(), reconciled_tab.clone());
+    }
+
+    for (id, reconciled_session) in &reconciled.sessions {
+        let target_session = target
+            .sessions
+            .entry(id.clone())
+            .or_insert_with(|| reconciled_session.clone());
+        target_session.browser_ids = reconciled_session.browser_ids.clone();
+        target_session.tab_ids = reconciled_session.tab_ids.clone();
+    }
+
+    let before_event_ids = before
+        .events
+        .iter()
+        .map(|event| event.id.clone())
+        .collect::<BTreeSet<_>>();
+    let mut target_event_ids = target
+        .events
+        .iter()
+        .map(|event| event.id.clone())
+        .collect::<BTreeSet<_>>();
+    for event in &reconciled.events {
+        if before_event_ids.contains(&event.id) || target_event_ids.contains(&event.id) {
+            continue;
+        }
+        target_event_ids.insert(event.id.clone());
+        push_service_event(target, event.clone());
+    }
+
+    target.refresh_derived_views();
 }
 
 pub async fn refresh_persisted_browser_health(state: &mut ServiceState) {
@@ -920,6 +987,7 @@ fn pid_is_running(pid: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_model::{JobState, ServiceJob, ServiceProvider, SitePolicy};
     use std::collections::BTreeMap;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -929,6 +997,162 @@ mod tests {
             browsers: BTreeMap::from([(browser.id.clone(), browser)]),
             ..ServiceState::default()
         }
+    }
+
+    #[test]
+    fn merge_reconciled_service_state_preserves_newer_mutations() {
+        let before = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("work-before".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-1".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-1".to_string(),
+                BrowserSession {
+                    id: "session-1".to_string(),
+                    service_name: Some("JournalDownloader".to_string()),
+                    browser_ids: vec!["browser-1".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            events: vec![ServiceEvent {
+                id: "event-before".to_string(),
+                kind: ServiceEventKind::Reconciliation,
+                message: "before".to_string(),
+                ..ServiceEvent::default()
+            }],
+            ..ServiceState::default()
+        };
+        let mut reconciled = before.clone();
+        reconciled.control_plane = Some(crate::native::service_model::ControlPlaneSnapshot {
+            worker_state: "ready".to_string(),
+            queue_capacity: 256,
+            ..crate::native::service_model::ControlPlaneSnapshot::default()
+        });
+        reconciled.reconciliation = Some(ServiceReconciliationSnapshot {
+            last_reconciled_at: Some("2026-04-22T00:00:01Z".to_string()),
+            browser_count: 1,
+            changed_browsers: 1,
+            ..ServiceReconciliationSnapshot::default()
+        });
+        reconciled.browsers.insert(
+            "browser-1".to_string(),
+            BrowserProcess {
+                id: "browser-1".to_string(),
+                profile_id: Some("work-before".to_string()),
+                health: BrowserHealth::Unreachable,
+                last_error: Some("CDP endpoint is unreachable".to_string()),
+                active_session_ids: vec!["session-1".to_string()],
+                ..BrowserProcess::default()
+            },
+        );
+        reconciled.tabs.insert(
+            "target:page-1".to_string(),
+            BrowserTab {
+                id: "target:page-1".to_string(),
+                browser_id: "browser-1".to_string(),
+                lifecycle: TabLifecycle::Ready,
+                title: Some("Example".to_string()),
+                owner_session_id: Some("session-1".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+        reconciled.sessions.get_mut("session-1").unwrap().tab_ids =
+            vec!["target:page-1".to_string()];
+        reconciled.events.push(ServiceEvent {
+            id: "event-reconcile".to_string(),
+            kind: ServiceEventKind::BrowserHealthChanged,
+            message: "health changed".to_string(),
+            browser_id: Some("browser-1".to_string()),
+            ..ServiceEvent::default()
+        });
+
+        let mut target = before.clone();
+        target.browsers.get_mut("browser-1").unwrap().profile_id = Some("work-current".to_string());
+        target.jobs.insert(
+            "job-current".to_string(),
+            ServiceJob {
+                id: "job-current".to_string(),
+                action: "navigate".to_string(),
+                state: JobState::Queued,
+                ..ServiceJob::default()
+            },
+        );
+        target.site_policies.insert(
+            "google".to_string(),
+            SitePolicy {
+                id: "google".to_string(),
+                origin_pattern: "https://accounts.google.com".to_string(),
+                ..SitePolicy::default()
+            },
+        );
+        target.providers.insert(
+            "manual".to_string(),
+            ServiceProvider {
+                id: "manual".to_string(),
+                display_name: "Manual approval".to_string(),
+                ..ServiceProvider::default()
+            },
+        );
+        target.events.push(ServiceEvent {
+            id: "event-current".to_string(),
+            kind: ServiceEventKind::IncidentAcknowledged,
+            message: "current".to_string(),
+            ..ServiceEvent::default()
+        });
+
+        merge_reconciled_service_state(&mut target, &before, &reconciled);
+
+        let browser = &target.browsers["browser-1"];
+        assert_eq!(browser.profile_id.as_deref(), Some("work-current"));
+        assert_eq!(browser.health, BrowserHealth::Unreachable);
+        assert_eq!(
+            browser.last_error.as_deref(),
+            Some("CDP endpoint is unreachable")
+        );
+        assert!(target.jobs.contains_key("job-current"));
+        assert!(target.site_policies.contains_key("google"));
+        assert!(target.providers.contains_key("manual"));
+        assert!(target
+            .events
+            .iter()
+            .any(|event| event.id == "event-current"));
+        assert!(target
+            .events
+            .iter()
+            .any(|event| event.id == "event-reconcile"));
+        assert_eq!(
+            target.sessions["session-1"].service_name.as_deref(),
+            Some("JournalDownloader")
+        );
+        assert_eq!(
+            target.sessions["session-1"].tab_ids,
+            vec!["target:page-1".to_string()]
+        );
+        assert_eq!(
+            target.tabs["target:page-1"].title.as_deref(),
+            Some("Example")
+        );
+        assert_eq!(
+            target
+                .control_plane
+                .as_ref()
+                .map(|snapshot| snapshot.queue_capacity),
+            Some(256)
+        );
+        assert_eq!(
+            target
+                .reconciliation
+                .as_ref()
+                .map(|snapshot| snapshot.changed_browsers),
+            Some(1)
+        );
     }
 
     #[test]
