@@ -6,7 +6,7 @@
 use serde_json::Value;
 
 use super::service_model::{ServiceProvider, ServiceState, SitePolicy};
-use super::service_store::mutate_default_service_state;
+use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 fn validate_entity_id(id: &str, label: &str) -> Result<(), String> {
     if id.trim().is_empty() {
@@ -84,28 +84,78 @@ pub fn delete_provider(
 
 /// Upsert one persisted site-policy record under the serialized state mutator.
 pub fn upsert_persisted_site_policy(id: &str, body: Value) -> Result<SitePolicy, String> {
-    mutate_default_service_state(|state| upsert_site_policy(state, id, body))
+    let repository = LockedServiceStateRepository::default_json()?;
+    upsert_site_policy_in_repository(&repository, id, body)
 }
 
 /// Delete one persisted site-policy record under the serialized state mutator.
 pub fn delete_persisted_site_policy(id: &str) -> Result<Option<SitePolicy>, String> {
-    mutate_default_service_state(|state| delete_site_policy(state, id))
+    let repository = LockedServiceStateRepository::default_json()?;
+    delete_site_policy_in_repository(&repository, id)
 }
 
 /// Upsert one persisted provider record under the serialized state mutator.
 pub fn upsert_persisted_provider(id: &str, body: Value) -> Result<ServiceProvider, String> {
-    mutate_default_service_state(|state| upsert_provider(state, id, body))
+    let repository = LockedServiceStateRepository::default_json()?;
+    upsert_provider_in_repository(&repository, id, body)
 }
 
 /// Delete one persisted provider record under the serialized state mutator.
 pub fn delete_persisted_provider(id: &str) -> Result<Option<ServiceProvider>, String> {
-    mutate_default_service_state(|state| delete_provider(state, id))
+    let repository = LockedServiceStateRepository::default_json()?;
+    delete_provider_in_repository(&repository, id)
+}
+
+pub fn upsert_site_policy_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+    body: Value,
+) -> Result<SitePolicy, String> {
+    repository.mutate(|state| upsert_site_policy(state, id, body))
+}
+
+pub fn delete_site_policy_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+) -> Result<Option<SitePolicy>, String> {
+    repository.mutate(|state| delete_site_policy(state, id))
+}
+
+pub fn upsert_provider_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+    body: Value,
+) -> Result<ServiceProvider, String> {
+    repository.mutate(|state| upsert_provider(state, id, body))
+}
+
+pub fn delete_provider_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+) -> Result<Option<ServiceProvider>, String> {
+    repository.mutate(|state| delete_provider(state, id))
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::service_store::{JsonServiceStateStore, ServiceStateStore};
     use super::*;
     use serde_json::json;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_state_path(label: &str) -> PathBuf {
+        std::env::temp_dir()
+            .join(format!(
+                "agent-browser-{label}-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ))
+            .join("state.json")
+    }
 
     #[test]
     fn upsert_site_policy_sets_path_id_and_defaults() {
@@ -160,5 +210,40 @@ mod tests {
 
         assert!(removed.is_some());
         assert!(!state.providers.contains_key("manual"));
+    }
+
+    #[test]
+    fn repository_helpers_mutate_explicit_repository() {
+        let path = unique_state_path("service-config-repository");
+        let store = JsonServiceStateStore::new(&path);
+        let repository = LockedServiceStateRepository::new(store.clone());
+
+        let policy = upsert_site_policy_in_repository(
+            &repository,
+            "google",
+            json!({
+                "originPattern": "https://accounts.google.com",
+                "interactionMode": "human_like_input"
+            }),
+        )
+        .unwrap();
+        let provider = upsert_provider_in_repository(
+            &repository,
+            "manual",
+            json!({
+                "displayName": "Dashboard approval",
+                "kind": "manual_approval"
+            }),
+        )
+        .unwrap();
+        let removed = delete_provider_in_repository(&repository, "manual").unwrap();
+
+        let persisted = store.load().unwrap();
+        assert_eq!(policy.id, "google");
+        assert_eq!(provider.id, "manual");
+        assert!(removed.is_some());
+        assert!(persisted.site_policies.contains_key("google"));
+        assert!(!persisted.providers.contains_key("manual"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }
