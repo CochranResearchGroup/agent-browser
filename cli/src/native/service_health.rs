@@ -988,15 +988,31 @@ fn pid_is_running(pid: u32) -> bool {
 mod tests {
     use super::*;
     use crate::native::service_model::{JobState, ServiceJob, ServiceProvider, SitePolicy};
+    use crate::test_utils::EnvGuard;
     use std::collections::BTreeMap;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+    use tokio::sync::oneshot;
 
     fn service_state_with_browser(browser: BrowserProcess) -> ServiceState {
         ServiceState {
             browsers: BTreeMap::from([(browser.id.clone(), browser)]),
             ..ServiceState::default()
         }
+    }
+
+    fn temp_home(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "agent-browser-{label}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
     }
 
     #[test]
@@ -1153,6 +1169,116 @@ mod tests {
                 .map(|snapshot| snapshot.changed_browsers),
             Some(1)
         );
+    }
+
+    #[tokio::test]
+    async fn persisted_reconcile_preserves_overlapping_state_mutations() {
+        let home = temp_home("service-reconcile-overlap");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (version_requested_tx, version_requested_rx) = oneshot::channel();
+        let (version_release_tx, version_release_rx) = oneshot::channel();
+        let server = tokio::spawn(serve_cdp_version_and_list_with_delayed_version(
+            listener,
+            r#"[
+                {"id":"page-1","type":"page","title":"Example","url":"https://example.com"}
+            ]"#,
+            version_requested_tx,
+            version_release_rx,
+        ));
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    "browser-1".to_string(),
+                    BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: BrowserHealth::Ready,
+                        cdp_endpoint: Some(format!("ws://127.0.0.1:{}/devtools/browser/abc", port)),
+                        active_session_ids: vec!["session-1".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                sessions: BTreeMap::from([(
+                    "session-1".to_string(),
+                    BrowserSession {
+                        id: "session-1".to_string(),
+                        browser_ids: vec!["browser-1".to_string()],
+                        ..BrowserSession::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let reconcile = tokio::spawn(async { reconcile_persisted_service_state().await });
+        version_requested_rx.await.unwrap();
+
+        mutate_default_service_state(|state| {
+            state.jobs.insert(
+                "job-overlap".to_string(),
+                ServiceJob {
+                    id: "job-overlap".to_string(),
+                    action: "navigate".to_string(),
+                    state: JobState::Queued,
+                    ..ServiceJob::default()
+                },
+            );
+            state.site_policies.insert(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "https://accounts.google.com".to_string(),
+                    ..SitePolicy::default()
+                },
+            );
+            state.providers.insert(
+                "manual".to_string(),
+                ServiceProvider {
+                    id: "manual".to_string(),
+                    display_name: "Manual approval".to_string(),
+                    ..ServiceProvider::default()
+                },
+            );
+            state.events.push(ServiceEvent {
+                id: "event-overlap".to_string(),
+                kind: ServiceEventKind::IncidentAcknowledged,
+                message: "operator acknowledged overlapping incident".to_string(),
+                ..ServiceEvent::default()
+            });
+            Ok(())
+        })
+        .unwrap();
+
+        version_release_tx.send(()).unwrap();
+        let summary = reconcile.await.unwrap().unwrap();
+        server.await.unwrap();
+
+        assert_eq!(summary.browser_count, 1);
+        let persisted = store.load().unwrap();
+        assert!(persisted.jobs.contains_key("job-overlap"));
+        assert!(persisted.site_policies.contains_key("google"));
+        assert!(persisted.providers.contains_key("manual"));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.id == "event-overlap"));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::Reconciliation));
+        assert!(persisted.tabs.contains_key("target:page-1"));
+        assert_eq!(
+            persisted.sessions["session-1"].tab_ids,
+            vec!["target:page-1".to_string()]
+        );
+
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]
@@ -1595,6 +1721,40 @@ mod tests {
             let body = if request.contains("/json/list") {
                 list_body
             } else {
+                r#"{"Browser":"Chrome/123"}"#
+            };
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        }
+    }
+
+    async fn serve_cdp_version_and_list_with_delayed_version(
+        listener: TcpListener,
+        list_body: &'static str,
+        version_requested_tx: oneshot::Sender<()>,
+        version_release_rx: oneshot::Receiver<()>,
+    ) {
+        let mut version_requested_tx = Some(version_requested_tx);
+        let mut version_release_rx = Some(version_release_rx);
+
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 2048];
+            let read = stream.read(&mut buf).await.unwrap_or(0);
+            let request = String::from_utf8_lossy(&buf[..read]);
+            let body = if request.contains("/json/list") {
+                list_body
+            } else {
+                if let Some(tx) = version_requested_tx.take() {
+                    let _ = tx.send(());
+                }
+                if let Some(rx) = version_release_rx.take() {
+                    let _ = rx.await;
+                }
                 r#"{"Browser":"Chrome/123"}"#
             };
             let response = format!(
