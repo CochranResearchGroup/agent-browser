@@ -2302,6 +2302,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_profiles"
             | "service_sessions"
             | "service_browsers"
+            | "service_tabs"
             | "service_jobs"
             | "service_incidents"
             | "service_events"
@@ -2497,6 +2498,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_profiles" => handle_service_profiles(cmd).await,
         "service_sessions" => handle_service_sessions(cmd).await,
         "service_browsers" => handle_service_browsers(cmd).await,
+        "service_tabs" => handle_service_tabs(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
         "service_incidents" => handle_service_incidents(cmd).await,
         "service_events" => handle_service_events(cmd).await,
@@ -6626,6 +6628,25 @@ async fn handle_service_browsers(cmd: &Value) -> Result<Value, String> {
 
     Ok(json!({
         "browsers": browsers,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned tab collection without the full status payload.
+async fn handle_service_tabs(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut tabs = service_state.tabs.into_values().collect::<Vec<_>>();
+    tabs.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = tabs.len();
+
+    Ok(json!({
+        "tabs": tabs,
         "count": count,
     }))
 }
@@ -11086,6 +11107,37 @@ mod tests {
             result["data"]["sessions"][0]["serviceName"],
             "JournalDownloader"
         );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_tabs_via_actions_returns_tab_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_tabs",
+            "id": "svc-tabs-1",
+            "serviceState": {
+                "tabs": {
+                    "tab-1": {
+                        "id": "tab-1",
+                        "browserId": "browser-1",
+                        "sessionId": "cdp-session-1",
+                        "ownerSessionId": "runtime-session",
+                        "lifecycle": "ready",
+                        "targetId": "target-1",
+                        "title": "Example",
+                        "url": "https://example.com/"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["tabs"][0]["id"], "tab-1");
+        assert_eq!(result["data"]["tabs"][0]["lifecycle"], "ready");
+        assert_eq!(result["data"]["tabs"][0]["browserId"], "browser-1");
         assert!(state.browser.is_none());
     }
 

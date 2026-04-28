@@ -984,6 +984,19 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "serviceState": flags.service_state.clone(),
                 }))
             }
+            Some("tabs") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service tabs: {}", rest[1]),
+                        usage: "service tabs",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_tabs",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
             Some("cancel") => {
                 let job_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
                     context: "service cancel".to_string(),
@@ -1785,6 +1798,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "profiles",
                     "sessions",
                     "browsers",
+                    "tabs",
                     "cancel",
                     "acknowledge",
                     "resolve",
@@ -1796,7 +1810,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|profiles|sessions|browsers|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
+                usage: "service <status|watch|reconcile|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
             }),
         },
 
@@ -5062,6 +5076,14 @@ mod tests {
     }
 
     #[test]
+    fn test_service_tabs() {
+        let cmd = parse_command(&args("service tabs"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_tabs");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
     fn test_service_profiles() {
         let cmd = parse_command(&args("service profiles"), &default_flags()).unwrap();
 
@@ -5080,6 +5102,13 @@ mod tests {
     #[test]
     fn test_service_browsers_rejects_extra_argument() {
         let err = parse_command(&args("service browsers extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_tabs_rejects_extra_argument() {
+        let err = parse_command(&args("service tabs extra"), &default_flags()).unwrap_err();
 
         assert!(matches!(err, ParseError::InvalidValue { .. }));
     }

@@ -137,6 +137,25 @@ try {
     )}`,
   );
 
+  const cliTabsResult = await runCli(context, ['--json', 'service', 'tabs']);
+  const cliTabs = parseJsonOutput(cliTabsResult.stdout, 'service tabs');
+  assert(
+    cliTabs.success === true,
+    `Service tabs failed: ${cliTabsResult.stdout}${cliTabsResult.stderr}`,
+  );
+  const cliTab = cliTabs.data?.tabs?.find(
+    (tab) =>
+      tab.id === liveTab.id &&
+      tab.browserId === liveBrowser.id &&
+      tab.lifecycle === liveTab.lifecycle &&
+      tab.title === liveTab.title &&
+      tab.targetId === liveTab.targetId,
+  );
+  assert(
+    cliTab,
+    `Service tabs did not match service reconcile tab ${liveTab.id}: ${JSON.stringify(cliTabs.data)}`,
+  );
+
   await cleanup();
   console.log('Service reconcile MCP smoke passed');
 } catch (err) {

@@ -598,6 +598,35 @@ fn format_service_browsers_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_tab_line(tab: &serde_json::Value) -> String {
+    let id = value_str(tab, "id", "unknown-tab");
+    let browser = value_str(tab, "browserId", "none");
+    let session = value_str(tab, "sessionId", "none");
+    let owner = value_str(tab, "ownerSessionId", "none");
+    let lifecycle = value_str(tab, "lifecycle", "unknown");
+    let target = value_str(tab, "targetId", "none");
+    let title = value_str(tab, "title", "none");
+    let url = value_str(tab, "url", "none");
+
+    format!(
+        "{id} browser={browser} session={session} owner={owner} lifecycle={lifecycle} target={target} title={title} url={url}"
+    )
+}
+
+fn format_service_tabs_text(data: &serde_json::Value) -> Option<String> {
+    let tabs = data.get("tabs")?.as_array()?;
+    let mut lines = vec![format!("Tabs: {}", tabs.len())];
+    if tabs.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            tabs.iter()
+                .map(|tab| format!("  {}", format_service_tab_line(tab))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
     let service_state = data.get("service_state")?;
     let control_plane = service_state.get("controlPlane");
@@ -789,6 +818,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_browsers") {
             if let Some(output) = format_service_browsers_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_tabs") {
+            if let Some(output) = format_service_tabs_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -3173,6 +3208,7 @@ Usage:
   agent-browser service profiles
   agent-browser service sessions
   agent-browser service browsers
+  agent-browser service tabs
   agent-browser service cancel <job-id> [--reason <text>]
   agent-browser service retry <browser-id> [--by <text>] [--note <text>]
   agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
@@ -3190,6 +3226,7 @@ Commands:
   profiles              Show retained service profile records
   sessions              Show retained service session records
   browsers              Show retained service browser records and latest health evidence
+  tabs                  Show retained service tab records
   cancel                Cancel a queued job or request running job cancellation
   retry                 Enable one new recovery attempt for a faulted browser
   acknowledge           Record that an operator has seen a retained incident
@@ -3221,6 +3258,7 @@ Notes:
   - Text service status includes profile, browser, and session summary lines for operator traceability.
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
+  - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
@@ -3248,6 +3286,7 @@ Examples:
   agent-browser service profiles
   agent-browser service sessions
   agent-browser service browsers
+  agent-browser service tabs
   agent-browser service cancel <job-id> --reason stale
   agent-browser service retry browser-1 --by operator --note approved
   agent-browser service acknowledge browser-1 --by operator --note triaged
@@ -3676,6 +3715,7 @@ Service:
   service profiles           Show retained service profile records
   service sessions           Show retained service session records
   service browsers           Show retained browser health records
+  service tabs               Show retained service tab records
   service cancel             Cancel a queued job or request running job cancellation
   service acknowledge        Record that an operator has seen a retained incident
   service resolve            Mark a retained incident handled
@@ -3964,6 +4004,7 @@ Examples:
   agent-browser service profiles         # Inspect retained service profile records
   agent-browser service sessions         # Inspect retained service session records
   agent-browser service browsers         # Inspect retained browser health records
+  agent-browser service tabs             # Inspect retained service tab records
   agent-browser service cancel <job-id>  # Cancel a queued or running service job
   agent-browser service acknowledge      # Mark a retained incident acknowledged
   agent-browser service resolve          # Mark a retained incident resolved
@@ -4088,8 +4129,8 @@ pub fn print_version() {
 mod tests {
     use super::{
         format_service_browsers_text, format_service_events_text, format_service_profiles_text,
-        format_service_sessions_text, format_service_status_text, format_service_trace_text,
-        format_storage_text,
+        format_service_sessions_text, format_service_status_text, format_service_tabs_text,
+        format_service_trace_text, format_storage_text,
     };
     use serde_json::json;
 
@@ -4314,6 +4355,29 @@ mod tests {
         assert_eq!(
             rendered,
             "Sessions: 1\n  runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work lease=exclusive cleanup=close_browser browsers=session:runtime-session"
+        );
+    }
+
+    #[test]
+    fn test_format_service_tabs_text_includes_tab_metadata() {
+        let data = json!({
+            "tabs": [{
+                "id": "tab-1",
+                "browserId": "browser-1",
+                "sessionId": "cdp-session-1",
+                "ownerSessionId": "runtime-session",
+                "lifecycle": "ready",
+                "targetId": "target-1",
+                "title": "Example",
+                "url": "https://example.com/"
+            }]
+        });
+
+        let rendered = format_service_tabs_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Tabs: 1\n  tab-1 browser=browser-1 session=cdp-session-1 owner=runtime-session lifecycle=ready target=target-1 title=Example url=https://example.com/"
         );
     }
 
