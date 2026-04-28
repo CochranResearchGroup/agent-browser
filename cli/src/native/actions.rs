@@ -823,54 +823,68 @@ fn persist_browser_recovery_started_from_persisted_state(
     state: &DaemonState,
     reason: &str,
 ) -> BrowserRecoveryPersistence {
-    mutate_default_service_state(|service_state| {
-        let id = service_browser_id(&state.session_id);
-        let Some(browser) = service_state.browsers.get(&id).cloned() else {
-            return Ok(BrowserRecoveryPersistence::NotRecorded);
-        };
-        if !matches!(
-            browser.health,
-            ServiceBrowserHealth::Degraded
-                | ServiceBrowserHealth::ProcessExited
-                | ServiceBrowserHealth::CdpDisconnected
-                | ServiceBrowserHealth::Unreachable
-                | ServiceBrowserHealth::Faulted
-        ) {
-            return Ok(BrowserRecoveryPersistence::NotRecorded);
-        }
-        let event_reason = browser.last_error.as_deref().unwrap_or(reason);
-        let policy = recovery_policy_for_next_attempt(
-            service_state,
-            &id,
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        return persist_browser_recovery_started_in_repository(
+            &repository,
+            &state.session_id,
             state.browser_recovery_policy_config,
+            reason,
         );
-        if policy.retry_budget_exceeded {
-            let faulted_error = format!(
+    }
+    BrowserRecoveryPersistence::NotRecorded
+}
+
+fn persist_browser_recovery_started_in_repository(
+    repository: &impl ServiceStateRepository,
+    session_id: &str,
+    policy_config: BrowserRecoveryPolicyConfig,
+    reason: &str,
+) -> BrowserRecoveryPersistence {
+    repository
+        .mutate(|service_state| {
+            let id = service_browser_id(session_id);
+            let Some(browser) = service_state.browsers.get(&id).cloned() else {
+                return Ok(BrowserRecoveryPersistence::NotRecorded);
+            };
+            if !matches!(
+                browser.health,
+                ServiceBrowserHealth::Degraded
+                    | ServiceBrowserHealth::ProcessExited
+                    | ServiceBrowserHealth::CdpDisconnected
+                    | ServiceBrowserHealth::Unreachable
+                    | ServiceBrowserHealth::Faulted
+            ) {
+                return Ok(BrowserRecoveryPersistence::NotRecorded);
+            }
+            let event_reason = browser.last_error.as_deref().unwrap_or(reason);
+            let policy = recovery_policy_for_next_attempt(service_state, &id, policy_config);
+            if policy.retry_budget_exceeded {
+                let faulted_error = format!(
                 "Browser recovery retry budget exceeded after {} attempts; next retry delay {} ms",
                 policy.retry_budget, policy.next_retry_delay_ms
             );
-            let mut faulted = BrowserProcess {
-                health: ServiceBrowserHealth::Faulted,
-                last_error: Some(faulted_error.clone()),
-                ..browser.clone()
-            };
-            let observation_details = browser_health_observation_details(&faulted, None);
-            apply_browser_health_observation(&mut faulted, Some(&observation_details));
-            record_browser_health_changed_event(service_state, &id, Some(&browser), &faulted);
-            service_state.browsers.insert(id, faulted);
-            return Ok(BrowserRecoveryPersistence::Blocked(faulted_error));
-        }
-        record_browser_recovery_started_event(
-            service_state,
-            &id,
-            &browser,
-            recovery_reason_kind_for_health(browser.health),
-            event_reason,
-            Some(policy),
-        );
-        Ok(BrowserRecoveryPersistence::Recorded)
-    })
-    .unwrap_or(BrowserRecoveryPersistence::NotRecorded)
+                let mut faulted = BrowserProcess {
+                    health: ServiceBrowserHealth::Faulted,
+                    last_error: Some(faulted_error.clone()),
+                    ..browser.clone()
+                };
+                let observation_details = browser_health_observation_details(&faulted, None);
+                apply_browser_health_observation(&mut faulted, Some(&observation_details));
+                record_browser_health_changed_event(service_state, &id, Some(&browser), &faulted);
+                service_state.browsers.insert(id, faulted);
+                return Ok(BrowserRecoveryPersistence::Blocked(faulted_error));
+            }
+            record_browser_recovery_started_event(
+                service_state,
+                &id,
+                &browser,
+                recovery_reason_kind_for_health(browser.health),
+                event_reason,
+                Some(policy),
+            );
+            Ok(BrowserRecoveryPersistence::Recorded)
+        })
+        .unwrap_or(BrowserRecoveryPersistence::NotRecorded)
 }
 
 fn stale_browser_process_record(
@@ -13036,11 +13050,10 @@ mod tests {
     fn test_persisted_recovery_blocks_and_marks_browser_faulted_after_budget() {
         let home = unique_socket_dir("service-recovery-budget-home");
         fs::create_dir_all(&home).unwrap();
-        let guard = EnvGuard::new(&["HOME"]);
-        guard.set("HOME", home.to_str().unwrap());
 
         let browser_id = "session:budget-session";
-        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
         store
             .save(&ServiceState {
                 browsers: BTreeMap::from([(
@@ -13065,11 +13078,11 @@ mod tests {
                 ..ServiceState::default()
             })
             .unwrap();
-        let mut daemon_state = DaemonState::new();
-        daemon_state.session_id = "budget-session".to_string();
 
-        let result = persist_browser_recovery_started_from_persisted_state(
-            &daemon_state,
+        let result = persist_browser_recovery_started_in_repository(
+            &repository,
+            "budget-session",
+            BrowserRecoveryPolicyConfig::default(),
             "Browser relaunch requested from persisted unhealthy state",
         );
 
