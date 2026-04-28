@@ -2299,6 +2299,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_incident_resolve"
             | "service_incident_activity"
             | "service_trace"
+            | "service_profiles"
+            | "service_sessions"
             | "service_browsers"
             | "service_jobs"
             | "service_incidents"
@@ -2492,6 +2494,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
         "service_incident_activity" => handle_service_incident_activity(cmd).await,
         "service_trace" => handle_service_trace(cmd).await,
+        "service_profiles" => handle_service_profiles(cmd).await,
+        "service_sessions" => handle_service_sessions(cmd).await,
         "service_browsers" => handle_service_browsers(cmd).await,
         "service_jobs" => handle_service_jobs(cmd).await,
         "service_incidents" => handle_service_incidents(cmd).await,
@@ -6566,6 +6570,44 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
             .get("serviceState")
             .cloned()
             .unwrap_or_else(|| json!({})),
+    }))
+}
+
+/// Return the service-owned profile collection without the full status payload.
+async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut profiles = service_state.profiles.into_values().collect::<Vec<_>>();
+    profiles.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = profiles.len();
+
+    Ok(json!({
+        "profiles": profiles,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned session collection without the full status payload.
+async fn handle_service_sessions(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut sessions = service_state.sessions.into_values().collect::<Vec<_>>();
+    sessions.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = sessions.len();
+
+    Ok(json!({
+        "sessions": sessions,
+        "count": count,
     }))
 }
 
@@ -10985,6 +11027,64 @@ mod tests {
         assert_eq!(
             result["data"]["browsers"][0]["lastHealthObservation"]["failureClass"],
             "browser_shutdown_degraded"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_profiles_via_actions_returns_profile_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_profiles",
+            "id": "svc-profiles-1",
+            "serviceState": {
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "allocation": "per_service",
+                        "keyring": "basic_password_store",
+                        "sharedServiceIds": ["JournalDownloader"]
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["profiles"][0]["id"], "work");
+        assert_eq!(result["data"]["profiles"][0]["name"], "Work");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_sessions_via_actions_returns_session_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_sessions",
+            "id": "svc-sessions-1",
+            "serviceState": {
+                "sessions": {
+                    "session-1": {
+                        "id": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "profileId": "work",
+                        "browserIds": ["browser-1"]
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["sessions"][0]["id"], "session-1");
+        assert_eq!(
+            result["data"]["sessions"][0]["serviceName"],
+            "JournalDownloader"
         );
         assert!(state.browser.is_none());
     }

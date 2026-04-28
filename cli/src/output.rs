@@ -497,6 +497,21 @@ fn format_service_profile_line(profile: &serde_json::Value) -> String {
     )
 }
 
+fn format_service_profiles_text(data: &serde_json::Value) -> Option<String> {
+    let profiles = data.get("profiles")?.as_array()?;
+    let mut lines = vec![format!("Profiles: {}", profiles.len())];
+    if profiles.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            profiles
+                .iter()
+                .map(|profile| format!("  {}", format_service_profile_line(profile))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_session_line(session: &serde_json::Value) -> String {
     let id = value_str(session, "id", "unknown-session");
     let service = value_str(session, "serviceName", "none");
@@ -521,6 +536,21 @@ fn format_service_session_line(session: &serde_json::Value) -> String {
     format!(
         "{id} service={service} agent={agent} task={task} profile={profile} lease={lease} cleanup={cleanup} browsers={browsers}"
     )
+}
+
+fn format_service_sessions_text(data: &serde_json::Value) -> Option<String> {
+    let sessions = data.get("sessions")?.as_array()?;
+    let mut lines = vec![format!("Sessions: {}", sessions.len())];
+    if sessions.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            sessions
+                .iter()
+                .map(|session| format!("  {}", format_service_session_line(session))),
+        );
+    }
+    Some(lines.join("\n"))
 }
 
 fn format_service_browser_line(browser: &serde_json::Value) -> String {
@@ -741,6 +771,18 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_status") {
             if let Some(output) = format_service_status_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_profiles") {
+            if let Some(output) = format_service_profiles_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_sessions") {
+            if let Some(output) = format_service_sessions_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -3128,6 +3170,8 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
+  agent-browser service profiles
+  agent-browser service sessions
   agent-browser service browsers
   agent-browser service cancel <job-id> [--reason <text>]
   agent-browser service retry <browser-id> [--by <text>] [--note <text>]
@@ -3143,6 +3187,8 @@ Commands:
   status                Show worker state, browser health, queue depth, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
+  profiles              Show retained service profile records
+  sessions              Show retained service session records
   browsers              Show retained service browser records and latest health evidence
   cancel                Cancel a queued job or request running job cancellation
   retry                 Enable one new recovery attempt for a faulted browser
@@ -3173,6 +3219,7 @@ Notes:
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, browser, and session summary lines for operator traceability.
+  - Text service profiles and sessions focus retained service-owned identity, lease, profile, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
@@ -3198,6 +3245,8 @@ Examples:
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
+  agent-browser service profiles
+  agent-browser service sessions
   agent-browser service browsers
   agent-browser service cancel <job-id> --reason stale
   agent-browser service retry browser-1 --by operator --note approved
@@ -3624,6 +3673,8 @@ Service:
   service status             Show service worker health and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
+  service profiles           Show retained service profile records
+  service sessions           Show retained service session records
   service browsers           Show retained browser health records
   service cancel             Cancel a queued job or request running job cancellation
   service acknowledge        Record that an operator has seen a retained incident
@@ -3910,6 +3961,8 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
+  agent-browser service profiles         # Inspect retained service profile records
+  agent-browser service sessions         # Inspect retained service session records
   agent-browser service browsers         # Inspect retained browser health records
   agent-browser service cancel <job-id>  # Cancel a queued or running service job
   agent-browser service acknowledge      # Mark a retained incident acknowledged
@@ -4034,8 +4087,9 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_service_browsers_text, format_service_events_text, format_service_status_text,
-        format_service_trace_text, format_storage_text,
+        format_service_browsers_text, format_service_events_text, format_service_profiles_text,
+        format_service_sessions_text, format_service_status_text, format_service_trace_text,
+        format_storage_text,
     };
     use serde_json::json;
 
@@ -4214,6 +4268,52 @@ mod tests {
         assert_eq!(
             rendered,
             "Browsers: 1\n  session:runtime-session health=degraded host=owned_process profile=work pid=1234 observed=2026-04-25T00:00:00Z failure=browser_shutdown_degraded exit_cause=operator_requested_close error=Polite browser close failed; force kill was required"
+        );
+    }
+
+    #[test]
+    fn test_format_service_profiles_text_includes_profile_contract_fields() {
+        let data = json!({
+            "profiles": [{
+                "id": "work",
+                "name": "Work",
+                "allocation": "per_service",
+                "keyring": "basic_password_store",
+                "persistent": true,
+                "manualLoginPreferred": false,
+                "sharedServiceIds": ["JournalDownloader"],
+                "userDataDir": "/tmp/work-profile"
+            }]
+        });
+
+        let rendered = format_service_profiles_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader user_data=/tmp/work-profile"
+        );
+    }
+
+    #[test]
+    fn test_format_service_sessions_text_includes_trace_context() {
+        let data = json!({
+            "sessions": [{
+                "id": "runtime-session",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "profileId": "work",
+                "lease": "exclusive",
+                "cleanup": "close_browser",
+                "browserIds": ["session:runtime-session"]
+            }]
+        });
+
+        let rendered = format_service_sessions_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Sessions: 1\n  runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work lease=exclusive cleanup=close_browser browsers=session:runtime-session"
         );
     }
 

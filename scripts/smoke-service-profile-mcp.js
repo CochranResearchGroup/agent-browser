@@ -102,6 +102,17 @@ try {
     `Profile userDataDir did not include runtime profile name: ${JSON.stringify(profile)}`,
   );
 
+  const cliProfilesResult = await runCli(context, ['--json', 'service', 'profiles']);
+  const cliProfiles = parseJsonOutput(cliProfilesResult.stdout, 'service profiles');
+  assert(
+    cliProfiles.success === true,
+    `Service profiles failed: ${cliProfilesResult.stdout}${cliProfilesResult.stderr}`,
+  );
+  assert(
+    cliProfiles.data?.profiles?.some((item) => item.id === runtimeProfile),
+    `Service profiles did not include runtime profile ${runtimeProfile}: ${JSON.stringify(cliProfiles.data)}`,
+  );
+
   const sessionsResourceResult = await runCli(context, [
     '--json',
     'mcp',
@@ -137,6 +148,22 @@ try {
   assert(
     persistedSession.browserIds?.includes(`session:${session}`),
     `Session browserIds missing active browser: ${JSON.stringify(persistedSession)}`,
+  );
+
+  const cliSessionsResult = await runCli(context, ['--json', 'service', 'sessions']);
+  const cliSessions = parseJsonOutput(cliSessionsResult.stdout, 'service sessions');
+  assert(
+    cliSessions.success === true,
+    `Service sessions failed: ${cliSessionsResult.stdout}${cliSessionsResult.stderr}`,
+  );
+  assert(
+    cliSessions.data?.sessions?.some(
+      (item) =>
+        item.id === session &&
+        item.serviceName === serviceName &&
+        item.profileId === runtimeProfile,
+    ),
+    `Service sessions did not include active session metadata: ${JSON.stringify(cliSessions.data)}`,
   );
 
   const eventsResourceResult = await runCli(context, [
