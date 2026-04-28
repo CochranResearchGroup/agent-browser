@@ -6,7 +6,7 @@ use crate::connection::{send_command, Response};
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_incidents::{service_incidents_response, ServiceIncidentFilters};
 use crate::native::service_model::ServiceState;
-use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
 
 const BROWSERS_RESOURCE: &str = "agent-browser://browsers";
@@ -242,8 +242,7 @@ fn service_mcp_resource_templates() -> Vec<Value> {
 }
 
 fn read_service_mcp_resource(uri: &str) -> Result<Value, String> {
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?);
-    let state = store.load()?;
+    let state = load_default_service_state_snapshot()?;
     read_service_mcp_resource_from_state(uri, &state)
 }
 
@@ -3412,15 +3411,7 @@ fn call_service_trace(arguments: &Value, session: &str) -> Result<Value, JsonRpc
     let task_name = optional_string_argument(arguments, "taskName")?;
     let since = optional_string_argument(arguments, "since")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
-    let store =
-        JsonServiceStateStore::new(JsonServiceStateStore::default_path().map_err(|err| {
-            JsonRpcError {
-                code: -32603,
-                message: "Internal error",
-                data: Some(json!({ "message": err, "tool": "service_trace" })),
-            }
-        })?);
-    let state = store.load().map_err(|err| JsonRpcError {
+    let state = load_default_service_state_snapshot().map_err(|err| JsonRpcError {
         code: -32603,
         message: "Internal error",
         data: Some(json!({ "message": err, "tool": "service_trace" })),
@@ -3461,15 +3452,7 @@ fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, Jso
     let agent_name = optional_string_argument(arguments, "agentName")?;
     let task_name = optional_string_argument(arguments, "taskName")?;
     let trace = service_tool_trace(service_name, agent_name, task_name);
-    let store =
-        JsonServiceStateStore::new(JsonServiceStateStore::default_path().map_err(|err| {
-            JsonRpcError {
-                code: -32603,
-                message: "Internal error",
-                data: Some(json!({ "message": err, "tool": "service_incidents" })),
-            }
-        })?);
-    let state = store.load().map_err(|err| JsonRpcError {
+    let state = load_default_service_state_snapshot().map_err(|err| JsonRpcError {
         code: -32603,
         message: "Internal error",
         data: Some(json!({ "message": err, "tool": "service_incidents" })),

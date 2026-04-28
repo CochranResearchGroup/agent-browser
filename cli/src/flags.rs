@@ -5,7 +5,7 @@ use crate::native::service_health::{
 use crate::native::service_model::{
     BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SitePolicy,
 };
-use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+use crate::native::service_store::load_default_service_state_snapshot;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -334,15 +334,7 @@ impl Config {
 }
 
 fn service_state_from_store(configured: ServiceState) -> ServiceState {
-    let store_path = match JsonServiceStateStore::default_path() {
-        Ok(path) => path,
-        Err(err) => {
-            eprintln!("{} {}", color::warning_indicator(), err);
-            return configured;
-        }
-    };
-    let store = JsonServiceStateStore::new(store_path);
-    let mut state = match store.load() {
+    let mut state = match load_default_service_state_snapshot() {
         Ok(state) => state,
         Err(err) => {
             eprintln!("{} {}", color::warning_indicator(), err);
@@ -1634,6 +1626,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::test_utils::EnvGuard;
 
     fn args(s: &str) -> Vec<String> {

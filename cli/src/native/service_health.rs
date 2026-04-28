@@ -10,7 +10,8 @@ use super::service_model::{
     ServiceEvent, ServiceEventKind, ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
 };
 use super::service_store::{
-    mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
+    load_default_service_state_snapshot, mutate_default_service_state, JsonServiceStateStore,
+    ServiceStateStore,
 };
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
@@ -327,8 +328,7 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
 }
 
 pub async fn reconcile_persisted_service_state() -> Result<ServiceReconcileSummary, String> {
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?);
-    let before = store.load()?;
+    let before = load_default_service_state_snapshot()?;
     let mut reconciled_state = before.clone();
     let summary = reconcile_service_state(&mut reconciled_state).await;
     mutate_default_service_state(|state| {

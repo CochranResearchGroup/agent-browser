@@ -111,6 +111,21 @@ pub fn default_service_state_path() -> Result<PathBuf, String> {
         .join(SERVICE_STATE_FILENAME))
 }
 
+/// Load a stable point-in-time snapshot of the default JSON service state.
+///
+/// Readers take the same mutex as mutators so they do not observe a snapshot
+/// while a serialized read-modify-write operation is in progress. This does
+/// not make the snapshot live after it is returned; callers that later write
+/// must still use merge-aware mutation helpers.
+pub fn load_default_service_state_snapshot() -> Result<ServiceState, String> {
+    let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock
+        .lock()
+        .map_err(|_| "Service state mutation lock was poisoned".to_string())?;
+    let store = JsonServiceStateStore::new(default_service_state_path()?);
+    store.load()
+}
+
 /// Serialize read-modify-write operations against the default JSON service state.
 ///
 /// The JSON store is intentionally simple, but callers that mutate state must
@@ -242,6 +257,10 @@ mod tests {
                 id: "service".to_string(),
                 label: "Service incidents".to_string(),
                 state: crate::native::service_model::ServiceIncidentState::Service,
+                severity: crate::native::service_model::ServiceIncidentSeverity::Error,
+                escalation: crate::native::service_model::ServiceIncidentEscalation::ServiceTriage,
+                recommended_action: "Inspect service logs, reconciliation state, and recent jobs."
+                    .to_string(),
                 latest_timestamp: "2026-04-22T00:00:00Z".to_string(),
                 latest_message: "Failed to reconcile service state".to_string(),
                 latest_kind: "reconciliation_error".to_string(),

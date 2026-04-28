@@ -18,7 +18,8 @@ use super::service_model::{
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
 };
 use super::service_store::{
-    mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
+    load_default_service_state_snapshot, mutate_default_service_state, JsonServiceStateStore,
+    ServiceStateStore,
 };
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
@@ -610,9 +611,7 @@ fn service_job_cancelled(job_id: &str) -> bool {
 }
 
 fn load_service_job(id: &str) -> Option<ServiceJob> {
-    let path = JsonServiceStateStore::default_path().ok()?;
-    let store = JsonServiceStateStore::new(path);
-    store.load().ok()?.jobs.remove(id)
+    load_default_service_state_snapshot().ok()?.jobs.remove(id)
 }
 
 fn job_state_name(state: JobState) -> &'static str {
