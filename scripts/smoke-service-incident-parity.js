@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'node:fs';
-
 import {
   appendPriorRecoveryAttempt,
   assert,
@@ -18,6 +16,11 @@ import {
   recoveryOverrideSmokeUrls,
   runCli,
 } from './smoke-utils.js';
+import {
+  assertServiceIncidentSchemaRecord,
+  loadServiceRecordSchema,
+  parseMcpJsonResource,
+} from './smoke-schema-utils.js';
 
 const context = configureRecoveryOverrideSmokeContext(
   createSmokeContext({ prefix: 'ab-sip-', sessionPrefix: 'sip' }),
@@ -28,11 +31,8 @@ const serviceName = 'IncidentParitySmoke';
 const agentName = 'smoke-agent';
 const taskName = 'compareHttpMcpIncidents';
 const traceFields = { serviceName, agentName, taskName };
-const incidentRecordSchema = JSON.parse(
-  readFileSync(
-    new URL('../docs/dev/contracts/service-incident-record.v1.schema.json', import.meta.url),
-    'utf8',
-  ),
+const incidentRecordSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-incident-record.v1.schema.json',
 );
 
 let mcp;
@@ -90,68 +90,6 @@ async function command(port, body) {
   return response;
 }
 
-function parseMcpJsonResource(result, uri, label) {
-  const content = result.contents?.[0];
-  assert(
-    content?.mimeType === 'application/json',
-    `${label} content MIME mismatch: ${JSON.stringify(content)}`,
-  );
-  assert(content?.uri === uri, `${label} content URI mismatch: ${JSON.stringify(content)}`);
-  assert(typeof content.text === 'string', `${label} content missing JSON text`);
-  return JSON.parse(content.text);
-}
-
-function schemaEnum(property) {
-  return incidentRecordSchema.properties[property].enum;
-}
-
-function currentHealthSchemaEnum() {
-  return incidentRecordSchema.properties.currentHealth.oneOf[0].enum;
-}
-
-function assertIncidentSchemaRecord(incident, label) {
-  assert(
-    incident && typeof incident === 'object',
-    `${label} incident is not an object: ${JSON.stringify(incident)}`,
-  );
-  for (const field of incidentRecordSchema.required) {
-    assert(
-      Object.hasOwn(incident, field),
-      `${label} incident missing schema field ${field}: ${JSON.stringify(incident)}`,
-    );
-  }
-  for (const field of [
-    'browser_id',
-    'recommended_action',
-    'acknowledged_at',
-    'acknowledged_by',
-    'acknowledgement_note',
-    'resolved_at',
-    'resolved_by',
-    'resolution_note',
-    'latest_timestamp',
-    'latest_message',
-    'latest_kind',
-    'current_health',
-    'event_ids',
-    'job_ids',
-  ]) {
-    assert(!Object.hasOwn(incident, field), `${label} incident leaked snake_case field ${field}`);
-  }
-  assert(schemaEnum('state').includes(incident.state), `${label} incident state is outside schema enum`);
-  assert(schemaEnum('severity').includes(incident.severity), `${label} incident severity is outside schema enum`);
-  assert(
-    schemaEnum('escalation').includes(incident.escalation),
-    `${label} incident escalation is outside schema enum`,
-  );
-  assert(
-    incident.currentHealth === null || currentHealthSchemaEnum().includes(incident.currentHealth),
-    `${label} incident currentHealth is outside schema enum: ${JSON.stringify(incident)}`,
-  );
-  assert(Array.isArray(incident.eventIds), `${label} incident missing eventIds array`);
-  assert(Array.isArray(incident.jobIds), `${label} incident missing jobIds array`);
-}
-
 function assertCriticalIncidentPayload(payload, label, browserId) {
   assert(payload.success === true, `${label} incidents query failed: ${JSON.stringify(payload)}`);
   assert(Array.isArray(payload.data?.incidents), `${label} missing incidents array`);
@@ -162,7 +100,7 @@ function assertCriticalIncidentPayload(payload, label, browserId) {
   );
   const incident = payload.data.incidents.find((item) => item.id === browserId);
   assert(incident, `${label} missing ${browserId}: ${JSON.stringify(payload.data.incidents)}`);
-  assertIncidentSchemaRecord(incident, label);
+  assertServiceIncidentSchemaRecord(incident, incidentRecordSchema, label);
   assert(incident.severity === 'critical', `${label} incident severity mismatch: ${JSON.stringify(incident)}`);
   assert(
     incident.escalation === 'os_degraded_possible',
@@ -285,7 +223,7 @@ try {
   );
   assert(httpIncidentDetail.success === true, `HTTP incident detail failed: ${JSON.stringify(httpIncidentDetail)}`);
   assert(httpIncidentDetail.data?.incident?.id === browserId, 'HTTP incident detail returned the wrong incident');
-  assertIncidentSchemaRecord(httpIncidentDetail.data.incident, 'HTTP detail');
+  assertServiceIncidentSchemaRecord(httpIncidentDetail.data.incident, incidentRecordSchema, 'HTTP detail');
 
   const mcpIncidentsResult = await send('tools/call', {
     name: 'service_incidents',
@@ -313,20 +251,20 @@ try {
     mcpResourceIncident,
     `MCP incidents resource missing ${browserId}: ${JSON.stringify(mcpResourcePayload.incidents)}`,
   );
-  assertIncidentSchemaRecord(mcpResourceIncident, 'MCP resource');
+  assertServiceIncidentSchemaRecord(mcpResourceIncident, incidentRecordSchema, 'MCP resource');
 
   const traceIncident = trace.data.incidents.find((item) => item.id === browserId);
   assert(
     traceIncident,
     `HTTP trace missing schema incident ${browserId}: ${JSON.stringify(trace.data.incidents)}`,
   );
-  assertIncidentSchemaRecord(traceIncident, 'HTTP trace');
+  assertServiceIncidentSchemaRecord(traceIncident, incidentRecordSchema, 'HTTP trace');
   const mcpTraceIncident = mcpTrace.data.incidents.find((item) => item.id === browserId);
   assert(
     mcpTraceIncident,
     `MCP trace missing schema incident ${browserId}: ${JSON.stringify(mcpTrace.data.incidents)}`,
   );
-  assertIncidentSchemaRecord(mcpTraceIncident, 'MCP trace');
+  assertServiceIncidentSchemaRecord(mcpTraceIncident, incidentRecordSchema, 'MCP trace');
 
   for (const field of ['id', 'severity', 'escalation', 'currentHealth', 'latestKind', 'recommendedAction']) {
     assert(
