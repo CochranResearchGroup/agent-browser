@@ -1448,6 +1448,12 @@ async fn relay_service_command(session_name: &str, cmd: Value) -> Result<String,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::actions::{execute_command, DaemonState};
+    use crate::native::service_model::{
+        SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+        SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+        SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    };
 
     #[test]
     fn split_path_query_returns_path_and_query() {
@@ -1580,6 +1586,48 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_jobs");
         assert_eq!(cmd["jobId"], "job-123");
+    }
+
+    #[tokio::test]
+    async fn service_jobs_http_command_returns_naming_warning_contract_fields() {
+        let mut cmd = service_jobs_command(Some("id=job-unnamed")).unwrap();
+        cmd["serviceState"] = json!({
+            "jobs": {
+                "job-unnamed": {
+                    "id": "job-unnamed",
+                    "action": "navigate",
+                    "state": "succeeded",
+                    "namingWarnings": [
+                        SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+                        SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+                        SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME
+                    ],
+                    "hasNamingWarning": true,
+                    "submittedAt": "2026-04-22T00:00:00Z"
+                }
+            }
+        });
+        let mut state = DaemonState::new();
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["job"]["id"], "job-unnamed");
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-unnamed");
+        for job in [&result["data"]["job"], &result["data"]["jobs"][0]] {
+            assert_eq!(
+                job["namingWarnings"],
+                json!([
+                    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+                    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+                    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME
+                ])
+            );
+            assert_eq!(job["hasNamingWarning"], true);
+            assert!(job.get("naming_warnings").is_none());
+            assert!(job.get("has_naming_warning").is_none());
+        }
     }
 
     #[test]
