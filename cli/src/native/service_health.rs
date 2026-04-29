@@ -976,12 +976,27 @@ fn reconcile_browser_targets(
         }
     }
 
-    refresh_session_tab_relationships_for_browser(
+    if let Some(repair) = refresh_session_tab_relationships_for_browser(
         state,
         browser_id,
-        owner_session_id,
+        owner_session_id.clone(),
         &live_tab_ids,
-    );
+    ) {
+        record_session_tab_ownership_repaired_event(state, browser_id, browser, repair);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SessionTabOwnershipRepair {
+    owner_session_id: Option<String>,
+    live_tab_ids: Vec<String>,
+    removed_relations: Vec<SessionTabOwnershipRepairRelation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SessionTabOwnershipRepairRelation {
+    session_id: String,
+    tab_id: String,
 }
 
 fn refresh_session_tab_relationships_for_browser(
@@ -989,7 +1004,7 @@ fn refresh_session_tab_relationships_for_browser(
     browser_id: &str,
     owner_session_id: Option<String>,
     live_tab_ids: &BTreeSet<String>,
-) {
+) -> Option<SessionTabOwnershipRepair> {
     let browser_tab_ids = state
         .tabs
         .iter()
@@ -1002,13 +1017,26 @@ fn refresh_session_tab_relationships_for_browser(
         })
         .collect::<BTreeSet<_>>();
 
-    for session in state.sessions.values_mut() {
-        session
-            .tab_ids
-            .retain(|tab_id| !browser_tab_ids.contains(tab_id));
+    let mut removed_relations = Vec::new();
+    for (session_id, session) in state.sessions.iter_mut() {
+        session.tab_ids.retain(|tab_id| {
+            if !browser_tab_ids.contains(tab_id) {
+                return true;
+            }
+            let is_current_owner_live_tab = owner_session_id.as_deref()
+                == Some(session_id.as_str())
+                && live_tab_ids.contains(tab_id);
+            if !is_current_owner_live_tab {
+                removed_relations.push(SessionTabOwnershipRepairRelation {
+                    session_id: session_id.clone(),
+                    tab_id: tab_id.clone(),
+                });
+            }
+            false
+        });
     }
 
-    if let Some(owner_session_id) = owner_session_id {
+    if let Some(owner_session_id) = owner_session_id.clone() {
         let session = state
             .sessions
             .entry(owner_session_id.clone())
@@ -1021,6 +1049,50 @@ fn refresh_session_tab_relationships_for_browser(
             merge_unique(&mut session.tab_ids, tab_id.clone());
         }
     }
+
+    (!removed_relations.is_empty()).then(|| SessionTabOwnershipRepair {
+        owner_session_id,
+        live_tab_ids: live_tab_ids.iter().cloned().collect(),
+        removed_relations,
+    })
+}
+
+fn record_session_tab_ownership_repaired_event(
+    state: &mut ServiceState,
+    browser_id: &str,
+    browser: &BrowserProcess,
+    repair: SessionTabOwnershipRepair,
+) {
+    let removed_relations = repair
+        .removed_relations
+        .iter()
+        .map(|relation| {
+            serde_json::json!({
+                "sessionId": relation.session_id,
+                "tabId": relation.tab_id,
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut event = ServiceEvent {
+        kind: ServiceEventKind::Reconciliation,
+        message: format!(
+            "Repaired {} stale session tab ownership relationships for browser {}",
+            repair.removed_relations.len(),
+            browser_id
+        ),
+        browser_id: Some(browser_id.to_string()),
+        details: Some(serde_json::json!({
+            "action": "session_tab_ownership_repaired",
+            "browserId": browser_id,
+            "ownerSessionId": repair.owner_session_id,
+            "liveTabIds": repair.live_tab_ids,
+            "removedRelationshipCount": repair.removed_relations.len(),
+            "removedRelations": removed_relations,
+        })),
+        ..new_service_event()
+    };
+    enrich_service_event_with_browser_context(&mut event, state, browser_id, browser);
+    push_service_event(state, event);
 }
 
 fn close_browser_tabs(state: &mut ServiceState, browser_id: &str) {
@@ -2517,6 +2589,33 @@ mod tests {
             state.tabs["target:page-1"].owner_session_id.as_deref(),
             Some("session-new")
         );
+        let repair_event = state
+            .events
+            .iter()
+            .find(|event| {
+                event.kind == ServiceEventKind::Reconciliation
+                    && event.details.as_ref().is_some_and(|details| {
+                        details["action"] == "session_tab_ownership_repaired"
+                    })
+            })
+            .unwrap();
+        assert_eq!(repair_event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(
+            repair_event.details.as_ref().unwrap()["ownerSessionId"],
+            "session-new"
+        );
+        assert_eq!(
+            repair_event.details.as_ref().unwrap()["removedRelationshipCount"],
+            1
+        );
+        assert_eq!(
+            repair_event.details.as_ref().unwrap()["removedRelations"][0]["sessionId"],
+            "session-old"
+        );
+        assert_eq!(
+            repair_event.details.as_ref().unwrap()["removedRelations"][0]["tabId"],
+            "target:page-1"
+        );
     }
 
     #[test]
@@ -2564,6 +2663,25 @@ mod tests {
         assert!(state.sessions["session-old"].tab_ids.is_empty());
         assert!(!state.sessions.contains_key(""));
         assert_eq!(state.tabs["target:page-1"].owner_session_id, None);
+        let repair_event = state
+            .events
+            .iter()
+            .find(|event| {
+                event.kind == ServiceEventKind::Reconciliation
+                    && event.details.as_ref().is_some_and(|details| {
+                        details["action"] == "session_tab_ownership_repaired"
+                    })
+            })
+            .unwrap();
+        assert_eq!(repair_event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(
+            repair_event.details.as_ref().unwrap()["ownerSessionId"],
+            serde_json::Value::Null
+        );
+        assert_eq!(
+            repair_event.details.as_ref().unwrap()["removedRelationshipCount"],
+            1
+        );
     }
 
     #[tokio::test]

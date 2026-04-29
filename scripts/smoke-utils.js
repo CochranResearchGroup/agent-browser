@@ -287,6 +287,39 @@ export function assertServiceOwnershipHandoff(collections, label, {
   );
 }
 
+export function assertServiceOwnershipRepairEvent(events, label, {
+  browserId,
+  handoffSession,
+  legacySession,
+  liveTabId,
+  staleTabId,
+}) {
+  const repairEvent = events?.find(
+    (event) =>
+      event.kind === 'reconciliation' &&
+      event.browserId === browserId &&
+      event.details?.action === 'session_tab_ownership_repaired',
+  );
+  assert(repairEvent, `${label} missing ownership repair event: ${JSON.stringify(events)}`);
+  assert(
+    repairEvent.details?.ownerSessionId === handoffSession,
+    `${label} repair event owner mismatch: ${JSON.stringify(repairEvent)}`,
+  );
+  assert(
+    repairEvent.details?.liveTabIds?.includes(liveTabId),
+    `${label} repair event missing live tab ${liveTabId}: ${JSON.stringify(repairEvent)}`,
+  );
+  const removedRelations = repairEvent.details?.removedRelations || [];
+  assert(
+    removedRelations.some((relation) => relation.sessionId === legacySession && relation.tabId === liveTabId),
+    `${label} repair event missing legacy live-tab relation: ${JSON.stringify(repairEvent)}`,
+  );
+  assert(
+    removedRelations.some((relation) => relation.sessionId === legacySession && relation.tabId === staleTabId),
+    `${label} repair event missing legacy stale-tab relation: ${JSON.stringify(repairEvent)}`,
+  );
+}
+
 export function configureRecoveryOverrideSmokeContext(context) {
   context.env.AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET = '1';
   context.env.AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS = '1';

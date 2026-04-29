@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
   assert,
   assertServiceOwnershipHandoff,
+  assertServiceOwnershipRepairEvent,
   closeSession,
   createSmokeContext,
   parseJsonOutput,
@@ -201,6 +202,15 @@ try {
     liveTabId: liveTab.id,
     ...handoffScenario,
   });
+  assertServiceOwnershipRepairEvent(
+    handoffReconciled.data?.service_state?.events || [],
+    'service reconcile handoff response',
+    {
+      browserId: liveBrowser.id,
+      liveTabId: liveTab.id,
+      ...handoffScenario,
+    },
+  );
 
   const statusResult = await runCli(context, ['--json', '--session', session, 'service', 'status']);
   const status = parseJsonOutput(statusResult.stdout, 'service status');
@@ -269,6 +279,13 @@ try {
       ...handoffScenario,
     },
   );
+
+  const eventsResource = await serviceMcpCollection('agent-browser://events', 'events');
+  assertServiceOwnershipRepairEvent(eventsResource.events, 'MCP events resource', {
+    browserId: liveBrowser.id,
+    liveTabId: liveTab.id,
+    ...handoffScenario,
+  });
 
   await cleanup();
   console.log('Service reconcile MCP smoke passed');

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
   assert,
   assertServiceOwnershipHandoff,
+  assertServiceOwnershipRepairEvent,
   closeSession,
   createSmokeContext,
   httpJson,
@@ -281,17 +282,41 @@ try {
       ...handoffScenario,
     },
   );
+  assertServiceOwnershipRepairEvent(
+    httpReconcile.data?.service_state?.events || [],
+    'HTTP service reconcile',
+    {
+      browserId: expectedBrowserId,
+      liveTabId: expectedTab.id,
+      ...handoffScenario,
+    },
+  );
 
   const httpHandoffSessions = await httpJson(port, 'GET', '/api/service/sessions');
   const httpHandoffTabs = await httpJson(port, 'GET', '/api/service/tabs');
+  const httpHandoffEvents = await httpJson(
+    port,
+    'GET',
+    '/api/service/events?kind=reconciliation&limit=20',
+  );
   assert(httpHandoffSessions.success === true, `HTTP service sessions failed: ${JSON.stringify(httpHandoffSessions)}`);
   assert(httpHandoffTabs.success === true, `HTTP service tabs failed: ${JSON.stringify(httpHandoffTabs)}`);
+  assert(httpHandoffEvents.success === true, `HTTP service events failed: ${JSON.stringify(httpHandoffEvents)}`);
   assertServiceOwnershipHandoff(
     {
       sessions: httpHandoffSessions.data?.sessions,
       tabs: httpHandoffTabs.data?.tabs,
     },
     'HTTP service collections after reconcile',
+    {
+      browserId: expectedBrowserId,
+      liveTabId: expectedTab.id,
+      ...handoffScenario,
+    },
+  );
+  assertServiceOwnershipRepairEvent(
+    httpHandoffEvents.data?.events,
+    'HTTP service events',
     {
       browserId: expectedBrowserId,
       liveTabId: expectedTab.id,
