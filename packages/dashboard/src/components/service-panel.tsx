@@ -132,6 +132,8 @@ type ServiceJob = {
   serviceName?: string | null;
   agentName?: string | null;
   taskName?: string | null;
+  namingWarnings?: string[];
+  hasNamingWarning?: boolean;
   timeoutMs?: number | null;
   request?: unknown;
   response?: unknown;
@@ -1015,6 +1017,7 @@ function IncidentRow({
 
 function JobRow({ job, onSelect }: { job: ServiceJob; onSelect: (job: ServiceJob) => void }) {
   const failed = job.state === "failed" || job.state === "timed_out" || job.state === "cancelled";
+  const namingWarning = serviceJobNamingWarningLabel(job.namingWarnings);
   return (
     <button
       type="button"
@@ -1037,6 +1040,11 @@ function JobRow({ job, onSelect }: { job: ServiceJob; onSelect: (job: ServiceJob
           <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
             {job.state ?? "unknown"}
           </Badge>
+          {namingWarning && (
+            <Badge variant="destructive" className="h-4 max-w-32 truncate px-1.5 text-[9px]">
+              {namingWarning}
+            </Badge>
+          )}
           <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
             {formatRelativeTime(job.submittedAt)}
           </span>
@@ -1047,6 +1055,17 @@ function JobRow({ job, onSelect }: { job: ServiceJob; onSelect: (job: ServiceJob
       </div>
     </button>
   );
+}
+
+function serviceJobNamingWarningLabel(warnings?: string[]): string | null {
+  if (!warnings || warnings.length === 0) return null;
+  const labels = warnings.map((warning) => {
+    if (warning === "missing_service_name") return "service";
+    if (warning === "missing_agent_name") return "agent";
+    if (warning === "missing_task_name") return "task";
+    return warning.replaceAll("_", " ");
+  });
+  return `Missing ${labels.join(", ")}`;
 }
 
 function EventDetailItem({ label, value }: { label: string; value?: string | null }) {
@@ -1169,6 +1188,7 @@ function JobDetailDialog({
   const response = formatDetails(job?.response ?? job?.result);
   const target = formatDetails(job?.target);
   const canCancel = job?.state === "queued" || job?.state === "running";
+  const namingWarning = serviceJobNamingWarningLabel(job?.namingWarnings);
   return (
     <Dialog open={!!job} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -1187,6 +1207,12 @@ function JobDetailDialog({
                 <div className="service-browser-error">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                   <span>{job.error}</span>
+                </div>
+              )}
+              {namingWarning && (
+                <div className="service-browser-error">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{namingWarning} name metadata. Add serviceName, agentName, and taskName for traceable jobs.</span>
                 </div>
               )}
               <div className="service-event-detail-grid">

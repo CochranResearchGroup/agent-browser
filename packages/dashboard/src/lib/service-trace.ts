@@ -33,6 +33,8 @@ export type ServiceTraceJob = {
   serviceName?: string | null;
   agentName?: string | null;
   taskName?: string | null;
+  namingWarnings?: string[];
+  hasNamingWarning?: boolean;
 };
 
 export type ServiceTraceTimelineItem = {
