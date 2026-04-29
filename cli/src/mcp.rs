@@ -10563,9 +10563,8 @@ mod tests {
         use std::collections::BTreeMap;
 
         use crate::native::service_model::{
-            JobState, JobTarget, ServiceJob, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-            SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-            SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+            assert_service_job_naming_warning_contract, service_job_naming_warning_values,
+            JobState, JobTarget, ServiceJob,
         };
 
         let state = ServiceState {
@@ -10588,11 +10587,7 @@ mod tests {
                         action: "navigate".to_string(),
                         target: JobTarget::Service,
                         state: JobState::Queued,
-                        naming_warnings: vec![
-                            SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME.to_string(),
-                            SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME.to_string(),
-                            SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME.to_string(),
-                        ],
+                        naming_warnings: service_job_naming_warning_values(),
                         has_naming_warning: true,
                         submitted_at: Some("2026-04-22T00:01:00Z".to_string()),
                         ..ServiceJob::default()
@@ -10607,21 +10602,7 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["jobs"][0]["id"], "job-a");
         assert_eq!(resource["contents"]["jobs"][1]["id"], "job-b");
-        assert_eq!(
-            resource["contents"]["jobs"][0]["namingWarnings"],
-            json!([
-                SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-                SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-                SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME
-            ])
-        );
-        assert_eq!(resource["contents"]["jobs"][0]["hasNamingWarning"], true);
-        assert!(resource["contents"]["jobs"][0]
-            .get("naming_warnings")
-            .is_none());
-        assert!(resource["contents"]["jobs"][0]
-            .get("has_naming_warning")
-            .is_none());
+        assert_service_job_naming_warning_contract(&resource["contents"]["jobs"][0]);
     }
 
     #[test]

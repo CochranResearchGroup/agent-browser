@@ -16,6 +16,25 @@ pub const SERVICE_JOB_NAMING_WARNING_VALUES: [&str; 3] = [
     SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 ];
 
+#[cfg(test)]
+pub fn service_job_naming_warning_values() -> Vec<String> {
+    SERVICE_JOB_NAMING_WARNING_VALUES
+        .iter()
+        .map(|value| value.to_string())
+        .collect()
+}
+
+#[cfg(test)]
+pub fn assert_service_job_naming_warning_contract(value: &serde_json::Value) {
+    assert_eq!(
+        value["namingWarnings"],
+        serde_json::json!(SERVICE_JOB_NAMING_WARNING_VALUES.to_vec())
+    );
+    assert_eq!(value["hasNamingWarning"], true);
+    assert!(value.get("naming_warnings").is_none());
+    assert!(value.get("has_naming_warning").is_none());
+}
+
 /// Top-level snapshot of the browser service control plane.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -1257,26 +1276,13 @@ mod tests {
         let job = ServiceJob {
             id: "job-1".to_string(),
             action: "navigate".to_string(),
-            naming_warnings: warning_values
-                .iter()
-                .map(|value| value.to_string())
-                .collect(),
+            naming_warnings: service_job_naming_warning_values(),
             has_naming_warning: true,
             ..ServiceJob::default()
         };
         let value = serde_json::to_value(job).unwrap();
 
-        assert_eq!(
-            value["namingWarnings"],
-            json!([
-                SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-                SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-                SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME
-            ])
-        );
-        assert_eq!(value["hasNamingWarning"], true);
-        assert!(value.get("naming_warnings").is_none());
-        assert!(value.get("has_naming_warning").is_none());
+        assert_service_job_naming_warning_contract(&value);
     }
 
     #[test]

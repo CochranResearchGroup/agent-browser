@@ -1450,9 +1450,7 @@ mod tests {
     use super::*;
     use crate::native::actions::{execute_command, DaemonState};
     use crate::native::service_model::{
-        SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-        SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-        SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
     };
 
     #[test]
@@ -1597,11 +1595,7 @@ mod tests {
                     "id": "job-unnamed",
                     "action": "navigate",
                     "state": "succeeded",
-                    "namingWarnings": [
-                        SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-                        SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-                        SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME
-                    ],
+                    "namingWarnings": service_job_naming_warning_values(),
                     "hasNamingWarning": true,
                     "submittedAt": "2026-04-22T00:00:00Z"
                 }
@@ -1616,17 +1610,7 @@ mod tests {
         assert_eq!(result["data"]["job"]["id"], "job-unnamed");
         assert_eq!(result["data"]["jobs"][0]["id"], "job-unnamed");
         for job in [&result["data"]["job"], &result["data"]["jobs"][0]] {
-            assert_eq!(
-                job["namingWarnings"],
-                json!([
-                    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-                    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-                    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME
-                ])
-            );
-            assert_eq!(job["hasNamingWarning"], true);
-            assert!(job.get("naming_warnings").is_none());
-            assert!(job.get("has_naming_warning").is_none());
+            assert_service_job_naming_warning_contract(job);
         }
     }
 
