@@ -9,6 +9,7 @@ const smokeScripts = [
   ['recovery override HTTP', 'scripts/smoke-service-recovery-override-http.js'],
   ['recovery override MCP', 'scripts/smoke-service-recovery-override-mcp.js'],
   ['incident HTTP/MCP parity', 'scripts/smoke-service-incident-parity.js'],
+  ['job naming warnings', 'scripts/smoke-service-job-naming.js'],
 ];
 
 function runSmoke([label, script]) {
