@@ -318,6 +318,8 @@ export function assertServiceOwnershipRepairEvent(events, label, {
     removedRelations.some((relation) => relation.sessionId === legacySession && relation.tabId === staleTabId),
     `${label} repair event missing legacy stale-tab relation: ${JSON.stringify(repairEvent)}`,
   );
+
+  return repairEvent;
 }
 
 export function configureRecoveryOverrideSmokeContext(context) {

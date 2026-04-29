@@ -5,11 +5,13 @@ import { join } from 'node:path';
 
 import {
   assert,
+  assertHttpMcpServiceTraceEventParity,
   assertServiceOwnershipHandoff,
   assertServiceOwnershipRepairEvent,
   closeSession,
   createMcpStdioClient,
   createSmokeContext,
+  httpJson,
   parseJsonOutput,
   parseMcpToolPayload,
   readResourceContents,
@@ -78,6 +80,23 @@ async function serviceCliCollection(command, key) {
 async function serviceMcpCollection(uri, label) {
   const result = await runCli(context, ['--json', 'mcp', 'read', uri]);
   return readResourceContents(parseJsonOutput(result.stdout, `${label} resource`), label);
+}
+
+async function enableStream() {
+  const streamStatusResult = await runCli(context, ['--json', '--session', session, 'stream', 'status']);
+  let stream = parseJsonOutput(streamStatusResult.stdout, 'stream status');
+  assert(
+    stream.success === true,
+    `stream status failed: ${streamStatusResult.stdout}${streamStatusResult.stderr}`,
+  );
+  if (!stream.data?.enabled) {
+    const streamResult = await runCli(context, ['--json', '--session', session, 'stream', 'enable']);
+    stream = parseJsonOutput(streamResult.stdout, 'stream enable');
+    assert(stream.success === true, `stream enable failed: ${streamResult.stdout}${streamResult.stderr}`);
+  }
+  const port = stream.data?.port;
+  assert(Number.isInteger(port) && port > 0, `stream enable did not return a port: ${JSON.stringify(stream)}`);
+  return port;
 }
 
 try {
@@ -306,6 +325,13 @@ try {
     ...handoffScenario,
   });
 
+  const port = await enableStream();
+  const httpTrace = await httpJson(
+    port,
+    'GET',
+    `/api/service/trace?browser-id=${encodeURIComponent(liveBrowser.id)}&limit=40`,
+  );
+
   mcp = createMcpStdioClient({
     context,
     args: ['--session', session, 'mcp', 'serve'],
@@ -327,13 +353,16 @@ try {
     },
   });
   const tracePayload = parseMcpToolPayload(traceResult, 'MCP service_trace');
-  assert(tracePayload.success === true, `MCP service_trace failed: ${JSON.stringify(tracePayload)}`);
-  assert(tracePayload.tool === 'service_trace', 'MCP service_trace payload tool mismatch');
-  assert(Array.isArray(tracePayload.data?.events), 'MCP service_trace missing events array');
-  assertServiceOwnershipRepairEvent(tracePayload.data.events, 'MCP service_trace', {
-    browserId: liveBrowser.id,
-    liveTabId: liveTab.id,
-    ...handoffScenario,
+  assertHttpMcpServiceTraceEventParity({
+    httpTrace,
+    mcpTrace: tracePayload,
+    label: 'ownership repair trace',
+    assertEvent: (events, label) =>
+      assertServiceOwnershipRepairEvent(events, label, {
+        browserId: liveBrowser.id,
+        liveTabId: liveTab.id,
+        ...handoffScenario,
+      }),
   });
 
   await cleanup();
