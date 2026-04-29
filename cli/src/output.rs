@@ -513,7 +513,19 @@ fn format_service_job_line(job: &serde_json::Value) -> String {
         .and_then(|value| value.as_str())
         .map(|error| format!(" error={error}"))
         .unwrap_or_default();
-    format!("{timestamp} {state} action={action} id={id}{error}")
+    let naming_warnings = job
+        .get("namingWarnings")
+        .and_then(|value| value.as_array())
+        .map(|warnings| {
+            warnings
+                .iter()
+                .filter_map(|warning| warning.as_str())
+                .collect::<Vec<_>>()
+        })
+        .filter(|warnings| !warnings.is_empty())
+        .map(|warnings| format!(" namingWarnings={}", warnings.join(",")))
+        .unwrap_or_default();
+    format!("{timestamp} {state} action={action} id={id}{naming_warnings}{error}")
 }
 
 fn value_str<'a>(value: &'a serde_json::Value, key: &str, fallback: &'a str) -> &'a str {
@@ -3545,7 +3557,7 @@ Notes:
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, and since filters as CLI and HTTP.
   - service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
-  - Service jobs persist serviceName, agentName, and taskName when commands provide them.
+  - Service jobs persist serviceName, agentName, and taskName when commands provide them, plus namingWarnings when caller labels are missing.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
   - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
@@ -4345,9 +4357,10 @@ pub fn print_version() {
 mod tests {
     use super::{
         format_service_browsers_text, format_service_challenges_text, format_service_events_text,
-        format_service_profiles_text, format_service_providers_text, format_service_sessions_text,
-        format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
-        format_service_trace_text, format_storage_text,
+        format_service_jobs_text, format_service_profiles_text, format_service_providers_text,
+        format_service_sessions_text, format_service_site_policies_text,
+        format_service_status_text, format_service_tabs_text, format_service_trace_text,
+        format_storage_text,
     };
     use serde_json::json;
 
@@ -4661,6 +4674,27 @@ mod tests {
         assert_eq!(
             rendered,
             "Challenges: 1\n  challenge-1 kind=captcha state=waiting_for_provider tab=tab-1 provider=captcha-api decision=provider_allowed human_approved=no result=pending"
+        );
+    }
+
+    #[test]
+    fn test_format_service_jobs_text_includes_naming_warnings() {
+        let data = json!({
+            "jobs": [{
+                "id": "job-1",
+                "action": "navigate",
+                "state": "queued",
+                "submittedAt": "2026-04-25T00:00:00Z",
+                "hasNamingWarning": true,
+                "namingWarnings": ["missing_agent_name"]
+            }]
+        });
+
+        let rendered = format_service_jobs_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "2026-04-25T00:00:00Z queued action=navigate id=job-1 namingWarnings=missing_agent_name"
         );
     }
 

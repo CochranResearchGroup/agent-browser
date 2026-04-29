@@ -724,6 +724,9 @@ pub struct ServiceJob {
     pub agent_name: Option<String>,
     /// Task-level caller label supplied by MCP, CLI, HTTP, or API clients.
     pub task_name: Option<String>,
+    /// Non-blocking policy warnings for missing caller labels.
+    pub naming_warnings: Vec<String>,
+    pub has_naming_warning: bool,
     pub target: JobTarget,
     pub owner: ServiceActor,
     pub state: JobState,
@@ -744,6 +747,8 @@ impl Default for ServiceJob {
             service_name: None,
             agent_name: None,
             task_name: None,
+            naming_warnings: Vec::new(),
+            has_naming_warning: false,
             target: JobTarget::Service,
             owner: ServiceActor::System,
             state: JobState::Queued,

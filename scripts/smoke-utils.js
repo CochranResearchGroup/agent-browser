@@ -520,6 +520,10 @@ export function assertServiceTracePayload(payload, label = 'Service trace', { to
   }
   assert(Array.isArray(payload.data?.events), `${label} missing events array`);
   assert(Array.isArray(payload.data?.jobs), `${label} missing jobs array`);
+  for (const job of payload.data.jobs) {
+    assert(Array.isArray(job.namingWarnings), `${label} job missing naming warnings array`);
+    assert(typeof job.hasNamingWarning === 'boolean', `${label} job missing naming warning flag`);
+  }
   assert(Array.isArray(payload.data?.incidents), `${label} missing incidents array`);
   assert(Array.isArray(payload.data?.activity), `${label} missing activity array`);
   assert(payload.data?.summary && typeof payload.data.summary === 'object', `${label} missing summary object`);

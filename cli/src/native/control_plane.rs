@@ -73,6 +73,7 @@ pub struct ControlRequest {
     pub service_name: Option<String>,
     pub agent_name: Option<String>,
     pub task_name: Option<String>,
+    pub naming_warnings: Vec<String>,
     pub command: Value,
     pub priority: ControlPriority,
     /// Optional worker-bound execution timeout. The worker records timed-out
@@ -218,6 +219,11 @@ impl ControlPlaneHandle {
         let service_name = optional_command_string(&command, "serviceName");
         let agent_name = optional_command_string(&command, "agentName");
         let task_name = optional_command_string(&command, "taskName");
+        let naming_warnings = request_naming_warnings(
+            service_name.as_deref(),
+            agent_name.as_deref(),
+            task_name.as_deref(),
+        );
         let request = ControlRequest {
             id: id.clone(),
             job_id,
@@ -225,6 +231,7 @@ impl ControlPlaneHandle {
             service_name,
             agent_name,
             task_name,
+            naming_warnings,
             command,
             priority: ControlPriority::Normal,
             timeout_ms,
@@ -424,6 +431,8 @@ fn persist_service_job_queued(request: &ControlRequest) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        naming_warnings: request.naming_warnings.clone(),
+        has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Queued,
@@ -441,6 +450,8 @@ fn persist_service_job_running(request: &ControlRequest) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        naming_warnings: request.naming_warnings.clone(),
+        has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Running,
@@ -472,6 +483,8 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        naming_warnings: request.naming_warnings.clone(),
+        has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: if success {
@@ -501,6 +514,8 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        naming_warnings: request.naming_warnings.clone(),
+        has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::TimedOut,
@@ -525,6 +540,8 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        naming_warnings: request.naming_warnings.clone(),
+        has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Cancelled,
@@ -549,6 +566,8 @@ fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) 
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        naming_warnings: request.naming_warnings.clone(),
+        has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Failed,
@@ -579,6 +598,22 @@ fn service_job_priority(priority: ControlPriority) -> JobPriority {
         ControlPriority::Normal => JobPriority::Normal,
         ControlPriority::Lifecycle => JobPriority::Lifecycle,
     }
+}
+
+fn request_naming_warnings(
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Vec<String> {
+    [
+        service_name.is_none().then_some("missing_service_name"),
+        agent_name.is_none().then_some("missing_agent_name"),
+        task_name.is_none().then_some("missing_task_name"),
+    ]
+    .into_iter()
+    .flatten()
+    .map(str::to_string)
+    .collect()
 }
 
 fn optional_command_string(command: &Value, name: &str) -> Option<String> {
@@ -918,10 +953,50 @@ mod tests {
         let job = &persisted.jobs["test-1"];
         assert_eq!(job.action, "state_list");
         assert_eq!(job.state, JobState::Succeeded);
+        assert_eq!(
+            job.naming_warnings,
+            vec![
+                "missing_service_name".to_string(),
+                "missing_agent_name".to_string(),
+                "missing_task_name".to_string()
+            ]
+        );
+        assert!(job.has_naming_warning);
         assert!(job.submitted_at.is_some());
         assert!(job.started_at.is_some());
         assert!(job.completed_at.is_some());
         assert_eq!(job.result.as_ref().unwrap()["success"], true);
+
+        handle.shutdown().await;
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn submit_persists_no_naming_warnings_for_named_request() {
+        let home = temp_home("control-plane-submit-named");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let handle = ControlPlaneWorker::start(DaemonState::new());
+        let response = handle
+            .submit(json!({
+                "id": "test-named",
+                "action": "state_list",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+            }))
+            .await;
+
+        assert_eq!(
+            response.get("success").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        let job = &persisted.jobs["test-named"];
+        assert!(job.naming_warnings.is_empty());
+        assert!(!job.has_naming_warning);
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
