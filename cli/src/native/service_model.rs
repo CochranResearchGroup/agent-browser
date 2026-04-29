@@ -725,7 +725,11 @@ pub struct ServiceJob {
     /// Task-level caller label supplied by MCP, CLI, HTTP, or API clients.
     pub task_name: Option<String>,
     /// Non-blocking policy warnings for missing caller labels.
+    ///
+    /// Current warning values are `missing_service_name`,
+    /// `missing_agent_name`, and `missing_task_name`.
     pub naming_warnings: Vec<String>,
+    /// True when `naming_warnings` is non-empty.
     pub has_naming_warning: bool,
     pub target: JobTarget,
     pub owner: ServiceActor,

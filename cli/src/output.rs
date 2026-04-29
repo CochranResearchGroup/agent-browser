@@ -3557,7 +3557,8 @@ Notes:
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, and since filters as CLI and HTTP.
   - service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
-  - Service jobs persist serviceName, agentName, and taskName when commands provide them, plus namingWarnings when caller labels are missing.
+  - Service jobs persist serviceName, agentName, and taskName when commands provide them.
+  - Service job namingWarnings values are missing_service_name, missing_agent_name, and missing_task_name. hasNamingWarning is true when namingWarnings is non-empty.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
   - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
