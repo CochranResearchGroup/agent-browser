@@ -98,6 +98,15 @@ export type ServiceTraceSummaryContext = NonNullable<
   NonNullable<ServiceTraceData["summary"]>["contexts"]
 >[number];
 
+export type ServiceTraceSummaryCard = {
+  key: string;
+  title: string;
+  subtitle: string;
+  total: number;
+  meta: string[];
+  counts: string[];
+};
+
 export type ServiceTraceToolPayload = {
   tool?: string;
   success?: boolean;
@@ -151,6 +160,44 @@ export function traceSummaryContexts(trace: ServiceTraceData | null): ServiceTra
     if (rightCount !== leftCount) return rightCount - leftCount;
     return (right.latestTimestamp ?? "").localeCompare(left.latestTimestamp ?? "");
   });
+}
+
+export function traceSummaryCards(trace: ServiceTraceData | null, limit = 4): ServiceTraceSummaryCard[] {
+  return traceSummaryContexts(trace)
+    .slice(0, limit)
+    .map((context, index) => {
+      const total =
+        (context.eventCount ?? 0) +
+        (context.jobCount ?? 0) +
+        (context.incidentCount ?? 0) +
+        (context.activityCount ?? 0);
+      return {
+        key: [
+          context.serviceName,
+          context.agentName,
+          context.taskName,
+          context.browserId,
+          context.profileId,
+          context.sessionId,
+          index,
+        ].join(":"),
+        title: context.serviceName ?? "Unlabeled service",
+        subtitle: context.taskName ?? "untitled task",
+        total,
+        meta: [
+          context.agentName && `agent ${context.agentName}`,
+          context.browserId && `browser ${context.browserId}`,
+          context.profileId && `profile ${context.profileId}`,
+          context.sessionId && `session ${context.sessionId}`,
+        ].filter((value): value is string => typeof value === "string" && value.length > 0),
+        counts: [
+          `${context.eventCount ?? 0} ev`,
+          `${context.jobCount ?? 0} jobs`,
+          `${context.incidentCount ?? 0} inc`,
+          `${context.activityCount ?? 0} act`,
+        ],
+      };
+    });
 }
 
 export function traceTimelineItems(trace: ServiceTraceData | null): ServiceTraceTimelineItem[] {

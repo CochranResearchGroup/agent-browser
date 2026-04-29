@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeServiceTraceData,
   traceFilterSummary,
+  traceSummaryCards,
   traceSummaryContexts,
   traceTimelineItems,
 } from '../packages/dashboard/src/lib/service-trace.ts';
@@ -152,6 +153,19 @@ const summaryContexts = traceSummaryContexts(traceData);
 assert.equal(summaryContexts[0].serviceName, 'JournalDownloader');
 assert.equal(summaryContexts[0].browserId, 'browser-1');
 assert.equal(summaryContexts[1].serviceName, 'SmallService');
+
+const summaryCards = traceSummaryCards(traceData);
+assert.equal(summaryCards[0].title, 'JournalDownloader');
+assert.equal(summaryCards[0].subtitle, 'probeACSwebsite');
+assert.equal(summaryCards[0].total, 6);
+assert.deepEqual(summaryCards[0].meta, [
+  'agent agent-a',
+  'browser browser-1',
+  'profile profile-1',
+  'session session-1',
+]);
+assert.deepEqual(summaryCards[0].counts, ['2 ev', '2 jobs', '0 inc', '2 act']);
+assert.equal(traceSummaryCards(null).length, 0);
 
 const timeline = traceTimelineItems(traceData);
 assert.deepEqual(

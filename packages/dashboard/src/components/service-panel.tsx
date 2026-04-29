@@ -31,7 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   normalizeServiceTraceData,
   traceFilterSummary,
-  traceSummaryContexts,
+  traceSummaryCards,
   traceTimelineItems,
   type ServiceTraceData,
   type ServiceTraceTimelineItem,
@@ -707,7 +707,7 @@ function TraceExplorer({
 }) {
   const counts = trace?.counts;
   const matched = trace?.matched;
-  const summaryContexts = traceSummaryContexts(trace).slice(0, 4);
+  const summaryCards = traceSummaryCards(trace);
   const hasFilters =
     !!filters.serviceName.trim() ||
     !!filters.agentName.trim() ||
@@ -853,58 +853,40 @@ function TraceExplorer({
           <div className="service-trace-contexts-header">
             <span>Ownership summary</span>
             <Badge variant="outline" className="rounded-full px-2 py-0 text-[9px] uppercase">
-              {trace.summary?.contextCount ?? summaryContexts.length} contexts
+              {trace.summary?.contextCount ?? summaryCards.length} contexts
             </Badge>
           </div>
-          {summaryContexts.length === 0 ? (
+          {summaryCards.length === 0 ? (
             <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-center text-xs text-muted-foreground">
               No ownership context was returned for this trace.
             </p>
           ) : (
             <div className="service-trace-context-grid">
-              {summaryContexts.map((context, index) => {
-                const key = [
-                  context.serviceName,
-                  context.agentName,
-                  context.taskName,
-                  context.browserId,
-                  context.profileId,
-                  context.sessionId,
-                  index,
-                ].join(":");
-                const total =
-                  (context.eventCount ?? 0) +
-                  (context.jobCount ?? 0) +
-                  (context.incidentCount ?? 0) +
-                  (context.activityCount ?? 0);
-                return (
-                  <div key={key} className="service-trace-context-card">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-xs font-black text-foreground">
-                        {context.serviceName ?? "Unlabeled service"}
-                      </span>
-                      <Badge variant="outline" className="ml-auto shrink-0 rounded-full px-1.5 py-0 text-[9px]">
-                        {total} records
-                      </Badge>
-                    </div>
-                    <p className="mt-1 truncate text-[11px] font-bold text-muted-foreground">
-                      {context.taskName ?? "untitled task"}
-                    </p>
-                    <div className="service-trace-context-meta">
-                      {context.agentName && <span>agent {context.agentName}</span>}
-                      {context.browserId && <span>browser {context.browserId}</span>}
-                      {context.profileId && <span>profile {context.profileId}</span>}
-                      {context.sessionId && <span>session {context.sessionId}</span>}
-                    </div>
-                    <div className="service-trace-context-counts">
-                      <span>{context.eventCount ?? 0} ev</span>
-                      <span>{context.jobCount ?? 0} jobs</span>
-                      <span>{context.incidentCount ?? 0} inc</span>
-                      <span>{context.activityCount ?? 0} act</span>
-                    </div>
+              {summaryCards.map((card) => (
+                <div key={card.key} className="service-trace-context-card">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-xs font-black text-foreground">
+                      {card.title}
+                    </span>
+                    <Badge variant="outline" className="ml-auto shrink-0 rounded-full px-1.5 py-0 text-[9px]">
+                      {card.total} records
+                    </Badge>
                   </div>
-                );
-              })}
+                  <p className="mt-1 truncate text-[11px] font-bold text-muted-foreground">
+                    {card.subtitle}
+                  </p>
+                  <div className="service-trace-context-meta">
+                    {card.meta.map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                  <div className="service-trace-context-counts">
+                    {card.counts.map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
