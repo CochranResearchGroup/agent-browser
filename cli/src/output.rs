@@ -3559,6 +3559,7 @@ Notes:
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
   - Service jobs persist serviceName, agentName, and taskName when commands provide them.
   - Service job namingWarnings values are missing_service_name, missing_agent_name, and missing_task_name. hasNamingWarning is true when namingWarnings is non-empty.
+  - HTTP /api/service/jobs, HTTP /api/service/jobs/<id>, and MCP agent-browser://jobs job records follow docs/dev/contracts/service-job-record.v1.schema.json.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
   - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
