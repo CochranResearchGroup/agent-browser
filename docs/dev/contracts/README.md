@@ -15,3 +15,18 @@ software clients and MCP agents are expected to consume directly.
 The schema is guarded by Rust tests for the model, HTTP, and MCP surfaces. Keep
 new contractual job fields in this schema before relying on them from external
 clients.
+
+## Service Incident Record v1
+
+`service-incident-record.v1.schema.json` describes grouped service incident
+records returned by:
+
+- HTTP `GET /api/service/incidents`
+- HTTP `GET /api/service/incidents/<id>`
+- MCP `agent-browser://incidents`
+- MCP `service_incidents`
+- service trace incident arrays
+
+The schema is guarded by Rust tests for the model, HTTP, MCP, and service trace
+surfaces. Keep new contractual incident fields in this schema before relying on
+them from external clients.

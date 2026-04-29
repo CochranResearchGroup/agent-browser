@@ -1450,7 +1450,8 @@ mod tests {
     use super::*;
     use crate::native::actions::{execute_command, DaemonState};
     use crate::native::service_model::{
-        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
+        assert_service_incident_record_contract, assert_service_job_naming_warning_contract,
+        service_job_naming_warning_values,
     };
 
     #[test]
@@ -1611,6 +1612,41 @@ mod tests {
         assert_eq!(result["data"]["jobs"][0]["id"], "job-unnamed");
         for job in [&result["data"]["job"], &result["data"]["jobs"][0]] {
             assert_service_job_naming_warning_contract(job);
+        }
+    }
+
+    #[tokio::test]
+    async fn service_incidents_http_command_returns_record_contract_fields() {
+        let mut cmd = service_incidents_command(Some("id=browser-1")).unwrap();
+        cmd["serviceState"] = json!({
+            "incidents": [
+                {
+                    "id": "browser-1",
+                    "browserId": "browser-1",
+                    "label": "browser-1",
+                    "state": "active",
+                    "severity": "error",
+                    "escalation": "browser_recovery",
+                    "recommendedAction": "Review recovery trace and retry or relaunch the affected browser.",
+                    "latestTimestamp": "2026-04-22T00:01:00Z",
+                    "latestMessage": "Browser crashed",
+                    "latestKind": "browser_health_changed",
+                    "currentHealth": "process_exited",
+                    "eventIds": ["event-1"],
+                    "jobIds": ["job-1"]
+                }
+            ]
+        });
+        let mut state = DaemonState::new();
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["incident"]["id"], "browser-1");
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
+        for incident in [&result["data"]["incident"], &result["data"]["incidents"][0]] {
+            assert_service_incident_record_contract(incident);
         }
     }
 

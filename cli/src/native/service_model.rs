@@ -15,6 +15,28 @@ pub const SERVICE_JOB_NAMING_WARNING_VALUES: [&str; 3] = [
     SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
     SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 ];
+pub const SERVICE_INCIDENT_STATE_VALUES: [&str; 3] = ["active", "recovered", "service"];
+pub const SERVICE_INCIDENT_SEVERITY_VALUES: [&str; 4] = ["info", "warning", "error", "critical"];
+pub const SERVICE_INCIDENT_ESCALATION_VALUES: [&str; 6] = [
+    "none",
+    "browser_degraded",
+    "browser_recovery",
+    "job_attention",
+    "service_triage",
+    "os_degraded_possible",
+];
+pub const SERVICE_BROWSER_HEALTH_VALUES: [&str; 10] = [
+    "not_started",
+    "launching",
+    "ready",
+    "degraded",
+    "unreachable",
+    "process_exited",
+    "cdp_disconnected",
+    "reconnecting",
+    "closing",
+    "faulted",
+];
 
 #[cfg(test)]
 pub fn service_job_naming_warning_values() -> Vec<String> {
@@ -33,6 +55,62 @@ pub fn assert_service_job_naming_warning_contract(value: &serde_json::Value) {
     assert_eq!(value["hasNamingWarning"], true);
     assert!(value.get("naming_warnings").is_none());
     assert!(value.get("has_naming_warning").is_none());
+}
+
+#[cfg(test)]
+pub fn assert_service_incident_record_contract(value: &serde_json::Value) {
+    for field in [
+        "id",
+        "browserId",
+        "label",
+        "state",
+        "severity",
+        "escalation",
+        "recommendedAction",
+        "acknowledgedAt",
+        "acknowledgedBy",
+        "acknowledgementNote",
+        "resolvedAt",
+        "resolvedBy",
+        "resolutionNote",
+        "latestTimestamp",
+        "latestMessage",
+        "latestKind",
+        "currentHealth",
+        "eventIds",
+        "jobIds",
+    ] {
+        assert!(value.get(field).is_some(), "missing incident field {field}");
+    }
+    for snake_case_field in [
+        "browser_id",
+        "recommended_action",
+        "acknowledged_at",
+        "acknowledged_by",
+        "acknowledgement_note",
+        "resolved_at",
+        "resolved_by",
+        "resolution_note",
+        "latest_timestamp",
+        "latest_message",
+        "latest_kind",
+        "current_health",
+        "event_ids",
+        "job_ids",
+    ] {
+        assert!(
+            value.get(snake_case_field).is_none(),
+            "unexpected snake_case incident field {snake_case_field}"
+        );
+    }
+    assert!(SERVICE_INCIDENT_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
+    assert!(SERVICE_INCIDENT_SEVERITY_VALUES.contains(&value["severity"].as_str().unwrap()));
+    assert!(SERVICE_INCIDENT_ESCALATION_VALUES.contains(&value["escalation"].as_str().unwrap()));
+    if let Some(current_health) = value["currentHealth"].as_str() {
+        assert!(SERVICE_BROWSER_HEALTH_VALUES.contains(&current_health));
+    }
+    assert!(value["eventIds"].is_array());
+    assert!(value["jobIds"].is_array());
 }
 
 /// Top-level snapshot of the browser service control plane.
@@ -1283,6 +1361,77 @@ mod tests {
         let value = serde_json::to_value(job).unwrap();
 
         assert_service_job_naming_warning_contract(&value);
+    }
+
+    #[test]
+    fn service_incident_record_contract_matches_wire_shape() {
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-incident-record.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_eq!(
+            schema["properties"]["state"]["enum"],
+            json!(SERVICE_INCIDENT_STATE_VALUES.to_vec())
+        );
+        assert_eq!(
+            schema["properties"]["severity"]["enum"],
+            json!(SERVICE_INCIDENT_SEVERITY_VALUES.to_vec())
+        );
+        assert_eq!(
+            schema["properties"]["escalation"]["enum"],
+            json!(SERVICE_INCIDENT_ESCALATION_VALUES.to_vec())
+        );
+        assert_eq!(
+            schema["properties"]["currentHealth"]["oneOf"][0]["enum"],
+            json!(SERVICE_BROWSER_HEALTH_VALUES.to_vec())
+        );
+        for field in [
+            "id",
+            "browserId",
+            "label",
+            "state",
+            "severity",
+            "escalation",
+            "recommendedAction",
+            "latestTimestamp",
+            "latestMessage",
+            "latestKind",
+            "currentHealth",
+            "eventIds",
+            "jobIds",
+        ] {
+            assert!(schema["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|required| required == field));
+        }
+
+        let incident = ServiceIncident {
+            id: "browser-1".to_string(),
+            browser_id: Some("browser-1".to_string()),
+            label: "browser-1".to_string(),
+            state: ServiceIncidentState::Active,
+            severity: ServiceIncidentSeverity::Error,
+            escalation: ServiceIncidentEscalation::BrowserRecovery,
+            recommended_action: "Review recovery trace and retry or relaunch the affected browser."
+                .to_string(),
+            latest_timestamp: "2026-04-22T00:01:00Z".to_string(),
+            latest_message: "Browser crashed".to_string(),
+            latest_kind: "browser_health_changed".to_string(),
+            current_health: Some(BrowserHealth::ProcessExited),
+            event_ids: vec!["event-1".to_string()],
+            job_ids: vec!["job-1".to_string()],
+            ..ServiceIncident::default()
+        };
+        let value = serde_json::to_value(incident).unwrap();
+
+        assert_service_incident_record_contract(&value);
+        assert_eq!(value["browserId"], "browser-1");
+        assert_eq!(value["severity"], "error");
+        assert_eq!(value["escalation"], "browser_recovery");
+        assert_eq!(value["currentHealth"], "process_exited");
     }
 
     #[test]

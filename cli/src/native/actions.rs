@@ -9758,8 +9758,8 @@ mod tests {
         close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
     };
     use crate::native::service_model::{
-        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
-        BrowserProcess,
+        assert_service_incident_record_contract, assert_service_job_naming_warning_contract,
+        service_job_naming_warning_values, BrowserProcess,
     };
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -11584,9 +11584,13 @@ mod tests {
                         "browserId": "browser-1",
                         "label": "browser-1",
                         "state": "active",
+                        "severity": "error",
+                        "escalation": "browser_recovery",
+                        "recommendedAction": "Review recovery trace and retry or relaunch the affected browser.",
                         "latestTimestamp": "2026-04-22T00:02:00Z",
                         "latestMessage": "Timed out",
                         "latestKind": "service_job_timeout",
+                        "currentHealth": "process_exited",
                         "eventIds": ["event-1"],
                         "jobIds": ["job-1"]
                     }
@@ -11605,6 +11609,7 @@ mod tests {
         assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
         assert_service_job_naming_warning_contract(&result["data"]["jobs"][0]);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
+        assert_service_incident_record_contract(&result["data"]["incidents"][0]);
         assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
         assert_eq!(result["data"]["summary"]["contextCount"], 2);
         assert_eq!(result["data"]["summary"]["hasTraceContext"], true);

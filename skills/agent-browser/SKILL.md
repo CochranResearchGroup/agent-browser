@@ -439,6 +439,8 @@ For MCP clients, use `agent-browser mcp serve` to run a stdio server that expose
 
 Service job warning values are `missing_service_name`, `missing_agent_name`, and `missing_task_name`; `hasNamingWarning` is true when `namingWarnings` is non-empty. HTTP `/api/service/jobs`, HTTP `/api/service/jobs/<id>`, and MCP `agent-browser://jobs` job records follow `docs/dev/contracts/service-job-record.v1.schema.json`.
 
+HTTP `/api/service/incidents`, HTTP `/api/service/incidents/<id>`, MCP `agent-browser://incidents`, and MCP `service_incidents` incident records follow `docs/dev/contracts/service-incident-record.v1.schema.json`.
+
 Run `pnpm test:service-shutdown-health-live` to validate that a polite browser shutdown failure leaves the persisted service browser record `degraded` after the owned Chrome process is force-killed.
 
 Typed MCP tools also include `browser_back`, `browser_forward`, `browser_reload`, `browser_tab_new`, `browser_tab_switch`, `browser_tab_close`, and `browser_set_content` for browser history, tab lifecycle, and page-content control.

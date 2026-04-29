@@ -10606,6 +10606,41 @@ mod tests {
     }
 
     #[test]
+    fn read_incidents_resource_returns_record_contract_fields() {
+        use crate::native::service_model::{
+            assert_service_incident_record_contract, BrowserHealth, ServiceIncident,
+            ServiceIncidentEscalation, ServiceIncidentSeverity, ServiceIncidentState,
+        };
+
+        let state = ServiceState {
+            incidents: vec![ServiceIncident {
+                id: "browser-1".to_string(),
+                browser_id: Some("browser-1".to_string()),
+                label: "browser-1".to_string(),
+                state: ServiceIncidentState::Active,
+                severity: ServiceIncidentSeverity::Error,
+                escalation: ServiceIncidentEscalation::BrowserRecovery,
+                recommended_action:
+                    "Review recovery trace and retry or relaunch the affected browser.".to_string(),
+                latest_timestamp: "2026-04-22T00:01:00Z".to_string(),
+                latest_message: "Browser crashed".to_string(),
+                latest_kind: "browser_health_changed".to_string(),
+                current_health: Some(BrowserHealth::ProcessExited),
+                event_ids: vec!["event-1".to_string()],
+                job_ids: vec!["job-1".to_string()],
+                ..ServiceIncident::default()
+            }],
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(INCIDENTS_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 1);
+        assert_eq!(resource["contents"]["incidents"][0]["id"], "browser-1");
+        assert_service_incident_record_contract(&resource["contents"]["incidents"][0]);
+    }
+
+    #[test]
     fn read_events_resource_returns_retained_events() {
         use crate::native::service_model::{ServiceEvent, ServiceEventKind};
 
