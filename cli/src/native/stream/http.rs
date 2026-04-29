@@ -164,9 +164,16 @@ pub(super) async fn handle_http_request(
         }
 
         if let Some(incident_id) = service_incident_action_id(path, "/acknowledge") {
+            let incident_id = match decode_path_segment(incident_id, "service incident id") {
+                Ok(incident_id) => incident_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
             let cmd = service_incident_mutation_command(
                 "service_incident_acknowledge",
-                incident_id,
+                &incident_id,
                 query,
             );
             let result = relay_service_command(session_name, cmd).await;
@@ -175,8 +182,15 @@ pub(super) async fn handle_http_request(
         }
 
         if let Some(incident_id) = service_incident_action_id(path, "/resolve") {
+            let incident_id = match decode_path_segment(incident_id, "service incident id") {
+                Ok(incident_id) => incident_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
             let cmd =
-                service_incident_mutation_command("service_incident_resolve", incident_id, query);
+                service_incident_mutation_command("service_incident_resolve", &incident_id, query);
             let result = relay_service_command(session_name, cmd).await;
             write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
@@ -309,9 +323,18 @@ pub(super) async fn handle_http_request(
 
     if method == "GET" {
         if let Some(incident_id) = service_incident_action_id(path, "/activity") {
-            let result =
-                relay_service_command(session_name, service_incident_activity_command(incident_id))
-                    .await;
+            let incident_id = match decode_path_segment(incident_id, "service incident id") {
+                Ok(incident_id) => incident_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(
+                session_name,
+                service_incident_activity_command(&incident_id),
+            )
+            .await;
             write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
@@ -329,6 +352,13 @@ pub(super) async fn handle_http_request(
             )
             .await;
             return;
+        };
+        let incident_id = match decode_path_segment(incident_id, "service incident id") {
+            Ok(incident_id) => incident_id,
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                return;
+            }
         };
         let mut cmd = match service_incidents_command(query) {
             Ok(cmd) => cmd,
@@ -974,6 +1004,12 @@ fn service_incident_action_id<'a>(path: &'a str, suffix: &str) -> Option<&'a str
     path.strip_prefix("/api/service/incidents/")
         .and_then(|rest| rest.strip_suffix(suffix))
         .filter(|id| !id.is_empty())
+}
+
+fn decode_path_segment(value: &str, label: &str) -> Result<String, String> {
+    urlencoding::decode(value)
+        .map(|decoded| decoded.into_owned())
+        .map_err(|err| format!("Invalid encoded {}: {}", label, err))
 }
 
 fn service_job_cancel_command(job_id: &str) -> Value {
@@ -1731,6 +1767,14 @@ mod tests {
         assert_eq!(
             service_incident_action_id("/api/service/incidents//resolve", "/resolve"),
             None
+        );
+    }
+
+    #[test]
+    fn decode_path_segment_decodes_reserved_incident_id_characters() {
+        assert_eq!(
+            decode_path_segment("session%3Asip-123", "service incident id").unwrap(),
+            "session:sip-123"
         );
     }
 
