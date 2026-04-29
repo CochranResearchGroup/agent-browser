@@ -511,6 +511,39 @@ export function assertRecoveryBudgetBlockedEvents(events, { browserId, label = '
   return { faultedEvent, faultedIndex };
 }
 
+export function assertHttpMcpServiceTraceEventParity({
+  assertEvent,
+  httpTrace,
+  label = 'Service trace',
+  mcpTrace,
+}) {
+  assert(typeof assertEvent === 'function', `${label} trace parity missing event assertion`);
+  assert(httpTrace.success === true, `HTTP service trace failed: ${JSON.stringify(httpTrace)}`);
+  assert(mcpTrace.success === true, `MCP service_trace failed: ${JSON.stringify(mcpTrace)}`);
+  assert(mcpTrace.tool === 'service_trace', 'MCP service_trace payload tool mismatch');
+  assert(Array.isArray(httpTrace.data?.events), 'HTTP service trace missing events array');
+  assert(Array.isArray(mcpTrace.data?.events), 'MCP service_trace missing events array');
+  assert(
+    httpTrace.data.counts?.events === httpTrace.data.events.length,
+    'HTTP service trace event count does not match returned events',
+  );
+  assert(
+    mcpTrace.data.counts?.events === mcpTrace.data.events.length,
+    'MCP service_trace event count does not match returned events',
+  );
+
+  const httpEvent = assertEvent(httpTrace.data.events, `HTTP ${label}`);
+  const mcpEvent = assertEvent(mcpTrace.data.events, `MCP ${label}`);
+  assert(httpEvent?.id, `HTTP ${label} did not return a matched event`);
+  assert(mcpEvent?.id, `MCP ${label} did not return a matched event`);
+  assert(
+    mcpEvent.id === httpEvent.id,
+    `HTTP/MCP trace event mismatch: http=${httpEvent.id} mcp=${mcpEvent.id}`,
+  );
+
+  return { httpEvent, mcpEvent };
+}
+
 export function assertRecoveryOverrideEvents(events, { browserId, actor, label = 'Recovery override' }) {
   assert(Array.isArray(events), `${label} trace missing events array`);
 
