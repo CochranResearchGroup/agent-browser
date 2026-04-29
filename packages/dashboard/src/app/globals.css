@@ -633,6 +633,69 @@ body {
   letter-spacing: 0.14em;
 }
 
+.service-trace-contexts {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--success) 12%, transparent), transparent 32%),
+    color-mix(in srgb, var(--background) 42%, transparent);
+  padding: 0.65rem;
+}
+
+.service-trace-contexts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.service-trace-context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.service-trace-context-card {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0.95rem;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--dashboard-panel-strong) 80%, transparent), color-mix(in srgb, var(--background) 48%, transparent));
+  padding: 0.65rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%);
+}
+
+.service-trace-context-meta,
+.service-trace-context-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.service-trace-context-meta span,
+.service-trace-context-counts span {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.25rem 0.4rem;
+}
+
+.service-trace-context-counts span {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: color-mix(in srgb, var(--foreground) 82%, var(--primary));
+}
+
 .service-trace-timeline {
   display: grid;
   gap: 0.35rem;
@@ -1271,7 +1334,8 @@ body {
   }
 
   .service-trace-grid,
-  .service-trace-counts {
+  .service-trace-counts,
+  .service-trace-context-grid {
     grid-template-columns: 1fr;
   }
 }

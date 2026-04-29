@@ -94,6 +94,10 @@ export type ServiceTraceData = {
   };
 };
 
+export type ServiceTraceSummaryContext = NonNullable<
+  NonNullable<ServiceTraceData["summary"]>["contexts"]
+>[number];
+
 export type ServiceTraceToolPayload = {
   tool?: string;
   success?: boolean;
@@ -130,6 +134,23 @@ export function traceFilterSummary(filters?: ServiceTraceFiltersData): string {
     filters.limit && `limit ${filters.limit}`,
   ].filter((value): value is string => typeof value === "string" && value.length > 0);
   return parts.length > 0 ? parts.join(" / ") : "No returned filters";
+}
+
+export function traceSummaryContexts(trace: ServiceTraceData | null): ServiceTraceSummaryContext[] {
+  return [...(trace?.summary?.contexts ?? [])].sort((left, right) => {
+    const rightCount =
+      (right.eventCount ?? 0) +
+      (right.jobCount ?? 0) +
+      (right.incidentCount ?? 0) +
+      (right.activityCount ?? 0);
+    const leftCount =
+      (left.eventCount ?? 0) +
+      (left.jobCount ?? 0) +
+      (left.incidentCount ?? 0) +
+      (left.activityCount ?? 0);
+    if (rightCount !== leftCount) return rightCount - leftCount;
+    return (right.latestTimestamp ?? "").localeCompare(left.latestTimestamp ?? "");
+  });
 }
 
 export function traceTimelineItems(trace: ServiceTraceData | null): ServiceTraceTimelineItem[] {

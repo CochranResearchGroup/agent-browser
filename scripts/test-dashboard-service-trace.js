@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeServiceTraceData,
   traceFilterSummary,
+  traceSummaryContexts,
   traceTimelineItems,
 } from '../packages/dashboard/src/lib/service-trace.ts';
 import {
@@ -92,6 +93,34 @@ const traceData = {
       taskName: 'probeACSwebsite',
     },
   ],
+  summary: {
+    contextCount: 2,
+    hasTraceContext: true,
+    contexts: [
+      {
+        serviceName: 'SmallService',
+        taskName: 'quickProbe',
+        eventCount: 1,
+        jobCount: 0,
+        incidentCount: 0,
+        activityCount: 0,
+        latestTimestamp: '2026-04-25T12:01:00Z',
+      },
+      {
+        serviceName: 'JournalDownloader',
+        agentName: 'agent-a',
+        taskName: 'probeACSwebsite',
+        browserId: 'browser-1',
+        profileId: 'profile-1',
+        sessionId: 'session-1',
+        eventCount: 2,
+        jobCount: 2,
+        incidentCount: 0,
+        activityCount: 2,
+        latestTimestamp: '2026-04-25T12:04:00Z',
+      },
+    ],
+  },
 };
 
 const mcpToolPayload = {
@@ -118,6 +147,11 @@ for (const expected of [
 ]) {
   assert(summary.includes(expected), `Trace filter summary missing ${expected}`);
 }
+
+const summaryContexts = traceSummaryContexts(traceData);
+assert.equal(summaryContexts[0].serviceName, 'JournalDownloader');
+assert.equal(summaryContexts[0].browserId, 'browser-1');
+assert.equal(summaryContexts[1].serviceName, 'SmallService');
 
 const timeline = traceTimelineItems(traceData);
 assert.deepEqual(
