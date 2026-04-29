@@ -529,6 +529,10 @@ export function assertServiceTracePayload(payload, label = 'Service trace', { to
     `${label} summary context count does not match returned contexts`,
   );
   assert(
+    Number.isInteger(payload.data.summary.namingWarningCount),
+    `${label} summary missing naming warning count`,
+  );
+  assert(
     payload.data.counts?.events === payload.data.events.length,
     `${label} event count does not match returned events`,
   );

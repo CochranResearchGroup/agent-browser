@@ -395,7 +395,13 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
     )];
     if let Some(summary) = data.get("summary") {
         if let Some(context_count) = summary.get("contextCount").and_then(|value| value.as_u64()) {
-            lines.push(format!("Summary: contexts={context_count}"));
+            let naming_warnings = summary
+                .get("namingWarningCount")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0);
+            lines.push(format!(
+                "Summary: contexts={context_count} namingWarnings={naming_warnings}"
+            ));
         }
         if let Some(contexts) = summary.get("contexts").and_then(|value| value.as_array()) {
             for context in contexts.iter().take(3) {
@@ -445,8 +451,21 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
                     .get("activityCount")
                     .and_then(|value| value.as_u64())
                     .unwrap_or(0);
+                let warning = context
+                    .get("namingWarnings")
+                    .and_then(|value| value.as_array())
+                    .filter(|warnings| !warnings.is_empty())
+                    .map(|warnings| {
+                        let joined = warnings
+                            .iter()
+                            .filter_map(|warning| warning.as_str())
+                            .collect::<Vec<_>>()
+                            .join(",");
+                        format!(" namingWarnings={joined}")
+                    })
+                    .unwrap_or_default();
                 lines.push(format!(
-                    "  context{service}{agent}{task}{browser}{profile}{session} events={events} jobs={jobs} incidents={incidents} activity={activity}"
+                    "  context{service}{agent}{task}{browser}{profile}{session}{warning} events={events} jobs={jobs} incidents={incidents} activity={activity}"
                 ));
             }
         }
@@ -3522,7 +3541,7 @@ Notes:
   - browser_command queues remaining HTTP-parity actions with params copied into the queued daemon command when a typed browser_* tool is not yet available.
   - Example browser_command arguments: {"action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}.
   - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
-  - service_trace reads persisted service state and returns related events, jobs, incidents, activity, and ownership summary contexts for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
+  - service_trace reads persisted service state and returns related events, jobs, incidents, activity, and ownership summary contexts and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, and since filters as CLI and HTTP.
   - service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
@@ -4657,6 +4676,7 @@ mod tests {
             "summary": {
                 "contextCount": 1,
                 "hasTraceContext": true,
+                "namingWarningCount": 0,
                 "contexts": [{
                     "serviceName": "JournalDownloader",
                     "agentName": "codex",
@@ -4668,6 +4688,8 @@ mod tests {
                     "jobCount": 1,
                     "incidentCount": 1,
                     "activityCount": 1,
+                    "hasNamingWarning": false,
+                    "namingWarnings": [],
                     "latestTimestamp": "2026-04-25T00:00:00Z"
                 }]
             },
@@ -4690,7 +4712,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=1 jobs=1 incidents=1 activity=1\nSummary: contexts=1\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=1 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 

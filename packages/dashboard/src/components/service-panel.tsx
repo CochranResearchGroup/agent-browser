@@ -855,6 +855,11 @@ function TraceExplorer({
             <Badge variant="outline" className="rounded-full px-2 py-0 text-[9px] uppercase">
               {trace.summary?.contextCount ?? summaryCards.length} contexts
             </Badge>
+            {(trace.summary?.namingWarningCount ?? 0) > 0 && (
+              <Badge variant="destructive" className="rounded-full px-2 py-0 text-[9px] uppercase">
+                {trace.summary?.namingWarningCount} naming warnings
+              </Badge>
+            )}
           </div>
           {summaryCards.length === 0 ? (
             <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-center text-xs text-muted-foreground">
@@ -875,6 +880,11 @@ function TraceExplorer({
                   <p className="mt-1 truncate text-[11px] font-bold text-muted-foreground">
                     {card.subtitle}
                   </p>
+                  {card.warning && (
+                    <p className="mt-1 rounded-full bg-warning/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-warning">
+                      {card.warning}
+                    </p>
+                  )}
                   <div className="service-trace-context-meta">
                     {card.meta.map((item) => (
                       <span key={item}>{item}</span>

@@ -97,10 +97,13 @@ const traceData = {
   summary: {
     contextCount: 2,
     hasTraceContext: true,
+    namingWarningCount: 1,
     contexts: [
       {
         serviceName: 'SmallService',
         taskName: 'quickProbe',
+        hasNamingWarning: true,
+        namingWarnings: ['missing_agent_name'],
         eventCount: 1,
         jobCount: 0,
         incidentCount: 0,
@@ -114,6 +117,8 @@ const traceData = {
         browserId: 'browser-1',
         profileId: 'profile-1',
         sessionId: 'session-1',
+        hasNamingWarning: false,
+        namingWarnings: [],
         eventCount: 2,
         jobCount: 2,
         incidentCount: 0,
@@ -158,6 +163,7 @@ const summaryCards = traceSummaryCards(traceData);
 assert.equal(summaryCards[0].title, 'JournalDownloader');
 assert.equal(summaryCards[0].subtitle, 'probeACSwebsite');
 assert.equal(summaryCards[0].total, 6);
+assert.equal(summaryCards[0].warning, null);
 assert.deepEqual(summaryCards[0].meta, [
   'agent agent-a',
   'browser browser-1',
@@ -165,6 +171,7 @@ assert.deepEqual(summaryCards[0].meta, [
   'session session-1',
 ]);
 assert.deepEqual(summaryCards[0].counts, ['2 ev', '2 jobs', '0 inc', '2 act']);
+assert.equal(summaryCards[1].warning, 'Missing agent name');
 assert.equal(traceSummaryCards(null).length, 0);
 
 const timeline = traceTimelineItems(traceData);

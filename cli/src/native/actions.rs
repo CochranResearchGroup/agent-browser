@@ -11602,6 +11602,7 @@ mod tests {
         assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
         assert_eq!(result["data"]["summary"]["contextCount"], 2);
         assert_eq!(result["data"]["summary"]["hasTraceContext"], true);
+        assert_eq!(result["data"]["summary"]["namingWarningCount"], 1);
         let owned_context = result["data"]["summary"]["contexts"]
             .as_array()
             .unwrap()
@@ -11618,7 +11619,24 @@ mod tests {
         assert_eq!(owned_context["eventCount"], 1);
         assert_eq!(owned_context["jobCount"], 1);
         assert_eq!(owned_context["activityCount"], 2);
+        assert_eq!(owned_context["hasNamingWarning"], false);
+        assert_eq!(owned_context["namingWarnings"].as_array().unwrap().len(), 0);
         assert_eq!(owned_context["latestTimestamp"], "2026-04-22T00:02:00Z");
+        let incident_context = result["data"]["summary"]["contexts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|context| context["incidentCount"] == 1)
+            .expect("trace summary should include incident-only context");
+        assert_eq!(incident_context["hasNamingWarning"], true);
+        assert_eq!(
+            incident_context["namingWarnings"],
+            json!([
+                "missing_service_name",
+                "missing_agent_name",
+                "missing_task_name"
+            ])
+        );
         assert!(state.browser.is_none());
     }
 

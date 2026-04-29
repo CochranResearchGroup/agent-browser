@@ -278,6 +278,7 @@ fn service_trace_summary(
     let contexts = contexts
         .into_iter()
         .map(|(key, summary)| {
+            let naming_warnings = trace_context_naming_warnings(&key);
             json!({
                 "serviceName": key.service_name,
                 "agentName": key.agent_name,
@@ -285,6 +286,8 @@ fn service_trace_summary(
                 "browserId": key.browser_id,
                 "profileId": key.profile_id,
                 "sessionId": key.session_id,
+                "namingWarnings": naming_warnings,
+                "hasNamingWarning": !naming_warnings.is_empty(),
                 "eventCount": summary.event_count,
                 "jobCount": summary.job_count,
                 "incidentCount": summary.incident_count,
@@ -295,6 +298,15 @@ fn service_trace_summary(
         .collect::<Vec<_>>();
 
     let context_count = contexts.len();
+    let naming_warning_count = contexts
+        .iter()
+        .filter(|context| {
+            context
+                .get("hasNamingWarning")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+        })
+        .count();
     let has_trace_context = contexts.iter().any(|context| {
         context
             .get("serviceName")
@@ -310,8 +322,20 @@ fn service_trace_summary(
     json!({
         "contextCount": context_count,
         "hasTraceContext": has_trace_context,
+        "namingWarningCount": naming_warning_count,
         "contexts": contexts,
     })
+}
+
+fn trace_context_naming_warnings(key: &TraceContextKey) -> Vec<&'static str> {
+    [
+        key.service_name.is_none().then_some("missing_service_name"),
+        key.agent_name.is_none().then_some("missing_agent_name"),
+        key.task_name.is_none().then_some("missing_task_name"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 fn update_latest_timestamp(latest: &mut Option<String>, timestamp: Option<&str>) {

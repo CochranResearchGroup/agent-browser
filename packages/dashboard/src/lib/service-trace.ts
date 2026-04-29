@@ -61,6 +61,7 @@ export type ServiceTraceData = {
   summary?: {
     contextCount?: number;
     hasTraceContext?: boolean;
+    namingWarningCount?: number;
     contexts?: {
       serviceName?: string | null;
       agentName?: string | null;
@@ -73,6 +74,8 @@ export type ServiceTraceData = {
       incidentCount?: number;
       activityCount?: number;
       latestTimestamp?: string | null;
+      hasNamingWarning?: boolean;
+      namingWarnings?: string[];
     }[];
   };
   counts?: {
@@ -103,6 +106,7 @@ export type ServiceTraceSummaryCard = {
   title: string;
   subtitle: string;
   total: number;
+  warning: string | null;
   meta: string[];
   counts: string[];
 };
@@ -184,6 +188,7 @@ export function traceSummaryCards(trace: ServiceTraceData | null, limit = 4): Se
         title: context.serviceName ?? "Unlabeled service",
         subtitle: context.taskName ?? "untitled task",
         total,
+        warning: traceNamingWarningLabel(context.namingWarnings),
         meta: [
           context.agentName && `agent ${context.agentName}`,
           context.browserId && `browser ${context.browserId}`,
@@ -198,6 +203,17 @@ export function traceSummaryCards(trace: ServiceTraceData | null, limit = 4): Se
         ],
       };
     });
+}
+
+function traceNamingWarningLabel(warnings?: string[]): string | null {
+  if (!warnings || warnings.length === 0) return null;
+  const labels = warnings.map((warning) => {
+    if (warning === "missing_service_name") return "service";
+    if (warning === "missing_agent_name") return "agent";
+    if (warning === "missing_task_name") return "task";
+    return warning.replaceAll("_", " ");
+  });
+  return `Missing ${labels.join(", ")} name${labels.length === 1 ? "" : "s"}`;
 }
 
 export function traceTimelineItems(trace: ServiceTraceData | null): ServiceTraceTimelineItem[] {
