@@ -105,6 +105,31 @@ function assertCriticalIncidentPayload(payload, label, browserId) {
   return incident;
 }
 
+function assertTraceParity(httpTrace, mcpTrace, browserId) {
+  assert(httpTrace.success === true, `HTTP service trace failed: ${JSON.stringify(httpTrace)}`);
+  assert(mcpTrace.success === true, `MCP service_trace failed: ${JSON.stringify(mcpTrace)}`);
+  assert(mcpTrace.tool === 'service_trace', 'MCP service_trace payload tool mismatch');
+  assert(Array.isArray(httpTrace.data?.events), 'HTTP service trace missing events array');
+  assert(Array.isArray(mcpTrace.data?.events), 'MCP service_trace missing events array');
+
+  const httpBlocked = assertRecoveryBudgetBlockedEvents(httpTrace.data.events, {
+    browserId,
+    label: 'HTTP incident parity trace',
+  });
+  const mcpBlocked = assertRecoveryBudgetBlockedEvents(mcpTrace.data.events, {
+    browserId,
+    label: 'MCP incident parity trace',
+  });
+  assert(
+    mcpBlocked.faultedEvent.id === httpBlocked.faultedEvent.id,
+    `HTTP/MCP faulted trace event mismatch: http=${httpBlocked.faultedEvent.id} mcp=${mcpBlocked.faultedEvent.id}`,
+  );
+  assert(
+    mcpTrace.data.counts?.events === mcpTrace.data.events.length,
+    'MCP service_trace event count does not match returned events',
+  );
+}
+
 try {
   const { blockedUrl, initialUrl } = recoveryOverrideSmokeUrls('Incident Parity Smoke');
 
@@ -178,7 +203,18 @@ try {
     )}&task-name=${encodeURIComponent(taskName)}&limit=80`,
   );
   assert(trace.success === true, `HTTP service trace failed: ${JSON.stringify(trace)}`);
-  assertRecoveryBudgetBlockedEvents(trace.data?.events, { browserId, label: 'Incident parity' });
+
+  const mcpTraceResult = await send('tools/call', {
+    name: 'service_trace',
+    arguments: {
+      serviceName,
+      agentName,
+      taskName,
+      limit: 80,
+    },
+  });
+  const mcpTrace = parseMcpToolPayload(mcpTraceResult, 'MCP service_trace');
+  assertTraceParity(trace, mcpTrace, browserId);
 
   const httpIncidents = await httpJson(
     port,
