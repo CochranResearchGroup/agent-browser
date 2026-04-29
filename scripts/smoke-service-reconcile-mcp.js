@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   assert,
+  assertServiceOwnershipHandoff,
   closeSession,
   createSmokeContext,
   parseJsonOutput,
   readResourceContents,
   runCli,
+  seedServiceOwnershipHandoff,
   smokeDataUrl,
 } from './smoke-utils.js';
 
@@ -19,6 +21,13 @@ const profileDir = join(context.tempHome, 'chrome-profile');
 const handoffSession = `${session}-handoff`;
 const legacySession = `${session}-legacy`;
 const staleTabId = 'target:service-reconcile-stale-target';
+const handoffScenario = {
+  handoffSession,
+  legacySession,
+  staleTabId,
+  staleTargetId: 'service-reconcile-stale-target',
+  staleTitle: 'Stale Service Reconcile Target',
+};
 
 mkdirSync(profileDir, { recursive: true });
 
@@ -38,47 +47,6 @@ async function fail(message) {
   process.exit(1);
 }
 
-function statePath() {
-  return join(context.agentHome, 'service', 'state.json');
-}
-
-function seedOwnershipHandoff({ browserId, liveTabId }) {
-  const path = statePath();
-  const state = JSON.parse(readFileSync(path, 'utf8'));
-  assert(state.browsers?.[browserId], `Cannot seed handoff; missing browser ${browserId}`);
-  state.browsers[browserId].activeSessionIds = [handoffSession];
-  state.sessions = {
-    ...(state.sessions || {}),
-    [legacySession]: {
-      id: legacySession,
-      serviceName: 'LegacyService',
-      agentName: 'legacy-agent',
-      taskName: 'staleOwner',
-      lease: 'shared',
-      cleanup: 'detach',
-      browserIds: [browserId],
-      tabIds: [liveTabId, staleTabId],
-    },
-  };
-  state.tabs = {
-    ...(state.tabs || {}),
-    [liveTabId]: {
-      ...(state.tabs?.[liveTabId] || {}),
-      ownerSessionId: legacySession,
-    },
-    [staleTabId]: {
-      id: staleTabId,
-      browserId,
-      targetId: 'service-reconcile-stale-target',
-      lifecycle: 'ready',
-      ownerSessionId: legacySession,
-      url: 'https://stale.example.invalid/',
-      title: 'Stale Service Reconcile Target',
-    },
-  };
-  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
-}
-
 async function serviceCliCollection(command, key) {
   const result = await runCli(context, ['--json', 'service', command]);
   const parsed = parseJsonOutput(result.stdout, `service ${command}`);
@@ -90,38 +58,6 @@ async function serviceCliCollection(command, key) {
 async function serviceMcpCollection(uri, label) {
   const result = await runCli(context, ['--json', 'mcp', 'read', uri]);
   return readResourceContents(parseJsonOutput(result.stdout, `${label} resource`), label);
-}
-
-function assertHandoffState(state, { browserId, liveTabId, label }) {
-  const tabs = Object.values(state.tabs || {});
-  const sessions = Object.values(state.sessions || {});
-  const liveTab = tabs.find((tab) => tab.id === liveTabId);
-  const staleTab = tabs.find((tab) => tab.id === staleTabId);
-  const newOwner = sessions.find((item) => item.id === handoffSession);
-  const oldOwner = sessions.find((item) => item.id === legacySession);
-
-  assert(liveTab, `${label} missing live tab ${liveTabId}: ${JSON.stringify(tabs)}`);
-  assert(staleTab, `${label} missing stale tab ${staleTabId}: ${JSON.stringify(tabs)}`);
-  assert(newOwner, `${label} missing handoff session ${handoffSession}: ${JSON.stringify(sessions)}`);
-  assert(oldOwner, `${label} missing legacy session ${legacySession}: ${JSON.stringify(sessions)}`);
-  assert(liveTab.browserId === browserId, `${label} live tab browser mismatch: ${JSON.stringify(liveTab)}`);
-  assert(liveTab.lifecycle === 'ready', `${label} live tab was not ready: ${JSON.stringify(liveTab)}`);
-  assert(
-    liveTab.ownerSessionId === handoffSession,
-    `${label} live tab owner was not reassigned: ${JSON.stringify(liveTab)}`,
-  );
-  assert(
-    staleTab.lifecycle === 'closed',
-    `${label} stale tab was not closed: ${JSON.stringify(staleTab)}`,
-  );
-  assert(
-    newOwner.tabIds?.includes(liveTabId),
-    `${label} handoff session did not receive live tab: ${JSON.stringify(newOwner)}`,
-  );
-  assert(
-    !oldOwner.tabIds?.includes(liveTabId) && !oldOwner.tabIds?.includes(staleTabId),
-    `${label} legacy session retained browser tabs: ${JSON.stringify(oldOwner)}`,
-  );
 }
 
 try {
@@ -239,7 +175,11 @@ try {
     `Service tabs did not match service reconcile tab ${liveTab.id}: ${JSON.stringify(cliTabs.data)}`,
   );
 
-  seedOwnershipHandoff({ browserId: liveBrowser.id, liveTabId: liveTab.id });
+  seedServiceOwnershipHandoff(context, {
+    browserId: liveBrowser.id,
+    liveTabId: liveTab.id,
+    ...handoffScenario,
+  });
 
   const handoffReconcileResult = await runCli(context, [
     '--json',
@@ -253,70 +193,80 @@ try {
     handoffReconciled.success === true,
     `handoff service reconcile failed: ${handoffReconcileResult.stdout}${handoffReconcileResult.stderr}`,
   );
-  assertHandoffState(handoffReconciled.data?.service_state || {}, {
+  assertServiceOwnershipHandoff({
+    sessions: Object.values(handoffReconciled.data?.service_state?.sessions || {}),
+    tabs: Object.values(handoffReconciled.data?.service_state?.tabs || {}),
+  }, 'service reconcile handoff response', {
     browserId: liveBrowser.id,
     liveTabId: liveTab.id,
-    label: 'service reconcile handoff response',
+    ...handoffScenario,
   });
 
   const statusResult = await runCli(context, ['--json', '--session', session, 'service', 'status']);
   const status = parseJsonOutput(statusResult.stdout, 'service status');
   assert(status.success === true, `service status failed: ${statusResult.stdout}${statusResult.stderr}`);
-  assertHandoffState(status.data?.service_state || {}, {
+  assertServiceOwnershipHandoff({
+    sessions: Object.values(status.data?.service_state?.sessions || {}),
+    tabs: Object.values(status.data?.service_state?.tabs || {}),
+  }, 'service status', {
     browserId: liveBrowser.id,
     liveTabId: liveTab.id,
-    label: 'service status',
+    ...handoffScenario,
   });
 
   const sessionsData = await serviceCliCollection('sessions', 'sessions');
-  assertHandoffState(
+  assertServiceOwnershipHandoff(
     {
-      tabs: handoffReconciled.data?.service_state?.tabs,
-      sessions: Object.fromEntries(sessionsData.sessions.map((item) => [item.id, item])),
+      sessions: sessionsData.sessions,
+      tabs: Object.values(handoffReconciled.data?.service_state?.tabs || {}),
     },
+    'service sessions',
     {
       browserId: liveBrowser.id,
       liveTabId: liveTab.id,
-      label: 'service sessions',
+      ...handoffScenario,
     },
   );
 
   const tabsData = await serviceCliCollection('tabs', 'tabs');
-  assertHandoffState(
+  assertServiceOwnershipHandoff(
     {
-      tabs: Object.fromEntries(tabsData.tabs.map((item) => [item.id, item])),
-      sessions: handoffReconciled.data?.service_state?.sessions,
+      sessions: Object.values(handoffReconciled.data?.service_state?.sessions || {}),
+      tabs: tabsData.tabs,
     },
+    'service tabs',
     {
       browserId: liveBrowser.id,
       liveTabId: liveTab.id,
-      label: 'service tabs',
+      ...handoffScenario,
     },
   );
 
   const sessionsResource = await serviceMcpCollection('agent-browser://sessions', 'sessions');
-  assertHandoffState(
+  assertServiceOwnershipHandoff(
     {
-      tabs: handoffReconciled.data?.service_state?.tabs,
-      sessions: Object.fromEntries(sessionsResource.sessions.map((item) => [item.id, item])),
+      sessions: sessionsResource.sessions,
+      tabs: Object.values(handoffReconciled.data?.service_state?.tabs || {}),
     },
+    'MCP sessions resource',
     {
       browserId: liveBrowser.id,
       liveTabId: liveTab.id,
-      label: 'MCP sessions resource',
+      ...handoffScenario,
     },
   );
 
   const handoffTabsResource = await serviceMcpCollection('agent-browser://tabs', 'tabs');
-  assertHandoffState(
+  assertServiceOwnershipHandoff(
     {
-      tabs: Object.fromEntries(handoffTabsResource.tabs.map((item) => [item.id, item])),
-      sessions: handoffReconciled.data?.service_state?.sessions,
+      sessions: Object.values(handoffReconciled.data?.service_state?.sessions || {}),
+      tabs: handoffTabsResource.tabs,
     },
+    'MCP tabs resource',
     {
       browserId: liveBrowser.id,
       liveTabId: liveTab.id,
-      label: 'MCP tabs resource',
+      ...handoffScenario,
     },
   );
 

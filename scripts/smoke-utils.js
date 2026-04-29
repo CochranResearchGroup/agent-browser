@@ -206,6 +206,87 @@ export function smokeDataUrl(title, heading) {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
+export function seedServiceOwnershipHandoff(context, {
+  browserId,
+  handoffSession,
+  legacySession,
+  liveTabId,
+  staleTabId,
+  staleTargetId,
+  staleTitle,
+}) {
+  const path = join(context.agentHome, 'service', 'state.json');
+  const state = JSON.parse(readFileSync(path, 'utf8'));
+  assert(state.browsers?.[browserId], `Cannot seed handoff; missing browser ${browserId}`);
+  state.browsers[browserId].activeSessionIds = [handoffSession];
+  state.sessions = {
+    ...(state.sessions || {}),
+    [legacySession]: {
+      id: legacySession,
+      serviceName: 'LegacyService',
+      agentName: 'legacy-agent',
+      taskName: 'staleOwner',
+      lease: 'shared',
+      cleanup: 'detach',
+      browserIds: [browserId],
+      tabIds: [liveTabId, staleTabId],
+    },
+  };
+  state.tabs = {
+    ...(state.tabs || {}),
+    [liveTabId]: {
+      ...(state.tabs?.[liveTabId] || {}),
+      ownerSessionId: legacySession,
+    },
+    [staleTabId]: {
+      id: staleTabId,
+      browserId,
+      targetId: staleTargetId,
+      lifecycle: 'ready',
+      ownerSessionId: legacySession,
+      url: 'https://stale.example.invalid/',
+      title: staleTitle,
+    },
+  };
+  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
+}
+
+export function assertServiceOwnershipHandoff(collections, label, {
+  browserId,
+  handoffSession,
+  legacySession,
+  liveTabId,
+  staleTabId,
+}) {
+  const liveTab = collections.tabs?.find((tab) => tab.id === liveTabId);
+  const staleTab = collections.tabs?.find((tab) => tab.id === staleTabId);
+  const newOwner = collections.sessions?.find((item) => item.id === handoffSession);
+  const oldOwner = collections.sessions?.find((item) => item.id === legacySession);
+
+  assert(liveTab, `${label} missing live tab ${liveTabId}: ${JSON.stringify(collections.tabs)}`);
+  assert(staleTab, `${label} missing stale tab ${staleTabId}: ${JSON.stringify(collections.tabs)}`);
+  assert(
+    newOwner,
+    `${label} missing handoff session ${handoffSession}: ${JSON.stringify(collections.sessions)}`,
+  );
+  assert(oldOwner, `${label} missing legacy session ${legacySession}: ${JSON.stringify(collections.sessions)}`);
+  assert(liveTab.browserId === browserId, `${label} live tab browser mismatch: ${JSON.stringify(liveTab)}`);
+  assert(liveTab.lifecycle === 'ready', `${label} live tab was not ready: ${JSON.stringify(liveTab)}`);
+  assert(
+    liveTab.ownerSessionId === handoffSession,
+    `${label} live tab owner was not reassigned: ${JSON.stringify(liveTab)}`,
+  );
+  assert(staleTab.lifecycle === 'closed', `${label} stale tab was not closed: ${JSON.stringify(staleTab)}`);
+  assert(
+    newOwner.tabIds?.includes(liveTabId),
+    `${label} handoff session did not receive live tab: ${JSON.stringify(newOwner)}`,
+  );
+  assert(
+    !oldOwner.tabIds?.includes(liveTabId) && !oldOwner.tabIds?.includes(staleTabId),
+    `${label} legacy session retained browser tabs: ${JSON.stringify(oldOwner)}`,
+  );
+}
+
 export function configureRecoveryOverrideSmokeContext(context) {
   context.env.AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET = '1';
   context.env.AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS = '1';

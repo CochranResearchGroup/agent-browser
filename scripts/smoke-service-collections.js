@@ -5,12 +5,14 @@ import { join } from 'node:path';
 
 import {
   assert,
+  assertServiceOwnershipHandoff,
   closeSession,
   createSmokeContext,
   httpJson,
   parseJsonOutput,
   readResourceContents,
   runCli,
+  seedServiceOwnershipHandoff,
   sendRawCommand,
   smokeDataUrl,
 } from './smoke-utils.js';
@@ -24,6 +26,13 @@ const taskName = 'collectionParitySmoke';
 const handoffSession = `${session}-handoff`;
 const legacySession = `${session}-legacy`;
 const staleTabId = 'target:service-collections-stale-target';
+const handoffScenario = {
+  handoffSession,
+  legacySession,
+  staleTabId,
+  staleTargetId: 'service-collections-stale-target',
+  staleTitle: 'Stale Service Collections Target',
+};
 
 const timeout = setTimeout(() => {
   fail('Timed out waiting for service collections smoke to complete');
@@ -103,73 +112,6 @@ function seedConfigCollections(context, expectedTabId) {
     },
   };
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
-}
-
-function seedOwnershipHandoff(context, { browserId, liveTabId }) {
-  const statePath = join(context.agentHome, 'service', 'state.json');
-  const state = JSON.parse(readFileSync(statePath, 'utf8'));
-  assert(state.browsers?.[browserId], `Cannot seed handoff; missing browser ${browserId}`);
-  state.browsers[browserId].activeSessionIds = [handoffSession];
-  state.sessions = {
-    ...(state.sessions || {}),
-    [legacySession]: {
-      id: legacySession,
-      serviceName: 'LegacyService',
-      agentName: 'legacy-agent',
-      taskName: 'staleOwner',
-      lease: 'shared',
-      cleanup: 'detach',
-      browserIds: [browserId],
-      tabIds: [liveTabId, staleTabId],
-    },
-  };
-  state.tabs = {
-    ...(state.tabs || {}),
-    [liveTabId]: {
-      ...(state.tabs?.[liveTabId] || {}),
-      ownerSessionId: legacySession,
-    },
-    [staleTabId]: {
-      id: staleTabId,
-      browserId,
-      targetId: 'service-collections-stale-target',
-      lifecycle: 'ready',
-      ownerSessionId: legacySession,
-      url: 'https://stale.example.invalid/',
-      title: 'Stale Service Collections Target',
-    },
-  };
-  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
-}
-
-function assertOwnershipHandoff(collections, label, { browserId, liveTabId }) {
-  const liveTab = collections.tabs?.find((tab) => tab.id === liveTabId);
-  const staleTab = collections.tabs?.find((tab) => tab.id === staleTabId);
-  const newOwner = collections.sessions?.find((item) => item.id === handoffSession);
-  const oldOwner = collections.sessions?.find((item) => item.id === legacySession);
-
-  assert(liveTab, `${label} missing live tab ${liveTabId}: ${JSON.stringify(collections.tabs)}`);
-  assert(staleTab, `${label} missing stale tab ${staleTabId}: ${JSON.stringify(collections.tabs)}`);
-  assert(
-    newOwner,
-    `${label} missing handoff session ${handoffSession}: ${JSON.stringify(collections.sessions)}`,
-  );
-  assert(oldOwner, `${label} missing legacy session ${legacySession}: ${JSON.stringify(collections.sessions)}`);
-  assert(liveTab.browserId === browserId, `${label} live tab browser mismatch: ${JSON.stringify(liveTab)}`);
-  assert(liveTab.lifecycle === 'ready', `${label} live tab was not ready: ${JSON.stringify(liveTab)}`);
-  assert(
-    liveTab.ownerSessionId === handoffSession,
-    `${label} live tab owner was not reassigned: ${JSON.stringify(liveTab)}`,
-  );
-  assert(staleTab.lifecycle === 'closed', `${label} stale tab was not closed: ${JSON.stringify(staleTab)}`);
-  assert(
-    newOwner.tabIds?.includes(liveTabId),
-    `${label} handoff session did not receive live tab: ${JSON.stringify(newOwner)}`,
-  );
-  assert(
-    !oldOwner.tabIds?.includes(liveTabId) && !oldOwner.tabIds?.includes(staleTabId),
-    `${label} legacy session retained browser tabs: ${JSON.stringify(oldOwner)}`,
-  );
 }
 
 try {
@@ -319,14 +261,15 @@ try {
     assertContains(mcpCollection, check.key, check.predicate, `MCP ${check.mcpUri}`);
   }
 
-  seedOwnershipHandoff(context, {
+  seedServiceOwnershipHandoff(context, {
     browserId: expectedBrowserId,
     liveTabId: expectedTab.id,
+    ...handoffScenario,
   });
 
   const httpReconcile = await httpJson(port, 'POST', '/api/service/reconcile');
   assert(httpReconcile.success === true, `HTTP service reconcile failed: ${JSON.stringify(httpReconcile)}`);
-  assertOwnershipHandoff(
+  assertServiceOwnershipHandoff(
     {
       sessions: Object.values(httpReconcile.data?.service_state?.sessions || {}),
       tabs: Object.values(httpReconcile.data?.service_state?.tabs || {}),
@@ -335,6 +278,7 @@ try {
     {
       browserId: expectedBrowserId,
       liveTabId: expectedTab.id,
+      ...handoffScenario,
     },
   );
 
@@ -342,7 +286,7 @@ try {
   const httpHandoffTabs = await httpJson(port, 'GET', '/api/service/tabs');
   assert(httpHandoffSessions.success === true, `HTTP service sessions failed: ${JSON.stringify(httpHandoffSessions)}`);
   assert(httpHandoffTabs.success === true, `HTTP service tabs failed: ${JSON.stringify(httpHandoffTabs)}`);
-  assertOwnershipHandoff(
+  assertServiceOwnershipHandoff(
     {
       sessions: httpHandoffSessions.data?.sessions,
       tabs: httpHandoffTabs.data?.tabs,
@@ -351,6 +295,7 @@ try {
     {
       browserId: expectedBrowserId,
       liveTabId: expectedTab.id,
+      ...handoffScenario,
     },
   );
 
