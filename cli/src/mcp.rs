@@ -10642,14 +10642,25 @@ mod tests {
 
     #[test]
     fn read_events_resource_returns_retained_events() {
-        use crate::native::service_model::{ServiceEvent, ServiceEventKind};
+        use crate::native::service_model::{
+            assert_service_event_record_contract, BrowserHealth, ServiceEvent, ServiceEventKind,
+        };
 
         let state = ServiceState {
             events: vec![ServiceEvent {
                 id: "event-1".to_string(),
                 timestamp: "2026-04-22T00:00:00Z".to_string(),
-                kind: ServiceEventKind::Reconciliation,
-                message: "Reconciled service state".to_string(),
+                kind: ServiceEventKind::BrowserHealthChanged,
+                message: "Browser crashed".to_string(),
+                browser_id: Some("browser-1".to_string()),
+                profile_id: Some("work".to_string()),
+                session_id: Some("session-1".to_string()),
+                service_name: Some("JournalDownloader".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("probeACSwebsite".to_string()),
+                previous_health: Some(BrowserHealth::Ready),
+                current_health: Some(BrowserHealth::ProcessExited),
+                details: Some(json!({"reasonKind": "process_exited"})),
                 ..ServiceEvent::default()
             }],
             ..ServiceState::default()
@@ -10659,5 +10670,6 @@ mod tests {
 
         assert_eq!(resource["contents"]["count"], 1);
         assert_eq!(resource["contents"]["events"][0]["id"], "event-1");
+        assert_service_event_record_contract(&resource["contents"]["events"][0]);
     }
 }

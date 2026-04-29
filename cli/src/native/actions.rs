@@ -9758,8 +9758,9 @@ mod tests {
         close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
     };
     use crate::native::service_model::{
-        assert_service_incident_record_contract, assert_service_job_naming_warning_contract,
-        service_job_naming_warning_values, BrowserProcess,
+        assert_service_event_record_contract, assert_service_incident_record_contract,
+        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
+        BrowserProcess,
     };
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -10966,6 +10967,7 @@ mod tests {
         assert_eq!(result["data"]["matched"], 2);
         assert_eq!(result["data"]["total"], 2);
         assert_eq!(result["data"]["events"][0]["id"], "event-2");
+        assert_service_event_record_contract(&result["data"]["events"][0]);
         assert!(state.browser.is_none());
     }
 
@@ -11056,6 +11058,7 @@ mod tests {
         assert_eq!(result["data"]["matched"], 1);
         assert_eq!(result["data"]["total"], 5);
         assert_eq!(result["data"]["events"][0]["id"], "event-2");
+        assert_service_event_record_contract(&result["data"]["events"][0]);
         assert!(state.browser.is_none());
     }
 
@@ -11606,6 +11609,7 @@ mod tests {
         assert_eq!(result["data"]["counts"]["incidents"], 1);
         assert_eq!(result["data"]["counts"]["activity"], 2);
         assert_eq!(result["data"]["events"][0]["id"], "event-1");
+        assert_service_event_record_contract(&result["data"]["events"][0]);
         assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
         assert_service_job_naming_warning_contract(&result["data"]["jobs"][0]);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");

@@ -30,3 +30,16 @@ records returned by:
 The schema is guarded by Rust tests for the model, HTTP, MCP, and service trace
 surfaces. Keep new contractual incident fields in this schema before relying on
 them from external clients.
+
+## Service Event Record v1
+
+`service-event-record.v1.schema.json` describes retained service event records
+returned by:
+
+- HTTP `GET /api/service/events`
+- MCP `agent-browser://events`
+- service trace event arrays
+
+The schema is guarded by Rust tests for the model, HTTP, MCP, and service trace
+surfaces. Keep new contractual event fields in this schema before relying on
+them from external clients.

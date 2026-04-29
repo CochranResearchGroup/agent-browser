@@ -37,6 +37,17 @@ pub const SERVICE_BROWSER_HEALTH_VALUES: [&str; 10] = [
     "closing",
     "faulted",
 ];
+pub const SERVICE_EVENT_KIND_VALUES: [&str; 9] = [
+    "reconciliation",
+    "browser_launch_recorded",
+    "browser_health_changed",
+    "browser_recovery_started",
+    "browser_recovery_override",
+    "tab_lifecycle_changed",
+    "reconciliation_error",
+    "incident_acknowledged",
+    "incident_resolved",
+];
 
 #[cfg(test)]
 pub fn service_job_naming_warning_values() -> Vec<String> {
@@ -111,6 +122,49 @@ pub fn assert_service_incident_record_contract(value: &serde_json::Value) {
     }
     assert!(value["eventIds"].is_array());
     assert!(value["jobIds"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_event_record_contract(value: &serde_json::Value) {
+    for field in [
+        "id",
+        "timestamp",
+        "kind",
+        "message",
+        "browserId",
+        "profileId",
+        "sessionId",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "previousHealth",
+        "currentHealth",
+        "details",
+    ] {
+        assert!(value.get(field).is_some(), "missing event field {field}");
+    }
+    for snake_case_field in [
+        "browser_id",
+        "profile_id",
+        "session_id",
+        "service_name",
+        "agent_name",
+        "task_name",
+        "previous_health",
+        "current_health",
+    ] {
+        assert!(
+            value.get(snake_case_field).is_none(),
+            "unexpected snake_case event field {snake_case_field}"
+        );
+    }
+    assert!(SERVICE_EVENT_KIND_VALUES.contains(&value["kind"].as_str().unwrap()));
+    if let Some(previous_health) = value["previousHealth"].as_str() {
+        assert!(SERVICE_BROWSER_HEALTH_VALUES.contains(&previous_health));
+    }
+    if let Some(current_health) = value["currentHealth"].as_str() {
+        assert!(SERVICE_BROWSER_HEALTH_VALUES.contains(&current_health));
+    }
 }
 
 /// Top-level snapshot of the browser service control plane.
@@ -1431,6 +1485,70 @@ mod tests {
         assert_eq!(value["browserId"], "browser-1");
         assert_eq!(value["severity"], "error");
         assert_eq!(value["escalation"], "browser_recovery");
+        assert_eq!(value["currentHealth"], "process_exited");
+    }
+
+    #[test]
+    fn service_event_record_contract_matches_wire_shape() {
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-event-record.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_eq!(
+            schema["properties"]["kind"]["enum"],
+            json!(SERVICE_EVENT_KIND_VALUES.to_vec())
+        );
+        assert_eq!(
+            schema["properties"]["previousHealth"]["oneOf"][0]["enum"],
+            json!(SERVICE_BROWSER_HEALTH_VALUES.to_vec())
+        );
+        assert_eq!(
+            schema["properties"]["currentHealth"]["oneOf"][0]["enum"],
+            json!(SERVICE_BROWSER_HEALTH_VALUES.to_vec())
+        );
+        for field in [
+            "id",
+            "timestamp",
+            "kind",
+            "message",
+            "browserId",
+            "profileId",
+            "sessionId",
+            "serviceName",
+            "agentName",
+            "taskName",
+            "previousHealth",
+            "currentHealth",
+            "details",
+        ] {
+            assert!(schema["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|required| required == field));
+        }
+
+        let event = ServiceEvent {
+            id: "event-1".to_string(),
+            timestamp: "2026-04-22T00:01:00Z".to_string(),
+            kind: ServiceEventKind::BrowserHealthChanged,
+            message: "Browser crashed".to_string(),
+            browser_id: Some("browser-1".to_string()),
+            profile_id: Some("work".to_string()),
+            session_id: Some("session-1".to_string()),
+            service_name: Some("JournalDownloader".to_string()),
+            agent_name: Some("codex".to_string()),
+            task_name: Some("probeACSwebsite".to_string()),
+            previous_health: Some(BrowserHealth::Ready),
+            current_health: Some(BrowserHealth::ProcessExited),
+            details: Some(json!({"reasonKind": "process_exited"})),
+        };
+        let value = serde_json::to_value(event).unwrap();
+
+        assert_service_event_record_contract(&value);
+        assert_eq!(value["kind"], "browser_health_changed");
+        assert_eq!(value["previousHealth"], "ready");
         assert_eq!(value["currentHealth"], "process_exited");
     }
 

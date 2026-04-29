@@ -17,6 +17,7 @@ import {
   runCli,
 } from './smoke-utils.js';
 import {
+  assertServiceEventSchemaRecord,
   assertServiceIncidentSchemaRecord,
   loadServiceRecordSchema,
   parseMcpJsonResource,
@@ -34,6 +35,7 @@ const traceFields = { serviceName, agentName, taskName };
 const incidentRecordSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-incident-record.v1.schema.json',
 );
+const eventRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-event-record.v1.schema.json');
 
 let mcp;
 const timeout = setTimeout(() => {
@@ -199,13 +201,25 @@ try {
     },
   });
   const mcpTrace = parseMcpToolPayload(mcpTraceResult, 'MCP service_trace');
-  assertHttpMcpServiceTraceEventParity({
+  const { httpEvent, mcpEvent } = assertHttpMcpServiceTraceEventParity({
     httpTrace: trace,
     mcpTrace,
     label: 'incident parity trace',
     assertEvent: (events, label) =>
       assertRecoveryBudgetBlockedEvents(events, { browserId, label }).faultedEvent,
   });
+  assertServiceEventSchemaRecord(httpEvent, eventRecordSchema, 'HTTP trace event');
+  assertServiceEventSchemaRecord(mcpEvent, eventRecordSchema, 'MCP trace event');
+
+  const httpEvents = await httpJson(
+    port,
+    'GET',
+    `/api/service/events?kind=browser_health_changed&browser-id=${encodeURIComponent(browserId)}&limit=20`,
+  );
+  assert(httpEvents.success === true, `HTTP service events failed: ${JSON.stringify(httpEvents)}`);
+  const httpEventsRecord = httpEvents.data?.events?.find((event) => event.id === httpEvent.id);
+  assert(httpEventsRecord, `HTTP events missing schema event ${httpEvent.id}: ${JSON.stringify(httpEvents)}`);
+  assertServiceEventSchemaRecord(httpEventsRecord, eventRecordSchema, 'HTTP events record');
 
   const httpIncidents = await httpJson(
     port,
@@ -252,6 +266,16 @@ try {
     `MCP incidents resource missing ${browserId}: ${JSON.stringify(mcpResourcePayload.incidents)}`,
   );
   assertServiceIncidentSchemaRecord(mcpResourceIncident, incidentRecordSchema, 'MCP resource');
+
+  const mcpEventsResource = await send('resources/read', { uri: 'agent-browser://events' });
+  const mcpEventsPayload = parseMcpJsonResource(mcpEventsResource, 'agent-browser://events', 'MCP events resource');
+  assert(Array.isArray(mcpEventsPayload.events), 'MCP events resource missing events array');
+  const mcpResourceEvent = mcpEventsPayload.events.find((event) => event.id === httpEvent.id);
+  assert(
+    mcpResourceEvent,
+    `MCP events resource missing ${httpEvent.id}: ${JSON.stringify(mcpEventsPayload.events)}`,
+  );
+  assertServiceEventSchemaRecord(mcpResourceEvent, eventRecordSchema, 'MCP events resource');
 
   const traceIncident = trace.data.incidents.find((item) => item.id === browserId);
   assert(

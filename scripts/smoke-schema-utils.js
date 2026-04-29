@@ -102,3 +102,31 @@ export function assertServiceIncidentSchemaRecord(incident, schema, label) {
   assert(Array.isArray(incident.eventIds), `${label} incident missing eventIds array`);
   assert(Array.isArray(incident.jobIds), `${label} incident missing jobIds array`);
 }
+
+export function assertServiceEventSchemaRecord(event, schema, label) {
+  assertRequiredFields(event, schema, label);
+  assertNoSnakeCaseFields(
+    event,
+    [
+      'browser_id',
+      'profile_id',
+      'session_id',
+      'service_name',
+      'agent_name',
+      'task_name',
+      'previous_health',
+      'current_health',
+    ],
+    label,
+  );
+  assert(schemaEnum(schema, 'kind').includes(event.kind), `${label} kind is outside schema enum`);
+  const healthEnum = schema.properties.currentHealth.oneOf[0].enum;
+  assert(
+    event.previousHealth === null || healthEnum.includes(event.previousHealth),
+    `${label} previousHealth is outside schema enum: ${JSON.stringify(event)}`,
+  );
+  assert(
+    event.currentHealth === null || healthEnum.includes(event.currentHealth),
+    `${label} currentHealth is outside schema enum: ${JSON.stringify(event)}`,
+  );
+}

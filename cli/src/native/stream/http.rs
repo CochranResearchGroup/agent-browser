@@ -1486,8 +1486,8 @@ mod tests {
     use super::*;
     use crate::native::actions::{execute_command, DaemonState};
     use crate::native::service_model::{
-        assert_service_incident_record_contract, assert_service_job_naming_warning_contract,
-        service_job_naming_warning_values,
+        assert_service_event_record_contract, assert_service_incident_record_contract,
+        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
     };
 
     #[test]
@@ -1520,6 +1520,38 @@ mod tests {
         assert_eq!(cmd["taskName"], "probeACSwebsite");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
         assert!(cmd.get("serviceState").is_some());
+    }
+
+    #[tokio::test]
+    async fn service_events_http_command_returns_record_contract_fields() {
+        let mut cmd = service_events_command(Some("kind=browser_health_changed")).unwrap();
+        cmd["serviceState"] = json!({
+            "events": [
+                {
+                    "id": "event-1",
+                    "timestamp": "2026-04-22T00:01:00Z",
+                    "kind": "browser_health_changed",
+                    "message": "Browser crashed",
+                    "browserId": "browser-1",
+                    "profileId": "work",
+                    "sessionId": "session-1",
+                    "serviceName": "JournalDownloader",
+                    "agentName": "codex",
+                    "taskName": "probeACSwebsite",
+                    "previousHealth": "ready",
+                    "currentHealth": "process_exited",
+                    "details": {"reasonKind": "process_exited"}
+                }
+            ]
+        });
+        let mut state = DaemonState::new();
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["events"][0]["id"], "event-1");
+        assert_service_event_record_contract(&result["data"]["events"][0]);
     }
 
     #[test]
