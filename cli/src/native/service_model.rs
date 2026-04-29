@@ -7,6 +7,15 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub const SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME: &str = "missing_service_name";
+pub const SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME: &str = "missing_agent_name";
+pub const SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME: &str = "missing_task_name";
+pub const SERVICE_JOB_NAMING_WARNING_VALUES: [&str; 3] = [
+    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+];
+
 /// Top-level snapshot of the browser service control plane.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -726,8 +735,8 @@ pub struct ServiceJob {
     pub task_name: Option<String>,
     /// Non-blocking policy warnings for missing caller labels.
     ///
-    /// Current warning values are `missing_service_name`,
-    /// `missing_agent_name`, and `missing_task_name`.
+    /// Current warning values are the `SERVICE_JOB_NAMING_WARNING_VALUES`
+    /// constants.
     pub naming_warnings: Vec<String>,
     /// True when `naming_warnings` is non-empty.
     pub has_naming_warning: bool,
@@ -1211,6 +1220,63 @@ mod tests {
         assert_eq!(value["interactionMode"], "human_like_input");
         assert_eq!(value["rateLimit"]["minActionDelayMs"], 250);
         assert_eq!(value["challengePolicy"], "avoid_first");
+    }
+
+    #[test]
+    fn service_job_record_contract_matches_wire_shape() {
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-job-record.v1.schema.json"
+        ))
+        .unwrap();
+        let warning_values = SERVICE_JOB_NAMING_WARNING_VALUES.to_vec();
+
+        assert_eq!(
+            schema["properties"]["namingWarnings"]["items"]["enum"],
+            json!(warning_values)
+        );
+        assert_eq!(
+            schema["properties"]["hasNamingWarning"]["description"],
+            "True when namingWarnings is non-empty."
+        );
+        for field in [
+            "id",
+            "action",
+            "serviceName",
+            "agentName",
+            "taskName",
+            "namingWarnings",
+            "hasNamingWarning",
+        ] {
+            assert!(schema["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|required| required == field));
+        }
+
+        let job = ServiceJob {
+            id: "job-1".to_string(),
+            action: "navigate".to_string(),
+            naming_warnings: warning_values
+                .iter()
+                .map(|value| value.to_string())
+                .collect(),
+            has_naming_warning: true,
+            ..ServiceJob::default()
+        };
+        let value = serde_json::to_value(job).unwrap();
+
+        assert_eq!(
+            value["namingWarnings"],
+            json!([
+                SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+                SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+                SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME
+            ])
+        );
+        assert_eq!(value["hasNamingWarning"], true);
+        assert!(value.get("naming_warnings").is_none());
+        assert!(value.get("has_naming_warning").is_none());
     }
 
     #[test]

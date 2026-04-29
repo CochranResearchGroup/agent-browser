@@ -19,6 +19,8 @@ use super::service_jobs::{
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -606,9 +608,15 @@ fn request_naming_warnings(
     task_name: Option<&str>,
 ) -> Vec<String> {
     [
-        service_name.is_none().then_some("missing_service_name"),
-        agent_name.is_none().then_some("missing_agent_name"),
-        task_name.is_none().then_some("missing_task_name"),
+        service_name
+            .is_none()
+            .then_some(SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME),
+        agent_name
+            .is_none()
+            .then_some(SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME),
+        task_name
+            .is_none()
+            .then_some(SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME),
     ]
     .into_iter()
     .flatten()
