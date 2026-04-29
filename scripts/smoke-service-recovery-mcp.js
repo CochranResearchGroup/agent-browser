@@ -3,6 +3,7 @@
 import {
   assert,
   assertRecoveryTraceEvents,
+  assertServiceTracePayload,
   closeSession,
   createMcpStdioClient,
   createSmokeContext,
@@ -156,23 +157,14 @@ try {
     },
   });
   const tracePayload = parseToolPayload(traceResult);
-  assert(tracePayload.success === true, `MCP service_trace failed: ${JSON.stringify(tracePayload)}`);
-  assert(tracePayload.tool === 'service_trace', 'service_trace payload tool mismatch');
+  assertServiceTracePayload(tracePayload, 'MCP service_trace', { tool: 'service_trace' });
   assert(tracePayload.trace?.serviceName === serviceName, 'service_trace response trace missing serviceName');
   assert(tracePayload.trace?.agentName === agentName, 'service_trace response trace missing agentName');
   assert(tracePayload.trace?.taskName === taskName, 'service_trace response trace missing taskName');
-  assert(Array.isArray(tracePayload.data?.events), 'MCP service_trace missing events array');
-  assert(Array.isArray(tracePayload.data?.jobs), 'MCP service_trace missing jobs array');
-  assert(Array.isArray(tracePayload.data?.incidents), 'MCP service_trace missing incidents array');
-  assert(Array.isArray(tracePayload.data?.activity), 'MCP service_trace missing activity array');
 
   const events = tracePayload.data.events;
   const browserId = `session:${session}`;
   assertRecoveryTraceEvents(events, { browserId, label: 'MCP recovery' });
-  assert(
-    tracePayload.data.counts?.events === events.length,
-    'MCP service_trace event count does not match returned events',
-  );
   assert(
     tracePayload.data.jobs.some(
       (job) =>

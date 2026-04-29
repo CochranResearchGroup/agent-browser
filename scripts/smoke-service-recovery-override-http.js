@@ -6,6 +6,7 @@ import {
   assertRecoveryBudgetBlockedEvents,
   assertRecoveryAfterOverride,
   assertRecoveryOverrideEvents,
+  assertServiceTracePayload,
   closeSession,
   configureRecoveryOverrideSmokeContext,
   createSmokeContext,
@@ -60,9 +61,7 @@ async function serviceTrace(port, { filtered = true } = {}) {
     'GET',
     path,
   );
-  assert(trace.success === true, `HTTP service trace failed: ${JSON.stringify(trace)}`);
-  assert(Array.isArray(trace.data?.events), 'HTTP service trace missing events array');
-  return trace;
+  return assertServiceTracePayload(trace, 'HTTP service trace');
 }
 
 try {
@@ -183,10 +182,6 @@ try {
     label: 'HTTP recovery after override',
     overrideIndex,
   });
-  assert(
-    trace.data.counts?.events === finalEvents.length,
-    'HTTP service trace event count does not match returned events',
-  );
 
   await cleanup();
   console.log('Service recovery override HTTP smoke passed');

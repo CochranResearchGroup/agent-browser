@@ -6,6 +6,7 @@ import {
   assertRecoveryBudgetBlockedEvents,
   assertRecoveryAfterOverride,
   assertRecoveryOverrideEvents,
+  assertServiceTracePayload,
   closeSession,
   configureRecoveryOverrideSmokeContext,
   createMcpStdioClient,
@@ -76,10 +77,7 @@ async function serviceTrace({ filtered = true } = {}) {
         },
   });
   const payload = parseMcpToolPayload(result);
-  assert(payload.success === true, `MCP service_trace failed: ${JSON.stringify(payload)}`);
-  assert(payload.tool === 'service_trace', 'service_trace payload tool mismatch');
-  assert(Array.isArray(payload.data?.events), 'MCP service_trace missing events array');
-  return payload;
+  return assertServiceTracePayload(payload, 'MCP service_trace', { tool: 'service_trace' });
 }
 
 try {
@@ -220,10 +218,6 @@ try {
     label: 'MCP recovery after override',
     overrideIndex,
   });
-  assert(
-    tracePayload.data.counts?.events === finalEvents.length,
-    'MCP service_trace event count does not match returned events',
-  );
 
   await cleanup();
   console.log('Service recovery override MCP smoke passed');

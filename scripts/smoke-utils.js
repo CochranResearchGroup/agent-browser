@@ -513,6 +513,22 @@ export function assertRecoveryBudgetBlockedEvents(events, { browserId, label = '
   return { faultedEvent, faultedIndex };
 }
 
+export function assertServiceTracePayload(payload, label = 'Service trace', { tool = undefined } = {}) {
+  assert(payload.success === true, `${label} failed: ${JSON.stringify(payload)}`);
+  if (tool !== undefined) {
+    assert(payload.tool === tool, `${label} payload tool mismatch`);
+  }
+  assert(Array.isArray(payload.data?.events), `${label} missing events array`);
+  assert(Array.isArray(payload.data?.jobs), `${label} missing jobs array`);
+  assert(Array.isArray(payload.data?.incidents), `${label} missing incidents array`);
+  assert(Array.isArray(payload.data?.activity), `${label} missing activity array`);
+  assert(
+    payload.data.counts?.events === payload.data.events.length,
+    `${label} event count does not match returned events`,
+  );
+  return payload;
+}
+
 export function assertHttpMcpServiceTraceEventParity({
   assertEvent,
   httpTrace,
@@ -520,19 +536,8 @@ export function assertHttpMcpServiceTraceEventParity({
   mcpTrace,
 }) {
   assert(typeof assertEvent === 'function', `${label} trace parity missing event assertion`);
-  assert(httpTrace.success === true, `HTTP service trace failed: ${JSON.stringify(httpTrace)}`);
-  assert(mcpTrace.success === true, `MCP service_trace failed: ${JSON.stringify(mcpTrace)}`);
-  assert(mcpTrace.tool === 'service_trace', 'MCP service_trace payload tool mismatch');
-  assert(Array.isArray(httpTrace.data?.events), 'HTTP service trace missing events array');
-  assert(Array.isArray(mcpTrace.data?.events), 'MCP service_trace missing events array');
-  assert(
-    httpTrace.data.counts?.events === httpTrace.data.events.length,
-    'HTTP service trace event count does not match returned events',
-  );
-  assert(
-    mcpTrace.data.counts?.events === mcpTrace.data.events.length,
-    'MCP service_trace event count does not match returned events',
-  );
+  assertServiceTracePayload(httpTrace, `HTTP ${label}`);
+  assertServiceTracePayload(mcpTrace, `MCP ${label}`, { tool: 'service_trace' });
 
   const httpEvent = assertEvent(httpTrace.data.events, `HTTP ${label}`);
   const mcpEvent = assertEvent(mcpTrace.data.events, `MCP ${label}`);

@@ -3,6 +3,7 @@
 import {
   assert,
   assertRecoveryTraceEvents,
+  assertServiceTracePayload,
   closeSession,
   createSmokeContext,
   httpJson,
@@ -119,8 +120,7 @@ try {
       agentName,
     )}&task-name=${encodeURIComponent(taskName)}&limit=50`,
   );
-  assert(trace.success === true, `HTTP service trace failed: ${JSON.stringify(trace)}`);
-  assert(Array.isArray(trace.data?.events), 'HTTP service trace missing events array');
+  assertServiceTracePayload(trace, 'HTTP service trace');
   assert(
     trace.data?.filters?.serviceName === serviceName,
     `Trace service filter was ${trace.data?.filters?.serviceName}`,
@@ -137,10 +137,6 @@ try {
   const events = trace.data.events;
   const browserId = `session:${session}`;
   assertRecoveryTraceEvents(events, { browserId, label: 'HTTP recovery' });
-  assert(
-    trace.data.counts?.events === events.length,
-    'HTTP service trace event count does not match returned events',
-  );
 
   await cleanup();
   console.log('Service recovery HTTP trace smoke passed');
