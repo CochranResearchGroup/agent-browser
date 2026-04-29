@@ -9757,7 +9757,10 @@ mod tests {
     use crate::native::service_health::{
         close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
     };
-    use crate::native::service_model::BrowserProcess;
+    use crate::native::service_model::{
+        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
+        BrowserProcess,
+    };
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::test_utils::EnvGuard;
@@ -11544,6 +11547,8 @@ mod tests {
                         "serviceName": "JournalDownloader",
                         "agentName": "codex",
                         "taskName": "probeACSwebsite",
+                        "namingWarnings": service_job_naming_warning_values(),
+                        "hasNamingWarning": true,
                         "submittedAt": "2026-04-22T00:02:00Z",
                         "error": "Timed out"
                     },
@@ -11598,6 +11603,7 @@ mod tests {
         assert_eq!(result["data"]["counts"]["activity"], 2);
         assert_eq!(result["data"]["events"][0]["id"], "event-1");
         assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
+        assert_service_job_naming_warning_contract(&result["data"]["jobs"][0]);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
         assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
         assert_eq!(result["data"]["summary"]["contextCount"], 2);
