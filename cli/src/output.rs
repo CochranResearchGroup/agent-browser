@@ -393,6 +393,64 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
     let mut lines = vec![format!(
         "Trace: events={events} jobs={jobs} incidents={incidents} activity={activity}"
     )];
+    if let Some(summary) = data.get("summary") {
+        if let Some(context_count) = summary.get("contextCount").and_then(|value| value.as_u64()) {
+            lines.push(format!("Summary: contexts={context_count}"));
+        }
+        if let Some(contexts) = summary.get("contexts").and_then(|value| value.as_array()) {
+            for context in contexts.iter().take(3) {
+                let service = context
+                    .get("serviceName")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" service={value}"))
+                    .unwrap_or_default();
+                let agent = context
+                    .get("agentName")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" agent={value}"))
+                    .unwrap_or_default();
+                let task = context
+                    .get("taskName")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" task={value}"))
+                    .unwrap_or_default();
+                let browser = context
+                    .get("browserId")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" browser={value}"))
+                    .unwrap_or_default();
+                let profile = context
+                    .get("profileId")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" profile={value}"))
+                    .unwrap_or_default();
+                let session = context
+                    .get("sessionId")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" session={value}"))
+                    .unwrap_or_default();
+                let events = context
+                    .get("eventCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let jobs = context
+                    .get("jobCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let incidents = context
+                    .get("incidentCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let activity = context
+                    .get("activityCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                lines.push(format!(
+                    "  context{service}{agent}{task}{browser}{profile}{session} events={events} jobs={jobs} incidents={incidents} activity={activity}"
+                ));
+            }
+        }
+    }
     if let Some(activity_text) = format_service_incident_activity_text(data) {
         if activity > 0 {
             lines.push(activity_text);
@@ -3374,7 +3432,7 @@ Notes:
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
-  - Trace returns related events, jobs, incidents, and normalized activity in one response for a browser, profile, session, service, agent, task, or time window.
+  - Trace returns related events, jobs, incidents, normalized activity, and a compact summary of service, agent, task, browser, profile, and session ownership in one response.
   - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, failureClass, processExitCause for process exits, retry-budget details, and recovery policy source metadata.
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
@@ -3464,7 +3522,7 @@ Notes:
   - browser_command queues remaining HTTP-parity actions with params copied into the queued daemon command when a typed browser_* tool is not yet available.
   - Example browser_command arguments: {"action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}.
   - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
-  - service_trace reads persisted service state and returns related events, jobs, incidents, and activity for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
+  - service_trace reads persisted service state and returns related events, jobs, incidents, activity, and ownership summary contexts for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, and since filters as CLI and HTTP.
   - service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
@@ -4596,6 +4654,23 @@ mod tests {
                 "incidents": 1,
                 "activity": 1
             },
+            "summary": {
+                "contextCount": 1,
+                "hasTraceContext": true,
+                "contexts": [{
+                    "serviceName": "JournalDownloader",
+                    "agentName": "codex",
+                    "taskName": "probeACSwebsite",
+                    "browserId": "browser-1",
+                    "profileId": "work",
+                    "sessionId": "session-1",
+                    "eventCount": 1,
+                    "jobCount": 1,
+                    "incidentCount": 1,
+                    "activityCount": 1,
+                    "latestTimestamp": "2026-04-25T00:00:00Z"
+                }]
+            },
             "activity": [{
                 "id": "activity-1",
                 "source": "event",
@@ -4615,7 +4690,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=1 jobs=1 incidents=1 activity=1\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=1 jobs=1 incidents=1 activity=1\nSummary: contexts=1\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 

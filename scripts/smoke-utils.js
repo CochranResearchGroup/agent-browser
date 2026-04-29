@@ -522,6 +522,12 @@ export function assertServiceTracePayload(payload, label = 'Service trace', { to
   assert(Array.isArray(payload.data?.jobs), `${label} missing jobs array`);
   assert(Array.isArray(payload.data?.incidents), `${label} missing incidents array`);
   assert(Array.isArray(payload.data?.activity), `${label} missing activity array`);
+  assert(payload.data?.summary && typeof payload.data.summary === 'object', `${label} missing summary object`);
+  assert(Array.isArray(payload.data.summary.contexts), `${label} summary missing contexts array`);
+  assert(
+    payload.data.summary.contextCount === payload.data.summary.contexts.length,
+    `${label} summary context count does not match returned contexts`,
+  );
   assert(
     payload.data.counts?.events === payload.data.events.length,
     `${label} event count does not match returned events`,

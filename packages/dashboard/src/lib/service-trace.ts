@@ -58,6 +58,23 @@ export type ServiceTraceData = {
   jobs?: ServiceTraceJob[];
   incidents?: unknown[];
   activity?: ServiceTraceTimelineItem[];
+  summary?: {
+    contextCount?: number;
+    hasTraceContext?: boolean;
+    contexts?: {
+      serviceName?: string | null;
+      agentName?: string | null;
+      taskName?: string | null;
+      browserId?: string | null;
+      profileId?: string | null;
+      sessionId?: string | null;
+      eventCount?: number;
+      jobCount?: number;
+      incidentCount?: number;
+      activityCount?: number;
+      latestTimestamp?: string | null;
+    }[];
+  };
   counts?: {
     events?: number;
     jobs?: number;

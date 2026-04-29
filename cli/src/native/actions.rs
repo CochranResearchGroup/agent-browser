@@ -11600,6 +11600,25 @@ mod tests {
         assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
         assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
+        assert_eq!(result["data"]["summary"]["contextCount"], 2);
+        assert_eq!(result["data"]["summary"]["hasTraceContext"], true);
+        let owned_context = result["data"]["summary"]["contexts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|context| {
+                context["serviceName"] == "JournalDownloader"
+                    && context["agentName"] == "codex"
+                    && context["taskName"] == "probeACSwebsite"
+                    && context["browserId"] == "browser-1"
+                    && context["profileId"] == "work"
+                    && context["sessionId"] == "session-1"
+            })
+            .expect("trace summary should include the owned service context");
+        assert_eq!(owned_context["eventCount"], 1);
+        assert_eq!(owned_context["jobCount"], 1);
+        assert_eq!(owned_context["activityCount"], 2);
+        assert_eq!(owned_context["latestTimestamp"], "2026-04-22T00:02:00Z");
         assert!(state.browser.is_none());
     }
 

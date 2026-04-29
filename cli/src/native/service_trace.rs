@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
 
@@ -124,6 +126,7 @@ pub(crate) fn service_trace_response(
     let job_count = jobs.len();
     let incident_count = incidents.len();
     let activity_count = activity.len();
+    let summary = service_trace_summary(service_state, &events, &jobs, &incidents, &activity);
 
     Ok(json!({
         "filters": {
@@ -140,6 +143,7 @@ pub(crate) fn service_trace_response(
         "jobs": jobs,
         "incidents": incidents,
         "activity": activity,
+        "summary": summary,
         "counts": {
             "events": event_count,
             "jobs": job_count,
@@ -158,6 +162,172 @@ pub(crate) fn service_trace_response(
             "incidents": total_incidents,
         },
     }))
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct TraceContextKey {
+    service_name: Option<String>,
+    agent_name: Option<String>,
+    task_name: Option<String>,
+    browser_id: Option<String>,
+    profile_id: Option<String>,
+    session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct TraceContextSummary {
+    event_count: usize,
+    job_count: usize,
+    incident_count: usize,
+    activity_count: usize,
+    latest_timestamp: Option<String>,
+}
+
+/// Compact owner/context rollup for dashboards, MCP agents, and API clients.
+fn service_trace_summary(
+    service_state: &ServiceState,
+    events: &[ServiceEvent],
+    jobs: &[ServiceJob],
+    incidents: &[ServiceIncident],
+    activity: &[Value],
+) -> Value {
+    let mut contexts = BTreeMap::<TraceContextKey, TraceContextSummary>::new();
+
+    for event in events {
+        let key = TraceContextKey {
+            service_name: event.service_name.clone(),
+            agent_name: event.agent_name.clone(),
+            task_name: event.task_name.clone(),
+            browser_id: event.browser_id.clone(),
+            profile_id: event.profile_id.clone(),
+            session_id: event.session_id.clone(),
+        };
+        let summary = contexts.entry(key).or_default();
+        summary.event_count += 1;
+        update_latest_timestamp(
+            &mut summary.latest_timestamp,
+            Some(event.timestamp.as_str()),
+        );
+    }
+
+    for job in jobs {
+        let key = TraceContextKey {
+            service_name: job.service_name.clone(),
+            agent_name: job.agent_name.clone(),
+            task_name: job.task_name.clone(),
+            browser_id: service_job_browser_id(job, service_state).map(str::to_string),
+            profile_id: service_job_profile_id(job, service_state).map(str::to_string),
+            session_id: service_job_session_id(job, service_state).map(str::to_string),
+        };
+        let summary = contexts.entry(key).or_default();
+        summary.job_count += 1;
+        update_latest_timestamp(
+            &mut summary.latest_timestamp,
+            service_job_latest_timestamp(job),
+        );
+    }
+
+    for incident in incidents {
+        let key = TraceContextKey {
+            browser_id: incident.browser_id.clone(),
+            ..TraceContextKey::default()
+        };
+        let summary = contexts.entry(key).or_default();
+        summary.incident_count += 1;
+        update_latest_timestamp(
+            &mut summary.latest_timestamp,
+            Some(incident.latest_timestamp.as_str()),
+        );
+    }
+
+    for item in activity {
+        let key = TraceContextKey {
+            service_name: item
+                .get("serviceName")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+            agent_name: item
+                .get("agentName")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+            task_name: item
+                .get("taskName")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+            browser_id: item
+                .get("browserId")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+            profile_id: item
+                .get("profileId")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+            session_id: item
+                .get("sessionId")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+        };
+        let summary = contexts.entry(key).or_default();
+        summary.activity_count += 1;
+        update_latest_timestamp(
+            &mut summary.latest_timestamp,
+            item.get("timestamp").and_then(|value| value.as_str()),
+        );
+    }
+
+    let contexts = contexts
+        .into_iter()
+        .map(|(key, summary)| {
+            json!({
+                "serviceName": key.service_name,
+                "agentName": key.agent_name,
+                "taskName": key.task_name,
+                "browserId": key.browser_id,
+                "profileId": key.profile_id,
+                "sessionId": key.session_id,
+                "eventCount": summary.event_count,
+                "jobCount": summary.job_count,
+                "incidentCount": summary.incident_count,
+                "activityCount": summary.activity_count,
+                "latestTimestamp": summary.latest_timestamp,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let context_count = contexts.len();
+    let has_trace_context = contexts.iter().any(|context| {
+        context
+            .get("serviceName")
+            .is_some_and(|value| !value.is_null())
+            || context
+                .get("agentName")
+                .is_some_and(|value| !value.is_null())
+            || context
+                .get("taskName")
+                .is_some_and(|value| !value.is_null())
+    });
+
+    json!({
+        "contextCount": context_count,
+        "hasTraceContext": has_trace_context,
+        "contexts": contexts,
+    })
+}
+
+fn update_latest_timestamp(latest: &mut Option<String>, timestamp: Option<&str>) {
+    let Some(timestamp) = timestamp.filter(|value| !value.is_empty()) else {
+        return;
+    };
+    if latest.as_deref().is_none_or(|current| timestamp > current) {
+        *latest = Some(timestamp.to_string());
+    }
+}
+
+fn service_job_latest_timestamp(job: &ServiceJob) -> Option<&str> {
+    job.completed_at
+        .as_deref()
+        .or(job.started_at.as_deref())
+        .or(job.submitted_at.as_deref())
 }
 
 fn parse_service_trace_timestamp(raw: &str) -> Result<DateTime<FixedOffset>, String> {
