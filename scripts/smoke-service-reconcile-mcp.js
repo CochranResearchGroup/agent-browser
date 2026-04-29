@@ -8,8 +8,10 @@ import {
   assertServiceOwnershipHandoff,
   assertServiceOwnershipRepairEvent,
   closeSession,
+  createMcpStdioClient,
   createSmokeContext,
   parseJsonOutput,
+  parseMcpToolPayload,
   readResourceContents,
   runCli,
   seedServiceOwnershipHandoff,
@@ -30,6 +32,8 @@ const handoffScenario = {
   staleTitle: 'Stale Service Reconcile Target',
 };
 
+let mcp;
+
 mkdirSync(profileDir, { recursive: true });
 
 const timeout = setTimeout(() => {
@@ -38,14 +42,29 @@ const timeout = setTimeout(() => {
 
 async function cleanup() {
   clearTimeout(timeout);
-  await closeSession(context);
-  context.cleanupTempHome();
+  if (mcp) mcp.close();
+  try {
+    await closeSession(context);
+  } finally {
+    context.cleanupTempHome();
+  }
 }
 
 async function fail(message) {
+  if (mcp) mcp.rejectPending(message);
   await cleanup();
   console.error(message);
+  const stderr = mcp?.stderr() ?? '';
+  if (stderr.trim()) console.error(stderr.trim());
   process.exit(1);
+}
+
+function send(method, params) {
+  return mcp.send(method, params);
+}
+
+function notify(method, params) {
+  mcp.notify(method, params);
 }
 
 async function serviceCliCollection(command, key) {
@@ -282,6 +301,36 @@ try {
 
   const eventsResource = await serviceMcpCollection('agent-browser://events', 'events');
   assertServiceOwnershipRepairEvent(eventsResource.events, 'MCP events resource', {
+    browserId: liveBrowser.id,
+    liveTabId: liveTab.id,
+    ...handoffScenario,
+  });
+
+  mcp = createMcpStdioClient({
+    context,
+    args: ['--session', session, 'mcp', 'serve'],
+    onFatal: fail,
+  });
+  const initialize = await send('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'agent-browser-service-reconcile-trace-smoke', version: '0' },
+  });
+  assert(initialize.capabilities?.tools, 'MCP tools capability missing');
+  notify('notifications/initialized');
+
+  const traceResult = await send('tools/call', {
+    name: 'service_trace',
+    arguments: {
+      browserId: liveBrowser.id,
+      limit: 40,
+    },
+  });
+  const tracePayload = parseMcpToolPayload(traceResult, 'MCP service_trace');
+  assert(tracePayload.success === true, `MCP service_trace failed: ${JSON.stringify(tracePayload)}`);
+  assert(tracePayload.tool === 'service_trace', 'MCP service_trace payload tool mismatch');
+  assert(Array.isArray(tracePayload.data?.events), 'MCP service_trace missing events array');
+  assertServiceOwnershipRepairEvent(tracePayload.data.events, 'MCP service_trace', {
     browserId: liveBrowser.id,
     liveTabId: liveTab.id,
     ...handoffScenario,

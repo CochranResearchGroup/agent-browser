@@ -299,9 +299,15 @@ try {
     'GET',
     '/api/service/events?kind=reconciliation&limit=20',
   );
+  const httpHandoffTrace = await httpJson(
+    port,
+    'GET',
+    `/api/service/trace?browser-id=${encodeURIComponent(expectedBrowserId)}&limit=40`,
+  );
   assert(httpHandoffSessions.success === true, `HTTP service sessions failed: ${JSON.stringify(httpHandoffSessions)}`);
   assert(httpHandoffTabs.success === true, `HTTP service tabs failed: ${JSON.stringify(httpHandoffTabs)}`);
   assert(httpHandoffEvents.success === true, `HTTP service events failed: ${JSON.stringify(httpHandoffEvents)}`);
+  assert(httpHandoffTrace.success === true, `HTTP service trace failed: ${JSON.stringify(httpHandoffTrace)}`);
   assertServiceOwnershipHandoff(
     {
       sessions: httpHandoffSessions.data?.sessions,
@@ -317,6 +323,15 @@ try {
   assertServiceOwnershipRepairEvent(
     httpHandoffEvents.data?.events,
     'HTTP service events',
+    {
+      browserId: expectedBrowserId,
+      liveTabId: expectedTab.id,
+      ...handoffScenario,
+    },
+  );
+  assertServiceOwnershipRepairEvent(
+    httpHandoffTrace.data?.events,
+    'HTTP service trace',
     {
       browserId: expectedBrowserId,
       liveTabId: expectedTab.id,
