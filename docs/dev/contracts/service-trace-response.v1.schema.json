@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-trace-response.v1.schema.json",
+  "title": "agent-browser service trace response",
+  "description": "Stable API shape for service trace responses returned by CLI JSON, HTTP service APIs, MCP tools, and dashboard trace views.",
+  "type": "object",
+  "required": [
+    "filters",
+    "events",
+    "jobs",
+    "incidents",
+    "activity",
+    "summary",
+    "counts",
+    "matched",
+    "total"
+  ],
+  "properties": {
+    "filters": {
+      "type": "object",
+      "required": [
+        "browserId",
+        "profileId",
+        "sessionId",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "since",
+        "limit"
+      ],
+      "properties": {
+        "browserId": {
+          "type": ["string", "null"]
+        },
+        "profileId": {
+          "type": ["string", "null"]
+        },
+        "sessionId": {
+          "type": ["string", "null"]
+        },
+        "serviceName": {
+          "type": ["string", "null"]
+        },
+        "agentName": {
+          "type": ["string", "null"]
+        },
+        "taskName": {
+          "type": ["string", "null"]
+        },
+        "since": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "events": {
+      "type": "array"
+    },
+    "jobs": {
+      "type": "array"
+    },
+    "incidents": {
+      "type": "array"
+    },
+    "activity": {
+      "type": "array"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "events",
+        "jobs",
+        "incidents",
+        "activity"
+      ],
+      "properties": {
+        "events": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "incidents": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activity": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "matched": {
+      "type": "object",
+      "required": [
+        "events",
+        "jobs",
+        "incidents",
+        "activity"
+      ],
+      "properties": {
+        "events": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "incidents": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activity": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "total": {
+      "type": "object",
+      "required": [
+        "events",
+        "jobs",
+        "incidents"
+      ],
+      "properties": {
+        "events": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "incidents": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

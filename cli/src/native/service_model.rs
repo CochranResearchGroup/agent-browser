@@ -641,6 +641,72 @@ pub fn assert_service_trace_activity_record_contract(value: &serde_json::Value) 
     }
 }
 
+#[cfg(test)]
+pub fn assert_service_trace_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "trace response",
+        value,
+        &[
+            "filters",
+            "events",
+            "jobs",
+            "incidents",
+            "activity",
+            "summary",
+            "counts",
+            "matched",
+            "total",
+        ],
+        &[],
+    );
+    assert_record_fields(
+        "trace filters",
+        &value["filters"],
+        &[
+            "browserId",
+            "profileId",
+            "sessionId",
+            "serviceName",
+            "agentName",
+            "taskName",
+            "since",
+            "limit",
+        ],
+        &[
+            "browser_id",
+            "profile_id",
+            "session_id",
+            "service_name",
+            "agent_name",
+            "task_name",
+        ],
+    );
+    for field in ["events", "jobs", "incidents", "activity"] {
+        assert!(value[field].is_array(), "trace {field} is not an array");
+        assert!(
+            value["counts"][field].is_u64(),
+            "trace counts.{field} is not an integer"
+        );
+        assert_eq!(
+            value["counts"][field].as_u64().unwrap(),
+            value[field].as_array().unwrap().len() as u64,
+            "trace counts.{field} does not match returned array length"
+        );
+        assert!(
+            value["matched"][field].is_u64(),
+            "trace matched.{field} is not an integer"
+        );
+    }
+    for field in ["events", "jobs", "incidents"] {
+        assert!(
+            value["total"][field].is_u64(),
+            "trace total.{field} is not an integer"
+        );
+    }
+    assert!(value["filters"]["limit"].is_u64());
+    assert_service_trace_summary_record_contract(&value["summary"]);
+}
+
 /// Top-level snapshot of the browser service control plane.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -2229,6 +2295,10 @@ mod tests {
 
     #[test]
     fn service_trace_aggregate_contracts_match_wire_shape() {
+        let response_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-trace-response.v1.schema.json"
+        ))
+        .unwrap();
         let summary_schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/service-trace-summary-record.v1.schema.json"
         ))
@@ -2254,6 +2324,45 @@ mod tests {
         assert_eq!(
             activity_schema["properties"]["jobState"]["enum"],
             json!(SERVICE_JOB_STATE_VALUES.to_vec())
+        );
+        assert_schema_required_fields(
+            &response_schema,
+            &[
+                "filters",
+                "events",
+                "jobs",
+                "incidents",
+                "activity",
+                "summary",
+                "counts",
+                "matched",
+                "total",
+            ],
+        );
+        assert_schema_required_fields(
+            &response_schema["properties"]["filters"],
+            &[
+                "browserId",
+                "profileId",
+                "sessionId",
+                "serviceName",
+                "agentName",
+                "taskName",
+                "since",
+                "limit",
+            ],
+        );
+        assert_schema_required_fields(
+            &response_schema["properties"]["counts"],
+            &["events", "jobs", "incidents", "activity"],
+        );
+        assert_schema_required_fields(
+            &response_schema["properties"]["matched"],
+            &["events", "jobs", "incidents", "activity"],
+        );
+        assert_schema_required_fields(
+            &response_schema["properties"]["total"],
+            &["events", "jobs", "incidents"],
         );
         assert_schema_required_fields(
             &summary_schema,
@@ -2310,6 +2419,41 @@ mod tests {
 
         assert_service_trace_summary_record_contract(&summary);
         assert_service_trace_activity_record_contract(&activity);
+        let response = json!({
+            "filters": {
+                "browserId": "browser-1",
+                "profileId": "work",
+                "sessionId": "session-1",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "since": null,
+                "limit": 20,
+            },
+            "events": [],
+            "jobs": [],
+            "incidents": [],
+            "activity": [activity],
+            "summary": summary,
+            "counts": {
+                "events": 0,
+                "jobs": 0,
+                "incidents": 0,
+                "activity": 1,
+            },
+            "matched": {
+                "events": 0,
+                "jobs": 0,
+                "incidents": 0,
+                "activity": 1,
+            },
+            "total": {
+                "events": 0,
+                "jobs": 0,
+                "incidents": 0,
+            },
+        });
+        assert_service_trace_response_contract(&response);
     }
 
     #[test]

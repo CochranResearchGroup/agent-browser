@@ -64,6 +64,10 @@ camelCase record fields from HTTP and MCP without inferring Rust internals.
 
 ## Service Trace Aggregate Records v1
 
+`service-trace-response.v1.schema.json` describes the full `service_trace`
+response returned by `agent-browser service trace`, HTTP `GET
+/api/service/trace`, and MCP `service_trace`.
+
 `service-trace-summary-record.v1.schema.json` describes the `summary` object
 returned by `agent-browser service trace`, HTTP `GET /api/service/trace`, and
 MCP `service_trace`.

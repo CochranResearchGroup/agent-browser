@@ -155,6 +155,29 @@ export function assertServiceTraceActivitySchemaRecord(activity, schema, label) 
   }
 }
 
+export function assertServiceTraceResponseSchemaRecord(trace, schema, label) {
+  assertRequiredFields(trace, schema, label);
+  assertNoSnakeCaseFields(trace, ['browser_id', 'profile_id', 'session_id', 'service_name', 'agent_name', 'task_name'], label);
+  const filtersSchema = schema.properties.filters;
+  assertRequiredFields(trace.filters, filtersSchema, `${label} filters`);
+  assertNoSnakeCaseFields(
+    trace.filters,
+    ['browser_id', 'profile_id', 'session_id', 'service_name', 'agent_name', 'task_name'],
+    `${label} filters`,
+  );
+  for (const field of ['events', 'jobs', 'incidents', 'activity']) {
+    assert(Array.isArray(trace[field]), `${label} missing ${field} array`);
+    assert(Number.isInteger(trace.counts?.[field]), `${label} missing counts.${field} integer`);
+    assert(trace.counts[field] === trace[field].length, `${label} counts.${field} does not match ${field} length`);
+    assert(Number.isInteger(trace.matched?.[field]), `${label} missing matched.${field} integer`);
+  }
+  for (const field of ['events', 'jobs', 'incidents']) {
+    assert(Number.isInteger(trace.total?.[field]), `${label} missing total.${field} integer`);
+  }
+  assert(Number.isInteger(trace.filters.limit), `${label} missing filters.limit integer`);
+  assert(trace.summary && typeof trace.summary === 'object', `${label} missing summary object`);
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

@@ -19,6 +19,7 @@ import {
 import {
   assertServiceEventSchemaRecord,
   assertServiceIncidentSchemaRecord,
+  assertServiceTraceResponseSchemaRecord,
   assertServiceTraceActivitySchemaRecord,
   assertServiceTraceSummarySchemaRecord,
   loadServiceRecordSchema,
@@ -38,6 +39,9 @@ const incidentRecordSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-incident-record.v1.schema.json',
 );
 const eventRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-event-record.v1.schema.json');
+const traceResponseRecordSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-trace-response.v1.schema.json',
+);
 const traceSummaryRecordSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-trace-summary-record.v1.schema.json',
 );
@@ -216,6 +220,8 @@ try {
     assertEvent: (events, label) =>
       assertRecoveryBudgetBlockedEvents(events, { browserId, label }).faultedEvent,
   });
+  assertServiceTraceResponseSchemaRecord(trace.data, traceResponseRecordSchema, 'HTTP trace response');
+  assertServiceTraceResponseSchemaRecord(mcpTrace.data, traceResponseRecordSchema, 'MCP trace response');
   assertServiceEventSchemaRecord(httpEvent, eventRecordSchema, 'HTTP trace event');
   assertServiceEventSchemaRecord(mcpEvent, eventRecordSchema, 'MCP trace event');
   assertServiceTraceSummarySchemaRecord(trace.data.summary, traceSummaryRecordSchema, 'HTTP trace summary');

@@ -9760,8 +9760,8 @@ mod tests {
     use crate::native::service_model::{
         assert_service_event_record_contract, assert_service_incident_record_contract,
         assert_service_job_naming_warning_contract, assert_service_trace_activity_record_contract,
-        assert_service_trace_summary_record_contract, service_job_naming_warning_values,
-        BrowserProcess,
+        assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
+        service_job_naming_warning_values, BrowserProcess,
     };
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -11615,6 +11615,7 @@ mod tests {
         assert_service_job_naming_warning_contract(&result["data"]["jobs"][0]);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
         assert_service_incident_record_contract(&result["data"]["incidents"][0]);
+        assert_service_trace_response_contract(&result["data"]);
         assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
         assert_service_trace_activity_record_contract(&result["data"]["activity"][1]);
         assert_service_trace_summary_record_contract(&result["data"]["summary"]);

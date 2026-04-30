@@ -445,7 +445,7 @@ HTTP `/api/service/events`, MCP `agent-browser://events`, and service trace even
 
 HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching `docs/dev/contracts/service-*-record.v1.schema.json` files.
 
-`service_trace` summary and activity records follow `docs/dev/contracts/service-trace-summary-record.v1.schema.json` and `docs/dev/contracts/service-trace-activity-record.v1.schema.json`.
+`service_trace` responses follow `docs/dev/contracts/service-trace-response.v1.schema.json`, with summary and activity records covered by `docs/dev/contracts/service-trace-summary-record.v1.schema.json` and `docs/dev/contracts/service-trace-activity-record.v1.schema.json`.
 
 Run `pnpm test:service-shutdown-health-live` to validate that a polite browser shutdown failure leaves the persisted service browser record `degraded` after the owned Chrome process is force-killed.
 
