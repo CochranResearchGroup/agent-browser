@@ -305,6 +305,13 @@ fn runtime_profile_from_env() -> Option<String> {
     env::var("AGENT_BROWSER_RUNTIME_PROFILE").ok()
 }
 
+fn launch_profile_from_sources(cmd: &Value) -> Option<String> {
+    cmd.get("profile")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| env::var("AGENT_BROWSER_PROFILE").ok())
+}
+
 fn close_behavior_for_attached_browser(
     runtime_attach_managed: bool,
     leave_open: bool,
@@ -2551,10 +2558,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             .and_then(|v| v.as_str())
             .map(String::from)
             .or_else(|| env::var("AGENT_BROWSER_PROXY_PASSWORD").ok()),
-        profile: cmd
-            .get("profile")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
+        profile: launch_profile_from_sources(cmd),
         runtime_profile: cmd
             .get("runtimeProfile")
             .and_then(|v| v.as_str())
@@ -13351,5 +13355,23 @@ mod tests {
             close_behavior_for_launched_browser(None, true),
             CloseBehavior::CloseBrowser
         );
+    }
+
+    #[test]
+    fn test_launch_profile_from_sources_prefers_command_then_env() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_PROFILE"]);
+        guard.set("AGENT_BROWSER_PROFILE", "/tmp/env-profile");
+
+        assert_eq!(
+            launch_profile_from_sources(&json!({})).as_deref(),
+            Some("/tmp/env-profile")
+        );
+        assert_eq!(
+            launch_profile_from_sources(&json!({ "profile": "/tmp/cmd-profile" })).as_deref(),
+            Some("/tmp/cmd-profile")
+        );
+
+        guard.remove("AGENT_BROWSER_PROFILE");
+        assert_eq!(launch_profile_from_sources(&json!({})), None);
     }
 }
