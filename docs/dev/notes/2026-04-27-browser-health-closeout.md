@@ -74,6 +74,7 @@ pnpm test:service-health-live
 For targeted troubleshooting, the gate expands to:
 
 ```bash
+pnpm test:service-api-mcp-parity
 pnpm test:service-shutdown-health-live
 pnpm test:service-recovery-http-live
 pnpm test:service-recovery-mcp-live

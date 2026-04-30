@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process';
 
 const smokeScripts = [
+  ['API/MCP browser-control parity', 'scripts/check-service-api-mcp-parity.js'],
   ['shutdown health', 'scripts/smoke-service-shutdown-health.js'],
   ['recovery HTTP', 'scripts/smoke-service-recovery-http.js'],
   ['recovery MCP', 'scripts/smoke-service-recovery-mcp.js'],
