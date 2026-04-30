@@ -9761,9 +9761,10 @@ mod tests {
         assert_service_event_record_contract, assert_service_events_response_contract,
         assert_service_incident_activity_response_contract,
         assert_service_incident_record_contract, assert_service_incidents_response_contract,
-        assert_service_job_naming_warning_contract, assert_service_trace_activity_record_contract,
-        assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
-        service_job_naming_warning_values, BrowserProcess,
+        assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
+        assert_service_trace_activity_record_contract, assert_service_trace_response_contract,
+        assert_service_trace_summary_record_contract, service_job_naming_warning_values,
+        BrowserProcess,
     };
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -11122,6 +11123,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_jobs_response_contract(&result["data"]);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 2);
         assert_eq!(result["data"]["total"], 2);
@@ -11240,6 +11242,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_jobs_response_contract(&result["data"]);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 1);
         assert_eq!(result["data"]["total"], 5);
@@ -12296,6 +12299,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_jobs_response_contract(&result["data"]);
         assert_eq!(result["data"]["job"]["id"], "job-2");
         assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
         assert_eq!(result["data"]["count"], 1);

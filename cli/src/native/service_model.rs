@@ -167,6 +167,7 @@ pub const SERVICE_JOB_STATE_VALUES: [&str; 6] = [
     "cancelled",
     "timed_out",
 ];
+pub const SERVICE_JOB_PRIORITY_VALUES: [&str; 3] = ["low", "normal", "lifecycle"];
 
 #[cfg(test)]
 fn assert_record_fields(
@@ -791,6 +792,70 @@ pub fn assert_service_events_response_contract(value: &serde_json::Value) {
     assert!(value["total"].is_u64());
     for event in events {
         assert_service_event_record_contract(event);
+    }
+}
+
+#[cfg(test)]
+pub fn assert_service_jobs_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "jobs response",
+        value,
+        &["jobs", "count", "matched", "total"],
+        &[],
+    );
+    let jobs = value["jobs"].as_array().unwrap();
+    assert_eq!(
+        value["count"].as_u64().unwrap(),
+        jobs.len() as u64,
+        "jobs response count does not match jobs length"
+    );
+    assert!(value["matched"].is_u64());
+    assert!(value["total"].is_u64());
+    for job in jobs {
+        assert_record_fields(
+            "job",
+            job,
+            &[
+                "id",
+                "action",
+                "serviceName",
+                "agentName",
+                "taskName",
+                "namingWarnings",
+                "hasNamingWarning",
+                "target",
+                "owner",
+                "state",
+                "priority",
+                "submittedAt",
+                "startedAt",
+                "completedAt",
+                "timeoutMs",
+                "result",
+                "error",
+            ],
+            &[
+                "service_name",
+                "agent_name",
+                "task_name",
+                "naming_warnings",
+                "has_naming_warning",
+                "submitted_at",
+                "started_at",
+                "completed_at",
+                "timeout_ms",
+            ],
+        );
+        assert!(SERVICE_JOB_STATE_VALUES.contains(&job["state"].as_str().unwrap()));
+        assert!(SERVICE_JOB_PRIORITY_VALUES.contains(&job["priority"].as_str().unwrap()));
+        assert!(job["namingWarnings"].is_array());
+        assert!(job["hasNamingWarning"].is_boolean());
+    }
+    if let Some(job) = value.get("job") {
+        assert!(
+            jobs.iter().any(|item| item["id"] == job["id"]),
+            "jobs response detail job is not present in jobs array"
+        );
     }
 }
 
@@ -2527,6 +2592,52 @@ mod tests {
         });
 
         assert_service_events_response_contract(&response);
+    }
+
+    #[test]
+    fn service_jobs_response_contract_matches_wire_shape() {
+        let response_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-jobs-response.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_schema_required_fields(&response_schema, &["jobs", "count", "matched", "total"]);
+
+        let job = json!({
+            "id": "job-1",
+            "action": "navigate",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+            "namingWarnings": [],
+            "hasNamingWarning": false,
+            "target": {"browser": "browser-1"},
+            "owner": null,
+            "state": "failed",
+            "priority": "normal",
+            "submittedAt": "2026-04-27T00:01:00Z",
+            "startedAt": "2026-04-27T00:01:01Z",
+            "completedAt": "2026-04-27T00:01:02Z",
+            "timeoutMs": 5000,
+            "result": null,
+            "error": "selector missing",
+        });
+        let list_response = json!({
+            "jobs": [job.clone()],
+            "count": 1,
+            "matched": 1,
+            "total": 2,
+        });
+        let detail_response = json!({
+            "job": job.clone(),
+            "jobs": [job],
+            "count": 1,
+            "matched": 1,
+            "total": 2,
+        });
+
+        assert_service_jobs_response_contract(&list_response);
+        assert_service_jobs_response_contract(&detail_response);
     }
 
     #[test]

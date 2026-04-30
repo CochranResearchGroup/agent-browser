@@ -232,6 +232,23 @@ export function assertServiceEventsResponseSchemaRecord(response, schema, label)
   assert(response.count === response.events.length, `${label} count does not match events length`);
 }
 
+export function assertServiceJobsResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assertNoSnakeCaseFields(response, ['service_name', 'agent_name', 'task_name'], label);
+  assert(Array.isArray(response.jobs), `${label} missing jobs array`);
+  assert(Number.isInteger(response.count), `${label} missing count integer`);
+  assert(Number.isInteger(response.matched), `${label} missing matched integer`);
+  assert(Number.isInteger(response.total), `${label} missing total integer`);
+  assert(response.count === response.jobs.length, `${label} count does not match jobs length`);
+  if (Object.hasOwn(response, 'job')) {
+    assert(response.job && typeof response.job === 'object', `${label} missing job object`);
+    assert(
+      response.jobs.some((job) => job.id === response.job.id),
+      `${label} detail job is not present in jobs array`,
+    );
+  }
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

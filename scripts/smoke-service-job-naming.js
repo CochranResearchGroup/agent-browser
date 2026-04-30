@@ -12,6 +12,7 @@ import {
   smokeDataUrl,
 } from './smoke-utils.js';
 import {
+  assertServiceJobsResponseSchemaRecord,
   assertServiceJobSchemaRecord,
   loadServiceRecordSchema,
   parseMcpJsonResource,
@@ -25,6 +26,7 @@ const taskName = 'jobNamingSmoke';
 const unnamedJobId = `job-naming-unnamed-${process.pid}`;
 const namedJobId = `job-naming-named-${process.pid}`;
 const jobRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-job-record.v1.schema.json');
+const jobsResponseSchema = loadServiceRecordSchema('../docs/dev/contracts/service-jobs-response.v1.schema.json');
 
 let mcp;
 
@@ -57,6 +59,7 @@ async function serviceCommand(port, body) {
 async function serviceJob(port, jobId) {
   const response = await httpJson(port, 'GET', `/api/service/jobs/${encodeURIComponent(jobId)}`);
   assert(response.success === true, `HTTP service job ${jobId} failed: ${JSON.stringify(response)}`);
+  assertServiceJobsResponseSchemaRecord(response.data, jobsResponseSchema, `HTTP service job ${jobId} response`);
   assert(response.data?.job?.id === jobId, `HTTP service job ${jobId} returned wrong job`);
   assertServiceJobSchemaRecord(response.data.job, jobRecordSchema, `HTTP service job ${jobId}`);
   return response.data.job;
@@ -115,6 +118,7 @@ try {
   const namedJob = await serviceJob(port, namedJobId);
   const jobs = await httpJson(port, 'GET', '/api/service/jobs?limit=50');
   assert(jobs.success === true, `HTTP service jobs failed: ${JSON.stringify(jobs)}`);
+  assertServiceJobsResponseSchemaRecord(jobs.data, jobsResponseSchema, 'HTTP service jobs response');
   const collectionUnnamedJob = jobs.data?.jobs?.find((job) => job.id === unnamedJobId);
   const collectionNamedJob = jobs.data?.jobs?.find((job) => job.id === namedJobId);
   assert(collectionUnnamedJob, `HTTP jobs collection missing unnamed job ${unnamedJobId}`);

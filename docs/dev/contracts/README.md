@@ -16,6 +16,16 @@ The schema is guarded by Rust tests for the model, HTTP, and MCP surfaces. Keep
 new contractual job fields in this schema before relying on them from external
 clients.
 
+`service-jobs-response.v1.schema.json` describes the response envelope returned
+by:
+
+- CLI `agent-browser service jobs`
+- HTTP `GET /api/service/jobs`
+- HTTP `GET /api/service/jobs/<id>`
+
+The schema covers list and detail responses, including the returned job array,
+count, matched and total counters, and the detail-only `job` field.
+
 ## Service Incident Record v1
 
 `service-incident-record.v1.schema.json` describes grouped service incident
