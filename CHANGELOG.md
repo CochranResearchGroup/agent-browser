@@ -1,8 +1,20 @@
 # agent-browser
 
-## 0.26.0
+## 0.26.1
 
 <!-- release:start -->
+### Bug Fixes
+
+- **npm release artifact** - Published a patch release after discovering that npm already contained an unrelated `0.26.0` artifact. The GitHub `v0.26.0` binaries were correct, but npm installs needed a new version so package-manager installs receive the service-mode build.
+
+### Contributors
+
+- @ecochran76
+
+<!-- release:end -->
+
+## 0.26.0
+
 ### New Features
 
 - **Service mode control plane** - Added persistent service state for profiles, sessions, browsers, tabs, jobs, events, incidents, site policies, providers, and challenges, with CLI, HTTP, MCP, and dashboard access for long-lived browser automation.
@@ -25,8 +37,6 @@
 - @jin-2-kakaoent
 - @juniper929
 - @Marshall-Sun
-
-<!-- release:end -->
 
 ## 0.25.3
 
