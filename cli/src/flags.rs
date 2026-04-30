@@ -2574,60 +2574,52 @@ mod tests {
 
     #[test]
     fn test_parse_flags_loads_service_job_timeout_from_config() {
-        let home = std::env::temp_dir().join(format!(
+        let dir = std::env::temp_dir().join(format!(
             "agent-browser-job-timeout-config-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_micros()
         ));
-        fs::create_dir_all(&home).unwrap();
-        let guard = EnvGuard::new(&[
-            "HOME",
-            "USERPROFILE",
-            "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS",
-        ]);
-        guard.set("HOME", home.to_str().unwrap());
-        guard.set("USERPROFILE", home.to_str().unwrap());
+        fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
         guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
-        let config_dir = home.join(".agent-browser");
-        fs::create_dir_all(&config_dir).unwrap();
-        let config_path = config_dir.join("config.json");
+        let config_path = dir.join("agent-browser.json");
         fs::write(&config_path, r#"{"service":{"jobTimeoutMs":5000}}"#).unwrap();
 
-        let flags = parse_flags(&args("service status"));
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
 
         assert_eq!(flags.service_job_timeout_ms, Some(5000));
-        let _ = fs::remove_dir_all(&home);
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
     }
 
     #[test]
     fn test_service_job_timeout_flag_overrides_config() {
-        let home = std::env::temp_dir().join(format!(
+        let dir = std::env::temp_dir().join(format!(
             "agent-browser-job-timeout-flag-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_micros()
         ));
-        fs::create_dir_all(&home).unwrap();
-        let guard = EnvGuard::new(&[
-            "HOME",
-            "USERPROFILE",
-            "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS",
-        ]);
-        guard.set("HOME", home.to_str().unwrap());
-        guard.set("USERPROFILE", home.to_str().unwrap());
+        fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
         guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
-        let config_dir = home.join(".agent-browser");
-        fs::create_dir_all(&config_dir).unwrap();
-        let config_path = config_dir.join("config.json");
+        let config_path = dir.join("agent-browser.json");
         fs::write(&config_path, r#"{"service":{"jobTimeoutMs":5000}}"#).unwrap();
 
-        let flags = parse_flags(&args("--service-job-timeout 250 service status"));
+        let flags = parse_flags(&args(&format!(
+            "--config {} --service-job-timeout 250 service status",
+            config_path.display()
+        )));
 
         assert_eq!(flags.service_job_timeout_ms, Some(250));
-        let _ = fs::remove_dir_all(&home);
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
     }
 
     #[test]
