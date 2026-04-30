@@ -198,6 +198,7 @@ pub async fn run_daemon(session: &str) {
 }
 
 #[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
 async fn run_socket_server(
     socket_path: &PathBuf,
     session: &str,

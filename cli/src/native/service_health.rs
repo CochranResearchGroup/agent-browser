@@ -411,6 +411,7 @@ pub fn persist_reconciled_service_state_in_repository(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn persist_service_browser_record_in_repository(
     repository: &impl ServiceStateRepository,
     session_id: &str,
@@ -474,6 +475,7 @@ pub fn persist_service_browser_record_in_repository(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn persist_current_browser_stale_health_in_repository(
     repository: &impl ServiceStateRepository,
     session_id: &str,
@@ -709,6 +711,7 @@ pub(crate) fn persist_closed_browser_health_in_repository(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn retry_persisted_service_browser_in_repository(
     repository: &impl ServiceStateRepository,
     browser_id: &str,
@@ -1254,7 +1257,6 @@ fn service_browser_recovery_override_event(
         previous_health: Some(BrowserHealth::Faulted),
         current_health: Some(browser.health),
         details: Some(details),
-        ..ServiceEvent::default()
     }
 }
 
