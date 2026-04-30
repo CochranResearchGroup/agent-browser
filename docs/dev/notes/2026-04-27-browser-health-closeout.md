@@ -93,8 +93,9 @@ current roadmap slice:
 - incident severity, escalation, and recommended action stay consistent across
   HTTP and MCP filters
 
-The gate passed on 2026-04-27 with all six scripts run serially from the repo
-checkout.
+The gate passed on 2026-04-27 with all then-current scripts run serially from
+the repo checkout. The current pre-merge checklist is maintained in
+`docs/dev/notes/2026-04-30-service-model-pre-merge-checklist.md`.
 
 ## Best Next Step
 
