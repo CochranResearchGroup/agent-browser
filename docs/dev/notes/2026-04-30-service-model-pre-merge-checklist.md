@@ -62,7 +62,7 @@ For an actual release, also follow the release process in `AGENTS.md`:
 - update `docs/src/app/changelog/page.mdx`
 - include contributors from the git log since the previous tag
 - validate the release workflow with the GitHub Actions `Release` workflow in
-  `dry_run` mode before publishing-sensitive changes are merged
+  `dry_run` mode before release-sensitive changes are merged
 
 ## Handoff Rule
 

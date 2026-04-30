@@ -3,12 +3,11 @@
 Browser automation CLI designed for AI agents. Compact text output minimizes context usage. 100% native Rust.
 
 ```bash
-npm install -g agent-browser      # all platforms
-brew install agent-browser        # macOS
+VERSION=v0.26.1
+curl -L -o ~/.local/bin/agent-browser \
+  https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
+chmod +x ~/.local/bin/agent-browser
 agent-browser install             # Download Chrome (first time)
-
-# or try without installing
-npx agent-browser open example.com
 ```
 
 ## Features

@@ -47,9 +47,9 @@ To prepare a release:
 5. Add a matching entry to `docs/src/app/changelog/page.mdx` at the top (below the `# Changelog` heading)
 6. Open a PR and merge to `main`
 
-When the PR merges, CI compares `package.json` version to what's on npm. If it differs, it builds all 7 platform binaries, publishes to npm, and creates the GitHub release automatically. The GitHub release body is extracted from the content between the `<!-- release:start -->` and `<!-- release:end -->` markers in `CHANGELOG.md`.
+When the PR merges, CI checks whether the matching GitHub release tag already exists. If the tag is missing, it builds all 7 platform binaries and creates the GitHub release automatically. The GitHub release body is extracted from the content between the `<!-- release:start -->` and `<!-- release:end -->` markers in `CHANGELOG.md`. npm is not an authoritative release target for this fork.
 
-To validate the release workflow without publishing, run the `Release` workflow manually from GitHub Actions with `dry_run` set to `true`. This builds the release binaries, verifies all expected artifacts, checks npm package contents with `npm pack --dry-run`, and skips npm publish plus GitHub release creation.
+To validate the release workflow without creating a release, run the `Release` workflow manually from GitHub Actions with `dry_run` set to `true`. This builds the release binaries, verifies all expected artifacts, and skips GitHub release creation.
 
 ### Writing the changelog
 
