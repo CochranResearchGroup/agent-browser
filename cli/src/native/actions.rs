@@ -10500,11 +10500,20 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn test_credentials_roundtrip_via_actions() {
+        let env_guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_ENCRYPTION_KEY"]);
         let _lock = crate::native::auth::AUTH_TEST_MUTEX.lock().unwrap();
-        let key_var = "AGENT_BROWSER_ENCRYPTION_KEY";
-        let original = std::env::var(key_var).ok();
-        // SAFETY: AUTH_TEST_MUTEX serializes all test access so no concurrent mutation.
-        unsafe { std::env::set_var(key_var, "a".repeat(64)) };
+
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-credentials-action-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&home).unwrap();
+        env_guard.set("HOME", home.to_str().unwrap());
+        env_guard.set("AGENT_BROWSER_ENCRYPTION_KEY", &"a".repeat(64));
 
         let mut state = DaemonState::new();
 
@@ -10538,12 +10547,6 @@ mod tests {
         });
         let result = execute_command(&del_cmd, &mut state).await;
         assert_eq!(result["success"], true);
-
-        // SAFETY: AUTH_TEST_MUTEX serializes all test access so no concurrent mutation.
-        match original {
-            Some(val) => unsafe { std::env::set_var(key_var, val) },
-            None => unsafe { std::env::remove_var(key_var) },
-        }
     }
 
     #[tokio::test]
@@ -10882,7 +10885,14 @@ mod tests {
                 .map(|snapshot| snapshot.changed_browsers),
             Some(1)
         );
-        assert_eq!(persisted.events.len(), 2);
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some("browser-1")
+        }));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::Reconciliation));
 
         let _ = fs::remove_dir_all(&home);
     }

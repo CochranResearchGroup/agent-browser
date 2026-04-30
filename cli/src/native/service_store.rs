@@ -93,36 +93,48 @@ impl ServiceStateStore for JsonServiceStateStore {
     }
 
     fn save(&self, state: &ServiceState) -> Result<(), String> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|err| {
-                format!(
-                    "Failed to create service state directory {}: {}",
-                    parent.display(),
-                    err
-                )
-            })?;
-        }
-
         let mut normalized = state.clone();
         normalized.refresh_derived_views();
         let serialized = serde_json::to_string_pretty(&normalized)
             .map_err(|err| format!("Failed to serialize service state: {}", err))?;
+        let payload = format!("{}\n", serialized);
         let temp_path = temp_state_path(&self.path);
-        fs::write(&temp_path, format!("{}\n", serialized)).map_err(|err| {
-            format!(
-                "Failed to write temporary service state {}: {}",
-                temp_path.display(),
-                err
-            )
-        })?;
-        fs::rename(&temp_path, &self.path).map_err(|err| {
-            let _ = fs::remove_file(&temp_path);
-            format!(
-                "Failed to replace service state {}: {}",
-                self.path.display(),
-                err
-            )
-        })?;
+
+        for attempt in 0..2 {
+            if let Some(parent) = self.path.parent() {
+                fs::create_dir_all(parent).map_err(|err| {
+                    format!(
+                        "Failed to create service state directory {}: {}",
+                        parent.display(),
+                        err
+                    )
+                })?;
+            }
+
+            fs::write(&temp_path, &payload).map_err(|err| {
+                format!(
+                    "Failed to write temporary service state {}: {}",
+                    temp_path.display(),
+                    err
+                )
+            })?;
+
+            match fs::rename(&temp_path, &self.path) {
+                Ok(()) => return Ok(()),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound && attempt == 0 => {
+                    let _ = fs::remove_file(&temp_path);
+                    continue;
+                }
+                Err(err) => {
+                    let _ = fs::remove_file(&temp_path);
+                    return Err(format!(
+                        "Failed to replace service state {}: {}",
+                        self.path.display(),
+                        err
+                    ));
+                }
+            }
+        }
 
         Ok(())
     }

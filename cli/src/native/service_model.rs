@@ -1311,7 +1311,7 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
                 ..ServiceIncident::default()
             });
 
-        if incident_is_newer(&timestamp, &incident.latest_timestamp) {
+        if incident_is_newer(timestamp, &incident.latest_timestamp) {
             incident.latest_timestamp = timestamp.to_string();
             incident.latest_message = message;
             incident.latest_kind = kind.to_string();
@@ -1340,13 +1340,13 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
     for incident in &mut incidents {
         incident.event_ids.sort_by(|left, right| {
             job_or_event_timestamp(&event_timestamps, left)
-                .cmp(&job_or_event_timestamp(&event_timestamps, right))
+                .cmp(job_or_event_timestamp(&event_timestamps, right))
                 .reverse()
                 .then_with(|| left.cmp(right))
         });
         incident.job_ids.sort_by(|left, right| {
             job_or_event_timestamp(&job_timestamps, left)
-                .cmp(&job_or_event_timestamp(&job_timestamps, right))
+                .cmp(job_or_event_timestamp(&job_timestamps, right))
                 .reverse()
                 .then_with(|| left.cmp(right))
         });

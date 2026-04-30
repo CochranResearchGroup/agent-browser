@@ -3,9 +3,9 @@
 ## 0.26.1
 
 <!-- release:start -->
-### Bug Fixes
+### Release
 
-- **npm release artifact** - Published a patch release after discovering that npm already contained an unrelated `0.26.0` artifact. The GitHub `v0.26.0` binaries were correct, but npm installs needed a new version so package-manager installs receive the service-mode build.
+- **GitHub release artifact** - Published a patch release after discovering that the npm package was not an authoritative artifact for this fork. The GitHub `v0.26.1` release contains the supported service-mode binaries.
 
 ### Contributors
 

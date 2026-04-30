@@ -4,44 +4,26 @@ Browser automation CLI for AI agents. Fast native Rust CLI.
 
 ## Installation
 
-### Global Installation (recommended)
+### GitHub Release Binary (recommended)
 
-Installs the native Rust binary:
+Download the native Rust binary from this fork's GitHub releases. Pick the asset
+for your platform from the latest release, then put it on your PATH.
 
 ```bash
-npm install -g agent-browser
+VERSION=v0.26.1
+curl -L -o ~/.local/bin/agent-browser \
+  https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
+chmod +x ~/.local/bin/agent-browser
 agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 ```
 
-### Project Installation (local dependency)
-
-For projects that want to pin the version in `package.json`:
-
-```bash
-npm install agent-browser
-agent-browser install
-```
-
-Then use via `package.json` scripts or by invoking `agent-browser` directly.
-
-### Homebrew (macOS)
-
-```bash
-brew install agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
-```
-
-### Cargo (Rust)
-
-```bash
-cargo install agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
-```
+npm, Homebrew, and Cargo are not authoritative release channels for this fork.
+Use GitHub release binaries or build from source.
 
 ### From Source
 
 ```bash
-git clone https://github.com/vercel-labs/agent-browser
+git clone https://github.com/CochranResearchGroup/agent-browser
 cd agent-browser
 pnpm install
 pnpm build
@@ -60,7 +42,7 @@ agent-browser install --with-deps
 
 ### Maintainer Release Validation
 
-Before publishing, maintainers can validate the release workflow without side effects by manually running the `Release` GitHub Actions workflow with `dry_run` set to `true`. The dry run builds all platform binaries, verifies the expected artifacts, runs `npm pack --dry-run`, and skips npm publishing plus GitHub release creation.
+Before creating a release, maintainers can validate the release workflow without side effects by manually running the `Release` GitHub Actions workflow with `dry_run` set to `true`. The dry run builds all platform binaries, verifies the expected artifacts, and skips GitHub release creation.
 
 ### Updating
 
@@ -70,7 +52,9 @@ Upgrade to the latest version:
 agent-browser upgrade
 ```
 
-Detects your installation method (npm, Homebrew, or Cargo) and runs the appropriate update command automatically.
+For this fork, prefer replacing the binary from the latest GitHub release. The
+legacy `upgrade` command may still know about upstream package-manager installs,
+but those channels are not authoritative here.
 
 ### Requirements
 

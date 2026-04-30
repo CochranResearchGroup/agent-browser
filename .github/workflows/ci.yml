@@ -42,7 +42,10 @@ jobs:
         run: cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
 
       - name: Run Rust tests
-        run: cargo test --profile ci --manifest-path cli/Cargo.toml
+        # The unit suite mutates process-global environment and user-scoped
+        # state in several legacy tests. Run it serially in CI so release gates
+        # validate behavior instead of test-runner scheduling.
+        run: cargo test --profile ci --manifest-path cli/Cargo.toml -- --test-threads=1
 
   dashboard:
     name: Dashboard
@@ -98,7 +101,7 @@ jobs:
           workspaces: cli
 
       - name: Run Rust tests
-        run: cargo test --profile ci --manifest-path cli/Cargo.toml --target ${{ matrix.target }}
+        run: cargo test --profile ci --manifest-path cli/Cargo.toml --target ${{ matrix.target }} -- --test-threads=1
 
   native-e2e:
     name: Native E2E Tests

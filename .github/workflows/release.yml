@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Build and verify release artifacts without publishing
+        description: Build and verify release artifacts without creating a release
         type: boolean
         default: true
 
@@ -29,7 +29,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Compare package.json version to npm and check GitHub release
+      - name: Check GitHub release state
         id: check
         run: |
           DRY_RUN="${DRY_RUN:-false}"
@@ -38,30 +38,23 @@ jobs:
 
           LOCAL_VERSION=$(node -p "require('./package.json').version")
           echo "Local version: $LOCAL_VERSION"
+          echo "version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
 
-          NPM_VERSION=$(npm view agent-browser version 2>/dev/null || echo "0.0.0")
-          echo "npm version: $NPM_VERSION"
+          TAG="v$LOCAL_VERSION"
 
-          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
-            echo "Version changed: $NPM_VERSION -> $LOCAL_VERSION"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run requested, building and validating release artifacts"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "needs_github_release=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Version unchanged on npm, skipping build and publish"
+          elif gh release view "$TAG" &>/dev/null; then
+            echo "GitHub release $TAG exists, skipping release build"
             echo "should_release=false" >> "$GITHUB_OUTPUT"
-
-            # Check if GitHub release exists; it may be missing if a prior run
-            # published to npm but failed before creating the release.
-            TAG="v$LOCAL_VERSION"
-            if gh release view "$TAG" &>/dev/null; then
-              echo "GitHub release $TAG exists"
-              echo "needs_github_release=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "GitHub release $TAG is missing, will rebuild and create it"
-              echo "needs_github_release=true" >> "$GITHUB_OUTPUT"
-            fi
+            echo "needs_github_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "GitHub release $TAG is missing, building release artifacts"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "needs_github_release=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
         env:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,7 +62,7 @@ jobs:
   build-binaries:
     name: Build ${{ matrix.name }}
     needs: check-release
-    if: needs.check-release.outputs.dry_run == 'true' || needs.check-release.outputs.should_release == 'true' || needs.check-release.outputs.needs_github_release == 'true'
+    if: needs.check-release.outputs.dry_run == 'true' || needs.check-release.outputs.needs_github_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -193,82 +186,6 @@ jobs:
           path: artifacts/${{ matrix.binary }}
           retention-days: 7
 
-  publish:
-    name: Publish to npm
-    needs: [check-release, build-binaries]
-    if: needs.check-release.outputs.dry_run != 'true' && needs.check-release.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Download all binary artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: artifacts/
-
-      - name: Move binaries to bin directory
-        run: |
-          mkdir -p bin
-          find artifacts -type f -name 'agent-browser-*' -exec mv {} bin/ \;
-          rm -rf artifacts
-          chmod +x bin/agent-browser-* 2>/dev/null || true
-          echo "Binaries in bin/:"
-          ls -la bin/
-
-      - name: Verify all binaries exist
-        run: |
-          EXPECTED_BINARIES=(
-            "agent-browser-linux-x64"
-            "agent-browser-linux-arm64"
-            "agent-browser-linux-musl-x64"
-            "agent-browser-linux-musl-arm64"
-            "agent-browser-win32-x64.exe"
-            "agent-browser-darwin-x64"
-            "agent-browser-darwin-arm64"
-          )
-          MIN_SIZE=100000
-          ERRORS=0
-          for binary in "${EXPECTED_BINARIES[@]}"; do
-            if [ ! -f "bin/$binary" ]; then
-              echo "ERROR: Missing bin/$binary"
-              ERRORS=$((ERRORS + 1))
-            else
-              SIZE=$(stat -c%s "bin/$binary" 2>/dev/null || stat -f%z "bin/$binary")
-              if [ "$SIZE" -lt "$MIN_SIZE" ]; then
-                echo "ERROR: bin/$binary is too small ($SIZE bytes, expected >= $MIN_SIZE)"
-                ERRORS=$((ERRORS + 1))
-              else
-                echo "OK: bin/$binary ($SIZE bytes)"
-              fi
-            fi
-          done
-          if [ "$ERRORS" -gt 0 ]; then
-            echo "Error: $ERRORS binary issues found"
-            exit 1
-          fi
-          echo "All 7 platform binaries present and valid"
-
-      - name: Publish to npm
-        run: pnpm publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_VERCEL_TOKEN_ELEVATED }}
-
   release-dry-run:
     name: Release dry run
     needs: [check-release, build-binaries]
@@ -325,13 +242,10 @@ jobs:
           fi
           echo "All 7 platform binaries present and valid"
 
-      - name: Verify npm package contents
-        run: npm pack --dry-run
-
   github-release:
     name: Create GitHub Release
-    needs: [check-release, build-binaries, publish]
-    if: always() && needs.check-release.outputs.dry_run != 'true' && needs.build-binaries.result == 'success' && needs.check-release.outputs.needs_github_release == 'true'
+    needs: [check-release, build-binaries]
+    if: needs.check-release.outputs.dry_run != 'true' && needs.build-binaries.result == 'success' && needs.check-release.outputs.needs_github_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

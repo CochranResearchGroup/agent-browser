@@ -394,7 +394,9 @@ mod tests {
     use super::*;
 
     fn with_test_key<F: FnOnce()>(f: F) {
-        let _lock = AUTH_TEST_MUTEX.lock().unwrap();
+        let _lock = AUTH_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let original = std::env::var(ENCRYPTION_KEY_ENV).ok();
         let test_key = "a".repeat(64);
         // SAFETY: TEST_MUTEX serializes all test access so no concurrent mutation.
