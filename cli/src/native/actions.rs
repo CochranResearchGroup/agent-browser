@@ -11165,7 +11165,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
-        assert_service_jobs_response_contract(&result["data"]);
+        assert_service_incidents_response_contract(&result["data"]);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 2);
         assert_eq!(result["data"]["total"], 2);
@@ -11284,7 +11284,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
-        assert_service_jobs_response_contract(&result["data"]);
+        assert_service_incidents_response_contract(&result["data"]);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 1);
         assert_eq!(result["data"]["total"], 5);
