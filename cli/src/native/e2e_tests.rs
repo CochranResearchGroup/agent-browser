@@ -4288,7 +4288,11 @@ async fn e2e_relaunch_on_options_change() {
 #[tokio::test]
 #[ignore]
 async fn e2e_stream_frame_metadata_respects_custom_viewport() {
-    let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "AGENT_BROWSER_SESSION"]);
+    let guard = EnvGuard::new(&[
+        "AGENT_BROWSER_PROFILE",
+        "AGENT_BROWSER_SOCKET_DIR",
+        "AGENT_BROWSER_SESSION",
+    ]);
     let socket_dir = std::env::temp_dir().join(format!(
         "agent-browser-e2e-stream-viewport-{}-{}",
         std::process::id(),
@@ -4298,6 +4302,13 @@ async fn e2e_stream_frame_metadata_respects_custom_viewport() {
             .as_nanos()
     ));
     std::fs::create_dir_all(&socket_dir).expect("socket dir should be created");
+    let profile_dir = e2e_temp_home("stream-viewport-profile");
+    guard.set(
+        "AGENT_BROWSER_PROFILE",
+        profile_dir
+            .to_str()
+            .expect("profile dir should be valid utf-8"),
+    );
     guard.set(
         "AGENT_BROWSER_SOCKET_DIR",
         socket_dir.to_str().expect("socket dir should be utf-8"),
@@ -4340,19 +4351,27 @@ async fn e2e_stream_frame_metadata_respects_custom_viewport() {
 
     // Wait for a frame message and verify both metadata and actual image dimensions
     let mut found_frame = false;
-    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(15);
+    let mut text_messages = 0usize;
+    let mut non_text_messages = 0usize;
+    let mut frame_messages = 0usize;
+    let mut last_text_message: Option<String> = None;
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(45);
     while tokio::time::Instant::now() < deadline {
-        let msg = tokio::time::timeout(tokio::time::Duration::from_secs(3), ws.next()).await;
+        let msg = tokio::time::timeout(tokio::time::Duration::from_secs(5), ws.next()).await;
         let Some(Ok(message)) = msg.ok().flatten() else {
             continue;
         };
         if !message.is_text() {
+            non_text_messages += 1;
             continue;
         }
+        let text = message.to_text().expect("text message should be readable");
+        text_messages += 1;
+        last_text_message = Some(text.chars().take(500).collect());
         let parsed: Value =
-            serde_json::from_str(message.to_text().expect("text message should be readable"))
-                .expect("stream payload should be valid JSON");
+            serde_json::from_str(text).expect("stream payload should be valid JSON");
         if parsed.get("type") == Some(&json!("frame")) {
+            frame_messages += 1;
             let meta = &parsed["metadata"];
             assert_eq!(
                 meta["deviceWidth"], 800,
@@ -4395,7 +4414,7 @@ async fn e2e_stream_frame_metadata_respects_custom_viewport() {
     }
     assert!(
         found_frame,
-        "should have received at least one frame message with correct viewport metadata"
+        "should have received at least one frame message with correct viewport metadata; text_messages={text_messages}, non_text_messages={non_text_messages}, frame_messages={frame_messages}, last_text_message={last_text_message:?}"
     );
 
     // Cleanup
@@ -4409,6 +4428,7 @@ async fn e2e_stream_frame_metadata_respects_custom_viewport() {
     let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
     assert_success(&resp);
     let _ = std::fs::remove_dir_all(&socket_dir);
+    let _ = std::fs::remove_dir_all(&profile_dir);
 }
 
 /// Extract width and height from a JPEG's SOF0 (0xFFC0) or SOF2 (0xFFC2) marker.

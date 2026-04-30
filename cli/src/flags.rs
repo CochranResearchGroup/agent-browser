@@ -2582,8 +2582,13 @@ mod tests {
                 .as_micros()
         ));
         fs::create_dir_all(&home).unwrap();
-        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
+        let guard = EnvGuard::new(&[
+            "HOME",
+            "USERPROFILE",
+            "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS",
+        ]);
         guard.set("HOME", home.to_str().unwrap());
+        guard.set("USERPROFILE", home.to_str().unwrap());
         guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
         let config_dir = home.join(".agent-browser");
         fs::create_dir_all(&config_dir).unwrap();
@@ -2606,8 +2611,13 @@ mod tests {
                 .as_micros()
         ));
         fs::create_dir_all(&home).unwrap();
-        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
+        let guard = EnvGuard::new(&[
+            "HOME",
+            "USERPROFILE",
+            "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS",
+        ]);
         guard.set("HOME", home.to_str().unwrap());
+        guard.set("USERPROFILE", home.to_str().unwrap());
         guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
         let config_dir = home.join(".agent-browser");
         fs::create_dir_all(&config_dir).unwrap();
