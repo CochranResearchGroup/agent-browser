@@ -1,0 +1,173 @@
+# Service Mode
+
+Service mode turns agent-browser from a single CLI session helper into a persistent browser control plane. It keeps service-owned state for profiles, sessions, browsers, tabs, jobs, incidents, events, site policies, providers, and challenges so multiple agents and software clients can share browser automation without racing each other.
+
+The model is intentionally broader than the CLI. Agents usually interact through MCP, software projects usually interact through the HTTP API, and operators can inspect or intervene through the CLI and dashboard.
+
+## What service mode provides
+
+- A queued worker path for browser-control actions so concurrent clients are dispatched in order instead of competing directly for CDP.
+- Persistent service records under the service state file, plus configured service records from `agent-browser.json` and `~/.agent-browser/config.json`.
+- Trace context fields for `serviceName`, `agentName`, and `taskName`, so a service such as `JournalDownloader` can distinguish a task such as `probeACSwebsite`.
+- Browser health detection for process exits, CDP disconnects, unreachable endpoints, target discovery failures, shutdown failures, and successful recovery.
+- Operator remedies for job cancellation, incident acknowledgement or resolution, browser retry overrides, service reconciliation, polite browser close, and forced kill fallback.
+- API and MCP parity for service records and typed browser-control actions.
+
+## Service clients
+
+Use the CLI when a human or shell script needs a direct operational view:
+
+```bash
+agent-browser service status
+agent-browser service watch
+agent-browser service trace --service-name JournalDownloader --task-name probeACSwebsite
+agent-browser service incidents --limit 20
+agent-browser service jobs --limit 20
+agent-browser service reconcile
+```
+
+Use the HTTP API when another program owns the workflow lifecycle:
+
+```bash
+curl "http://127.0.0.1:<stream-port>/api/service/status"
+curl "http://127.0.0.1:<stream-port>/api/service/trace?serviceName=JournalDownloader&taskName=probeACSwebsite"
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/navigate" \
+  -H "content-type: application/json" \
+  -d '{"url":"https://example.com","serviceName":"JournalDownloader","agentName":"article-probe-agent","taskName":"probeACSwebsite"}'
+```
+
+Use MCP when an agent runtime wants resources and tools without scraping CLI text:
+
+```bash
+agent-browser mcp serve
+agent-browser mcp resources
+agent-browser mcp read agent-browser://browsers
+agent-browser mcp read agent-browser://jobs
+```
+
+MCP tool callers should include `serviceName`, `agentName`, and `taskName` whenever those values are known. Anonymous callers remain compatible, but service jobs record `namingWarnings` so operators can find unlabelled automation.
+
+## Profile and session planning
+
+Runtime profiles are the safest default for recurring automation because they keep Chrome user data, cookies, site storage, and login state in a managed path. A single profile can represent one user identity per site, so profile allocation is a service design decision:
+
+- Use one shared profile when several tasks intentionally operate as the same browser identity.
+- Use a service-specific profile when a service needs durable login state but should not share cookies or extensions with unrelated services.
+- Use a separate browser process when profile isolation, keyring behavior, extension state, or resource ownership matters more than process count.
+- Use a custom `--profile <path>` only when an external profile directory is part of the contract.
+
+Configured service profiles and sessions can describe ownership, lease behavior, cleanup policy, keyring posture, browser linkage, and caller labels. Current browser launch behavior still comes from `runtimeProfiles`, `--runtime-profile`, `--profile`, and the normal launch flags.
+
+## Browser health and recovery
+
+Service reconciliation probes persisted browser records and updates health before clients make decisions from stale state. Local process exits are marked `process_exited`. CDP endpoints with a live process but failed CDP connection are marked `cdp_disconnected`. Endpoints without a live process are marked `unreachable`. Endpoints that answer health probes but fail target discovery are marked `degraded`.
+
+When a queued browser command finds that the active browser has exited or CDP is disconnected, agent-browser records the failure before cleanup and relaunch. Recovery traces show the health transition, recovery start, retry budget, policy source, next retry delay, and the final ready transition when relaunch succeeds.
+
+Close handling uses two remedies. First, agent-browser attempts a polite browser shutdown. If polite shutdown fails, the browser record is degraded. Then it force kills owned browser processes when needed. If force kill fails, the browser record is faulted and the incident can escalate as possible OS degradation.
+
+## Service records
+
+The CLI, HTTP API, MCP resources, and dashboard share the same service concepts:
+
+- `profiles` describe durable browser identity and launch policy.
+- `sessions` describe service or agent ownership of browser work.
+- `browsers` describe process, CDP, health, and recovery state.
+- `tabs` describe live page and webview targets discovered from CDP.
+- `jobs` describe queued, running, succeeded, failed, cancelled, and timed-out service work.
+- `incidents` group operational issues with severity, escalation, handling state, and recommended action.
+- `events` record launch, reconciliation, health, recovery, tab lifecycle, and incident-handling changes.
+- `sitePolicies`, `providers`, and `challenges` describe site-specific automation posture, browser providers, and retained challenge state.
+
+The repo keeps JSON schemas for these contracts under `docs/dev/contracts/`. HTTP and MCP collection envelopes are expected to remain aligned with those schemas.
+
+## HTTP API shape
+
+The dashboard stream server exposes service and browser-control routes. Service routes load the same persisted and configured state as the CLI. Named browser routes are wrappers over the same daemon command queue as `/api/command` and MCP browser tools.
+
+Common service routes:
+
+```text
+GET  /api/service/status
+GET  /api/service/profiles
+GET  /api/service/sessions
+GET  /api/service/browsers
+GET  /api/service/tabs
+GET  /api/service/site-policies
+GET  /api/service/providers
+GET  /api/service/challenges
+GET  /api/service/jobs
+GET  /api/service/jobs/<id>
+POST /api/service/jobs/<id>/cancel
+GET  /api/service/incidents
+GET  /api/service/incidents/<id>
+GET  /api/service/incidents/<id>/activity
+POST /api/service/incidents/<id>/acknowledge
+POST /api/service/incidents/<id>/resolve
+GET  /api/service/events
+GET  /api/service/trace
+POST /api/service/reconcile
+POST /api/service/browsers/<id>/retry
+```
+
+State-changing config routes use the path ID as authoritative. Requests with a conflicting nested `id` field are rejected:
+
+```text
+POST   /api/service/site-policies/<id>
+DELETE /api/service/site-policies/<id>
+POST   /api/service/providers/<id>
+DELETE /api/service/providers/<id>
+```
+
+Named browser-control routes accept the same action fields as the underlying command, plus trace fields such as `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs`.
+
+## MCP shape
+
+`agent-browser mcp serve` exposes read-only service resources and service/browser tools over stdio. Important resources include:
+
+```text
+agent-browser://profiles
+agent-browser://sessions
+agent-browser://browsers
+agent-browser://tabs
+agent-browser://site-policies
+agent-browser://providers
+agent-browser://challenges
+agent-browser://jobs
+agent-browser://events
+agent-browser://incidents
+agent-browser://incidents/{incident_id}/activity
+```
+
+Service tools include `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_trace`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, and `service_provider_delete`.
+
+Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fills, waits, keyboard actions, element reads, cookies, storage, headers, offline mode, viewport, geolocation, permissions, timezone, locale, media, dialogs, uploads, downloads, HAR capture, request routing, console, errors, PDFs, response bodies, and clipboard operations. Use `browser_command` only for browser actions that do not yet have a typed tool.
+
+## Dashboard operations
+
+The dashboard service view is the operator surface for long-lived automation. It should organize multiple services and agents at the same time, show named tasks, expose service traces and incidents, and make browser state inspectable without requiring every operator to attach directly to Chrome.
+
+When live browser viewing is enabled, use it as an inspection and intervention surface, not as the source of truth. Service records, trace entries, and job or incident state remain the durable control-plane state.
+
+## Pre-release validation
+
+Run the release-facing documentation and service contract checks before cutting a release that includes service mode:
+
+```bash
+pnpm test:service-api-mcp-parity
+cd docs && pnpm build
+git diff --check
+```
+
+Run the broader service health smoke when Chrome-backed live validation is required:
+
+```bash
+pnpm test:service-health-live
+```
+
+Run the Rust service tests when the release includes service implementation changes:
+
+```bash
+cargo test --manifest-path cli/Cargo.toml service_ -- --test-threads=1
+```
+

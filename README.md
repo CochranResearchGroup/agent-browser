@@ -168,6 +168,8 @@ agent-browser chat "<instruction>"    # AI chat: natural language browser contro
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
 
+Service mode is the persistent control plane for long-lived automation. It keeps profile, session, browser, tab, job, incident, event, site-policy, provider, and challenge state aligned across CLI commands, the HTTP API, MCP resources/tools, and the dashboard. Agents should include `serviceName`, `agentName`, and `taskName` when available so multi-service work remains traceable.
+
 ### Get Info
 
 ```bash
@@ -713,14 +715,14 @@ agent-browser --session-name secure open example.com
 
 ## Security
 
-agent-browser includes security features for safe AI agent deployments. All features are opt-in -- existing workflows are unaffected until you explicitly enable a feature:
+agent-browser includes security features for safe AI agent deployments. All features are opt-in, so existing workflows are unaffected until you explicitly enable a feature:
 
-- **Authentication Vault** -- Store credentials locally (always encrypted), reference by name. The LLM never sees passwords. `auth login` navigates with `load` and then waits for login form selectors to appear (SPA-friendly, timeout follows the default action timeout). A key is auto-generated at `~/.agent-browser/.encryption-key` if `AGENT_BROWSER_ENCRYPTION_KEY` is not set: `echo "pass" | agent-browser auth save github --url https://github.com/login --username user --password-stdin` then `agent-browser auth login github`
-- **Content Boundary Markers** -- Wrap page output in delimiters so LLMs can distinguish tool output from untrusted content: `--content-boundaries`
-- **Domain Allowlist** -- Restrict navigation to trusted domains (wildcards like `*.example.com` also match the bare domain): `--allowed-domains "example.com,*.example.com"`. Sub-resource requests (scripts, images, fetch) and WebSocket/EventSource connections to non-allowed domains are also blocked. Include any CDN domains your target pages depend on (e.g., `*.cdn.example.com`).
-- **Action Policy** -- Gate destructive actions with a static policy file: `--action-policy ./policy.json`
-- **Action Confirmation** -- Require explicit approval for sensitive action categories: `--confirm-actions eval,download`
-- **Output Length Limits** -- Prevent context flooding: `--max-output 50000`
+- **Authentication Vault** stores credentials locally, always encrypted, and references them by name. The LLM never sees passwords. `auth login` navigates with `load` and then waits for login form selectors to appear. The timeout follows the default action timeout. A key is auto-generated at `~/.agent-browser/.encryption-key` if `AGENT_BROWSER_ENCRYPTION_KEY` is not set: `echo "pass" | agent-browser auth save github --url https://github.com/login --username user --password-stdin` then `agent-browser auth login github`
+- **Content Boundary Markers** wrap page output in delimiters so LLMs can distinguish tool output from untrusted content: `--content-boundaries`
+- **Domain Allowlist** restricts navigation to trusted domains. Wildcards like `*.example.com` also match the bare domain: `--allowed-domains "example.com,*.example.com"`. Sub-resource requests (scripts, images, fetch) and WebSocket/EventSource connections to non-allowed domains are also blocked. Include any CDN domains your target pages depend on, for example `*.cdn.example.com`.
+- **Action Policy** gates destructive actions with a static policy file: `--action-policy ./policy.json`
+- **Action Confirmation** requires explicit approval for sensitive action categories: `--confirm-actions eval,download`
+- **Output Length Limits** prevent context flooding: `--max-output 50000`
 
 For unattended headed or headless runs that need the real OS credential store, agent-browser can read keychain settings from a dotenv file. Environment variables take precedence, otherwise it loads `AGENT_BROWSER_ENV_FILE`, then `~/.agent-browser/.env` if present.
 

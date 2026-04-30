@@ -54,6 +54,35 @@ agent-browser open example.com --headed
 
 On Unix, if <code>DISPLAY</code> is unset, agent-browser falls back to <code>DISPLAY=:0.0</code> for headed Chrome launches.
 
+## Persistent login state
+
+agent-browser uses a managed runtime profile by default. If you sign in manually once, later runs can reuse that browser state:
+
+```bash
+agent-browser runtime login https://accounts.google.com
+agent-browser runtime status
+agent-browser open https://gmail.com
+```
+
+Use named runtime profiles when different services or tasks need separate browser identities:
+
+```bash
+agent-browser runtime create journal-downloader --set-default
+agent-browser --runtime-profile journal-downloader open https://example.com
+```
+
+## Service inspection
+
+For long-lived or multi-agent automation, inspect service state instead of guessing from one command result:
+
+```bash
+agent-browser service status
+agent-browser service trace --service-name JournalDownloader --task-name probeACSwebsite
+agent-browser service incidents --limit 10
+```
+
+See [Service Mode](/service-mode) for the persistent control-plane model, HTTP API, MCP resources/tools, browser health handling, and release validation checklist.
+
 ## Wait for content
 
 ```bash
