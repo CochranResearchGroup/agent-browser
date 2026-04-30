@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-incident-acknowledge-response.v1.schema.json",
+  "title": "agent-browser service incident acknowledge response",
+  "description": "Stable API shape for service incident acknowledge responses returned by HTTP service APIs and MCP service_incident_acknowledge.",
+  "type": "object",
+  "required": [
+    "acknowledged",
+    "incident"
+  ],
+  "properties": {
+    "acknowledged": {
+      "type": "boolean"
+    },
+    "incident": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

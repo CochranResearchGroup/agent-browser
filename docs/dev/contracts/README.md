@@ -104,6 +104,17 @@ by HTTP service APIs and matching MCP tools:
 These schemas cover the authoritative path ID, mutation flag, and returned or
 removed record payload for persisted site policy and provider writes.
 
+The operator remedy mutation schemas describe write response envelopes returned
+by HTTP service APIs and matching MCP tools:
+
+- `service-job-cancel-response.v1.schema.json`
+- `service-browser-retry-response.v1.schema.json`
+- `service-incident-acknowledge-response.v1.schema.json`
+- `service-incident-resolve-response.v1.schema.json`
+
+These schemas cover queued job cancellation, manual browser recovery retry
+overrides, and durable incident acknowledgement or resolution metadata.
+
 ## Service Trace Aggregate Records v1
 
 `service-trace-response.v1.schema.json` describes the full `service_trace`

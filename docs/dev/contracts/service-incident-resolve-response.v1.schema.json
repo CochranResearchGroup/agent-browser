@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-incident-resolve-response.v1.schema.json",
+  "title": "agent-browser service incident resolve response",
+  "description": "Stable API shape for service incident resolve responses returned by HTTP service APIs and MCP service_incident_resolve.",
+  "type": "object",
+  "required": [
+    "resolved",
+    "incident"
+  ],
+  "properties": {
+    "resolved": {
+      "type": "boolean"
+    },
+    "incident": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

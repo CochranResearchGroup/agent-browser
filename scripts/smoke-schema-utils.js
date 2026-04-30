@@ -285,6 +285,35 @@ export function assertServiceProviderDeleteResponseSchemaRecord(response, schema
   );
 }
 
+export function assertServiceJobCancelResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.cancelled === 'boolean', `${label} missing cancelled boolean`);
+  assert(response.job && typeof response.job === 'object', `${label} missing job object`);
+}
+
+export function assertServiceBrowserRetryResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assertNoSnakeCaseFields(response, ['retry_enabled'], label);
+  assert(typeof response.retryEnabled === 'boolean', `${label} missing retryEnabled boolean`);
+  assert(response.browser && typeof response.browser === 'object', `${label} missing browser object`);
+  assert(
+    response.incident === null || (response.incident && typeof response.incident === 'object'),
+    `${label} incident should be object or null`,
+  );
+}
+
+export function assertServiceIncidentAcknowledgeResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.acknowledged === 'boolean', `${label} missing acknowledged boolean`);
+  assert(response.incident && typeof response.incident === 'object', `${label} missing incident object`);
+}
+
+export function assertServiceIncidentResolveResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.resolved === 'boolean', `${label} missing resolved boolean`);
+  assert(response.incident && typeof response.incident === 'object', `${label} missing incident object`);
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

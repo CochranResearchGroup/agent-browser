@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-browser-retry-response.v1.schema.json",
+  "title": "agent-browser service browser retry response",
+  "description": "Stable API shape for service browser retry responses returned by HTTP service APIs and MCP service_browser_retry.",
+  "type": "object",
+  "required": [
+    "retryEnabled",
+    "browser",
+    "incident"
+  ],
+  "properties": {
+    "retryEnabled": {
+      "type": "boolean"
+    },
+    "browser": {
+      "type": "object"
+    },
+    "incident": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

@@ -19,7 +19,9 @@ import {
 import {
   assertServiceEventSchemaRecord,
   assertServiceEventsResponseSchemaRecord,
+  assertServiceIncidentAcknowledgeResponseSchemaRecord,
   assertServiceIncidentActivityResponseSchemaRecord,
+  assertServiceIncidentResolveResponseSchemaRecord,
   assertServiceIncidentSchemaRecord,
   assertServiceIncidentsResponseSchemaRecord,
   assertServiceTraceResponseSchemaRecord,
@@ -59,6 +61,12 @@ const traceActivityRecordSchema = loadServiceRecordSchema(
 );
 const incidentActivityResponseSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-incident-activity-response.v1.schema.json',
+);
+const incidentAcknowledgeResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-incident-acknowledge-response.v1.schema.json',
+);
+const incidentResolveResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-incident-resolve-response.v1.schema.json',
 );
 
 let mcp;
@@ -384,6 +392,48 @@ try {
       `HTTP/MCP resource incident ${field} mismatch: http=${httpIncident[field]} mcp=${mcpResourceIncident[field]}`,
     );
   }
+
+  const acknowledged = await httpJson(
+    port,
+    'POST',
+    `/api/service/incidents/${encodeURIComponent(browserId)}/acknowledge?by=operator&note=triaged`,
+  );
+  assert(acknowledged.success === true, `HTTP incident acknowledge failed: ${JSON.stringify(acknowledged)}`);
+  assertServiceIncidentAcknowledgeResponseSchemaRecord(
+    acknowledged.data,
+    incidentAcknowledgeResponseSchema,
+    'HTTP incident acknowledge response',
+  );
+  assertServiceIncidentSchemaRecord(
+    acknowledged.data.incident,
+    incidentRecordSchema,
+    'HTTP incident acknowledge',
+  );
+  assert(
+    acknowledged.data.incident.acknowledgedBy === 'operator',
+    `HTTP incident acknowledge actor mismatch: ${JSON.stringify(acknowledged)}`,
+  );
+
+  const resolved = await httpJson(
+    port,
+    'POST',
+    `/api/service/incidents/${encodeURIComponent(browserId)}/resolve?by=operator&note=recovered`,
+  );
+  assert(resolved.success === true, `HTTP incident resolve failed: ${JSON.stringify(resolved)}`);
+  assertServiceIncidentResolveResponseSchemaRecord(
+    resolved.data,
+    incidentResolveResponseSchema,
+    'HTTP incident resolve response',
+  );
+  assertServiceIncidentSchemaRecord(
+    resolved.data.incident,
+    incidentRecordSchema,
+    'HTTP incident resolve',
+  );
+  assert(
+    resolved.data.incident.resolvedBy === 'operator',
+    `HTTP incident resolve actor mismatch: ${JSON.stringify(resolved)}`,
+  );
 
   await cleanup();
   console.log('Service incident HTTP/MCP parity smoke passed');

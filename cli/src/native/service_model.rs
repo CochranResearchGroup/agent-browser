@@ -860,6 +860,48 @@ pub fn assert_service_jobs_response_contract(value: &serde_json::Value) {
 }
 
 #[cfg(test)]
+pub fn assert_service_job_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "job",
+        value,
+        &[
+            "id",
+            "action",
+            "serviceName",
+            "agentName",
+            "taskName",
+            "namingWarnings",
+            "hasNamingWarning",
+            "target",
+            "owner",
+            "state",
+            "priority",
+            "submittedAt",
+            "startedAt",
+            "completedAt",
+            "timeoutMs",
+            "result",
+            "error",
+        ],
+        &[
+            "service_name",
+            "agent_name",
+            "task_name",
+            "naming_warnings",
+            "has_naming_warning",
+            "submitted_at",
+            "started_at",
+            "completed_at",
+            "timeout_ms",
+        ],
+    );
+    assert!(SERVICE_JOB_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
+    assert!(SERVICE_JOB_PRIORITY_VALUES.contains(&value["priority"].as_str().unwrap()));
+    assert!(value["namingWarnings"].is_array());
+    assert!(value["hasNamingWarning"].is_boolean());
+}
+
+#[cfg(test)]
 pub fn assert_service_site_policy_upsert_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "site policy upsert response",
@@ -917,6 +959,54 @@ pub fn assert_service_provider_delete_response_contract(value: &serde_json::Valu
     } else {
         assert!(value["provider"].is_null());
     }
+}
+
+#[cfg(test)]
+pub fn assert_service_job_cancel_response_contract(value: &serde_json::Value) {
+    assert_record_fields("job cancel response", value, &["cancelled", "job"], &[]);
+    assert!(value["cancelled"].is_boolean());
+    assert_service_job_record_contract(&value["job"]);
+}
+
+#[cfg(test)]
+pub fn assert_service_browser_retry_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "browser retry response",
+        value,
+        &["retryEnabled", "browser", "incident"],
+        &["retry_enabled"],
+    );
+    assert!(value["retryEnabled"].is_boolean());
+    assert_service_browser_record_contract(&value["browser"]);
+    if value["incident"].is_object() {
+        assert_service_incident_record_contract(&value["incident"]);
+    } else {
+        assert!(value["incident"].is_null());
+    }
+}
+
+#[cfg(test)]
+pub fn assert_service_incident_acknowledge_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "incident acknowledge response",
+        value,
+        &["acknowledged", "incident"],
+        &[],
+    );
+    assert!(value["acknowledged"].is_boolean());
+    assert_service_incident_record_contract(&value["incident"]);
+}
+
+#[cfg(test)]
+pub fn assert_service_incident_resolve_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "incident resolve response",
+        value,
+        &["resolved", "incident"],
+        &[],
+    );
+    assert!(value["resolved"].is_boolean());
+    assert_service_incident_record_contract(&value["incident"]);
 }
 
 #[cfg(test)]
@@ -2770,6 +2860,105 @@ mod tests {
             "id": "manual",
             "deleted": true,
             "provider": provider,
+        }));
+    }
+
+    #[test]
+    fn service_operator_mutation_response_contracts_match_wire_shape() {
+        let job_cancel_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-job-cancel-response.v1.schema.json"
+        ))
+        .unwrap();
+        let browser_retry_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-browser-retry-response.v1.schema.json"
+        ))
+        .unwrap();
+        let incident_acknowledge_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-incident-acknowledge-response.v1.schema.json"
+        ))
+        .unwrap();
+        let incident_resolve_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-incident-resolve-response.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_schema_required_fields(&job_cancel_schema, &["cancelled", "job"]);
+        assert_schema_required_fields(
+            &browser_retry_schema,
+            &["retryEnabled", "browser", "incident"],
+        );
+        assert_schema_required_fields(&incident_acknowledge_schema, &["acknowledged", "incident"]);
+        assert_schema_required_fields(&incident_resolve_schema, &["resolved", "incident"]);
+
+        let job = json!({
+            "id": "job-queued",
+            "action": "navigate",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+            "namingWarnings": [],
+            "hasNamingWarning": false,
+            "target": "browser",
+            "owner": "agent",
+            "state": "cancelled",
+            "priority": "normal",
+            "submittedAt": "2026-04-22T00:00:00Z",
+            "startedAt": null,
+            "completedAt": "2026-04-22T00:00:01Z",
+            "timeoutMs": null,
+            "result": { "success": false, "cancelled": true },
+            "error": "stale",
+        });
+        let browser = json!({
+            "id": "session:retry-session",
+            "profileId": "work",
+            "host": "local_headless",
+            "pid": null,
+            "cdpEndpoint": null,
+            "viewStreams": [],
+            "health": "process_exited",
+            "lastError": "Browser retry requested by operator",
+            "activeSessionIds": ["retry-session"],
+            "lastHealthObservation": null,
+        });
+        let incident = json!({
+            "id": "session:retry-session",
+            "browserId": "session:retry-session",
+            "label": "Browser session:retry-session",
+            "state": "active",
+            "severity": "error",
+            "escalation": "browser_recovery",
+            "recommendedAction": "Inspect browser health and retry or relaunch the affected browser if needed.",
+            "acknowledgedAt": null,
+            "acknowledgedBy": null,
+            "acknowledgementNote": null,
+            "resolvedAt": null,
+            "resolvedBy": null,
+            "resolutionNote": null,
+            "latestTimestamp": "2026-04-22T00:00:00Z",
+            "latestMessage": "Browser faulted",
+            "latestKind": "browser_health_changed",
+            "currentHealth": "faulted",
+            "eventIds": ["event-faulted"],
+            "jobIds": [],
+        });
+
+        assert_service_job_cancel_response_contract(&json!({
+            "cancelled": true,
+            "job": job,
+        }));
+        assert_service_browser_retry_response_contract(&json!({
+            "retryEnabled": true,
+            "browser": browser,
+            "incident": incident.clone(),
+        }));
+        assert_service_incident_acknowledge_response_contract(&json!({
+            "acknowledged": true,
+            "incident": incident.clone(),
+        }));
+        assert_service_incident_resolve_response_contract(&json!({
+            "resolved": true,
+            "incident": incident,
         }));
     }
 

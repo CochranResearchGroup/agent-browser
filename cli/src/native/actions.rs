@@ -9758,9 +9758,12 @@ mod tests {
         close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
     };
     use crate::native::service_model::{
-        assert_service_event_record_contract, assert_service_events_response_contract,
+        assert_service_browser_retry_response_contract, assert_service_event_record_contract,
+        assert_service_events_response_contract,
+        assert_service_incident_acknowledge_response_contract,
         assert_service_incident_activity_response_contract,
-        assert_service_incident_record_contract, assert_service_incidents_response_contract,
+        assert_service_incident_record_contract, assert_service_incident_resolve_response_contract,
+        assert_service_incidents_response_contract, assert_service_job_cancel_response_contract,
         assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
         assert_service_provider_delete_response_contract,
         assert_service_provider_upsert_response_contract,
@@ -9770,6 +9773,7 @@ mod tests {
         assert_service_trace_summary_record_contract, service_job_naming_warning_values,
         BrowserProcess,
     };
+    use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::test_utils::EnvGuard;
@@ -11951,6 +11955,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_service_job_cancel_response_matches_contract() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-job-cancel-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                jobs: BTreeMap::from([(
+                    "job-queued".to_string(),
+                    ServiceJob {
+                        id: "job-queued".to_string(),
+                        action: "navigate".to_string(),
+                        state: JobState::Queued,
+                        submitted_at: Some("2026-04-22T00:00:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_job_cancel",
+                "id": "svc-job-cancel-1",
+                "jobId": "job-queued",
+                "reason": "stale"
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_job_cancel_response_contract(&result["data"]);
+        assert_eq!(result["data"]["cancelled"], true);
+        assert_eq!(result["data"]["job"]["state"], "cancelled");
+        assert_eq!(result["data"]["job"]["error"], "stale");
+        assert_eq!(
+            store.load().unwrap().jobs["job-queued"].state,
+            JobState::Cancelled
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
     async fn test_service_incident_acknowledge_persists_metadata() {
         let guard = EnvGuard::new(&["HOME"]);
         let home = unique_socket_dir("service-incident-ack-home");
@@ -11998,6 +12050,7 @@ mod tests {
         .await;
 
         assert_eq!(result["success"], true);
+        assert_service_incident_acknowledge_response_contract(&result["data"]);
         assert_eq!(result["data"]["incident"]["acknowledgedBy"], "operator");
         assert_eq!(result["data"]["incident"]["acknowledgementNote"], "triaged");
         assert_eq!(
@@ -12139,6 +12192,7 @@ mod tests {
         .await;
 
         assert_eq!(result["success"], true);
+        assert_service_incident_resolve_response_contract(&result["data"]);
         assert_eq!(result["data"]["incident"]["resolvedBy"], "operator");
         assert_eq!(result["data"]["incident"]["resolutionNote"], "recovered");
         let persisted = store.load().unwrap();
@@ -12590,6 +12644,7 @@ mod tests {
         .await;
 
         assert_eq!(result["success"], true);
+        assert_service_browser_retry_response_contract(&result["data"]);
         assert_eq!(result["data"]["retryEnabled"], true);
         assert_eq!(result["data"]["browser"]["health"], "process_exited");
         let persisted = store.load().unwrap();

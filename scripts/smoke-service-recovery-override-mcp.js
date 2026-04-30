@@ -17,6 +17,10 @@ import {
   runCli,
   sendRawCommand,
 } from './smoke-utils.js';
+import {
+  assertServiceBrowserRetryResponseSchemaRecord,
+  loadServiceRecordSchema,
+} from './smoke-schema-utils.js';
 
 const context = configureRecoveryOverrideSmokeContext(
   createSmokeContext({
@@ -31,6 +35,9 @@ const agentName = 'smoke-agent';
 const taskName = 'resumeAfterFaultedMcpSmoke';
 const traceFields = { serviceName, agentName, taskName };
 const retryActor = 'service-recovery-override-mcp-smoke';
+const browserRetryResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-browser-retry-response.v1.schema.json',
+);
 
 let mcp;
 const timeout = setTimeout(() => {
@@ -170,6 +177,11 @@ try {
   });
   const retryPayload = parseMcpToolPayload(retryResult);
   assert(retryPayload.success === true, `MCP service_browser_retry failed: ${JSON.stringify(retryPayload)}`);
+  assertServiceBrowserRetryResponseSchemaRecord(
+    retryPayload.data,
+    browserRetryResponseSchema,
+    'MCP service_browser_retry response',
+  );
   assert(
     retryPayload.data?.retryEnabled === true,
     `MCP service_browser_retry did not enable recovery: ${JSON.stringify(retryPayload)}`,
