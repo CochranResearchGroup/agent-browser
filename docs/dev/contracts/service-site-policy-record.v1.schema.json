@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-site-policy-record.v1.schema.json",
+  "title": "agent-browser service site policy record",
+  "description": "Stable API shape for service site policy records returned by HTTP service collection APIs and MCP resources.",
+  "type": "object",
+  "required": [
+    "id",
+    "originPattern",
+    "browserHost",
+    "viewStream",
+    "controlInput",
+    "interactionMode",
+    "rateLimit",
+    "manualLoginPreferred",
+    "profileRequired",
+    "authProviders",
+    "challengePolicy",
+    "allowedChallengeProviders",
+    "notes"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "originPattern": {
+      "type": "string"
+    },
+    "browserHost": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "local_headless",
+            "local_headed",
+            "docker_headed",
+            "remote_headed",
+            "cloud_provider",
+            "attached_existing"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "viewStream": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "cdp_screencast",
+            "chrome_tab_webrtc",
+            "virtual_display_webrtc",
+            "novnc",
+            "external_url"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "controlInput": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "cdp_input",
+            "webrtc_input",
+            "vnc_input",
+            "manual_attached_desktop"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "interactionMode": {
+      "type": "string",
+      "enum": [
+        "cdp_direct",
+        "dom_action",
+        "browser_input",
+        "human_like_input",
+        "manual"
+      ]
+    },
+    "rateLimit": {
+      "type": "object"
+    },
+    "manualLoginPreferred": {
+      "type": "boolean"
+    },
+    "profileRequired": {
+      "type": "boolean"
+    },
+    "authProviders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "challengePolicy": {
+      "type": "string",
+      "enum": [
+        "avoid_first",
+        "manual_only",
+        "provider_allowed",
+        "provider_preferred",
+        "deny"
+      ]
+    },
+    "allowedChallengeProviders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

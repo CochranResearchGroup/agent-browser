@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-session-record.v1.schema.json",
+  "title": "agent-browser service session record",
+  "description": "Stable API shape for service session records returned by HTTP service collection APIs and MCP resources.",
+  "type": "object",
+  "required": [
+    "id",
+    "serviceName",
+    "agentName",
+    "taskName",
+    "owner",
+    "lease",
+    "profileId",
+    "cleanup",
+    "browserIds",
+    "tabIds",
+    "createdAt",
+    "expiresAt"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "serviceName": {
+      "type": ["string", "null"]
+    },
+    "agentName": {
+      "type": ["string", "null"]
+    },
+    "taskName": {
+      "type": ["string", "null"]
+    },
+    "owner": {},
+    "lease": {
+      "type": "string",
+      "enum": [
+        "shared",
+        "exclusive",
+        "human_takeover",
+        "released",
+        "expired"
+      ]
+    },
+    "profileId": {
+      "type": ["string", "null"]
+    },
+    "cleanup": {
+      "type": "string",
+      "enum": [
+        "detach",
+        "close_tabs",
+        "close_browser",
+        "release_only"
+      ]
+    },
+    "browserIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tabIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "createdAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "expiresAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true
+}

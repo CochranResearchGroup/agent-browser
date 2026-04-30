@@ -15,6 +15,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::test_utils::EnvGuard;
 
 use super::actions::{execute_command, DaemonState};
+use super::control_plane::ControlPlaneWorker;
+use super::service_model::{BrowserHealth as ServiceBrowserHealth, JobState};
+use super::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 fn assert_success(resp: &Value) {
     assert_eq!(
@@ -44,6 +47,62 @@ fn native_test_fixture_url(name: &str) -> String {
         "data:text/html;base64,{}",
         STANDARD.encode(native_test_fixture_html(name))
     )
+}
+
+fn e2e_temp_home(label: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "agent-browser-e2e-{label}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&path).unwrap();
+    path
+}
+
+async fn start_hanging_navigation_server() -> (String, tokio::task::JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let base_url = format!("http://127.0.0.1:{}", port);
+
+    let handle = tokio::spawn(async move {
+        for _ in 0..20 {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 8192];
+                let _ = stream.read(&mut buf).await;
+                let body = "<!doctype html><title>Hanging</title><h1>Hanging navigation</h1>";
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\
+                     Content-Length: 1048576\r\nConnection: keep-alive\r\n\r\n{}",
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.flush().await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            });
+        }
+    });
+
+    (base_url, handle)
+}
+
+fn kill_browser_process(pid: u32) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .status();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +165,320 @@ async fn e2e_launch_navigate_evaluate_close() {
     let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
     assert_success(&resp);
     assert_eq!(get_data(&resp)["closed"], true);
+}
+
+#[tokio::test]
+#[ignore]
+async fn e2e_service_cancel_during_navigation_recovers_for_followup_command() {
+    let home = e2e_temp_home("service-cancel-navigation-recovery");
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SESSION"]);
+    guard.set("HOME", home.to_str().unwrap());
+    guard.set("AGENT_BROWSER_SESSION", "e2e-service-cancel-navigation");
+    let (base_url, server_handle) = start_hanging_navigation_server().await;
+    let handle = ControlPlaneWorker::start(DaemonState::new());
+
+    let launch = handle
+        .submit(json!({
+            "id": "e2e-launch-before-cancel",
+            "action": "launch",
+            "headless": true,
+        }))
+        .await;
+    assert_success(&launch);
+
+    let nav_job_id = "e2e-running-nav-cancel";
+    let navigation = {
+        let handle = handle.clone();
+        let url = format!("{}/slow", base_url);
+        tokio::spawn(async move {
+            handle
+                .submit(json!({
+                    "id": nav_job_id,
+                    "action": "navigate",
+                    "url": url,
+                }))
+                .await
+        })
+    };
+
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    for _ in 0..200 {
+        if store
+            .load()
+            .unwrap()
+            .jobs
+            .get(nav_job_id)
+            .is_some_and(|job| job.state == JobState::Running)
+        {
+            break;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(25)).await;
+    }
+
+    assert!(
+        store
+            .load()
+            .unwrap()
+            .jobs
+            .get(nav_job_id)
+            .is_some_and(|job| job.state == JobState::Running),
+        "navigation job should enter running state before cancellation"
+    );
+
+    let cancel = handle.cancel_job_response("e2e-cancel-nav", nav_job_id, None);
+    assert_eq!(
+        cancel
+            .pointer("/data/cancellationRequested")
+            .and_then(|value| value.as_bool()),
+        Some(true),
+        "expected running cancellation request: {}",
+        cancel
+    );
+
+    let cancelled = navigation.await.expect("navigation task should complete");
+    assert_eq!(
+        cancelled
+            .pointer("/data/cancelled")
+            .and_then(|v| v.as_bool()),
+        Some(true),
+        "navigation should return a cancelled response: {}",
+        cancelled
+    );
+
+    let follow_up = handle
+        .submit(json!({
+            "id": "e2e-after-nav-cancel",
+            "action": "navigate",
+            "url": "data:text/html,<h1>Recovered after cancellation</h1>",
+        }))
+        .await;
+    assert_success(&follow_up);
+
+    let snapshot = handle
+        .submit(json!({
+            "id": "e2e-snapshot-after-nav-cancel",
+            "action": "snapshot",
+        }))
+        .await;
+    assert_success(&snapshot);
+    assert!(
+        get_data(&snapshot)["snapshot"]
+            .as_str()
+            .is_some_and(|text| text.contains("Recovered after cancellation")),
+        "snapshot should prove the browser is usable after cancellation: {}",
+        snapshot
+    );
+
+    let persisted = store.load().unwrap();
+    assert_eq!(persisted.jobs[nav_job_id].state, JobState::Cancelled);
+    assert_eq!(
+        persisted.jobs["e2e-after-nav-cancel"].state,
+        JobState::Succeeded
+    );
+    assert_eq!(
+        persisted.jobs["e2e-snapshot-after-nav-cancel"].state,
+        JobState::Succeeded
+    );
+
+    handle.shutdown().await;
+    server_handle.abort();
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[tokio::test]
+#[ignore]
+async fn e2e_service_detects_browser_crash_and_recovers_on_next_command() {
+    let home = e2e_temp_home("service-crash-recovery");
+    let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SESSION"]);
+    guard.set("HOME", home.to_str().unwrap());
+    guard.set("AGENT_BROWSER_SESSION", "e2e-service-crash-recovery");
+    let handle = ControlPlaneWorker::start(DaemonState::new());
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    let browser_id = "session:e2e-service-crash-recovery";
+
+    let launch = handle
+        .submit(json!({
+            "id": "e2e-crash-launch",
+            "action": "launch",
+            "headless": true,
+        }))
+        .await;
+    assert_success(&launch);
+
+    let pid_response = handle
+        .submit(json!({
+            "id": "e2e-crash-browser-pid",
+            "action": "browser_pid",
+        }))
+        .await;
+    assert_success(&pid_response);
+    let pid = get_data(&pid_response)["pid"]
+        .as_u64()
+        .expect("browser_pid should return a pid") as u32;
+    kill_browser_process(pid);
+
+    for attempt in 0..50 {
+        let probe = handle
+            .submit(json!({
+                "id": format!("e2e-crash-probe-{attempt}"),
+                "action": "state_list",
+            }))
+            .await;
+        assert_success(&probe);
+
+        if store
+            .load()
+            .unwrap()
+            .browsers
+            .get(browser_id)
+            .is_some_and(|browser| browser.health == ServiceBrowserHealth::ProcessExited)
+        {
+            break;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    let detected = store.load().unwrap();
+    let crashed_browser = detected
+        .browsers
+        .get(browser_id)
+        .expect("service browser record should exist after crash detection");
+    assert_eq!(crashed_browser.health, ServiceBrowserHealth::ProcessExited);
+    assert_eq!(crashed_browser.pid, Some(pid));
+    assert!(
+        crashed_browser
+            .last_error
+            .as_deref()
+            .is_some_and(|error| error.contains("exited")),
+        "crash detection should record an operator-readable error: {:?}",
+        crashed_browser.last_error
+    );
+    assert!(detected.events.iter().any(|event| {
+        event.kind == super::service_model::ServiceEventKind::BrowserHealthChanged
+            && event.browser_id.as_deref() == Some(browser_id)
+            && event.previous_health == Some(ServiceBrowserHealth::Ready)
+            && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+    }));
+
+    let recovered = handle
+        .submit(json!({
+            "id": "e2e-crash-recovered-navigate",
+            "action": "navigate",
+            "url": "data:text/html,<h1>Recovered after crash</h1>",
+        }))
+        .await;
+    assert_success(&recovered);
+
+    let new_pid_response = handle
+        .submit(json!({
+            "id": "e2e-crash-recovered-browser-pid",
+            "action": "browser_pid",
+        }))
+        .await;
+    assert_success(&new_pid_response);
+    let new_pid = get_data(&new_pid_response)["pid"]
+        .as_u64()
+        .expect("recovered browser_pid should return a pid") as u32;
+    assert_ne!(
+        new_pid, pid,
+        "follow-up browser command should auto-launch a fresh Chrome process"
+    );
+
+    let snapshot = handle
+        .submit(json!({
+            "id": "e2e-crash-recovered-snapshot",
+            "action": "snapshot",
+        }))
+        .await;
+    assert_success(&snapshot);
+    assert!(
+        get_data(&snapshot)["snapshot"]
+            .as_str()
+            .is_some_and(|text| text.contains("Recovered after crash")),
+        "snapshot should prove the recovered browser is usable: {}",
+        snapshot
+    );
+
+    let recovered_state = store.load().unwrap();
+    let browser = recovered_state
+        .browsers
+        .get(browser_id)
+        .expect("service browser record should exist after recovery");
+    assert_eq!(browser.health, ServiceBrowserHealth::Ready);
+    assert_eq!(browser.pid, Some(new_pid));
+    assert!(recovered_state.events.iter().any(|event| {
+        event.kind == super::service_model::ServiceEventKind::BrowserHealthChanged
+            && event.browser_id.as_deref() == Some(browser_id)
+            && event.previous_health == Some(ServiceBrowserHealth::ProcessExited)
+            && event.current_health == Some(ServiceBrowserHealth::Ready)
+    }));
+    let stale_health_event_index = recovered_state
+        .events
+        .iter()
+        .position(|event| {
+            event.kind == super::service_model::ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.previous_health == Some(ServiceBrowserHealth::Ready)
+                && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+        })
+        .expect("crash detection should record the stale browser health transition");
+    assert_eq!(
+        recovered_state.events[stale_health_event_index]
+            .details
+            .as_ref()
+            .and_then(|details| details.get("currentReasonKind"))
+            .and_then(|reason| reason.as_str()),
+        Some("process_exited")
+    );
+    let recovery_event_index = recovered_state
+        .events
+        .iter()
+        .position(|event| {
+            event.kind == super::service_model::ServiceEventKind::BrowserRecoveryStarted
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+        })
+        .expect("relaunch should record that browser recovery started");
+    let ready_health_event_index = recovered_state
+        .events
+        .iter()
+        .position(|event| {
+            event.kind == super::service_model::ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.previous_health == Some(ServiceBrowserHealth::ProcessExited)
+                && event.current_health == Some(ServiceBrowserHealth::Ready)
+        })
+        .expect("relaunch should record the recovered browser health transition");
+    assert!(
+        stale_health_event_index < recovery_event_index
+            && recovery_event_index < ready_health_event_index,
+        "recovery should be logged between stale and ready browser health transitions"
+    );
+    assert!(recovered_state.events[recovery_event_index]
+        .details
+        .as_ref()
+        .and_then(|details| details.get("reason"))
+        .and_then(|reason| reason.as_str())
+        .is_some_and(|reason| reason.contains("exited")));
+    assert_eq!(
+        recovered_state.events[recovery_event_index]
+            .details
+            .as_ref()
+            .and_then(|details| details.get("reasonKind"))
+            .and_then(|reason| reason.as_str()),
+        Some("process_exited")
+    );
+    assert_eq!(
+        recovered_state.jobs["e2e-crash-recovered-navigate"].state,
+        JobState::Succeeded
+    );
+    assert_eq!(
+        recovered_state.jobs["e2e-crash-recovered-snapshot"].state,
+        JobState::Succeeded
+    );
+
+    handle.shutdown().await;
+    let _ = std::fs::remove_dir_all(&home);
 }
 
 #[tokio::test]

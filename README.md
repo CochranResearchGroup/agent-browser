@@ -132,11 +132,43 @@ agent-browser connect <port>          # Connect to browser via CDP
 agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
+agent-browser service status          # Show service control-plane and configured service state
+agent-browser service watch           # Poll service health until interrupted
+agent-browser service reconcile       # Refresh persisted browser health records
+agent-browser service profiles        # Show retained service profile records
+agent-browser service sessions        # Show retained service session records
+agent-browser service browsers        # Show retained browser health records
+agent-browser service tabs            # Show retained service tab records
+agent-browser service site-policies   # Show configured service site-policy records
+agent-browser service providers       # Show configured service provider records
+agent-browser service challenges      # Show retained service challenge records
+agent-browser service cancel <job-id> # Cancel a queued or running service control job
+agent-browser service acknowledge <incident-id> # Mark a retained incident acknowledged
+agent-browser service resolve <incident-id>     # Mark a retained incident resolved
+agent-browser service activity <incident-id>    # Show a retained incident timeline
+agent-browser service trace                     # Show related service trace records
+agent-browser service jobs            # Show recent service control jobs
+agent-browser service incidents       # Show grouped retained service incidents
+agent-browser service events          # Show recent service events
+agent-browser mcp serve               # Run the MCP stdio server
+agent-browser mcp resources           # List read-only service resources for MCP adapters
+agent-browser mcp read agent-browser://incidents
+agent-browser mcp read agent-browser://profiles
+agent-browser mcp read agent-browser://sessions
+agent-browser mcp read agent-browser://browsers
+agent-browser mcp read agent-browser://tabs
+agent-browser mcp read agent-browser://site-policies
+agent-browser mcp read agent-browser://providers
+agent-browser mcp read agent-browser://challenges
+agent-browser mcp read agent-browser://jobs
+agent-browser mcp read agent-browser://events
 agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 agent-browser chat "<instruction>"    # AI chat: natural language browser control (single-shot)
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
+
+Service mode is the persistent control plane for long-lived automation. It keeps profile, session, browser, tab, job, incident, event, site-policy, provider, and challenge state aligned across CLI commands, the HTTP API, MCP resources/tools, and the dashboard. Agents should include `serviceName`, `agentName`, and `taskName` when available so multi-service work remains traceable.
 
 ### Get Info
 
@@ -478,6 +510,27 @@ stable per-profile defaults and service-specific login hints.
         "defaultViewport": "960x640"
       }
     }
+  },
+  "service": {
+    "profiles": {
+      "work": {
+        "name": "Work",
+        "allocation": "per_service",
+        "keyring": "basic_password_store",
+        "sharedServiceIds": ["JournalDownloader"],
+        "manualLoginPreferred": true
+      }
+    },
+    "sessions": {
+      "journal-session": {
+        "serviceName": "JournalDownloader",
+        "agentName": "article-probe-agent",
+        "taskName": "probeACSwebsite",
+        "profileId": "work",
+        "lease": "exclusive",
+        "cleanup": "close_tabs"
+      }
+    }
   }
 }
 ```
@@ -492,6 +545,16 @@ is accepted. Set `launch.leaveOpen` or pass `--leave-open` when you want
 down. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
 `960x640`, when a runtime profile should resize the browser content area after
 launch and before the requested command runs.
+
+The `service.profiles` and `service.sessions` maps define service control-plane
+metadata for profile allocation, keyring posture, caller ownership, profile
+binding, lease state, and cleanup policy. These records are exposed through
+service status, MCP resources, and the HTTP service APIs. Current browser
+launch behavior still comes from `runtimeProfiles`, `--runtime-profile`,
+`--profile`, and existing launch flags. Launches that select a runtime profile
+or custom profile path now bind the active browser record to a service profile.
+When commands include `serviceName`, `agentName`, or `taskName`, the active
+session record also captures that caller context for traceability.
 
 You can register a runtime profile into user config explicitly:
 
@@ -652,14 +715,14 @@ agent-browser --session-name secure open example.com
 
 ## Security
 
-agent-browser includes security features for safe AI agent deployments. All features are opt-in -- existing workflows are unaffected until you explicitly enable a feature:
+agent-browser includes security features for safe AI agent deployments. All features are opt-in, so existing workflows are unaffected until you explicitly enable a feature:
 
-- **Authentication Vault** -- Store credentials locally (always encrypted), reference by name. The LLM never sees passwords. `auth login` navigates with `load` and then waits for login form selectors to appear (SPA-friendly, timeout follows the default action timeout). A key is auto-generated at `~/.agent-browser/.encryption-key` if `AGENT_BROWSER_ENCRYPTION_KEY` is not set: `echo "pass" | agent-browser auth save github --url https://github.com/login --username user --password-stdin` then `agent-browser auth login github`
-- **Content Boundary Markers** -- Wrap page output in delimiters so LLMs can distinguish tool output from untrusted content: `--content-boundaries`
-- **Domain Allowlist** -- Restrict navigation to trusted domains (wildcards like `*.example.com` also match the bare domain): `--allowed-domains "example.com,*.example.com"`. Sub-resource requests (scripts, images, fetch) and WebSocket/EventSource connections to non-allowed domains are also blocked. Include any CDN domains your target pages depend on (e.g., `*.cdn.example.com`).
-- **Action Policy** -- Gate destructive actions with a static policy file: `--action-policy ./policy.json`
-- **Action Confirmation** -- Require explicit approval for sensitive action categories: `--confirm-actions eval,download`
-- **Output Length Limits** -- Prevent context flooding: `--max-output 50000`
+- **Authentication Vault** stores credentials locally, always encrypted, and references them by name. The LLM never sees passwords. `auth login` navigates with `load` and then waits for login form selectors to appear. The timeout follows the default action timeout. A key is auto-generated at `~/.agent-browser/.encryption-key` if `AGENT_BROWSER_ENCRYPTION_KEY` is not set: `echo "pass" | agent-browser auth save github --url https://github.com/login --username user --password-stdin` then `agent-browser auth login github`
+- **Content Boundary Markers** wrap page output in delimiters so LLMs can distinguish tool output from untrusted content: `--content-boundaries`
+- **Domain Allowlist** restricts navigation to trusted domains. Wildcards like `*.example.com` also match the bare domain: `--allowed-domains "example.com,*.example.com"`. Sub-resource requests (scripts, images, fetch) and WebSocket/EventSource connections to non-allowed domains are also blocked. Include any CDN domains your target pages depend on, for example `*.cdn.example.com`.
+- **Action Policy** gates destructive actions with a static policy file: `--action-policy ./policy.json`
+- **Action Confirmation** requires explicit approval for sensitive action categories: `--confirm-actions eval,download`
+- **Output Length Limits** prevent context flooding: `--max-output 50000`
 
 For unattended headed or headless runs that need the real OS credential store, agent-browser can read keychain settings from a dotenv file. Environment variables take precedence, otherwise it loads `AGENT_BROWSER_ENV_FILE`, then `~/.agent-browser/.env` if present.
 
@@ -770,6 +833,11 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--confirm-actions <list>` | Action categories requiring confirmation (or `AGENT_BROWSER_CONFIRM_ACTIONS` env) |
 | `--confirm-interactive` | Interactive confirmation prompts; auto-denies if stdin is not a TTY (or `AGENT_BROWSER_CONFIRM_INTERACTIVE` env) |
 | `--engine <name>` | Browser engine: `chrome` (default), `lightpanda` (or `AGENT_BROWSER_ENGINE` env) |
+| `--service-reconcile-interval <ms>` | Background service browser-health reconciliation interval; `0` disables it (or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` env) |
+| `--service-job-timeout <ms>` | Timeout for dispatched service control jobs; `0` disables it (or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` env) |
+| `--service-recovery-retry-budget <n>` | Browser recovery attempts before faulting (or `AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET` env) |
+| `--service-recovery-base-backoff <ms>` | Browser recovery backoff base delay (or `AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS` env) |
+| `--service-recovery-max-backoff <ms>` | Browser recovery backoff ceiling (or `AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS` env) |
 | `--no-auto-dialog` | Disable automatic dismissal of `alert`/`beforeunload` dialogs (or `AGENT_BROWSER_NO_AUTO_DIALOG` env) |
 | `--model <name>` | AI model for chat command (or `AI_GATEWAY_MODEL` env) |
 | `-v`, `--verbose` | Show tool commands and their raw output (chat) |
@@ -796,11 +864,12 @@ agent-browser dashboard stop
 The dashboard runs as a standalone background process on port 4848, independent of browser sessions. It stays available even when no sessions are running. All sessions automatically stream to the dashboard.
 
 The dashboard displays:
-- **Live viewport** -- real-time JPEG frames from the browser
-- **Activity feed** -- chronological command/result stream with timing and expandable details
-- **Console output** -- browser console messages (log, warn, error)
-- **Session creation** -- create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
-- **AI Chat** -- chat with an AI assistant directly in the dashboard (requires Vercel AI Gateway configuration)
+- **Live viewport** — real-time JPEG frames from the browser
+- **Service view** — worker and browser health cards, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent incident severity, escalation, and recommended action displays sourced from the service incident contract, a service-owned incident history timeline with local fallback, a trace explorer backed by `/api/service/trace` for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards and naming warnings from the shared trace payload, a browser-health transition timeline for crash/recovery visibility, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, managed entity counts, recent service jobs with naming warnings and queued/running job cancellation, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
+- **Activity feed** — chronological command/result stream with timing and expandable details
+- **Console output** — browser console messages (log, warn, error)
+- **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
+- **AI Chat** — chat with an AI assistant directly in the dashboard (requires Vercel AI Gateway configuration)
 
 ### AI Chat
 
@@ -847,6 +916,10 @@ Create an `agent-browser.json` file to set persistent defaults instead of repeat
   "proxy": "http://localhost:8080",
   "profile": "./browser-data",
   "userAgent": "my-agent/1.0",
+  "service": {
+    "reconcileIntervalMs": 60000,
+    "jobTimeoutMs": 120000
+  },
   "ignoreHttpsErrors": true
 }
 ```
@@ -859,6 +932,12 @@ AGENT_BROWSER_CONFIG=./ci-config.json agent-browser open example.com
 ```
 
 All options from the table above can be set in the config file using camelCase keys (e.g., `--executable-path` becomes `"executablePath"`, `--proxy-bypass` becomes `"proxyBypass"`). Unknown keys are ignored for forward compatibility.
+
+Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
+
+Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, pass `--service-job-timeout <ms>`, or set `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.
+
+Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass the matching `--service-recovery-*` flags, or use the `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host. Recovery-started trace events include `details.policySource.retryBudget`, `details.policySource.baseBackoffMs`, and `details.policySource.maxBackoffMs` so operators can see whether each active value came from defaults, config, environment, or CLI flags.
 
 Boolean flags accept an optional `true`/`false` value to override config settings. For example, `--headed false` disables `"headed": true` from config. A bare `--headed` is equivalent to `--headed true`.
 
@@ -1183,6 +1262,232 @@ agent-browser stream disable              # Stop streaming for the session
 
 The WebSocket server streams the browser viewport and accepts input events.
 
+### Service Status
+
+Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser:
+
+```bash
+agent-browser service status
+agent-browser service status --watch --interval 1000
+agent-browser service watch --interval 1000 --count 5
+agent-browser service reconcile
+agent-browser service profiles
+agent-browser service sessions
+agent-browser service browsers
+agent-browser service tabs
+agent-browser service site-policies
+agent-browser service providers
+agent-browser service challenges
+agent-browser service cancel <job-id> --reason stale
+agent-browser service retry browser-1 --by operator --note approved
+agent-browser service acknowledge browser-1 --by operator --note triaged
+agent-browser service resolve browser-1 --by operator --note recovered
+agent-browser service activity browser-1
+agent-browser service trace --service-name JournalDownloader --task-name probeACSwebsite
+agent-browser service jobs --limit 20
+agent-browser service jobs --id <job-id>
+agent-browser service jobs --state failed --action navigate --since 2026-04-22T00:00:00Z
+agent-browser service jobs --service-name JournalDownloader --task-name probeACSwebsite
+agent-browser service incidents --limit 20
+agent-browser service incidents --id browser-1
+agent-browser service incidents --handling-state unacknowledged
+agent-browser service incidents --severity critical --escalation os_degraded_possible
+agent-browser service incidents --state active --kind service_job_timeout
+agent-browser service incidents --state recovered --handling-state resolved --browser-id browser-1
+agent-browser service incidents --service-name JournalDownloader --task-name probeACSwebsite
+agent-browser service events --limit 20
+agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
+agent-browser service events --service-name JournalDownloader --task-name probeACSwebsite
+agent-browser service events --kind browser_recovery_started
+agent-browser service events --kind browser_recovery_override
+agent-browser service events --kind tab_lifecycle_changed
+```
+
+The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode profiles, sessions, site policies, and providers from `agent-browser.json` and `~/.agent-browser/config.json`. In text mode, it summarizes profiles, browsers, and sessions with service, agent, task, profile, lease, cleanup, browser linkage, health, and retained observation fields. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, unreachable CDP endpoints without a PID are marked `unreachable`, and endpoints that answer health probes but fail target-list discovery are marked `degraded`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active. When reconciliation removes stale session/tab ownership links, it appends a `reconciliation` event with `details.action: "session_tab_ownership_repaired"` and the removed relationships. Configured profiles, sessions, site policies, and providers override entries with the same IDs from the persisted state. Browser launch, close, and command-time stale-browser detection update the persisted browser health records for the active session. Browser records retain the latest non-ready health evidence in `lastHealthObservation`, so service status clients can inspect failure metadata without reconstructing events. Use `service profiles`, `service sessions`, `service browsers`, `service tabs`, `service site-policies`, `service providers`, and `service challenges` for focused collection views without parsing the full status payload. Unexpected process-exit health and recovery events include `details.processExitCause: "unexpected_process_exit"` and `details.failureClass: "browser_process_exited"`; active local Chrome exits also include `processExitDetection`, `processExitPid`, and exit code or signal when available. During close, agent-browser first tries a polite browser shutdown and then force kills owned browser processes if needed; close-generated health events include `details.shutdownReasonKind: "operator_requested_close"`, `details.processExitCause: "operator_requested_close"`, and shutdown outcome flags. Polite shutdown failure leaves the browser record `degraded`, and force-kill failure leaves it `faulted` with an OS-degraded warning. When a queued command finds the active browser process exited or the CDP connection disconnected, agent-browser records that failure before cleanup and relaunch. Runtime profile and custom profile launches also populate linked service profile and session records, including `serviceName`, `agentName`, and `taskName` when the caller provides them.
+
+Run `pnpm test:service-collections-live` to validate that CLI, HTTP, and MCP expose matching service-owned profile, session, browser, tab, site-policy, provider, and challenge collections for one live runtime-profile session.
+
+The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
+
+The persisted service state also includes bounded audit records for recent control-plane jobs in `jobs`, a derived `incidents` collection that groups retained incident signals by browser or service scope, plus an `events` log with reconciliation summaries, browser health transitions, browser recovery starts, ownership-repair details, and tab lifecycle changes such as discovered tabs, URL or title changes, and closed tabs. Job records track request action, priority, timestamps, final success or failure, and error text without storing large command payloads.
+
+Use `service reconcile` to run the persisted browser health and target probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot, refreshes live tab records for reachable browser CDP endpoints, and appends service events.
+
+Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
+
+Use `service cancel <job-id>` to mark a queued service job cancelled before it dispatches or request cooperative cancellation for a running job. Running cancellation drops the active service future, records the job as `cancelled`, and cleans up browser state before the worker accepts more work. Terminal jobs are rejected rather than rewritten. Add `--reason <text>` to record an operator-readable reason for queued cancellation.
+
+Use `service acknowledge <incident-id>` to mark a retained incident seen by an operator. Add `--by <text>` to record who acknowledged it and `--note <text>` to persist a short operator note.
+
+Use `service resolve <incident-id>` to mark a retained incident handled. This preserves the derived incident record while adding durable resolution metadata. Add `--by <text>` to record who resolved it and `--note <text>` to persist a resolution note.
+
+Acknowledgement and resolution also append retained service events with `incident_acknowledged` and `incident_resolved` kinds. Incident detail includes those handling events alongside the health and job events that define the grouped incident. Use `service activity <incident-id>` to fetch a normalized chronological timeline for one retained incident without reconstructing it client-side.
+
+The activity response is the canonical agent-facing incident timeline. It returns `{ incident, activity, count }`. Each activity item includes `id`, `source`, `timestamp`, `kind`, `title`, and `message`, plus `eventId` or `jobId` when it came from a retained event or job. Event and job items include trace context fields such as `browserId`, `profileId`, `sessionId`, `serviceName`, `agentName`, and `taskName` when known, so clients can display one timeline without rejoining raw records. Older retained incidents can include `source: "metadata"` acknowledgement or resolution items when handling metadata predates retained handling events.
+
+Use `service trace --service-name <name> --task-name <name>` to inspect related events, jobs, incidents, and normalized activity in one response. Add `--limit <n>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--agent-name <name>`, or `--since <timestamp>` to narrow a trace view for one service, agent, task, browser, profile, session, or time window. This is the preferred service debugging surface when a client needs a complete timeline without issuing separate jobs, incidents, events, and incident activity requests. The response includes a `summary` object with compact service, agent, task, browser, profile, and session context rows plus per-context record counts and naming warnings for missing service, agent, or task labels when debugging multi-agent runs. Browser crash recovery traces expose the canonical sequence in `events`: a `browser_health_changed` event with `currentHealth` such as `process_exited` or `cdp_disconnected` and `details.currentReasonKind`, then `browser_recovery_started` with `details.reasonKind`, `details.reason`, `details.attempt`, `details.retryBudget`, `details.nextRetryDelayMs`, and `details.policySource`, then a `browser_health_changed` event with `currentHealth: "ready"` after relaunch. Stale health and recovery events also include `details.failureClass`, such as `browser_process_exited`, `cdp_unresponsive`, `cdp_endpoint_unreachable`, or `target_discovery_failed`. Process-exit health and recovery events also include `details.processExitCause: "unexpected_process_exit"`. Active local Chrome process exits include `details.processExitDetection: "local_child_try_wait"`, `details.processExitPid`, and `details.processExitCode` or `details.processExitSignal` when available. `details.policySource` reports `default`, `config`, `env`, or `cli` for the retry budget, base backoff, and max backoff values. Operator-requested shutdown health events instead include `details.shutdownReasonKind: "operator_requested_close"` and `details.processExitCause: "operator_requested_close"` plus polite-close and force-kill outcome flags, so clients can separate clean or degraded closes from unexpected exits. If the next attempt would exceed the default retry budget, the browser is marked `faulted` and the command fails instead of relaunching. HTTP clients read the same payload from `/api/service/trace`, and MCP clients read it through the `service_trace` tool.
+
+Use `service retry <browser-id> --by <operator> --note <text>` to explicitly allow one new recovery attempt for a faulted browser. It records a `browser_recovery_override` event, moves the browser back to a retryable stale health state, and resets retry counting from that override boundary. HTTP retry requests accept `service-name`, `agent-name`, and `task-name` query parameters, and MCP `service_browser_retry` accepts `serviceName`, `agentName`, and `taskName`, so override events appear in filtered service traces.
+
+Use `service jobs --limit <n>` to inspect recent control-plane jobs without parsing the full service state. Use `service jobs --id <job-id>` to inspect one retained job directly. Add `--state <state>`, `--action <action>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter jobs before the limit is applied. Valid states are `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `timed_out`. `--since` accepts RFC 3339 timestamps. Jobs include `namingWarnings` when a request is missing `serviceName`, `agentName`, or `taskName`; these warnings are advisory and do not reject anonymous compatibility requests. Current warning values are `missing_service_name`, `missing_agent_name`, and `missing_task_name`. `hasNamingWarning` is `true` when `namingWarnings` is non-empty. `pnpm test:service-health-live` includes the static API/MCP parity guard and HTTP job-naming check; run `pnpm test:service-api-mcp-parity` or `pnpm test:service-job-naming-live` directly when only one contract needs validation.
+
+Use `service incidents --limit <n>` to inspect grouped retained incidents directly without parsing the full service state. Use `service incidents --id <incident-id>` to fetch one retained incident together with its expanded related events and jobs. Incident detail also includes acknowledgement and resolution metadata when present. Incidents include `severity`, `escalation`, and `recommendedAction` so CLI, HTTP, MCP, and dashboard clients do not infer operator priority differently. Add `--state <state>`, `--severity <severity>`, `--escalation <escalation>`, `--handling-state <state>`, `--kind <kind>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter incidents before the limit is applied. Trace-context filters match related events and jobs. Valid incident states are `active`, `recovered`, and `service`. Valid severities are `info`, `warning`, `error`, and `critical`. Valid escalations are `none`, `browser_degraded`, `browser_recovery`, `job_attention`, `service_triage`, and `os_degraded_possible`. Valid handling states are `unacknowledged`, `acknowledged`, and `resolved`. Valid kinds are `browser_health_changed`, `reconciliation_error`, `service_job_timeout`, and `service_job_cancelled`. `--since` compares the incident `latestTimestamp` using RFC 3339 timestamps.
+
+Use `service events --limit <n>` to inspect recent reconciliation summaries, browser launch metadata, browser health transitions, browser recovery starts, browser recovery overrides, tab lifecycle changes, and incident handling events without parsing the full service state. Launch, health, and recovery events include `profileId`, `sessionId`, `serviceName`, `agentName`, and `taskName` when that context is known. Add `--kind <kind>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_launch_recorded`, `browser_health_changed`, `browser_recovery_started`, `browser_recovery_override`, `tab_lifecycle_changed`, `reconciliation_error`, `incident_acknowledged`, and `incident_resolved`. `--since` accepts RFC 3339 timestamps.
+
+When the session stream server is running, agents can read the same service surface over HTTP without shelling out:
+
+```bash
+curl "http://127.0.0.1:<stream-port>/api/browser/url"
+curl "http://127.0.0.1:<stream-port>/api/browser/title"
+curl "http://127.0.0.1:<stream-port>/api/browser/tabs?verbose=true"
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/navigate" -H "content-type: application/json" -d '{"url":"https://example.com","waitUntil":"load"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/back" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/forward" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/reload" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/new-tab" -H "content-type: application/json" -d '{"url":"https://example.com/next"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/switch-tab" -H "content-type: application/json" -d '{"index":0}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/close-tab" -H "content-type: application/json" -d '{"index":1}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/viewport" -H "content-type: application/json" -d '{"width":1280,"height":720,"deviceScaleFactor":1}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/user-agent" -H "content-type: application/json" -d '{"userAgent":"AgentBrowserClient/1.0"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/media" -H "content-type: application/json" -d '{"colorScheme":"dark","reducedMotion":"reduce"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/timezone" -H "content-type: application/json" -d '{"timezoneId":"America/Chicago"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/locale" -H "content-type: application/json" -d '{"locale":"en-US"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/geolocation" -H "content-type: application/json" -d '{"latitude":41.8781,"longitude":-87.6298,"accuracy":10}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/permissions" -H "content-type: application/json" -d '{"permissions":["geolocation"]}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/cookies/get" -H "content-type: application/json" -d '{"urls":["https://example.com"]}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/cookies/set" -H "content-type: application/json" -d '{"name":"session","value":"abc","url":"https://example.com"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/cookies/clear" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/storage/get" -H "content-type: application/json" -d '{"type":"local","key":"token"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/storage/set" -H "content-type: application/json" -d '{"type":"local","key":"token","value":"abc"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/storage/clear" -H "content-type: application/json" -d '{"type":"local"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/console" -H "content-type: application/json" -d '{"clear":false}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/errors" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/set-content" -H "content-type: application/json" -d '{"html":"<main>Ready</main>"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/headers" -H "content-type: application/json" -d '{"headers":{"X-Client":"agent-browser"}}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/offline" -H "content-type: application/json" -d '{"offline":false}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/dialog" -H "content-type: application/json" -d '{"response":"status"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/clipboard" -H "content-type: application/json" -d '{"operation":"write","text":"copied text"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/upload" -H "content-type: application/json" -d '{"selector":"#file","files":["/tmp/file.txt"]}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/download" -H "content-type: application/json" -d '{"selector":"#download","path":"/tmp/download.txt"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/wait-for-download" -H "content-type: application/json" -d '{"path":"/tmp/download.txt","timeoutMs":5000}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/pdf" -H "content-type: application/json" -d '{"path":"/tmp/page.pdf"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/response-body" -H "content-type: application/json" -d '{"url":"/api/data","timeoutMs":5000}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/har/start" -H "content-type: application/json" -d '{}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/har/stop" -H "content-type: application/json" -d '{"path":"/tmp/capture.har"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/route" -H "content-type: application/json" -d '{"url":"**/api/*","response":{"status":200,"body":"{}","contentType":"application/json"}}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/unroute" -H "content-type: application/json" -d '{"url":"**/api/*"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/requests" -H "content-type: application/json" -d '{"filter":"/api","method":"GET","status":"2xx"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/request-detail" -H "content-type: application/json" -d '{"requestId":"<request-id>"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/snapshot" -H "content-type: application/json" -d '{"selector":"main","interactive":true}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/screenshot" -H "content-type: application/json" -d '{"selector":"main","path":"page.png"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/click" -H "content-type: application/json" -d '{"selector":"#submit","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/fill" -H "content-type: application/json" -d '{"selector":"#query","value":"search text","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/wait" -H "content-type: application/json" -d '{"selector":"#result","text":"Ready","timeoutMs":5000}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/type" -H "content-type: application/json" -d '{"selector":"#query","text":" more","delayMs":10}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/press" -H "content-type: application/json" -d '{"key":"Enter"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/hover" -H "content-type: application/json" -d '{"selector":"#menu"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/select" -H "content-type: application/json" -d '{"selector":"#state","values":["CA"]}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-text" -H "content-type: application/json" -d '{"selector":"#result"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-value" -H "content-type: application/json" -d '{"selector":"#query"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-visible" -H "content-type: application/json" -d '{"selector":"#result"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-attribute" -H "content-type: application/json" -d '{"selector":"a","attribute":"href"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-html" -H "content-type: application/json" -d '{"selector":"main"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-styles" -H "content-type: application/json" -d '{"selector":"#result","properties":["display","width"]}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/count" -H "content-type: application/json" -d '{"selector":".row"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/get-box" -H "content-type: application/json" -d '{"selector":"#result"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-enabled" -H "content-type: application/json" -d '{"selector":"#submit"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/is-checked" -H "content-type: application/json" -d '{"selector":"#remember"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/check" -H "content-type: application/json" -d '{"selector":"#remember"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/uncheck" -H "content-type: application/json" -d '{"selector":"#remember"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/scroll" -H "content-type: application/json" -d '{"direction":"down","amount":500}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/scroll-into-view" -H "content-type: application/json" -d '{"selector":"#footer"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/focus" -H "content-type: application/json" -d '{"selector":"#query"}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/browser/clear" -H "content-type: application/json" -d '{"selector":"#query"}'
+curl "http://127.0.0.1:<stream-port>/api/service/status"
+curl "http://127.0.0.1:<stream-port>/api/service/profiles"
+curl "http://127.0.0.1:<stream-port>/api/service/sessions"
+curl "http://127.0.0.1:<stream-port>/api/service/browsers"
+curl "http://127.0.0.1:<stream-port>/api/service/tabs"
+curl "http://127.0.0.1:<stream-port>/api/service/site-policies"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/site-policies/google" -H "content-type: application/json" -d '{"originPattern":"https://accounts.google.com","interactionProfile":"headed","challengeStrategy":"avoid"}'
+curl -X DELETE "http://127.0.0.1:<stream-port>/api/service/site-policies/google"
+curl "http://127.0.0.1:<stream-port>/api/service/providers"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/providers/manual" -H "content-type: application/json" -d '{"name":"Manual approval","kind":"manual_approval","enabled":true}'
+curl -X DELETE "http://127.0.0.1:<stream-port>/api/service/providers/manual"
+curl "http://127.0.0.1:<stream-port>/api/service/challenges"
+curl "http://127.0.0.1:<stream-port>/api/service/trace?service-name=JournalDownloader&task-name=probeACSwebsite"
+curl "http://127.0.0.1:<stream-port>/api/service/jobs?limit=20&state=failed"
+curl "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/jobs/<job-id>/cancel"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/browsers/<browser-id>/retry?by=operator&note=approved&service-name=JournalDownloader&task-name=probeACSwebsite"
+curl "http://127.0.0.1:<stream-port>/api/service/incidents?limit=20&handling-state=unacknowledged"
+curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>"
+curl "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/activity"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/acknowledge?by=operator&note=triaged"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/incidents/<incident-id>/resolve?by=operator&note=recovered"
+curl "http://127.0.0.1:<stream-port>/api/service/events?limit=20&kind=browser_health_changed"
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
+```
+
+The HTTP API loads the same persisted and configured service state as the CLI before relaying state-changing requests to the daemon. Named browser endpoints are thin wrappers over the same daemon command queue as `/api/command` and MCP tools. POST bodies accept the same command fields as the underlying action, including `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs` for traceable software clients. `GET /api/service/jobs` and `GET /api/service/jobs/<id>` return service job records matching the repo schema at `docs/dev/contracts/service-job-record.v1.schema.json`; their response envelopes follow `docs/dev/contracts/service-jobs-response.v1.schema.json`. `GET /api/service/incidents` and `GET /api/service/incidents/<id>` return service incident records matching the repo schema at `docs/dev/contracts/service-incident-record.v1.schema.json`; their response envelopes follow `docs/dev/contracts/service-incidents-response.v1.schema.json`. `GET /api/service/events` returns service event records matching the repo schema at `docs/dev/contracts/service-event-record.v1.schema.json`; its response envelope follows `docs/dev/contracts/service-events-response.v1.schema.json`. HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching repo schemas under `docs/dev/contracts/service-*-record.v1.schema.json`. Service status and compact collection response envelopes follow the matching status and collection response schemas under `docs/dev/contracts/`. `service_trace` responses follow `docs/dev/contracts/service-trace-response.v1.schema.json`, with summary and activity records covered by the matching trace schemas. Incident activity responses follow `docs/dev/contracts/service-incident-activity-response.v1.schema.json`. `POST /api/service/site-policies/<id>` and `POST /api/service/providers/<id>` persist service config records through the service worker queue, and `DELETE` on the same paths removes persisted records through the same queue. Site-policy and provider mutation responses follow `docs/dev/contracts/service-*-upsert-response.v1.schema.json` and `docs/dev/contracts/service-*-delete-response.v1.schema.json`. Job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching operator remedy response schemas under `docs/dev/contracts/`. Service reconcile responses follow `docs/dev/contracts/service-reconcile-response.v1.schema.json`. The path ID is authoritative; requests with a conflicting nested `id` field are rejected. The collection endpoints return the same compact arrays as the MCP resources: `profiles`, `sessions`, `browsers`, `tabs`, `sitePolicies`, `providers`, and `challenges`, each with a `count` field. Run `pnpm test:service-config-live` to validate HTTP and MCP mutation parity for site policies and providers.
+
+For MCP clients, use `mcp serve` to run a stdio server that exposes service resources without launching a browser. The server supports `initialize`, `ping`, `resources/list`, `resources/templates/list`, `resources/read`, `tools/list`, and `tools/call`. MCP tools include `service_job_cancel`, which cancels queued service jobs or requests cancellation for running jobs, `service_browser_retry`, which enables a new recovery attempt for a faulted browser, `service_incidents`, which reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, and since filters as CLI and HTTP, `service_trace`, which reads related events, jobs, incidents, and activity from persisted service state, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, and `service_provider_delete`, which mutate persisted service config through the service worker queue with the same ID checks as HTTP, `browser_navigate`, which queues typed navigation for the active browser session, `browser_requests`, which enables and filters request inspection, `browser_request_detail`, which reads one tracked request by ID, `browser_headers`, which sets extra HTTP headers for the active browser session, `browser_offline`, which toggles network offline emulation, `browser_cookies_get`, which reads cookies, `browser_cookies_set`, which sets cookies, `browser_cookies_clear`, which clears cookies, `browser_storage_get`, which reads localStorage or sessionStorage, `browser_storage_set`, which sets localStorage or sessionStorage, `browser_storage_clear`, which clears localStorage or sessionStorage, `browser_user_agent`, which sets the user agent, `browser_viewport`, which sets the viewport, `browser_geolocation`, which sets geolocation emulation, `browser_permissions`, which grants browser permissions, `browser_timezone`, which sets timezone emulation, `browser_locale`, which sets locale emulation, `browser_media`, which sets media emulation, `browser_dialog`, which handles dialog status or response, `browser_upload`, which uploads files, `browser_download`, which clicks and saves downloads, `browser_wait_for_download`, which waits for downloads, `browser_har_start` and `browser_har_stop`, which capture HAR files, `browser_route`, which routes matching requests, `browser_unroute`, which removes routes, `browser_console`, which reads or clears console messages, `browser_errors`, which reads page errors, `browser_pdf`, which saves PDFs, `browser_response_body`, which reads matching response bodies, `browser_clipboard`, which controls clipboard operations, `browser_command`, which queues any supported browser-control action for HTTP parity, `browser_snapshot`, which queues the existing snapshot command for the active browser session, `browser_get_url`, which reads the active browser URL, `browser_get_title`, which reads the active browser title, `browser_tabs`, which lists open tabs, `browser_screenshot`, which saves a screenshot for visual inspection, `browser_click`, which clicks a selector or cached ref through the queued control plane, `browser_fill`, which fills a field through the queued control plane, `browser_wait`, which waits for selector, text, URL, function, load-state, or fixed-duration conditions through the queued control plane, `browser_type`, which types text through the queued control plane, `browser_press`, which presses keys and key chords through the queued control plane, `browser_hover`, which hovers elements through the queued control plane, `browser_select`, which selects dropdown values through the queued control plane, `browser_get_text`, which reads element text through the queued control plane, `browser_get_value`, which reads field values through the queued control plane, `browser_get_attribute`, which reads element attributes through the queued control plane, `browser_get_html`, which reads element inner HTML through the queued control plane, `browser_get_styles`, which reads computed styles through the queued control plane, `browser_count`, which counts matching elements through the queued control plane, `browser_get_box`, which reads element geometry through the queued control plane, `browser_is_visible`, which reads element visibility through the queued control plane, `browser_is_enabled`, which reads element enabled state through the queued control plane, `browser_check`, which checks checkbox or radio controls through the queued control plane, `browser_is_checked`, which reads checkbox, radio, or ARIA checked state through the queued control plane, `browser_uncheck`, which unchecks checkbox controls through the queued control plane, `browser_scroll`, which scrolls pages or containers through the queued control plane, `browser_scroll_into_view`, which scrolls a target element into view through the queued control plane, `browser_focus`, which focuses a target element through the queued control plane, and `browser_clear`, which clears a target field through the queued control plane. MCP tool callers should include `serviceName`, `agentName`, and `taskName` when available so multi-service and multi-agent behavior remains traceable. Service jobs persist these caller context fields when commands provide them and persist advisory `namingWarnings` when any caller label is missing. Current warning values are `missing_service_name`, `missing_agent_name`, and `missing_task_name`; `hasNamingWarning` is `true` when `namingWarnings` is non-empty. The `agent-browser://jobs` resource returns the same service job record schema as HTTP: `docs/dev/contracts/service-job-record.v1.schema.json`; CLI and HTTP `service_jobs` response envelopes follow `docs/dev/contracts/service-jobs-response.v1.schema.json`. The `agent-browser://incidents` resource and `service_incidents` tool return the same service incident record schema as HTTP: `docs/dev/contracts/service-incident-record.v1.schema.json`; `service_incidents` response envelopes follow `docs/dev/contracts/service-incidents-response.v1.schema.json`. The `agent-browser://events` resource returns the same service event record schema as HTTP: `docs/dev/contracts/service-event-record.v1.schema.json`; CLI and HTTP `service_events` response envelopes follow `docs/dev/contracts/service-events-response.v1.schema.json`. Run `pnpm test:mcp-live` to validate the live daemon, browser, MCP tool call, and retained job metadata path. Run `pnpm test:service-reconcile-live` to validate that `service reconcile` and MCP browser/tab resources agree on live service-owned state. Run `pnpm test:service-profile-live` to validate that runtime-profile launches populate MCP profile and session resources with caller metadata. Run `pnpm test:service-profile-http-live` to validate the same profile and session metadata through the HTTP service API. Run `pnpm test:service-recovery-http-live` to validate the HTTP trace contract for crash detection, recovery start, and ready-after-relaunch events. Run `pnpm test:service-recovery-mcp-live` to validate the same recovery trace contract through MCP `service_trace`. Run `pnpm test:service-api-mcp-parity` to statically check that named browser-control HTTP endpoints, typed MCP tools, README, skill, and docs site stay aligned. For shell inspection, use `mcp resources` to list service resource contracts and `mcp read <uri>` to read one resource from persisted service state. Implemented resources are `agent-browser://incidents`, `agent-browser://profiles`, `agent-browser://sessions`, `agent-browser://browsers`, `agent-browser://tabs`, `agent-browser://site-policies`, `agent-browser://providers`, `agent-browser://challenges`, `agent-browser://jobs`, `agent-browser://events`, and `agent-browser://incidents/{incident_id}/activity`.
+
+Run `pnpm test:service-shutdown-health-live` to validate that a polite browser shutdown failure leaves the persisted service browser record `degraded` after the owned Chrome process is force-killed.
+
+Typed MCP tools also include `browser_back`, `browser_forward`, `browser_reload`, `browser_tab_new`, `browser_tab_switch`, `browser_tab_close`, and `browser_set_content` for browser history, tab lifecycle, and page-content control.
+
+Use `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`, `browser_tab_new`, `browser_tab_switch`, `browser_tab_close`, and `browser_set_content` for typed navigation, tab, and page-content control. Use `browser_requests` for request discovery, `browser_request_detail` for one tracked request, `browser_headers` for extra HTTP headers, `browser_offline` for network emulation, `browser_cookies_*` for cookies, `browser_storage_*` for localStorage or sessionStorage, `browser_user_agent` for user agent emulation, `browser_viewport` for viewport emulation, `browser_geolocation` for geolocation emulation, `browser_permissions` for permission grants, `browser_timezone` for timezone emulation, `browser_locale` for locale emulation, `browser_media` for media emulation, `browser_dialog` for dialog status and responses, `browser_upload`, `browser_download`, `browser_wait_for_download`, `browser_har_start`, `browser_har_stop`, `browser_route`, `browser_unroute`, `browser_console`, `browser_errors`, `browser_pdf`, `browser_response_body`, and `browser_clipboard` for file, HAR, routing, observability, and artifact workflows. Use `browser_command` for controls that do not yet have typed MCP tools. The `action` field is the daemon action name, and `params` contains the same fields accepted by the CLI, HTTP wrapper, or `/api/command` path:
+
+```json
+{"name":"browser_navigate","arguments":{"url":"https://example.com","waitUntil":"load","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_requests","arguments":{"filter":"/api","method":"GET","status":"2xx","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_request_detail","arguments":{"requestId":"<request-id>","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_headers","arguments":{"headers":{"Authorization":"Bearer <token>"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_offline","arguments":{"offline":false,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_cookies_get","arguments":{"urls":["https://example.com"],"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_cookies_set","arguments":{"name":"session","value":"abc","url":"https://example.com","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_storage_set","arguments":{"type":"local","key":"token","value":"abc","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_storage_get","arguments":{"type":"local","key":"token","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_user_agent","arguments":{"userAgent":"AgentBrowserBot/1.0","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_viewport","arguments":{"width":1280,"height":720,"deviceScaleFactor":1,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_geolocation","arguments":{"latitude":41.8781,"longitude":-87.6298,"accuracy":10,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_permissions","arguments":{"permissions":["geolocation"],"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_timezone","arguments":{"timezoneId":"America/Chicago","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_locale","arguments":{"locale":"en-US","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_media","arguments":{"media":"screen","colorScheme":"light","reducedMotion":"no-preference","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_dialog","arguments":{"response":"status","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_upload","arguments":{"selector":"#file","files":["/tmp/file.txt"],"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_download","arguments":{"selector":"#download","path":"/tmp/download.txt","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_wait_for_download","arguments":{"path":"/tmp/download.txt","timeoutMs":5000,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_har_start","arguments":{"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_har_stop","arguments":{"path":"/tmp/capture.har","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_route","arguments":{"url":"**/api/*","response":{"status":200,"body":"{}","contentType":"application/json"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_unroute","arguments":{"url":"**/api/*","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_console","arguments":{"clear":true,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_errors","arguments":{"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_pdf","arguments":{"path":"/tmp/page.pdf","printBackground":true,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_response_body","arguments":{"url":"/api/data","timeoutMs":5000,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_clipboard","arguments":{"operation":"write","text":"copied text","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_reload","arguments":{"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_tab_new","arguments":{"url":"https://example.com","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_tab_switch","arguments":{"index":0,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_tab_close","arguments":{"index":1,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_set_content","arguments":{"html":"<main>Ready</main>","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_command","arguments":{"action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_command","arguments":{"action":"headers","params":{"headers":{"Authorization":"Bearer <token>"}},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_command","arguments":{"action":"offline","params":{"offline":false},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_command","arguments":{"action":"requests","params":{"filter":"/api","method":"GET","status":"2xx"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_command","arguments":{"action":"request_detail","params":{"requestId":"<request-id>"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+```
+
+Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
+
+Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, `--service-job-timeout <ms>`, or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.
+
+Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass the matching `--service-recovery-*` flags, or use the `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host. Recovery-started trace events include `details.policySource.retryBudget`, `details.policySource.baseBackoffMs`, and `details.policySource.maxBackoffMs` so clients can audit whether each active value came from defaults, config, environment, or CLI flags.
+
 ### WebSocket Protocol
 
 Connect to `ws://localhost:9223` to receive frames and send input:
@@ -1246,6 +1551,8 @@ agent-browser uses a client-daemon architecture:
 2. **Rust Daemon** - Pure Rust daemon using direct CDP, no Node.js required
 
 The daemon starts automatically on first command and persists between commands for fast subsequent operations. To auto-shutdown the daemon after a period of inactivity, set `AGENT_BROWSER_IDLE_TIMEOUT_MS` (value in milliseconds). When set, the daemon closes the browser and exits after receiving no commands for the specified duration.
+
+Persisted service browser-health reconciliation runs every 60000 ms while the daemon is alive. Set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable the background loop.
 
 **Browser Engine:** Uses Chrome (from Chrome for Testing) by default. The `--engine` flag selects between `chrome` and `lightpanda`. Supported browsers: Chromium/Chrome (via CDP) and Safari (via WebDriver for iOS).
 

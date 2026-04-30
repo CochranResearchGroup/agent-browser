@@ -5,6 +5,8 @@ pub mod auth;
 #[allow(dead_code)]
 pub mod browser;
 #[allow(dead_code)]
+pub mod cancellation;
+#[allow(dead_code)]
 pub mod cdp;
 #[allow(dead_code)]
 pub mod control_plane;
@@ -30,6 +32,24 @@ pub mod providers;
 pub mod recording;
 #[allow(dead_code)]
 pub mod screenshot;
+#[allow(dead_code)]
+pub mod service_activity;
+#[allow(dead_code)]
+pub mod service_config;
+#[allow(dead_code)]
+pub mod service_health;
+#[allow(dead_code)]
+pub mod service_incidents;
+#[allow(dead_code)]
+pub mod service_jobs;
+#[allow(dead_code)]
+pub mod service_lifecycle;
+#[allow(dead_code)]
+pub mod service_model;
+#[allow(dead_code)]
+pub mod service_store;
+#[allow(dead_code)]
+pub mod service_trace;
 #[allow(dead_code)]
 pub mod snapshot;
 #[allow(dead_code)]

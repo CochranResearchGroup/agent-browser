@@ -1,6 +1,6 @@
 {
   "name": "agent-browser",
-  "version": "0.25.3",
+  "version": "0.26.0",
   "description": "Browser automation CLI for AI agents",
   "type": "module",
   "files": [
@@ -22,7 +22,24 @@
     "build:docker": "docker build -t agent-browser-builder -f docker/Dockerfile.build .",
     "release": "npm run version:sync && npm run build:all-platforms && npm publish",
     "postinstall": "node scripts/postinstall.js",
-    "build:dashboard": "cd packages/dashboard && pnpm build"
+    "build:dashboard": "cd packages/dashboard && pnpm build",
+    "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
+    "test:service-api-mcp-parity": "node scripts/check-service-api-mcp-parity.js",
+    "test:mcp-stdio": "node scripts/smoke-mcp-stdio.js",
+    "test:mcp-live": "node scripts/smoke-mcp-live.js",
+    "test:service-collections-live": "node scripts/smoke-service-collections.js",
+    "test:service-reconcile-live": "node scripts/smoke-service-reconcile-mcp.js",
+    "test:service-profile-live": "node scripts/smoke-service-profile-mcp.js",
+    "test:service-profile-http-live": "node scripts/smoke-service-profile-http.js",
+    "test:service-recovery-http-live": "node scripts/smoke-service-recovery-http.js",
+    "test:service-recovery-mcp-live": "node scripts/smoke-service-recovery-mcp.js",
+    "test:service-recovery-override-http-live": "node scripts/smoke-service-recovery-override-http.js",
+    "test:service-recovery-override-mcp-live": "node scripts/smoke-service-recovery-override-mcp.js",
+    "test:service-incident-parity-live": "node scripts/smoke-service-incident-parity.js",
+    "test:service-shutdown-health-live": "node scripts/smoke-service-shutdown-health.js",
+    "test:service-health-live": "node scripts/smoke-service-health.js",
+    "test:service-config-live": "node scripts/smoke-service-config.js",
+    "test:service-job-naming-live": "node scripts/smoke-service-job-naming.js"
   },
   "keywords": [
     "browser",

@@ -1,8 +1,35 @@
 # agent-browser
 
-## 0.25.3
+## 0.26.0
 
 <!-- release:start -->
+### New Features
+
+- **Service mode control plane** - Added persistent service state for profiles, sessions, browsers, tabs, jobs, events, incidents, site policies, providers, and challenges, with CLI, HTTP, MCP, and dashboard access for long-lived browser automation.
+- **API and MCP browser-control parity** - Added named HTTP browser-control wrappers and typed MCP tools for navigation, tabs, page state, environment emulation, requests, files, HAR capture, routing, element reads, and interactions.
+- **Browser health and recovery** - Added service-owned browser reconciliation, crash and disconnect detection, recovery traces, retry policy, operator retry overrides, and shutdown remedy classification.
+
+### Improvements
+
+- **Service traceability** - Jobs, events, profiles, sessions, and browser records carry service, agent, and task context with naming warnings for anonymous clients.
+- **Release gates** - Added API/MCP parity and service-health validation gates for pre-merge and release preparation.
+
+### Documentation
+
+- **Service mode docs** - Added dedicated service-mode documentation and updated the docs site, README, and agent skill guidance with the release validation path.
+
+### Contributors
+
+- @ctate
+- @ecochran76
+- @jin-2-kakaoent
+- @juniper929
+- @Marshall-Sun
+
+<!-- release:end -->
+
+## 0.25.3
+
 ### Bug Fixes
 
 - Fixed **hidden radio/checkbox inputs missing from snapshot refs** when a `<label>` wraps a `display:none` `<input type="radio">` or `<input type="checkbox">`. Chrome excludes these inputs from the accessibility tree entirely, making it impossible for AI agents to identify radio buttons and checkboxes via refs. Hidden inputs inside elements are now detected during cursor-interactive scanning and their parent nodes are promoted to the correct role with proper name and checked state (#1085)
@@ -16,7 +43,6 @@
 - @ctate
 - @jin-2-kakaoent
 - @hyunjinee
-<!-- release:end -->
 
 ## 0.25.2
 

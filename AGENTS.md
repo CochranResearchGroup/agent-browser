@@ -126,6 +126,21 @@ cd cli && cargo fmt -- --check   # Check formatting
 cd cli && cargo clippy            # Lint
 ```
 
+## Graphiti Memory Discovery
+
+- Use the `graphiti-discovery` skill at the start of non-trivial planning,
+  service-roadmap, architecture, debugging, or handoff work.
+- Query repo memory group `agent_browser_main` before assuming prior context
+  only exists in chat history or git history.
+- Treat Graphiti as advisory memory; verify cited facts against repo files,
+  notes, commits, or tests before changing code or live systems.
+- Seed or refresh memory only from curated source-backed artifacts such as
+  `docs/dev/notes/`, roadmap notes, bounded plans, validation reports, and
+  release checkpoints.
+- Keep memory episodes compact, atomic, and source-oriented. Do not seed raw
+  command logs, secrets, auth state, browser artifacts, private site data, or
+  every small commit.
+
 ## Windows Debugging
 
 A remote Windows Server 2022 EC2 instance is available for debugging Windows-specific issues. It uses AWS Systems Manager (SSM) with no SSH or open ports. Commands run via `aws ssm send-command` and return stdout/stderr.

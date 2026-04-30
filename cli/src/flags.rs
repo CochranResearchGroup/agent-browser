@@ -1,7 +1,14 @@
 use crate::color;
+use crate::native::service_health::{
+    BrowserRecoveryPolicyConfig, BrowserRecoveryPolicyValueSource,
+};
+use crate::native::service_model::{
+    BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SitePolicy,
+};
+use crate::native::service_store::load_default_service_state_snapshot;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,6 +16,8 @@ use std::path::{Path, PathBuf};
 const CONFIG_DIR: &str = ".agent-browser";
 const CONFIG_FILENAME: &str = "config.json";
 const PROJECT_CONFIG_FILENAME: &str = "agent-browser.json";
+/// Default daemon background interval for persisted service browser-health probes.
+const DEFAULT_SERVICE_RECONCILE_INTERVAL_MS: u64 = 60_000;
 
 /// Parse idle timeout from user-friendly format.
 /// Supports: "10s" (seconds), "3m" (minutes), "1h" (hours), or raw milliseconds.
@@ -50,6 +59,83 @@ fn parse_idle_timeout_value(value: Option<String>, source: &str) -> Option<Strin
             None
         }
     })
+}
+
+fn service_reconcile_interval_from_sources(config: &Config) -> Option<u64> {
+    if let Ok(raw) = env::var("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS") {
+        return match raw.parse::<u64>() {
+            Ok(0) => None,
+            Ok(ms) => Some(ms),
+            Err(_) => {
+                eprintln!(
+                    "{} invalid service reconcile interval from AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS: expected milliseconds, got {}",
+                    color::warning_indicator(),
+                    raw
+                );
+                Some(DEFAULT_SERVICE_RECONCILE_INTERVAL_MS)
+            }
+        };
+    }
+
+    if let Some(ms) = config
+        .service
+        .as_ref()
+        .and_then(|service| service.reconcile_interval_ms)
+    {
+        return (ms > 0).then_some(ms);
+    }
+
+    Some(DEFAULT_SERVICE_RECONCILE_INTERVAL_MS)
+}
+
+fn service_job_timeout_from_sources(config: &Config) -> Option<u64> {
+    if let Ok(raw) = env::var("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS") {
+        return match raw.parse::<u64>() {
+            Ok(0) => None,
+            Ok(ms) => Some(ms),
+            Err(_) => {
+                eprintln!(
+                    "{} invalid service job timeout from AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS: expected milliseconds, got {}",
+                    color::warning_indicator(),
+                    raw
+                );
+                None
+            }
+        };
+    }
+
+    config
+        .service
+        .as_ref()
+        .and_then(|service| service.job_timeout_ms)
+        .filter(|ms| *ms > 0)
+}
+
+fn service_recovery_value_from_sources(
+    env_name: &str,
+    config_value: Option<u64>,
+    default_value: u64,
+) -> (u64, BrowserRecoveryPolicyValueSource) {
+    if let Ok(raw) = env::var(env_name) {
+        return match raw.parse::<u64>() {
+            Ok(value) => (value, BrowserRecoveryPolicyValueSource::Env),
+            Err(_) => {
+                eprintln!(
+                    "{} invalid service recovery value from {}: expected unsigned integer, got {}",
+                    color::warning_indicator(),
+                    env_name,
+                    raw
+                );
+                (default_value, BrowserRecoveryPolicyValueSource::Default)
+            }
+        };
+    }
+
+    if let Some(value) = config_value {
+        (value, BrowserRecoveryPolicyValueSource::Config)
+    } else {
+        (default_value, BrowserRecoveryPolicyValueSource::Default)
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -107,12 +193,27 @@ pub struct RuntimeProfileConfig {
     pub preferences: Option<RuntimeProfilePreferencesConfig>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceConfig {
+    pub profiles: Option<BTreeMap<String, BrowserProfile>>,
+    pub sessions: Option<BTreeMap<String, BrowserSession>>,
+    pub site_policies: Option<BTreeMap<String, SitePolicy>>,
+    pub providers: Option<BTreeMap<String, ServiceProvider>>,
+    pub reconcile_interval_ms: Option<u64>,
+    pub job_timeout_ms: Option<u64>,
+    pub recovery_retry_budget: Option<u64>,
+    pub recovery_base_backoff_ms: Option<u64>,
+    pub recovery_max_backoff_ms: Option<u64>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Config {
     pub default_runtime_profile: Option<String>,
     pub runtime_profiles: Option<HashMap<String, RuntimeProfileConfig>>,
     pub service_defaults: Option<HashMap<String, RuntimeProfileServiceConfig>>,
+    pub service: Option<ServiceConfig>,
     pub headed: Option<bool>,
     pub leave_open: Option<bool>,
     pub json: Option<bool>,
@@ -155,6 +256,20 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn service_state_snapshot(&self) -> ServiceState {
+        let Some(service) = self.service.as_ref() else {
+            return ServiceState::default();
+        };
+
+        ServiceState {
+            profiles: service.profiles.clone().unwrap_or_default(),
+            sessions: service.sessions.clone().unwrap_or_default(),
+            site_policies: service.site_policies.clone().unwrap_or_default(),
+            providers: service.providers.clone().unwrap_or_default(),
+            ..ServiceState::default()
+        }
+    }
+
     fn merge(self, other: Config) -> Config {
         Config {
             default_runtime_profile: other
@@ -168,6 +283,7 @@ impl Config {
                 self.service_defaults,
                 other.service_defaults,
             ),
+            service: merge_service_configs(self.service, other.service),
             headed: other.headed.or(self.headed),
             leave_open: other.leave_open.or(self.leave_open),
             json: other.json.or(self.json),
@@ -217,6 +333,18 @@ impl Config {
     }
 }
 
+fn service_state_from_store(configured: ServiceState) -> ServiceState {
+    let mut state = match load_default_service_state_snapshot() {
+        Ok(state) => state,
+        Err(err) => {
+            eprintln!("{} {}", color::warning_indicator(), err);
+            ServiceState::default()
+        }
+    };
+    state.overlay_configured_entities(configured);
+    state
+}
+
 fn merge_runtime_profile_maps(
     base: Option<HashMap<String, RuntimeProfileConfig>>,
     overlay: Option<HashMap<String, RuntimeProfileConfig>>,
@@ -260,6 +388,45 @@ fn merge_service_config_maps(
             }
             Some(base_map)
         }
+    }
+}
+
+fn merge_service_model_maps<T>(
+    base: Option<BTreeMap<String, T>>,
+    overlay: Option<BTreeMap<String, T>>,
+) -> Option<BTreeMap<String, T>> {
+    match (base, overlay) {
+        (None, None) => None,
+        (Some(map), None) | (None, Some(map)) => Some(map),
+        (Some(mut base_map), Some(overlay_map)) => {
+            base_map.extend(overlay_map);
+            Some(base_map)
+        }
+    }
+}
+
+fn merge_service_configs(
+    base: Option<ServiceConfig>,
+    overlay: Option<ServiceConfig>,
+) -> Option<ServiceConfig> {
+    match (base, overlay) {
+        (None, None) => None,
+        (Some(config), None) | (None, Some(config)) => Some(config),
+        (Some(base), Some(overlay)) => Some(ServiceConfig {
+            profiles: merge_service_model_maps(base.profiles, overlay.profiles),
+            sessions: merge_service_model_maps(base.sessions, overlay.sessions),
+            site_policies: merge_service_model_maps(base.site_policies, overlay.site_policies),
+            providers: merge_service_model_maps(base.providers, overlay.providers),
+            reconcile_interval_ms: overlay.reconcile_interval_ms.or(base.reconcile_interval_ms),
+            job_timeout_ms: overlay.job_timeout_ms.or(base.job_timeout_ms),
+            recovery_retry_budget: overlay.recovery_retry_budget.or(base.recovery_retry_budget),
+            recovery_base_backoff_ms: overlay
+                .recovery_base_backoff_ms
+                .or(base.recovery_base_backoff_ms),
+            recovery_max_backoff_ms: overlay
+                .recovery_max_backoff_ms
+                .or(base.recovery_max_backoff_ms),
+        }),
     }
 }
 
@@ -418,6 +585,28 @@ fn apply_runtime_profile_overrides(config: &mut Config, runtime_profile_name: &s
     config.runtime_profile = Some(runtime_profile_name.to_string());
 }
 
+fn normalize_service_config(config: &mut Config) {
+    let Some(service) = config.service.as_mut() else {
+        return;
+    };
+
+    if let Some(site_policies) = service.site_policies.as_mut() {
+        for (id, policy) in site_policies {
+            if policy.id.is_empty() {
+                policy.id = id.clone();
+            }
+        }
+    }
+
+    if let Some(providers) = service.providers.as_mut() {
+        for (id, provider) in providers {
+            if provider.id.is_empty() {
+                provider.id = id.clone();
+            }
+        }
+    }
+}
+
 fn manual_login_preferred_services(config: &Config) -> Vec<String> {
     let mut services = config.service_defaults.clone().unwrap_or_default();
 
@@ -455,6 +644,7 @@ fn read_config_file(path: &Path) -> Option<Config> {
                 config.idle_timeout.take(),
                 &format!("config file {}", path.display()),
             );
+            normalize_service_config(&mut config);
             Some(config)
         }
         Err(e) => {
@@ -630,6 +820,11 @@ fn extract_config_path(args: &[String]) -> Option<Option<String>> {
         "--screenshot-quality",
         "--screenshot-format",
         "--idle-timeout",
+        "--service-reconcile-interval",
+        "--service-job-timeout",
+        "--service-recovery-retry-budget",
+        "--service-recovery-base-backoff",
+        "--service-recovery-max-backoff",
         "--model",
     ];
     let mut i = 0;
@@ -692,6 +887,15 @@ pub struct Flags {
     pub default_runtime_profile: Option<String>,
     pub configured_runtime_profiles: HashMap<String, Option<String>>,
     pub manual_login_preferred_services: Vec<String>,
+    pub service_state: ServiceState,
+    pub service_reconcile_interval_ms: Option<u64>,
+    pub service_job_timeout_ms: Option<u64>,
+    pub service_recovery_retry_budget: u64,
+    pub service_recovery_base_backoff_ms: u64,
+    pub service_recovery_max_backoff_ms: u64,
+    pub service_recovery_retry_budget_source: BrowserRecoveryPolicyValueSource,
+    pub service_recovery_base_backoff_ms_source: BrowserRecoveryPolicyValueSource,
+    pub service_recovery_max_backoff_ms_source: BrowserRecoveryPolicyValueSource,
     pub runtime_profile: Option<String>,
     pub headers: Option<String>,
     pub executable_path: Option<String>,
@@ -766,6 +970,37 @@ pub fn parse_flags(args: &[String]) -> Flags {
         })
         .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
+    let service_state = service_state_from_store(config.service_state_snapshot());
+    let service_reconcile_interval_ms = service_reconcile_interval_from_sources(&config);
+    let service_job_timeout_ms = service_job_timeout_from_sources(&config);
+    let recovery_defaults = BrowserRecoveryPolicyConfig::default();
+    let (service_recovery_retry_budget, service_recovery_retry_budget_source) =
+        service_recovery_value_from_sources(
+            "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+            config
+                .service
+                .as_ref()
+                .and_then(|service| service.recovery_retry_budget),
+            recovery_defaults.retry_budget,
+        );
+    let (service_recovery_base_backoff_ms, service_recovery_base_backoff_ms_source) =
+        service_recovery_value_from_sources(
+            "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+            config
+                .service
+                .as_ref()
+                .and_then(|service| service.recovery_base_backoff_ms),
+            recovery_defaults.base_backoff_ms,
+        );
+    let (service_recovery_max_backoff_ms, service_recovery_max_backoff_ms_source) =
+        service_recovery_value_from_sources(
+            "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+            config
+                .service
+                .as_ref()
+                .and_then(|service| service.recovery_max_backoff_ms),
+            recovery_defaults.max_backoff_ms,
+        );
 
     let extensions_env = env::var("AGENT_BROWSER_EXTENSIONS")
         .ok()
@@ -795,6 +1030,15 @@ pub fn parse_flags(args: &[String]) -> Flags {
         default_runtime_profile,
         configured_runtime_profiles,
         manual_login_preferred_services,
+        service_state,
+        service_reconcile_interval_ms,
+        service_job_timeout_ms,
+        service_recovery_retry_budget,
+        service_recovery_base_backoff_ms,
+        service_recovery_max_backoff_ms,
+        service_recovery_retry_budget_source,
+        service_recovery_base_backoff_ms_source,
+        service_recovery_max_backoff_ms_source,
         runtime_profile: env::var("AGENT_BROWSER_RUNTIME_PROFILE")
             .ok()
             .or(config.runtime_profile),
@@ -961,6 +1205,85 @@ pub fn parse_flags(args: &[String]) -> Flags {
                             "{} Invalid --idle-timeout: {}",
                             color::warning_indicator(),
                             e
+                        ),
+                    }
+                    i += 1;
+                }
+            }
+            "--service-reconcile-interval" => {
+                if let Some(s) = args.get(i + 1) {
+                    match s.parse::<u64>() {
+                        Ok(0) => flags.service_reconcile_interval_ms = None,
+                        Ok(ms) => flags.service_reconcile_interval_ms = Some(ms),
+                        Err(_) => eprintln!(
+                            "{} Invalid --service-reconcile-interval: expected milliseconds, got {}",
+                            color::warning_indicator(),
+                            s
+                        ),
+                    }
+                    i += 1;
+                }
+            }
+            "--service-job-timeout" => {
+                if let Some(s) = args.get(i + 1) {
+                    match s.parse::<u64>() {
+                        Ok(0) => flags.service_job_timeout_ms = None,
+                        Ok(ms) => flags.service_job_timeout_ms = Some(ms),
+                        Err(_) => eprintln!(
+                            "{} Invalid --service-job-timeout: expected milliseconds, got {}",
+                            color::warning_indicator(),
+                            s
+                        ),
+                    }
+                    i += 1;
+                }
+            }
+            "--service-recovery-retry-budget" => {
+                if let Some(s) = args.get(i + 1) {
+                    match s.parse::<u64>() {
+                        Ok(value) => {
+                            flags.service_recovery_retry_budget = value;
+                            flags.service_recovery_retry_budget_source =
+                                BrowserRecoveryPolicyValueSource::Cli;
+                        }
+                        Err(_) => eprintln!(
+                            "{} Invalid --service-recovery-retry-budget: expected unsigned integer, got {}",
+                            color::warning_indicator(),
+                            s
+                        ),
+                    }
+                    i += 1;
+                }
+            }
+            "--service-recovery-base-backoff" => {
+                if let Some(s) = args.get(i + 1) {
+                    match s.parse::<u64>() {
+                        Ok(ms) => {
+                            flags.service_recovery_base_backoff_ms = ms;
+                            flags.service_recovery_base_backoff_ms_source =
+                                BrowserRecoveryPolicyValueSource::Cli;
+                        }
+                        Err(_) => eprintln!(
+                            "{} Invalid --service-recovery-base-backoff: expected milliseconds, got {}",
+                            color::warning_indicator(),
+                            s
+                        ),
+                    }
+                    i += 1;
+                }
+            }
+            "--service-recovery-max-backoff" => {
+                if let Some(s) = args.get(i + 1) {
+                    match s.parse::<u64>() {
+                        Ok(ms) => {
+                            flags.service_recovery_max_backoff_ms = ms;
+                            flags.service_recovery_max_backoff_ms_source =
+                                BrowserRecoveryPolicyValueSource::Cli;
+                        }
+                        Err(_) => eprintln!(
+                            "{} Invalid --service-recovery-max-backoff: expected milliseconds, got {}",
+                            color::warning_indicator(),
+                            s
                         ),
                     }
                     i += 1;
@@ -1264,6 +1587,11 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
         "--screenshot-quality",
         "--screenshot-format",
         "--idle-timeout",
+        "--service-reconcile-interval",
+        "--service-job-timeout",
+        "--service-recovery-retry-budget",
+        "--service-recovery-base-backoff",
+        "--service-recovery-max-backoff",
         "--model",
     ];
 
@@ -1298,6 +1626,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::test_utils::EnvGuard;
 
     fn args(s: &str) -> Vec<String> {
@@ -1442,6 +1771,26 @@ mod tests {
     }
 
     #[test]
+    fn test_clean_args_removes_service_reconcile_interval_before_command() {
+        let cleaned = clean_args(&args("--service-reconcile-interval 1000 open example.com"));
+        assert_eq!(cleaned, vec!["open", "example.com"]);
+    }
+
+    #[test]
+    fn test_clean_args_removes_service_job_timeout_before_command() {
+        let cleaned = clean_args(&args("--service-job-timeout 1000 open example.com"));
+        assert_eq!(cleaned, vec!["open", "example.com"]);
+    }
+
+    #[test]
+    fn test_clean_args_removes_service_recovery_flags_before_command() {
+        let cleaned = clean_args(&args(
+            "--service-recovery-retry-budget 5 --service-recovery-base-backoff 250 --service-recovery-max-backoff 10000 open example.com",
+        ));
+        assert_eq!(cleaned, vec!["open", "example.com"]);
+    }
+
+    #[test]
     fn test_parse_idle_timeout_flag_converts_to_ms() {
         let flags = parse_flags(&args("--idle-timeout 10s open example.com"));
         assert_eq!(flags.idle_timeout.as_deref(), Some("10000"));
@@ -1543,6 +1892,30 @@ mod tests {
                     }
                 }
             },
+            "service": {
+                "sitePolicies": {
+                    "google": {
+                        "originPattern": "https://accounts.google.com",
+                        "browserHost": "docker_headed",
+                        "viewStream": "virtual_display_webrtc",
+                        "controlInput": "webrtc_input",
+                        "interactionMode": "human_like_input",
+                        "manualLoginPreferred": true,
+                        "profileRequired": true,
+                        "authProviders": ["browser", "gog"],
+                        "challengePolicy": "avoid_first",
+                        "allowedChallengeProviders": ["manual"]
+                    }
+                },
+                "providers": {
+                    "manual": {
+                        "kind": "manual_approval",
+                        "displayName": "Dashboard approval",
+                        "enabled": true,
+                        "capabilities": ["human_approval"]
+                    }
+                }
+            },
             "headed": true,
             "json": true,
             "debug": true,
@@ -1578,6 +1951,29 @@ mod tests {
                 .and_then(|p| p.preferences.as_ref())
                 .and_then(|p| p.default_viewport.as_deref()),
             Some("960x640")
+        );
+        let service = config.service.as_ref().unwrap();
+        let google_policy = service
+            .site_policies
+            .as_ref()
+            .and_then(|policies| policies.get("google"))
+            .unwrap();
+        assert_eq!(
+            google_policy.browser_host,
+            Some(crate::native::service_model::BrowserHost::DockerHeaded)
+        );
+        assert_eq!(
+            google_policy.interaction_mode,
+            crate::native::service_model::InteractionMode::HumanLikeInput
+        );
+        let manual_provider = service
+            .providers
+            .as_ref()
+            .and_then(|providers| providers.get("manual"))
+            .unwrap();
+        assert_eq!(
+            manual_provider.kind,
+            crate::native::service_model::ProviderKind::ManualApproval
         );
         assert_eq!(config.headed, Some(true));
         assert_eq!(config.json, Some(true));
@@ -1643,6 +2039,32 @@ mod tests {
             headed: Some(true),
             proxy: Some("http://user-proxy:8080".to_string()),
             profile: Some("/user/profile".to_string()),
+            service: Some(ServiceConfig {
+                profiles: None,
+                sessions: None,
+                site_policies: Some(BTreeMap::from([(
+                    "google".to_string(),
+                    SitePolicy {
+                        id: "google".to_string(),
+                        origin_pattern: "https://accounts.google.com".to_string(),
+                        profile_required: true,
+                        ..SitePolicy::default()
+                    },
+                )])),
+                providers: Some(BTreeMap::from([(
+                    "manual".to_string(),
+                    ServiceProvider {
+                        id: "manual".to_string(),
+                        display_name: "Manual".to_string(),
+                        ..ServiceProvider::default()
+                    },
+                )])),
+                reconcile_interval_ms: Some(60_000),
+                job_timeout_ms: Some(120_000),
+                recovery_retry_budget: Some(3),
+                recovery_base_backoff_ms: Some(1_000),
+                recovery_max_backoff_ms: Some(30_000),
+            }),
             ..Config::default()
         };
         let project = Config {
@@ -1659,6 +2081,35 @@ mod tests {
             )])),
             proxy: Some("http://project-proxy:9090".to_string()),
             debug: Some(true),
+            service: Some(ServiceConfig {
+                profiles: None,
+                sessions: None,
+                site_policies: Some(BTreeMap::from([
+                    (
+                        "google".to_string(),
+                        SitePolicy {
+                            id: "google".to_string(),
+                            origin_pattern: "https://accounts.google.com".to_string(),
+                            manual_login_preferred: true,
+                            ..SitePolicy::default()
+                        },
+                    ),
+                    (
+                        "github".to_string(),
+                        SitePolicy {
+                            id: "github".to_string(),
+                            origin_pattern: "https://github.com".to_string(),
+                            ..SitePolicy::default()
+                        },
+                    ),
+                ])),
+                providers: None,
+                reconcile_interval_ms: Some(30_000),
+                job_timeout_ms: Some(90_000),
+                recovery_retry_budget: Some(5),
+                recovery_base_backoff_ms: Some(500),
+                recovery_max_backoff_ms: Some(10_000),
+            }),
             ..Config::default()
         };
         let merged = user.merge(project);
@@ -1676,6 +2127,24 @@ mod tests {
             runtime.launch.as_ref().and_then(|l| l.proxy.as_deref()),
             Some("http://runtime-proxy:9090")
         );
+        let service = merged.service.as_ref().unwrap();
+        let site_policies = service.site_policies.as_ref().unwrap();
+        assert_eq!(site_policies.len(), 2);
+        assert!(site_policies["google"].manual_login_preferred);
+        assert_eq!(site_policies["github"].origin_pattern, "https://github.com");
+        assert_eq!(
+            service
+                .providers
+                .as_ref()
+                .and_then(|providers| providers.get("manual"))
+                .map(|provider| provider.display_name.as_str()),
+            Some("Manual")
+        );
+        assert_eq!(service.reconcile_interval_ms, Some(30_000));
+        assert_eq!(service.job_timeout_ms, Some(90_000));
+        assert_eq!(service.recovery_retry_budget, Some(5));
+        assert_eq!(service.recovery_base_backoff_ms, Some(500));
+        assert_eq!(service.recovery_max_backoff_ms, Some(10_000));
     }
 
     #[test]
@@ -1865,6 +2334,468 @@ mod tests {
 
         let _ = fs::remove_file(&config_path);
         let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_load_config_normalizes_service_model_ids() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!(
+            "ab-test-service-config-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        let config_path = dir.join("service-config.json");
+        let mut f = fs::File::create(&config_path).unwrap();
+        writeln!(
+            f,
+            r#"{{
+                "service": {{
+                    "sitePolicies": {{
+                        "google": {{
+                            "originPattern": "https://accounts.google.com",
+                            "browserHost": "docker_headed"
+                        }}
+                    }},
+                    "providers": {{
+                        "manual": {{
+                            "kind": "manual_approval",
+                            "displayName": "Dashboard approval",
+                            "capabilities": ["human_approval"]
+                        }}
+                    }}
+                }}
+            }}"#
+        )
+        .unwrap();
+
+        let config = read_config_file(&config_path).unwrap();
+        let service = config.service.as_ref().unwrap();
+
+        assert_eq!(
+            service
+                .site_policies
+                .as_ref()
+                .and_then(|policies| policies.get("google"))
+                .map(|policy| policy.id.as_str()),
+            Some("google")
+        );
+        assert_eq!(
+            service
+                .providers
+                .as_ref()
+                .and_then(|providers| providers.get("manual"))
+                .map(|provider| provider.id.as_str()),
+            Some("manual")
+        );
+
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_service_state_snapshot_contains_configured_service_entities() {
+        let config = Config {
+            service: Some(ServiceConfig {
+                profiles: Some(BTreeMap::from([(
+                    "work".to_string(),
+                    BrowserProfile {
+                        id: "work".to_string(),
+                        name: "Work".to_string(),
+                        allocation:
+                            crate::native::service_model::ProfileAllocationPolicy::PerService,
+                        keyring:
+                            crate::native::service_model::ProfileKeyringPolicy::BasicPasswordStore,
+                        shared_service_ids: vec!["JournalDownloader".to_string()],
+                        ..BrowserProfile::default()
+                    },
+                )])),
+                sessions: Some(BTreeMap::from([(
+                    "journal-session".to_string(),
+                    BrowserSession {
+                        id: "journal-session".to_string(),
+                        service_name: Some("JournalDownloader".to_string()),
+                        profile_id: Some("work".to_string()),
+                        lease: crate::native::service_model::LeaseState::Exclusive,
+                        cleanup: crate::native::service_model::SessionCleanupPolicy::CloseTabs,
+                        ..BrowserSession::default()
+                    },
+                )])),
+                site_policies: Some(BTreeMap::from([(
+                    "google".to_string(),
+                    SitePolicy {
+                        id: "google".to_string(),
+                        origin_pattern: "https://accounts.google.com".to_string(),
+                        manual_login_preferred: true,
+                        ..SitePolicy::default()
+                    },
+                )])),
+                providers: Some(BTreeMap::from([(
+                    "manual".to_string(),
+                    ServiceProvider {
+                        id: "manual".to_string(),
+                        display_name: "Dashboard approval".to_string(),
+                        ..ServiceProvider::default()
+                    },
+                )])),
+                reconcile_interval_ms: Some(45_000),
+                job_timeout_ms: Some(120_000),
+                recovery_retry_budget: None,
+                recovery_base_backoff_ms: None,
+                recovery_max_backoff_ms: None,
+            }),
+            ..Config::default()
+        };
+
+        let state = config.service_state_snapshot();
+
+        assert_eq!(state.profiles.len(), 1);
+        assert_eq!(state.sessions.len(), 1);
+        assert_eq!(state.site_policies.len(), 1);
+        assert_eq!(state.providers.len(), 1);
+        assert_eq!(
+            state.profiles["work"].shared_service_ids,
+            vec!["JournalDownloader"]
+        );
+        assert_eq!(
+            state.sessions["journal-session"].profile_id.as_deref(),
+            Some("work")
+        );
+        assert!(state.site_policies["google"].manual_login_preferred);
+        assert_eq!(state.providers["manual"].display_name, "Dashboard approval");
+        assert!(state.browsers.is_empty());
+    }
+
+    #[test]
+    fn test_parse_flags_loads_service_reconcile_interval_from_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-service-reconcile-config-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(&config_path, r#"{"service":{"reconcileIntervalMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
+
+        assert_eq!(flags.service_reconcile_interval_ms, Some(5000));
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_parse_flags_defaults_service_reconcile_interval() {
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-service-reconcile-default-home-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS", "HOME"]);
+        guard.remove("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS");
+        guard.set("HOME", home.to_str().unwrap());
+
+        let flags = parse_flags(&args("service status"));
+
+        assert_eq!(
+            flags.service_reconcile_interval_ms,
+            Some(DEFAULT_SERVICE_RECONCILE_INTERVAL_MS)
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_reconcile_interval_zero_disables_default() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-service-reconcile-disable-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(&config_path, r#"{"service":{"reconcileIntervalMs":0}}"#).unwrap();
+
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS"]);
+        guard.remove("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS");
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
+
+        assert_eq!(flags.service_reconcile_interval_ms, None);
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_service_reconcile_interval_flag_overrides_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-service-reconcile-flag-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(&config_path, r#"{"service":{"reconcileIntervalMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args(&format!(
+            "--config {} --service-reconcile-interval 250 service status",
+            config_path.display()
+        )));
+
+        assert_eq!(flags.service_reconcile_interval_ms, Some(250));
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_service_reconcile_interval_flag_zero_disables_default() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS"]);
+        guard.remove("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS");
+
+        let flags = parse_flags(&args("--service-reconcile-interval 0 service status"));
+
+        assert_eq!(flags.service_reconcile_interval_ms, None);
+    }
+
+    #[test]
+    fn test_parse_flags_loads_service_job_timeout_from_config() {
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-job-timeout-config-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
+        let config_dir = home.join(".agent-browser");
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("config.json");
+        fs::write(&config_path, r#"{"service":{"jobTimeoutMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args("service status"));
+
+        assert_eq!(flags.service_job_timeout_ms, Some(5000));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_job_timeout_flag_overrides_config() {
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-job-timeout-flag-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
+        let config_dir = home.join(".agent-browser");
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("config.json");
+        fs::write(&config_path, r#"{"service":{"jobTimeoutMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args("--service-job-timeout 250 service status"));
+
+        assert_eq!(flags.service_job_timeout_ms, Some(250));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_job_timeout_flag_zero_disables_timeout() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS"]);
+        guard.remove("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS");
+
+        let flags = parse_flags(&args("--service-job-timeout 0 service status"));
+
+        assert_eq!(flags.service_job_timeout_ms, None);
+    }
+
+    #[test]
+    fn test_parse_flags_loads_service_recovery_policy_from_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-recovery-policy-config-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(
+            &config_path,
+            r#"{"service":{"recoveryRetryBudget":5,"recoveryBaseBackoffMs":250,"recoveryMaxBackoffMs":10000}}"#,
+        )
+        .unwrap();
+
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+            "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+            "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+        ]);
+        guard.remove("AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET");
+        guard.remove("AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS");
+        guard.remove("AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS");
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
+
+        assert_eq!(flags.service_recovery_retry_budget, 5);
+        assert_eq!(flags.service_recovery_base_backoff_ms, 250);
+        assert_eq!(flags.service_recovery_max_backoff_ms, 10_000);
+        assert_eq!(
+            flags.service_recovery_retry_budget_source,
+            BrowserRecoveryPolicyValueSource::Config
+        );
+        assert_eq!(
+            flags.service_recovery_base_backoff_ms_source,
+            BrowserRecoveryPolicyValueSource::Config
+        );
+        assert_eq!(
+            flags.service_recovery_max_backoff_ms_source,
+            BrowserRecoveryPolicyValueSource::Config
+        );
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_service_recovery_policy_flags_override_config() {
+        let flags = parse_flags(&args(
+            "--service-recovery-retry-budget 7 --service-recovery-base-backoff 500 --service-recovery-max-backoff 15000 service status",
+        ));
+
+        assert_eq!(flags.service_recovery_retry_budget, 7);
+        assert_eq!(flags.service_recovery_base_backoff_ms, 500);
+        assert_eq!(flags.service_recovery_max_backoff_ms, 15_000);
+        assert_eq!(
+            flags.service_recovery_retry_budget_source,
+            BrowserRecoveryPolicyValueSource::Cli
+        );
+        assert_eq!(
+            flags.service_recovery_base_backoff_ms_source,
+            BrowserRecoveryPolicyValueSource::Cli
+        );
+        assert_eq!(
+            flags.service_recovery_max_backoff_ms_source,
+            BrowserRecoveryPolicyValueSource::Cli
+        );
+    }
+
+    #[test]
+    fn test_service_state_from_store_overlays_configured_entities() {
+        let temp_home = std::env::temp_dir().join(format!(
+            "agent-browser-service-store-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        std::fs::create_dir_all(&temp_home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", temp_home.to_str().unwrap());
+
+        let persisted = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                crate::native::service_model::BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: crate::native::service_model::BrowserHealth::Ready,
+                    ..crate::native::service_model::BrowserProcess::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "persisted".to_string(),
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store.save(&persisted).unwrap();
+
+        let configured = ServiceState {
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "configured".to_string(),
+                    ..SitePolicy::default()
+                },
+            )]),
+            providers: BTreeMap::from([(
+                "manual".to_string(),
+                ServiceProvider {
+                    id: "manual".to_string(),
+                    display_name: "Manual approval".to_string(),
+                    ..ServiceProvider::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let state = service_state_from_store(configured);
+
+        assert_eq!(state.browsers["browser-1"].id, "browser-1");
+        assert_eq!(state.site_policies["google"].origin_pattern, "configured");
+        assert_eq!(state.providers["manual"].display_name, "Manual approval");
+        let _ = std::fs::remove_dir_all(&temp_home);
+    }
+
+    #[test]
+    fn test_parse_flags_loads_persisted_service_state() {
+        let temp_home = std::env::temp_dir().join(format!(
+            "agent-browser-parse-service-store-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        std::fs::create_dir_all(&temp_home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", temp_home.to_str().unwrap());
+
+        let persisted = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                crate::native::service_model::BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: crate::native::service_model::BrowserHealth::Ready,
+                    ..crate::native::service_model::BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store.save(&persisted).unwrap();
+
+        let flags = parse_flags(&args("service status"));
+
+        assert_eq!(flags.service_state.browsers["browser-1"].id, "browser-1");
+        let _ = std::fs::remove_dir_all(&temp_home);
     }
 
     #[test]

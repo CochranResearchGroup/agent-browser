@@ -155,6 +155,14 @@ pub async fn run_daemon(session: &str) {
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .filter(|&ms| ms > 0);
+    let service_reconcile_interval_ms = env::var("AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|&ms| ms > 0);
+    let service_job_timeout_ms = env::var("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|&ms| ms > 0);
 
     let result = run_socket_server(
         &socket_path,
@@ -163,6 +171,8 @@ pub async fn run_daemon(session: &str) {
         stream_client,
         stream_server_instance,
         idle_timeout_ms,
+        service_reconcile_interval_ms,
+        service_job_timeout_ms,
     )
     .await;
 
@@ -195,6 +205,8 @@ async fn run_socket_server(
     stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
     stream_server: Option<Arc<StreamServer>>,
     idle_timeout_ms: Option<u64>,
+    service_reconcile_interval_ms: Option<u64>,
+    service_job_timeout_ms: Option<u64>,
 ) -> Result<(), String> {
     use tokio::net::UnixListener;
 
@@ -209,8 +221,11 @@ async fn run_socket_server(
         None
     };
 
-    let control_plane =
-        ControlPlaneWorker::start(DaemonState::new_with_stream(stream_client, stream_server));
+    let control_plane = ControlPlaneWorker::start_with_options(
+        DaemonState::new_with_stream(stream_client, stream_server),
+        service_reconcile_interval_ms,
+        service_job_timeout_ms,
+    );
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -281,6 +296,8 @@ async fn run_socket_server(
     stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
     stream_server: Option<Arc<StreamServer>>,
     idle_timeout_ms: Option<u64>,
+    service_reconcile_interval_ms: Option<u64>,
+    service_job_timeout_ms: Option<u64>,
 ) -> Result<(), String> {
     use tokio::net::TcpListener;
 
@@ -309,8 +326,11 @@ async fn run_socket_server(
         None
     };
 
-    let control_plane =
-        ControlPlaneWorker::start(DaemonState::new_with_stream(stream_client, stream_server));
+    let control_plane = ControlPlaneWorker::start_with_options(
+        DaemonState::new_with_stream(stream_client, stream_server),
+        service_reconcile_interval_ms,
+        service_job_timeout_ms,
+    );
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -440,6 +460,20 @@ async fn handle_connection<S>(
                 let response = if action == Some("worker_status") {
                     let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
                     control_plane.status_response(id)
+                } else if action == Some("service_job_cancel") {
+                    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    let job_id = cmd.get("jobId").and_then(|v| v.as_str()).unwrap_or("");
+                    let reason = cmd.get("reason").and_then(|v| v.as_str());
+                    control_plane.cancel_job_response(id, job_id, reason)
+                } else if action == Some("service_status") {
+                    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    let service_state = cmd
+                        .get("serviceState")
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({}));
+                    control_plane
+                        .service_status_response(id, service_state)
+                        .await
                 } else {
                     control_plane.submit(cmd).await
                 };

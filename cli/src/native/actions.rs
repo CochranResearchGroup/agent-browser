@@ -1,7 +1,9 @@
+use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
+use std::future::Future;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -10,10 +12,15 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::{broadcast, oneshot, RwLock};
 
 use crate::connection::get_socket_dir;
-use crate::runtime_profile::{clear_runtime_state, pid_is_running, read_runtime_state};
+use crate::runtime_profile::{
+    clear_runtime_state, pid_is_running, read_runtime_state, runtime_profile_user_data_dir,
+};
 
 use super::auth;
-use super::browser::{should_track_target, BrowserManager, WaitUntil};
+use super::browser::{
+    should_track_target, BrowserManager, BrowserShutdownOutcome, ProcessExitObservation, WaitUntil,
+};
+use super::cancellation::CancellationToken;
 use super::cdp::chrome::LaunchOptions;
 use super::cdp::client::CdpClient;
 use super::cdp::types::{
@@ -31,6 +38,32 @@ use super::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use super::providers;
 use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
+use super::service_activity::service_incident_activity_response;
+use super::service_config::{
+    delete_persisted_provider, delete_persisted_site_policy, upsert_persisted_provider,
+    upsert_persisted_site_policy,
+};
+use super::service_health::{
+    persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
+    persist_current_browser_stale_health_in_repository,
+    persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
+    reconcile_service_state, retry_persisted_service_browser_in_repository,
+    BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
+    BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+};
+use super::service_incidents::{
+    acknowledge_persisted_service_incident, resolve_persisted_service_incident,
+    service_incidents_response, ServiceIncidentFilters,
+};
+use super::service_jobs::cancel_persisted_service_job;
+use super::service_lifecycle::{service_profile_id, ServiceLaunchMetadata};
+use super::service_model::{
+    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
+    JobState as ServiceJobState, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind,
+    ServiceState, SessionCleanupPolicy,
+};
+use super::service_store::LockedServiceStateRepository;
+use super::service_trace::{service_trace_response, ServiceTraceFilters};
 use super::snapshot::{self, SnapshotOptions};
 use super::state;
 use super::storage;
@@ -57,7 +90,6 @@ const AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS: u64 = 100;
 /// Time spent trying targeted username selectors before broad text-input
 /// fallback selectors are allowed.
 const AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS: u64 = 5_000;
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum CloseBehavior {
     #[default]
@@ -102,7 +134,7 @@ async fn relaunch_and_restore_page(
     state.screencasting = false;
     state.reset_input_state();
     state.update_stream_client().await;
-    auto_launch(state).await?;
+    auto_launch(state, &json!({})).await?;
 
     if let Some(url) = desired_url.as_deref() {
         if !url.is_empty() && url != "about:blank" {
@@ -295,6 +327,250 @@ fn close_behavior_for_launched_browser(
     }
 }
 
+fn service_browser_id(session_id: &str) -> String {
+    format!("session:{}", session_id)
+}
+
+impl ServiceLaunchMetadata {
+    /// Captures the service-model metadata that can be inferred from a launch
+    /// command before Chrome starts, so every launch path writes the same
+    /// browser/profile/session relationships into persisted service state.
+    fn from_launch_options(options: &LaunchOptions, command: Option<&Value>) -> Self {
+        let profile_id = service_profile_id(
+            options.profile.as_deref(),
+            options.runtime_profile.as_deref(),
+        );
+        let user_data_dir = options.profile.clone().or_else(|| {
+            options.runtime_profile.as_ref().and_then(|name| {
+                runtime_profile_user_data_dir(name)
+                    .ok()
+                    .map(|path| path.to_string_lossy().to_string())
+            })
+        });
+        Self {
+            profile_name: options.runtime_profile.clone().or(options.profile.clone()),
+            user_data_dir,
+            persistent_profile: profile_id.is_some(),
+            keyring: if options.use_real_keychain {
+                ProfileKeyringPolicy::RealOsKeychain
+            } else {
+                ProfileKeyringPolicy::BasicPasswordStore
+            },
+            profile_id,
+            service_name: command.and_then(|cmd| optional_command_string(cmd, "serviceName")),
+            agent_name: command.and_then(|cmd| optional_command_string(cmd, "agentName")),
+            task_name: command.and_then(|cmd| optional_command_string(cmd, "taskName")),
+            cleanup: if command
+                .and_then(|cmd| cmd.get("leaveOpen"))
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            {
+                SessionCleanupPolicy::Detach
+            } else {
+                SessionCleanupPolicy::CloseBrowser
+            },
+        }
+    }
+}
+
+fn optional_command_string(command: &Value, name: &str) -> Option<String> {
+    command
+        .get(name)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn service_browser_host_for_launch(cmd: &Value, headless: bool) -> ServiceBrowserHost {
+    if cmd.get("provider").is_some() {
+        ServiceBrowserHost::CloudProvider
+    } else if cmd.get("cdpUrl").is_some()
+        || cmd.get("cdpPort").is_some()
+        || cmd
+            .get("autoConnect")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    {
+        ServiceBrowserHost::AttachedExisting
+    } else if headless {
+        ServiceBrowserHost::LocalHeadless
+    } else {
+        ServiceBrowserHost::LocalHeaded
+    }
+}
+
+fn persist_service_browser_record(
+    session_id: &str,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+    pid: Option<u32>,
+    cdp_endpoint: Option<String>,
+    last_error: Option<String>,
+    metadata: Option<ServiceLaunchMetadata>,
+) {
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        let _ = persist_service_browser_record_in_repository(
+            &repository,
+            session_id,
+            host,
+            health,
+            pid,
+            cdp_endpoint,
+            last_error,
+            metadata,
+        );
+    }
+}
+
+fn persist_current_browser_health(
+    state: &DaemonState,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+    metadata: Option<ServiceLaunchMetadata>,
+) {
+    let (pid, cdp_endpoint) = state
+        .browser
+        .as_ref()
+        .map(|mgr| (mgr.browser_pid(), Some(mgr.get_cdp_url().to_string())))
+        .unwrap_or((None, None));
+    persist_service_browser_record(
+        &state.session_id,
+        host,
+        health,
+        pid,
+        cdp_endpoint,
+        None,
+        metadata,
+    );
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BrowserStaleState {
+    needs_launch: bool,
+    health: Option<ServiceBrowserHealth>,
+    recovery_reason_kind: Option<BrowserRecoveryReasonKind>,
+    message: Option<String>,
+    event_details: Option<Value>,
+}
+
+async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleState {
+    let Some(ref mut mgr) = state.browser else {
+        return BrowserStaleState {
+            needs_launch: true,
+            health: None,
+            recovery_reason_kind: None,
+            message: None,
+            event_details: None,
+        };
+    };
+
+    if let Some(exit) = mgr.poll_process_exit() {
+        let message = format!(
+            "Active browser PID {} exited before command dispatch",
+            exit.pid
+        );
+        return BrowserStaleState {
+            needs_launch: true,
+            health: Some(ServiceBrowserHealth::ProcessExited),
+            recovery_reason_kind: Some(BrowserRecoveryReasonKind::ProcessExited),
+            message: Some(message),
+            event_details: Some(process_exit_observation_details(&exit)),
+        };
+    }
+
+    if !mgr.is_connection_alive().await {
+        return BrowserStaleState {
+            needs_launch: true,
+            health: Some(ServiceBrowserHealth::CdpDisconnected),
+            recovery_reason_kind: Some(BrowserRecoveryReasonKind::CdpDisconnected),
+            message: Some(format!(
+                "Active browser CDP connection is not responding: {}",
+                mgr.get_cdp_url()
+            )),
+            event_details: Some(json!({
+                "cdpProbe": "Browser.getVersion",
+                "cdpEndpoint": mgr.get_cdp_url(),
+            })),
+        };
+    }
+
+    BrowserStaleState {
+        needs_launch: false,
+        health: None,
+        recovery_reason_kind: None,
+        message: None,
+        event_details: None,
+    }
+}
+
+fn process_exit_observation_details(exit: &ProcessExitObservation) -> Value {
+    let mut details = json!({
+        "processExitDetection": "local_child_try_wait",
+        "processExitPid": exit.pid,
+    });
+    if let Some(code) = exit.exit_code {
+        details["processExitCode"] = json!(code);
+    }
+    #[cfg(unix)]
+    if let Some(signal) = exit.signal {
+        details["processExitSignal"] = json!(signal);
+    }
+    if let Some(error) = exit.poll_error.as_deref() {
+        details["processExitPollError"] = json!(error);
+    }
+    details
+}
+
+fn persist_current_browser_stale_health(
+    state: &DaemonState,
+    health: ServiceBrowserHealth,
+    reason_kind: BrowserRecoveryReasonKind,
+    last_error: String,
+    event_details: Option<Value>,
+) -> BrowserRecoveryPersistence {
+    let Some(mgr) = state.browser.as_ref() else {
+        return BrowserRecoveryPersistence::NotRecorded;
+    };
+
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        return persist_current_browser_stale_health_in_repository(
+            &repository,
+            &state.session_id,
+            mgr.browser_pid(),
+            Some(mgr.get_cdp_url().to_string()),
+            state.browser_recovery_policy_config,
+            health,
+            reason_kind,
+            last_error,
+            event_details,
+        );
+    }
+    BrowserRecoveryPersistence::NotRecorded
+}
+
+fn persist_browser_recovery_started_from_persisted_state(
+    state: &DaemonState,
+    reason: &str,
+) -> BrowserRecoveryPersistence {
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        return persist_browser_recovery_started_in_repository(
+            &repository,
+            &state.session_id,
+            state.browser_recovery_policy_config,
+            reason,
+        );
+    }
+    BrowserRecoveryPersistence::NotRecorded
+}
+
+fn persist_closed_browser_health(state: &DaemonState, outcome: Option<&BrowserShutdownOutcome>) {
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        let _ =
+            persist_closed_browser_health_in_repository(&repository, &state.session_id, outcome);
+    }
+}
+
 pub struct DaemonState {
     pub browser: Option<BrowserManager>,
     pub appium: Option<AppiumManager>,
@@ -359,6 +635,11 @@ pub struct DaemonState {
     pub engine: String,
     /// Default timeout for wait operations, from AGENT_BROWSER_DEFAULT_TIMEOUT env var.
     pub default_timeout_ms: u64,
+    /// Retry budget and backoff used when a stale browser is relaunched.
+    pub browser_recovery_policy_config: BrowserRecoveryPolicyConfig,
+    /// Cancellation token for the currently running service job, if this
+    /// command is executing inside the service control-plane worker.
+    pub current_cancellation: Option<CancellationToken>,
     /// Storage mutations made through agent-browser storage commands, keyed by origin.
     /// This preserves cross-origin storage for state saves even after navigation.
     tracked_origin_storage: HashMap<String, state::OriginStorage>,
@@ -418,6 +699,8 @@ impl DaemonState {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(30_000),
+            browser_recovery_policy_config: browser_recovery_policy_config_from_env(),
+            current_cancellation: None,
             tracked_origin_storage: HashMap::new(),
         }
     }
@@ -1329,40 +1612,158 @@ fn runtime_profile_pid(runtime_profile: Option<&str>) -> Option<u32> {
         .map(|state| state.browser_pid)
 }
 
-async fn terminate_runtime_browser(pid: u32) {
-    let _ = tokio::task::spawn_blocking(move || {
+fn env_u64_or_default(name: &str, default: u64) -> u64 {
+    env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(default)
+}
+
+fn browser_recovery_policy_config_from_env() -> BrowserRecoveryPolicyConfig {
+    let defaults = BrowserRecoveryPolicyConfig::default();
+    BrowserRecoveryPolicyConfig {
+        retry_budget: env_u64_or_default(
+            "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+            defaults.retry_budget,
+        ),
+        base_backoff_ms: env_u64_or_default(
+            "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+            defaults.base_backoff_ms,
+        ),
+        max_backoff_ms: env_u64_or_default(
+            "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+            defaults.max_backoff_ms,
+        ),
+        source: BrowserRecoveryPolicySource {
+            retry_budget: browser_recovery_policy_source_from_env(
+                "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+                "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET_SOURCE",
+            ),
+            base_backoff_ms: browser_recovery_policy_source_from_env(
+                "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+                "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS_SOURCE",
+            ),
+            max_backoff_ms: browser_recovery_policy_source_from_env(
+                "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+                "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS_SOURCE",
+            ),
+        },
+    }
+}
+
+fn browser_recovery_policy_source_from_env(
+    value_name: &str,
+    source_name: &str,
+) -> BrowserRecoveryPolicyValueSource {
+    env::var(source_name)
+        .ok()
+        .map(|value| BrowserRecoveryPolicyValueSource::from_str(&value))
+        .unwrap_or_else(|| {
+            if env::var(value_name).is_ok() {
+                BrowserRecoveryPolicyValueSource::Env
+            } else {
+                BrowserRecoveryPolicyValueSource::Default
+            }
+        })
+}
+
+async fn terminate_runtime_browser(pid: u32) -> BrowserShutdownOutcome {
+    tokio::task::spawn_blocking(move || {
+        let mut outcome = BrowserShutdownOutcome::default();
         #[cfg(unix)]
         {
             for _ in 0..20 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 if !pid_is_running(pid) {
-                    return;
+                    return outcome;
                 }
             }
-            unsafe {
-                libc::kill(pid as i32, libc::SIGTERM);
+            outcome.polite_close_attempted = true;
+            let term_rc = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+            if term_rc != 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::ESRCH) {
+                    outcome.polite_close_succeeded = true;
+                    return outcome;
+                }
+                outcome.errors.push(format!(
+                    "Failed to politely terminate runtime browser PID {}: {}",
+                    pid, err
+                ));
+                outcome.polite_close_failed = true;
             }
             for _ in 0..20 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 if !pid_is_running(pid) {
-                    return;
+                    outcome.polite_close_succeeded = true;
+                    return outcome;
                 }
             }
-            unsafe {
-                libc::kill(pid as i32, libc::SIGKILL);
+            outcome.polite_close_failed = true;
+            outcome.force_kill_attempted = true;
+            let kill_rc = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+            if kill_rc != 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::ESRCH) {
+                    outcome.force_kill_succeeded = true;
+                    return outcome;
+                }
+                outcome.errors.push(format!(
+                    "Failed to force kill runtime browser PID {}: {}",
+                    pid, err
+                ));
+                outcome.force_kill_failed = true;
+                return outcome;
             }
+            for _ in 0..20 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                if !pid_is_running(pid) {
+                    outcome.force_kill_succeeded = true;
+                    return outcome;
+                }
+            }
+            outcome.errors.push(format!(
+                "Runtime browser PID {} survived force kill; OS may be degraded",
+                pid
+            ));
+            outcome.force_kill_failed = true;
         }
 
         #[cfg(windows)]
         {
-            let _ = std::process::Command::new("taskkill")
+            outcome.force_kill_attempted = true;
+            let status = std::process::Command::new("taskkill")
                 .args(["/PID", &pid.to_string(), "/T", "/F"])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status();
+            match status {
+                Ok(status) if status.success() => outcome.force_kill_succeeded = true,
+                Ok(status) => outcome.errors.push(format!(
+                    "taskkill failed for runtime browser PID {} with status {}",
+                    pid, status
+                )),
+                Err(err) => outcome.errors.push(format!(
+                    "Failed to start taskkill for runtime browser PID {}: {}",
+                    pid, err
+                )),
+            }
+            if outcome.force_kill_attempted && !outcome.force_kill_succeeded {
+                outcome.force_kill_failed = true;
+            }
         }
+        outcome
     })
-    .await;
+    .await
+    .unwrap_or_else(|err| BrowserShutdownOutcome {
+        force_kill_attempted: true,
+        force_kill_failed: true,
+        errors: vec![format!(
+            "Failed to join runtime browser termination task: {}",
+            err
+        )],
+        ..BrowserShutdownOutcome::default()
+    })
 }
 
 impl Drop for DaemonState {
@@ -1378,6 +1779,25 @@ impl Drop for DaemonState {
     }
 }
 
+fn cancellation_error() -> String {
+    "Service job was cancelled while running".to_string()
+}
+
+async fn cancellable<F, T>(future: F, cancellation: Option<CancellationToken>) -> Result<T, String>
+where
+    F: Future<Output = Result<T, String>>,
+{
+    let Some(cancellation) = cancellation else {
+        return future.await;
+    };
+
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err(cancellation_error()),
+        result = future => result,
+    }
+}
+
 pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
     let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
     let id = cmd
@@ -1387,6 +1807,13 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         .to_string();
 
     let cmd_start = std::time::Instant::now();
+
+    #[cfg(test)]
+    if action == "__test_sleep" {
+        let ms = cmd.get("ms").and_then(|value| value.as_u64()).unwrap_or(1);
+        tokio::time::sleep(tokio::time::Duration::from_millis(ms)).await;
+        return success_response(&id, json!({ "sleptMs": ms }));
+    }
 
     if let Some(ref server) = state.stream_server {
         server.broadcast_command(action, &id, cmd);
@@ -1463,16 +1890,35 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "stream_enable"
             | "stream_disable"
             | "stream_status"
+            | "service_status"
+            | "service_reconcile"
+            | "service_job_cancel"
+            | "service_browser_retry"
+            | "service_site_policy_upsert"
+            | "service_site_policy_delete"
+            | "service_provider_upsert"
+            | "service_provider_delete"
+            | "service_incident_acknowledge"
+            | "service_incident_resolve"
+            | "service_incident_activity"
+            | "service_trace"
+            | "service_profiles"
+            | "service_sessions"
+            | "service_browsers"
+            | "service_tabs"
+            | "service_site_policies"
+            | "service_providers"
+            | "service_challenges"
+            | "service_jobs"
+            | "service_incidents"
+            | "service_events"
     );
     if !skip_launch {
         // Check if existing connection is stale and needs re-launch.
         // First do a fast, non-blocking check: did the browser process crash/exit?
         // This avoids a 3-second CDP timeout when Chrome is already dead.
-        let mut needs_launch = if let Some(ref mut mgr) = state.browser {
-            mgr.has_process_exited() || !mgr.is_connection_alive().await
-        } else {
-            true
-        };
+        let stale_state = detect_browser_stale_state(state).await;
+        let mut needs_launch = stale_state.needs_launch;
 
         if needs_launch
             && state.browser.is_some()
@@ -1485,7 +1931,21 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         }
 
         if needs_launch {
+            let mut recovery_persistence = BrowserRecoveryPersistence::NotRecorded;
             if state.browser.is_some() {
+                if let (Some(health), Some(reason_kind), Some(message)) = (
+                    stale_state.health,
+                    stale_state.recovery_reason_kind,
+                    stale_state.message,
+                ) {
+                    recovery_persistence = persist_current_browser_stale_health(
+                        state,
+                        health,
+                        reason_kind,
+                        message,
+                        stale_state.event_details,
+                    );
+                }
                 if let Some(ref mut mgr) = state.browser {
                     let _ = mgr.close().await;
                 }
@@ -1494,7 +1954,16 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                 state.reset_input_state();
                 state.update_stream_client().await;
             }
-            if let Err(e) = auto_launch(state).await {
+            if !recovery_persistence.recorded() {
+                recovery_persistence = persist_browser_recovery_started_from_persisted_state(
+                    state,
+                    "Browser relaunch requested from persisted unhealthy state",
+                );
+            }
+            if let BrowserRecoveryPersistence::Blocked(reason) = recovery_persistence {
+                return error_response(&id, &reason);
+            }
+            if let Err(e) = auto_launch(state, cmd).await {
                 return error_response(&id, &format!("Auto-launch failed: {}", e));
             }
         }
@@ -1624,6 +2093,28 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_enable" => handle_stream_enable(cmd, state).await,
         "stream_disable" => handle_stream_disable(state).await,
         "stream_status" => handle_stream_status(state).await,
+        "service_status" => handle_service_status(cmd).await,
+        "service_reconcile" => handle_service_reconcile(cmd).await,
+        "service_job_cancel" => handle_service_job_cancel(cmd).await,
+        "service_browser_retry" => handle_service_browser_retry(cmd).await,
+        "service_site_policy_upsert" => handle_service_site_policy_upsert(cmd).await,
+        "service_site_policy_delete" => handle_service_site_policy_delete(cmd).await,
+        "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
+        "service_provider_delete" => handle_service_provider_delete(cmd).await,
+        "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
+        "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
+        "service_incident_activity" => handle_service_incident_activity(cmd).await,
+        "service_trace" => handle_service_trace(cmd).await,
+        "service_profiles" => handle_service_profiles(cmd).await,
+        "service_sessions" => handle_service_sessions(cmd).await,
+        "service_browsers" => handle_service_browsers(cmd).await,
+        "service_tabs" => handle_service_tabs(cmd).await,
+        "service_site_policies" => handle_service_site_policies(cmd).await,
+        "service_providers" => handle_service_providers(cmd).await,
+        "service_challenges" => handle_service_challenges(cmd).await,
+        "service_jobs" => handle_service_jobs(cmd).await,
+        "service_incidents" => handle_service_incidents(cmd).await,
+        "service_events" => handle_service_events(cmd).await,
         "waitforurl" => handle_waitforurl(cmd, state).await,
         "waitforloadstate" => handle_waitforloadstate(cmd, state).await,
         "waitforfunction" => handle_waitforfunction(cmd, state).await,
@@ -1689,6 +2180,14 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             }
             resp
         }
+        Err(e) if e == cancellation_error() => json!({
+            "id": id,
+            "success": false,
+            "error": e,
+            "data": {
+                "cancelled": true,
+            },
+        }),
         Err(e) => error_response(&id, &super::browser::to_ai_friendly_error(&e)),
     };
 
@@ -1752,7 +2251,7 @@ async fn connect_auto_with_fresh_tab() -> Result<BrowserManager, String> {
     Ok(mgr)
 }
 
-async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
+async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), String> {
     let mut options = launch_options_from_env();
     let leave_open = env::var("AGENT_BROWSER_LEAVE_OPEN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""));
@@ -1765,6 +2264,7 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         options.viewport_size = Some(server.viewport().await);
     }
     let engine = env::var("AGENT_BROWSER_ENGINE").ok();
+    let metadata = ServiceLaunchMetadata::from_launch_options(&options, Some(command));
 
     // Store proxy credentials for Fetch.authRequired handling
     let has_proxy_auth = options.proxy_username.is_some();
@@ -1800,6 +2300,12 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(
+            state,
+            ServiceBrowserHost::AttachedExisting,
+            ServiceBrowserHealth::Ready,
+            Some(metadata),
+        );
         try_auto_restore_state(state).await;
         return Ok(());
     }
@@ -1814,6 +2320,12 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(
+            state,
+            ServiceBrowserHost::AttachedExisting,
+            ServiceBrowserHealth::Ready,
+            None,
+        );
         try_auto_restore_state(state).await;
         return Ok(());
     }
@@ -1851,6 +2363,12 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
                     state.start_dialog_handler();
                     state.update_stream_client().await;
                     write_provider_file(&state.session_id, &p);
+                    persist_current_browser_health(
+                        state,
+                        ServiceBrowserHost::CloudProvider,
+                        ServiceBrowserHealth::Ready,
+                        None,
+                    );
                     try_auto_restore_state(state).await;
                     return Ok(());
                 }
@@ -1864,6 +2382,11 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
         }
     }
 
+    let service_host = if options.headless {
+        ServiceBrowserHost::LocalHeadless
+    } else {
+        ServiceBrowserHost::LocalHeaded
+    };
     let hash = launch_hash(&options);
     let mgr = BrowserManager::launch(options, engine.as_deref()).await?;
     state.reset_input_state();
@@ -1877,6 +2400,12 @@ async fn auto_launch(state: &mut DaemonState) -> Result<(), String> {
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
+    persist_current_browser_health(
+        state,
+        service_host,
+        ServiceBrowserHealth::Ready,
+        Some(metadata),
+    );
 
     // Enable Fetch with handleAuthRequests for proxy authentication
     if has_proxy_auth {
@@ -1962,6 +2491,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         .get("headless")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
+    let service_host = service_browser_host_for_launch(cmd, headless);
     let cdp_url = cmd.get("cdpUrl").and_then(|v| v.as_str());
     let cdp_port = cmd.get("cdpPort").and_then(|v| v.as_u64());
     let auto_connect = cmd
@@ -2067,6 +2597,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         manual_login: false,
         attachable: false,
     };
+    let metadata = ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd));
 
     let new_hash = launch_hash(&launch_options);
 
@@ -2098,6 +2629,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             state.update_stream_client().await;
         }
     } else {
+        persist_current_browser_health(
+            state,
+            service_host,
+            ServiceBrowserHealth::Ready,
+            Some(metadata),
+        );
         return Ok(json!({ "launched": true, "reused": true }));
     }
     state.ref_map.clear();
@@ -2131,6 +2668,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(
+            state,
+            service_host,
+            ServiceBrowserHealth::Ready,
+            Some(metadata),
+        );
         return Ok(json!({ "launched": true }));
     }
 
@@ -2153,6 +2696,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(
+            state,
+            service_host,
+            ServiceBrowserHealth::Ready,
+            Some(metadata),
+        );
         return Ok(json!({ "launched": true }));
     }
 
@@ -2166,6 +2715,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
+        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready, None);
         return Ok(json!({ "launched": true }));
     }
 
@@ -2205,6 +2755,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
                         state.start_dialog_handler();
                         state.update_stream_client().await;
                         write_provider_file(&state.session_id, provider);
+                        persist_current_browser_health(
+                            state,
+                            service_host,
+                            ServiceBrowserHealth::Ready,
+                            None,
+                        );
 
                         if let Some(info) = providers::get_agentcore_info() {
                             return Ok(json!({
@@ -2272,6 +2828,12 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
+    persist_current_browser_health(
+        state,
+        service_host,
+        ServiceBrowserHealth::Ready,
+        Some(metadata),
+    );
 
     // Enable Fetch interception (domain filtering and/or proxy auth).
     // Only call Fetch.enable once to avoid overwriting handleAuthRequests.
@@ -2401,6 +2963,7 @@ async fn launch_safari(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
 }
 
 async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let cancellation = state.current_cancellation.clone();
     let url = cmd
         .get("url")
         .and_then(|v| v.as_str())
@@ -2417,9 +2980,13 @@ async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     if let Some(ref wb) = state.webdriver_backend {
         if state.browser.is_none() {
             state.ref_map.clear();
-            wb.navigate(url).await?;
-            let new_url = wb.get_url().await.unwrap_or_else(|_| url.to_string());
-            let title = wb.get_title().await.unwrap_or_default();
+            cancellable(wb.navigate(url), cancellation.clone()).await?;
+            let new_url = cancellable(wb.get_url(), cancellation.clone())
+                .await
+                .unwrap_or_else(|_| url.to_string());
+            let title = cancellable(wb.get_title(), cancellation.clone())
+                .await
+                .unwrap_or_default();
             let mut data = json!({ "url": new_url, "title": title });
             add_manual_login_hint_warning(cmd, &mut data);
             return Ok(data);
@@ -2469,9 +3036,12 @@ async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
                 if has_proxy_creds {
                     params["handleAuthRequests"] = json!(true);
                 }
-                mgr.client
-                    .send_command("Fetch.enable", Some(params), Some(&session_id))
-                    .await?;
+                cancellable(
+                    mgr.client
+                        .send_command("Fetch.enable", Some(params), Some(&session_id)),
+                    cancellation.clone(),
+                )
+                .await?;
             }
         }
     }
@@ -2479,7 +3049,7 @@ async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     state.ref_map.clear();
     state.iframe_sessions.clear();
     state.active_frame_id = None;
-    let mut data = mgr.navigate(url, wait_until).await?;
+    let mut data = cancellable(mgr.navigate(url, wait_until), cancellation).await?;
     add_manual_login_hint_warning(cmd, &mut data);
     Ok(data)
 }
@@ -2699,6 +3269,7 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     let attached_runtime_profile = state.attached_runtime_profile.take();
     let attached_browser_pid = state.attached_browser_pid.take();
     let close_behavior = std::mem::take(&mut state.close_behavior);
+    let mut shutdown_outcome = BrowserShutdownOutcome::default();
 
     if let Some(ref mgr) = state.browser {
         if let Some(ref session_name) = state.session_name {
@@ -2732,7 +3303,14 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
         if close_behavior == CloseBehavior::Detach && runtime_profile.is_some() {
             mgr.detach_runtime_browser()?;
         } else {
-            mgr.close().await?;
+            let outcome = mgr.close_with_outcome().await?;
+            shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
+            shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
+            shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
+            shutdown_outcome.force_kill_attempted |= outcome.force_kill_attempted;
+            shutdown_outcome.force_kill_succeeded |= outcome.force_kill_succeeded;
+            shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
+            shutdown_outcome.errors.extend(outcome.errors);
             if let Some(runtime_profile) = runtime_profile {
                 let _ = clear_runtime_state(&runtime_profile);
             }
@@ -2742,7 +3320,14 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
         if close_behavior == CloseBehavior::CloseBrowser {
             let pid = attached_browser_pid.or_else(|| runtime_profile_pid(Some(&runtime_profile)));
             if let Some(pid) = pid {
-                terminate_runtime_browser(pid).await;
+                let outcome = terminate_runtime_browser(pid).await;
+                shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
+                shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
+                shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
+                shutdown_outcome.force_kill_attempted |= outcome.force_kill_attempted;
+                shutdown_outcome.force_kill_succeeded |= outcome.force_kill_succeeded;
+                shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
+                shutdown_outcome.errors.extend(outcome.errors);
             }
             let _ = clear_runtime_state(&runtime_profile);
         }
@@ -2752,6 +3337,7 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     state.screencasting = false;
     state.reset_input_state();
     state.update_stream_client().await;
+    persist_closed_browser_health(state, Some(&shutdown_outcome));
 
     // Stop background Fetch handler
     if let Some(task) = state.fetch_handler_task.take() {
@@ -2790,6 +3376,7 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
 // ---------------------------------------------------------------------------
 
 async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let cancellation = state.current_cancellation.clone();
     let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
     let session_id = mgr.active_session_id()?.to_string();
 
@@ -2814,17 +3401,22 @@ async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     };
 
     state.ref_map.clear();
-    let tree = snapshot::take_snapshot(
-        &mgr.client,
-        &session_id,
-        &options,
-        &mut state.ref_map,
-        state.active_frame_id.as_deref(),
-        &state.iframe_sessions,
+    let tree = cancellable(
+        snapshot::take_snapshot(
+            &mgr.client,
+            &session_id,
+            &options,
+            &mut state.ref_map,
+            state.active_frame_id.as_deref(),
+            &state.iframe_sessions,
+        ),
+        cancellation.clone(),
     )
     .await?;
 
-    let url = mgr.get_url().await.unwrap_or_default();
+    let url = cancellable(mgr.get_url(), cancellation)
+        .await
+        .unwrap_or_default();
 
     let refs: serde_json::Map<String, Value> = state
         .ref_map
@@ -2842,6 +3434,7 @@ async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
 }
 
 async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let cancellation = state.current_cancellation.clone();
     let annotate = cmd
         .get("annotate")
         .and_then(|v| v.as_bool())
@@ -2856,7 +3449,7 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
                 );
             }
 
-            let base64_data = wb.screenshot().await?;
+            let base64_data = cancellable(wb.screenshot(), cancellation.clone()).await?;
             let path = cmd.get("path").and_then(|v| v.as_str());
             if let Some(p) = path {
                 let bytes = base64::Engine::decode(
@@ -2917,26 +3510,32 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
 
     if annotate {
         state.ref_map.clear();
-        let _ = snapshot::take_snapshot(
-            &mgr.client,
-            &session_id,
-            &SnapshotOptions {
-                interactive: true,
-                ..SnapshotOptions::default()
-            },
-            &mut state.ref_map,
-            state.active_frame_id.as_deref(),
-            &state.iframe_sessions,
+        let _ = cancellable(
+            snapshot::take_snapshot(
+                &mgr.client,
+                &session_id,
+                &SnapshotOptions {
+                    interactive: true,
+                    ..SnapshotOptions::default()
+                },
+                &mut state.ref_map,
+                state.active_frame_id.as_deref(),
+                &state.iframe_sessions,
+            ),
+            cancellation.clone(),
         )
         .await?;
     }
 
-    let result = match screenshot::take_screenshot(
-        &mgr.client,
-        &session_id,
-        &state.ref_map,
-        &options,
-        &state.iframe_sessions,
+    let result = match cancellable(
+        screenshot::take_screenshot(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            &options,
+            &state.iframe_sessions,
+        ),
+        cancellation.clone(),
     )
     .await
     {
@@ -2957,12 +3556,15 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
             }
             let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
             let fresh_session_id = mgr.active_session_id()?.to_string();
-            screenshot::take_screenshot(
-                &mgr.client,
-                &fresh_session_id,
-                &state.ref_map,
-                &options,
-                &state.iframe_sessions,
+            cancellable(
+                screenshot::take_screenshot(
+                    &mgr.client,
+                    &fresh_session_id,
+                    &state.ref_map,
+                    &options,
+                    &state.iframe_sessions,
+                ),
+                cancellation,
             )
             .await?
         }
@@ -5575,6 +6177,800 @@ async fn handle_stream_disable(state: &mut DaemonState) -> Result<Value, String>
 
 async fn handle_stream_status(state: &DaemonState) -> Result<Value, String> {
     Ok(current_stream_status(state).await)
+}
+
+async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
+    Ok(json!({
+        "service_state": cmd
+            .get("serviceState")
+            .cloned()
+            .unwrap_or_else(|| json!({})),
+    }))
+}
+
+/// Return the service-owned profile collection without the full status payload.
+async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut profiles = service_state.profiles.into_values().collect::<Vec<_>>();
+    profiles.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = profiles.len();
+
+    Ok(json!({
+        "profiles": profiles,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned session collection without the full status payload.
+async fn handle_service_sessions(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut sessions = service_state.sessions.into_values().collect::<Vec<_>>();
+    sessions.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = sessions.len();
+
+    Ok(json!({
+        "sessions": sessions,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned browser collection without the full status payload.
+async fn handle_service_browsers(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut browsers = service_state.browsers.into_values().collect::<Vec<_>>();
+    browsers.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = browsers.len();
+
+    Ok(json!({
+        "browsers": browsers,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned tab collection without the full status payload.
+async fn handle_service_tabs(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut tabs = service_state.tabs.into_values().collect::<Vec<_>>();
+    tabs.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = tabs.len();
+
+    Ok(json!({
+        "tabs": tabs,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned site-policy collection without the full status payload.
+async fn handle_service_site_policies(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut site_policies = service_state
+        .site_policies
+        .into_values()
+        .collect::<Vec<_>>();
+    site_policies.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = site_policies.len();
+
+    Ok(json!({
+        "sitePolicies": site_policies,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned provider collection without the full status payload.
+async fn handle_service_providers(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut providers = service_state.providers.into_values().collect::<Vec<_>>();
+    providers.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = providers.len();
+
+    Ok(json!({
+        "providers": providers,
+        "count": count,
+    }))
+}
+
+/// Return the service-owned challenge collection without the full status payload.
+async fn handle_service_challenges(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut challenges = service_state.challenges.into_values().collect::<Vec<_>>();
+    challenges.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = challenges.len();
+
+    Ok(json!({
+        "challenges": challenges,
+        "count": count,
+    }))
+}
+
+async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
+    let mut service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let before = service_state.clone();
+    let summary = reconcile_service_state(&mut service_state).await;
+
+    let reconciled_state = service_state.clone();
+    let repository = LockedServiceStateRepository::default_json()?;
+    persist_reconciled_service_state_in_repository(&repository, &before, &reconciled_state)?;
+
+    Ok(json!({
+        "reconciled": true,
+        "browserCount": summary.browser_count,
+        "changedBrowsers": summary.changed_browsers,
+        "service_state": service_state,
+    }))
+}
+
+async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
+    let job_id = cmd
+        .get("jobId")
+        .and_then(|value| value.as_str())
+        .ok_or("Missing jobId")?;
+    let reason = cmd.get("reason").and_then(|value| value.as_str());
+    let job = cancel_persisted_service_job(job_id, reason)?;
+
+    Ok(json!({
+        "cancelled": true,
+        "job": job,
+    }))
+}
+
+async fn handle_service_site_policy_upsert(cmd: &Value) -> Result<Value, String> {
+    let site_policy_id = required_service_config_id(cmd, "sitePolicyId")?;
+    let body = cmd.get("sitePolicy").cloned().ok_or("Missing sitePolicy")?;
+    let site_policy = upsert_persisted_site_policy(site_policy_id, body)?;
+
+    Ok(json!({
+        "id": site_policy_id,
+        "sitePolicy": site_policy,
+        "upserted": true,
+    }))
+}
+
+async fn handle_service_site_policy_delete(cmd: &Value) -> Result<Value, String> {
+    let site_policy_id = required_service_config_id(cmd, "sitePolicyId")?;
+    let removed = delete_persisted_site_policy(site_policy_id)?;
+
+    Ok(json!({
+        "id": site_policy_id,
+        "deleted": removed.is_some(),
+        "sitePolicy": removed,
+    }))
+}
+
+async fn handle_service_provider_upsert(cmd: &Value) -> Result<Value, String> {
+    let provider_id = required_service_config_id(cmd, "providerId")?;
+    let body = cmd.get("provider").cloned().ok_or("Missing provider")?;
+    let provider = upsert_persisted_provider(provider_id, body)?;
+
+    Ok(json!({
+        "id": provider_id,
+        "provider": provider,
+        "upserted": true,
+    }))
+}
+
+async fn handle_service_provider_delete(cmd: &Value) -> Result<Value, String> {
+    let provider_id = required_service_config_id(cmd, "providerId")?;
+    let removed = delete_persisted_provider(provider_id)?;
+
+    Ok(json!({
+        "id": provider_id,
+        "deleted": removed.is_some(),
+        "provider": removed,
+    }))
+}
+
+fn required_service_config_id<'a>(cmd: &'a Value, field: &str) -> Result<&'a str, String> {
+    cmd.get(field)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("Missing {field}"))
+}
+
+async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
+    let browser_id = cmd
+        .get("browserId")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("Missing browserId")?;
+    let by = cmd.get("by").and_then(|value| value.as_str());
+    let note = cmd.get("note").and_then(|value| value.as_str());
+    let service_name = optional_command_string(cmd, "serviceName");
+    let agent_name = optional_command_string(cmd, "agentName");
+    let task_name = optional_command_string(cmd, "taskName");
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+    let repository = LockedServiceStateRepository::default_json().map_err(|err| {
+        if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+            format!("Unable to load service state: {}", err)
+        } else {
+            err
+        }
+    })?;
+    let (retryable, incident) = retry_persisted_service_browser_in_repository(
+        &repository,
+        browser_id,
+        &timestamp,
+        &actor,
+        note.as_deref(),
+        service_name.as_deref(),
+        agent_name.as_deref(),
+        task_name.as_deref(),
+    )?;
+
+    Ok(json!({
+        "retryEnabled": true,
+        "browser": retryable,
+        "incident": incident,
+    }))
+}
+
+async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, String> {
+    let incident_id = cmd
+        .get("incidentId")
+        .and_then(|value| value.as_str())
+        .ok_or("Missing incidentId")?;
+    let by = cmd.get("by").and_then(|value| value.as_str());
+    let note = cmd.get("note").and_then(|value| value.as_str());
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+    let incident =
+        acknowledge_persisted_service_incident(incident_id, &timestamp, &actor, note.as_deref())?;
+
+    Ok(json!({
+        "acknowledged": true,
+        "incident": incident,
+    }))
+}
+
+async fn handle_service_incident_resolve(cmd: &Value) -> Result<Value, String> {
+    let incident_id = cmd
+        .get("incidentId")
+        .and_then(|value| value.as_str())
+        .ok_or("Missing incidentId")?;
+    let by = cmd.get("by").and_then(|value| value.as_str());
+    let note = cmd.get("note").and_then(|value| value.as_str());
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+    let incident =
+        resolve_persisted_service_incident(incident_id, &timestamp, &actor, note.as_deref())?;
+
+    Ok(json!({
+        "resolved": true,
+        "incident": incident,
+    }))
+}
+
+fn normalized_operator(value: Option<&str>) -> String {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("operator")
+        .to_string()
+}
+
+fn normalized_note(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let limit = cmd
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let kind = cmd.get("kind").and_then(|value| value.as_str());
+    let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+    let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+    let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+    let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+    let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+    let task_name = cmd.get("taskName").and_then(|value| value.as_str());
+    let since = cmd
+        .get("since")
+        .and_then(|value| value.as_str())
+        .map(parse_service_event_timestamp)
+        .transpose()?;
+    let total = service_state.events.len();
+    let mut events = service_state
+        .events
+        .into_iter()
+        .filter(|event| {
+            kind.is_none_or(|expected| service_event_kind_name(event.kind) == expected)
+                && browser_id.is_none_or(|expected| event.browser_id.as_deref() == Some(expected))
+                && profile_id.is_none_or(|expected| event.profile_id.as_deref() == Some(expected))
+                && session_id.is_none_or(|expected| event.session_id.as_deref() == Some(expected))
+                && service_name
+                    .is_none_or(|expected| event.service_name.as_deref() == Some(expected))
+                && agent_name.is_none_or(|expected| event.agent_name.as_deref() == Some(expected))
+                && task_name.is_none_or(|expected| event.task_name.as_deref() == Some(expected))
+                && since.is_none_or(|minimum| service_event_at_or_after(event, minimum))
+        })
+        .collect::<Vec<_>>();
+    let matched = events.len();
+    let start = matched.saturating_sub(limit);
+    events = events[start..].to_vec();
+
+    Ok(json!({
+        "events": events,
+        "count": events.len(),
+        "matched": matched,
+        "total": total,
+    }))
+}
+
+async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let limit = cmd
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    service_incidents_response(
+        &service_state,
+        ServiceIncidentFilters {
+            limit,
+            incident_id: cmd.get("incidentId").and_then(|value| value.as_str()),
+            state: cmd.get("state").and_then(|value| value.as_str()),
+            severity: cmd.get("severity").and_then(|value| value.as_str()),
+            escalation: cmd.get("escalation").and_then(|value| value.as_str()),
+            handling_state: cmd.get("handlingState").and_then(|value| value.as_str()),
+            kind: cmd.get("kind").and_then(|value| value.as_str()),
+            browser_id: cmd.get("browserId").and_then(|value| value.as_str()),
+            profile_id: cmd.get("profileId").and_then(|value| value.as_str()),
+            session_id: cmd.get("sessionId").and_then(|value| value.as_str()),
+            service_name: cmd.get("serviceName").and_then(|value| value.as_str()),
+            agent_name: cmd.get("agentName").and_then(|value| value.as_str()),
+            task_name: cmd.get("taskName").and_then(|value| value.as_str()),
+            since: cmd.get("since").and_then(|value| value.as_str()),
+        },
+    )
+}
+
+async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let limit = cmd
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let state = cmd.get("state").and_then(|value| value.as_str());
+    let action = cmd.get("jobAction").and_then(|value| value.as_str());
+    let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+    let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+    let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+    let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+    let task_name = cmd.get("taskName").and_then(|value| value.as_str());
+    let since = cmd
+        .get("since")
+        .and_then(|value| value.as_str())
+        .map(parse_service_event_timestamp)
+        .transpose()?;
+    let total = service_state.jobs.len();
+    if let Some(job_id) = cmd.get("jobId").and_then(|value| value.as_str()) {
+        let job = service_state
+            .jobs
+            .get(job_id)
+            .cloned()
+            .ok_or_else(|| format!("Service job not found: {}", job_id))?;
+        return Ok(json!({
+            "job": job,
+            "jobs": [job],
+            "count": 1,
+            "matched": 1,
+            "total": total,
+        }));
+    }
+    let mut jobs = service_state.jobs.values().cloned().collect::<Vec<_>>();
+    jobs.sort_by(|left, right| {
+        let left_time = left.submitted_at.as_deref().unwrap_or_default();
+        let right_time = right.submitted_at.as_deref().unwrap_or_default();
+        left_time
+            .cmp(right_time)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let mut jobs = jobs
+        .into_iter()
+        .filter(|job| {
+            state.is_none_or(|expected| service_job_state_name(job.state) == expected)
+                && action.is_none_or(|expected| job.action == expected)
+                && service_job_matches_trace_filters(
+                    job,
+                    &service_state,
+                    profile_id,
+                    session_id,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )
+                && since.is_none_or(|minimum| service_job_at_or_after(job, minimum))
+        })
+        .collect::<Vec<_>>();
+    let matched = jobs.len();
+    let start = matched.saturating_sub(limit);
+    jobs = jobs[start..].to_vec();
+
+    Ok(json!({
+        "jobs": jobs,
+        "count": jobs.len(),
+        "matched": matched,
+        "total": total,
+    }))
+}
+
+async fn handle_service_incident_activity(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let incident_id = cmd
+        .get("incidentId")
+        .and_then(|value| value.as_str())
+        .ok_or("Missing incidentId")?;
+    service_incident_activity_response(&service_state, incident_id)
+}
+
+async fn handle_service_trace(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let limit = cmd
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(20);
+    let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+    let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+    let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+    let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+    let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+    let task_name = cmd.get("taskName").and_then(|value| value.as_str());
+    let since = cmd.get("since").and_then(|value| value.as_str());
+    service_trace_response(
+        &service_state,
+        ServiceTraceFilters {
+            limit,
+            browser_id,
+            profile_id,
+            session_id,
+            service_name,
+            agent_name,
+            task_name,
+            since,
+        },
+    )
+}
+
+fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
+    match kind {
+        ServiceEventKind::Reconciliation => "reconciliation",
+        ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
+        ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
+        ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
+        ServiceEventKind::BrowserRecoveryOverride => "browser_recovery_override",
+        ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
+        ServiceEventKind::ReconciliationError => "reconciliation_error",
+        ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
+        ServiceEventKind::IncidentResolved => "incident_resolved",
+    }
+}
+
+fn service_job_state_name(state: ServiceJobState) -> &'static str {
+    match state {
+        ServiceJobState::Queued => "queued",
+        ServiceJobState::Running => "running",
+        ServiceJobState::Succeeded => "succeeded",
+        ServiceJobState::Failed => "failed",
+        ServiceJobState::Cancelled => "cancelled",
+        ServiceJobState::TimedOut => "timed_out",
+    }
+}
+
+fn service_incident_state_name(state: super::service_model::ServiceIncidentState) -> &'static str {
+    match state {
+        super::service_model::ServiceIncidentState::Active => "active",
+        super::service_model::ServiceIncidentState::Recovered => "recovered",
+        super::service_model::ServiceIncidentState::Service => "service",
+    }
+}
+
+fn service_incident_severity_name(
+    severity: super::service_model::ServiceIncidentSeverity,
+) -> &'static str {
+    match severity {
+        super::service_model::ServiceIncidentSeverity::Info => "info",
+        super::service_model::ServiceIncidentSeverity::Warning => "warning",
+        super::service_model::ServiceIncidentSeverity::Error => "error",
+        super::service_model::ServiceIncidentSeverity::Critical => "critical",
+    }
+}
+
+fn service_incident_escalation_name(
+    escalation: super::service_model::ServiceIncidentEscalation,
+) -> &'static str {
+    match escalation {
+        super::service_model::ServiceIncidentEscalation::None => "none",
+        super::service_model::ServiceIncidentEscalation::BrowserDegraded => "browser_degraded",
+        super::service_model::ServiceIncidentEscalation::BrowserRecovery => "browser_recovery",
+        super::service_model::ServiceIncidentEscalation::JobAttention => "job_attention",
+        super::service_model::ServiceIncidentEscalation::ServiceTriage => "service_triage",
+        super::service_model::ServiceIncidentEscalation::OsDegradedPossible => {
+            "os_degraded_possible"
+        }
+    }
+}
+
+fn service_incident_handling_state_name(
+    incident: &super::service_model::ServiceIncident,
+) -> &'static str {
+    if incident.resolved_at.is_some() {
+        "resolved"
+    } else if incident.acknowledged_at.is_some() {
+        "acknowledged"
+    } else {
+        "unacknowledged"
+    }
+}
+
+fn parse_service_event_timestamp(raw: &str) -> Result<DateTime<FixedOffset>, String> {
+    DateTime::parse_from_rfc3339(raw)
+        .map_err(|err| format!("Invalid --since timestamp '{}': {}", raw, err))
+}
+
+fn service_job_at_or_after(
+    job: &super::service_model::ServiceJob,
+    minimum: DateTime<FixedOffset>,
+) -> bool {
+    job.submitted_at
+        .as_deref()
+        .and_then(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
+        .is_some_and(|timestamp| timestamp >= minimum)
+}
+
+fn service_event_at_or_after(event: &ServiceEvent, minimum: DateTime<FixedOffset>) -> bool {
+    DateTime::parse_from_rfc3339(&event.timestamp)
+        .map(|timestamp| timestamp >= minimum)
+        .unwrap_or(false)
+}
+
+fn service_incident_matches_trace_filters(
+    incident: &super::service_model::ServiceIncident,
+    service_state: &ServiceState,
+    profile_id: Option<&str>,
+    session_id: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> bool {
+    if profile_id.is_none()
+        && session_id.is_none()
+        && service_name.is_none()
+        && agent_name.is_none()
+        && task_name.is_none()
+    {
+        return true;
+    }
+
+    incident.event_ids.iter().any(|event_id| {
+        service_state
+            .events
+            .iter()
+            .find(|event| &event.id == event_id)
+            .is_some_and(|event| {
+                service_event_matches_trace_filters(
+                    event,
+                    profile_id,
+                    session_id,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )
+            })
+    }) || incident.job_ids.iter().any(|job_id| {
+        service_state.jobs.get(job_id).is_some_and(|job| {
+            service_job_matches_trace_filters(
+                job,
+                service_state,
+                profile_id,
+                session_id,
+                service_name,
+                agent_name,
+                task_name,
+            )
+        })
+    })
+}
+
+fn service_event_matches_trace_filters(
+    event: &ServiceEvent,
+    profile_id: Option<&str>,
+    session_id: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> bool {
+    profile_id.is_none_or(|expected| event.profile_id.as_deref() == Some(expected))
+        && session_id.is_none_or(|expected| event.session_id.as_deref() == Some(expected))
+        && service_name.is_none_or(|expected| event.service_name.as_deref() == Some(expected))
+        && agent_name.is_none_or(|expected| event.agent_name.as_deref() == Some(expected))
+        && task_name.is_none_or(|expected| event.task_name.as_deref() == Some(expected))
+}
+
+fn service_job_matches_trace_filters(
+    job: &super::service_model::ServiceJob,
+    service_state: &ServiceState,
+    profile_id: Option<&str>,
+    session_id: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> bool {
+    profile_id.is_none_or(|expected| service_job_profile_id(job, service_state) == Some(expected))
+        && session_id
+            .is_none_or(|expected| service_job_session_id(job, service_state) == Some(expected))
+        && service_name.is_none_or(|expected| job.service_name.as_deref() == Some(expected))
+        && agent_name.is_none_or(|expected| job.agent_name.as_deref() == Some(expected))
+        && task_name.is_none_or(|expected| job.task_name.as_deref() == Some(expected))
+}
+
+fn service_job_profile_id<'a>(
+    job: &'a super::service_model::ServiceJob,
+    service_state: &'a ServiceState,
+) -> Option<&'a str> {
+    match &job.target {
+        super::service_model::JobTarget::Profile(profile_id) => Some(profile_id.as_str()),
+        super::service_model::JobTarget::Browser(browser_id) => service_state
+            .browsers
+            .get(browser_id)
+            .and_then(|browser| browser.profile_id.as_deref()),
+        super::service_model::JobTarget::Tab(tab_id) => {
+            service_state.tabs.get(tab_id).and_then(|tab| {
+                tab.owner_session_id
+                    .as_deref()
+                    .and_then(|session_id| service_state.sessions.get(session_id))
+                    .and_then(|session| session.profile_id.as_deref())
+                    .or_else(|| {
+                        service_state
+                            .browsers
+                            .get(&tab.browser_id)
+                            .and_then(|browser| browser.profile_id.as_deref())
+                    })
+            })
+        }
+        super::service_model::JobTarget::Service
+        | super::service_model::JobTarget::Monitor(_)
+        | super::service_model::JobTarget::Challenge(_) => None,
+    }
+}
+
+fn service_job_session_id<'a>(
+    job: &'a super::service_model::ServiceJob,
+    service_state: &'a ServiceState,
+) -> Option<&'a str> {
+    match &job.target {
+        super::service_model::JobTarget::Browser(browser_id) => service_state
+            .browsers
+            .get(browser_id)
+            .and_then(|browser| browser.active_session_ids.first().map(String::as_str))
+            .or_else(|| session_id_for_browser(service_state, browser_id)),
+        super::service_model::JobTarget::Tab(tab_id) => service_state
+            .tabs
+            .get(tab_id)
+            .and_then(|tab| tab.owner_session_id.as_deref()),
+        super::service_model::JobTarget::Service
+        | super::service_model::JobTarget::Profile(_)
+        | super::service_model::JobTarget::Monitor(_)
+        | super::service_model::JobTarget::Challenge(_) => None,
+    }
+}
+
+fn session_id_for_browser<'a>(
+    service_state: &'a ServiceState,
+    browser_id: &str,
+) -> Option<&'a str> {
+    service_state
+        .sessions
+        .iter()
+        .find_map(|(session_id, session)| {
+            session
+                .browser_ids
+                .iter()
+                .any(|id| id == browser_id)
+                .then_some(session_id.as_str())
+        })
+}
+
+fn service_incident_at_or_after(
+    incident: &super::service_model::ServiceIncident,
+    minimum: DateTime<FixedOffset>,
+) -> bool {
+    DateTime::parse_from_rfc3339(&incident.latest_timestamp)
+        .map(|timestamp| timestamp >= minimum)
+        .unwrap_or(false)
+}
+
+fn service_now_timestamp() -> String {
+    chrono::Utc::now().to_rfc3339()
 }
 
 // ---------------------------------------------------------------------------
@@ -8358,7 +9754,32 @@ fn error_response(id: &str, error: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_health::{
+        close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
+    };
+    use crate::native::service_model::{
+        assert_service_browser_retry_response_contract,
+        assert_service_collection_response_contract, assert_service_event_record_contract,
+        assert_service_events_response_contract,
+        assert_service_incident_acknowledge_response_contract,
+        assert_service_incident_activity_response_contract,
+        assert_service_incident_record_contract, assert_service_incident_resolve_response_contract,
+        assert_service_incidents_response_contract, assert_service_job_cancel_response_contract,
+        assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
+        assert_service_provider_delete_response_contract,
+        assert_service_provider_upsert_response_contract,
+        assert_service_reconcile_response_contract,
+        assert_service_site_policy_delete_response_contract,
+        assert_service_site_policy_upsert_response_contract,
+        assert_service_status_response_contract, assert_service_trace_activity_record_contract,
+        assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
+        service_job_naming_warning_values, BrowserProcess,
+    };
+    use crate::native::service_model::{JobState, ServiceJob};
+    use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::test_utils::EnvGuard;
+    use std::collections::BTreeMap;
     use std::fs;
 
     fn unique_socket_dir(label: &str) -> PathBuf {
@@ -8370,6 +9791,23 @@ mod tests {
             "agent-browser-{label}-{}-{nanos}",
             std::process::id()
         ))
+    }
+
+    #[tokio::test]
+    async fn test_cancellable_returns_cancelled_error_before_future_completes() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+
+        let result = cancellable(
+            async {
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                Ok::<_, String>(json!({ "completed": true }))
+            },
+            Some(cancellation),
+        )
+        .await;
+
+        assert_eq!(result, Err(cancellation_error()));
     }
 
     #[tokio::test]
@@ -9115,6 +10553,2531 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
         assert_eq!(result["success"], true);
         assert!(result["data"]["files"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_service_status_via_actions_does_not_launch_browser() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_status",
+            "id": "svc1",
+            "serviceState": {
+                "sitePolicies": {
+                    "google": {
+                        "id": "google",
+                        "originPattern": "https://accounts.google.com"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_status_response_contract(&result["data"]);
+        assert_eq!(
+            result["data"]["service_state"]["sitePolicies"]["google"]["id"],
+            "google"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_browsers_via_actions_returns_last_health_observation() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_browsers",
+            "id": "svc-browsers-1",
+            "serviceState": {
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "health": "degraded",
+                        "lastHealthObservation": {
+                            "observedAt": "2026-04-25T00:00:00Z",
+                            "failureClass": "browser_shutdown_degraded",
+                            "processExitCause": "operator_requested_close"
+                        }
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "browsers",
+            "browsers response",
+        );
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["browsers"][0]["id"], "browser-1");
+        assert_eq!(
+            result["data"]["browsers"][0]["lastHealthObservation"]["failureClass"],
+            "browser_shutdown_degraded"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_profiles_via_actions_returns_profile_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_profiles",
+            "id": "svc-profiles-1",
+            "serviceState": {
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "allocation": "per_service",
+                        "keyring": "basic_password_store",
+                        "sharedServiceIds": ["JournalDownloader"]
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "profiles",
+            "profiles response",
+        );
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["profiles"][0]["id"], "work");
+        assert_eq!(result["data"]["profiles"][0]["name"], "Work");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_sessions_via_actions_returns_session_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_sessions",
+            "id": "svc-sessions-1",
+            "serviceState": {
+                "sessions": {
+                    "session-1": {
+                        "id": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "profileId": "work",
+                        "browserIds": ["browser-1"]
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "sessions",
+            "sessions response",
+        );
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["sessions"][0]["id"], "session-1");
+        assert_eq!(
+            result["data"]["sessions"][0]["serviceName"],
+            "JournalDownloader"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_tabs_via_actions_returns_tab_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_tabs",
+            "id": "svc-tabs-1",
+            "serviceState": {
+                "tabs": {
+                    "tab-1": {
+                        "id": "tab-1",
+                        "browserId": "browser-1",
+                        "sessionId": "cdp-session-1",
+                        "ownerSessionId": "runtime-session",
+                        "lifecycle": "ready",
+                        "targetId": "target-1",
+                        "title": "Example",
+                        "url": "https://example.com/"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(&result["data"], "tabs", "tabs response");
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["tabs"][0]["id"], "tab-1");
+        assert_eq!(result["data"]["tabs"][0]["lifecycle"], "ready");
+        assert_eq!(result["data"]["tabs"][0]["browserId"], "browser-1");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_site_policies_via_actions_returns_policy_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_site_policies",
+            "id": "svc-site-policies-1",
+            "serviceState": {
+                "sitePolicies": {
+                    "google": {
+                        "id": "google",
+                        "originPattern": "https://accounts.google.com",
+                        "interactionMode": "human_like_input",
+                        "manualLoginPreferred": true,
+                        "profileRequired": true,
+                        "challengePolicy": "avoid_first"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "sitePolicies",
+            "site policies response",
+        );
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["sitePolicies"][0]["id"], "google");
+        assert_eq!(
+            result["data"]["sitePolicies"][0]["originPattern"],
+            "https://accounts.google.com"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_providers_via_actions_returns_provider_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_providers",
+            "id": "svc-providers-1",
+            "serviceState": {
+                "providers": {
+                    "manual": {
+                        "id": "manual",
+                        "kind": "manual_approval",
+                        "displayName": "Dashboard approval",
+                        "enabled": true,
+                        "capabilities": ["human_approval"]
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "providers",
+            "providers response",
+        );
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["providers"][0]["id"], "manual");
+        assert_eq!(
+            result["data"]["providers"][0]["displayName"],
+            "Dashboard approval"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_challenges_via_actions_returns_challenge_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_challenges",
+            "id": "svc-challenges-1",
+            "serviceState": {
+                "challenges": {
+                    "challenge-1": {
+                        "id": "challenge-1",
+                        "tabId": "tab-1",
+                        "kind": "captcha",
+                        "state": "waiting_for_provider",
+                        "providerId": "captcha-api",
+                        "policyDecision": "provider_allowed"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "challenges",
+            "challenges response",
+        );
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["challenges"][0]["id"], "challenge-1");
+        assert_eq!(result["data"]["challenges"][0]["kind"], "captcha");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_reconcile_persists_unreachable_browser_health() {
+        let home = unique_socket_dir("service-reconcile-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_reconcile",
+            "id": "svc-reconcile-1",
+            "serviceState": {
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "host": "attached_existing",
+                        "health": "ready",
+                        "cdpEndpoint": "ws://127.0.0.1:9/devtools/browser/unreachable",
+                        "activeSessionIds": ["reconcile-session"]
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["reconciled"], true);
+        assert_eq!(result["data"]["browserCount"], 1);
+        assert_eq!(result["data"]["changedBrowsers"], 1);
+        assert_eq!(
+            result["data"]["service_state"]["browsers"]["browser-1"]["health"],
+            "unreachable"
+        );
+        assert_eq!(
+            result["data"]["service_state"]["reconciliation"]["changedBrowsers"],
+            1
+        );
+        assert_eq!(
+            result["data"]["service_state"]["events"][0]["kind"],
+            "browser_health_changed"
+        );
+        assert_eq!(
+            result["data"]["service_state"]["events"][1]["kind"],
+            "reconciliation"
+        );
+        assert!(state.browser.is_none());
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers["browser-1"].health,
+            ServiceBrowserHealth::Unreachable
+        );
+        assert_eq!(
+            persisted
+                .reconciliation
+                .as_ref()
+                .map(|snapshot| snapshot.changed_browsers),
+            Some(1)
+        );
+        assert_eq!(persisted.events.len(), 2);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_reconciled_service_state_in_repository_preserves_current_fields() {
+        let home = unique_socket_dir("service-reconcile-repository-home");
+        fs::create_dir_all(&home).unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let before = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("work-before".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    active_session_ids: vec!["session-1".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let mut persisted_current = before.clone();
+        persisted_current
+            .browsers
+            .get_mut("browser-1")
+            .unwrap()
+            .profile_id = Some("work-current".to_string());
+        store.save(&persisted_current).unwrap();
+
+        let mut reconciled = before.clone();
+        reconciled.browsers.insert(
+            "browser-1".to_string(),
+            BrowserProcess {
+                id: "browser-1".to_string(),
+                profile_id: Some("work-before".to_string()),
+                health: ServiceBrowserHealth::Unreachable,
+                last_error: Some("CDP endpoint is unreachable".to_string()),
+                active_session_ids: vec!["session-1".to_string()],
+                ..BrowserProcess::default()
+            },
+        );
+
+        persist_reconciled_service_state_in_repository(&repository, &before, &reconciled).unwrap();
+
+        let persisted = store.load().unwrap();
+        let browser = &persisted.browsers["browser-1"];
+        assert_eq!(browser.profile_id.as_deref(), Some("work-current"));
+        assert_eq!(browser.health, ServiceBrowserHealth::Unreachable);
+        assert_eq!(
+            browser.last_error.as_deref(),
+            Some("CDP endpoint is unreachable")
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_stale_browser_process_record_preserves_identity_and_marks_error() {
+        let previous = BrowserProcess {
+            id: "browser-mcp-live".to_string(),
+            profile_id: Some("profile-work".to_string()),
+            host: ServiceBrowserHost::LocalHeaded,
+            health: ServiceBrowserHealth::Ready,
+            pid: Some(1234),
+            cdp_endpoint: Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
+            active_session_ids: vec!["mcp-live".to_string()],
+            ..BrowserProcess::default()
+        };
+
+        let stale = stale_browser_process_record(
+            "browser-mcp-live",
+            "mcp-live",
+            Some(&previous),
+            Some(1234),
+            Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
+            ServiceBrowserHealth::ProcessExited,
+            "Active browser PID 1234 exited before command dispatch".to_string(),
+        );
+
+        assert_eq!(stale.id, "browser-mcp-live");
+        assert_eq!(stale.profile_id.as_deref(), Some("profile-work"));
+        assert_eq!(stale.host, ServiceBrowserHost::LocalHeaded);
+        assert_eq!(stale.health, ServiceBrowserHealth::ProcessExited);
+        assert_eq!(stale.pid, Some(1234));
+        assert_eq!(
+            stale.cdp_endpoint.as_deref(),
+            Some("ws://127.0.0.1:9222/devtools/browser/old")
+        );
+        assert_eq!(stale.active_session_ids, vec!["mcp-live".to_string()]);
+        assert_eq!(
+            stale.last_error.as_deref(),
+            Some("Active browser PID 1234 exited before command dispatch")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_service_events_returns_limited_events() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_events",
+            "id": "svc-events-1",
+            "limit": 1,
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "reconciliation",
+                        "message": "first"
+                    },
+                    {
+                        "id": "event-2",
+                        "timestamp": "2026-04-22T00:01:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "second",
+                        "browserId": "browser-1"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_events_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 2);
+        assert_eq!(result["data"]["total"], 2);
+        assert_eq!(result["data"]["events"][0]["id"], "event-2");
+        assert_service_event_record_contract(&result["data"]["events"][0]);
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_events_filters_by_kind_browser_and_since() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_events",
+            "id": "svc-events-2",
+            "kind": "browser_health_changed",
+            "browserId": "browser-1",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+            "since": "2026-04-22T00:01:00Z",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "too old",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-2",
+                        "timestamp": "2026-04-22T00:01:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "matching",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-3",
+                        "timestamp": "2026-04-22T00:02:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "different browser",
+                        "browserId": "browser-2",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-4",
+                        "timestamp": "2026-04-22T00:03:00Z",
+                        "kind": "reconciliation",
+                        "message": "different kind",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-5",
+                        "timestamp": "2026-04-22T00:04:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "different context",
+                        "browserId": "browser-1",
+                        "profileId": "other",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_events_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["total"], 5);
+        assert_eq!(result["data"]["events"][0]["id"], "event-2");
+        assert_service_event_record_contract(&result["data"]["events"][0]);
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_events_rejects_invalid_since() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_events",
+            "id": "svc-events-3",
+            "since": "not-a-timestamp",
+            "serviceState": {
+                "events": []
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], false);
+        assert!(result["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Invalid --since timestamp"));
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_returns_limited_incidents() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-1",
+            "limit": 1,
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "latestTimestamp": "2026-04-22T00:00:00Z",
+                        "latestMessage": "Browser crashed",
+                        "latestKind": "browser_health_changed"
+                    },
+                    {
+                        "id": "service",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "latestTimestamp": "2026-04-22T00:01:00Z",
+                        "latestMessage": "Reconciliation failed",
+                        "latestKind": "reconciliation_error"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_incidents_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 2);
+        assert_eq!(result["data"]["total"], 2);
+        assert_eq!(result["data"]["incidents"][0]["id"], "service");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_filter_by_state_kind_browser_and_since() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-2",
+            "state": "recovered",
+            "kind": "browser_health_changed",
+            "browserId": "browser-1",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+            "since": "2026-04-22T00:01:00Z",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-old",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Too old",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-match",
+                        "timestamp": "2026-04-22T00:01:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Matching incident",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-wrong-context",
+                        "timestamp": "2026-04-22T00:04:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Wrong context",
+                        "browserId": "browser-1",
+                        "profileId": "other",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    }
+                ],
+                "incidents": [
+                    {
+                        "id": "browser-1-old",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:00:00Z",
+                        "latestMessage": "Too old",
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-old"]
+                    },
+                    {
+                        "id": "browser-1-match",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:01:00Z",
+                        "latestMessage": "Matching incident",
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-match"]
+                    },
+                    {
+                        "id": "browser-2",
+                        "browserId": "browser-2",
+                        "label": "browser-2",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:02:00Z",
+                        "latestMessage": "Wrong browser",
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-match"]
+                    },
+                    {
+                        "id": "service",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "latestTimestamp": "2026-04-22T00:03:00Z",
+                        "latestMessage": "Wrong state",
+                        "latestKind": "reconciliation_error",
+                        "eventIds": ["event-match"]
+                    },
+                    {
+                        "id": "browser-1-wrong-context",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:04:00Z",
+                        "latestMessage": "Wrong context",
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-wrong-context"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_incidents_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["total"], 5);
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-1-match");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_filter_by_handling_state() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-2b",
+            "handlingState": "acknowledged",
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "incident-unack",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "latestTimestamp": "2026-04-22T00:00:00Z",
+                        "latestMessage": "Needs attention",
+                        "latestKind": "reconciliation_error"
+                    },
+                    {
+                        "id": "incident-ack",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "acknowledgedAt": "2026-04-22T00:01:00Z",
+                        "acknowledgedBy": "operator",
+                        "latestTimestamp": "2026-04-22T00:01:00Z",
+                        "latestMessage": "Triaged",
+                        "latestKind": "reconciliation_error"
+                    },
+                    {
+                        "id": "incident-resolved",
+                        "label": "Service incidents",
+                        "state": "service",
+                        "acknowledgedAt": "2026-04-22T00:02:00Z",
+                        "resolvedAt": "2026-04-22T00:03:00Z",
+                        "resolvedBy": "operator",
+                        "latestTimestamp": "2026-04-22T00:03:00Z",
+                        "latestMessage": "Handled",
+                        "latestKind": "reconciliation_error"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["incidents"][0]["id"], "incident-ack");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_filter_by_severity_and_escalation() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-severity",
+            "severity": "critical",
+            "escalation": "os_degraded_possible",
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "browser-degraded",
+                        "browserId": "browser-degraded",
+                        "label": "browser-degraded",
+                        "state": "active",
+                        "severity": "warning",
+                        "escalation": "browser_degraded",
+                        "recommendedAction": "Inspect browser health.",
+                        "latestTimestamp": "2026-04-27T00:00:00Z",
+                        "latestMessage": "Polite close failed",
+                        "latestKind": "browser_health_changed",
+                        "currentHealth": "degraded"
+                    },
+                    {
+                        "id": "browser-faulted",
+                        "browserId": "browser-faulted",
+                        "label": "browser-faulted",
+                        "state": "active",
+                        "severity": "critical",
+                        "escalation": "os_degraded_possible",
+                        "recommendedAction": "Inspect the host OS.",
+                        "latestTimestamp": "2026-04-27T00:01:00Z",
+                        "latestMessage": "Force kill failed",
+                        "latestKind": "browser_health_changed",
+                        "currentHealth": "faulted"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_incidents_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-faulted");
+        assert_eq!(result["data"]["incidents"][0]["severity"], "critical");
+        assert_eq!(
+            result["data"]["incidents"][0]["escalation"],
+            "os_degraded_possible"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_returns_incident_by_id_with_related_records() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-3",
+            "incidentId": "browser-1",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser recovered",
+                        "browserId": "browser-1"
+                    }
+                ],
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "cancelled",
+                        "submittedAt": "2026-04-22T00:01:00Z"
+                    }
+                },
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "latestTimestamp": "2026-04-22T00:01:00Z",
+                        "latestMessage": "navigate was cancelled",
+                        "latestKind": "service_job_cancelled",
+                        "eventIds": ["event-1"],
+                        "jobIds": ["job-1"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_incidents_response_contract(&result["data"]);
+        assert_eq!(result["data"]["incident"]["id"], "browser-1");
+        assert_eq!(result["data"]["events"][0]["id"], "event-1");
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
+        assert_eq!(result["data"]["count"], 1);
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incident_activity_returns_normalized_timeline() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incident_activity",
+            "id": "svc-activity-1",
+            "incidentId": "browser-1",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser browser-1 health changed from Ready to ProcessExited",
+                        "browserId": "browser-1"
+                    },
+                    {
+                        "id": "event-2",
+                        "timestamp": "2026-04-22T00:02:00Z",
+                        "kind": "incident_acknowledged",
+                        "message": "Incident browser-1 acknowledged",
+                        "browserId": "browser-1",
+                        "details": {
+                            "incidentId": "browser-1",
+                            "actor": "operator",
+                            "action": "acknowledged",
+                            "note": "triaged"
+                        }
+                    }
+                ],
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "target": {"browser": "browser-1"},
+                        "state": "timed_out",
+                        "submittedAt": "2026-04-22T00:01:00Z",
+                        "error": "Timed out after 30000 ms"
+                    }
+                },
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "profileId": "work",
+                        "activeSessionIds": ["session-1"]
+                    }
+                },
+                "sessions": {
+                    "session-1": {
+                        "id": "session-1",
+                        "profileId": "work",
+                        "browserIds": ["browser-1"]
+                    }
+                },
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "acknowledgedAt": "2026-04-22T00:02:00Z",
+                        "acknowledgedBy": "operator",
+                        "resolvedAt": "2026-04-22T00:03:00Z",
+                        "resolvedBy": "operator",
+                        "resolutionNote": "handled",
+                        "latestTimestamp": "2026-04-22T00:03:00Z",
+                        "latestMessage": "Handled",
+                        "latestKind": "service_job_timeout",
+                        "eventIds": ["event-1", "event-2"],
+                        "jobIds": ["job-1"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["incident"]["id"], "browser-1");
+        assert_service_incident_activity_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 4);
+        assert_eq!(
+            result["data"]["activity"][0]["kind"],
+            "browser_health_changed"
+        );
+        assert_eq!(result["data"]["activity"][1]["kind"], "service_job_timeout");
+        assert_eq!(result["data"]["activity"][1]["browserId"], "browser-1");
+        assert_eq!(result["data"]["activity"][1]["profileId"], "work");
+        assert_eq!(result["data"]["activity"][1]["sessionId"], "session-1");
+        assert_eq!(
+            result["data"]["activity"][1]["serviceName"],
+            "JournalDownloader"
+        );
+        assert_eq!(result["data"]["activity"][1]["agentName"], "codex");
+        assert_eq!(result["data"]["activity"][1]["taskName"], "probeACSwebsite");
+        assert_eq!(
+            result["data"]["activity"][2]["kind"],
+            "incident_acknowledged"
+        );
+        assert_eq!(result["data"]["activity"][2]["source"], "event");
+        assert_eq!(result["data"]["activity"][3]["kind"], "incident_resolved");
+        assert_eq!(result["data"]["activity"][3]["source"], "metadata");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_trace_returns_related_records_and_activity() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_trace",
+            "id": "svc-trace-1",
+            "serviceName": "JournalDownloader",
+            "taskName": "probeACSwebsite",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-1",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser failed",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-2",
+                        "timestamp": "2026-04-22T00:01:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Wrong task",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "otherTask"
+                    }
+                ],
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "timed_out",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "namingWarnings": service_job_naming_warning_values(),
+                        "hasNamingWarning": true,
+                        "submittedAt": "2026-04-22T00:02:00Z",
+                        "error": "Timed out"
+                    },
+                    "job-2": {
+                        "id": "job-2",
+                        "action": "navigate",
+                        "state": "timed_out",
+                        "target": {"profile": "other"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:03:00Z",
+                        "error": "Wrong profile"
+                    }
+                },
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "profileId": "work",
+                        "activeSessionIds": ["session-1"]
+                    }
+                },
+                "sessions": {
+                    "session-1": {
+                        "id": "session-1",
+                        "profileId": "work",
+                        "browserIds": ["browser-1"]
+                    }
+                },
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "severity": "error",
+                        "escalation": "browser_recovery",
+                        "recommendedAction": "Review recovery trace and retry or relaunch the affected browser.",
+                        "latestTimestamp": "2026-04-22T00:02:00Z",
+                        "latestMessage": "Timed out",
+                        "latestKind": "service_job_timeout",
+                        "currentHealth": "process_exited",
+                        "eventIds": ["event-1"],
+                        "jobIds": ["job-1"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["counts"]["events"], 1);
+        assert_eq!(result["data"]["counts"]["jobs"], 1);
+        assert_eq!(result["data"]["counts"]["incidents"], 1);
+        assert_eq!(result["data"]["counts"]["activity"], 2);
+        assert_eq!(result["data"]["events"][0]["id"], "event-1");
+        assert_service_event_record_contract(&result["data"]["events"][0]);
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-1");
+        assert_service_job_naming_warning_contract(&result["data"]["jobs"][0]);
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
+        assert_service_incident_record_contract(&result["data"]["incidents"][0]);
+        assert_service_trace_response_contract(&result["data"]);
+        assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
+        assert_service_trace_activity_record_contract(&result["data"]["activity"][1]);
+        assert_service_trace_summary_record_contract(&result["data"]["summary"]);
+        assert_eq!(result["data"]["summary"]["contextCount"], 2);
+        assert_eq!(result["data"]["summary"]["hasTraceContext"], true);
+        assert_eq!(result["data"]["summary"]["namingWarningCount"], 1);
+        let owned_context = result["data"]["summary"]["contexts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|context| {
+                context["serviceName"] == "JournalDownloader"
+                    && context["agentName"] == "codex"
+                    && context["taskName"] == "probeACSwebsite"
+                    && context["browserId"] == "browser-1"
+                    && context["profileId"] == "work"
+                    && context["sessionId"] == "session-1"
+            })
+            .expect("trace summary should include the owned service context");
+        assert_eq!(owned_context["eventCount"], 1);
+        assert_eq!(owned_context["jobCount"], 1);
+        assert_eq!(owned_context["activityCount"], 2);
+        assert_eq!(owned_context["hasNamingWarning"], false);
+        assert_eq!(owned_context["namingWarnings"].as_array().unwrap().len(), 0);
+        assert_eq!(owned_context["latestTimestamp"], "2026-04-22T00:02:00Z");
+        let incident_context = result["data"]["summary"]["contexts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|context| context["incidentCount"] == 1)
+            .expect("trace summary should include incident-only context");
+        assert_eq!(incident_context["hasNamingWarning"], true);
+        assert_eq!(
+            incident_context["namingWarnings"],
+            json!([
+                "missing_service_name",
+                "missing_agent_name",
+                "missing_task_name"
+            ])
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_trace_returns_browser_recovery_sequence() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_trace",
+            "id": "svc-trace-recovery-1",
+            "browserId": "browser-1",
+            "serviceName": "JournalDownloader",
+            "taskName": "probeACSwebsite",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-stale",
+                        "timestamp": "2026-04-22T00:00:00Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser browser-1 health changed from Ready to ProcessExited",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "previousHealth": "ready",
+                        "currentHealth": "process_exited",
+                        "details": {
+                            "currentReasonKind": "process_exited"
+                        }
+                    },
+                    {
+                        "id": "event-recovery",
+                        "timestamp": "2026-04-22T00:00:01Z",
+                        "kind": "browser_recovery_started",
+                        "message": "Browser browser-1 recovery started",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "currentHealth": "process_exited",
+                        "details": {
+                            "reasonKind": "process_exited",
+                            "reason": "Active browser PID 1234 exited before command dispatch"
+                        }
+                    },
+                    {
+                        "id": "event-ready",
+                        "timestamp": "2026-04-22T00:00:02Z",
+                        "kind": "browser_health_changed",
+                        "message": "Browser browser-1 health changed from ProcessExited to Ready",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "previousHealth": "process_exited",
+                        "currentHealth": "ready"
+                    }
+                ],
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "recovered",
+                        "latestTimestamp": "2026-04-22T00:00:02Z",
+                        "latestMessage": "Browser browser-1 health changed from ProcessExited to Ready",
+                        "latestKind": "browser_health_changed",
+                        "eventIds": ["event-stale", "event-ready"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["counts"]["events"], 3);
+        assert_eq!(
+            result["data"]["events"][0]["kind"],
+            "browser_health_changed"
+        );
+        assert_eq!(
+            result["data"]["events"][0]["currentHealth"],
+            "process_exited"
+        );
+        assert_eq!(
+            result["data"]["events"][0]["details"]["currentReasonKind"],
+            "process_exited"
+        );
+        assert_eq!(
+            result["data"]["events"][1]["kind"],
+            "browser_recovery_started"
+        );
+        assert_eq!(
+            result["data"]["events"][1]["details"]["reason"],
+            "Active browser PID 1234 exited before command dispatch"
+        );
+        assert_eq!(
+            result["data"]["events"][1]["details"]["reasonKind"],
+            "process_exited"
+        );
+        assert_eq!(
+            result["data"]["events"][2]["kind"],
+            "browser_health_changed"
+        );
+        assert_eq!(result["data"]["events"][2]["currentHealth"], "ready");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_trace_filters_browser_recovery_override_events() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_trace",
+            "id": "svc-trace-recovery-override-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+            "serviceState": {
+                "events": [
+                    {
+                        "id": "event-override",
+                        "timestamp": "2026-04-22T00:00:03Z",
+                        "kind": "browser_recovery_override",
+                        "message": "Browser browser-1 recovery retry enabled by operator",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "previousHealth": "faulted",
+                        "currentHealth": "process_exited",
+                        "details": {
+                            "actor": "operator",
+                            "action": "retry_enabled"
+                        }
+                    },
+                    {
+                        "id": "event-other-task",
+                        "timestamp": "2026-04-22T00:00:04Z",
+                        "kind": "browser_recovery_override",
+                        "message": "Browser browser-1 recovery retry enabled by operator",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "otherTask",
+                        "previousHealth": "faulted",
+                        "currentHealth": "process_exited",
+                        "details": {
+                            "actor": "operator",
+                            "action": "retry_enabled"
+                        }
+                    }
+                ],
+                "incidents": [
+                    {
+                        "id": "browser-1",
+                        "browserId": "browser-1",
+                        "label": "browser-1",
+                        "state": "active",
+                        "latestTimestamp": "2026-04-22T00:00:03Z",
+                        "latestMessage": "Browser browser-1 recovery retry enabled by operator",
+                        "latestKind": "browser_recovery_override",
+                        "eventIds": ["event-override"]
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["counts"]["events"], 1);
+        assert_eq!(result["data"]["events"][0]["id"], "event-override");
+        assert_eq!(
+            result["data"]["events"][0]["kind"],
+            "browser_recovery_override"
+        );
+        assert_eq!(
+            result["data"]["events"][0]["details"]["action"],
+            "retry_enabled"
+        );
+        assert_eq!(result["data"]["counts"]["incidents"], 1);
+        assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_config_actions_mutate_persisted_state() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-config-actions-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let mut state = DaemonState::new();
+
+        let upsert_policy = execute_command(
+            &json!({
+                "action": "service_site_policy_upsert",
+                "id": "svc-policy-upsert-1",
+                "sitePolicyId": "google",
+                "sitePolicy": {
+                    "originPattern": "https://accounts.google.com",
+                    "interactionMode": "human_like_input"
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(upsert_policy["success"], true);
+        assert_service_site_policy_upsert_response_contract(&upsert_policy["data"]);
+        assert_eq!(upsert_policy["data"]["sitePolicy"]["id"], "google");
+
+        let upsert_provider = execute_command(
+            &json!({
+                "action": "service_provider_upsert",
+                "id": "svc-provider-upsert-1",
+                "providerId": "manual",
+                "provider": {
+                    "kind": "manual_approval",
+                    "displayName": "Dashboard approval",
+                    "capabilities": ["human_approval"]
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(upsert_provider["success"], true);
+        assert_service_provider_upsert_response_contract(&upsert_provider["data"]);
+        assert_eq!(upsert_provider["data"]["provider"]["id"], "manual");
+
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.site_policies["google"].origin_pattern,
+            "https://accounts.google.com"
+        );
+        assert_eq!(
+            persisted.providers["manual"].display_name,
+            "Dashboard approval"
+        );
+
+        let delete_provider = execute_command(
+            &json!({
+                "action": "service_provider_delete",
+                "id": "svc-provider-delete-1",
+                "providerId": "manual"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(delete_provider["success"], true);
+        assert_service_provider_delete_response_contract(&delete_provider["data"]);
+        assert_eq!(delete_provider["data"]["deleted"], true);
+        assert!(!store.load().unwrap().providers.contains_key("manual"));
+
+        let delete_policy = execute_command(
+            &json!({
+                "action": "service_site_policy_delete",
+                "id": "svc-policy-delete-1",
+                "sitePolicyId": "google"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(delete_policy["success"], true);
+        assert_service_site_policy_delete_response_contract(&delete_policy["data"]);
+        assert_eq!(delete_policy["data"]["deleted"], true);
+        assert!(!store.load().unwrap().site_policies.contains_key("google"));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_job_cancel_response_matches_contract() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-job-cancel-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                jobs: BTreeMap::from([(
+                    "job-queued".to_string(),
+                    ServiceJob {
+                        id: "job-queued".to_string(),
+                        action: "navigate".to_string(),
+                        state: JobState::Queued,
+                        submitted_at: Some("2026-04-22T00:00:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_job_cancel",
+                "id": "svc-job-cancel-1",
+                "jobId": "job-queued",
+                "reason": "stale"
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_job_cancel_response_contract(&result["data"]);
+        assert_eq!(result["data"]["cancelled"], true);
+        assert_eq!(result["data"]["job"]["state"], "cancelled");
+        assert_eq!(result["data"]["job"]["error"], "stale");
+        assert_eq!(
+            store.load().unwrap().jobs["job-queued"].state,
+            JobState::Cancelled
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_reconcile_response_matches_contract() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-reconcile-response-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_reconcile",
+                "id": "svc-reconcile-response-1",
+                "serviceState": ServiceState::default(),
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_reconcile_response_contract(&result["data"]);
+        assert_eq!(result["data"]["reconciled"], true);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_incident_acknowledge_persists_metadata() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-incident-ack-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                events: vec![crate::native::service_model::ServiceEvent {
+                    id: "event-1".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: crate::native::service_model::ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from Ready to ProcessExited"
+                        .to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(crate::native::service_model::BrowserHealth::Ready),
+                    current_health: Some(
+                        crate::native::service_model::BrowserHealth::ProcessExited,
+                    ),
+                    ..crate::native::service_model::ServiceEvent::default()
+                }],
+                browsers: std::collections::BTreeMap::from([(
+                    "browser-1".to_string(),
+                    crate::native::service_model::BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: crate::native::service_model::BrowserHealth::ProcessExited,
+                        ..crate::native::service_model::BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_incident_acknowledge",
+                "id": "svc-incidents-ack-1",
+                "incidentId": "browser-1",
+                "by": "operator",
+                "note": "triaged"
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_incident_acknowledge_response_contract(&result["data"]);
+        assert_eq!(result["data"]["incident"]["acknowledgedBy"], "operator");
+        assert_eq!(result["data"]["incident"]["acknowledgementNote"], "triaged");
+        assert_eq!(
+            result["data"]["incident"]["eventIds"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.incidents[0].acknowledged_by.as_deref(),
+            Some("operator")
+        );
+        assert_eq!(
+            persisted.incidents[0].acknowledgement_note.as_deref(),
+            Some("triaged")
+        );
+        let event = persisted.events.last().unwrap();
+        assert_eq!(
+            event.kind,
+            crate::native::service_model::ServiceEventKind::IncidentAcknowledged
+        );
+        assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
+        assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
+        assert_eq!(event.details.as_ref().unwrap()["note"], "triaged");
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_acknowledge_service_incident_in_repository_persists_metadata() {
+        let home = unique_socket_dir("service-incident-repository-home");
+        fs::create_dir_all(&home).unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                events: vec![ServiceEvent {
+                    id: "event-1".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from Ready to ProcessExited"
+                        .to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(ServiceBrowserHealth::Ready),
+                    current_health: Some(ServiceBrowserHealth::ProcessExited),
+                    ..ServiceEvent::default()
+                }],
+                browsers: BTreeMap::from([(
+                    "browser-1".to_string(),
+                    BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: ServiceBrowserHealth::ProcessExited,
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let incident =
+            crate::native::service_incidents::acknowledge_service_incident_in_repository(
+                &repository,
+                "browser-1",
+                "2026-04-22T01:00:00Z",
+                "operator",
+                Some("triaged"),
+            )
+            .unwrap();
+
+        assert_eq!(incident.id, "browser-1");
+        assert_eq!(incident.acknowledged_by.as_deref(), Some("operator"));
+        assert_eq!(incident.acknowledgement_note.as_deref(), Some("triaged"));
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.incidents[0].acknowledged_by.as_deref(),
+            Some("operator")
+        );
+        assert_eq!(
+            persisted.incidents[0].acknowledgement_note.as_deref(),
+            Some("triaged")
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_incident_resolve_persists_metadata() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-incident-resolve-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                events: vec![crate::native::service_model::ServiceEvent {
+                    id: "event-1".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: crate::native::service_model::ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser browser-1 health changed from Ready to ProcessExited"
+                        .to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    previous_health: Some(crate::native::service_model::BrowserHealth::Ready),
+                    current_health: Some(
+                        crate::native::service_model::BrowserHealth::ProcessExited,
+                    ),
+                    ..crate::native::service_model::ServiceEvent::default()
+                }],
+                incidents: vec![crate::native::service_model::ServiceIncident {
+                    id: "browser-1".to_string(),
+                    acknowledged_at: Some("2026-04-22T00:00:00Z".to_string()),
+                    acknowledged_by: Some("operator".to_string()),
+                    ..crate::native::service_model::ServiceIncident::default()
+                }],
+                browsers: std::collections::BTreeMap::from([(
+                    "browser-1".to_string(),
+                    crate::native::service_model::BrowserProcess {
+                        id: "browser-1".to_string(),
+                        health: crate::native::service_model::BrowserHealth::ProcessExited,
+                        ..crate::native::service_model::BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_incident_resolve",
+                "id": "svc-incidents-resolve-1",
+                "incidentId": "browser-1",
+                "by": "operator",
+                "note": "recovered"
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_incident_resolve_response_contract(&result["data"]);
+        assert_eq!(result["data"]["incident"]["resolvedBy"], "operator");
+        assert_eq!(result["data"]["incident"]["resolutionNote"], "recovered");
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.incidents[0].resolved_by.as_deref(),
+            Some("operator")
+        );
+        assert_eq!(
+            persisted.incidents[0].resolution_note.as_deref(),
+            Some("recovered")
+        );
+        let event = persisted.events.last().unwrap();
+        assert_eq!(
+            event.kind,
+            crate::native::service_model::ServiceEventKind::IncidentResolved
+        );
+        assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
+        assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
+        assert_eq!(event.details.as_ref().unwrap()["note"], "recovered");
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_jobs_returns_limited_jobs() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_jobs",
+            "id": "svc-jobs-1",
+            "limit": 1,
+            "serviceState": {
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "succeeded",
+                        "submittedAt": "2026-04-22T00:00:00Z"
+                    },
+                    "job-2": {
+                        "id": "job-2",
+                        "action": "click",
+                        "state": "failed",
+                        "submittedAt": "2026-04-22T00:01:00Z"
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 2);
+        assert_eq!(result["data"]["total"], 2);
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_jobs_filters_by_state_action_and_since() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_jobs",
+            "id": "svc-jobs-2",
+            "state": "failed",
+            "jobAction": "navigate",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+            "since": "2026-04-22T00:01:00Z",
+            "serviceState": {
+                "sessions": {
+                    "session-1": {
+                        "id": "session-1",
+                        "profileId": "work",
+                        "browserIds": ["browser-1"]
+                    }
+                },
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "profileId": "work",
+                        "activeSessionIds": ["session-1"]
+                    }
+                },
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "failed",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:00:00Z"
+                    },
+                    "job-2": {
+                        "id": "job-2",
+                        "action": "navigate",
+                        "state": "failed",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:01:00Z"
+                    },
+                    "job-3": {
+                        "id": "job-3",
+                        "action": "click",
+                        "state": "failed",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:02:00Z"
+                    },
+                    "job-4": {
+                        "id": "job-4",
+                        "action": "navigate",
+                        "state": "succeeded",
+                        "target": {"browser": "browser-1"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:03:00Z"
+                    },
+                    "job-5": {
+                        "id": "job-5",
+                        "action": "navigate",
+                        "state": "failed",
+                        "target": {"profile": "other"},
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "submittedAt": "2026-04-22T00:04:00Z"
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["total"], 5);
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_jobs_returns_job_by_id() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_jobs",
+            "id": "svc-jobs-3",
+            "jobId": "job-2",
+            "serviceState": {
+                "jobs": {
+                    "job-1": {
+                        "id": "job-1",
+                        "action": "navigate",
+                        "state": "succeeded",
+                        "submittedAt": "2026-04-22T00:00:00Z"
+                    },
+                    "job-2": {
+                        "id": "job-2",
+                        "action": "click",
+                        "state": "failed",
+                        "submittedAt": "2026-04-22T00:01:00Z",
+                        "error": "selector missing"
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_jobs_response_contract(&result["data"]);
+        assert_eq!(result["data"]["job"]["id"], "job-2");
+        assert_eq!(result["data"]["jobs"][0]["id"], "job-2");
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["total"], 2);
+        assert!(state.browser.is_none());
+    }
+
+    #[test]
+    fn test_persist_service_browser_record_round_trips() {
+        let home = unique_socket_dir("service-browser-record-home");
+        fs::create_dir_all(&home).unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+
+        persist_service_browser_record_in_repository(
+            &repository,
+            "persist-session",
+            ServiceBrowserHost::LocalHeadless,
+            ServiceBrowserHealth::Ready,
+            Some(1234),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                profile_id: Some("work".to_string()),
+                profile_name: Some("Work".to_string()),
+                user_data_dir: Some("/tmp/agent-browser-work".to_string()),
+                persistent_profile: true,
+                keyring: ProfileKeyringPolicy::RealOsKeychain,
+                service_name: Some("JournalDownloader".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("probe-acs-website".to_string()),
+                cleanup: SessionCleanupPolicy::Detach,
+            }),
+        )
+        .unwrap();
+
+        let state = store.load().unwrap();
+        let browser = &state.browsers["session:persist-session"];
+
+        assert_eq!(browser.host, ServiceBrowserHost::LocalHeadless);
+        assert_eq!(browser.health, ServiceBrowserHealth::Ready);
+        assert_eq!(browser.pid, Some(1234));
+        assert_eq!(
+            browser.cdp_endpoint.as_deref(),
+            Some("http://127.0.0.1:9222")
+        );
+        assert_eq!(browser.profile_id.as_deref(), Some("work"));
+        let profile = &state.profiles["work"];
+        assert_eq!(profile.name, "Work");
+        assert_eq!(
+            profile.user_data_dir.as_deref(),
+            Some("/tmp/agent-browser-work")
+        );
+        assert_eq!(profile.allocation, ProfileAllocationPolicy::PerService);
+        assert_eq!(profile.keyring, ProfileKeyringPolicy::RealOsKeychain);
+        assert!(profile.persistent);
+        assert!(profile.manual_login_preferred);
+        assert_eq!(profile.shared_service_ids, vec!["JournalDownloader"]);
+        let session = &state.sessions["persist-session"];
+        assert_eq!(session.service_name.as_deref(), Some("JournalDownloader"));
+        assert_eq!(session.agent_name.as_deref(), Some("codex"));
+        assert_eq!(session.task_name.as_deref(), Some("probe-acs-website"));
+        assert_eq!(session.profile_id.as_deref(), Some("work"));
+        assert_eq!(session.lease, LeaseState::Exclusive);
+        assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
+        assert_eq!(session.browser_ids, vec!["session:persist-session"]);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_recovery_policy_counts_attempts_since_ready() {
+        let browser_id = "session:budget-session";
+        let state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "ready".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    browser_id: Some(browser_id.to_string()),
+                    current_health: Some(ServiceBrowserHealth::Ready),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-2".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+            ],
+            ..ServiceState::default()
+        };
+
+        let policy = recovery_policy_for_next_attempt(
+            &state,
+            browser_id,
+            BrowserRecoveryPolicyConfig::default(),
+        );
+
+        assert_eq!(policy.attempt, 3);
+        assert_eq!(
+            policy.retry_budget,
+            BrowserRecoveryPolicyConfig::default().retry_budget
+        );
+        assert!(!policy.retry_budget_exceeded);
+        assert_eq!(policy.next_retry_delay_ms, 4_000);
+    }
+
+    #[test]
+    fn test_recovery_policy_blocks_after_budget() {
+        let browser_id = "session:budget-session";
+        let state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "recovery-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-2".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-3".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+            ],
+            ..ServiceState::default()
+        };
+
+        let policy = recovery_policy_for_next_attempt(
+            &state,
+            browser_id,
+            BrowserRecoveryPolicyConfig::default(),
+        );
+
+        assert_eq!(policy.attempt, 4);
+        assert!(policy.retry_budget_exceeded);
+        assert_eq!(policy.next_retry_delay_ms, 8_000);
+    }
+
+    #[test]
+    fn test_recovery_policy_uses_configured_budget_and_backoff() {
+        let browser_id = "session:budget-session";
+        let policy = BrowserRecoveryPolicyConfig {
+            retry_budget: 2,
+            base_backoff_ms: 250,
+            max_backoff_ms: 1_000,
+            source: BrowserRecoveryPolicySource::default(),
+        };
+        let state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "recovery-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "recovery-2".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+            ],
+            ..ServiceState::default()
+        };
+
+        let configured_policy = recovery_policy_for_next_attempt(&state, browser_id, policy);
+
+        assert_eq!(configured_policy.attempt, 3);
+        assert_eq!(configured_policy.retry_budget, 2);
+        assert!(configured_policy.retry_budget_exceeded);
+        assert_eq!(configured_policy.next_retry_delay_ms, 1_000);
+    }
+
+    #[test]
+    fn test_recovery_policy_resets_after_operator_override() {
+        let browser_id = "session:budget-session";
+        let state = ServiceState {
+            events: vec![
+                ServiceEvent {
+                    id: "recovery-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryStarted,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+                ServiceEvent {
+                    id: "override-1".to_string(),
+                    kind: ServiceEventKind::BrowserRecoveryOverride,
+                    browser_id: Some(browser_id.to_string()),
+                    ..ServiceEvent::default()
+                },
+            ],
+            ..ServiceState::default()
+        };
+
+        let policy = recovery_policy_for_next_attempt(
+            &state,
+            browser_id,
+            BrowserRecoveryPolicyConfig::default(),
+        );
+
+        assert_eq!(policy.attempt, 1);
+        assert!(!policy.retry_budget_exceeded);
+    }
+
+    #[tokio::test]
+    async fn test_service_browser_retry_marks_faulted_browser_retryable() {
+        let home = unique_socket_dir("service-browser-retry-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let browser_id = "session:retry-session";
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        profile_id: Some("work".to_string()),
+                        health: ServiceBrowserHealth::Faulted,
+                        active_session_ids: vec!["retry-session".to_string()],
+                        last_error: Some("Browser recovery retry budget exceeded".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                events: vec![ServiceEvent {
+                    id: "event-faulted".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser faulted".to_string(),
+                    browser_id: Some(browser_id.to_string()),
+                    current_health: Some(ServiceBrowserHealth::Faulted),
+                    ..ServiceEvent::default()
+                }],
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut daemon_state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "id": "retry-1",
+                "action": "service_browser_retry",
+                "browserId": browser_id,
+                "by": "operator",
+                "note": "manual retry approved",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite"
+            }),
+            &mut daemon_state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_browser_retry_response_contract(&result["data"]);
+        assert_eq!(result["data"]["retryEnabled"], true);
+        assert_eq!(result["data"]["browser"]["health"], "process_exited");
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers[browser_id].health,
+            ServiceBrowserHealth::ProcessExited
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryOverride
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.service_name.as_deref() == Some("JournalDownloader")
+                && event.agent_name.as_deref() == Some("codex")
+                && event.task_name.as_deref() == Some("probeACSwebsite")
+                && event
+                    .details
+                    .as_ref()
+                    .and_then(|details| details.get("actor"))
+                    == Some(&json!("operator"))
+        }));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_retry_service_browser_in_repository_marks_faulted_browser_retryable() {
+        let home = unique_socket_dir("service-browser-retry-repository-home");
+        fs::create_dir_all(&home).unwrap();
+
+        let browser_id = "session:retry-repository-session";
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        profile_id: Some("work".to_string()),
+                        health: ServiceBrowserHealth::Faulted,
+                        active_session_ids: vec!["retry-repository-session".to_string()],
+                        last_error: Some("Browser recovery retry budget exceeded".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                events: vec![ServiceEvent {
+                    id: "event-faulted".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Browser faulted".to_string(),
+                    browser_id: Some(browser_id.to_string()),
+                    current_health: Some(ServiceBrowserHealth::Faulted),
+                    ..ServiceEvent::default()
+                }],
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let (retryable, incident) = retry_persisted_service_browser_in_repository(
+            &repository,
+            browser_id,
+            "2026-04-22T01:00:00Z",
+            "operator",
+            Some("manual retry approved"),
+            Some("JournalDownloader"),
+            Some("codex"),
+            Some("probeACSwebsite"),
+        )
+        .unwrap();
+
+        assert_eq!(retryable.health, ServiceBrowserHealth::ProcessExited);
+        assert_eq!(
+            incident.as_ref().map(|incident| incident.id.as_str()),
+            Some(browser_id)
+        );
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers[browser_id].health,
+            ServiceBrowserHealth::ProcessExited
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryOverride
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.service_name.as_deref() == Some("JournalDownloader")
+                && event.agent_name.as_deref() == Some("codex")
+                && event.task_name.as_deref() == Some("probeACSwebsite")
+                && event
+                    .details
+                    .as_ref()
+                    .and_then(|details| details.get("note"))
+                    == Some(&json!("manual retry approved"))
+        }));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_persisted_recovery_blocks_and_marks_browser_faulted_after_budget() {
+        let home = unique_socket_dir("service-recovery-budget-home");
+        fs::create_dir_all(&home).unwrap();
+
+        let browser_id = "session:budget-session";
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        health: ServiceBrowserHealth::ProcessExited,
+                        last_error: Some(
+                            "Recorded browser PID 1234 is no longer running".to_string(),
+                        ),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                events: (1..=BrowserRecoveryPolicyConfig::default().retry_budget)
+                    .map(|attempt| ServiceEvent {
+                        id: format!("recovery-{attempt}"),
+                        kind: ServiceEventKind::BrowserRecoveryStarted,
+                        browser_id: Some(browser_id.to_string()),
+                        ..ServiceEvent::default()
+                    })
+                    .collect(),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let result = persist_browser_recovery_started_in_repository(
+            &repository,
+            "budget-session",
+            BrowserRecoveryPolicyConfig::default(),
+            "Browser relaunch requested from persisted unhealthy state",
+        );
+
+        assert!(matches!(result, BrowserRecoveryPersistence::Blocked(_)));
+        let state = store.load().unwrap();
+        assert_eq!(
+            state.browsers[browser_id].health,
+            ServiceBrowserHealth::Faulted
+        );
+        assert!(state.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.current_health == Some(ServiceBrowserHealth::Faulted)
+        }));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_current_stale_health_in_repository_records_recovery_started() {
+        let home = unique_socket_dir("service-current-stale-health-repository");
+        fs::create_dir_all(&home).unwrap();
+
+        let browser_id = "session:stale-session";
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        profile_id: Some("work".to_string()),
+                        host: ServiceBrowserHost::LocalHeaded,
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["stale-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let result = persist_current_browser_stale_health_in_repository(
+            &repository,
+            "stale-session",
+            Some(1234),
+            Some("ws://127.0.0.1:9222/devtools/browser/stale".to_string()),
+            BrowserRecoveryPolicyConfig::default(),
+            ServiceBrowserHealth::CdpDisconnected,
+            BrowserRecoveryReasonKind::CdpDisconnected,
+            "CDP response channel closed".to_string(),
+            Some(json!({"failureClass": "cdp_disconnected"})),
+        );
+
+        assert_eq!(result, BrowserRecoveryPersistence::Recorded);
+        let state = store.load().unwrap();
+        let browser = &state.browsers[browser_id];
+        assert_eq!(browser.health, ServiceBrowserHealth::CdpDisconnected);
+        assert_eq!(browser.pid, Some(1234));
+        assert_eq!(
+            browser.cdp_endpoint.as_deref(),
+            Some("ws://127.0.0.1:9222/devtools/browser/stale")
+        );
+        assert_eq!(browser.profile_id.as_deref(), Some("work"));
+        assert!(state.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserHealthChanged
+                && event.browser_id.as_deref() == Some(browser_id)
+        }));
+        assert!(state.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryStarted
+                && event.browser_id.as_deref() == Some(browser_id)
+        }));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_close_persists_not_started_browser_health() {
+        let home = unique_socket_dir("service-browser-close-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SESSION"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_SESSION", "close-session");
+        let mut state = DaemonState::new();
+
+        let result =
+            execute_command(&json!({ "action": "close", "id": "close-1" }), &mut state).await;
+
+        assert_eq!(result["success"], true);
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers["session:close-session"].health,
+            ServiceBrowserHealth::NotStarted
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_close_health_event_marks_operator_requested_close() {
+        let home = unique_socket_dir("service-browser-close-reason-home");
+        fs::create_dir_all(&home).unwrap();
+        let browser_id = "session:close-reason-session";
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["close-reason-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        persist_closed_browser_health_in_repository(
+            &repository,
+            "close-reason-session",
+            Some(&BrowserShutdownOutcome {
+                polite_close_attempted: true,
+                polite_close_succeeded: true,
+                ..BrowserShutdownOutcome::default()
+            }),
+        )
+        .unwrap();
+
+        let persisted = store.load().unwrap();
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| {
+                event.kind == ServiceEventKind::BrowserHealthChanged
+                    && event.browser_id.as_deref() == Some(browser_id)
+            })
+            .expect("close should record a browser health event");
+        assert_eq!(event.current_health, Some(ServiceBrowserHealth::NotStarted));
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("shutdownReasonKind"))
+                .and_then(|reason| reason.as_str()),
+            Some("operator_requested_close")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("processExitCause"))
+                .and_then(|cause| cause.as_str()),
+            Some("operator_requested_close")
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("shutdownRequested"))
+                .and_then(|requested| requested.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("politeCloseSucceeded"))
+                .and_then(|succeeded| succeeded.as_bool()),
+            Some(true)
+        );
+        assert!(persisted.browsers[browser_id]
+            .last_health_observation
+            .is_none());
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_process_exit_observation_details_include_exit_evidence() {
+        let observation = ProcessExitObservation {
+            pid: 1234,
+            exit_code: Some(137),
+            #[cfg(unix)]
+            signal: Some(9),
+            poll_error: None,
+        };
+
+        let details = process_exit_observation_details(&observation);
+
+        assert_eq!(details["processExitDetection"], "local_child_try_wait");
+        assert_eq!(details["processExitPid"], 1234);
+        assert_eq!(details["processExitCode"], 137);
+        #[cfg(unix)]
+        assert_eq!(details["processExitSignal"], 9);
+    }
+
+    #[test]
+    fn test_close_health_marks_polite_close_failure_degraded() {
+        let outcome = BrowserShutdownOutcome {
+            polite_close_attempted: true,
+            polite_close_succeeded: false,
+            polite_close_failed: true,
+            force_kill_attempted: true,
+            force_kill_succeeded: true,
+            errors: vec!["CDP connection closed".to_string()],
+            ..BrowserShutdownOutcome::default()
+        };
+
+        let (health, last_error) = close_health_from_outcome(Some(&outcome));
+
+        assert_eq!(health, ServiceBrowserHealth::Degraded);
+        assert!(last_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Polite browser close failed"));
+    }
+
+    #[test]
+    fn test_close_health_marks_force_kill_failure_faulted() {
+        let outcome = BrowserShutdownOutcome {
+            polite_close_attempted: true,
+            polite_close_succeeded: false,
+            polite_close_failed: true,
+            force_kill_attempted: true,
+            force_kill_succeeded: false,
+            force_kill_failed: true,
+            errors: vec!["permission denied".to_string()],
+            ..BrowserShutdownOutcome::default()
+        };
+
+        let (health, last_error) = close_health_from_outcome(Some(&outcome));
+
+        assert_eq!(health, ServiceBrowserHealth::Faulted);
+        assert!(last_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("OS may be degraded"));
     }
 
     #[tokio::test]

@@ -1,0 +1,884 @@
+#!/usr/bin/env node
+
+import { createMcpStdioClient, createSmokeContext } from './smoke-utils.js';
+
+const context = createSmokeContext({
+  prefix: 'agent-browser-mcp-smoke-',
+  sessionPrefix: 'mcp-smoke',
+});
+let mcp;
+const timeout = setTimeout(() => {
+  fail('Timed out waiting for MCP stdio responses');
+}, 45000);
+
+mcp = createMcpStdioClient({
+  context,
+  args: ['mcp', 'serve'],
+  onFatal: fail,
+});
+
+function send(method, params) {
+  return mcp.send(method, params);
+}
+
+function notify(method, params) {
+  mcp.notify(method, params);
+}
+
+function assert(condition, message) {
+  if (!condition) fail(message);
+}
+
+function fail(message) {
+  clearTimeout(timeout);
+  if (mcp) {
+    mcp.rejectPending(message);
+    mcp.close();
+  }
+  context.cleanupTempHome();
+  console.error(message);
+  const stderr = mcp?.stderr() ?? '';
+  if (stderr.trim()) console.error(stderr.trim());
+  process.exit(1);
+}
+
+try {
+  const initialize = await send('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'agent-browser-smoke', version: '0' },
+  });
+  assert(initialize.protocolVersion === '2025-06-18', 'Unexpected MCP protocol version');
+  assert(initialize.capabilities?.resources, 'MCP resources capability missing');
+  notify('notifications/initialized');
+
+  const resources = await send('resources/list');
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://incidents'),
+    'MCP incidents resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://profiles'),
+    'MCP profiles resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://sessions'),
+    'MCP sessions resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://browsers'),
+    'MCP browsers resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://tabs'),
+    'MCP tabs resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://site-policies'),
+    'MCP site policies resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://providers'),
+    'MCP providers resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://challenges'),
+    'MCP challenges resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://jobs'),
+    'MCP jobs resource missing',
+  );
+  assert(
+    resources.resources?.some((resource) => resource.uri === 'agent-browser://events'),
+    'MCP events resource missing',
+  );
+
+  const templates = await send('resources/templates/list');
+  assert(
+    templates.resourceTemplates?.some(
+      (resource) =>
+        resource.uriTemplate === 'agent-browser://incidents/{incident_id}/activity',
+    ),
+    'MCP incident activity template missing',
+  );
+
+  const tools = await send('tools/list');
+  const cancelTool = tools.tools?.find((tool) => tool.name === 'service_job_cancel');
+  assert(cancelTool, 'MCP service_job_cancel tool missing');
+  assert(
+    cancelTool.inputSchema?.properties?.serviceName,
+    'MCP service_job_cancel missing serviceName trace field',
+  );
+  assert(
+    cancelTool.inputSchema?.properties?.agentName,
+    'MCP service_job_cancel missing agentName trace field',
+  );
+  assert(
+    cancelTool.inputSchema?.properties?.taskName,
+    'MCP service_job_cancel missing taskName trace field',
+  );
+  const snapshotTool = tools.tools?.find((tool) => tool.name === 'browser_snapshot');
+  assert(snapshotTool, 'MCP browser_snapshot tool missing');
+  assert(
+    snapshotTool.inputSchema?.properties?.interactive,
+    'MCP browser_snapshot missing interactive option',
+  );
+  assert(
+    snapshotTool.inputSchema?.properties?.serviceName,
+    'MCP browser_snapshot missing serviceName trace field',
+  );
+  assert(
+    snapshotTool.inputSchema?.properties?.agentName,
+    'MCP browser_snapshot missing agentName trace field',
+  );
+  assert(
+    snapshotTool.inputSchema?.properties?.taskName,
+    'MCP browser_snapshot missing taskName trace field',
+  );
+  const getUrlTool = tools.tools?.find((tool) => tool.name === 'browser_get_url');
+  assert(getUrlTool, 'MCP browser_get_url tool missing');
+  assert(
+    getUrlTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_url missing serviceName trace field',
+  );
+  assert(
+    getUrlTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_url missing agentName trace field',
+  );
+  assert(
+    getUrlTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_url missing taskName trace field',
+  );
+  const getTitleTool = tools.tools?.find((tool) => tool.name === 'browser_get_title');
+  assert(getTitleTool, 'MCP browser_get_title tool missing');
+  assert(
+    getTitleTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_title missing serviceName trace field',
+  );
+  assert(
+    getTitleTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_title missing agentName trace field',
+  );
+  assert(
+    getTitleTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_title missing taskName trace field',
+  );
+  const tabsTool = tools.tools?.find((tool) => tool.name === 'browser_tabs');
+  assert(tabsTool, 'MCP browser_tabs tool missing');
+  assert(
+    tabsTool.inputSchema?.properties?.verbose,
+    'MCP browser_tabs missing verbose option',
+  );
+  assert(
+    tabsTool.inputSchema?.properties?.serviceName,
+    'MCP browser_tabs missing serviceName trace field',
+  );
+  assert(
+    tabsTool.inputSchema?.properties?.agentName,
+    'MCP browser_tabs missing agentName trace field',
+  );
+  assert(
+    tabsTool.inputSchema?.properties?.taskName,
+    'MCP browser_tabs missing taskName trace field',
+  );
+  const screenshotTool = tools.tools?.find((tool) => tool.name === 'browser_screenshot');
+  assert(screenshotTool, 'MCP browser_screenshot tool missing');
+  assert(
+    screenshotTool.inputSchema?.properties?.selector,
+    'MCP browser_screenshot missing selector option',
+  );
+  assert(
+    screenshotTool.inputSchema?.properties?.format,
+    'MCP browser_screenshot missing format option',
+  );
+  assert(
+    screenshotTool.inputSchema?.properties?.serviceName,
+    'MCP browser_screenshot missing serviceName trace field',
+  );
+  assert(
+    screenshotTool.inputSchema?.properties?.agentName,
+    'MCP browser_screenshot missing agentName trace field',
+  );
+  assert(
+    screenshotTool.inputSchema?.properties?.taskName,
+    'MCP browser_screenshot missing taskName trace field',
+  );
+  const clickTool = tools.tools?.find((tool) => tool.name === 'browser_click');
+  assert(clickTool, 'MCP browser_click tool missing');
+  assert(
+    clickTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_click missing selector requirement',
+  );
+  assert(
+    clickTool.inputSchema?.properties?.newTab,
+    'MCP browser_click missing newTab option',
+  );
+  assert(
+    clickTool.inputSchema?.properties?.serviceName,
+    'MCP browser_click missing serviceName trace field',
+  );
+  assert(
+    clickTool.inputSchema?.properties?.agentName,
+    'MCP browser_click missing agentName trace field',
+  );
+  assert(
+    clickTool.inputSchema?.properties?.taskName,
+    'MCP browser_click missing taskName trace field',
+  );
+  const fillTool = tools.tools?.find((tool) => tool.name === 'browser_fill');
+  assert(fillTool, 'MCP browser_fill tool missing');
+  assert(
+    fillTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_fill missing selector requirement',
+  );
+  assert(
+    fillTool.inputSchema?.required?.includes('value'),
+    'MCP browser_fill missing value requirement',
+  );
+  assert(
+    fillTool.inputSchema?.properties?.value,
+    'MCP browser_fill missing value property',
+  );
+  assert(
+    fillTool.inputSchema?.properties?.serviceName,
+    'MCP browser_fill missing serviceName trace field',
+  );
+  assert(
+    fillTool.inputSchema?.properties?.agentName,
+    'MCP browser_fill missing agentName trace field',
+  );
+  assert(
+    fillTool.inputSchema?.properties?.taskName,
+    'MCP browser_fill missing taskName trace field',
+  );
+  const waitTool = tools.tools?.find((tool) => tool.name === 'browser_wait');
+  assert(waitTool, 'MCP browser_wait tool missing');
+  assert(
+    waitTool.inputSchema?.properties?.selector,
+    'MCP browser_wait missing selector option',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.text,
+    'MCP browser_wait missing text option',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.loadState,
+    'MCP browser_wait missing loadState option',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.timeoutMs,
+    'MCP browser_wait missing timeoutMs option',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.serviceName,
+    'MCP browser_wait missing serviceName trace field',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.agentName,
+    'MCP browser_wait missing agentName trace field',
+  );
+  assert(
+    waitTool.inputSchema?.properties?.taskName,
+    'MCP browser_wait missing taskName trace field',
+  );
+  const typeTool = tools.tools?.find((tool) => tool.name === 'browser_type');
+  assert(typeTool, 'MCP browser_type tool missing');
+  assert(
+    typeTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_type missing selector requirement',
+  );
+  assert(
+    typeTool.inputSchema?.required?.includes('text'),
+    'MCP browser_type missing text requirement',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.clear,
+    'MCP browser_type missing clear option',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.delayMs,
+    'MCP browser_type missing delayMs option',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.serviceName,
+    'MCP browser_type missing serviceName trace field',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.agentName,
+    'MCP browser_type missing agentName trace field',
+  );
+  assert(
+    typeTool.inputSchema?.properties?.taskName,
+    'MCP browser_type missing taskName trace field',
+  );
+  const pressTool = tools.tools?.find((tool) => tool.name === 'browser_press');
+  assert(pressTool, 'MCP browser_press tool missing');
+  assert(
+    pressTool.inputSchema?.required?.includes('key'),
+    'MCP browser_press missing key requirement',
+  );
+  assert(
+    pressTool.inputSchema?.properties?.key,
+    'MCP browser_press missing key property',
+  );
+  assert(
+    pressTool.inputSchema?.properties?.serviceName,
+    'MCP browser_press missing serviceName trace field',
+  );
+  assert(
+    pressTool.inputSchema?.properties?.agentName,
+    'MCP browser_press missing agentName trace field',
+  );
+  assert(
+    pressTool.inputSchema?.properties?.taskName,
+    'MCP browser_press missing taskName trace field',
+  );
+  const hoverTool = tools.tools?.find((tool) => tool.name === 'browser_hover');
+  assert(hoverTool, 'MCP browser_hover tool missing');
+  assert(
+    hoverTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_hover missing selector requirement',
+  );
+  assert(
+    hoverTool.inputSchema?.properties?.selector,
+    'MCP browser_hover missing selector property',
+  );
+  assert(
+    hoverTool.inputSchema?.properties?.serviceName,
+    'MCP browser_hover missing serviceName trace field',
+  );
+  assert(
+    hoverTool.inputSchema?.properties?.agentName,
+    'MCP browser_hover missing agentName trace field',
+  );
+  assert(
+    hoverTool.inputSchema?.properties?.taskName,
+    'MCP browser_hover missing taskName trace field',
+  );
+  const selectTool = tools.tools?.find((tool) => tool.name === 'browser_select');
+  assert(selectTool, 'MCP browser_select tool missing');
+  assert(
+    selectTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_select missing selector requirement',
+  );
+  assert(
+    selectTool.inputSchema?.required?.includes('values'),
+    'MCP browser_select missing values requirement',
+  );
+  assert(
+    selectTool.inputSchema?.properties?.values,
+    'MCP browser_select missing values property',
+  );
+  assert(
+    selectTool.inputSchema?.properties?.serviceName,
+    'MCP browser_select missing serviceName trace field',
+  );
+  assert(
+    selectTool.inputSchema?.properties?.agentName,
+    'MCP browser_select missing agentName trace field',
+  );
+  assert(
+    selectTool.inputSchema?.properties?.taskName,
+    'MCP browser_select missing taskName trace field',
+  );
+  const getTextTool = tools.tools?.find((tool) => tool.name === 'browser_get_text');
+  assert(getTextTool, 'MCP browser_get_text tool missing');
+  assert(
+    getTextTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_text missing selector requirement',
+  );
+  assert(
+    getTextTool.inputSchema?.properties?.selector,
+    'MCP browser_get_text missing selector property',
+  );
+  assert(
+    getTextTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_text missing serviceName trace field',
+  );
+  assert(
+    getTextTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_text missing agentName trace field',
+  );
+  assert(
+    getTextTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_text missing taskName trace field',
+  );
+  const getValueTool = tools.tools?.find((tool) => tool.name === 'browser_get_value');
+  assert(getValueTool, 'MCP browser_get_value tool missing');
+  assert(
+    getValueTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_value missing selector requirement',
+  );
+  assert(
+    getValueTool.inputSchema?.properties?.selector,
+    'MCP browser_get_value missing selector property',
+  );
+  assert(
+    getValueTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_value missing serviceName trace field',
+  );
+  assert(
+    getValueTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_value missing agentName trace field',
+  );
+  assert(
+    getValueTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_value missing taskName trace field',
+  );
+  const getAttributeTool = tools.tools?.find((tool) => tool.name === 'browser_get_attribute');
+  assert(getAttributeTool, 'MCP browser_get_attribute tool missing');
+  assert(
+    getAttributeTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_attribute missing selector requirement',
+  );
+  assert(
+    getAttributeTool.inputSchema?.required?.includes('attribute'),
+    'MCP browser_get_attribute missing attribute requirement',
+  );
+  assert(
+    getAttributeTool.inputSchema?.properties?.attribute,
+    'MCP browser_get_attribute missing attribute property',
+  );
+  assert(
+    getAttributeTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_attribute missing serviceName trace field',
+  );
+  assert(
+    getAttributeTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_attribute missing agentName trace field',
+  );
+  assert(
+    getAttributeTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_attribute missing taskName trace field',
+  );
+  const getHtmlTool = tools.tools?.find((tool) => tool.name === 'browser_get_html');
+  assert(getHtmlTool, 'MCP browser_get_html tool missing');
+  assert(
+    getHtmlTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_html missing selector requirement',
+  );
+  assert(
+    getHtmlTool.inputSchema?.properties?.selector,
+    'MCP browser_get_html missing selector property',
+  );
+  assert(
+    getHtmlTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_html missing serviceName trace field',
+  );
+  assert(
+    getHtmlTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_html missing agentName trace field',
+  );
+  assert(
+    getHtmlTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_html missing taskName trace field',
+  );
+  const getStylesTool = tools.tools?.find((tool) => tool.name === 'browser_get_styles');
+  assert(getStylesTool, 'MCP browser_get_styles tool missing');
+  assert(
+    getStylesTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_styles missing selector requirement',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.selector,
+    'MCP browser_get_styles missing selector property',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.properties,
+    'MCP browser_get_styles missing properties option',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_styles missing serviceName trace field',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_styles missing agentName trace field',
+  );
+  assert(
+    getStylesTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_styles missing taskName trace field',
+  );
+  const countTool = tools.tools?.find((tool) => tool.name === 'browser_count');
+  assert(countTool, 'MCP browser_count tool missing');
+  assert(
+    countTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_count missing selector requirement',
+  );
+  assert(countTool.inputSchema?.properties?.selector, 'MCP browser_count missing selector property');
+  assert(
+    countTool.inputSchema?.properties?.serviceName,
+    'MCP browser_count missing serviceName trace field',
+  );
+  assert(
+    countTool.inputSchema?.properties?.agentName,
+    'MCP browser_count missing agentName trace field',
+  );
+  assert(
+    countTool.inputSchema?.properties?.taskName,
+    'MCP browser_count missing taskName trace field',
+  );
+  const getBoxTool = tools.tools?.find((tool) => tool.name === 'browser_get_box');
+  assert(getBoxTool, 'MCP browser_get_box tool missing');
+  assert(
+    getBoxTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_get_box missing selector requirement',
+  );
+  assert(
+    getBoxTool.inputSchema?.properties?.selector,
+    'MCP browser_get_box missing selector property',
+  );
+  assert(
+    getBoxTool.inputSchema?.properties?.serviceName,
+    'MCP browser_get_box missing serviceName trace field',
+  );
+  assert(
+    getBoxTool.inputSchema?.properties?.agentName,
+    'MCP browser_get_box missing agentName trace field',
+  );
+  assert(
+    getBoxTool.inputSchema?.properties?.taskName,
+    'MCP browser_get_box missing taskName trace field',
+  );
+  const isVisibleTool = tools.tools?.find((tool) => tool.name === 'browser_is_visible');
+  assert(isVisibleTool, 'MCP browser_is_visible tool missing');
+  assert(
+    isVisibleTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_is_visible missing selector requirement',
+  );
+  assert(
+    isVisibleTool.inputSchema?.properties?.selector,
+    'MCP browser_is_visible missing selector property',
+  );
+  assert(
+    isVisibleTool.inputSchema?.properties?.serviceName,
+    'MCP browser_is_visible missing serviceName trace field',
+  );
+  assert(
+    isVisibleTool.inputSchema?.properties?.agentName,
+    'MCP browser_is_visible missing agentName trace field',
+  );
+  assert(
+    isVisibleTool.inputSchema?.properties?.taskName,
+    'MCP browser_is_visible missing taskName trace field',
+  );
+  const isEnabledTool = tools.tools?.find((tool) => tool.name === 'browser_is_enabled');
+  assert(isEnabledTool, 'MCP browser_is_enabled tool missing');
+  assert(
+    isEnabledTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_is_enabled missing selector requirement',
+  );
+  assert(
+    isEnabledTool.inputSchema?.properties?.selector,
+    'MCP browser_is_enabled missing selector property',
+  );
+  assert(
+    isEnabledTool.inputSchema?.properties?.serviceName,
+    'MCP browser_is_enabled missing serviceName trace field',
+  );
+  assert(
+    isEnabledTool.inputSchema?.properties?.agentName,
+    'MCP browser_is_enabled missing agentName trace field',
+  );
+  assert(
+    isEnabledTool.inputSchema?.properties?.taskName,
+    'MCP browser_is_enabled missing taskName trace field',
+  );
+  const checkTool = tools.tools?.find((tool) => tool.name === 'browser_check');
+  assert(checkTool, 'MCP browser_check tool missing');
+  assert(
+    checkTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_check missing selector requirement',
+  );
+  assert(
+    checkTool.inputSchema?.properties?.selector,
+    'MCP browser_check missing selector property',
+  );
+  assert(
+    checkTool.inputSchema?.properties?.serviceName,
+    'MCP browser_check missing serviceName trace field',
+  );
+  assert(
+    checkTool.inputSchema?.properties?.agentName,
+    'MCP browser_check missing agentName trace field',
+  );
+  assert(
+    checkTool.inputSchema?.properties?.taskName,
+    'MCP browser_check missing taskName trace field',
+  );
+  const isCheckedTool = tools.tools?.find((tool) => tool.name === 'browser_is_checked');
+  assert(isCheckedTool, 'MCP browser_is_checked tool missing');
+  assert(
+    isCheckedTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_is_checked missing selector requirement',
+  );
+  assert(
+    isCheckedTool.inputSchema?.properties?.selector,
+    'MCP browser_is_checked missing selector property',
+  );
+  assert(
+    isCheckedTool.inputSchema?.properties?.serviceName,
+    'MCP browser_is_checked missing serviceName trace field',
+  );
+  assert(
+    isCheckedTool.inputSchema?.properties?.agentName,
+    'MCP browser_is_checked missing agentName trace field',
+  );
+  assert(
+    isCheckedTool.inputSchema?.properties?.taskName,
+    'MCP browser_is_checked missing taskName trace field',
+  );
+  const uncheckTool = tools.tools?.find((tool) => tool.name === 'browser_uncheck');
+  assert(uncheckTool, 'MCP browser_uncheck tool missing');
+  assert(
+    uncheckTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_uncheck missing selector requirement',
+  );
+  assert(
+    uncheckTool.inputSchema?.properties?.selector,
+    'MCP browser_uncheck missing selector property',
+  );
+  assert(
+    uncheckTool.inputSchema?.properties?.serviceName,
+    'MCP browser_uncheck missing serviceName trace field',
+  );
+  assert(
+    uncheckTool.inputSchema?.properties?.agentName,
+    'MCP browser_uncheck missing agentName trace field',
+  );
+  assert(
+    uncheckTool.inputSchema?.properties?.taskName,
+    'MCP browser_uncheck missing taskName trace field',
+  );
+  const scrollTool = tools.tools?.find((tool) => tool.name === 'browser_scroll');
+  assert(scrollTool, 'MCP browser_scroll tool missing');
+  assert(
+    scrollTool.inputSchema?.properties?.direction,
+    'MCP browser_scroll missing direction property',
+  );
+  assert(scrollTool.inputSchema?.properties?.amount, 'MCP browser_scroll missing amount property');
+  assert(scrollTool.inputSchema?.properties?.deltaX, 'MCP browser_scroll missing deltaX property');
+  assert(scrollTool.inputSchema?.properties?.deltaY, 'MCP browser_scroll missing deltaY property');
+  assert(
+    scrollTool.inputSchema?.properties?.selector,
+    'MCP browser_scroll missing selector property',
+  );
+  assert(
+    scrollTool.inputSchema?.properties?.serviceName,
+    'MCP browser_scroll missing serviceName trace field',
+  );
+  assert(
+    scrollTool.inputSchema?.properties?.agentName,
+    'MCP browser_scroll missing agentName trace field',
+  );
+  assert(
+    scrollTool.inputSchema?.properties?.taskName,
+    'MCP browser_scroll missing taskName trace field',
+  );
+  const scrollIntoViewTool = tools.tools?.find(
+    (tool) => tool.name === 'browser_scroll_into_view',
+  );
+  assert(scrollIntoViewTool, 'MCP browser_scroll_into_view tool missing');
+  assert(
+    scrollIntoViewTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_scroll_into_view missing selector requirement',
+  );
+  assert(
+    scrollIntoViewTool.inputSchema?.properties?.selector,
+    'MCP browser_scroll_into_view missing selector property',
+  );
+  assert(
+    scrollIntoViewTool.inputSchema?.properties?.serviceName,
+    'MCP browser_scroll_into_view missing serviceName trace field',
+  );
+  assert(
+    scrollIntoViewTool.inputSchema?.properties?.agentName,
+    'MCP browser_scroll_into_view missing agentName trace field',
+  );
+  assert(
+    scrollIntoViewTool.inputSchema?.properties?.taskName,
+    'MCP browser_scroll_into_view missing taskName trace field',
+  );
+  const focusTool = tools.tools?.find((tool) => tool.name === 'browser_focus');
+  assert(focusTool, 'MCP browser_focus tool missing');
+  assert(
+    focusTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_focus missing selector requirement',
+  );
+  assert(
+    focusTool.inputSchema?.properties?.selector,
+    'MCP browser_focus missing selector property',
+  );
+  assert(
+    focusTool.inputSchema?.properties?.serviceName,
+    'MCP browser_focus missing serviceName trace field',
+  );
+  assert(
+    focusTool.inputSchema?.properties?.agentName,
+    'MCP browser_focus missing agentName trace field',
+  );
+  assert(
+    focusTool.inputSchema?.properties?.taskName,
+    'MCP browser_focus missing taskName trace field',
+  );
+  const clearTool = tools.tools?.find((tool) => tool.name === 'browser_clear');
+  assert(clearTool, 'MCP browser_clear tool missing');
+  assert(
+    clearTool.inputSchema?.required?.includes('selector'),
+    'MCP browser_clear missing selector requirement',
+  );
+  assert(
+    clearTool.inputSchema?.properties?.selector,
+    'MCP browser_clear missing selector property',
+  );
+  assert(
+    clearTool.inputSchema?.properties?.serviceName,
+    'MCP browser_clear missing serviceName trace field',
+  );
+  assert(
+    clearTool.inputSchema?.properties?.agentName,
+    'MCP browser_clear missing agentName trace field',
+  );
+  assert(
+    clearTool.inputSchema?.properties?.taskName,
+    'MCP browser_clear missing taskName trace field',
+  );
+  const traceTool = tools.tools?.find((tool) => tool.name === 'service_trace');
+  assert(traceTool, 'MCP service_trace tool missing');
+  assert(
+    traceTool.inputSchema?.properties?.serviceName,
+    'MCP service_trace missing serviceName filter',
+  );
+  assert(
+    traceTool.inputSchema?.properties?.taskName,
+    'MCP service_trace missing taskName filter',
+  );
+  assert(
+    traceTool.inputSchema?.properties?.since,
+    'MCP service_trace missing since filter',
+  );
+  const incidentsTool = tools.tools?.find((tool) => tool.name === 'service_incidents');
+  assert(incidentsTool, 'MCP service_incidents tool missing');
+  assert(
+    incidentsTool.inputSchema?.properties?.severity?.enum?.includes('critical'),
+    'MCP service_incidents missing critical severity filter',
+  );
+  assert(
+    incidentsTool.inputSchema?.properties?.escalation?.enum?.includes('os_degraded_possible'),
+    'MCP service_incidents missing os_degraded_possible escalation filter',
+  );
+  assert(
+    incidentsTool.inputSchema?.properties?.serviceName,
+    'MCP service_incidents missing serviceName filter',
+  );
+
+  const filteredIncidents = await send('tools/call', {
+    name: 'service_incidents',
+    arguments: {
+      severity: 'critical',
+      escalation: 'os_degraded_possible',
+      serviceName: 'JournalDownloader',
+      taskName: 'probeACSwebsite',
+    },
+  });
+  const filteredIncidentPayload = JSON.parse(filteredIncidents.content?.[0]?.text || '{}');
+  assert(
+    filteredIncidentPayload.tool === 'service_incidents',
+    'MCP service_incidents payload tool mismatch',
+  );
+  assert(
+    filteredIncidentPayload.success === true,
+    'MCP service_incidents should succeed on fresh state',
+  );
+  assert(
+    Array.isArray(filteredIncidentPayload.data?.incidents),
+    'MCP service_incidents missing incidents array',
+  );
+  assert(
+    filteredIncidentPayload.data?.filters?.severity === 'critical',
+    'MCP service_incidents did not retain severity filter',
+  );
+  assert(
+    filteredIncidentPayload.data?.filters?.escalation === 'os_degraded_possible',
+    'MCP service_incidents did not retain escalation filter',
+  );
+
+  const trace = await send('tools/call', {
+    name: 'service_trace',
+    arguments: { serviceName: 'JournalDownloader', taskName: 'probeACSwebsite' },
+  });
+  const tracePayload = JSON.parse(trace.content?.[0]?.text || '{}');
+  assert(tracePayload.tool === 'service_trace', 'MCP service_trace payload tool mismatch');
+  assert(tracePayload.success === true, 'MCP service_trace should succeed on fresh state');
+  assert(Array.isArray(tracePayload.data?.events), 'MCP service_trace missing events array');
+  assert(Array.isArray(tracePayload.data?.jobs), 'MCP service_trace missing jobs array');
+  assert(Array.isArray(tracePayload.data?.incidents), 'MCP service_trace missing incidents array');
+  assert(Array.isArray(tracePayload.data?.activity), 'MCP service_trace missing activity array');
+
+  const incidents = await send('resources/read', { uri: 'agent-browser://incidents' });
+  const incidentContent = incidents.contents?.[0];
+  assert(incidentContent?.mimeType === 'application/json', 'MCP incident content MIME mismatch');
+  assert(incidentContent?.uri === 'agent-browser://incidents', 'MCP incident content URI mismatch');
+  const incidentPayload = JSON.parse(incidentContent.text);
+  assert(Array.isArray(incidentPayload.incidents), 'MCP incident payload missing incidents array');
+  assert(incidentPayload.count === 0, 'Fresh MCP smoke state should have zero incidents');
+
+  const profiles = await send('resources/read', { uri: 'agent-browser://profiles' });
+  const profilePayload = JSON.parse(profiles.contents?.[0]?.text || '{}');
+  assert(Array.isArray(profilePayload.profiles), 'MCP profiles payload missing profiles array');
+  assert(profilePayload.count === 0, 'Fresh MCP smoke state should have zero profiles');
+
+  const sessions = await send('resources/read', { uri: 'agent-browser://sessions' });
+  const sessionPayload = JSON.parse(sessions.contents?.[0]?.text || '{}');
+  assert(Array.isArray(sessionPayload.sessions), 'MCP sessions payload missing sessions array');
+  assert(sessionPayload.count === 0, 'Fresh MCP smoke state should have zero sessions');
+
+  const browsers = await send('resources/read', { uri: 'agent-browser://browsers' });
+  const browserPayload = JSON.parse(browsers.contents?.[0]?.text || '{}');
+  assert(Array.isArray(browserPayload.browsers), 'MCP browsers payload missing browsers array');
+  assert(browserPayload.count === 0, 'Fresh MCP smoke state should have zero browsers');
+
+  const tabs = await send('resources/read', { uri: 'agent-browser://tabs' });
+  const tabPayload = JSON.parse(tabs.contents?.[0]?.text || '{}');
+  assert(Array.isArray(tabPayload.tabs), 'MCP tabs payload missing tabs array');
+  assert(tabPayload.count === 0, 'Fresh MCP smoke state should have zero tabs');
+
+  const sitePolicies = await send('resources/read', { uri: 'agent-browser://site-policies' });
+  const sitePolicyPayload = JSON.parse(sitePolicies.contents?.[0]?.text || '{}');
+  assert(
+    Array.isArray(sitePolicyPayload.sitePolicies),
+    'MCP site policies payload missing sitePolicies array',
+  );
+  assert(sitePolicyPayload.count === 0, 'Fresh MCP smoke state should have zero site policies');
+
+  const providers = await send('resources/read', { uri: 'agent-browser://providers' });
+  const providerPayload = JSON.parse(providers.contents?.[0]?.text || '{}');
+  assert(Array.isArray(providerPayload.providers), 'MCP providers payload missing providers array');
+  assert(providerPayload.count === 0, 'Fresh MCP smoke state should have zero providers');
+
+  const challenges = await send('resources/read', { uri: 'agent-browser://challenges' });
+  const challengePayload = JSON.parse(challenges.contents?.[0]?.text || '{}');
+  assert(
+    Array.isArray(challengePayload.challenges),
+    'MCP challenges payload missing challenges array',
+  );
+  assert(challengePayload.count === 0, 'Fresh MCP smoke state should have zero challenges');
+
+  const jobs = await send('resources/read', { uri: 'agent-browser://jobs' });
+  const jobPayload = JSON.parse(jobs.contents?.[0]?.text || '{}');
+  assert(Array.isArray(jobPayload.jobs), 'MCP jobs payload missing jobs array');
+  assert(jobPayload.count === 0, 'Fresh MCP smoke state should have zero jobs');
+
+  const events = await send('resources/read', { uri: 'agent-browser://events' });
+  const eventPayload = JSON.parse(events.contents?.[0]?.text || '{}');
+  assert(Array.isArray(eventPayload.events), 'MCP events payload missing events array');
+  assert(eventPayload.count === 0, 'Fresh MCP smoke state should have zero events');
+
+  clearTimeout(timeout);
+  mcp.close();
+  context.cleanupTempHome();
+  console.log('MCP stdio smoke passed');
+} catch (err) {
+  fail(err.message);
+}

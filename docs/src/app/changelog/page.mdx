@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.26.0
+
+<p className="text-[#888] text-sm">April 30, 2026</p>
+
+### New Features
+
+- **Service mode control plane** - Added persistent service state for profiles, sessions, browsers, tabs, jobs, events, incidents, site policies, providers, and challenges, with CLI, HTTP, MCP, and dashboard access for long-lived browser automation.
+- **API and MCP browser-control parity** - Added named HTTP browser-control wrappers and typed MCP tools for navigation, tabs, page state, environment emulation, requests, files, HAR capture, routing, element reads, and interactions.
+- **Browser health and recovery** - Added service-owned browser reconciliation, crash and disconnect detection, recovery traces, retry policy, operator retry overrides, and shutdown remedy classification.
+
+### Improvements
+
+- **Service traceability** - Jobs, events, profiles, sessions, and browser records carry service, agent, and task context with naming warnings for anonymous clients.
+- **Release gates** - Added API/MCP parity and service-health validation gates for pre-merge and release preparation.
+
+### Documentation
+
+- **Service mode docs** - Added dedicated service-mode documentation and updated the docs site, README, and agent skill guidance with the release validation path.
+
+---
+
 ## v0.25.3
 
 <p className="text-[#888] text-sm">April 7, 2026</p>

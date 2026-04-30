@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-job-record.v1.schema.json",
+  "title": "agent-browser service job record",
+  "description": "Stable API shape for service job records returned by CLI JSON, HTTP service APIs, MCP resources, and service traces.",
+  "type": "object",
+  "required": [
+    "id",
+    "action",
+    "serviceName",
+    "agentName",
+    "taskName",
+    "namingWarnings",
+    "hasNamingWarning",
+    "target",
+    "owner",
+    "state",
+    "priority",
+    "submittedAt",
+    "startedAt",
+    "completedAt",
+    "timeoutMs",
+    "result",
+    "error"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "serviceName": {
+      "type": ["string", "null"]
+    },
+    "agentName": {
+      "type": ["string", "null"]
+    },
+    "taskName": {
+      "type": ["string", "null"]
+    },
+    "namingWarnings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "missing_service_name",
+          "missing_agent_name",
+          "missing_task_name"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "hasNamingWarning": {
+      "type": "boolean",
+      "description": "True when namingWarnings is non-empty."
+    },
+    "target": {
+      "oneOf": [
+        {
+          "const": "service"
+        },
+        {
+          "type": "object"
+        }
+      ]
+    },
+    "owner": {},
+    "state": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "timed_out"
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "normal",
+        "lifecycle"
+      ]
+    },
+    "submittedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "startedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "timeoutMs": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "result": {},
+    "error": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

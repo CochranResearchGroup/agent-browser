@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-provider-record.v1.schema.json",
+  "title": "agent-browser service provider record",
+  "description": "Stable API shape for service provider records returned by HTTP service collection APIs and MCP resources.",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "displayName",
+    "enabled",
+    "configRef",
+    "capabilities"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "browser_credentials",
+        "password_manager",
+        "totp",
+        "sms",
+        "email",
+        "manual_approval",
+        "intelligence",
+        "captcha"
+      ]
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "configRef": {
+      "type": ["string", "null"]
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "password_fill",
+          "passkey",
+          "totp_code",
+          "sms_code",
+          "email_code",
+          "visual_reasoning",
+          "captcha_solve",
+          "human_approval"
+        ]
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": true
+}

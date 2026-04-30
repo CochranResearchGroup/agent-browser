@@ -53,6 +53,29 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
       }
     }
   },
+  "service": {
+    "reconcileIntervalMs": 60000,
+    "jobTimeoutMs": 120000,
+    "profiles": {
+      "work": {
+        "name": "Work",
+        "allocation": "per_service",
+        "keyring": "basic_password_store",
+        "sharedServiceIds": ["JournalDownloader"],
+        "manualLoginPreferred": true
+      }
+    },
+    "sessions": {
+      "journal-session": {
+        "serviceName": "JournalDownloader",
+        "agentName": "article-probe-agent",
+        "taskName": "probeACSwebsite",
+        "profileId": "work",
+        "lease": "exclusive",
+        "cleanup": "close_tabs"
+      }
+    }
+  },
   "userAgent": "my-agent/1.0",
   "ignoreHttpsErrors": true
 }
@@ -71,6 +94,17 @@ managed runtime-profile browser instead of shutting it down. Set
 <code>preferences.defaultViewport</code> to a <code>WIDTHxHEIGHT</code> value,
 such as <code>960x640</code>, when a runtime profile should resize the browser
 content area after launch and before the requested command runs.
+
+The <code>service.profiles</code> and <code>service.sessions</code> maps define
+service control-plane metadata for profile allocation, keyring posture, caller
+ownership, profile binding, lease state, and cleanup policy. These records are
+exposed through service status, MCP resources, and the HTTP service APIs.
+Current browser launch behavior still comes from <code>runtimeProfiles</code>,
+<code>--runtime-profile</code>, <code>--profile</code>, and existing launch
+flags. Launches that select a runtime profile or custom profile path bind the
+active browser record to a service profile. When commands include
+<code>serviceName</code>, <code>agentName</code>, or <code>taskName</code>, the
+active session record also captures that caller context for traceability.
 
 Use <code>agent-browser runtime list</code> to inspect the merged runtime-profile
 view from config plus on-disk managed profiles. If a profile sets
@@ -123,6 +157,11 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>confirmActions</code></td><td><code>--confirm-actions</code></td><td>string</td></tr>
     <tr><td><code>confirmInteractive</code></td><td><code>--confirm-interactive</code></td><td>boolean</td></tr>
     <tr><td><code>engine</code></td><td><code>--engine</code></td><td>string (<code>chrome</code>, <code>lightpanda</code>)</td></tr>
+    <tr><td><code>service.reconcileIntervalMs</code></td><td><code>--service-reconcile-interval</code></td><td>number</td></tr>
+    <tr><td><code>service.jobTimeoutMs</code></td><td><code>--service-job-timeout</code></td><td>number</td></tr>
+    <tr><td><code>service.recoveryRetryBudget</code></td><td><code>--service-recovery-retry-budget</code></td><td>number</td></tr>
+    <tr><td><code>service.recoveryBaseBackoffMs</code></td><td><code>--service-recovery-base-backoff</code></td><td>number</td></tr>
+    <tr><td><code>service.recoveryMaxBackoffMs</code></td><td><code>--service-recovery-max-backoff</code></td><td>number</td></tr>
     <tr><td><code>noAutoDialog</code></td><td><code>--no-auto-dialog</code></td><td>boolean</td></tr>
     <tr><td><code>headers</code></td><td><code>--headers</code></td><td>string (JSON)</td></tr>
   </tbody>
@@ -225,6 +264,10 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_RUNTIME_PROFILE</code></td><td>Managed runtime profile name used for persistent browser state.</td><td><code>default</code></td></tr>
     <tr><td><code>AGENT_BROWSER_STREAM_PORT</code></td><td>Override the WebSocket streaming port. By default, an OS-assigned port is used. Set this to bind to a specific port (e.g., <code>9223</code>).</td><td>OS-assigned</td></tr>
     <tr><td><code>AGENT_BROWSER_IDLE_TIMEOUT_MS</code></td><td>Auto-shutdown the daemon after N ms of inactivity (no commands received). Useful for ephemeral environments.</td><td>(disabled)</td></tr>
+    <tr><td><code>AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS</code></td><td>Override the persisted service browser-health reconciliation interval in milliseconds. Set <code>0</code> to disable the daemon background loop.</td><td><code>60000</code></td></tr>
+    <tr><td><code>AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET</code></td><td>Browser recovery attempts before faulting. Recovery traces report the active source in <code>details.policySource.retryBudget</code>.</td><td><code>3</code></td></tr>
+    <tr><td><code>AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS</code></td><td>Browser recovery backoff base delay in milliseconds. Recovery traces report the active source in <code>details.policySource.baseBackoffMs</code>.</td><td><code>1000</code></td></tr>
+    <tr><td><code>AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS</code></td><td>Browser recovery backoff ceiling in milliseconds. Recovery traces report the active source in <code>details.policySource.maxBackoffMs</code>.</td><td><code>30000</code></td></tr>
     <tr><td><code>AGENT_BROWSER_IOS_DEVICE</code></td><td>Default iOS device name for the <code>ios</code> provider.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_IOS_UDID</code></td><td>Default iOS device UDID for the <code>ios</code> provider.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_ENV_FILE</code></td><td>Optional dotenv file loaded before startup for agent-browser secrets.</td><td><code>~/.agent-browser/.env</code> if present</td></tr>

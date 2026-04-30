@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-incident-record.v1.schema.json",
+  "title": "agent-browser service incident record",
+  "description": "Stable API shape for service incident records returned by CLI JSON, HTTP service APIs, MCP resources, and service traces.",
+  "type": "object",
+  "required": [
+    "id",
+    "browserId",
+    "label",
+    "state",
+    "severity",
+    "escalation",
+    "recommendedAction",
+    "acknowledgedAt",
+    "acknowledgedBy",
+    "acknowledgementNote",
+    "resolvedAt",
+    "resolvedBy",
+    "resolutionNote",
+    "latestTimestamp",
+    "latestMessage",
+    "latestKind",
+    "currentHealth",
+    "eventIds",
+    "jobIds"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "browserId": {
+      "type": ["string", "null"]
+    },
+    "label": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "active",
+        "recovered",
+        "service"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ]
+    },
+    "escalation": {
+      "type": "string",
+      "enum": [
+        "none",
+        "browser_degraded",
+        "browser_recovery",
+        "job_attention",
+        "service_triage",
+        "os_degraded_possible"
+      ]
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "acknowledgedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "acknowledgedBy": {
+      "type": ["string", "null"]
+    },
+    "acknowledgementNote": {
+      "type": ["string", "null"]
+    },
+    "resolvedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "resolvedBy": {
+      "type": ["string", "null"]
+    },
+    "resolutionNote": {
+      "type": ["string", "null"]
+    },
+    "latestTimestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "latestMessage": {
+      "type": "string"
+    },
+    "latestKind": {
+      "type": "string"
+    },
+    "currentHealth": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "not_started",
+            "launching",
+            "ready",
+            "degraded",
+            "unreachable",
+            "process_exited",
+            "cdp_disconnected",
+            "reconnecting",
+            "closing",
+            "faulted"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "eventIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "jobIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

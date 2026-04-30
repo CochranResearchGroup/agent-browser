@@ -179,7 +179,7 @@ fn load_daemon_auth_token(session: &str) -> Result<String, String> {
         .map_err(|e| format!("Failed to read daemon auth token: {}", e))
 }
 
-fn attach_daemon_auth_token(cmd: &Value, session: &str) -> Result<Value, String> {
+pub(crate) fn attach_daemon_auth_token(cmd: &Value, session: &str) -> Result<Value, String> {
     let token = load_daemon_auth_token(session)?;
     let mut authenticated = cmd.clone();
     let obj = authenticated
@@ -297,6 +297,14 @@ pub struct DaemonOptions<'a> {
     pub keychain_password: Option<&'a str>,
     pub auto_connect: bool,
     pub idle_timeout: Option<&'a str>,
+    pub service_reconcile_interval_ms: Option<u64>,
+    pub service_job_timeout_ms: Option<u64>,
+    pub service_recovery_retry_budget: u64,
+    pub service_recovery_base_backoff_ms: u64,
+    pub service_recovery_max_backoff_ms: u64,
+    pub service_recovery_retry_budget_source: &'a str,
+    pub service_recovery_base_backoff_ms_source: &'a str,
+    pub service_recovery_max_backoff_ms_source: &'a str,
     pub default_timeout: Option<u64>,
     pub cdp: Option<&'a str>,
     pub runtime_attach_managed: bool,
@@ -391,6 +399,39 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     if let Some(idle) = opts.idle_timeout {
         cmd.env("AGENT_BROWSER_IDLE_TIMEOUT_MS", idle);
     }
+    if let Some(ms) = opts.service_reconcile_interval_ms {
+        cmd.env(
+            "AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS",
+            ms.to_string(),
+        );
+    }
+    if let Some(ms) = opts.service_job_timeout_ms {
+        cmd.env("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS", ms.to_string());
+    }
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
+        opts.service_recovery_retry_budget.to_string(),
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
+        opts.service_recovery_base_backoff_ms.to_string(),
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
+        opts.service_recovery_max_backoff_ms.to_string(),
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET_SOURCE",
+        opts.service_recovery_retry_budget_source,
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS_SOURCE",
+        opts.service_recovery_base_backoff_ms_source,
+    );
+    cmd.env(
+        "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS_SOURCE",
+        opts.service_recovery_max_backoff_ms_source,
+    );
     if let Some(timeout) = opts.default_timeout {
         cmd.env("AGENT_BROWSER_DEFAULT_TIMEOUT", timeout.to_string());
     }
@@ -990,6 +1031,14 @@ mod tests {
             keychain_password: Some("secret"),
             auto_connect: false,
             idle_timeout: None,
+            service_reconcile_interval_ms: Some(1234),
+            service_job_timeout_ms: Some(5678),
+            service_recovery_retry_budget: 9,
+            service_recovery_base_backoff_ms: 250,
+            service_recovery_max_backoff_ms: 10_000,
+            service_recovery_retry_budget_source: "cli",
+            service_recovery_base_backoff_ms_source: "cli",
+            service_recovery_max_backoff_ms_source: "cli",
             default_timeout: None,
             cdp: None,
             runtime_attach_managed: false,
@@ -1012,6 +1061,32 @@ mod tests {
             .any(|(k, v)| { k == "AGENT_BROWSER_USE_REAL_KEYCHAIN" && v.as_deref() == Some("1") }));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_KEYCHAIN_PASSWORD" && v.as_deref() == Some("secret")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS" && v.as_deref() == Some("1234")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS" && v.as_deref() == Some("5678")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET" && v.as_deref() == Some("9")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS" && v.as_deref() == Some("250")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS" && v.as_deref() == Some("10000")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET_SOURCE" && v.as_deref() == Some("cli")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS_SOURCE"
+                && v.as_deref() == Some("cli")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS_SOURCE"
+                && v.as_deref() == Some("cli")
         }));
     }
 

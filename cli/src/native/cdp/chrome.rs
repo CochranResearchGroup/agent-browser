@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+
 use crate::runtime_profile::{
     read_devtools_port as read_runtime_devtools_port, resolve_profile, write_runtime_state,
     RuntimeState,
@@ -30,20 +33,89 @@ pub struct ChromeProcess {
     pgid: Option<i32>,
 }
 
+/// Result of waiting for Chrome to exit, including whether force kill was needed.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProcessShutdownOutcome {
+    pub graceful_exit: bool,
+    pub force_kill_attempted: bool,
+    pub force_kill_succeeded: bool,
+    pub errors: Vec<String>,
+}
+
+/// Non-blocking child-process exit evidence captured from `try_wait()`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessExitObservation {
+    pub pid: u32,
+    pub exit_code: Option<i32>,
+    #[cfg(unix)]
+    pub signal: Option<i32>,
+    pub poll_error: Option<String>,
+}
+
 impl ChromeProcess {
     pub fn kill(&mut self) {
-        let _ = self.child.kill();
+        let _ = self.kill_with_outcome();
+    }
+
+    pub fn kill_with_outcome(&mut self) -> ProcessShutdownOutcome {
+        let mut outcome = ProcessShutdownOutcome {
+            force_kill_attempted: true,
+            ..ProcessShutdownOutcome::default()
+        };
+
+        let child_kill_ok = match self.child.kill() {
+            Ok(()) => true,
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::InvalidInput {
+                    true
+                } else {
+                    outcome.errors.push(format!(
+                        "Failed to force kill Chrome child process: {}",
+                        err
+                    ));
+                    false
+                }
+            }
+        };
         // On Unix, kill the entire process group to ensure Chrome helper
         // processes (GPU, renderer, utility, crashpad) are also terminated.
         // This prevents orphaned Chrome processes from blocking the user's
         // normal Chrome (issue #1113).
         #[cfg(unix)]
-        if let Some(pgid) = self.pgid {
-            unsafe {
-                libc::kill(-pgid, libc::SIGKILL);
+        let process_group_kill_ok = if let Some(pgid) = self.pgid {
+            let rc = unsafe { libc::kill(-pgid, libc::SIGKILL) };
+            if rc == 0 {
+                true
+            } else {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::ESRCH) {
+                    true
+                } else {
+                    outcome.errors.push(format!(
+                        "Failed to force kill Chrome process group {}: {}",
+                        pgid, err
+                    ));
+                    false
+                }
             }
-        }
-        let _ = self.child.wait();
+        } else {
+            true
+        };
+        #[cfg(not(unix))]
+        let process_group_kill_ok = true;
+
+        let wait_ok = match self.child.wait() {
+            Ok(_) => true,
+            Err(err) => {
+                outcome.errors.push(format!(
+                    "Failed to wait for Chrome process after force kill: {}",
+                    err
+                ));
+                false
+            }
+        };
+        outcome.force_kill_succeeded = child_kill_ok && process_group_kill_ok && wait_ok;
+        outcome
     }
 
     /// Returns the OS process ID of the Chrome child process.
@@ -59,28 +131,66 @@ impl ChromeProcess {
         self.runtime_profile.as_deref()
     }
 
+    /// Non-blocking check whether Chrome has exited and capture observable exit evidence.
+    pub fn poll_exit(&mut self) -> Option<ProcessExitObservation> {
+        let pid = self.child.id();
+        match self.child.try_wait() {
+            Ok(Some(status)) => Some(ProcessExitObservation {
+                pid,
+                exit_code: status.code(),
+                #[cfg(unix)]
+                signal: status.signal(),
+                poll_error: None,
+            }),
+            Ok(None) => None,
+            Err(err) => Some(ProcessExitObservation {
+                pid,
+                exit_code: None,
+                #[cfg(unix)]
+                signal: None,
+                poll_error: Some(err.to_string()),
+            }),
+        }
+    }
+
     /// Non-blocking check whether Chrome has exited.
-    /// Returns `true` if the process has exited (and reaps it), `false` if still running.
+    /// Returns `true` if the process has exited, `false` if still running.
     pub fn has_exited(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(Some(_)) | Err(_))
+        self.poll_exit().is_some()
     }
 
     /// Wait for Chrome to exit on its own (after Browser.close CDP command),
     /// falling back to kill() if it doesn't exit within the timeout.
     /// This allows Chrome to flush cookies and other state to the user-data-dir.
-    pub fn wait_or_kill(&mut self, timeout: Duration) {
+    pub fn wait_or_kill(&mut self, timeout: Duration) -> ProcessShutdownOutcome {
         let start = std::time::Instant::now();
         let poll_interval = Duration::from_millis(50);
 
         while start.elapsed() < timeout {
             match self.child.try_wait() {
-                Ok(Some(_)) => return,
+                Ok(Some(_)) => {
+                    return ProcessShutdownOutcome {
+                        graceful_exit: true,
+                        ..ProcessShutdownOutcome::default()
+                    };
+                }
                 Ok(None) => std::thread::sleep(poll_interval),
-                Err(_) => break,
+                Err(err) => {
+                    let mut outcome = ProcessShutdownOutcome::default();
+                    outcome.errors.push(format!(
+                        "Failed to poll Chrome process during shutdown: {}",
+                        err
+                    ));
+                    let force = self.kill_with_outcome();
+                    outcome.force_kill_attempted = force.force_kill_attempted;
+                    outcome.force_kill_succeeded = force.force_kill_succeeded;
+                    outcome.errors.extend(force.errors);
+                    return outcome;
+                }
             }
         }
 
-        self.kill();
+        self.kill_with_outcome()
     }
 }
 

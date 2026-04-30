@@ -5,6 +5,7 @@ mod commands;
 mod connection;
 mod flags;
 mod install;
+mod mcp;
 mod native;
 mod output;
 mod runtime_profile;
@@ -51,6 +52,122 @@ fn print_json_error(message: impl AsRef<str>) {
         "success": false,
         "error": message.as_ref(),
     }));
+}
+
+fn format_service_watch_line(resp: &connection::Response) -> String {
+    let Some(data) = resp.data.as_ref() else {
+        return "service status unavailable".to_string();
+    };
+    let control_plane = data
+        .get("control_plane")
+        .unwrap_or(&serde_json::Value::Null);
+    let service_state = data
+        .get("service_state")
+        .unwrap_or(&serde_json::Value::Null);
+    let reconciliation = service_state
+        .get("reconciliation")
+        .unwrap_or(&serde_json::Value::Null);
+
+    let worker = control_plane
+        .get("worker_state")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let browser = control_plane
+        .get("browser_health")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let queue_depth = control_plane
+        .get("queue_depth")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let last_reconciled = reconciliation
+        .get("lastReconciledAt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("never");
+    let browser_count = reconciliation
+        .get("browserCount")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let changed_browsers = reconciliation
+        .get("changedBrowsers")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let last_error = reconciliation
+        .get("lastError")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("none");
+
+    format!(
+        "worker={worker} browser={browser} queue={queue_depth} reconciled={last_reconciled} browsers={browser_count} changed={changed_browsers} error={last_error}"
+    )
+}
+
+fn run_service_watch(cmd: &serde_json::Value, flags: &Flags) -> ! {
+    let interval_ms = cmd
+        .get("watchIntervalMs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1000)
+        .max(100);
+    let count = cmd.get("watchCount").and_then(|v| v.as_u64());
+    let mut iterations = 0u64;
+    let mut current_cmd = cmd.clone();
+
+    loop {
+        let mut poll_cmd = current_cmd.clone();
+        if let Some(obj) = poll_cmd.as_object_mut() {
+            obj.insert("id".to_string(), json!(gen_id()));
+            obj.remove("watch");
+            obj.remove("watchIntervalMs");
+            obj.remove("watchCount");
+        }
+
+        match send_command(poll_cmd, &flags.session) {
+            Ok(resp) => {
+                if let Some(service_state) = resp
+                    .data
+                    .as_ref()
+                    .and_then(|data| data.get("service_state"))
+                    .cloned()
+                {
+                    current_cmd["serviceState"] = service_state;
+                }
+                if flags.json {
+                    println!("{}", serde_json::to_string(&resp).unwrap_or_default());
+                } else if resp.success {
+                    println!("{}", format_service_watch_line(&resp));
+                } else {
+                    eprintln!(
+                        "{} {}",
+                        color::error_indicator(),
+                        resp.error.as_deref().unwrap_or("service status failed")
+                    );
+                }
+                if !resp.success {
+                    exit(1);
+                }
+            }
+            Err(e) => {
+                if flags.json {
+                    print_json_error(e);
+                } else {
+                    eprintln!("{} {}", color::error_indicator(), e);
+                }
+                exit(1);
+            }
+        }
+
+        {
+            use std::io::Write as _;
+            let _ = std::io::stdout().flush();
+        }
+
+        iterations += 1;
+        if count.is_some_and(|limit| iterations >= limit) {
+            exit(0);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(interval_ms));
+    }
 }
 
 fn parse_viewport_size(value: &str) -> Result<(u32, u32), String> {
@@ -629,6 +746,20 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 keychain_password: keychain_password.as_deref(),
                 auto_connect: false,
                 idle_timeout: flags.idle_timeout.as_deref(),
+                service_reconcile_interval_ms: flags.service_reconcile_interval_ms,
+                service_job_timeout_ms: flags.service_job_timeout_ms,
+                service_recovery_retry_budget: flags.service_recovery_retry_budget,
+                service_recovery_base_backoff_ms: flags.service_recovery_base_backoff_ms,
+                service_recovery_max_backoff_ms: flags.service_recovery_max_backoff_ms,
+                service_recovery_retry_budget_source: flags
+                    .service_recovery_retry_budget_source
+                    .as_str(),
+                service_recovery_base_backoff_ms_source: flags
+                    .service_recovery_base_backoff_ms_source
+                    .as_str(),
+                service_recovery_max_backoff_ms_source: flags
+                    .service_recovery_max_backoff_ms_source
+                    .as_str(),
                 default_timeout: flags.default_timeout,
                 cdp: cdp_port_str.as_deref(),
                 runtime_attach_managed: attach_to_existing,
@@ -1243,6 +1374,10 @@ fn main() {
         return;
     }
 
+    if clean.first().map(|s| s.as_str()) == Some("mcp") {
+        exit(mcp::run_mcp_command(&clean, flags.json, &flags.session));
+    }
+
     // Handle session separately (doesn't need daemon)
     if clean.first().map(|s| s.as_str()) == Some("session") {
         run_session(&clean, &flags.session, flags.json);
@@ -1409,6 +1544,18 @@ fn main() {
         keychain_password: keychain_password.as_deref(),
         auto_connect: flags.auto_connect,
         idle_timeout: flags.idle_timeout.as_deref(),
+        service_reconcile_interval_ms: flags.service_reconcile_interval_ms,
+        service_job_timeout_ms: flags.service_job_timeout_ms,
+        service_recovery_retry_budget: flags.service_recovery_retry_budget,
+        service_recovery_base_backoff_ms: flags.service_recovery_base_backoff_ms,
+        service_recovery_max_backoff_ms: flags.service_recovery_max_backoff_ms,
+        service_recovery_retry_budget_source: flags.service_recovery_retry_budget_source.as_str(),
+        service_recovery_base_backoff_ms_source: flags
+            .service_recovery_base_backoff_ms_source
+            .as_str(),
+        service_recovery_max_backoff_ms_source: flags
+            .service_recovery_max_backoff_ms_source
+            .as_str(),
         default_timeout: flags.default_timeout,
         cdp: flags.cdp.as_deref().or(live_runtime_cdp.as_deref()),
         runtime_attach_managed: live_runtime_status.is_some(),
@@ -1931,6 +2078,12 @@ fn main() {
         });
         run_batch(&flags, bail, arg_commands);
         return;
+    }
+
+    if cmd.get("action").and_then(|v| v.as_str()) == Some("service_status")
+        && cmd.get("watch").and_then(|v| v.as_bool()).unwrap_or(false)
+    {
+        run_service_watch(&cmd, &flags);
     }
 
     let output_opts = OutputOptions::from_flags(&flags);

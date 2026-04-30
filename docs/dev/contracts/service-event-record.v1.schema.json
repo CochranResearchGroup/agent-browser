@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-event-record.v1.schema.json",
+  "title": "agent-browser service event record",
+  "description": "Stable API shape for retained service event records returned by CLI JSON, HTTP service APIs, MCP resources, and service traces.",
+  "type": "object",
+  "required": [
+    "id",
+    "timestamp",
+    "kind",
+    "message",
+    "browserId",
+    "profileId",
+    "sessionId",
+    "serviceName",
+    "agentName",
+    "taskName",
+    "previousHealth",
+    "currentHealth",
+    "details"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "reconciliation",
+        "browser_launch_recorded",
+        "browser_health_changed",
+        "browser_recovery_started",
+        "browser_recovery_override",
+        "tab_lifecycle_changed",
+        "reconciliation_error",
+        "incident_acknowledged",
+        "incident_resolved"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "browserId": {
+      "type": ["string", "null"]
+    },
+    "profileId": {
+      "type": ["string", "null"]
+    },
+    "sessionId": {
+      "type": ["string", "null"]
+    },
+    "serviceName": {
+      "type": ["string", "null"]
+    },
+    "agentName": {
+      "type": ["string", "null"]
+    },
+    "taskName": {
+      "type": ["string", "null"]
+    },
+    "previousHealth": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "not_started",
+            "launching",
+            "ready",
+            "degraded",
+            "unreachable",
+            "process_exited",
+            "cdp_disconnected",
+            "reconnecting",
+            "closing",
+            "faulted"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "currentHealth": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "not_started",
+            "launching",
+            "ready",
+            "degraded",
+            "unreachable",
+            "process_exited",
+            "cdp_disconnected",
+            "reconnecting",
+            "closing",
+            "faulted"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "details": {}
+  },
+  "additionalProperties": true
+}

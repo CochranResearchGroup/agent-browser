@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import { activePortAtom, sessionsAtom, newSessionDialogAtom } from "@/store/sessions";
 import { useSessionsSync } from "@/store/sessions";
@@ -16,6 +17,8 @@ import { StoragePanel } from "@/components/storage-panel";
 import { ExtensionsPanel } from "@/components/extensions-panel";
 import { NetworkPanel } from "@/components/network-panel";
 import { SessionTree } from "@/components/session-tree";
+import { AppShell, type DashboardSection } from "@/components/app-shell";
+import { ServicePanel } from "@/components/service-panel";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -26,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
 export default function DashboardPage() {
+  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -38,6 +42,11 @@ export default function DashboardPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const hasConsoleErrors = useAtomValue(hasConsoleErrorsAtom);
   const activeExtensions = useAtomValue(activeExtensionsAtom);
+  const primaryPanel = activeSection === "service"
+    ? <ServicePanel />
+    : activeSection === "activity"
+      ? <ActivityFeed />
+      : <Viewport />;
 
   const sidePanel = (
     <Tabs defaultValue="chat" className="flex h-full flex-col">
@@ -45,6 +54,7 @@ export default function DashboardPage() {
         <TabsList variant="line" className="h-7 w-full">
           <TabsTrigger value="chat" className="text-[11px]">Chat</TabsTrigger>
           <TabsTrigger value="activity" className="text-[11px]">Activity</TabsTrigger>
+          <TabsTrigger value="service" className="text-[11px]">Service</TabsTrigger>
           <TabsTrigger value="console" className="text-[11px]">
             Console
             {hasConsoleErrors && (
@@ -63,6 +73,9 @@ export default function DashboardPage() {
       </div>
       <TabsContent value="activity" className="min-h-0 flex-1 overflow-hidden">
         <ActivityFeed />
+      </TabsContent>
+      <TabsContent value="service" className="min-h-0 flex-1 overflow-hidden">
+        <ServicePanel />
       </TabsContent>
       <TabsContent value="console" className="min-h-0 flex-1 overflow-hidden">
         <ConsolePanel />
@@ -85,79 +98,111 @@ export default function DashboardPage() {
   if (isDesktop) {
     if (!hasSessions) {
       return (
-        <div className="flex h-screen flex-col bg-background">
+        <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
           <ResizablePanelGroup
             orientation="horizontal"
-            className="min-h-0 flex-1"
+            className="dashboard-panel-grid"
           >
             <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
-              <SessionTree />
+              <div className="dashboard-pane dashboard-pane-left">
+                <SessionTree />
+              </div>
             </ResizablePanel>
             <ResizableHandle />
             <ResizablePanel id="empty" defaultSize="85%">
-              <div className="flex h-full items-center justify-center">
-                <div className="text-center space-y-4">
+              <div className="dashboard-empty-state">
+                <div className="dashboard-empty-card">
+                  <div className="dashboard-empty-orb">
+                    <Plus className="size-6" />
+                  </div>
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">No active sessions</p>
-                    <p className="text-xs text-muted-foreground/60">Create a session to get started</p>
+                    <p className="text-xl font-black tracking-[-0.04em] text-foreground">
+                      No active sessions
+                    </p>
+                    <p className="max-w-sm text-sm leading-6 text-muted-foreground">
+                      Start a managed browser workspace to inspect pages, stream a headed session, and prepare the service control plane.
+                    </p>
                   </div>
                   <Button
-                    size="sm"
+                    size="lg"
+                    className="dashboard-primary-action"
                     onClick={() => setNewSessionDialog(true)}
                   >
-                    <Plus className="size-3.5" />
+                    <Plus className="size-4" />
                     New session
                   </Button>
                 </div>
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
-        </div>
+        </AppShell>
       );
     }
 
     return (
-      <div className="flex h-screen flex-col bg-background">
+      <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
         <ResizablePanelGroup
           orientation="horizontal"
-          className="min-h-0 flex-1"
+          className="dashboard-panel-grid"
         >
           <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
-            <SessionTree />
+            <div className="dashboard-pane dashboard-pane-left">
+              <SessionTree />
+            </div>
           </ResizablePanel>
           <ResizableHandle />
           <ResizablePanel id="viewport" defaultSize="55%" minSize="30%">
-            <Viewport />
+            <div className="dashboard-pane dashboard-pane-viewport">
+              {primaryPanel}
+            </div>
           </ResizablePanel>
           <ResizableHandle />
           <ResizablePanel id="activity" defaultSize="30%" minSize="15%" maxSize="50%">
-            {sidePanel}
+            <div className="dashboard-pane dashboard-pane-right">
+              {sidePanel}
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <Tabs defaultValue="viewport" className="min-h-0 flex-1">
-        <div className="shrink-0 px-2 pt-2">
-          <TabsList className="w-full">
+    <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
+      <Tabs
+        value={activeSection === "service" ? "service" : activeSection === "activity" ? "activity" : "viewport"}
+        onValueChange={(value) => {
+          if (value === "service" || value === "activity") {
+            setActiveSection(value);
+          } else {
+            setActiveSection("overview");
+          }
+        }}
+        className="min-h-0 flex-1"
+      >
+        <div className="shrink-0 px-3 pt-3">
+          <TabsList className="w-full rounded-2xl bg-white/60 p-1 shadow-sm ring-1 ring-foreground/10 backdrop-blur-xl dark:bg-white/5">
             <TabsTrigger value="sessions">Sessions</TabsTrigger>
             <TabsTrigger value="viewport">Viewport</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="service">Service</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="sessions" className="min-h-0 overflow-hidden">
+        <TabsContent value="sessions" className="min-h-0 overflow-hidden p-3">
           <SessionTree />
         </TabsContent>
-        <TabsContent value="viewport" className="min-h-0 overflow-hidden">
+        <TabsContent value="viewport" className="min-h-0 overflow-hidden p-3">
           <Viewport />
         </TabsContent>
-        <TabsContent value="activity" className="min-h-0 overflow-hidden">
+        <TabsContent value="activity" className="min-h-0 overflow-hidden p-3">
           {sidePanel}
         </TabsContent>
+        <TabsContent value="service" className="min-h-0 overflow-hidden p-3">
+          <div className="dashboard-pane">
+            <ServicePanel />
+          </div>
+        </TabsContent>
       </Tabs>
-    </div>
+    </AppShell>
   );
 }

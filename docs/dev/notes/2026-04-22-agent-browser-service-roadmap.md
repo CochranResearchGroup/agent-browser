@@ -318,6 +318,8 @@ Suggested resources:
 - `agent-browser://sessions`
 - `agent-browser://tabs`
 - `agent-browser://jobs`
+- `agent-browser://incidents`
+- `agent-browser://incidents/{incident_id}/activity`
 - `agent-browser://monitors`
 - `agent-browser://events`
 - `agent-browser://site-policies`
@@ -347,6 +349,11 @@ Suggested tools:
 - `monitor_create`
 - `monitor_pause`
 - `monitor_resume`
+- `incident_list`
+- `incident_get`
+- `incident_activity`
+- `incident_acknowledge`
+- `incident_resolve`
 - `auth_flow_start`
 - `auth_flow_status`
 - `challenge_status`
@@ -367,6 +374,7 @@ The service API should support:
 - tab lifecycle commands
 - action commands
 - job submission and cancellation
+- incident listing, detail, handling, and canonical activity timelines
 - event streaming through WebSocket or server-sent events
 - view stream discovery
 - challenge and approval workflows
@@ -374,6 +382,48 @@ The service API should support:
 
 Every long-running command should return a job ID or explicit completion
 signal. Clients should not infer completion from idle state.
+
+Incident activity should be a first-class service-owned read model rather than
+client-side reconstruction. The canonical shape for MCP and HTTP clients is:
+
+```json
+{
+  "incident": {
+    "id": "browser-1",
+    "label": "browser-1",
+    "latestKind": "service_job_timeout",
+    "latestTimestamp": "2026-04-22T00:03:00Z"
+  },
+  "activity": [
+    {
+      "id": "event-1",
+      "source": "event",
+      "eventId": "event-1",
+      "timestamp": "2026-04-22T00:00:00Z",
+      "kind": "browser_health_changed",
+      "title": "Browser health changed",
+      "message": "Browser browser-1 health changed from Ready to ProcessExited",
+      "browserId": "browser-1",
+      "details": null
+    },
+    {
+      "id": "job-1",
+      "source": "job",
+      "jobId": "job-1",
+      "timestamp": "2026-04-22T00:01:00Z",
+      "kind": "service_job_timeout",
+      "title": "Service job timed out",
+      "message": "Timed out after 30000 ms"
+    }
+  ],
+  "count": 2
+}
+```
+
+Clients should preserve `source`, `eventId`, and `jobId` when displaying or
+linking activity items. Older incident records may produce `metadata` source
+items for acknowledgement or resolution metadata that predate retained
+handling events.
 
 ## Implementation Phases
 
@@ -478,4 +528,3 @@ those features clean additions instead of special cases.
   automation, and actions that require explicit human approval?
 - Which external provider interface should be implemented first: SMS, email,
   TOTP, captcha, or generic intelligence provider?
-

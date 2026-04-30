@@ -876,6 +876,983 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
         },
 
+        // === Service status ===
+        "service" => match rest.first().copied() {
+            Some("status") | Some("watch") => {
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_status",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = if rest.first().copied() == Some("watch") {
+                    cmd["watch"] = json!(true);
+                    1
+                } else {
+                    1
+                };
+                while i < rest.len() {
+                    match rest[i] {
+                        "--watch" => {
+                            cmd["watch"] = json!(true);
+                        }
+                        "--interval" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --interval".to_string(),
+                                    usage:
+                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                });
+                            };
+                            let interval =
+                                raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --interval value: {}", raw),
+                                    usage:
+                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                })?;
+                            cmd["watchIntervalMs"] = json!(interval);
+                            i += 1;
+                        }
+                        "--count" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --count".to_string(),
+                                    usage:
+                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                });
+                            };
+                            let count =
+                                raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --count value: {}", raw),
+                                    usage:
+                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                })?;
+                            cmd["watchCount"] = json!(count);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service status: {}", flag),
+                                usage: "service status [--watch] [--interval <ms>] [--count <n>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("reconcile") => Ok(json!({
+                "id": id,
+                "action": "service_reconcile",
+                "serviceState": flags.service_state.clone(),
+            })),
+            Some("profiles") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service profiles: {}", rest[1]),
+                        usage: "service profiles",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_profiles",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("sessions") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service sessions: {}", rest[1]),
+                        usage: "service sessions",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_sessions",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("browsers") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service browsers: {}", rest[1]),
+                        usage: "service browsers",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_browsers",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("tabs") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service tabs: {}", rest[1]),
+                        usage: "service tabs",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_tabs",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("site-policies") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service site-policies: {}", rest[1]),
+                        usage: "service site-policies",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_site_policies",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("providers") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service providers: {}", rest[1]),
+                        usage: "service providers",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_providers",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("challenges") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service challenges: {}", rest[1]),
+                        usage: "service challenges",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_challenges",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("cancel") => {
+                let job_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service cancel".to_string(),
+                    usage: "service cancel <job-id> [--reason <text>]",
+                })?;
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_job_cancel",
+                    "jobId": job_id,
+                });
+                let mut i = 2;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--reason" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --reason".to_string(),
+                                    usage: "service cancel <job-id> [--reason <text>]",
+                                });
+                            };
+                            cmd["reason"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service cancel: {}", flag),
+                                usage: "service cancel <job-id> [--reason <text>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("retry") => {
+                let browser_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service retry".to_string(),
+                    usage: "service retry <browser-id> [--by <text>] [--note <text>]",
+                })?;
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_browser_retry",
+                    "browserId": browser_id,
+                });
+                let mut i = 2;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--by" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --by".to_string(),
+                                    usage: "service retry <browser-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["by"] = json!(raw);
+                            i += 1;
+                        }
+                        "--note" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --note".to_string(),
+                                    usage: "service retry <browser-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["note"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service retry: {}", flag),
+                                usage: "service retry <browser-id> [--by <text>] [--note <text>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("acknowledge") => {
+                let incident_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service acknowledge".to_string(),
+                    usage: "service acknowledge <incident-id> [--by <text>] [--note <text>]",
+                })?;
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_incident_acknowledge",
+                    "incidentId": incident_id,
+                });
+                let mut i = 2;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--by" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --by".to_string(),
+                                    usage: "service acknowledge <incident-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["by"] = json!(raw);
+                            i += 1;
+                        }
+                        "--note" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --note".to_string(),
+                                    usage: "service acknowledge <incident-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["note"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service acknowledge: {}", flag),
+                                usage: "service acknowledge <incident-id> [--by <text>] [--note <text>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("resolve") => {
+                let incident_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service resolve".to_string(),
+                    usage: "service resolve <incident-id> [--by <text>] [--note <text>]",
+                })?;
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_incident_resolve",
+                    "incidentId": incident_id,
+                });
+                let mut i = 2;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--by" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --by".to_string(),
+                                    usage: "service resolve <incident-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["by"] = json!(raw);
+                            i += 1;
+                        }
+                        "--note" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --note".to_string(),
+                                    usage: "service resolve <incident-id> [--by <text>] [--note <text>]",
+                                });
+                            };
+                            cmd["note"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service resolve: {}", flag),
+                                usage: "service resolve <incident-id> [--by <text>] [--note <text>]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("activity") => {
+                let incident_id = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                    context: "service activity".to_string(),
+                    usage: "service activity <incident-id>",
+                })?;
+                if rest.len() > 2 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service activity: {}", rest[2]),
+                        usage: "service activity <incident-id>",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_incident_activity",
+                    "incidentId": incident_id,
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("trace") => {
+                let usage =
+                    "service trace [--limit <n>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_trace",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--limit" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --limit".to_string(),
+                                    usage,
+                                });
+                            };
+                            let limit =
+                                raw.parse::<usize>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --limit value: {}", raw),
+                                    usage,
+                                })?;
+                            cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        "--browser-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --browser-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["browserId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--profile-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --profile-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["profileId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--session-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --session-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["sessionId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--service-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --service-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["serviceName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--agent-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --agent-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["agentName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--task-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --task-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["taskName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--since" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --since".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["since"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service trace: {}", flag),
+                                usage,
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("jobs") => {
+                let usage =
+                    "service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_jobs",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--limit" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --limit".to_string(),
+                                    usage,
+                                });
+                            };
+                            let limit =
+                                raw.parse::<usize>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --limit value: {}", raw),
+                                    usage,
+                                })?;
+                            cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        "--id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["jobId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--state" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --state".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "queued" | "running" | "succeeded" | "failed" | "cancelled"
+                                | "timed_out" => {
+                                    cmd["state"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --state value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--action" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --action".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["jobAction"] = json!(raw);
+                            i += 1;
+                        }
+                        "--profile-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --profile-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["profileId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--session-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --session-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["sessionId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--service-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --service-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["serviceName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--agent-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --agent-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["agentName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--task-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --task-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["taskName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--since" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --since".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["since"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service jobs: {}", flag),
+                                usage,
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("incidents") => {
+                let usage =
+                    "service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_incidents",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--limit" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --limit".to_string(),
+                                    usage,
+                                });
+                            };
+                            let limit =
+                                raw.parse::<usize>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --limit value: {}", raw),
+                                    usage,
+                                })?;
+                            cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        "--id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["incidentId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--state" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --state".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "active" | "recovered" | "service" => {
+                                    cmd["state"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --state value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--severity" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --severity".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "info" | "warning" | "error" | "critical" => {
+                                    cmd["severity"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --severity value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--escalation" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --escalation".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "none"
+                                | "browser_degraded"
+                                | "browser_recovery"
+                                | "job_attention"
+                                | "service_triage"
+                                | "os_degraded_possible" => {
+                                    cmd["escalation"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --escalation value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--handling-state" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --handling-state".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "unacknowledged" | "acknowledged" | "resolved" => {
+                                    cmd["handlingState"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!(
+                                            "Invalid --handling-state value: {}",
+                                            raw
+                                        ),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--kind" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --kind".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "browser_health_changed"
+                                | "reconciliation_error"
+                                | "service_job_timeout"
+                                | "service_job_cancelled" => {
+                                    cmd["kind"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --kind value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--browser-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --browser-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["browserId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--profile-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --profile-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["profileId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--session-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --session-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["sessionId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--service-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --service-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["serviceName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--agent-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --agent-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["agentName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--task-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --task-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["taskName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--since" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --since".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["since"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service incidents: {}", flag),
+                                usage,
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some("events") => {
+                let usage =
+                    "service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_events",
+                    "serviceState": flags.service_state.clone(),
+                });
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--limit" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --limit".to_string(),
+                                    usage,
+                                });
+                            };
+                            let limit =
+                                raw.parse::<usize>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!("Invalid --limit value: {}", raw),
+                                    usage,
+                                })?;
+                            cmd["limit"] = json!(limit);
+                            i += 1;
+                        }
+                        "--kind" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --kind".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "reconciliation"
+                                | "browser_launch_recorded"
+                                | "browser_health_changed"
+                                | "browser_recovery_started"
+                                | "browser_recovery_override"
+                                | "tab_lifecycle_changed"
+                                | "reconciliation_error"
+                                | "incident_acknowledged"
+                                | "incident_resolved" => {
+                                    cmd["kind"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --kind value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        "--browser-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --browser-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["browserId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--profile-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --profile-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["profileId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--session-id" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --session-id".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["sessionId"] = json!(raw);
+                            i += 1;
+                        }
+                        "--service-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --service-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["serviceName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--agent-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --agent-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["agentName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--task-name" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --task-name".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["taskName"] = json!(raw);
+                            i += 1;
+                        }
+                        "--since" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --since".to_string(),
+                                    usage,
+                                });
+                            };
+                            cmd["since"] = json!(raw);
+                            i += 1;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service events: {}", flag),
+                                usage,
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
+            }
+            Some(sub) => Err(ParseError::UnknownSubcommand {
+                subcommand: sub.to_string(),
+                valid_options: &[
+                    "status",
+                    "watch",
+                    "reconcile",
+                    "profiles",
+                    "sessions",
+                    "browsers",
+                    "tabs",
+                    "cancel",
+                    "acknowledge",
+                    "resolve",
+                    "trace",
+                    "jobs",
+                    "incidents",
+                    "events",
+                ],
+            }),
+            None => Err(ParseError::MissingArguments {
+                context: "service".to_string(),
+                usage: "service <status|watch|reconcile|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
+            }),
+        },
+
         // === Get ===
         "get" => parse_get(&rest, &id),
 
@@ -2395,6 +3372,18 @@ mod tests {
             default_runtime_profile: None,
             configured_runtime_profiles: std::collections::HashMap::new(),
             manual_login_preferred_services: Vec::new(),
+            service_state: crate::native::service_model::ServiceState::default(),
+            service_reconcile_interval_ms: None,
+            service_job_timeout_ms: None,
+            service_recovery_retry_budget: 3,
+            service_recovery_base_backoff_ms: 1_000,
+            service_recovery_max_backoff_ms: 30_000,
+            service_recovery_retry_budget_source:
+                crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
+            service_recovery_base_backoff_ms_source:
+                crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
+            service_recovery_max_backoff_ms_source:
+                crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
             runtime_profile: None,
             json: false,
             headed: false,
@@ -3939,6 +4928,498 @@ mod tests {
     fn test_stream_status() {
         let cmd = parse_command(&args("stream status"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "stream_status");
+    }
+
+    #[test]
+    fn test_service_status_includes_configured_service_state() {
+        let mut flags = default_flags();
+        flags.service_state.site_policies.insert(
+            "google".to_string(),
+            crate::native::service_model::SitePolicy {
+                id: "google".to_string(),
+                origin_pattern: "https://accounts.google.com".to_string(),
+                manual_login_preferred: true,
+                ..crate::native::service_model::SitePolicy::default()
+            },
+        );
+
+        let cmd = parse_command(&args("service status"), &flags).unwrap();
+
+        assert_eq!(cmd["action"], "service_status");
+        assert_eq!(
+            cmd["serviceState"]["sitePolicies"]["google"]["id"],
+            "google"
+        );
+        assert_eq!(
+            cmd["serviceState"]["sitePolicies"]["google"]["manualLoginPreferred"],
+            true
+        );
+    }
+
+    #[test]
+    fn test_service_status_watch_options() {
+        let cmd = parse_command(
+            &args("service status --watch --interval 250 --count 2"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_status");
+        assert_eq!(cmd["watch"], true);
+        assert_eq!(cmd["watchIntervalMs"], 250);
+        assert_eq!(cmd["watchCount"], 2);
+    }
+
+    #[test]
+    fn test_service_watch_alias() {
+        let cmd = parse_command(&args("service watch --interval 1000"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_status");
+        assert_eq!(cmd["watch"], true);
+        assert_eq!(cmd["watchIntervalMs"], 1000);
+    }
+
+    #[test]
+    fn test_service_reconcile_includes_configured_service_state() {
+        let mut flags = default_flags();
+        flags.service_state.site_policies.insert(
+            "google".to_string(),
+            crate::native::service_model::SitePolicy {
+                id: "google".to_string(),
+                origin_pattern: "https://accounts.google.com".to_string(),
+                manual_login_preferred: true,
+                ..crate::native::service_model::SitePolicy::default()
+            },
+        );
+
+        let cmd = parse_command(&args("service reconcile"), &flags).unwrap();
+
+        assert_eq!(cmd["action"], "service_reconcile");
+        assert_eq!(
+            cmd["serviceState"]["sitePolicies"]["google"]["id"],
+            "google"
+        );
+        assert_eq!(
+            cmd["serviceState"]["sitePolicies"]["google"]["manualLoginPreferred"],
+            true
+        );
+    }
+
+    #[test]
+    fn test_service_jobs_filters() {
+        let cmd = parse_command(
+            &args(
+                "service jobs --limit 7 --state failed --action navigate --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_jobs");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["state"], "failed");
+        assert_eq!(cmd["jobAction"], "navigate");
+        assert_eq!(cmd["profileId"], "work");
+        assert_eq!(cmd["sessionId"], "session-1");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_jobs_id_lookup() {
+        let cmd = parse_command(&args("service jobs --id job-123"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_jobs");
+        assert_eq!(cmd["jobId"], "job-123");
+    }
+
+    #[test]
+    fn test_service_cancel_job() {
+        let cmd = parse_command(
+            &args("service cancel job-123 --reason no-longer-needed"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_job_cancel");
+        assert_eq!(cmd["jobId"], "job-123");
+        assert_eq!(cmd["reason"], "no-longer-needed");
+    }
+
+    #[test]
+    fn test_service_retry_browser() {
+        let cmd = parse_command(
+            &args("service retry browser-123 --by operator --note approved"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_browser_retry");
+        assert_eq!(cmd["browserId"], "browser-123");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "approved");
+    }
+
+    #[test]
+    fn test_service_acknowledge_incident() {
+        let cmd = parse_command(
+            &args("service acknowledge incident-123 --by operator --note triaged"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incident_acknowledge");
+        assert_eq!(cmd["incidentId"], "incident-123");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "triaged");
+    }
+
+    #[test]
+    fn test_service_resolve_incident() {
+        let cmd = parse_command(
+            &args("service resolve incident-123 --by operator --note fixed"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incident_resolve");
+        assert_eq!(cmd["incidentId"], "incident-123");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "fixed");
+    }
+
+    #[test]
+    fn test_service_jobs_rejects_invalid_state() {
+        let err =
+            parse_command(&args("service jobs --state broken"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_events_limit() {
+        let cmd = parse_command(&args("service events --limit 7"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_events");
+        assert_eq!(cmd["limit"], 7);
+    }
+
+    #[test]
+    fn test_service_browsers() {
+        let cmd = parse_command(&args("service browsers"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_browsers");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_tabs() {
+        let cmd = parse_command(&args("service tabs"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_tabs");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_profiles() {
+        let cmd = parse_command(&args("service profiles"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_profiles");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_sessions() {
+        let cmd = parse_command(&args("service sessions"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_sessions");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_site_policies() {
+        let cmd = parse_command(&args("service site-policies"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_site_policies");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_providers() {
+        let cmd = parse_command(&args("service providers"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_providers");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_challenges() {
+        let cmd = parse_command(&args("service challenges"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_challenges");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_browsers_rejects_extra_argument() {
+        let err = parse_command(&args("service browsers extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_tabs_rejects_extra_argument() {
+        let err = parse_command(&args("service tabs extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_profiles_rejects_extra_argument() {
+        let err = parse_command(&args("service profiles extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_sessions_rejects_extra_argument() {
+        let err = parse_command(&args("service sessions extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_site_policies_rejects_extra_argument() {
+        let err =
+            parse_command(&args("service site-policies extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_providers_rejects_extra_argument() {
+        let err = parse_command(&args("service providers extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_challenges_rejects_extra_argument() {
+        let err = parse_command(&args("service challenges extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_filters() {
+        let cmd = parse_command(
+            &args(
+                "service incidents --limit 7 --state active --severity critical --escalation os_degraded_possible --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incidents");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["state"], "active");
+        assert_eq!(cmd["severity"], "critical");
+        assert_eq!(cmd["escalation"], "os_degraded_possible");
+        assert_eq!(cmd["handlingState"], "unacknowledged");
+        assert_eq!(cmd["kind"], "service_job_timeout");
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["profileId"], "work");
+        assert_eq!(cmd["sessionId"], "session-1");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_incidents_id_lookup() {
+        let cmd = parse_command(
+            &args("service incidents --id incident-123"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incidents");
+        assert_eq!(cmd["incidentId"], "incident-123");
+    }
+
+    #[test]
+    fn test_service_activity_id_lookup() {
+        let cmd = parse_command(&args("service activity incident-123"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_incident_activity");
+        assert_eq!(cmd["incidentId"], "incident-123");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_trace_filters() {
+        let cmd = parse_command(
+            &args(
+                "service trace --limit 7 --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_trace");
+        assert_eq!(cmd["limit"], 7);
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["profileId"], "work");
+        assert_eq!(cmd["sessionId"], "session-1");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_activity_rejects_extra_argument() {
+        let err = parse_command(
+            &args("service activity incident-123 extra"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_state() {
+        let err =
+            parse_command(&args("service incidents --state failed"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_severity() {
+        let err = parse_command(
+            &args("service incidents --severity panic"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_escalation() {
+        let err = parse_command(
+            &args("service incidents --escalation panic"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_kind() {
+        let err = parse_command(
+            &args("service incidents --kind tab_lifecycle_changed"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_incidents_reject_invalid_handling_state() {
+        let err = parse_command(
+            &args("service incidents --handling-state active"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_events_filters() {
+        let cmd = parse_command(
+            &args(
+                "service events --kind browser_health_changed --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_events");
+        assert_eq!(cmd["kind"], "browser_health_changed");
+        assert_eq!(cmd["browserId"], "browser-1");
+        assert_eq!(cmd["profileId"], "work");
+        assert_eq!(cmd["sessionId"], "session-1");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "probeACSwebsite");
+        assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_events_accepts_tab_lifecycle_kind() {
+        let cmd = parse_command(
+            &args("service events --kind tab_lifecycle_changed"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["kind"], "tab_lifecycle_changed");
+    }
+
+    #[test]
+    fn test_service_events_accepts_browser_launch_kind() {
+        let cmd = parse_command(
+            &args("service events --kind browser_launch_recorded"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["kind"], "browser_launch_recorded");
+    }
+
+    #[test]
+    fn test_service_events_accepts_recovery_override_kind() {
+        let cmd = parse_command(
+            &args("service events --kind browser_recovery_override"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["kind"], "browser_recovery_override");
+    }
+
+    #[test]
+    fn test_service_events_accepts_incident_handling_kinds() {
+        let acknowledged = parse_command(
+            &args("service events --kind incident_acknowledged"),
+            &default_flags(),
+        )
+        .unwrap();
+        let resolved = parse_command(
+            &args("service events --kind incident_resolved"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(acknowledged["kind"], "incident_acknowledged");
+        assert_eq!(resolved["kind"], "incident_resolved");
+    }
+
+    #[test]
+    fn test_service_events_rejects_invalid_kind() {
+        let err =
+            parse_command(&args("service events --kind crash"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
     }
 
     #[test]

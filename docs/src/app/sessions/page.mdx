@@ -117,6 +117,14 @@ Use <code>--leave-open</code> or <code>runtimeProfiles.work.launch.leaveOpen</co
 when you want <code>close</code> to detach from that managed runtime-profile browser
 instead of shutting it down.
 
+Service-mode profile and session records can also be declared under
+<code>service.profiles</code> and <code>service.sessions</code>. These records
+describe profile allocation strategy, keyring posture, caller ownership,
+profile binding, lease state, and cleanup policy for the service control plane.
+They are metadata today; browser launch behavior still comes from
+<code>runtimeProfiles</code>, <code>--runtime-profile</code>, <code>--profile</code>,
+and existing launch flags.
+
 <table>
   <thead>
     <tr><th>Detail</th><th>Description</th></tr>

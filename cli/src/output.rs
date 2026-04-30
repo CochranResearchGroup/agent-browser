@@ -130,6 +130,783 @@ fn format_stream_status_text(action: Option<&str>, data: &serde_json::Value) -> 
     }
 }
 
+fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
+    let events = data.get("events").and_then(|value| value.as_array())?;
+    if events.is_empty() {
+        return Some("No service events".to_string());
+    }
+
+    let lines = events
+        .iter()
+        .map(|event| {
+            let timestamp = event
+                .get("timestamp")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-time");
+            let kind = event
+                .get("kind")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let message = event
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let browser = event
+                .get("browserId")
+                .and_then(|value| value.as_str())
+                .map(|id| format!(" browser={id}"))
+                .unwrap_or_default();
+            let profile = event
+                .get("profileId")
+                .and_then(|value| value.as_str())
+                .map(|id| format!(" profile={id}"))
+                .unwrap_or_default();
+            let session = event
+                .get("sessionId")
+                .and_then(|value| value.as_str())
+                .map(|id| format!(" session={id}"))
+                .unwrap_or_default();
+            let service = event
+                .get("serviceName")
+                .and_then(|value| value.as_str())
+                .map(|name| format!(" service={name}"))
+                .unwrap_or_default();
+            let agent = event
+                .get("agentName")
+                .and_then(|value| value.as_str())
+                .map(|name| format!(" agent={name}"))
+                .unwrap_or_default();
+            let task = event
+                .get("taskName")
+                .and_then(|value| value.as_str())
+                .map(|name| format!(" task={name}"))
+                .unwrap_or_default();
+            format!("{timestamp} {kind}{browser}{profile}{session}{service}{agent}{task} {message}")
+        })
+        .collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
+fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
+    if let Some(incident) = data.get("incident") {
+        let timestamp = incident
+            .get("latestTimestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown-time");
+        let state = incident
+            .get("state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let kind = incident
+            .get("latestKind")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let severity = incident
+            .get("severity")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let escalation = incident
+            .get("escalation")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let id = incident
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown-id");
+        let browser = incident
+            .get("browserId")
+            .and_then(|value| value.as_str())
+            .map(|value| format!("browser={value}\n"))
+            .unwrap_or_default();
+        let message = incident
+            .get("latestMessage")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let recommended_action = incident
+            .get("recommendedAction")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let events = data
+            .get("events")
+            .and_then(|value| value.as_array())
+            .map(|value| value.len())
+            .unwrap_or(0);
+        let jobs = data
+            .get("jobs")
+            .and_then(|value| value.as_array())
+            .map(|value| value.len())
+            .unwrap_or(0);
+        let acknowledged_by = incident
+            .get("acknowledgedBy")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none");
+        let acknowledged_at = incident
+            .get("acknowledgedAt")
+            .and_then(|value| value.as_str())
+            .unwrap_or("never");
+        let resolved_by = incident
+            .get("resolvedBy")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none");
+        let resolved_at = incident
+            .get("resolvedAt")
+            .and_then(|value| value.as_str())
+            .unwrap_or("never");
+        return Some(format!(
+            "{timestamp} {state} severity={severity} escalation={escalation} kind={kind} id={id}\n{browser}message={message}\nrecommended_action={recommended_action}\nacknowledged_by={acknowledged_by} acknowledged_at={acknowledged_at}\nresolved_by={resolved_by} resolved_at={resolved_at}\nrelated_events={events} related_jobs={jobs}"
+        ));
+    }
+    let incidents = data.get("incidents").and_then(|value| value.as_array())?;
+    if incidents.is_empty() {
+        return Some("No service incidents".to_string());
+    }
+
+    let lines = incidents
+        .iter()
+        .map(|incident| {
+            let timestamp = incident
+                .get("latestTimestamp")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-time");
+            let state = incident
+                .get("state")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let kind = incident
+                .get("latestKind")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let severity = incident
+                .get("severity")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let escalation = incident
+                .get("escalation")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let id = incident
+                .get("id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-id");
+            let browser = incident
+                .get("browserId")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" browser={value}"))
+                .unwrap_or_default();
+            let message = incident
+                .get("latestMessage")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            format!(
+                "{timestamp} {state} severity={severity} escalation={escalation} kind={kind} id={id}{browser} {message}"
+            )
+        })
+        .collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
+fn format_service_incident_activity_text(data: &serde_json::Value) -> Option<String> {
+    let activity = data.get("activity").and_then(|value| value.as_array())?;
+    if activity.is_empty() {
+        return Some("No service incident activity".to_string());
+    }
+
+    let lines = activity
+        .iter()
+        .map(|item| {
+            let timestamp = item
+                .get("timestamp")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-time");
+            let kind = item
+                .get("kind")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let source = item
+                .get("source")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let id = item
+                .get("id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-id");
+            let message = item
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let browser = item
+                .get("browserId")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" browser={value}"))
+                .unwrap_or_default();
+            let profile = item
+                .get("profileId")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" profile={value}"))
+                .unwrap_or_default();
+            let session = item
+                .get("sessionId")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" session={value}"))
+                .unwrap_or_default();
+            let service = item
+                .get("serviceName")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" service={value}"))
+                .unwrap_or_default();
+            let agent = item
+                .get("agentName")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" agent={value}"))
+                .unwrap_or_default();
+            let task = item
+                .get("taskName")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" task={value}"))
+                .unwrap_or_default();
+            format!(
+                "{timestamp} {kind} source={source} id={id}{browser}{profile}{session}{service}{agent}{task} {message}"
+            )
+        })
+        .collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
+fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
+    let counts = data.get("counts")?;
+    let events = counts
+        .get("events")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let jobs = counts
+        .get("jobs")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let incidents = counts
+        .get("incidents")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let activity = counts
+        .get("activity")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let mut lines = vec![format!(
+        "Trace: events={events} jobs={jobs} incidents={incidents} activity={activity}"
+    )];
+    if let Some(summary) = data.get("summary") {
+        if let Some(context_count) = summary.get("contextCount").and_then(|value| value.as_u64()) {
+            let naming_warnings = summary
+                .get("namingWarningCount")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0);
+            lines.push(format!(
+                "Summary: contexts={context_count} namingWarnings={naming_warnings}"
+            ));
+        }
+        if let Some(contexts) = summary.get("contexts").and_then(|value| value.as_array()) {
+            for context in contexts.iter().take(3) {
+                let service = context
+                    .get("serviceName")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" service={value}"))
+                    .unwrap_or_default();
+                let agent = context
+                    .get("agentName")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" agent={value}"))
+                    .unwrap_or_default();
+                let task = context
+                    .get("taskName")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" task={value}"))
+                    .unwrap_or_default();
+                let browser = context
+                    .get("browserId")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" browser={value}"))
+                    .unwrap_or_default();
+                let profile = context
+                    .get("profileId")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" profile={value}"))
+                    .unwrap_or_default();
+                let session = context
+                    .get("sessionId")
+                    .and_then(|value| value.as_str())
+                    .map(|value| format!(" session={value}"))
+                    .unwrap_or_default();
+                let events = context
+                    .get("eventCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let jobs = context
+                    .get("jobCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let incidents = context
+                    .get("incidentCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let activity = context
+                    .get("activityCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let warning = context
+                    .get("namingWarnings")
+                    .and_then(|value| value.as_array())
+                    .filter(|warnings| !warnings.is_empty())
+                    .map(|warnings| {
+                        let joined = warnings
+                            .iter()
+                            .filter_map(|warning| warning.as_str())
+                            .collect::<Vec<_>>()
+                            .join(",");
+                        format!(" namingWarnings={joined}")
+                    })
+                    .unwrap_or_default();
+                lines.push(format!(
+                    "  context{service}{agent}{task}{browser}{profile}{session}{warning} events={events} jobs={jobs} incidents={incidents} activity={activity}"
+                ));
+            }
+        }
+    }
+    if let Some(activity_text) = format_service_incident_activity_text(data) {
+        if activity > 0 {
+            lines.push(activity_text);
+        }
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_jobs_text(data: &serde_json::Value) -> Option<String> {
+    if let Some(job) = data.get("job") {
+        return Some(format_service_job_line(job));
+    }
+    let jobs = data.get("jobs").and_then(|value| value.as_array())?;
+    if jobs.is_empty() {
+        return Some("No service jobs".to_string());
+    }
+
+    let lines = jobs.iter().map(format_service_job_line).collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
+fn format_service_job_line(job: &serde_json::Value) -> String {
+    let timestamp = job
+        .get("submittedAt")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-time");
+    let state = job
+        .get("state")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let action = job
+        .get("action")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-action");
+    let id = job
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-id");
+    let error = job
+        .get("error")
+        .and_then(|value| value.as_str())
+        .map(|error| format!(" error={error}"))
+        .unwrap_or_default();
+    let naming_warnings = job
+        .get("namingWarnings")
+        .and_then(|value| value.as_array())
+        .map(|warnings| {
+            warnings
+                .iter()
+                .filter_map(|warning| warning.as_str())
+                .collect::<Vec<_>>()
+        })
+        .filter(|warnings| !warnings.is_empty())
+        .map(|warnings| format!(" namingWarnings={}", warnings.join(",")))
+        .unwrap_or_default();
+    format!("{timestamp} {state} action={action} id={id}{naming_warnings}{error}")
+}
+
+fn value_str<'a>(value: &'a serde_json::Value, key: &str, fallback: &'a str) -> &'a str {
+    value
+        .get(key)
+        .and_then(|value| value.as_str())
+        .unwrap_or(fallback)
+}
+
+fn value_bool_label(value: &serde_json::Value, key: &str) -> &'static str {
+    if value
+        .get(key)
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        "yes"
+    } else {
+        "no"
+    }
+}
+
+fn sorted_object_values(value: &serde_json::Value, key: &str) -> Vec<serde_json::Value> {
+    let mut values = value
+        .get(key)
+        .and_then(|value| value.as_object())
+        .map(|items| items.values().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    values.sort_by(|left, right| value_str(left, "id", "").cmp(value_str(right, "id", "")));
+    values
+}
+
+fn format_service_profile_line(profile: &serde_json::Value) -> String {
+    let id = value_str(profile, "id", "unknown-profile");
+    let name = value_str(profile, "name", id);
+    let allocation = value_str(profile, "allocation", "unknown");
+    let keyring = value_str(profile, "keyring", "unknown");
+    let persistent = value_bool_label(profile, "persistent");
+    let manual_login = value_bool_label(profile, "manualLoginPreferred");
+    let services = profile
+        .get("sharedServiceIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+    let user_data = profile
+        .get("userDataDir")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+
+    format!(
+        "{id} name={name} allocation={allocation} keyring={keyring} persistent={persistent} manual_login={manual_login} services={services} user_data={user_data}"
+    )
+}
+
+fn format_service_profiles_text(data: &serde_json::Value) -> Option<String> {
+    let profiles = data.get("profiles")?.as_array()?;
+    let mut lines = vec![format!("Profiles: {}", profiles.len())];
+    if profiles.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            profiles
+                .iter()
+                .map(|profile| format!("  {}", format_service_profile_line(profile))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_session_line(session: &serde_json::Value) -> String {
+    let id = value_str(session, "id", "unknown-session");
+    let service = value_str(session, "serviceName", "none");
+    let agent = value_str(session, "agentName", "none");
+    let task = value_str(session, "taskName", "none");
+    let profile = value_str(session, "profileId", "none");
+    let lease = value_str(session, "lease", "unknown");
+    let cleanup = value_str(session, "cleanup", "unknown");
+    let browsers = session
+        .get("browserIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+
+    format!(
+        "{id} service={service} agent={agent} task={task} profile={profile} lease={lease} cleanup={cleanup} browsers={browsers}"
+    )
+}
+
+fn format_service_sessions_text(data: &serde_json::Value) -> Option<String> {
+    let sessions = data.get("sessions")?.as_array()?;
+    let mut lines = vec![format!("Sessions: {}", sessions.len())];
+    if sessions.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            sessions
+                .iter()
+                .map(|session| format!("  {}", format_service_session_line(session))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_browser_line(browser: &serde_json::Value) -> String {
+    let id = value_str(browser, "id", "unknown-browser");
+    let health = value_str(browser, "health", "unknown");
+    let host = value_str(browser, "host", "unknown");
+    let profile = value_str(browser, "profileId", "none");
+    let pid = browser
+        .get("pid")
+        .and_then(|value| value.as_u64())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".to_string());
+    let observation = browser.get("lastHealthObservation");
+    let failure_class = observation
+        .map(|value| value_str(value, "failureClass", "none"))
+        .unwrap_or("none");
+    let process_exit_cause = observation
+        .map(|value| value_str(value, "processExitCause", "none"))
+        .unwrap_or("none");
+    let observed_at = observation
+        .map(|value| value_str(value, "observedAt", "never"))
+        .unwrap_or("never");
+    let last_error = browser
+        .get("lastError")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+
+    format!(
+        "{id} health={health} host={host} profile={profile} pid={pid} observed={observed_at} failure={failure_class} exit_cause={process_exit_cause} error={last_error}"
+    )
+}
+
+fn format_service_browsers_text(data: &serde_json::Value) -> Option<String> {
+    let browsers = data.get("browsers")?.as_array()?;
+    let mut lines = vec![format!("Browsers: {}", browsers.len())];
+    if browsers.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            browsers
+                .iter()
+                .map(|browser| format!("  {}", format_service_browser_line(browser))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_tab_line(tab: &serde_json::Value) -> String {
+    let id = value_str(tab, "id", "unknown-tab");
+    let browser = value_str(tab, "browserId", "none");
+    let session = value_str(tab, "sessionId", "none");
+    let owner = value_str(tab, "ownerSessionId", "none");
+    let lifecycle = value_str(tab, "lifecycle", "unknown");
+    let target = value_str(tab, "targetId", "none");
+    let title = value_str(tab, "title", "none");
+    let url = value_str(tab, "url", "none");
+
+    format!(
+        "{id} browser={browser} session={session} owner={owner} lifecycle={lifecycle} target={target} title={title} url={url}"
+    )
+}
+
+fn format_service_tabs_text(data: &serde_json::Value) -> Option<String> {
+    let tabs = data.get("tabs")?.as_array()?;
+    let mut lines = vec![format!("Tabs: {}", tabs.len())];
+    if tabs.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            tabs.iter()
+                .map(|tab| format!("  {}", format_service_tab_line(tab))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_site_policy_line(policy: &serde_json::Value) -> String {
+    let id = value_str(policy, "id", "unknown-policy");
+    let origin = value_str(policy, "originPattern", "none");
+    let host = value_str(policy, "browserHost", "default");
+    let interaction = value_str(policy, "interactionMode", "unknown");
+    let challenge = value_str(policy, "challengePolicy", "unknown");
+    let manual_login = value_bool_label(policy, "manualLoginPreferred");
+    let profile_required = value_bool_label(policy, "profileRequired");
+
+    format!(
+        "{id} origin={origin} host={host} interaction={interaction} challenge={challenge} manual_login={manual_login} profile_required={profile_required}"
+    )
+}
+
+fn format_service_site_policies_text(data: &serde_json::Value) -> Option<String> {
+    let site_policies = data.get("sitePolicies")?.as_array()?;
+    let mut lines = vec![format!("Site policies: {}", site_policies.len())];
+    if site_policies.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            site_policies
+                .iter()
+                .map(|policy| format!("  {}", format_service_site_policy_line(policy))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_provider_line(provider: &serde_json::Value) -> String {
+    let id = value_str(provider, "id", "unknown-provider");
+    let kind = value_str(provider, "kind", "unknown");
+    let name = value_str(provider, "displayName", id);
+    let enabled = value_bool_label(provider, "enabled");
+    let config = provider
+        .get("configRef")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let capabilities = provider
+        .get("capabilities")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+
+    format!("{id} name={name} kind={kind} enabled={enabled} config={config} capabilities={capabilities}")
+}
+
+fn format_service_providers_text(data: &serde_json::Value) -> Option<String> {
+    let providers = data.get("providers")?.as_array()?;
+    let mut lines = vec![format!("Providers: {}", providers.len())];
+    if providers.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            providers
+                .iter()
+                .map(|provider| format!("  {}", format_service_provider_line(provider))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_challenge_line(challenge: &serde_json::Value) -> String {
+    let id = value_str(challenge, "id", "unknown-challenge");
+    let kind = value_str(challenge, "kind", "unknown");
+    let state = value_str(challenge, "state", "unknown");
+    let tab = value_str(challenge, "tabId", "none");
+    let provider = value_str(challenge, "providerId", "none");
+    let decision = value_str(challenge, "policyDecision", "none");
+    let human_approved = value_bool_label(challenge, "humanApproved");
+    let result = value_str(challenge, "result", "none");
+
+    format!(
+        "{id} kind={kind} state={state} tab={tab} provider={provider} decision={decision} human_approved={human_approved} result={result}"
+    )
+}
+
+fn format_service_challenges_text(data: &serde_json::Value) -> Option<String> {
+    let challenges = data.get("challenges")?.as_array()?;
+    let mut lines = vec![format!("Challenges: {}", challenges.len())];
+    if challenges.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            challenges
+                .iter()
+                .map(|challenge| format!("  {}", format_service_challenge_line(challenge))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
+fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
+    let service_state = data.get("service_state")?;
+    let control_plane = service_state.get("controlPlane");
+    let reconciliation = service_state.get("reconciliation");
+    let profiles = sorted_object_values(service_state, "profiles");
+    let browsers = sorted_object_values(service_state, "browsers");
+    let sessions = sorted_object_values(service_state, "sessions");
+    let browser_count = service_state
+        .get("browsers")
+        .and_then(|value| value.as_object())
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let tab_count = service_state
+        .get("tabs")
+        .and_then(|value| value.as_object())
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let queue_depth = control_plane
+        .and_then(|value| value.get("queueDepth"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let queue_capacity = control_plane
+        .and_then(|value| value.get("queueCapacity"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let worker_state = control_plane
+        .map(|value| value_str(value, "workerState", "unknown"))
+        .unwrap_or("unknown");
+    let browser_health = control_plane
+        .map(|value| value_str(value, "browserHealth", "unknown"))
+        .unwrap_or("unknown");
+
+    let mut lines = vec![
+        format!(
+            "Service: worker={worker_state} browser={browser_health} queue={queue_depth}/{queue_capacity} browsers={browser_count} tabs={tab_count}"
+        ),
+        format!(
+            "Reconciliation: last={} browsers={} changed={} error={}",
+            reconciliation
+                .map(|value| value_str(value, "lastReconciledAt", "never"))
+                .unwrap_or("never"),
+            reconciliation
+                .and_then(|value| value.get("browserCount"))
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            reconciliation
+                .and_then(|value| value.get("changedBrowsers"))
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            reconciliation
+                .and_then(|value| value.get("lastError"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("none")
+        ),
+        format!("Profiles: {}", profiles.len()),
+    ];
+
+    if profiles.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            profiles
+                .iter()
+                .map(|profile| format!("  {}", format_service_profile_line(profile))),
+        );
+    }
+
+    lines.push(format!("Browsers: {}", browsers.len()));
+    if browsers.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            browsers
+                .iter()
+                .map(|browser| format!("  {}", format_service_browser_line(browser))),
+        );
+    }
+
+    lines.push(format!("Sessions: {}", sessions.len()));
+    if sessions.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            sessions
+                .iter()
+                .map(|session| format!("  {}", format_service_session_line(session))),
+        );
+    }
+
+    Some(lines.join("\n"))
+}
+
 pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &OutputOptions) {
     if opts.json {
         if opts.content_boundaries {
@@ -202,6 +979,102 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         if let Some(output) = format_stream_status_text(action, data) {
             println!("{}", output);
             return;
+        }
+        if action == Some("service_events") {
+            if let Some(output) = format_service_events_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_status") {
+            if let Some(output) = format_service_status_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_profiles") {
+            if let Some(output) = format_service_profiles_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_sessions") {
+            if let Some(output) = format_service_sessions_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_browsers") {
+            if let Some(output) = format_service_browsers_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_tabs") {
+            if let Some(output) = format_service_tabs_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_site_policies") {
+            if let Some(output) = format_service_site_policies_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_providers") {
+            if let Some(output) = format_service_providers_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_challenges") {
+            if let Some(output) = format_service_challenges_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_incidents") {
+            if let Some(output) = format_service_incidents_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_incident_activity") {
+            if let Some(output) = format_service_incident_activity_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_trace") {
+            if let Some(output) = format_service_trace_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_jobs") {
+            if let Some(output) = format_service_jobs_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_job_cancel") {
+            if let Some(job) = data.get("job") {
+                println!("Cancelled {}", format_service_job_line(job));
+                return;
+            }
+            if data
+                .get("cancellationRequested")
+                .and_then(|value| value.as_bool())
+                == Some(true)
+            {
+                let job_id = data
+                    .get("jobId")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown-id");
+                println!("Cancellation requested for service job {job_id}");
+                return;
+            }
         }
         if action == Some("storage_get") {
             if let Some(output) = format_storage_text(data) {
@@ -2426,6 +3299,13 @@ Usage: agent-browser dashboard [start|stop] [options]
 Manage the observability dashboard, a local web UI that shows live
 browser viewports and command activity feeds for all sessions.
 The dashboard is bundled into the binary and requires no separate install.
+The Service view includes a remembered operator identity, optional notes, an
+incident history timeline, a shared events/jobs/incidents/activity trace
+explorer for service, agent, task, browser, profile, session, and time-window
+debugging with ownership summary cards, a browser-health transition timeline,
+a grouped incident browser panel with acknowledgement and resolution actions,
+and incident filters for handling state plus crash, disconnect, recovery,
+timeout, and cancellation signals.
 
 Subcommands:
   start [--port <n>]   Start the dashboard server (default port: 4848)
@@ -2519,6 +3399,201 @@ Examples:
   agent-browser stream enable
   agent-browser stream enable --port 9223
   agent-browser stream disable
+"##
+        }
+
+        "service" => {
+            r##"
+agent-browser service - Inspect service-mode state
+
+Usage:
+  agent-browser service status
+  agent-browser service status --watch [--interval <ms>] [--count <n>]
+  agent-browser service watch [--interval <ms>] [--count <n>]
+  agent-browser service reconcile
+  agent-browser service profiles
+  agent-browser service sessions
+  agent-browser service browsers
+  agent-browser service tabs
+  agent-browser service site-policies
+  agent-browser service providers
+  agent-browser service challenges
+  agent-browser service cancel <job-id> [--reason <text>]
+  agent-browser service retry <browser-id> [--by <text>] [--note <text>]
+  agent-browser service acknowledge <incident-id> [--by <text>] [--note <text>]
+  agent-browser service resolve <incident-id> [--by <text>] [--note <text>]
+  agent-browser service activity <incident-id>
+  agent-browser service trace [--limit <n>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+
+Commands:
+  status                Show worker state, browser health, queue depth, configured site policies, and providers
+  watch                 Poll service status until interrupted
+  reconcile             Probe persisted browser records and update service state
+  profiles              Show retained service profile records
+  sessions              Show retained service session records
+  browsers              Show retained service browser records and latest health evidence
+  tabs                  Show retained service tab records
+  site-policies         Show configured service site-policy records
+  providers             Show configured service provider records
+  challenges            Show retained auth, 2FA, captcha, passkey, and blocked-flow challenge records
+  cancel                Cancel a queued job or request running job cancellation
+  retry                 Enable one new recovery attempt for a faulted browser
+  acknowledge           Record that an operator has seen a retained incident
+  resolve               Mark a retained incident handled with operator metadata
+  activity              Show a normalized incident timeline from related events, jobs, and handling metadata
+  trace                 Show events, jobs, incidents, and activity for one service/task trace
+  jobs                  Show recent service control-plane jobs
+  incidents             Show grouped retained service incidents
+  events                Show recent service reconciliation, launch, browser health, recovery, and tab lifecycle events
+
+Notes:
+  - It does not launch a browser.
+  - Persisted service state is loaded from ~/.agent-browser/service/state.json.
+  - The current control-plane snapshot is refreshed in the persisted service state.
+  - Recent control-plane requests are retained as bounded job records with timestamps and final state.
+  - Derived grouped incidents are retained with incident state, latest kind, and related event/job ids.
+  - Incident operator metadata includes acknowledgement and resolution timestamps, actor names, and notes.
+  - Acknowledgement and resolution append incident_acknowledged and incident_resolved service events.
+  - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
+  - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
+  - Incidents include severity, escalation, and recommendedAction so clients share one operator priority contract.
+  - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
+  - Incident lookup returns the matching retained incident together with expanded related events and jobs.
+  - Incident activity returns a normalized chronological timeline for one retained incident.
+  - Trace returns related events, jobs, incidents, normalized activity, and a compact summary of service, agent, task, browser, profile, and session ownership in one response.
+  - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, failureClass, processExitCause for process exits, retry-budget details, and recovery policy source metadata.
+  - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
+  - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
+  - Text service status includes profile, browser, and session summary lines for operator traceability.
+  - Text service profiles and sessions focus retained service-owned identity, lease, profile, and browser-linkage records.
+  - Text service browsers focuses retained browser records and their lastHealthObservation fields.
+  - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
+  - Text service site-policies focuses origin, host, interaction, challenge, login, and profile-required policy fields.
+  - Text service providers focuses provider identity, kind, enabled state, config reference, and capabilities.
+  - Text service challenges focuses detected challenge kind, state, tab, provider, policy decision, human approval, and result.
+  - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
+  - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
+  - Reconciliation emits a reconciliation event with details.action=session_tab_ownership_repaired when it removes stale session/tab ownership links.
+  - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
+  - The bounded events log records reconciliation summaries, browser launch metadata, browser health transitions, browser recovery starts, and tab lifecycle changes.
+  - Event filters match kind, browser ID, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
+  - The stream server exposes named browser control endpoints at /api/browser/url, /api/browser/title, /api/browser/tabs, /api/browser/navigate, /api/browser/back, /api/browser/forward, /api/browser/reload, /api/browser/new-tab, /api/browser/switch-tab, /api/browser/close-tab, /api/browser/viewport, /api/browser/user-agent, /api/browser/media, /api/browser/timezone, /api/browser/locale, /api/browser/geolocation, /api/browser/permissions, /api/browser/cookies/get, /api/browser/cookies/set, /api/browser/cookies/clear, /api/browser/storage/get, /api/browser/storage/set, /api/browser/storage/clear, /api/browser/console, /api/browser/errors, /api/browser/set-content, /api/browser/headers, /api/browser/offline, /api/browser/dialog, /api/browser/clipboard, /api/browser/upload, /api/browser/download, /api/browser/wait-for-download, /api/browser/pdf, /api/browser/response-body, /api/browser/har/start, /api/browser/har/stop, /api/browser/route, /api/browser/unroute, /api/browser/requests, /api/browser/request-detail, /api/browser/snapshot, /api/browser/screenshot, /api/browser/click, /api/browser/fill, /api/browser/wait, /api/browser/type, /api/browser/press, /api/browser/hover, /api/browser/select, /api/browser/get-text, /api/browser/get-value, /api/browser/is-visible, /api/browser/get-attribute, /api/browser/get-html, /api/browser/get-styles, /api/browser/count, /api/browser/get-box, /api/browser/is-enabled, /api/browser/is-checked, /api/browser/check, /api/browser/uncheck, /api/browser/scroll, /api/browser/scroll-into-view, /api/browser/focus, and /api/browser/clear.
+  - The stream server exposes the service surface at /api/service/status, /api/service/profiles, /api/service/sessions, /api/service/browsers, /api/service/tabs, /api/service/site-policies, /api/service/site-policies/<id>, /api/service/providers, /api/service/providers/<id>, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
+  - POST /api/service/site-policies/<id> and POST /api/service/providers/<id> persist service config records through the service worker queue. DELETE on the same paths removes persisted records through the same queue.
+  - Service config mutation uses the path ID as authoritative and rejects a request body whose nested id conflicts with the path.
+  - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
+  - Browser launch, close, and command-time stale-browser detection update the active session's persisted browser health record before relaunch.
+  - Close first attempts polite browser shutdown, then force kill for owned browser processes. Polite shutdown failure records degraded browser health; force-kill failure records faulted health with an OS-degraded warning.
+  - pnpm test:service-shutdown-health-live validates the polite-shutdown failure remedy against live service state.
+  - Runtime profile and custom profile launches populate linked service profile and session records.
+  - Commands should include serviceName, agentName, and taskName when available for traceability.
+  - Configured profiles, sessions, site policies, and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
+
+Global Options:
+  --json               Output as JSON
+  --session <name>     Use specific session
+
+Examples:
+  agent-browser service status
+  agent-browser service status --watch --interval 1000
+  agent-browser service watch --interval 1000 --count 5
+  agent-browser service reconcile
+  agent-browser service profiles
+  agent-browser service sessions
+  agent-browser service browsers
+  agent-browser service tabs
+  agent-browser service site-policies
+  agent-browser service providers
+  agent-browser service challenges
+  agent-browser service cancel <job-id> --reason stale
+  agent-browser service retry browser-1 --by operator --note approved
+  agent-browser service acknowledge browser-1 --by operator --note triaged
+  agent-browser service resolve browser-1 --by operator --note recovered
+  agent-browser service activity browser-1
+  agent-browser service trace --service-name JournalDownloader --task-name probeACSwebsite
+  agent-browser service jobs --limit 20
+  agent-browser service jobs --id <job-id>
+  agent-browser service jobs --state failed --action navigate
+  agent-browser service incidents --limit 20
+  agent-browser service incidents --id browser-1
+  agent-browser service incidents --handling-state unacknowledged
+  agent-browser service incidents --severity critical --escalation os_degraded_possible
+  agent-browser service incidents --state active --kind service_job_timeout
+  agent-browser service incidents --state recovered --handling-state resolved --browser-id browser-1
+  agent-browser service events --limit 20
+  agent-browser service events --kind browser_health_changed --browser-id browser-1 --since 2026-04-22T00:00:00Z
+  agent-browser service events --kind browser_recovery_started
+  agent-browser service events --kind browser_recovery_override
+  agent-browser service events --kind tab_lifecycle_changed
+  agent-browser --json service status
+"##
+        }
+
+        "mcp" => {
+            r##"
+agent-browser mcp - Inspect MCP resource contracts and service tools
+
+Usage:
+  agent-browser mcp serve
+  agent-browser mcp resources
+  agent-browser mcp read <uri>
+
+Commands:
+  serve                 Run the MCP stdio server
+  resources             List read-only service resources exposed for MCP adapters
+  read                  Read a service resource URI as JSON
+
+Notes:
+  - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
+  - MCP tools include service_job_cancel, service_incidents, service_trace, service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, service_provider_delete, browser_navigate, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_get, browser_cookies_set, browser_cookies_clear, browser_storage_get, browser_storage_set, browser_storage_clear, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_start, browser_har_stop, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, browser_clipboard, browser_back, browser_forward, browser_reload, browser_tab_new, browser_tab_switch, browser_tab_close, browser_set_content, browser_command, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, browser_fill, browser_wait, browser_type, browser_press, browser_hover, browser_select, browser_get_text, browser_get_value, browser_get_attribute, browser_get_html, browser_get_styles, browser_count, browser_get_box, browser_is_visible, browser_is_enabled, browser_check, browser_is_checked, browser_uncheck, browser_scroll, browser_scroll_into_view, browser_focus, and browser_clear.
+  - browser_navigate, browser_back, browser_forward, browser_reload, browser_tab_*, browser_set_content, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_*, browser_storage_*, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_*, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, and browser_clipboard provide typed schemas for common navigation, tab, page-content, request-inspection, session-shaping, observability, artifact, file-transfer, HAR, routing, cookie, and storage workflows.
+  - browser_command queues remaining HTTP-parity actions with params copied into the queued daemon command when a typed browser_* tool is not yet available.
+  - Example browser_command arguments: {"action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}.
+  - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
+  - service_trace reads persisted service state and returns related events, jobs, incidents, activity, and ownership summary contexts and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
+  - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, and since filters as CLI and HTTP.
+  - service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
+  - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
+  - Service jobs persist serviceName, agentName, and taskName when commands provide them.
+  - Service job namingWarnings values are missing_service_name, missing_agent_name, and missing_task_name. hasNamingWarning is true when namingWarnings is non-empty.
+  - HTTP /api/service/jobs, HTTP /api/service/jobs/<id>, and MCP agent-browser://jobs job records follow docs/dev/contracts/service-job-record.v1.schema.json.
+  - CLI and HTTP service_jobs response envelopes follow docs/dev/contracts/service-jobs-response.v1.schema.json.
+  - HTTP /api/service/incidents, HTTP /api/service/incidents/<id>, MCP agent-browser://incidents, and MCP service_incidents incident records follow docs/dev/contracts/service-incident-record.v1.schema.json.
+  - CLI, HTTP, and MCP service_incidents response envelopes follow docs/dev/contracts/service-incidents-response.v1.schema.json.
+  - HTTP /api/service/events and MCP agent-browser://events event records follow docs/dev/contracts/service-event-record.v1.schema.json.
+  - CLI and HTTP service_events response envelopes follow docs/dev/contracts/service-events-response.v1.schema.json.
+  - HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching docs/dev/contracts/service-*-record.v1.schema.json files.
+  - service_status responses follow docs/dev/contracts/service-status-response.v1.schema.json.
+  - Service collection response envelopes follow the matching docs/dev/contracts/service-*-response.v1.schema.json files for profiles, browsers, sessions, tabs, site policies, providers, and challenges.
+  - Service site-policy and provider mutation responses follow the matching docs/dev/contracts/service-*-upsert-response.v1.schema.json and docs/dev/contracts/service-*-delete-response.v1.schema.json files.
+  - Service job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching docs/dev/contracts/service-*-response.v1.schema.json files.
+  - service_reconcile responses follow docs/dev/contracts/service-reconcile-response.v1.schema.json.
+  - service_trace responses follow docs/dev/contracts/service-trace-response.v1.schema.json, with summary and activity records covered by the matching service-trace-summary and service-trace-activity schemas.
+  - Incident activity responses follow docs/dev/contracts/service-incident-activity-response.v1.schema.json.
+  - It reads persisted service state from ~/.agent-browser/service/state.json.
+  - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
+  - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
+
+Global Options:
+  --json               Output compact JSON
+
+Examples:
+  agent-browser mcp serve
+  agent-browser mcp resources
+  agent-browser mcp read agent-browser://incidents
+  agent-browser mcp read agent-browser://profiles
+  agent-browser mcp read agent-browser://sessions
+  agent-browser mcp read agent-browser://browsers
+  agent-browser mcp read agent-browser://tabs
+  agent-browser mcp read agent-browser://site-policies
+  agent-browser mcp read agent-browser://providers
+  agent-browser mcp read agent-browser://challenges
+  agent-browser mcp read agent-browser://jobs
+  agent-browser mcp read agent-browser://events
+  agent-browser mcp read agent-browser://incidents/browser-1/activity
 "##
         }
 
@@ -2870,6 +3945,31 @@ Streaming:
   stream disable             Stop runtime WebSocket streaming
   stream status              Show streaming status and active port
 
+Service:
+  service status             Show service worker health and configured service state
+  service watch              Poll service worker health and reconciliation state
+  service reconcile          Probe persisted browser records and update service state
+  service profiles           Show retained service profile records
+  service sessions           Show retained service session records
+  service browsers           Show retained browser health records
+  service tabs               Show retained service tab records
+  service site-policies      Show configured service site-policy records
+  service providers          Show configured service provider records
+  service challenges         Show retained service challenge records
+  service cancel             Cancel a queued job or request running job cancellation
+  service acknowledge        Record that an operator has seen a retained incident
+  service resolve            Mark a retained incident handled
+  service activity           Show a normalized retained incident timeline
+  service trace              Show related service trace records in one response
+  service jobs               Show recent service control-plane jobs
+  service incidents          Show grouped retained service incidents
+  service events             Show recent service events
+
+MCP:
+  mcp serve                  Run the MCP stdio server
+  mcp resources              List read-only service resource contracts
+  mcp read <uri>             Read a service resource as JSON
+
 Batch:
   batch [--bail] ["cmd" ...]  Execute multiple commands sequentially (args or stdin)
                               --bail stops on first error (default: continue all)
@@ -2964,6 +4064,11 @@ Options:
   --confirm-actions <list>   Categories requiring confirmation (or AGENT_BROWSER_CONFIRM_ACTIONS)
   --confirm-interactive      Interactive confirmation prompts; auto-denies if stdin is not a TTY (or AGENT_BROWSER_CONFIRM_INTERACTIVE)
   --engine <name>            Browser engine: chrome (default), lightpanda (or AGENT_BROWSER_ENGINE)
+  --service-reconcile-interval <ms> Background service browser-health reconciliation interval (default: 60000); 0 disables it
+  --service-job-timeout <ms> Timeout for dispatched service control jobs; 0 disables it
+  --service-recovery-retry-budget <n> Browser recovery attempts before faulting (default: 3)
+  --service-recovery-base-backoff <ms> Browser recovery backoff base delay (default: 1000)
+  --service-recovery-max-backoff <ms> Browser recovery backoff ceiling (default: 30000)
   --no-auto-dialog           Disable automatic dismissal of alert/beforeunload dialogs (or AGENT_BROWSER_NO_AUTO_DIALOG)
   --model <name>             AI model for chat (or AI_GATEWAY_MODEL env)
   -v, --verbose              Show tool commands and their raw output
@@ -3002,8 +4107,36 @@ Configuration:
             "defaultViewport": "960x640"
           }}
         }}
+      }},
+      "service": {{
+        "reconcileIntervalMs": 60000,
+        "jobTimeoutMs": 120000,
+        "profiles": {{
+          "work": {{
+            "name": "Work",
+            "allocation": "per_service",
+            "keyring": "basic_password_store",
+            "sharedServiceIds": ["JournalDownloader"],
+            "manualLoginPreferred": true
+          }}
+        }},
+        "sessions": {{
+          "journal-session": {{
+            "serviceName": "JournalDownloader",
+            "agentName": "article-probe-agent",
+            "taskName": "probeACSwebsite",
+            "profileId": "work",
+            "lease": "exclusive",
+            "cleanup": "close_tabs"
+          }}
+        }}
       }}
     }}
+
+  service.profiles and service.sessions are contract metadata for the service
+  control plane. They describe allocation, keyring posture, caller ownership,
+  and cleanup policy; current launch behavior still comes from runtimeProfiles,
+  --runtime-profile, --profile, and existing launch flags.
 
   Service hints are advisory. When a configured service marks
   manualLoginPreferred, navigation to known login hosts emits a warning that
@@ -3013,6 +4146,15 @@ Configuration:
   detach from a managed runtime-profile browser instead of shutting it down.
   Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640
   to resize the browser content area after launch and before the command runs.
+  Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`
+  to run persisted browser-health reconciliation in the daemon background.
+  Set `service.jobTimeoutMs` or pass `--service-job-timeout` to mark
+  long-running service control jobs as timed_out.
+  Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and
+  `service.recoveryMaxBackoffMs` or pass the matching service recovery flags
+  to control when repeated browser relaunch attempts become faulted. Recovery
+  trace events include policySource fields showing whether active recovery
+  values came from defaults, config, environment, or CLI flags.
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.
@@ -3047,6 +4189,11 @@ Environment:
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM session encryption
   AGENT_BROWSER_STREAM_PORT      Override WebSocket streaming port (default: OS-assigned)
   AGENT_BROWSER_IDLE_TIMEOUT_MS  Auto-shutdown daemon after N ms of inactivity (disabled by default)
+  AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS Background service browser-health reconciliation interval in ms (default: 60000; 0 disables it)
+  AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS Timeout for dispatched service control jobs in ms (disabled by default; 0 disables it)
+  AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET Browser recovery attempts before faulting (default: 3)
+  AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS Browser recovery backoff base delay in ms (default: 1000)
+  AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS Browser recovery backoff ceiling in ms (default: 30000)
   AGENT_BROWSER_IOS_DEVICE       Default iOS device name
   AGENT_BROWSER_IOS_UDID         Default iOS device UDID
   AGENT_BROWSER_RUNTIME_PROFILE  Managed runtime profile name
@@ -3091,6 +4238,24 @@ Examples:
   agent-browser --auto-connect snapshot  # Auto-discover running Chrome
   agent-browser stream enable            # Start runtime streaming on an auto-selected port
   agent-browser stream status            # Inspect runtime streaming state
+  agent-browser service status           # Inspect service control-plane state
+  agent-browser service watch            # Watch service health until interrupted
+  agent-browser service reconcile        # Refresh persisted service browser health
+  agent-browser service profiles         # Inspect retained service profile records
+  agent-browser service sessions         # Inspect retained service session records
+  agent-browser service browsers         # Inspect retained browser health records
+  agent-browser service tabs             # Inspect retained service tab records
+  agent-browser service site-policies    # Inspect configured service site-policy records
+  agent-browser service providers        # Inspect configured service provider records
+  agent-browser service challenges       # Inspect retained service challenge records
+  agent-browser service cancel <job-id>  # Cancel a queued or running service job
+  agent-browser service acknowledge      # Mark a retained incident acknowledged
+  agent-browser service resolve          # Mark a retained incident resolved
+  agent-browser service activity         # Inspect a retained incident timeline
+  agent-browser service trace            # Inspect related service trace records
+  agent-browser service jobs             # Inspect recent service control jobs
+  agent-browser service incidents        # Inspect grouped retained service incidents
+  agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile
   agent-browser runtime login https://example.com --attachable # DevTools-enabled manual login for ordinary sites
@@ -3205,7 +4370,13 @@ pub fn print_version() {
 
 #[cfg(test)]
 mod tests {
-    use super::format_storage_text;
+    use super::{
+        format_service_browsers_text, format_service_challenges_text, format_service_events_text,
+        format_service_jobs_text, format_service_profiles_text, format_service_providers_text,
+        format_service_sessions_text, format_service_site_policies_text,
+        format_service_status_text, format_service_tabs_text, format_service_trace_text,
+        format_storage_text,
+    };
     use serde_json::json;
 
     #[test]
@@ -3270,5 +4441,344 @@ mod tests {
         let rendered = format_storage_text(&data).unwrap();
 
         assert_eq!(rendered, "No storage entries");
+    }
+
+    #[test]
+    fn test_format_service_status_text_includes_profile_and_session_summaries() {
+        let data = json!({
+            "service_state": {
+                "controlPlane": {
+                    "workerState": "idle",
+                    "browserHealth": "ready",
+                    "queueDepth": 1,
+                    "queueCapacity": 64
+                },
+                "reconciliation": {
+                    "lastReconciledAt": "2026-04-25T00:00:00Z",
+                    "browserCount": 1,
+                    "changedBrowsers": 0,
+                    "lastError": null
+                },
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "allocation": "per_service",
+                        "keyring": "basic_password_store",
+                        "persistent": true,
+                        "manualLoginPreferred": false,
+                        "sharedServiceIds": ["JournalDownloader"],
+                        "userDataDir": "/tmp/work-profile"
+                    }
+                },
+                "sessions": {
+                    "runtime-session": {
+                        "id": "runtime-session",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "profileId": "work",
+                        "lease": "exclusive",
+                        "cleanup": "close_browser",
+                        "browserIds": ["session:runtime-session"]
+                    }
+                },
+                "browsers": {
+                    "session:runtime-session": {
+                        "id": "session:runtime-session"
+                    }
+                },
+                "tabs": {}
+            }
+        });
+
+        let rendered = format_service_status_text(&data).unwrap();
+
+        assert!(
+            rendered.contains("Service: worker=idle browser=ready queue=1/64 browsers=1 tabs=0")
+        );
+        assert!(rendered.contains("Profiles: 1"));
+        assert!(rendered.contains(
+            "work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader user_data=/tmp/work-profile"
+        ));
+        assert!(rendered.contains("Sessions: 1"));
+        assert!(rendered.contains(
+            "runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work lease=exclusive cleanup=close_browser browsers=session:runtime-session"
+        ));
+    }
+
+    #[test]
+    fn test_format_service_events_text_includes_trace_context() {
+        let data = json!({
+            "events": [{
+                "timestamp": "2026-04-25T00:00:00Z",
+                "kind": "browser_launch_recorded",
+                "browserId": "session:runtime-session",
+                "profileId": "work",
+                "sessionId": "runtime-session",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "message": "Browser session:runtime-session launch metadata recorded"
+            }]
+        });
+
+        let rendered = format_service_events_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "2026-04-25T00:00:00Z browser_launch_recorded browser=session:runtime-session profile=work session=runtime-session service=JournalDownloader agent=codex task=probeACSwebsite Browser session:runtime-session launch metadata recorded"
+        );
+    }
+
+    #[test]
+    fn test_format_service_browsers_text_includes_last_health_observation() {
+        let data = json!({
+            "browsers": [{
+                "id": "session:runtime-session",
+                "health": "degraded",
+                "host": "owned_process",
+                "profileId": "work",
+                "pid": 1234,
+                "lastError": "Polite browser close failed; force kill was required",
+                "lastHealthObservation": {
+                    "observedAt": "2026-04-25T00:00:00Z",
+                    "failureClass": "browser_shutdown_degraded",
+                    "processExitCause": "operator_requested_close"
+                }
+            }]
+        });
+
+        let rendered = format_service_browsers_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Browsers: 1\n  session:runtime-session health=degraded host=owned_process profile=work pid=1234 observed=2026-04-25T00:00:00Z failure=browser_shutdown_degraded exit_cause=operator_requested_close error=Polite browser close failed; force kill was required"
+        );
+    }
+
+    #[test]
+    fn test_format_service_profiles_text_includes_profile_contract_fields() {
+        let data = json!({
+            "profiles": [{
+                "id": "work",
+                "name": "Work",
+                "allocation": "per_service",
+                "keyring": "basic_password_store",
+                "persistent": true,
+                "manualLoginPreferred": false,
+                "sharedServiceIds": ["JournalDownloader"],
+                "userDataDir": "/tmp/work-profile"
+            }]
+        });
+
+        let rendered = format_service_profiles_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader user_data=/tmp/work-profile"
+        );
+    }
+
+    #[test]
+    fn test_format_service_sessions_text_includes_trace_context() {
+        let data = json!({
+            "sessions": [{
+                "id": "runtime-session",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "profileId": "work",
+                "lease": "exclusive",
+                "cleanup": "close_browser",
+                "browserIds": ["session:runtime-session"]
+            }]
+        });
+
+        let rendered = format_service_sessions_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Sessions: 1\n  runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work lease=exclusive cleanup=close_browser browsers=session:runtime-session"
+        );
+    }
+
+    #[test]
+    fn test_format_service_tabs_text_includes_tab_metadata() {
+        let data = json!({
+            "tabs": [{
+                "id": "tab-1",
+                "browserId": "browser-1",
+                "sessionId": "cdp-session-1",
+                "ownerSessionId": "runtime-session",
+                "lifecycle": "ready",
+                "targetId": "target-1",
+                "title": "Example",
+                "url": "https://example.com/"
+            }]
+        });
+
+        let rendered = format_service_tabs_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Tabs: 1\n  tab-1 browser=browser-1 session=cdp-session-1 owner=runtime-session lifecycle=ready target=target-1 title=Example url=https://example.com/"
+        );
+    }
+
+    #[test]
+    fn test_format_service_site_policies_text_includes_policy_fields() {
+        let data = json!({
+            "sitePolicies": [{
+                "id": "google",
+                "originPattern": "https://accounts.google.com",
+                "browserHost": "local_headed",
+                "interactionMode": "human_like_input",
+                "challengePolicy": "avoid_first",
+                "manualLoginPreferred": true,
+                "profileRequired": true
+            }]
+        });
+
+        let rendered = format_service_site_policies_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Site policies: 1\n  google origin=https://accounts.google.com host=local_headed interaction=human_like_input challenge=avoid_first manual_login=yes profile_required=yes"
+        );
+    }
+
+    #[test]
+    fn test_format_service_providers_text_includes_provider_fields() {
+        let data = json!({
+            "providers": [{
+                "id": "manual",
+                "kind": "manual_approval",
+                "displayName": "Dashboard approval",
+                "enabled": true,
+                "configRef": "service.providers.manual",
+                "capabilities": ["human_approval"]
+            }]
+        });
+
+        let rendered = format_service_providers_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Providers: 1\n  manual name=Dashboard approval kind=manual_approval enabled=yes config=service.providers.manual capabilities=human_approval"
+        );
+    }
+
+    #[test]
+    fn test_format_service_challenges_text_includes_challenge_fields() {
+        let data = json!({
+            "challenges": [{
+                "id": "challenge-1",
+                "kind": "captcha",
+                "state": "waiting_for_provider",
+                "tabId": "tab-1",
+                "providerId": "captcha-api",
+                "policyDecision": "provider_allowed",
+                "humanApproved": false,
+                "result": "pending"
+            }]
+        });
+
+        let rendered = format_service_challenges_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Challenges: 1\n  challenge-1 kind=captcha state=waiting_for_provider tab=tab-1 provider=captcha-api decision=provider_allowed human_approved=no result=pending"
+        );
+    }
+
+    #[test]
+    fn test_format_service_jobs_text_includes_naming_warnings() {
+        let data = json!({
+            "jobs": [{
+                "id": "job-1",
+                "action": "navigate",
+                "state": "queued",
+                "submittedAt": "2026-04-25T00:00:00Z",
+                "hasNamingWarning": true,
+                "namingWarnings": ["missing_agent_name"]
+            }]
+        });
+
+        let rendered = format_service_jobs_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "2026-04-25T00:00:00Z queued action=navigate id=job-1 namingWarnings=missing_agent_name"
+        );
+    }
+
+    #[test]
+    fn test_format_service_trace_text_includes_activity_trace_context() {
+        let data = json!({
+            "counts": {
+                "events": 1,
+                "jobs": 1,
+                "incidents": 1,
+                "activity": 1
+            },
+            "summary": {
+                "contextCount": 1,
+                "hasTraceContext": true,
+                "namingWarningCount": 0,
+                "contexts": [{
+                    "serviceName": "JournalDownloader",
+                    "agentName": "codex",
+                    "taskName": "probeACSwebsite",
+                    "browserId": "browser-1",
+                    "profileId": "work",
+                    "sessionId": "session-1",
+                    "eventCount": 1,
+                    "jobCount": 1,
+                    "incidentCount": 1,
+                    "activityCount": 1,
+                    "hasNamingWarning": false,
+                    "namingWarnings": [],
+                    "latestTimestamp": "2026-04-25T00:00:00Z"
+                }]
+            },
+            "activity": [{
+                "id": "activity-1",
+                "source": "event",
+                "timestamp": "2026-04-25T00:00:00Z",
+                "kind": "browser_health_changed",
+                "browserId": "browser-1",
+                "profileId": "work",
+                "sessionId": "session-1",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "message": "Browser failed"
+            }]
+        });
+
+        let rendered = format_service_trace_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Trace: events=1 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+        );
+    }
+
+    #[test]
+    fn test_format_service_status_text_handles_empty_profiles_and_sessions() {
+        let data = json!({
+            "service_state": {
+                "profiles": {},
+                "sessions": {},
+                "browsers": {},
+                "tabs": {}
+            }
+        });
+
+        let rendered = format_service_status_text(&data).unwrap();
+
+        assert!(rendered.contains("Profiles: 0\n  none"));
+        assert!(rendered.contains("Sessions: 0\n  none"));
     }
 }

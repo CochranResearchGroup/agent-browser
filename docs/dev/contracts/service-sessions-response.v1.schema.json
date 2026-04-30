@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-sessions-response.v1.schema.json",
+  "title": "agent-browser service sessions response",
+  "description": "Stable API shape for compact service session collection responses returned by CLI JSON, HTTP service APIs, and MCP resources.",
+  "type": "object",
+  "required": [
+    "sessions",
+    "count"
+  ],
+  "properties": {
+    "sessions": {
+      "type": "array"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

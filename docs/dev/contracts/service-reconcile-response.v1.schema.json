@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-reconcile-response.v1.schema.json",
+  "title": "agent-browser service reconcile response",
+  "description": "Stable API shape for service reconcile responses returned by CLI JSON and HTTP service APIs.",
+  "type": "object",
+  "required": [
+    "reconciled",
+    "browserCount",
+    "changedBrowsers",
+    "service_state"
+  ],
+  "properties": {
+    "reconciled": {
+      "type": "boolean"
+    },
+    "browserCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "changedBrowsers": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "service_state": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

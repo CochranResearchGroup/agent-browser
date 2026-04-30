@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-incidents-response.v1.schema.json",
+  "title": "agent-browser service incidents response",
+  "description": "Stable API shape for filtered service incident list and detail responses returned by CLI JSON, HTTP service APIs, and MCP service_incidents.",
+  "type": "object",
+  "required": [
+    "incidents",
+    "count",
+    "matched",
+    "total"
+  ],
+  "properties": {
+    "filters": {
+      "type": "object",
+      "required": [
+        "state",
+        "severity",
+        "escalation",
+        "handlingState",
+        "kind",
+        "browserId",
+        "profileId",
+        "sessionId",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "since",
+        "limit"
+      ],
+      "properties": {
+        "state": {
+          "type": ["string", "null"],
+          "enum": [
+            "active",
+            "recovered",
+            "service",
+            null
+          ]
+        },
+        "severity": {
+          "type": ["string", "null"],
+          "enum": [
+            "info",
+            "warning",
+            "error",
+            "critical",
+            null
+          ]
+        },
+        "escalation": {
+          "type": ["string", "null"],
+          "enum": [
+            "none",
+            "browser_recovery",
+            "browser_degraded",
+            "job_attention",
+            "service_triage",
+            "os_degraded_possible",
+            null
+          ]
+        },
+        "handlingState": {
+          "type": ["string", "null"],
+          "enum": [
+            "open",
+            "acknowledged",
+            "resolved",
+            null
+          ]
+        },
+        "kind": {
+          "type": ["string", "null"]
+        },
+        "browserId": {
+          "type": ["string", "null"]
+        },
+        "profileId": {
+          "type": ["string", "null"]
+        },
+        "sessionId": {
+          "type": ["string", "null"]
+        },
+        "serviceName": {
+          "type": ["string", "null"]
+        },
+        "agentName": {
+          "type": ["string", "null"]
+        },
+        "taskName": {
+          "type": ["string", "null"]
+        },
+        "since": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "incident": {
+      "type": "object"
+    },
+    "incidents": {
+      "type": "array"
+    },
+    "events": {
+      "type": "array"
+    },
+    "jobs": {
+      "type": "array"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "matched": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

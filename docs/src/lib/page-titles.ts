@@ -8,6 +8,7 @@ export const PAGE_TITLES: Record<string, string> = {
   selectors: "Selectors",
   snapshots: "Snapshots",
   sessions: "Sessions",
+  "service-mode": "Service Mode",
   diffing: "Diffing",
   "cdp-mode": "CDP Mode",
   dashboard: "Dashboard",

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-browser-record.v1.schema.json",
+  "title": "agent-browser service browser record",
+  "description": "Stable API shape for service browser records returned by HTTP service collection APIs and MCP resources.",
+  "type": "object",
+  "required": [
+    "id",
+    "profileId",
+    "host",
+    "health",
+    "pid",
+    "cdpEndpoint",
+    "viewStreams",
+    "activeSessionIds",
+    "lastError",
+    "lastHealthObservation"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "profileId": {
+      "type": ["string", "null"]
+    },
+    "host": {
+      "type": "string",
+      "enum": [
+        "local_headless",
+        "local_headed",
+        "docker_headed",
+        "remote_headed",
+        "cloud_provider",
+        "attached_existing"
+      ]
+    },
+    "health": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "launching",
+        "ready",
+        "degraded",
+        "unreachable",
+        "process_exited",
+        "cdp_disconnected",
+        "reconnecting",
+        "closing",
+        "faulted"
+      ]
+    },
+    "pid": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "cdpEndpoint": {
+      "type": ["string", "null"]
+    },
+    "viewStreams": {
+      "type": "array"
+    },
+    "activeSessionIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "lastError": {
+      "type": ["string", "null"]
+    },
+    "lastHealthObservation": {
+      "type": ["object", "null"]
+    }
+  },
+  "additionalProperties": true
+}
