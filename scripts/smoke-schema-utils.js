@@ -78,6 +78,83 @@ export function assertServiceCollectionSchemaRecord(record, schema, label, optio
   }
 }
 
+export function assertServiceTraceSummarySchemaRecord(summary, schema, label) {
+  assertRequiredFields(summary, schema, label);
+  assertNoSnakeCaseFields(
+    summary,
+    ['context_count', 'has_trace_context', 'naming_warning_count'],
+    label,
+  );
+  assert(Array.isArray(summary.contexts), `${label} missing contexts array: ${JSON.stringify(summary)}`);
+  assert(
+    summary.contextCount === summary.contexts.length,
+    `${label} contextCount mismatch: ${JSON.stringify(summary)}`,
+  );
+  assert(typeof summary.hasTraceContext === 'boolean', `${label} missing hasTraceContext boolean`);
+  assert(Number.isInteger(summary.namingWarningCount), `${label} missing namingWarningCount integer`);
+
+  const contextSchema = schema.properties.contexts.items;
+  for (const [index, context] of summary.contexts.entries()) {
+    const contextLabel = `${label} contexts[${index}]`;
+    assertRequiredFields(context, contextSchema, contextLabel);
+    assertNoSnakeCaseFields(
+      context,
+      [
+        'service_name',
+        'agent_name',
+        'task_name',
+        'browser_id',
+        'profile_id',
+        'session_id',
+        'naming_warnings',
+        'has_naming_warning',
+        'event_count',
+        'job_count',
+        'incident_count',
+        'activity_count',
+        'latest_timestamp',
+      ],
+      contextLabel,
+    );
+    assert(Array.isArray(context.namingWarnings), `${contextLabel} missing namingWarnings array`);
+    for (const warning of context.namingWarnings) {
+      assert(
+        contextSchema.properties.namingWarnings.items.enum.includes(warning),
+        `${contextLabel} warning is outside schema enum: ${warning}`,
+      );
+    }
+    for (const field of ['eventCount', 'jobCount', 'incidentCount', 'activityCount']) {
+      assert(Number.isInteger(context[field]), `${contextLabel} missing ${field} integer`);
+    }
+    assert(typeof context.hasNamingWarning === 'boolean', `${contextLabel} missing hasNamingWarning boolean`);
+  }
+}
+
+export function assertServiceTraceActivitySchemaRecord(activity, schema, label) {
+  assertRequiredFields(activity, schema, label);
+  assertNoSnakeCaseFields(
+    activity,
+    [
+      'event_id',
+      'job_id',
+      'browser_id',
+      'profile_id',
+      'session_id',
+      'service_name',
+      'agent_name',
+      'task_name',
+      'job_state',
+      'job_action',
+    ],
+    label,
+  );
+  assert(schemaEnum(schema, 'source').includes(activity.source), `${label} source is outside schema enum`);
+  assert(schemaEnum(schema, 'kind').includes(activity.kind), `${label} kind is outside schema enum`);
+  if (Object.hasOwn(activity, 'jobState')) {
+    assert(schemaEnum(schema, 'jobState').includes(activity.jobState), `${label} jobState is outside schema enum`);
+  }
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

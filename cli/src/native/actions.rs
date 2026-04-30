@@ -9759,7 +9759,8 @@ mod tests {
     };
     use crate::native::service_model::{
         assert_service_event_record_contract, assert_service_incident_record_contract,
-        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
+        assert_service_job_naming_warning_contract, assert_service_trace_activity_record_contract,
+        assert_service_trace_summary_record_contract, service_job_naming_warning_values,
         BrowserProcess,
     };
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -11615,6 +11616,8 @@ mod tests {
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-1");
         assert_service_incident_record_contract(&result["data"]["incidents"][0]);
         assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
+        assert_service_trace_activity_record_contract(&result["data"]["activity"][1]);
+        assert_service_trace_summary_record_contract(&result["data"]["summary"]);
         assert_eq!(result["data"]["summary"]["contextCount"], 2);
         assert_eq!(result["data"]["summary"]["hasTraceContext"], true);
         assert_eq!(result["data"]["summary"]["namingWarningCount"], 1);

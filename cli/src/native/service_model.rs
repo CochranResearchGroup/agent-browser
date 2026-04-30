@@ -144,6 +144,29 @@ pub const SERVICE_EVENT_KIND_VALUES: [&str; 9] = [
     "incident_acknowledged",
     "incident_resolved",
 ];
+pub const SERVICE_TRACE_ACTIVITY_SOURCE_VALUES: [&str; 3] = ["event", "job", "metadata"];
+pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 12] = [
+    "reconciliation",
+    "browser_launch_recorded",
+    "browser_health_changed",
+    "browser_recovery_started",
+    "browser_recovery_override",
+    "tab_lifecycle_changed",
+    "reconciliation_error",
+    "incident_acknowledged",
+    "incident_resolved",
+    "service_job_timeout",
+    "service_job_cancelled",
+    "service_job",
+];
+pub const SERVICE_JOB_STATE_VALUES: [&str; 6] = [
+    "queued",
+    "running",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "timed_out",
+];
 
 #[cfg(test)]
 fn assert_record_fields(
@@ -513,6 +536,109 @@ pub fn assert_service_challenge_record_contract(value: &serde_json::Value) {
     );
     assert!(SERVICE_CHALLENGE_KIND_VALUES.contains(&value["kind"].as_str().unwrap()));
     assert!(SERVICE_CHALLENGE_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
+}
+
+#[cfg(test)]
+pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "trace summary",
+        value,
+        &[
+            "contextCount",
+            "hasTraceContext",
+            "namingWarningCount",
+            "contexts",
+        ],
+        &["context_count", "has_trace_context", "naming_warning_count"],
+    );
+    let contexts = value["contexts"].as_array().unwrap();
+    assert_eq!(
+        value["contextCount"].as_u64().unwrap(),
+        contexts.len() as u64
+    );
+    assert!(value["hasTraceContext"].is_boolean());
+    assert!(value["namingWarningCount"].is_u64());
+    for context in contexts {
+        assert_record_fields(
+            "trace summary context",
+            context,
+            &[
+                "serviceName",
+                "agentName",
+                "taskName",
+                "browserId",
+                "profileId",
+                "sessionId",
+                "namingWarnings",
+                "hasNamingWarning",
+                "eventCount",
+                "jobCount",
+                "incidentCount",
+                "activityCount",
+                "latestTimestamp",
+            ],
+            &[
+                "service_name",
+                "agent_name",
+                "task_name",
+                "browser_id",
+                "profile_id",
+                "session_id",
+                "naming_warnings",
+                "has_naming_warning",
+                "event_count",
+                "job_count",
+                "incident_count",
+                "activity_count",
+                "latest_timestamp",
+            ],
+        );
+        for warning in context["namingWarnings"].as_array().unwrap() {
+            assert!(
+                SERVICE_JOB_NAMING_WARNING_VALUES.contains(&warning.as_str().unwrap()),
+                "unexpected trace context naming warning {warning:?}"
+            );
+        }
+        assert!(context["hasNamingWarning"].is_boolean());
+        assert!(context["eventCount"].is_u64());
+        assert!(context["jobCount"].is_u64());
+        assert!(context["incidentCount"].is_u64());
+        assert!(context["activityCount"].is_u64());
+    }
+}
+
+#[cfg(test)]
+pub fn assert_service_trace_activity_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "trace activity",
+        value,
+        &[
+            "id",
+            "source",
+            "timestamp",
+            "kind",
+            "title",
+            "message",
+            "browserId",
+        ],
+        &[
+            "event_id",
+            "job_id",
+            "browser_id",
+            "profile_id",
+            "session_id",
+            "service_name",
+            "agent_name",
+            "task_name",
+            "job_state",
+            "job_action",
+        ],
+    );
+    assert!(SERVICE_TRACE_ACTIVITY_SOURCE_VALUES.contains(&value["source"].as_str().unwrap()));
+    assert!(SERVICE_TRACE_ACTIVITY_KIND_VALUES.contains(&value["kind"].as_str().unwrap()));
+    if let Some(job_state) = value.get("jobState").and_then(|state| state.as_str()) {
+        assert!(SERVICE_JOB_STATE_VALUES.contains(&job_state));
+    }
 }
 
 /// Top-level snapshot of the browser service control plane.
@@ -2099,6 +2225,91 @@ mod tests {
         assert_service_site_policy_record_contract(&serde_json::to_value(site_policy).unwrap());
         assert_service_provider_record_contract(&serde_json::to_value(provider).unwrap());
         assert_service_challenge_record_contract(&serde_json::to_value(challenge).unwrap());
+    }
+
+    #[test]
+    fn service_trace_aggregate_contracts_match_wire_shape() {
+        let summary_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-trace-summary-record.v1.schema.json"
+        ))
+        .unwrap();
+        let activity_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-trace-activity-record.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_eq!(
+            summary_schema["properties"]["contexts"]["items"]["properties"]["namingWarnings"]
+                ["items"]["enum"],
+            json!(SERVICE_JOB_NAMING_WARNING_VALUES.to_vec())
+        );
+        assert_eq!(
+            activity_schema["properties"]["source"]["enum"],
+            json!(SERVICE_TRACE_ACTIVITY_SOURCE_VALUES.to_vec())
+        );
+        assert_eq!(
+            activity_schema["properties"]["kind"]["enum"],
+            json!(SERVICE_TRACE_ACTIVITY_KIND_VALUES.to_vec())
+        );
+        assert_eq!(
+            activity_schema["properties"]["jobState"]["enum"],
+            json!(SERVICE_JOB_STATE_VALUES.to_vec())
+        );
+        assert_schema_required_fields(
+            &summary_schema,
+            &[
+                "contextCount",
+                "hasTraceContext",
+                "namingWarningCount",
+                "contexts",
+            ],
+        );
+        assert_schema_required_fields(
+            &activity_schema,
+            &["id", "source", "timestamp", "kind", "title", "message"],
+        );
+
+        let summary = json!({
+            "contextCount": 1,
+            "hasTraceContext": true,
+            "namingWarningCount": 0,
+            "contexts": [{
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "browserId": "browser-1",
+                "profileId": "work",
+                "sessionId": "session-1",
+                "namingWarnings": [],
+                "hasNamingWarning": false,
+                "eventCount": 1,
+                "jobCount": 1,
+                "incidentCount": 0,
+                "activityCount": 1,
+                "latestTimestamp": "2026-04-22T00:01:00Z",
+            }],
+        });
+        let activity = json!({
+            "id": "job-1",
+            "source": "job",
+            "jobId": "job-1",
+            "timestamp": "2026-04-22T00:01:00Z",
+            "kind": "service_job_timeout",
+            "title": "Service job timed out",
+            "message": "Timed out",
+            "jobState": "timed_out",
+            "jobAction": "navigate",
+            "target": {"browser": "browser-1"},
+            "browserId": "browser-1",
+            "profileId": "work",
+            "sessionId": "session-1",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+        });
+
+        assert_service_trace_summary_record_contract(&summary);
+        assert_service_trace_activity_record_contract(&activity);
     }
 
     #[test]

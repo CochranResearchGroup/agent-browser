@@ -61,3 +61,23 @@ These schemas cover `profiles`, `browsers`, `sessions`, `tabs`,
 `sitePolicies`, `providers`, and `challenges` records. They are guarded by Rust
 model tests and MCP resource tests so software clients can consume the same
 camelCase record fields from HTTP and MCP without inferring Rust internals.
+
+## Service Trace Aggregate Records v1
+
+`service-trace-summary-record.v1.schema.json` describes the `summary` object
+returned by `agent-browser service trace`, HTTP `GET /api/service/trace`, and
+MCP `service_trace`.
+
+`service-trace-activity-record.v1.schema.json` describes normalized `activity`
+items returned by:
+
+- CLI `agent-browser service activity <incident-id>`
+- CLI `agent-browser service trace`
+- HTTP `GET /api/service/incidents/<id>/activity`
+- HTTP `GET /api/service/trace`
+- MCP `agent-browser://incidents/{incident_id}/activity`
+- MCP `service_trace`
+
+The schemas are guarded by Rust model/action tests and live HTTP/MCP trace
+smokes so dashboards, API clients, and agents can use the aggregate trace
+payload without rejoining raw event, job, and incident records themselves.

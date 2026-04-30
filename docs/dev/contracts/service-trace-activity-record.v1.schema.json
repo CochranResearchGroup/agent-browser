@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-trace-activity-record.v1.schema.json",
+  "title": "agent-browser service trace activity record",
+  "description": "Stable API shape for normalized service trace activity items returned by incident activity and service trace APIs.",
+  "type": "object",
+  "required": [
+    "id",
+    "source",
+    "timestamp",
+    "kind",
+    "title",
+    "message",
+    "browserId"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "event",
+        "job",
+        "metadata"
+      ]
+    },
+    "eventId": {
+      "type": "string"
+    },
+    "jobId": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "reconciliation",
+        "browser_launch_recorded",
+        "browser_health_changed",
+        "browser_recovery_started",
+        "browser_recovery_override",
+        "tab_lifecycle_changed",
+        "reconciliation_error",
+        "incident_acknowledged",
+        "incident_resolved",
+        "service_job_timeout",
+        "service_job_cancelled",
+        "service_job"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "browserId": {
+      "type": ["string", "null"]
+    },
+    "profileId": {
+      "type": ["string", "null"]
+    },
+    "sessionId": {
+      "type": ["string", "null"]
+    },
+    "serviceName": {
+      "type": ["string", "null"]
+    },
+    "agentName": {
+      "type": ["string", "null"]
+    },
+    "taskName": {
+      "type": ["string", "null"]
+    },
+    "jobState": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "timed_out"
+      ]
+    },
+    "jobAction": {
+      "type": "string"
+    },
+    "target": {},
+    "details": {}
+  },
+  "additionalProperties": true
+}

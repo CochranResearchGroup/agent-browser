@@ -19,6 +19,8 @@ import {
 import {
   assertServiceEventSchemaRecord,
   assertServiceIncidentSchemaRecord,
+  assertServiceTraceActivitySchemaRecord,
+  assertServiceTraceSummarySchemaRecord,
   loadServiceRecordSchema,
   parseMcpJsonResource,
 } from './smoke-schema-utils.js';
@@ -36,6 +38,12 @@ const incidentRecordSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-incident-record.v1.schema.json',
 );
 const eventRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-event-record.v1.schema.json');
+const traceSummaryRecordSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-trace-summary-record.v1.schema.json',
+);
+const traceActivityRecordSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-trace-activity-record.v1.schema.json',
+);
 
 let mcp;
 const timeout = setTimeout(() => {
@@ -210,6 +218,14 @@ try {
   });
   assertServiceEventSchemaRecord(httpEvent, eventRecordSchema, 'HTTP trace event');
   assertServiceEventSchemaRecord(mcpEvent, eventRecordSchema, 'MCP trace event');
+  assertServiceTraceSummarySchemaRecord(trace.data.summary, traceSummaryRecordSchema, 'HTTP trace summary');
+  assertServiceTraceSummarySchemaRecord(mcpTrace.data.summary, traceSummaryRecordSchema, 'MCP trace summary');
+  for (const [index, item] of trace.data.activity.entries()) {
+    assertServiceTraceActivitySchemaRecord(item, traceActivityRecordSchema, `HTTP trace activity[${index}]`);
+  }
+  for (const [index, item] of mcpTrace.data.activity.entries()) {
+    assertServiceTraceActivitySchemaRecord(item, traceActivityRecordSchema, `MCP trace activity[${index}]`);
+  }
 
   const httpEvents = await httpJson(
     port,

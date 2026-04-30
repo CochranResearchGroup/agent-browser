@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-trace-summary-record.v1.schema.json",
+  "title": "agent-browser service trace summary record",
+  "description": "Stable API shape for service trace summary records returned by CLI JSON, HTTP service APIs, MCP tools, and dashboard trace views.",
+  "type": "object",
+  "required": [
+    "contextCount",
+    "hasTraceContext",
+    "namingWarningCount",
+    "contexts"
+  ],
+  "properties": {
+    "contextCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "hasTraceContext": {
+      "type": "boolean"
+    },
+    "namingWarningCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "contexts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "serviceName",
+          "agentName",
+          "taskName",
+          "browserId",
+          "profileId",
+          "sessionId",
+          "namingWarnings",
+          "hasNamingWarning",
+          "eventCount",
+          "jobCount",
+          "incidentCount",
+          "activityCount",
+          "latestTimestamp"
+        ],
+        "properties": {
+          "serviceName": {
+            "type": ["string", "null"]
+          },
+          "agentName": {
+            "type": ["string", "null"]
+          },
+          "taskName": {
+            "type": ["string", "null"]
+          },
+          "browserId": {
+            "type": ["string", "null"]
+          },
+          "profileId": {
+            "type": ["string", "null"]
+          },
+          "sessionId": {
+            "type": ["string", "null"]
+          },
+          "namingWarnings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "missing_service_name",
+                "missing_agent_name",
+                "missing_task_name"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "hasNamingWarning": {
+            "type": "boolean"
+          },
+          "eventCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "jobCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "incidentCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activityCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "latestTimestamp": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
