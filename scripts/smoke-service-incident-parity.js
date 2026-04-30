@@ -20,6 +20,7 @@ import {
   assertServiceEventSchemaRecord,
   assertServiceIncidentActivityResponseSchemaRecord,
   assertServiceIncidentSchemaRecord,
+  assertServiceIncidentsResponseSchemaRecord,
   assertServiceTraceResponseSchemaRecord,
   assertServiceTraceActivitySchemaRecord,
   assertServiceTraceSummarySchemaRecord,
@@ -38,6 +39,9 @@ const taskName = 'compareHttpMcpIncidents';
 const traceFields = { serviceName, agentName, taskName };
 const incidentRecordSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-incident-record.v1.schema.json',
+);
+const incidentsResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-incidents-response.v1.schema.json',
 );
 const eventRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-event-record.v1.schema.json');
 const traceResponseRecordSchema = loadServiceRecordSchema(
@@ -254,6 +258,7 @@ try {
       serviceName,
     )}&agent-name=${encodeURIComponent(agentName)}&task-name=${encodeURIComponent(taskName)}&limit=20`,
   );
+  assertServiceIncidentsResponseSchemaRecord(httpIncidents.data, incidentsResponseSchema, 'HTTP incidents response');
   const httpIncident = assertCriticalIncidentPayload(httpIncidents, 'HTTP', browserId);
 
   const httpIncidentDetail = await httpJson(
@@ -262,6 +267,11 @@ try {
     `/api/service/incidents/${encodeURIComponent(browserId)}?limit=20`,
   );
   assert(httpIncidentDetail.success === true, `HTTP incident detail failed: ${JSON.stringify(httpIncidentDetail)}`);
+  assertServiceIncidentsResponseSchemaRecord(
+    httpIncidentDetail.data,
+    incidentsResponseSchema,
+    'HTTP incident detail response',
+  );
   assert(httpIncidentDetail.data?.incident?.id === browserId, 'HTTP incident detail returned the wrong incident');
   assertServiceIncidentSchemaRecord(httpIncidentDetail.data.incident, incidentRecordSchema, 'HTTP detail');
 
@@ -300,6 +310,7 @@ try {
     },
   });
   const mcpIncidents = parseMcpToolPayload(mcpIncidentsResult, 'MCP service_incidents');
+  assertServiceIncidentsResponseSchemaRecord(mcpIncidents.data, incidentsResponseSchema, 'MCP incidents response');
   const mcpIncident = assertCriticalIncidentPayload(mcpIncidents, 'MCP', browserId);
 
   const mcpResourceResult = await send('resources/read', { uri: 'agent-browser://incidents' });

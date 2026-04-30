@@ -31,6 +31,18 @@ The schema is guarded by Rust tests for the model, HTTP, MCP, and service trace
 surfaces. Keep new contractual incident fields in this schema before relying on
 them from external clients.
 
+`service-incidents-response.v1.schema.json` describes the response envelope
+returned by:
+
+- CLI `agent-browser service incidents`
+- HTTP `GET /api/service/incidents`
+- HTTP `GET /api/service/incidents/<id>`
+- MCP `service_incidents`
+
+The schema covers list and detail responses, including the returned incident
+array, count, matched and total counters, list filters, and detail-only related
+events and jobs.
+
 ## Service Event Record v1
 
 `service-event-record.v1.schema.json` describes retained service event records

@@ -186,6 +186,42 @@ export function assertServiceIncidentActivityResponseSchemaRecord(response, sche
   assert(response.count === response.activity.length, `${label} count does not match activity length`);
 }
 
+export function assertServiceIncidentsResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assertNoSnakeCaseFields(response, ['handling_state', 'browser_id', 'profile_id', 'session_id'], label);
+  assert(Array.isArray(response.incidents), `${label} missing incidents array`);
+  assert(Number.isInteger(response.count), `${label} missing count integer`);
+  assert(Number.isInteger(response.matched), `${label} missing matched integer`);
+  assert(Number.isInteger(response.total), `${label} missing total integer`);
+  assert(response.count === response.incidents.length, `${label} count does not match incidents length`);
+  if (Object.hasOwn(response, 'filters')) {
+    assertRequiredFields(response.filters, schema.properties.filters, `${label} filters`);
+    assertNoSnakeCaseFields(
+      response.filters,
+      [
+        'handling_state',
+        'browser_id',
+        'profile_id',
+        'session_id',
+        'service_name',
+        'agent_name',
+        'task_name',
+      ],
+      `${label} filters`,
+    );
+    assert(Number.isInteger(response.filters.limit), `${label} filters missing limit integer`);
+  }
+  if (Object.hasOwn(response, 'incident')) {
+    assert(response.incident && typeof response.incident === 'object', `${label} missing incident object`);
+  }
+  if (Object.hasOwn(response, 'events')) {
+    assert(Array.isArray(response.events), `${label} events is not an array`);
+  }
+  if (Object.hasOwn(response, 'jobs')) {
+    assert(Array.isArray(response.jobs), `${label} jobs is not an array`);
+  }
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

@@ -708,6 +708,72 @@ pub fn assert_service_trace_response_contract(value: &serde_json::Value) {
 }
 
 #[cfg(test)]
+pub fn assert_service_incidents_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "incidents response",
+        value,
+        &["incidents", "count", "matched", "total"],
+        &[],
+    );
+    let incidents = value["incidents"].as_array().unwrap();
+    assert_eq!(
+        value["count"].as_u64().unwrap(),
+        incidents.len() as u64,
+        "incidents response count does not match incidents length"
+    );
+    assert!(value["matched"].is_u64());
+    assert!(value["total"].is_u64());
+    for incident in incidents {
+        assert_service_incident_record_contract(incident);
+    }
+    if let Some(filters) = value.get("filters") {
+        assert_record_fields(
+            "incidents filters",
+            filters,
+            &[
+                "state",
+                "severity",
+                "escalation",
+                "handlingState",
+                "kind",
+                "browserId",
+                "profileId",
+                "sessionId",
+                "serviceName",
+                "agentName",
+                "taskName",
+                "since",
+                "limit",
+            ],
+            &[
+                "handling_state",
+                "browser_id",
+                "profile_id",
+                "session_id",
+                "service_name",
+                "agent_name",
+                "task_name",
+            ],
+        );
+        assert!(filters["limit"].is_u64());
+    }
+    if let Some(incident) = value.get("incident") {
+        assert_service_incident_record_contract(incident);
+    }
+    if let Some(events) = value.get("events").and_then(|events| events.as_array()) {
+        for event in events {
+            assert_service_event_record_contract(event);
+        }
+    }
+    assert!(
+        value
+            .get("jobs")
+            .is_none_or(|jobs| jobs.as_array().is_some()),
+        "incidents response jobs is not an array"
+    );
+}
+
+#[cfg(test)]
 pub fn assert_service_incident_activity_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "incident activity response",
@@ -2307,6 +2373,106 @@ mod tests {
         assert_service_site_policy_record_contract(&serde_json::to_value(site_policy).unwrap());
         assert_service_provider_record_contract(&serde_json::to_value(provider).unwrap());
         assert_service_challenge_record_contract(&serde_json::to_value(challenge).unwrap());
+    }
+
+    #[test]
+    fn service_incidents_response_contract_matches_wire_shape() {
+        let response_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-incidents-response.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_schema_required_fields(
+            &response_schema,
+            &["incidents", "count", "matched", "total"],
+        );
+        assert_schema_required_fields(
+            &response_schema["properties"]["filters"],
+            &[
+                "state",
+                "severity",
+                "escalation",
+                "handlingState",
+                "kind",
+                "browserId",
+                "profileId",
+                "sessionId",
+                "serviceName",
+                "agentName",
+                "taskName",
+                "since",
+                "limit",
+            ],
+        );
+
+        let incident = json!({
+            "id": "browser-1",
+            "browserId": "browser-1",
+            "label": "browser-1",
+            "state": "active",
+            "severity": "critical",
+            "escalation": "os_degraded_possible",
+            "recommendedAction": "Inspect the host OS.",
+            "acknowledgedAt": null,
+            "acknowledgedBy": null,
+            "acknowledgementNote": null,
+            "resolvedAt": null,
+            "resolvedBy": null,
+            "resolutionNote": null,
+            "latestTimestamp": "2026-04-27T00:01:00Z",
+            "latestMessage": "Force kill failed",
+            "latestKind": "browser_health_changed",
+            "currentHealth": "faulted",
+            "eventIds": ["event-1"],
+            "jobIds": ["job-1"],
+        });
+        let list_response = json!({
+            "filters": {
+                "state": null,
+                "severity": "critical",
+                "escalation": "os_degraded_possible",
+                "handlingState": null,
+                "kind": null,
+                "browserId": "browser-1",
+                "profileId": "work",
+                "sessionId": "session-1",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "since": null,
+                "limit": 20,
+            },
+            "incidents": [incident.clone()],
+            "count": 1,
+            "matched": 1,
+            "total": 1,
+        });
+        let detail_response = json!({
+            "incident": incident.clone(),
+            "incidents": [incident],
+            "events": [{
+                "id": "event-1",
+                "timestamp": "2026-04-27T00:01:00Z",
+                "kind": "browser_health_changed",
+                "message": "Force kill failed",
+                "browserId": "browser-1",
+                "profileId": "work",
+                "sessionId": "session-1",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "previousHealth": "degraded",
+                "currentHealth": "faulted",
+                "details": null,
+            }],
+            "jobs": [],
+            "count": 1,
+            "matched": 1,
+            "total": 1,
+        });
+
+        assert_service_incidents_response_contract(&list_response);
+        assert_service_incidents_response_contract(&detail_response);
     }
 
     #[test]

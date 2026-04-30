@@ -9759,10 +9759,10 @@ mod tests {
     };
     use crate::native::service_model::{
         assert_service_event_record_contract, assert_service_incident_activity_response_contract,
-        assert_service_incident_record_contract, assert_service_job_naming_warning_contract,
-        assert_service_trace_activity_record_contract, assert_service_trace_response_contract,
-        assert_service_trace_summary_record_contract, service_job_naming_warning_values,
-        BrowserProcess,
+        assert_service_incident_record_contract, assert_service_incidents_response_contract,
+        assert_service_job_naming_warning_contract, assert_service_trace_activity_record_contract,
+        assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
+        service_job_naming_warning_values, BrowserProcess,
     };
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -11337,6 +11337,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_incidents_response_contract(&result["data"]);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 1);
         assert_eq!(result["data"]["incidents"][0]["id"], "browser-faulted");
@@ -11392,6 +11393,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_incidents_response_contract(&result["data"]);
         assert_eq!(result["data"]["incident"]["id"], "browser-1");
         assert_eq!(result["data"]["events"][0]["id"], "event-1");
         assert_eq!(result["data"]["jobs"][0]["id"], "job-1");

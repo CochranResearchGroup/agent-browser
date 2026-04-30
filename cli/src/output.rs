@@ -3561,6 +3561,7 @@ Notes:
   - Service job namingWarnings values are missing_service_name, missing_agent_name, and missing_task_name. hasNamingWarning is true when namingWarnings is non-empty.
   - HTTP /api/service/jobs, HTTP /api/service/jobs/<id>, and MCP agent-browser://jobs job records follow docs/dev/contracts/service-job-record.v1.schema.json.
   - HTTP /api/service/incidents, HTTP /api/service/incidents/<id>, MCP agent-browser://incidents, and MCP service_incidents incident records follow docs/dev/contracts/service-incident-record.v1.schema.json.
+  - CLI, HTTP, and MCP service_incidents response envelopes follow docs/dev/contracts/service-incidents-response.v1.schema.json.
   - HTTP /api/service/events and MCP agent-browser://events event records follow docs/dev/contracts/service-event-record.v1.schema.json.
   - HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching docs/dev/contracts/service-*-record.v1.schema.json files.
   - service_trace responses follow docs/dev/contracts/service-trace-response.v1.schema.json, with summary and activity records covered by the matching service-trace-summary and service-trace-activity schemas.
