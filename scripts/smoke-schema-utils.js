@@ -222,6 +222,16 @@ export function assertServiceIncidentsResponseSchemaRecord(response, schema, lab
   }
 }
 
+export function assertServiceEventsResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assertNoSnakeCaseFields(response, ['browser_id', 'profile_id', 'session_id', 'service_name', 'agent_name', 'task_name'], label);
+  assert(Array.isArray(response.events), `${label} missing events array`);
+  assert(Number.isInteger(response.count), `${label} missing count integer`);
+  assert(Number.isInteger(response.matched), `${label} missing matched integer`);
+  assert(Number.isInteger(response.total), `${label} missing total integer`);
+  assert(response.count === response.events.length, `${label} count does not match events length`);
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

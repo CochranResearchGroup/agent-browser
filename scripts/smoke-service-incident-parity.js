@@ -18,6 +18,7 @@ import {
 } from './smoke-utils.js';
 import {
   assertServiceEventSchemaRecord,
+  assertServiceEventsResponseSchemaRecord,
   assertServiceIncidentActivityResponseSchemaRecord,
   assertServiceIncidentSchemaRecord,
   assertServiceIncidentsResponseSchemaRecord,
@@ -44,6 +45,9 @@ const incidentsResponseSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-incidents-response.v1.schema.json',
 );
 const eventRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-event-record.v1.schema.json');
+const eventsResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-events-response.v1.schema.json',
+);
 const traceResponseRecordSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-trace-response.v1.schema.json',
 );
@@ -247,6 +251,7 @@ try {
     `/api/service/events?kind=browser_health_changed&browser-id=${encodeURIComponent(browserId)}&limit=20`,
   );
   assert(httpEvents.success === true, `HTTP service events failed: ${JSON.stringify(httpEvents)}`);
+  assertServiceEventsResponseSchemaRecord(httpEvents.data, eventsResponseSchema, 'HTTP events response');
   const httpEventsRecord = httpEvents.data?.events?.find((event) => event.id === httpEvent.id);
   assert(httpEventsRecord, `HTTP events missing schema event ${httpEvent.id}: ${JSON.stringify(httpEvents)}`);
   assertServiceEventSchemaRecord(httpEventsRecord, eventRecordSchema, 'HTTP events record');

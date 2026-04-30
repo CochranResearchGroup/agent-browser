@@ -9758,7 +9758,8 @@ mod tests {
         close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
     };
     use crate::native::service_model::{
-        assert_service_event_record_contract, assert_service_incident_activity_response_contract,
+        assert_service_event_record_contract, assert_service_events_response_contract,
+        assert_service_incident_activity_response_contract,
         assert_service_incident_record_contract, assert_service_incidents_response_contract,
         assert_service_job_naming_warning_contract, assert_service_trace_activity_record_contract,
         assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
@@ -10965,6 +10966,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_events_response_contract(&result["data"]);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 2);
         assert_eq!(result["data"]["total"], 2);
@@ -11056,6 +11058,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_events_response_contract(&result["data"]);
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["matched"], 1);
         assert_eq!(result["data"]["total"], 5);

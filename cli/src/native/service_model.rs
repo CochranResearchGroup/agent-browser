@@ -774,6 +774,27 @@ pub fn assert_service_incidents_response_contract(value: &serde_json::Value) {
 }
 
 #[cfg(test)]
+pub fn assert_service_events_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "events response",
+        value,
+        &["events", "count", "matched", "total"],
+        &[],
+    );
+    let events = value["events"].as_array().unwrap();
+    assert_eq!(
+        value["count"].as_u64().unwrap(),
+        events.len() as u64,
+        "events response count does not match events length"
+    );
+    assert!(value["matched"].is_u64());
+    assert!(value["total"].is_u64());
+    for event in events {
+        assert_service_event_record_contract(event);
+    }
+}
+
+#[cfg(test)]
 pub fn assert_service_incident_activity_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "incident activity response",
@@ -2473,6 +2494,39 @@ mod tests {
 
         assert_service_incidents_response_contract(&list_response);
         assert_service_incidents_response_contract(&detail_response);
+    }
+
+    #[test]
+    fn service_events_response_contract_matches_wire_shape() {
+        let response_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-events-response.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_schema_required_fields(&response_schema, &["events", "count", "matched", "total"]);
+
+        let response = json!({
+            "events": [{
+                "id": "event-1",
+                "timestamp": "2026-04-27T00:01:00Z",
+                "kind": "browser_health_changed",
+                "message": "Browser browser-1 health changed from degraded to faulted",
+                "browserId": "browser-1",
+                "profileId": "work",
+                "sessionId": "session-1",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "previousHealth": "degraded",
+                "currentHealth": "faulted",
+                "details": null,
+            }],
+            "count": 1,
+            "matched": 1,
+            "total": 2,
+        });
+
+        assert_service_events_response_contract(&response);
     }
 
     #[test]

@@ -56,6 +56,15 @@ The schema is guarded by Rust tests for the model, HTTP, MCP, and service trace
 surfaces. Keep new contractual event fields in this schema before relying on
 them from external clients.
 
+`service-events-response.v1.schema.json` describes the response envelope
+returned by:
+
+- CLI `agent-browser service events`
+- HTTP `GET /api/service/events`
+
+The schema covers the returned event array plus count, matched, and total
+counters for filtered event list consumers.
+
 ## Service Collection Records v1
 
 The service collection record schemas describe compact records returned by HTTP
