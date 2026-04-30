@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-site-policies-response.v1.schema.json",
+  "title": "agent-browser service site policies response",
+  "description": "Stable API shape for compact service site policy collection responses returned by CLI JSON, HTTP service APIs, and MCP resources.",
+  "type": "object",
+  "required": [
+    "sitePolicies",
+    "count"
+  ],
+  "properties": {
+    "sitePolicies": {
+      "type": "array"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

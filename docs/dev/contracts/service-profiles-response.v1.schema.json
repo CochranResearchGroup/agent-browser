@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profiles-response.v1.schema.json",
+  "title": "agent-browser service profiles response",
+  "description": "Stable API shape for compact service profile collection responses returned by CLI JSON, HTTP service APIs, and MCP resources.",
+  "type": "object",
+  "required": [
+    "profiles",
+    "count"
+  ],
+  "properties": {
+    "profiles": {
+      "type": "array"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

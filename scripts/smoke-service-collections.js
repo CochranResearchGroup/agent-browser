@@ -18,7 +18,9 @@ import {
   smokeDataUrl,
 } from './smoke-utils.js';
 import {
+  assertServiceCollectionResponseSchemaRecord,
   assertServiceCollectionSchemaRecord,
+  assertServiceStatusResponseSchemaRecord,
   loadServiceRecordSchema,
 } from './smoke-schema-utils.js';
 
@@ -47,6 +49,18 @@ const collectionSchemas = {
   providers: loadServiceRecordSchema('../docs/dev/contracts/service-provider-record.v1.schema.json'),
   challenges: loadServiceRecordSchema('../docs/dev/contracts/service-challenge-record.v1.schema.json'),
 };
+const collectionResponseSchemas = {
+  profiles: loadServiceRecordSchema('../docs/dev/contracts/service-profiles-response.v1.schema.json'),
+  browsers: loadServiceRecordSchema('../docs/dev/contracts/service-browsers-response.v1.schema.json'),
+  sessions: loadServiceRecordSchema('../docs/dev/contracts/service-sessions-response.v1.schema.json'),
+  tabs: loadServiceRecordSchema('../docs/dev/contracts/service-tabs-response.v1.schema.json'),
+  sitePolicies: loadServiceRecordSchema('../docs/dev/contracts/service-site-policies-response.v1.schema.json'),
+  providers: loadServiceRecordSchema('../docs/dev/contracts/service-providers-response.v1.schema.json'),
+  challenges: loadServiceRecordSchema('../docs/dev/contracts/service-challenges-response.v1.schema.json'),
+};
+const statusResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-status-response.v1.schema.json',
+);
 const collectionSchemaOptions = {
   profiles: {
     arrayFields: ['sitePolicyIds', 'sharedServiceIds', 'credentialProviderIds', 'tags'],
@@ -171,6 +185,9 @@ function assertContains(collection, key, predicate, label) {
 }
 
 function assertSchemaCollection(collection, key, label) {
+  const responseSchema = collectionResponseSchemas[key];
+  assert(responseSchema, `${label} missing response schema for ${key}`);
+  assertServiceCollectionResponseSchemaRecord(collection, responseSchema, key, label);
   assert(Array.isArray(collection[key]), `${label} missing ${key} array: ${JSON.stringify(collection)}`);
   assert(collection.count === collection[key].length, `${label} count mismatch: ${JSON.stringify(collection)}`);
   const schema = collectionSchemas[key];
@@ -284,6 +301,15 @@ try {
   );
   assert(expectedTab, `service reconcile did not retain the smoke tab: ${JSON.stringify(state.tabs)}`);
   seedConfigCollections(context, expectedTab.id);
+
+  const cliStatusResult = await runCli(context, ['--json', '--session', session, 'service', 'status']);
+  const cliStatus = parseJsonOutput(cliStatusResult.stdout, 'service status');
+  assert(cliStatus.success === true, `CLI service status failed: ${cliStatusResult.stdout}${cliStatusResult.stderr}`);
+  assertServiceStatusResponseSchemaRecord(cliStatus.data, statusResponseSchema, 'CLI service status response');
+
+  const httpStatus = await httpJson(port, 'GET', '/api/service/status');
+  assert(httpStatus.success === true, `HTTP service status failed: ${JSON.stringify(httpStatus)}`);
+  assertServiceStatusResponseSchemaRecord(httpStatus.data, statusResponseSchema, 'HTTP service status response');
 
   const checks = [
     {

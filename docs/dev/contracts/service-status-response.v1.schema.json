@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-status-response.v1.schema.json",
+  "title": "agent-browser service status response",
+  "description": "Stable API shape for service status responses returned by CLI JSON and HTTP service APIs.",
+  "type": "object",
+  "required": [
+    "service_state"
+  ],
+  "properties": {
+    "service_state": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

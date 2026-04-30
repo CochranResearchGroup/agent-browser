@@ -77,6 +77,10 @@ counters for filtered event list consumers.
 
 ## Service Collection Records v1
 
+`service-status-response.v1.schema.json` describes the full service status
+response returned by `agent-browser service status` and HTTP
+`GET /api/service/status`.
+
 The service collection record schemas describe compact records returned by HTTP
 collection APIs and the matching MCP resources:
 
@@ -92,6 +96,19 @@ These schemas cover `profiles`, `browsers`, `sessions`, `tabs`,
 `sitePolicies`, `providers`, and `challenges` records. They are guarded by Rust
 model tests and MCP resource tests so software clients can consume the same
 camelCase record fields from HTTP and MCP without inferring Rust internals.
+
+The matching collection response schemas cover the compact collection envelopes
+returned by CLI, HTTP, and MCP resources:
+
+- `service-profiles-response.v1.schema.json`
+- `service-browsers-response.v1.schema.json`
+- `service-sessions-response.v1.schema.json`
+- `service-tabs-response.v1.schema.json`
+- `service-site-policies-response.v1.schema.json`
+- `service-providers-response.v1.schema.json`
+- `service-challenges-response.v1.schema.json`
+
+These schemas guard the collection array field and `count` field.
 
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

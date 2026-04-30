@@ -3566,6 +3566,8 @@ Notes:
   - HTTP /api/service/events and MCP agent-browser://events event records follow docs/dev/contracts/service-event-record.v1.schema.json.
   - CLI and HTTP service_events response envelopes follow docs/dev/contracts/service-events-response.v1.schema.json.
   - HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching docs/dev/contracts/service-*-record.v1.schema.json files.
+  - service_status responses follow docs/dev/contracts/service-status-response.v1.schema.json.
+  - Service collection response envelopes follow the matching docs/dev/contracts/service-*-response.v1.schema.json files for profiles, browsers, sessions, tabs, site policies, providers, and challenges.
   - Service site-policy and provider mutation responses follow the matching docs/dev/contracts/service-*-upsert-response.v1.schema.json and docs/dev/contracts/service-*-delete-response.v1.schema.json files.
   - Service job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching docs/dev/contracts/service-*-response.v1.schema.json files.
   - service_reconcile responses follow docs/dev/contracts/service-reconcile-response.v1.schema.json.

@@ -1029,6 +1029,34 @@ pub fn assert_service_reconcile_response_contract(value: &serde_json::Value) {
 }
 
 #[cfg(test)]
+pub fn assert_service_status_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "service status response",
+        value,
+        &["service_state"],
+        &["serviceState"],
+    );
+    assert!(value["service_state"].is_object());
+}
+
+#[cfg(test)]
+pub fn assert_service_collection_response_contract(
+    value: &serde_json::Value,
+    field: &str,
+    label: &str,
+) {
+    assert_record_fields(label, value, &[field, "count"], &[]);
+    let records = value[field].as_array().unwrap_or_else(|| {
+        panic!("{label} missing {field} array");
+    });
+    assert_eq!(
+        value["count"].as_u64().unwrap(),
+        records.len() as u64,
+        "{label} count does not match {field} length"
+    );
+}
+
+#[cfg(test)]
 pub fn assert_service_incident_activity_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "incident activity response",
@@ -3016,6 +3044,89 @@ mod tests {
                 "reconciliation": null,
             },
         }));
+    }
+
+    #[test]
+    fn service_status_and_collection_response_contracts_match_wire_shape() {
+        let status_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-status-response.v1.schema.json"
+        ))
+        .unwrap();
+        let collection_schemas = [
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-profiles-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "profiles",
+                "profiles response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-sessions-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "sessions",
+                "sessions response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-browsers-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "browsers",
+                "browsers response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-tabs-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "tabs",
+                "tabs response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-site-policies-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "sitePolicies",
+                "site policies response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-providers-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "providers",
+                "providers response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-challenges-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "challenges",
+                "challenges response",
+            ),
+        ];
+
+        assert_schema_required_fields(&status_schema, &["service_state"]);
+        assert_service_status_response_contract(&json!({
+            "service_state": {},
+        }));
+
+        for (schema, field, label) in collection_schemas {
+            assert_schema_required_fields(&schema, &[field, "count"]);
+            assert_service_collection_response_contract(
+                &json!({
+                    field: [],
+                    "count": 0,
+                }),
+                field,
+                label,
+            );
+        }
     }
 
     #[test]

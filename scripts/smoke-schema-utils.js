@@ -78,6 +78,19 @@ export function assertServiceCollectionSchemaRecord(record, schema, label, optio
   }
 }
 
+export function assertServiceCollectionResponseSchemaRecord(response, schema, key, label) {
+  assertRequiredFields(response, schema, label);
+  assert(Array.isArray(response[key]), `${label} missing ${key} array: ${JSON.stringify(response)}`);
+  assert(Number.isInteger(response.count), `${label} missing count integer`);
+  assert(response.count === response[key].length, `${label} count does not match ${key} length`);
+}
+
+export function assertServiceStatusResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assertNoSnakeCaseFields(response, ['serviceState'], label);
+  assert(response.service_state && typeof response.service_state === 'object', `${label} missing service_state object`);
+}
+
 export function assertServiceTraceSummarySchemaRecord(summary, schema, label) {
   assertRequiredFields(summary, schema, label);
   assertNoSnakeCaseFields(

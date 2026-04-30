@@ -9758,7 +9758,8 @@ mod tests {
         close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
     };
     use crate::native::service_model::{
-        assert_service_browser_retry_response_contract, assert_service_event_record_contract,
+        assert_service_browser_retry_response_contract,
+        assert_service_collection_response_contract, assert_service_event_record_contract,
         assert_service_events_response_contract,
         assert_service_incident_acknowledge_response_contract,
         assert_service_incident_activity_response_contract,
@@ -9770,9 +9771,9 @@ mod tests {
         assert_service_reconcile_response_contract,
         assert_service_site_policy_delete_response_contract,
         assert_service_site_policy_upsert_response_contract,
-        assert_service_trace_activity_record_contract, assert_service_trace_response_contract,
-        assert_service_trace_summary_record_contract, service_job_naming_warning_values,
-        BrowserProcess,
+        assert_service_status_response_contract, assert_service_trace_activity_record_contract,
+        assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
+        service_job_naming_warning_values, BrowserProcess,
     };
     use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -10572,6 +10573,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_status_response_contract(&result["data"]);
         assert_eq!(
             result["data"]["service_state"]["sitePolicies"]["google"]["id"],
             "google"
@@ -10602,6 +10604,11 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "browsers",
+            "browsers response",
+        );
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["browsers"][0]["id"], "browser-1");
         assert_eq!(
@@ -10632,6 +10639,11 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "profiles",
+            "profiles response",
+        );
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["profiles"][0]["id"], "work");
         assert_eq!(result["data"]["profiles"][0]["name"], "Work");
@@ -10660,6 +10672,11 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "sessions",
+            "sessions response",
+        );
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["sessions"][0]["id"], "session-1");
         assert_eq!(
@@ -10693,6 +10710,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(&result["data"], "tabs", "tabs response");
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["tabs"][0]["id"], "tab-1");
         assert_eq!(result["data"]["tabs"][0]["lifecycle"], "ready");
@@ -10722,6 +10740,11 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "sitePolicies",
+            "site policies response",
+        );
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["sitePolicies"][0]["id"], "google");
         assert_eq!(
@@ -10752,6 +10775,11 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "providers",
+            "providers response",
+        );
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["providers"][0]["id"], "manual");
         assert_eq!(
@@ -10783,6 +10811,11 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "challenges",
+            "challenges response",
+        );
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["challenges"][0]["id"], "challenge-1");
         assert_eq!(result["data"]["challenges"][0]["kind"], "captcha");
