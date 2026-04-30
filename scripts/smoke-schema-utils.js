@@ -34,6 +34,50 @@ function schemaEnum(schema, property) {
   return schema.properties[property].enum;
 }
 
+function schemaOneOfEnum(schema, property) {
+  return schema.properties[property].oneOf?.find((entry) => Array.isArray(entry.enum))?.enum;
+}
+
+export function assertServiceCollectionSchemaRecord(record, schema, label, options = {}) {
+  const {
+    arrayFields = [],
+    booleanFields = [],
+    enumFields = [],
+    nullableEnumFields = [],
+    objectFields = [],
+    snakeCaseFields = [],
+  } = options;
+  assertRequiredFields(record, schema, label);
+  assertNoSnakeCaseFields(record, snakeCaseFields, label);
+
+  for (const field of enumFields) {
+    assert(
+      schemaEnum(schema, field).includes(record[field]),
+      `${label} ${field} is outside schema enum: ${JSON.stringify(record)}`,
+    );
+  }
+  for (const field of nullableEnumFields) {
+    const values = schemaOneOfEnum(schema, field);
+    assert(Array.isArray(values), `${label} ${field} schema missing nullable enum`);
+    assert(
+      record[field] === null || values.includes(record[field]),
+      `${label} ${field} is outside schema enum: ${JSON.stringify(record)}`,
+    );
+  }
+  for (const field of arrayFields) {
+    assert(Array.isArray(record[field]), `${label} missing ${field} array: ${JSON.stringify(record)}`);
+  }
+  for (const field of booleanFields) {
+    assert(typeof record[field] === 'boolean', `${label} missing ${field} boolean: ${JSON.stringify(record)}`);
+  }
+  for (const field of objectFields) {
+    assert(
+      record[field] && typeof record[field] === 'object' && !Array.isArray(record[field]),
+      `${label} missing ${field} object: ${JSON.stringify(record)}`,
+    );
+  }
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

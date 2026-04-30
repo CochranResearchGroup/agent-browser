@@ -17,6 +17,10 @@ import {
   sendRawCommand,
   smokeDataUrl,
 } from './smoke-utils.js';
+import {
+  assertServiceCollectionSchemaRecord,
+  loadServiceRecordSchema,
+} from './smoke-schema-utils.js';
 
 const context = createSmokeContext({ prefix: 'ab-sc-', sessionPrefix: 'sc' });
 const { session } = context;
@@ -33,6 +37,100 @@ const handoffScenario = {
   staleTabId,
   staleTargetId: 'service-collections-stale-target',
   staleTitle: 'Stale Service Collections Target',
+};
+const collectionSchemas = {
+  profiles: loadServiceRecordSchema('../docs/dev/contracts/service-profile-record.v1.schema.json'),
+  browsers: loadServiceRecordSchema('../docs/dev/contracts/service-browser-record.v1.schema.json'),
+  sessions: loadServiceRecordSchema('../docs/dev/contracts/service-session-record.v1.schema.json'),
+  tabs: loadServiceRecordSchema('../docs/dev/contracts/service-tab-record.v1.schema.json'),
+  sitePolicies: loadServiceRecordSchema('../docs/dev/contracts/service-site-policy-record.v1.schema.json'),
+  providers: loadServiceRecordSchema('../docs/dev/contracts/service-provider-record.v1.schema.json'),
+  challenges: loadServiceRecordSchema('../docs/dev/contracts/service-challenge-record.v1.schema.json'),
+};
+const collectionSchemaOptions = {
+  profiles: {
+    arrayFields: ['sitePolicyIds', 'sharedServiceIds', 'credentialProviderIds', 'tags'],
+    booleanFields: ['manualLoginPreferred', 'persistent'],
+    enumFields: ['allocation', 'keyring'],
+    nullableEnumFields: ['defaultBrowserHost'],
+    snakeCaseFields: [
+      'user_data_dir',
+      'site_policy_ids',
+      'default_browser_host',
+      'shared_service_ids',
+      'credential_provider_ids',
+      'manual_login_preferred',
+    ],
+  },
+  browsers: {
+    arrayFields: ['viewStreams', 'activeSessionIds'],
+    enumFields: ['host', 'health'],
+    snakeCaseFields: [
+      'profile_id',
+      'cdp_endpoint',
+      'view_streams',
+      'active_session_ids',
+      'last_error',
+      'last_health_observation',
+    ],
+  },
+  sessions: {
+    arrayFields: ['browserIds', 'tabIds'],
+    enumFields: ['lease', 'cleanup'],
+    snakeCaseFields: [
+      'service_name',
+      'agent_name',
+      'task_name',
+      'profile_id',
+      'browser_ids',
+      'tab_ids',
+      'created_at',
+      'expires_at',
+    ],
+  },
+  tabs: {
+    enumFields: ['lifecycle'],
+    snakeCaseFields: [
+      'browser_id',
+      'target_id',
+      'session_id',
+      'owner_session_id',
+      'latest_snapshot_id',
+      'latest_screenshot_id',
+      'challenge_id',
+    ],
+  },
+  sitePolicies: {
+    arrayFields: ['authProviders', 'allowedChallengeProviders'],
+    booleanFields: ['manualLoginPreferred', 'profileRequired'],
+    enumFields: ['interactionMode', 'challengePolicy'],
+    nullableEnumFields: ['browserHost', 'viewStream', 'controlInput'],
+    objectFields: ['rateLimit'],
+    snakeCaseFields: [
+      'origin_pattern',
+      'browser_host',
+      'view_stream',
+      'control_input',
+      'interaction_mode',
+      'rate_limit',
+      'manual_login_preferred',
+      'profile_required',
+      'auth_providers',
+      'challenge_policy',
+      'allowed_challenge_providers',
+    ],
+  },
+  providers: {
+    arrayFields: ['capabilities'],
+    booleanFields: ['enabled'],
+    enumFields: ['kind'],
+    snakeCaseFields: ['display_name', 'config_ref'],
+  },
+  challenges: {
+    booleanFields: ['humanApproved'],
+    enumFields: ['kind', 'state'],
+    snakeCaseFields: ['tab_id', 'detected_at', 'provider_id', 'policy_decision', 'human_approved'],
+  },
 };
 
 const timeout = setTimeout(() => {
@@ -70,6 +168,17 @@ function assertContains(collection, key, predicate, label) {
     collection[key]?.some(predicate),
     `${label} missing expected item in ${key}: ${JSON.stringify(collection)}`,
   );
+}
+
+function assertSchemaCollection(collection, key, label) {
+  assert(Array.isArray(collection[key]), `${label} missing ${key} array: ${JSON.stringify(collection)}`);
+  assert(collection.count === collection[key].length, `${label} count mismatch: ${JSON.stringify(collection)}`);
+  const schema = collectionSchemas[key];
+  const options = collectionSchemaOptions[key];
+  assert(schema, `${label} missing schema for ${key}`);
+  for (const [index, record] of collection[key].entries()) {
+    assertServiceCollectionSchemaRecord(record, schema, `${label} ${key}[${index}]`, options);
+  }
 }
 
 function seedConfigCollections(context, expectedTabId) {
@@ -252,13 +361,16 @@ try {
 
   for (const check of checks) {
     const cliCollection = await serviceCliCollection(check.command, check.key);
+    assertSchemaCollection(cliCollection, check.key, `CLI service ${check.command}`);
     assertContains(cliCollection, check.key, check.predicate, `CLI service ${check.command}`);
 
     const httpCollection = await httpJson(port, 'GET', check.endpoint);
     assert(httpCollection.success === true, `HTTP ${check.endpoint} failed: ${JSON.stringify(httpCollection)}`);
+    assertSchemaCollection(httpCollection.data, check.key, `HTTP ${check.endpoint}`);
     assertContains(httpCollection.data, check.key, check.predicate, `HTTP ${check.endpoint}`);
 
     const mcpCollection = await serviceMcpCollection(check.mcpUri, check.key);
+    assertSchemaCollection(mcpCollection, check.key, `MCP ${check.mcpUri}`);
     assertContains(mcpCollection, check.key, check.predicate, `MCP ${check.mcpUri}`);
   }
 
