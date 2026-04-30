@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-challenge-record.v1.schema.json",
+  "title": "agent-browser service challenge record",
+  "description": "Stable API shape for service challenge records returned by HTTP service collection APIs and MCP resources.",
+  "type": "object",
+  "required": [
+    "id",
+    "tabId",
+    "kind",
+    "state",
+    "detectedAt",
+    "providerId",
+    "policyDecision",
+    "humanApproved",
+    "result"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "tabId": {
+      "type": ["string", "null"]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "captcha",
+        "two_factor",
+        "passkey",
+        "suspicious_login",
+        "blocked_flow"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "detected",
+        "waiting_for_provider",
+        "waiting_for_human",
+        "resolved",
+        "failed",
+        "denied"
+      ]
+    },
+    "detectedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "providerId": {
+      "type": ["string", "null"]
+    },
+    "policyDecision": {
+      "type": ["string", "null"]
+    },
+    "humanApproved": {
+      "type": "boolean"
+    },
+    "result": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

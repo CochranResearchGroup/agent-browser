@@ -10285,7 +10285,8 @@ mod tests {
         use std::collections::BTreeMap;
 
         use crate::native::service_model::{
-            BrowserHost, BrowserProfile, ProfileAllocationPolicy, ProfileKeyringPolicy,
+            assert_service_profile_record_contract, BrowserHost, BrowserProfile,
+            ProfileAllocationPolicy, ProfileKeyringPolicy,
         };
 
         let state = ServiceState {
@@ -10327,13 +10328,17 @@ mod tests {
             resource["contents"]["profiles"][1]["keyring"],
             "basic_password_store"
         );
+        assert_service_profile_record_contract(&resource["contents"]["profiles"][1]);
     }
 
     #[test]
     fn read_sessions_resource_returns_sessions_sorted_by_id() {
         use std::collections::BTreeMap;
 
-        use crate::native::service_model::{BrowserSession, LeaseState, SessionCleanupPolicy};
+        use crate::native::service_model::{
+            assert_service_session_record_contract, BrowserSession, LeaseState,
+            SessionCleanupPolicy,
+        };
 
         let state = ServiceState {
             sessions: BTreeMap::from([
@@ -10374,13 +10379,16 @@ mod tests {
             "profile-b"
         );
         assert_eq!(resource["contents"]["sessions"][1]["cleanup"], "close_tabs");
+        assert_service_session_record_contract(&resource["contents"]["sessions"][1]);
     }
 
     #[test]
     fn read_browsers_resource_returns_browsers_sorted_by_id() {
         use std::collections::BTreeMap;
 
-        use crate::native::service_model::{BrowserHealth, BrowserProcess};
+        use crate::native::service_model::{
+            assert_service_browser_record_contract, BrowserHealth, BrowserProcess,
+        };
 
         let state = ServiceState {
             browsers: BTreeMap::from([
@@ -10409,13 +10417,16 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["browsers"][0]["id"], "browser-a");
         assert_eq!(resource["contents"]["browsers"][1]["id"], "browser-b");
+        assert_service_browser_record_contract(&resource["contents"]["browsers"][1]);
     }
 
     #[test]
     fn read_tabs_resource_returns_tabs_sorted_by_id() {
         use std::collections::BTreeMap;
 
-        use crate::native::service_model::{BrowserTab, TabLifecycle};
+        use crate::native::service_model::{
+            assert_service_tab_record_contract, BrowserTab, TabLifecycle,
+        };
 
         let state = ServiceState {
             tabs: BTreeMap::from([
@@ -10446,13 +10457,16 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["tabs"][0]["id"], "tab-a");
         assert_eq!(resource["contents"]["tabs"][1]["id"], "tab-b");
+        assert_service_tab_record_contract(&resource["contents"]["tabs"][1]);
     }
 
     #[test]
     fn read_site_policies_resource_returns_policies_sorted_by_id() {
         use std::collections::BTreeMap;
 
-        use crate::native::service_model::SitePolicy;
+        use crate::native::service_model::{
+            assert_service_site_policy_record_contract, SitePolicy,
+        };
 
         let state = ServiceState {
             site_policies: BTreeMap::from([
@@ -10482,13 +10496,16 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["sitePolicies"][0]["id"], "google");
         assert_eq!(resource["contents"]["sitePolicies"][1]["id"], "microsoft");
+        assert_service_site_policy_record_contract(&resource["contents"]["sitePolicies"][0]);
     }
 
     #[test]
     fn read_providers_resource_returns_providers_sorted_by_id() {
         use std::collections::BTreeMap;
 
-        use crate::native::service_model::{ProviderKind, ServiceProvider};
+        use crate::native::service_model::{
+            assert_service_provider_record_contract, ProviderKind, ServiceProvider,
+        };
 
         let state = ServiceState {
             providers: BTreeMap::from([
@@ -10519,13 +10536,16 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["providers"][0]["id"], "manual");
         assert_eq!(resource["contents"]["providers"][1]["id"], "sms");
+        assert_service_provider_record_contract(&resource["contents"]["providers"][1]);
     }
 
     #[test]
     fn read_challenges_resource_returns_challenges_sorted_by_id() {
         use std::collections::BTreeMap;
 
-        use crate::native::service_model::{Challenge, ChallengeKind, ChallengeState};
+        use crate::native::service_model::{
+            assert_service_challenge_record_contract, Challenge, ChallengeKind, ChallengeState,
+        };
 
         let state = ServiceState {
             challenges: BTreeMap::from([
@@ -10556,6 +10576,7 @@ mod tests {
         assert_eq!(resource["contents"]["count"], 2);
         assert_eq!(resource["contents"]["challenges"][0]["id"], "challenge-a");
         assert_eq!(resource["contents"]["challenges"][1]["id"], "challenge-b");
+        assert_service_challenge_record_contract(&resource["contents"]["challenges"][1]);
     }
 
     #[test]

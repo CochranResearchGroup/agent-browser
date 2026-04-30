@@ -37,6 +37,102 @@ pub const SERVICE_BROWSER_HEALTH_VALUES: [&str; 10] = [
     "closing",
     "faulted",
 ];
+pub const SERVICE_BROWSER_HOST_VALUES: [&str; 6] = [
+    "local_headless",
+    "local_headed",
+    "docker_headed",
+    "remote_headed",
+    "cloud_provider",
+    "attached_existing",
+];
+pub const SERVICE_PROFILE_ALLOCATION_VALUES: [&str; 5] = [
+    "shared_service",
+    "per_service",
+    "per_site",
+    "per_identity",
+    "caller_supplied",
+];
+pub const SERVICE_PROFILE_KEYRING_VALUES: [&str; 4] = [
+    "basic_password_store",
+    "real_os_keychain",
+    "managed_vault",
+    "manual_login_profile",
+];
+pub const SERVICE_LEASE_STATE_VALUES: [&str; 5] = [
+    "shared",
+    "exclusive",
+    "human_takeover",
+    "released",
+    "expired",
+];
+pub const SERVICE_SESSION_CLEANUP_VALUES: [&str; 4] =
+    ["detach", "close_tabs", "close_browser", "release_only"];
+pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
+    "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
+];
+pub const SERVICE_VIEW_STREAM_PROVIDER_VALUES: [&str; 5] = [
+    "cdp_screencast",
+    "chrome_tab_webrtc",
+    "virtual_display_webrtc",
+    "novnc",
+    "external_url",
+];
+pub const SERVICE_CONTROL_INPUT_PROVIDER_VALUES: [&str; 4] = [
+    "cdp_input",
+    "webrtc_input",
+    "vnc_input",
+    "manual_attached_desktop",
+];
+pub const SERVICE_INTERACTION_MODE_VALUES: [&str; 5] = [
+    "cdp_direct",
+    "dom_action",
+    "browser_input",
+    "human_like_input",
+    "manual",
+];
+pub const SERVICE_CHALLENGE_POLICY_VALUES: [&str; 5] = [
+    "avoid_first",
+    "manual_only",
+    "provider_allowed",
+    "provider_preferred",
+    "deny",
+];
+pub const SERVICE_PROVIDER_KIND_VALUES: [&str; 8] = [
+    "browser_credentials",
+    "password_manager",
+    "totp",
+    "sms",
+    "email",
+    "manual_approval",
+    "intelligence",
+    "captcha",
+];
+pub const SERVICE_PROVIDER_CAPABILITY_VALUES: [&str; 8] = [
+    "password_fill",
+    "passkey",
+    "totp_code",
+    "sms_code",
+    "email_code",
+    "visual_reasoning",
+    "captcha_solve",
+    "human_approval",
+];
+pub const SERVICE_CHALLENGE_KIND_VALUES: [&str; 6] = [
+    "unknown",
+    "captcha",
+    "two_factor",
+    "passkey",
+    "suspicious_login",
+    "blocked_flow",
+];
+pub const SERVICE_CHALLENGE_STATE_VALUES: [&str; 6] = [
+    "detected",
+    "waiting_for_provider",
+    "waiting_for_human",
+    "resolved",
+    "failed",
+    "denied",
+];
 pub const SERVICE_EVENT_KIND_VALUES: [&str; 9] = [
     "reconciliation",
     "browser_launch_recorded",
@@ -48,6 +144,27 @@ pub const SERVICE_EVENT_KIND_VALUES: [&str; 9] = [
     "incident_acknowledged",
     "incident_resolved",
 ];
+
+#[cfg(test)]
+fn assert_record_fields(
+    record_name: &str,
+    value: &serde_json::Value,
+    required_fields: &[&str],
+    snake_case_fields: &[&str],
+) {
+    for field in required_fields {
+        assert!(
+            value.get(field).is_some(),
+            "missing {record_name} field {field}"
+        );
+    }
+    for snake_case_field in snake_case_fields {
+        assert!(
+            value.get(snake_case_field).is_none(),
+            "unexpected snake_case {record_name} field {snake_case_field}"
+        );
+    }
+}
 
 #[cfg(test)]
 pub fn service_job_naming_warning_values() -> Vec<String> {
@@ -70,50 +187,47 @@ pub fn assert_service_job_naming_warning_contract(value: &serde_json::Value) {
 
 #[cfg(test)]
 pub fn assert_service_incident_record_contract(value: &serde_json::Value) {
-    for field in [
-        "id",
-        "browserId",
-        "label",
-        "state",
-        "severity",
-        "escalation",
-        "recommendedAction",
-        "acknowledgedAt",
-        "acknowledgedBy",
-        "acknowledgementNote",
-        "resolvedAt",
-        "resolvedBy",
-        "resolutionNote",
-        "latestTimestamp",
-        "latestMessage",
-        "latestKind",
-        "currentHealth",
-        "eventIds",
-        "jobIds",
-    ] {
-        assert!(value.get(field).is_some(), "missing incident field {field}");
-    }
-    for snake_case_field in [
-        "browser_id",
-        "recommended_action",
-        "acknowledged_at",
-        "acknowledged_by",
-        "acknowledgement_note",
-        "resolved_at",
-        "resolved_by",
-        "resolution_note",
-        "latest_timestamp",
-        "latest_message",
-        "latest_kind",
-        "current_health",
-        "event_ids",
-        "job_ids",
-    ] {
-        assert!(
-            value.get(snake_case_field).is_none(),
-            "unexpected snake_case incident field {snake_case_field}"
-        );
-    }
+    assert_record_fields(
+        "incident",
+        value,
+        &[
+            "id",
+            "browserId",
+            "label",
+            "state",
+            "severity",
+            "escalation",
+            "recommendedAction",
+            "acknowledgedAt",
+            "acknowledgedBy",
+            "acknowledgementNote",
+            "resolvedAt",
+            "resolvedBy",
+            "resolutionNote",
+            "latestTimestamp",
+            "latestMessage",
+            "latestKind",
+            "currentHealth",
+            "eventIds",
+            "jobIds",
+        ],
+        &[
+            "browser_id",
+            "recommended_action",
+            "acknowledged_at",
+            "acknowledged_by",
+            "acknowledgement_note",
+            "resolved_at",
+            "resolved_by",
+            "resolution_note",
+            "latest_timestamp",
+            "latest_message",
+            "latest_kind",
+            "current_health",
+            "event_ids",
+            "job_ids",
+        ],
+    );
     assert!(SERVICE_INCIDENT_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
     assert!(SERVICE_INCIDENT_SEVERITY_VALUES.contains(&value["severity"].as_str().unwrap()));
     assert!(SERVICE_INCIDENT_ESCALATION_VALUES.contains(&value["escalation"].as_str().unwrap()));
@@ -126,38 +240,35 @@ pub fn assert_service_incident_record_contract(value: &serde_json::Value) {
 
 #[cfg(test)]
 pub fn assert_service_event_record_contract(value: &serde_json::Value) {
-    for field in [
-        "id",
-        "timestamp",
-        "kind",
-        "message",
-        "browserId",
-        "profileId",
-        "sessionId",
-        "serviceName",
-        "agentName",
-        "taskName",
-        "previousHealth",
-        "currentHealth",
-        "details",
-    ] {
-        assert!(value.get(field).is_some(), "missing event field {field}");
-    }
-    for snake_case_field in [
-        "browser_id",
-        "profile_id",
-        "session_id",
-        "service_name",
-        "agent_name",
-        "task_name",
-        "previous_health",
-        "current_health",
-    ] {
-        assert!(
-            value.get(snake_case_field).is_none(),
-            "unexpected snake_case event field {snake_case_field}"
-        );
-    }
+    assert_record_fields(
+        "event",
+        value,
+        &[
+            "id",
+            "timestamp",
+            "kind",
+            "message",
+            "browserId",
+            "profileId",
+            "sessionId",
+            "serviceName",
+            "agentName",
+            "taskName",
+            "previousHealth",
+            "currentHealth",
+            "details",
+        ],
+        &[
+            "browser_id",
+            "profile_id",
+            "session_id",
+            "service_name",
+            "agent_name",
+            "task_name",
+            "previous_health",
+            "current_health",
+        ],
+    );
     assert!(SERVICE_EVENT_KIND_VALUES.contains(&value["kind"].as_str().unwrap()));
     if let Some(previous_health) = value["previousHealth"].as_str() {
         assert!(SERVICE_BROWSER_HEALTH_VALUES.contains(&previous_health));
@@ -165,6 +276,243 @@ pub fn assert_service_event_record_contract(value: &serde_json::Value) {
     if let Some(current_health) = value["currentHealth"].as_str() {
         assert!(SERVICE_BROWSER_HEALTH_VALUES.contains(&current_health));
     }
+}
+
+#[cfg(test)]
+pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "profile",
+        value,
+        &[
+            "id",
+            "name",
+            "userDataDir",
+            "sitePolicyIds",
+            "defaultBrowserHost",
+            "allocation",
+            "keyring",
+            "sharedServiceIds",
+            "credentialProviderIds",
+            "manualLoginPreferred",
+            "persistent",
+            "tags",
+        ],
+        &[
+            "user_data_dir",
+            "site_policy_ids",
+            "default_browser_host",
+            "shared_service_ids",
+            "credential_provider_ids",
+            "manual_login_preferred",
+        ],
+    );
+    if let Some(host) = value["defaultBrowserHost"].as_str() {
+        assert!(SERVICE_BROWSER_HOST_VALUES.contains(&host));
+    }
+    assert!(SERVICE_PROFILE_ALLOCATION_VALUES.contains(&value["allocation"].as_str().unwrap()));
+    assert!(SERVICE_PROFILE_KEYRING_VALUES.contains(&value["keyring"].as_str().unwrap()));
+    assert!(value["sitePolicyIds"].is_array());
+    assert!(value["sharedServiceIds"].is_array());
+    assert!(value["credentialProviderIds"].is_array());
+    assert!(value["tags"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_browser_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "browser",
+        value,
+        &[
+            "id",
+            "profileId",
+            "host",
+            "health",
+            "pid",
+            "cdpEndpoint",
+            "viewStreams",
+            "activeSessionIds",
+            "lastError",
+            "lastHealthObservation",
+        ],
+        &[
+            "profile_id",
+            "cdp_endpoint",
+            "view_streams",
+            "active_session_ids",
+            "last_error",
+            "last_health_observation",
+        ],
+    );
+    assert!(SERVICE_BROWSER_HOST_VALUES.contains(&value["host"].as_str().unwrap()));
+    assert!(SERVICE_BROWSER_HEALTH_VALUES.contains(&value["health"].as_str().unwrap()));
+    assert!(value["viewStreams"].is_array());
+    assert!(value["activeSessionIds"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_session_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "session",
+        value,
+        &[
+            "id",
+            "serviceName",
+            "agentName",
+            "taskName",
+            "owner",
+            "lease",
+            "profileId",
+            "cleanup",
+            "browserIds",
+            "tabIds",
+            "createdAt",
+            "expiresAt",
+        ],
+        &[
+            "service_name",
+            "agent_name",
+            "task_name",
+            "profile_id",
+            "browser_ids",
+            "tab_ids",
+            "created_at",
+            "expires_at",
+        ],
+    );
+    assert!(SERVICE_LEASE_STATE_VALUES.contains(&value["lease"].as_str().unwrap()));
+    assert!(SERVICE_SESSION_CLEANUP_VALUES.contains(&value["cleanup"].as_str().unwrap()));
+    assert!(value["browserIds"].is_array());
+    assert!(value["tabIds"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_tab_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "tab",
+        value,
+        &[
+            "id",
+            "browserId",
+            "targetId",
+            "sessionId",
+            "lifecycle",
+            "url",
+            "title",
+            "ownerSessionId",
+            "latestSnapshotId",
+            "latestScreenshotId",
+            "challengeId",
+        ],
+        &[
+            "browser_id",
+            "target_id",
+            "session_id",
+            "owner_session_id",
+            "latest_snapshot_id",
+            "latest_screenshot_id",
+            "challenge_id",
+        ],
+    );
+    assert!(SERVICE_TAB_LIFECYCLE_VALUES.contains(&value["lifecycle"].as_str().unwrap()));
+}
+
+#[cfg(test)]
+pub fn assert_service_site_policy_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "site policy",
+        value,
+        &[
+            "id",
+            "originPattern",
+            "browserHost",
+            "viewStream",
+            "controlInput",
+            "interactionMode",
+            "rateLimit",
+            "manualLoginPreferred",
+            "profileRequired",
+            "authProviders",
+            "challengePolicy",
+            "allowedChallengeProviders",
+            "notes",
+        ],
+        &[
+            "origin_pattern",
+            "browser_host",
+            "view_stream",
+            "control_input",
+            "interaction_mode",
+            "rate_limit",
+            "manual_login_preferred",
+            "profile_required",
+            "auth_providers",
+            "challenge_policy",
+            "allowed_challenge_providers",
+        ],
+    );
+    if let Some(host) = value["browserHost"].as_str() {
+        assert!(SERVICE_BROWSER_HOST_VALUES.contains(&host));
+    }
+    if let Some(provider) = value["viewStream"].as_str() {
+        assert!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.contains(&provider));
+    }
+    if let Some(provider) = value["controlInput"].as_str() {
+        assert!(SERVICE_CONTROL_INPUT_PROVIDER_VALUES.contains(&provider));
+    }
+    assert!(SERVICE_INTERACTION_MODE_VALUES.contains(&value["interactionMode"].as_str().unwrap()));
+    assert!(SERVICE_CHALLENGE_POLICY_VALUES.contains(&value["challengePolicy"].as_str().unwrap()));
+    assert!(value["rateLimit"].is_object());
+    assert!(value["authProviders"].is_array());
+    assert!(value["allowedChallengeProviders"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_provider_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "provider",
+        value,
+        &[
+            "id",
+            "kind",
+            "displayName",
+            "enabled",
+            "configRef",
+            "capabilities",
+        ],
+        &["display_name", "config_ref"],
+    );
+    assert!(SERVICE_PROVIDER_KIND_VALUES.contains(&value["kind"].as_str().unwrap()));
+    for capability in value["capabilities"].as_array().unwrap() {
+        assert!(SERVICE_PROVIDER_CAPABILITY_VALUES.contains(&capability.as_str().unwrap()));
+    }
+}
+
+#[cfg(test)]
+pub fn assert_service_challenge_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "challenge",
+        value,
+        &[
+            "id",
+            "tabId",
+            "kind",
+            "state",
+            "detectedAt",
+            "providerId",
+            "policyDecision",
+            "humanApproved",
+            "result",
+        ],
+        &[
+            "tab_id",
+            "detected_at",
+            "provider_id",
+            "policy_decision",
+            "human_approved",
+        ],
+    );
+    assert!(SERVICE_CHALLENGE_KIND_VALUES.contains(&value["kind"].as_str().unwrap()));
+    assert!(SERVICE_CHALLENGE_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
 }
 
 /// Top-level snapshot of the browser service control plane.
@@ -1340,6 +1688,19 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn assert_schema_required_fields(schema: &serde_json::Value, fields: &[&str]) {
+        for field in fields {
+            assert!(
+                schema["required"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|required| required == field),
+                "schema missing required field {field}"
+            );
+        }
+    }
+
     #[test]
     fn site_policy_serializes_stable_wire_names() {
         let policy = SitePolicy {
@@ -1550,6 +1911,194 @@ mod tests {
         assert_eq!(value["kind"], "browser_health_changed");
         assert_eq!(value["previousHealth"], "ready");
         assert_eq!(value["currentHealth"], "process_exited");
+    }
+
+    #[test]
+    fn service_collection_record_contracts_match_wire_shape() {
+        let profile_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-profile-record.v1.schema.json"
+        ))
+        .unwrap();
+        let browser_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-browser-record.v1.schema.json"
+        ))
+        .unwrap();
+        let session_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-session-record.v1.schema.json"
+        ))
+        .unwrap();
+        let tab_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-tab-record.v1.schema.json"
+        ))
+        .unwrap();
+        let site_policy_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-site-policy-record.v1.schema.json"
+        ))
+        .unwrap();
+        let provider_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-provider-record.v1.schema.json"
+        ))
+        .unwrap();
+        let challenge_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-challenge-record.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_eq!(
+            profile_schema["properties"]["defaultBrowserHost"]["oneOf"][0]["enum"],
+            json!(SERVICE_BROWSER_HOST_VALUES.to_vec())
+        );
+        assert_eq!(
+            profile_schema["properties"]["allocation"]["enum"],
+            json!(SERVICE_PROFILE_ALLOCATION_VALUES.to_vec())
+        );
+        assert_eq!(
+            profile_schema["properties"]["keyring"]["enum"],
+            json!(SERVICE_PROFILE_KEYRING_VALUES.to_vec())
+        );
+        assert_eq!(
+            browser_schema["properties"]["host"]["enum"],
+            json!(SERVICE_BROWSER_HOST_VALUES.to_vec())
+        );
+        assert_eq!(
+            browser_schema["properties"]["health"]["enum"],
+            json!(SERVICE_BROWSER_HEALTH_VALUES.to_vec())
+        );
+        assert_eq!(
+            session_schema["properties"]["lease"]["enum"],
+            json!(SERVICE_LEASE_STATE_VALUES.to_vec())
+        );
+        assert_eq!(
+            session_schema["properties"]["cleanup"]["enum"],
+            json!(SERVICE_SESSION_CLEANUP_VALUES.to_vec())
+        );
+        assert_eq!(
+            tab_schema["properties"]["lifecycle"]["enum"],
+            json!(SERVICE_TAB_LIFECYCLE_VALUES.to_vec())
+        );
+        assert_eq!(
+            site_policy_schema["properties"]["browserHost"]["oneOf"][0]["enum"],
+            json!(SERVICE_BROWSER_HOST_VALUES.to_vec())
+        );
+        assert_eq!(
+            site_policy_schema["properties"]["viewStream"]["oneOf"][0]["enum"],
+            json!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.to_vec())
+        );
+        assert_eq!(
+            site_policy_schema["properties"]["controlInput"]["oneOf"][0]["enum"],
+            json!(SERVICE_CONTROL_INPUT_PROVIDER_VALUES.to_vec())
+        );
+        assert_eq!(
+            site_policy_schema["properties"]["interactionMode"]["enum"],
+            json!(SERVICE_INTERACTION_MODE_VALUES.to_vec())
+        );
+        assert_eq!(
+            site_policy_schema["properties"]["challengePolicy"]["enum"],
+            json!(SERVICE_CHALLENGE_POLICY_VALUES.to_vec())
+        );
+        assert_eq!(
+            provider_schema["properties"]["kind"]["enum"],
+            json!(SERVICE_PROVIDER_KIND_VALUES.to_vec())
+        );
+        assert_eq!(
+            provider_schema["properties"]["capabilities"]["items"]["enum"],
+            json!(SERVICE_PROVIDER_CAPABILITY_VALUES.to_vec())
+        );
+        assert_eq!(
+            challenge_schema["properties"]["kind"]["enum"],
+            json!(SERVICE_CHALLENGE_KIND_VALUES.to_vec())
+        );
+        assert_eq!(
+            challenge_schema["properties"]["state"]["enum"],
+            json!(SERVICE_CHALLENGE_STATE_VALUES.to_vec())
+        );
+
+        assert_schema_required_fields(
+            &profile_schema,
+            &["id", "name", "defaultBrowserHost", "allocation", "keyring"],
+        );
+        assert_schema_required_fields(&browser_schema, &["id", "profileId", "host", "health"]);
+        assert_schema_required_fields(
+            &session_schema,
+            &["id", "serviceName", "lease", "profileId", "cleanup"],
+        );
+        assert_schema_required_fields(&tab_schema, &["id", "browserId", "sessionId", "lifecycle"]);
+        assert_schema_required_fields(
+            &site_policy_schema,
+            &["id", "originPattern", "interactionMode", "challengePolicy"],
+        );
+        assert_schema_required_fields(&provider_schema, &["id", "kind", "displayName"]);
+        assert_schema_required_fields(&challenge_schema, &["id", "tabId", "kind", "state"]);
+
+        let profile = BrowserProfile {
+            id: "profile-1".to_string(),
+            name: "Work profile".to_string(),
+            default_browser_host: Some(BrowserHost::LocalHeaded),
+            allocation: ProfileAllocationPolicy::PerService,
+            keyring: ProfileKeyringPolicy::BasicPasswordStore,
+            manual_login_preferred: true,
+            persistent: true,
+            ..BrowserProfile::default()
+        };
+        let browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            profile_id: Some("profile-1".to_string()),
+            host: BrowserHost::LocalHeaded,
+            health: BrowserHealth::Ready,
+            pid: Some(1234),
+            ..BrowserProcess::default()
+        };
+        let session = BrowserSession {
+            id: "session-1".to_string(),
+            service_name: Some("JournalDownloader".to_string()),
+            agent_name: Some("codex".to_string()),
+            task_name: Some("probeACSwebsite".to_string()),
+            lease: LeaseState::Exclusive,
+            profile_id: Some("profile-1".to_string()),
+            cleanup: SessionCleanupPolicy::CloseTabs,
+            ..BrowserSession::default()
+        };
+        let tab = BrowserTab {
+            id: "tab-1".to_string(),
+            browser_id: "browser-1".to_string(),
+            target_id: Some("target-1".to_string()),
+            session_id: Some("session-1".to_string()),
+            lifecycle: TabLifecycle::Ready,
+            ..BrowserTab::default()
+        };
+        let site_policy = SitePolicy {
+            id: "google".to_string(),
+            origin_pattern: "https://accounts.google.com".to_string(),
+            browser_host: Some(BrowserHost::DockerHeaded),
+            view_stream: Some(ViewStreamProvider::ChromeTabWebrtc),
+            control_input: Some(ControlInputProvider::WebrtcInput),
+            interaction_mode: InteractionMode::HumanLikeInput,
+            challenge_policy: ChallengePolicy::ProviderAllowed,
+            ..SitePolicy::default()
+        };
+        let provider = ServiceProvider {
+            id: "sms".to_string(),
+            kind: ProviderKind::Sms,
+            display_name: "SMS".to_string(),
+            capabilities: vec![ProviderCapability::SmsCode],
+            ..ServiceProvider::default()
+        };
+        let challenge = Challenge {
+            id: "challenge-1".to_string(),
+            tab_id: Some("tab-1".to_string()),
+            kind: ChallengeKind::TwoFactor,
+            state: ChallengeState::WaitingForProvider,
+            provider_id: Some("sms".to_string()),
+            ..Challenge::default()
+        };
+
+        assert_service_profile_record_contract(&serde_json::to_value(profile).unwrap());
+        assert_service_browser_record_contract(&serde_json::to_value(browser).unwrap());
+        assert_service_session_record_contract(&serde_json::to_value(session).unwrap());
+        assert_service_tab_record_contract(&serde_json::to_value(tab).unwrap());
+        assert_service_site_policy_record_contract(&serde_json::to_value(site_policy).unwrap());
+        assert_service_provider_record_contract(&serde_json::to_value(provider).unwrap());
+        assert_service_challenge_record_contract(&serde_json::to_value(challenge).unwrap());
     }
 
     #[test]

@@ -43,3 +43,21 @@ returned by:
 The schema is guarded by Rust tests for the model, HTTP, MCP, and service trace
 surfaces. Keep new contractual event fields in this schema before relying on
 them from external clients.
+
+## Service Collection Records v1
+
+The service collection record schemas describe compact records returned by HTTP
+collection APIs and the matching MCP resources:
+
+- `service-profile-record.v1.schema.json`
+- `service-browser-record.v1.schema.json`
+- `service-session-record.v1.schema.json`
+- `service-tab-record.v1.schema.json`
+- `service-site-policy-record.v1.schema.json`
+- `service-provider-record.v1.schema.json`
+- `service-challenge-record.v1.schema.json`
+
+These schemas cover `profiles`, `browsers`, `sessions`, `tabs`,
+`sitePolicies`, `providers`, and `challenges` records. They are guarded by Rust
+model tests and MCP resource tests so software clients can consume the same
+camelCase record fields from HTTP and MCP without inferring Rust internals.

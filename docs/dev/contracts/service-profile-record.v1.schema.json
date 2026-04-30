@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-record.v1.schema.json",
+  "title": "agent-browser service profile record",
+  "description": "Stable API shape for service profile records returned by HTTP service collection APIs and MCP resources.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "userDataDir",
+    "sitePolicyIds",
+    "defaultBrowserHost",
+    "allocation",
+    "keyring",
+    "sharedServiceIds",
+    "credentialProviderIds",
+    "manualLoginPreferred",
+    "persistent",
+    "tags"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "userDataDir": {
+      "type": ["string", "null"]
+    },
+    "sitePolicyIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "defaultBrowserHost": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "local_headless",
+            "local_headed",
+            "docker_headed",
+            "remote_headed",
+            "cloud_provider",
+            "attached_existing"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "allocation": {
+      "type": "string",
+      "enum": [
+        "shared_service",
+        "per_service",
+        "per_site",
+        "per_identity",
+        "caller_supplied"
+      ]
+    },
+    "keyring": {
+      "type": "string",
+      "enum": [
+        "basic_password_store",
+        "real_os_keychain",
+        "managed_vault",
+        "manual_login_profile"
+      ]
+    },
+    "sharedServiceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "credentialProviderIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "manualLoginPreferred": {
+      "type": "boolean"
+    },
+    "persistent": {
+      "type": "boolean"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-tab-record.v1.schema.json",
+  "title": "agent-browser service tab record",
+  "description": "Stable API shape for service tab records returned by HTTP service collection APIs and MCP resources.",
+  "type": "object",
+  "required": [
+    "id",
+    "browserId",
+    "targetId",
+    "sessionId",
+    "lifecycle",
+    "url",
+    "title",
+    "ownerSessionId",
+    "latestSnapshotId",
+    "latestScreenshotId",
+    "challengeId"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "browserId": {
+      "type": "string"
+    },
+    "targetId": {
+      "type": ["string", "null"]
+    },
+    "sessionId": {
+      "type": ["string", "null"]
+    },
+    "lifecycle": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "opening",
+        "loading",
+        "ready",
+        "closing",
+        "closed",
+        "crashed"
+      ]
+    },
+    "url": {
+      "type": ["string", "null"]
+    },
+    "title": {
+      "type": ["string", "null"]
+    },
+    "ownerSessionId": {
+      "type": ["string", "null"]
+    },
+    "latestSnapshotId": {
+      "type": ["string", "null"]
+    },
+    "latestScreenshotId": {
+      "type": ["string", "null"]
+    },
+    "challengeId": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

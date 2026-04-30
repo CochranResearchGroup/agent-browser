@@ -3562,6 +3562,7 @@ Notes:
   - HTTP /api/service/jobs, HTTP /api/service/jobs/<id>, and MCP agent-browser://jobs job records follow docs/dev/contracts/service-job-record.v1.schema.json.
   - HTTP /api/service/incidents, HTTP /api/service/incidents/<id>, MCP agent-browser://incidents, and MCP service_incidents incident records follow docs/dev/contracts/service-incident-record.v1.schema.json.
   - HTTP /api/service/events and MCP agent-browser://events event records follow docs/dev/contracts/service-event-record.v1.schema.json.
+  - HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching docs/dev/contracts/service-*-record.v1.schema.json files.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
   - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.

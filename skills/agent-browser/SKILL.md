@@ -443,6 +443,8 @@ HTTP `/api/service/incidents`, HTTP `/api/service/incidents/<id>`, MCP `agent-br
 
 HTTP `/api/service/events`, MCP `agent-browser://events`, and service trace event records follow `docs/dev/contracts/service-event-record.v1.schema.json`.
 
+HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching `docs/dev/contracts/service-*-record.v1.schema.json` files.
+
 Run `pnpm test:service-shutdown-health-live` to validate that a polite browser shutdown failure leaves the persisted service browser record `degraded` after the owned Chrome process is force-killed.
 
 Typed MCP tools also include `browser_back`, `browser_forward`, `browser_reload`, `browser_tab_new`, `browser_tab_switch`, `browser_tab_close`, and `browser_set_content` for browser history, tab lifecycle, and page-content control.
