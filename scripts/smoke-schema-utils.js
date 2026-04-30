@@ -314,6 +314,15 @@ export function assertServiceIncidentResolveResponseSchemaRecord(response, schem
   assert(response.incident && typeof response.incident === 'object', `${label} missing incident object`);
 }
 
+export function assertServiceReconcileResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assertNoSnakeCaseFields(response, ['browser_count', 'changed_browsers'], label);
+  assert(typeof response.reconciled === 'boolean', `${label} missing reconciled boolean`);
+  assert(Number.isInteger(response.browserCount), `${label} missing browserCount integer`);
+  assert(Number.isInteger(response.changedBrowsers), `${label} missing changedBrowsers integer`);
+  assert(response.service_state && typeof response.service_state === 'object', `${label} missing service_state object`);
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

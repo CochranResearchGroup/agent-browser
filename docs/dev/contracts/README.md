@@ -115,6 +115,11 @@ by HTTP service APIs and matching MCP tools:
 These schemas cover queued job cancellation, manual browser recovery retry
 overrides, and durable incident acknowledgement or resolution metadata.
 
+`service-reconcile-response.v1.schema.json` describes the response envelope
+returned by `agent-browser service reconcile` and HTTP
+`POST /api/service/reconcile`. It covers the reconciliation flag, browser
+counts, changed browser count, and returned service state snapshot.
+
 ## Service Trace Aggregate Records v1
 
 `service-trace-response.v1.schema.json` describes the full `service_trace`

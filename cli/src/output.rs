@@ -3568,6 +3568,7 @@ Notes:
   - HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching docs/dev/contracts/service-*-record.v1.schema.json files.
   - Service site-policy and provider mutation responses follow the matching docs/dev/contracts/service-*-upsert-response.v1.schema.json and docs/dev/contracts/service-*-delete-response.v1.schema.json files.
   - Service job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching docs/dev/contracts/service-*-response.v1.schema.json files.
+  - service_reconcile responses follow docs/dev/contracts/service-reconcile-response.v1.schema.json.
   - service_trace responses follow docs/dev/contracts/service-trace-response.v1.schema.json, with summary and activity records covered by the matching service-trace-summary and service-trace-activity schemas.
   - Incident activity responses follow docs/dev/contracts/service-incident-activity-response.v1.schema.json.
   - It reads persisted service state from ~/.agent-browser/service/state.json.

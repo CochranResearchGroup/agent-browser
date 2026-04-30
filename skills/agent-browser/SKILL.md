@@ -443,7 +443,7 @@ HTTP `/api/service/incidents`, HTTP `/api/service/incidents/<id>`, MCP `agent-br
 
 HTTP `/api/service/events`, MCP `agent-browser://events`, and service trace event records follow `docs/dev/contracts/service-event-record.v1.schema.json`. CLI and HTTP `service_events` response envelopes follow `docs/dev/contracts/service-events-response.v1.schema.json`.
 
-HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching `docs/dev/contracts/service-*-record.v1.schema.json` files. Site-policy and provider mutation responses follow the matching upsert and delete response schemas under `docs/dev/contracts/`. Job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching operator remedy response schemas under `docs/dev/contracts/`.
+HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching `docs/dev/contracts/service-*-record.v1.schema.json` files. Site-policy and provider mutation responses follow the matching upsert and delete response schemas under `docs/dev/contracts/`. Job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching operator remedy response schemas under `docs/dev/contracts/`. Service reconcile responses follow `docs/dev/contracts/service-reconcile-response.v1.schema.json`.
 
 `service_trace` responses follow `docs/dev/contracts/service-trace-response.v1.schema.json`, with summary and activity records covered by `docs/dev/contracts/service-trace-summary-record.v1.schema.json` and `docs/dev/contracts/service-trace-activity-record.v1.schema.json`.
 

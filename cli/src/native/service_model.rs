@@ -1010,6 +1010,25 @@ pub fn assert_service_incident_resolve_response_contract(value: &serde_json::Val
 }
 
 #[cfg(test)]
+pub fn assert_service_reconcile_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "service reconcile response",
+        value,
+        &[
+            "reconciled",
+            "browserCount",
+            "changedBrowsers",
+            "service_state",
+        ],
+        &["browser_count", "changed_browsers"],
+    );
+    assert!(value["reconciled"].is_boolean());
+    assert!(value["browserCount"].is_u64());
+    assert!(value["changedBrowsers"].is_u64());
+    assert!(value["service_state"].is_object());
+}
+
+#[cfg(test)]
 pub fn assert_service_incident_activity_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "incident activity response",
@@ -2959,6 +2978,43 @@ mod tests {
         assert_service_incident_resolve_response_contract(&json!({
             "resolved": true,
             "incident": incident,
+        }));
+    }
+
+    #[test]
+    fn service_reconcile_response_contract_matches_wire_shape() {
+        let response_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-reconcile-response.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_schema_required_fields(
+            &response_schema,
+            &[
+                "reconciled",
+                "browserCount",
+                "changedBrowsers",
+                "service_state",
+            ],
+        );
+
+        assert_service_reconcile_response_contract(&json!({
+            "reconciled": true,
+            "browserCount": 1,
+            "changedBrowsers": 1,
+            "service_state": {
+                "profiles": {},
+                "browsers": {},
+                "sessions": {},
+                "tabs": {},
+                "sitePolicies": {},
+                "providers": {},
+                "challenges": {},
+                "events": [],
+                "jobs": {},
+                "incidents": [],
+                "reconciliation": null,
+            },
         }));
     }
 

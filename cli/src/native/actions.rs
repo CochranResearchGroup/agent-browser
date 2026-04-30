@@ -9767,6 +9767,7 @@ mod tests {
         assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
         assert_service_provider_delete_response_contract,
         assert_service_provider_upsert_response_contract,
+        assert_service_reconcile_response_contract,
         assert_service_site_policy_delete_response_contract,
         assert_service_site_policy_upsert_response_contract,
         assert_service_trace_activity_record_contract, assert_service_trace_response_contract,
@@ -11998,6 +11999,31 @@ mod tests {
             store.load().unwrap().jobs["job-queued"].state,
             JobState::Cancelled
         );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_reconcile_response_matches_contract() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("service-reconcile-response-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_reconcile",
+                "id": "svc-reconcile-response-1",
+                "serviceState": ServiceState::default(),
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_reconcile_response_contract(&result["data"]);
+        assert_eq!(result["data"]["reconciled"], true);
 
         let _ = fs::remove_dir_all(&home);
     }

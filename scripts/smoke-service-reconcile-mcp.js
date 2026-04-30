@@ -19,6 +19,10 @@ import {
   seedServiceOwnershipHandoff,
   smokeDataUrl,
 } from './smoke-utils.js';
+import {
+  assertServiceReconcileResponseSchemaRecord,
+  loadServiceRecordSchema,
+} from './smoke-schema-utils.js';
 
 const context = createSmokeContext({ prefix: 'ab-sr-', sessionPrefix: 'sr' });
 const { session } = context;
@@ -33,6 +37,9 @@ const handoffScenario = {
   staleTargetId: 'service-reconcile-stale-target',
   staleTitle: 'Stale Service Reconcile Target',
 };
+const reconcileResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-reconcile-response.v1.schema.json',
+);
 
 let mcp;
 
@@ -119,6 +126,11 @@ try {
   const reconcileResult = await runCli(context, ['--json', '--session', session, 'service', 'reconcile']);
   const reconciled = parseJsonOutput(reconcileResult.stdout, 'service reconcile');
   assert(reconciled.success === true, `service reconcile failed: ${reconcileResult.stdout}`);
+  assertServiceReconcileResponseSchemaRecord(
+    reconciled.data,
+    reconcileResponseSchema,
+    'CLI service reconcile response',
+  );
   assert(reconciled.data?.reconciled === true, 'service reconcile did not report reconciled=true');
 
   const state = reconciled.data?.service_state;
@@ -326,6 +338,14 @@ try {
   });
 
   const port = await enableStream();
+  const httpReconcile = await httpJson(port, 'POST', '/api/service/reconcile');
+  assert(httpReconcile.success === true, `HTTP service reconcile failed: ${JSON.stringify(httpReconcile)}`);
+  assertServiceReconcileResponseSchemaRecord(
+    httpReconcile.data,
+    reconcileResponseSchema,
+    'HTTP service reconcile response',
+  );
+
   const httpTrace = await httpJson(
     port,
     'GET',
