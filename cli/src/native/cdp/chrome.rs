@@ -22,6 +22,24 @@ fn set_private_dir_permissions(path: &Path) {
     }
 }
 
+fn create_profile_dir(path: &Path, label: &str) -> Result<(), String> {
+    for attempt in 0..2 {
+        match std::fs::create_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound && attempt == 0 => continue,
+            Err(err) => {
+                return Err(format!(
+                    "Failed to create {} {}: {}",
+                    label,
+                    path.display(),
+                    err
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
 pub struct ChromeProcess {
     child: Child,
     pub ws_url: String,
@@ -483,20 +501,13 @@ fn build_chrome_args(
 
     let (user_data_dir, temp_user_data_dir, runtime_profile) = if options.profile.is_some() {
         let dir = resolved_profile.user_data_dir.clone();
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create profile dir {}: {}", dir.display(), e))?;
+        create_profile_dir(&dir, "profile dir")?;
         set_private_dir_permissions(&dir);
         args.push(format!("--user-data-dir={}", dir.display()));
         (dir, None, resolved_profile.runtime_profile)
     } else {
         let dir = resolved_profile.user_data_dir.clone();
-        std::fs::create_dir_all(&dir).map_err(|e| {
-            format!(
-                "Failed to create default profile dir {}: {}",
-                dir.display(),
-                e
-            )
-        })?;
+        create_profile_dir(&dir, "default profile dir")?;
         set_private_dir_permissions(&dir);
         args.push(format!("--user-data-dir={}", dir.display()));
         (dir, None, resolved_profile.runtime_profile)

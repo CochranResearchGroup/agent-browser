@@ -8,35 +8,39 @@
 use serde_json::{json, Value};
 
 use super::actions::{execute_command, DaemonState};
+use crate::test_utils::EnvGuard;
 
 const ENCRYPTION_KEY_ENV: &str = "AGENT_BROWSER_ENCRYPTION_KEY";
 
 struct TestKeyGuard {
+    _env_guard: EnvGuard<'static>,
     _lock: std::sync::MutexGuard<'static, ()>,
-    original: Option<String>,
+    _home: std::path::PathBuf,
 }
 
 impl TestKeyGuard {
     fn new() -> Self {
+        let env_guard = EnvGuard::new(&["HOME", ENCRYPTION_KEY_ENV]);
         let lock = super::auth::AUTH_TEST_MUTEX
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        let original = std::env::var(ENCRYPTION_KEY_ENV).ok();
-        // SAFETY: AUTH_TEST_MUTEX serializes all test access so no concurrent mutation.
-        unsafe { std::env::set_var(ENCRYPTION_KEY_ENV, "a".repeat(64)) };
-        Self {
-            _lock: lock,
-            original,
-        }
-    }
-}
 
-impl Drop for TestKeyGuard {
-    fn drop(&mut self) {
-        // SAFETY: AUTH_TEST_MUTEX is held via _lock.
-        match &self.original {
-            Some(val) => unsafe { std::env::set_var(ENCRYPTION_KEY_ENV, val) },
-            None => unsafe { std::env::remove_var(ENCRYPTION_KEY_ENV) },
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-auth-parity-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&home).unwrap();
+        env_guard.set("HOME", home.to_str().unwrap());
+        env_guard.set(ENCRYPTION_KEY_ENV, &"a".repeat(64));
+
+        Self {
+            _env_guard: env_guard,
+            _lock: lock,
+            _home: home,
         }
     }
 }
