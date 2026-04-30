@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-incident-activity-response.v1.schema.json",
+  "title": "agent-browser service incident activity response",
+  "description": "Stable API shape for standalone incident activity responses returned by CLI JSON, HTTP service APIs, and MCP incident activity resources.",
+  "type": "object",
+  "required": [
+    "incident",
+    "activity",
+    "count"
+  ],
+  "properties": {
+    "incident": {
+      "type": "object"
+    },
+    "activity": {
+      "type": "array"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

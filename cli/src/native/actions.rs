@@ -9758,10 +9758,11 @@ mod tests {
         close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
     };
     use crate::native::service_model::{
-        assert_service_event_record_contract, assert_service_incident_record_contract,
-        assert_service_job_naming_warning_contract, assert_service_trace_activity_record_contract,
-        assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
-        service_job_naming_warning_values, BrowserProcess,
+        assert_service_event_record_contract, assert_service_incident_activity_response_contract,
+        assert_service_incident_record_contract, assert_service_job_naming_warning_contract,
+        assert_service_trace_activity_record_contract, assert_service_trace_response_contract,
+        assert_service_trace_summary_record_contract, service_job_naming_warning_values,
+        BrowserProcess,
     };
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
@@ -11480,6 +11481,7 @@ mod tests {
 
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["incident"]["id"], "browser-1");
+        assert_service_incident_activity_response_contract(&result["data"]);
         assert_eq!(result["data"]["count"], 4);
         assert_eq!(
             result["data"]["activity"][0]["kind"],

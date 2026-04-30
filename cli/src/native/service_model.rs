@@ -707,6 +707,22 @@ pub fn assert_service_trace_response_contract(value: &serde_json::Value) {
     assert_service_trace_summary_record_contract(&value["summary"]);
 }
 
+#[cfg(test)]
+pub fn assert_service_incident_activity_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "incident activity response",
+        value,
+        &["incident", "activity", "count"],
+        &[],
+    );
+    assert_service_incident_record_contract(&value["incident"]);
+    let activity = value["activity"].as_array().unwrap();
+    assert_eq!(value["count"].as_u64().unwrap(), activity.len() as u64);
+    for item in activity {
+        assert_service_trace_activity_record_contract(item);
+    }
+}
+
 /// Top-level snapshot of the browser service control plane.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -2295,6 +2311,11 @@ mod tests {
 
     #[test]
     fn service_trace_aggregate_contracts_match_wire_shape() {
+        let incident_activity_response_schema: serde_json::Value =
+            serde_json::from_str(include_str!(
+                "../../../docs/dev/contracts/service-incident-activity-response.v1.schema.json"
+            ))
+            .unwrap();
         let response_schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/service-trace-response.v1.schema.json"
         ))
@@ -2324,6 +2345,10 @@ mod tests {
         assert_eq!(
             activity_schema["properties"]["jobState"]["enum"],
             json!(SERVICE_JOB_STATE_VALUES.to_vec())
+        );
+        assert_schema_required_fields(
+            &incident_activity_response_schema,
+            &["incident", "activity", "count"],
         );
         assert_schema_required_fields(
             &response_schema,
@@ -2416,9 +2441,36 @@ mod tests {
             "agentName": "codex",
             "taskName": "probeACSwebsite",
         });
+        let incident = json!({
+            "id": "browser-1",
+            "browserId": "browser-1",
+            "label": "browser-1",
+            "state": "active",
+            "severity": "error",
+            "escalation": "browser_recovery",
+            "recommendedAction": "Review recovery trace and retry or relaunch the affected browser.",
+            "acknowledgedAt": null,
+            "acknowledgedBy": null,
+            "acknowledgementNote": null,
+            "resolvedAt": null,
+            "resolvedBy": null,
+            "resolutionNote": null,
+            "latestTimestamp": "2026-04-22T00:01:00Z",
+            "latestMessage": "Timed out",
+            "latestKind": "service_job_timeout",
+            "currentHealth": "process_exited",
+            "eventIds": [],
+            "jobIds": ["job-1"],
+        });
 
         assert_service_trace_summary_record_contract(&summary);
         assert_service_trace_activity_record_contract(&activity);
+        let incident_activity_response = json!({
+            "incident": incident,
+            "activity": [activity.clone()],
+            "count": 1,
+        });
+        assert_service_incident_activity_response_contract(&incident_activity_response);
         let response = json!({
             "filters": {
                 "browserId": "browser-1",

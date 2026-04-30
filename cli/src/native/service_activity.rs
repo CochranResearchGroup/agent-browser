@@ -296,8 +296,8 @@ mod tests {
 
     use super::*;
     use crate::native::service_model::{
-        BrowserHealth, BrowserProcess, BrowserSession, BrowserTab, JobTarget, ServiceIncidentState,
-        TabLifecycle,
+        assert_service_incident_activity_response_contract, BrowserHealth, BrowserProcess,
+        BrowserSession, BrowserTab, JobTarget, ServiceIncidentState, TabLifecycle,
     };
 
     #[test]
@@ -373,6 +373,7 @@ mod tests {
 
         let response = service_incident_activity_response(&state, "browser-1").unwrap();
 
+        assert_service_incident_activity_response_contract(&response);
         assert_eq!(response["count"], 3);
         assert_eq!(response["activity"][0]["source"], "event");
         assert_eq!(response["activity"][1]["source"], "job");

@@ -18,6 +18,7 @@ import {
 } from './smoke-utils.js';
 import {
   assertServiceEventSchemaRecord,
+  assertServiceIncidentActivityResponseSchemaRecord,
   assertServiceIncidentSchemaRecord,
   assertServiceTraceResponseSchemaRecord,
   assertServiceTraceActivitySchemaRecord,
@@ -47,6 +48,9 @@ const traceSummaryRecordSchema = loadServiceRecordSchema(
 );
 const traceActivityRecordSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-trace-activity-record.v1.schema.json',
+);
+const incidentActivityResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-incident-activity-response.v1.schema.json',
 );
 
 let mcp;
@@ -261,6 +265,29 @@ try {
   assert(httpIncidentDetail.data?.incident?.id === browserId, 'HTTP incident detail returned the wrong incident');
   assertServiceIncidentSchemaRecord(httpIncidentDetail.data.incident, incidentRecordSchema, 'HTTP detail');
 
+  const httpIncidentActivity = await httpJson(
+    port,
+    'GET',
+    `/api/service/incidents/${encodeURIComponent(browserId)}/activity`,
+  );
+  assert(
+    httpIncidentActivity.success === true,
+    `HTTP incident activity failed: ${JSON.stringify(httpIncidentActivity)}`,
+  );
+  assertServiceIncidentActivityResponseSchemaRecord(
+    httpIncidentActivity.data,
+    incidentActivityResponseSchema,
+    'HTTP incident activity',
+  );
+  assertServiceIncidentSchemaRecord(
+    httpIncidentActivity.data.incident,
+    incidentRecordSchema,
+    'HTTP incident activity',
+  );
+  for (const [index, item] of httpIncidentActivity.data.activity.entries()) {
+    assertServiceTraceActivitySchemaRecord(item, traceActivityRecordSchema, `HTTP incident activity[${index}]`);
+  }
+
   const mcpIncidentsResult = await send('tools/call', {
     name: 'service_incidents',
     arguments: {
@@ -288,6 +315,25 @@ try {
     `MCP incidents resource missing ${browserId}: ${JSON.stringify(mcpResourcePayload.incidents)}`,
   );
   assertServiceIncidentSchemaRecord(mcpResourceIncident, incidentRecordSchema, 'MCP resource');
+
+  const mcpActivityUri = `agent-browser://incidents/${browserId}/activity`;
+  const mcpActivityResource = await send('resources/read', {
+    uri: mcpActivityUri,
+  });
+  const mcpActivityPayload = parseMcpJsonResource(
+    mcpActivityResource,
+    mcpActivityUri,
+    'MCP incident activity resource',
+  );
+  assertServiceIncidentActivityResponseSchemaRecord(
+    mcpActivityPayload,
+    incidentActivityResponseSchema,
+    'MCP incident activity resource',
+  );
+  assertServiceIncidentSchemaRecord(mcpActivityPayload.incident, incidentRecordSchema, 'MCP incident activity resource');
+  for (const [index, item] of mcpActivityPayload.activity.entries()) {
+    assertServiceTraceActivitySchemaRecord(item, traceActivityRecordSchema, `MCP incident activity[${index}]`);
+  }
 
   const mcpEventsResource = await send('resources/read', { uri: 'agent-browser://events' });
   const mcpEventsPayload = parseMcpJsonResource(mcpEventsResource, 'agent-browser://events', 'MCP events resource');

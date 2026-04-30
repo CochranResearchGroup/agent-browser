@@ -178,6 +178,14 @@ export function assertServiceTraceResponseSchemaRecord(trace, schema, label) {
   assert(trace.summary && typeof trace.summary === 'object', `${label} missing summary object`);
 }
 
+export function assertServiceIncidentActivityResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(response.incident && typeof response.incident === 'object', `${label} missing incident object`);
+  assert(Array.isArray(response.activity), `${label} missing activity array`);
+  assert(Number.isInteger(response.count), `${label} missing count integer`);
+  assert(response.count === response.activity.length, `${label} count does not match activity length`);
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

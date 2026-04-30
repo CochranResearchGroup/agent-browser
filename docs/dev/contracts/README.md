@@ -85,3 +85,8 @@ items returned by:
 The schemas are guarded by Rust model/action tests and live HTTP/MCP trace
 smokes so dashboards, API clients, and agents can use the aggregate trace
 payload without rejoining raw event, job, and incident records themselves.
+
+`service-incident-activity-response.v1.schema.json` describes the standalone
+incident activity response returned by `agent-browser service activity
+<incident-id>`, HTTP `GET /api/service/incidents/<id>/activity`, and MCP
+`agent-browser://incidents/{incident_id}/activity`.
