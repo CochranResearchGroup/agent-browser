@@ -249,6 +249,42 @@ export function assertServiceJobsResponseSchemaRecord(response, schema, label) {
   }
 }
 
+export function assertServiceSitePolicyUpsertResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assertNoSnakeCaseFields(response, ['site_policy'], label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(response.upserted === true, `${label} upserted should be true: ${JSON.stringify(response)}`);
+  assert(response.sitePolicy && typeof response.sitePolicy === 'object', `${label} missing sitePolicy object`);
+}
+
+export function assertServiceSitePolicyDeleteResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assertNoSnakeCaseFields(response, ['site_policy'], label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(typeof response.deleted === 'boolean', `${label} missing deleted boolean`);
+  assert(
+    response.sitePolicy === null || (response.sitePolicy && typeof response.sitePolicy === 'object'),
+    `${label} sitePolicy should be object or null`,
+  );
+}
+
+export function assertServiceProviderUpsertResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(response.upserted === true, `${label} upserted should be true: ${JSON.stringify(response)}`);
+  assert(response.provider && typeof response.provider === 'object', `${label} missing provider object`);
+}
+
+export function assertServiceProviderDeleteResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(typeof response.deleted === 'boolean', `${label} missing deleted boolean`);
+  assert(
+    response.provider === null || (response.provider && typeof response.provider === 'object'),
+    `${label} provider should be object or null`,
+  );
+}
+
 export function assertServiceJobSchemaRecord(job, schema, label) {
   assertRequiredFields(job, schema, label);
   assertNoSnakeCaseFields(

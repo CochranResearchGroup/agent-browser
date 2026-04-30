@@ -9762,6 +9762,10 @@ mod tests {
         assert_service_incident_activity_response_contract,
         assert_service_incident_record_contract, assert_service_incidents_response_contract,
         assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
+        assert_service_provider_delete_response_contract,
+        assert_service_provider_upsert_response_contract,
+        assert_service_site_policy_delete_response_contract,
+        assert_service_site_policy_upsert_response_contract,
         assert_service_trace_activity_record_contract, assert_service_trace_response_contract,
         assert_service_trace_summary_record_contract, service_job_naming_warning_values,
         BrowserProcess,
@@ -11884,6 +11888,7 @@ mod tests {
         )
         .await;
         assert_eq!(upsert_policy["success"], true);
+        assert_service_site_policy_upsert_response_contract(&upsert_policy["data"]);
         assert_eq!(upsert_policy["data"]["sitePolicy"]["id"], "google");
 
         let upsert_provider = execute_command(
@@ -11901,6 +11906,7 @@ mod tests {
         )
         .await;
         assert_eq!(upsert_provider["success"], true);
+        assert_service_provider_upsert_response_contract(&upsert_provider["data"]);
         assert_eq!(upsert_provider["data"]["provider"]["id"], "manual");
 
         let persisted = store.load().unwrap();
@@ -11923,8 +11929,23 @@ mod tests {
         )
         .await;
         assert_eq!(delete_provider["success"], true);
+        assert_service_provider_delete_response_contract(&delete_provider["data"]);
         assert_eq!(delete_provider["data"]["deleted"], true);
         assert!(!store.load().unwrap().providers.contains_key("manual"));
+
+        let delete_policy = execute_command(
+            &json!({
+                "action": "service_site_policy_delete",
+                "id": "svc-policy-delete-1",
+                "sitePolicyId": "google"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(delete_policy["success"], true);
+        assert_service_site_policy_delete_response_contract(&delete_policy["data"]);
+        assert_eq!(delete_policy["data"]["deleted"], true);
+        assert!(!store.load().unwrap().site_policies.contains_key("google"));
 
         let _ = fs::remove_dir_all(&home);
     }

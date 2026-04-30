@@ -860,6 +860,66 @@ pub fn assert_service_jobs_response_contract(value: &serde_json::Value) {
 }
 
 #[cfg(test)]
+pub fn assert_service_site_policy_upsert_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "site policy upsert response",
+        value,
+        &["id", "sitePolicy", "upserted"],
+        &["site_policy"],
+    );
+    assert!(value["id"].is_string());
+    assert_eq!(value["upserted"], true);
+    assert_service_site_policy_record_contract(&value["sitePolicy"]);
+}
+
+#[cfg(test)]
+pub fn assert_service_site_policy_delete_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "site policy delete response",
+        value,
+        &["id", "deleted", "sitePolicy"],
+        &["site_policy"],
+    );
+    assert!(value["id"].is_string());
+    assert!(value["deleted"].is_boolean());
+    if value["sitePolicy"].is_object() {
+        assert_service_site_policy_record_contract(&value["sitePolicy"]);
+    } else {
+        assert!(value["sitePolicy"].is_null());
+    }
+}
+
+#[cfg(test)]
+pub fn assert_service_provider_upsert_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "provider upsert response",
+        value,
+        &["id", "provider", "upserted"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert_eq!(value["upserted"], true);
+    assert_service_provider_record_contract(&value["provider"]);
+}
+
+#[cfg(test)]
+pub fn assert_service_provider_delete_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "provider delete response",
+        value,
+        &["id", "deleted", "provider"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert!(value["deleted"].is_boolean());
+    if value["provider"].is_object() {
+        assert_service_provider_record_contract(&value["provider"]);
+    } else {
+        assert!(value["provider"].is_null());
+    }
+}
+
+#[cfg(test)]
 pub fn assert_service_incident_activity_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "incident activity response",
@@ -2638,6 +2698,79 @@ mod tests {
 
         assert_service_jobs_response_contract(&list_response);
         assert_service_jobs_response_contract(&detail_response);
+    }
+
+    #[test]
+    fn service_config_mutation_response_contracts_match_wire_shape() {
+        let site_policy_upsert_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-site-policy-upsert-response.v1.schema.json"
+        ))
+        .unwrap();
+        let site_policy_delete_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-site-policy-delete-response.v1.schema.json"
+        ))
+        .unwrap();
+        let provider_upsert_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-provider-upsert-response.v1.schema.json"
+        ))
+        .unwrap();
+        let provider_delete_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-provider-delete-response.v1.schema.json"
+        ))
+        .unwrap();
+
+        assert_schema_required_fields(
+            &site_policy_upsert_schema,
+            &["id", "sitePolicy", "upserted"],
+        );
+        assert_schema_required_fields(&site_policy_delete_schema, &["id", "deleted", "sitePolicy"]);
+        assert_schema_required_fields(&provider_upsert_schema, &["id", "provider", "upserted"]);
+        assert_schema_required_fields(&provider_delete_schema, &["id", "deleted", "provider"]);
+
+        let site_policy = json!({
+            "id": "google",
+            "originPattern": "https://accounts.google.com",
+            "browserHost": null,
+            "viewStream": null,
+            "controlInput": null,
+            "interactionMode": "human_like_input",
+            "rateLimit": {},
+            "manualLoginPreferred": true,
+            "profileRequired": true,
+            "authProviders": [],
+            "challengePolicy": "avoid_first",
+            "allowedChallengeProviders": [],
+            "notes": null,
+        });
+        let provider = json!({
+            "id": "manual",
+            "kind": "manual_approval",
+            "displayName": "Dashboard approval",
+            "enabled": true,
+            "configRef": null,
+            "capabilities": ["human_approval"],
+        });
+
+        assert_service_site_policy_upsert_response_contract(&json!({
+            "id": "google",
+            "sitePolicy": site_policy.clone(),
+            "upserted": true,
+        }));
+        assert_service_site_policy_delete_response_contract(&json!({
+            "id": "google",
+            "deleted": true,
+            "sitePolicy": site_policy,
+        }));
+        assert_service_provider_upsert_response_contract(&json!({
+            "id": "manual",
+            "provider": provider.clone(),
+            "upserted": true,
+        }));
+        assert_service_provider_delete_response_contract(&json!({
+            "id": "manual",
+            "deleted": true,
+            "provider": provider,
+        }));
     }
 
     #[test]

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-provider-delete-response.v1.schema.json",
+  "title": "agent-browser service provider delete response",
+  "description": "Stable API shape for service provider delete responses returned by HTTP service APIs and MCP service_provider_delete.",
+  "type": "object",
+  "required": [
+    "id",
+    "deleted",
+    "provider"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "deleted": {
+      "type": "boolean"
+    },
+    "provider": {
+      "type": ["object", "null"]
+    }
+  },
+  "additionalProperties": true
+}

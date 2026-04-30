@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-site-policy-delete-response.v1.schema.json",
+  "title": "agent-browser service site policy delete response",
+  "description": "Stable API shape for service site policy delete responses returned by HTTP service APIs and MCP service_site_policy_delete.",
+  "type": "object",
+  "required": [
+    "id",
+    "deleted",
+    "sitePolicy"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "deleted": {
+      "type": "boolean"
+    },
+    "sitePolicy": {
+      "type": ["object", "null"]
+    }
+  },
+  "additionalProperties": true
+}

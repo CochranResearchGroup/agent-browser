@@ -93,6 +93,17 @@ These schemas cover `profiles`, `browsers`, `sessions`, `tabs`,
 model tests and MCP resource tests so software clients can consume the same
 camelCase record fields from HTTP and MCP without inferring Rust internals.
 
+The service config mutation schemas describe write response envelopes returned
+by HTTP service APIs and matching MCP tools:
+
+- `service-site-policy-upsert-response.v1.schema.json`
+- `service-site-policy-delete-response.v1.schema.json`
+- `service-provider-upsert-response.v1.schema.json`
+- `service-provider-delete-response.v1.schema.json`
+
+These schemas cover the authoritative path ID, mutation flag, and returned or
+removed record payload for persisted site policy and provider writes.
+
 ## Service Trace Aggregate Records v1
 
 `service-trace-response.v1.schema.json` describes the full `service_trace`

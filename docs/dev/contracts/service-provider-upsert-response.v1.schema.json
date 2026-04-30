@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-provider-upsert-response.v1.schema.json",
+  "title": "agent-browser service provider upsert response",
+  "description": "Stable API shape for service provider upsert responses returned by HTTP service APIs and MCP service_provider_upsert.",
+  "type": "object",
+  "required": [
+    "id",
+    "provider",
+    "upserted"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "object"
+    },
+    "upserted": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

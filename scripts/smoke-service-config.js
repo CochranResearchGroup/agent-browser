@@ -10,6 +10,14 @@ import {
   parseMcpToolPayload,
   runCli,
 } from './smoke-utils.js';
+import {
+  assertServiceProviderDeleteResponseSchemaRecord,
+  assertServiceProviderUpsertResponseSchemaRecord,
+  assertServiceSitePolicyDeleteResponseSchemaRecord,
+  assertServiceSitePolicyUpsertResponseSchemaRecord,
+  loadServiceRecordSchema,
+  parseMcpJsonResource,
+} from './smoke-schema-utils.js';
 
 const context = createSmokeContext({ prefix: 'ab-scfg-', sessionPrefix: 'scfg' });
 const { session } = context;
@@ -17,6 +25,18 @@ const serviceName = 'ServiceConfigSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'configMutationParity';
 const traceFields = { serviceName, agentName, taskName };
+const sitePolicyUpsertResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-site-policy-upsert-response.v1.schema.json',
+);
+const sitePolicyDeleteResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-site-policy-delete-response.v1.schema.json',
+);
+const providerUpsertResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-provider-upsert-response.v1.schema.json',
+);
+const providerDeleteResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-provider-delete-response.v1.schema.json',
+);
 let mcp;
 
 const timeout = setTimeout(() => {
@@ -83,6 +103,11 @@ try {
     profileRequired: true,
   });
   assert(httpPolicy.success === true, `HTTP site policy upsert failed: ${JSON.stringify(httpPolicy)}`);
+  assertServiceSitePolicyUpsertResponseSchemaRecord(
+    httpPolicy.data,
+    sitePolicyUpsertResponseSchema,
+    'HTTP site policy upsert response',
+  );
   assert(httpPolicy.data?.sitePolicy?.id === 'google', `HTTP policy id mismatch: ${JSON.stringify(httpPolicy)}`);
 
   mcp = createMcpStdioClient({
@@ -99,7 +124,11 @@ try {
   notify('notifications/initialized');
 
   const mcpPoliciesResource = await send('resources/read', { uri: 'agent-browser://site-policies' });
-  const mcpPolicies = JSON.parse(mcpPoliciesResource.contents?.[0]?.text || '{}');
+  const mcpPolicies = parseMcpJsonResource(
+    mcpPoliciesResource,
+    'agent-browser://site-policies',
+    'MCP site-policies resource',
+  );
   assert(
     mcpPolicies.sitePolicies?.some(
       (policy) =>
@@ -125,6 +154,11 @@ try {
   });
   const mcpProvider = parseMcpToolPayload(mcpProviderResult, 'MCP service_provider_upsert');
   assert(mcpProvider.success === true, `MCP provider upsert failed: ${JSON.stringify(mcpProvider)}`);
+  assertServiceProviderUpsertResponseSchemaRecord(
+    mcpProvider.data,
+    providerUpsertResponseSchema,
+    'MCP provider upsert response',
+  );
 
   const httpProviders = await httpJson(port, 'GET', '/api/service/providers');
   assert(
@@ -143,6 +177,11 @@ try {
     'MCP service_site_policy_delete',
   );
   assert(mcpDeletePolicy.success === true, `MCP policy delete failed: ${JSON.stringify(mcpDeletePolicy)}`);
+  assertServiceSitePolicyDeleteResponseSchemaRecord(
+    mcpDeletePolicy.data,
+    sitePolicyDeleteResponseSchema,
+    'MCP site policy delete response',
+  );
 
   const httpPoliciesAfterDelete = await httpJson(port, 'GET', '/api/service/site-policies');
   assertCollectionMissing(httpPoliciesAfterDelete.data, 'sitePolicies', 'google', 'HTTP site-policies');
@@ -152,9 +191,18 @@ try {
     httpDeleteProvider.success === true && httpDeleteProvider.data?.deleted === true,
     `HTTP provider delete failed: ${JSON.stringify(httpDeleteProvider)}`,
   );
+  assertServiceProviderDeleteResponseSchemaRecord(
+    httpDeleteProvider.data,
+    providerDeleteResponseSchema,
+    'HTTP provider delete response',
+  );
 
   const mcpProvidersResource = await send('resources/read', { uri: 'agent-browser://providers' });
-  const mcpProviders = JSON.parse(mcpProvidersResource.contents?.[0]?.text || '{}');
+  const mcpProviders = parseMcpJsonResource(
+    mcpProvidersResource,
+    'agent-browser://providers',
+    'MCP providers resource',
+  );
   assertCollectionMissing(mcpProviders, 'providers', 'manual', 'MCP providers');
 
   await cleanup();
