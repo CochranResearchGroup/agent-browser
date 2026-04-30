@@ -3080,10 +3080,15 @@ async fn e2e_material_checkbox_check_uncheck() {
 #[tokio::test]
 #[ignore]
 async fn e2e_snapshot_cursor_interactive() {
+    let profile_dir = e2e_temp_home("snapshot-cursor-interactive-profile");
+    let profile = profile_dir
+        .to_str()
+        .expect("profile dir should be valid utf-8");
+
     let mut state = DaemonState::new();
 
     let resp = execute_command(
-        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &json!({ "id": "1", "action": "launch", "headless": true, "profile": profile }),
         &mut state,
     )
     .await;
@@ -3169,6 +3174,7 @@ async fn e2e_snapshot_cursor_interactive() {
 
     let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
     assert_success(&resp);
+    let _ = std::fs::remove_dir_all(&profile_dir);
 }
 
 /// Verifies that `screenshot --annotate` completes in bounded time even with
