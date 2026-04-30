@@ -101,6 +101,8 @@ impl ChromeProcess {
         } else {
             true
         };
+        #[cfg(not(unix))]
+        let process_group_kill_ok = true;
 
         let wait_ok = match self.child.wait() {
             Ok(_) => true,
