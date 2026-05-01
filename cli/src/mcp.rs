@@ -4,7 +4,9 @@ use serde_json::{json, Value};
 
 use crate::connection::{send_command, Response};
 use crate::native::service_activity::service_incident_activity_response;
-use crate::native::service_incidents::{service_incidents_response, ServiceIncidentFilters};
+use crate::native::service_incidents::{
+    service_incident_summary, service_incidents_response, ServiceIncidentFilters,
+};
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
@@ -578,6 +580,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "integer",
                         "minimum": 1,
                         "description": "Maximum incident records to return. Defaults to 20."
+                    },
+                    "summary": {
+                        "type": "boolean",
+                        "description": "When true, include summary groups by escalation, severity, and state with recommended next actions."
                     },
                     "state": {
                         "type": "string",
@@ -3639,7 +3645,8 @@ fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, Jso
         message: "Internal error",
         data: Some(json!({ "message": err, "tool": "service_incidents" })),
     })?;
-    let data = service_incidents_response(
+    let summarize = optional_bool_argument(arguments, "summary")?.unwrap_or(false);
+    let mut data = service_incidents_response(
         &state,
         ServiceIncidentFilters {
             limit,
@@ -3695,6 +3702,14 @@ fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, Jso
         message: "Invalid params",
         data: Some(json!({ "message": err, "tool": "service_incidents" })),
     })?;
+    if summarize {
+        let incidents = data
+            .get("incidents")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+        data["summary"] = service_incident_summary(&incidents);
+    }
 
     Ok(tool_response_from_payload(
         "service_incidents",
@@ -7720,6 +7735,7 @@ mod tests {
                 .unwrap()
                 .contains(&json!("os_degraded_possible"))
         );
+        assert!(response["result"]["tools"][2]["inputSchema"]["properties"]["summary"].is_object());
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()
@@ -8484,6 +8500,22 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("severity must be one of"));
+    }
+
+    #[test]
+    fn service_incidents_rejects_invalid_summary_before_store_read() {
+        let response = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":43,"method":"tools/call","params":{"name":"service_incidents","arguments":{"summary":"yes"}}}"#,
+            "default",
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 43);
+        assert_eq!(response["error"]["code"], -32602);
+        assert!(response["error"]["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("summary must be a boolean"));
     }
 
     #[test]

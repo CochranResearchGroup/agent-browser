@@ -106,7 +106,7 @@ GET  /api/service/challenges
 GET  /api/service/jobs
 GET  /api/service/jobs/<id>
 POST /api/service/jobs/<id>/cancel
-GET  /api/service/incidents
+GET  /api/service/incidents?summary=true
 GET  /api/service/incidents/<id>
 GET  /api/service/incidents/<id>/activity
 POST /api/service/incidents/<id>/acknowledge
@@ -150,7 +150,7 @@ agent-browser://incidents
 agent-browser://incidents/{incident_id}/activity
 ```
 
-Service tools include `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_trace`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, and `service_provider_delete`.
+Service tools include `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_trace`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, and `service_provider_delete`. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`.
 
 Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fills, waits, keyboard actions, element reads, cookies, storage, headers, offline mode, viewport, geolocation, permissions, timezone, locale, media, dialogs, uploads, downloads, HAR capture, request routing, console, errors, PDFs, response bodies, and clipboard operations. Use `browser_command` only for browser actions that do not yet have a typed tool.
 

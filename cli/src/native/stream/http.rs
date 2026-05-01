@@ -1314,6 +1314,9 @@ fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
 
     for (key, value) in query_params(query) {
         match key.as_str() {
+            "summary" => {
+                cmd["summary"] = json!(parse_query_bool("summary", &value)?);
+            }
             "limit" => {
                 let limit = value
                     .parse::<usize>()
@@ -1684,11 +1687,12 @@ mod tests {
     #[test]
     fn service_incidents_command_maps_query_filters() {
         let cmd = service_incidents_command(Some(
-            "id=incident-1&limit=7&state=active&severity=critical&escalation=os_degraded_possible&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
+            "summary=true&id=incident-1&limit=7&state=active&severity=critical&escalation=os_degraded_possible&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
         ))
         .unwrap();
 
         assert_eq!(cmd["action"], "service_incidents");
+        assert_eq!(cmd["summary"], true);
         assert_eq!(cmd["incidentId"], "incident-1");
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");
@@ -2673,6 +2677,13 @@ mod tests {
         let err = service_incidents_command(Some("handling-state=active")).unwrap_err();
 
         assert!(err.contains("Invalid handlingState value"));
+    }
+
+    #[test]
+    fn service_incidents_command_rejects_invalid_summary() {
+        let err = service_incidents_command(Some("summary=yes")).unwrap_err();
+
+        assert!(err.contains("Invalid summary value"));
     }
 
     #[test]

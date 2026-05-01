@@ -113,6 +113,64 @@
     "jobs": {
       "type": "array"
     },
+    "summary": {
+      "type": "object",
+      "description": "Optional compact incident grouping returned when summary output is requested.",
+      "required": [
+        "groupCount",
+        "groups"
+      ],
+      "properties": {
+        "groupCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "escalation",
+              "severity",
+              "state",
+              "count",
+              "latestTimestamp",
+              "recommendedAction",
+              "incidentIds"
+            ],
+            "properties": {
+              "escalation": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "latestTimestamp": {
+                "type": "string"
+              },
+              "recommendedAction": {
+                "type": "string"
+              },
+              "incidentIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
     "count": {
       "type": "integer",
       "minimum": 0

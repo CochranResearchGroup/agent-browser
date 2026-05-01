@@ -772,10 +772,15 @@ try {
     incidentsTool.inputSchema?.properties?.serviceName,
     'MCP service_incidents missing serviceName filter',
   );
+  assert(
+    incidentsTool.inputSchema?.properties?.summary?.type === 'boolean',
+    'MCP service_incidents missing summary flag',
+  );
 
   const filteredIncidents = await send('tools/call', {
     name: 'service_incidents',
     arguments: {
+      summary: true,
       severity: 'critical',
       escalation: 'os_degraded_possible',
       serviceName: 'JournalDownloader',
@@ -794,6 +799,11 @@ try {
   assert(
     Array.isArray(filteredIncidentPayload.data?.incidents),
     'MCP service_incidents missing incidents array',
+  );
+  assert(
+    filteredIncidentPayload.data?.summary &&
+      Array.isArray(filteredIncidentPayload.data.summary.groups),
+    'MCP service_incidents missing summary groups',
   );
   assert(
     filteredIncidentPayload.data?.filters?.severity === 'critical',

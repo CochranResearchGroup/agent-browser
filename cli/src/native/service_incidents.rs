@@ -119,6 +119,74 @@ pub(crate) fn service_incidents_response(
     }))
 }
 
+pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
+    let mut groups = std::collections::BTreeMap::<(String, String, String), Vec<&Value>>::new();
+    for incident in incidents {
+        let escalation = incident
+            .get("escalation")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none")
+            .to_string();
+        let severity = incident
+            .get("severity")
+            .and_then(|value| value.as_str())
+            .unwrap_or("info")
+            .to_string();
+        let state = incident
+            .get("state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+        groups
+            .entry((escalation, severity, state))
+            .or_default()
+            .push(incident);
+    }
+
+    let groups = groups
+        .into_iter()
+        .map(|((escalation, severity, state), incidents)| {
+            let recommended_action = incidents
+                .iter()
+                .filter_map(|incident| {
+                    incident
+                        .get("recommendedAction")
+                        .and_then(|value| value.as_str())
+                        .filter(|value| !value.is_empty())
+                })
+                .next()
+                .unwrap_or("Inspect incident details.");
+            let ids = incidents
+                .iter()
+                .filter_map(|incident| incident.get("id").and_then(|value| value.as_str()))
+                .collect::<Vec<_>>();
+            let newest = incidents
+                .iter()
+                .filter_map(|incident| {
+                    incident
+                        .get("latestTimestamp")
+                        .and_then(|value| value.as_str())
+                })
+                .max()
+                .unwrap_or("unknown-time");
+            json!({
+                "escalation": escalation,
+                "severity": severity,
+                "state": state,
+                "count": incidents.len(),
+                "latestTimestamp": newest,
+                "recommendedAction": recommended_action,
+                "incidentIds": ids,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "groupCount": groups.len(),
+        "groups": groups,
+    })
+}
+
 pub(crate) fn acknowledge_persisted_service_incident(
     incident_id: &str,
     timestamp: &str,

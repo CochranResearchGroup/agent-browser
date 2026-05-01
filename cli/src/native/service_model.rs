@@ -767,6 +767,32 @@ pub fn assert_service_incidents_response_contract(value: &serde_json::Value) {
     if let Some(incident) = value.get("incident") {
         assert_service_incident_record_contract(incident);
     }
+    if let Some(summary) = value.get("summary") {
+        assert_record_fields("incidents summary", summary, &["groupCount", "groups"], &[]);
+        let groups = summary["groups"].as_array().unwrap();
+        assert_eq!(
+            summary["groupCount"].as_u64().unwrap(),
+            groups.len() as u64,
+            "incidents summary groupCount does not match groups length"
+        );
+        for group in groups {
+            assert_record_fields(
+                "incidents summary group",
+                group,
+                &[
+                    "escalation",
+                    "severity",
+                    "state",
+                    "count",
+                    "latestTimestamp",
+                    "recommendedAction",
+                    "incidentIds",
+                ],
+                &[],
+            );
+            assert!(group["incidentIds"].is_array());
+        }
+    }
     if let Some(events) = value.get("events").and_then(|events| events.as_array()) {
         for event in events {
             assert_service_event_record_contract(event);

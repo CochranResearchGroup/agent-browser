@@ -1,6 +1,6 @@
 use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::future::Future;
@@ -54,7 +54,7 @@ use super::service_health::{
 };
 use super::service_incidents::{
     acknowledge_persisted_service_incident, resolve_persisted_service_incident,
-    service_incidents_response, ServiceIncidentFilters,
+    service_incident_summary, service_incidents_response, ServiceIncidentFilters,
 };
 use super::service_jobs::cancel_persisted_service_job;
 use super::service_lifecycle::{
@@ -6726,74 +6726,6 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         response["summary"] = service_incident_summary(&incidents);
     }
     Ok(response)
-}
-
-fn service_incident_summary(incidents: &[Value]) -> Value {
-    let mut groups = BTreeMap::<(String, String, String), Vec<&Value>>::new();
-    for incident in incidents {
-        let escalation = incident
-            .get("escalation")
-            .and_then(|value| value.as_str())
-            .unwrap_or("none")
-            .to_string();
-        let severity = incident
-            .get("severity")
-            .and_then(|value| value.as_str())
-            .unwrap_or("info")
-            .to_string();
-        let state = incident
-            .get("state")
-            .and_then(|value| value.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        groups
-            .entry((escalation, severity, state))
-            .or_default()
-            .push(incident);
-    }
-
-    let groups = groups
-        .into_iter()
-        .map(|((escalation, severity, state), incidents)| {
-            let recommended_action = incidents
-                .iter()
-                .filter_map(|incident| {
-                    incident
-                        .get("recommendedAction")
-                        .and_then(|value| value.as_str())
-                        .filter(|value| !value.is_empty())
-                })
-                .next()
-                .unwrap_or("Inspect incident details.");
-            let ids = incidents
-                .iter()
-                .filter_map(|incident| incident.get("id").and_then(|value| value.as_str()))
-                .collect::<Vec<_>>();
-            let newest = incidents
-                .iter()
-                .filter_map(|incident| {
-                    incident
-                        .get("latestTimestamp")
-                        .and_then(|value| value.as_str())
-                })
-                .max()
-                .unwrap_or("unknown-time");
-            json!({
-                "escalation": escalation,
-                "severity": severity,
-                "state": state,
-                "count": incidents.len(),
-                "latestTimestamp": newest,
-                "recommendedAction": recommended_action,
-                "incidentIds": ids,
-            })
-        })
-        .collect::<Vec<_>>();
-
-    json!({
-        "groupCount": groups.len(),
-        "groups": groups,
-    })
 }
 
 async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
