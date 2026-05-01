@@ -40,6 +40,7 @@ import {
 import {
   formatIncidentField,
   incidentPriorityView,
+  incidentSeverityTone,
   type ServiceIncidentEscalation,
   type ServiceIncidentSeverity,
 } from "@/lib/service-incidents";
@@ -188,6 +189,27 @@ type ServiceIncidentActivityData = {
   incident?: ServiceIncident;
   activity?: ServiceTraceTimelineItem[];
   count?: number;
+};
+
+type ServiceIncidentSummaryGroup = {
+  escalation?: ServiceIncidentEscalation | null;
+  severity?: ServiceIncidentSeverity | null;
+  state?: string | null;
+  count?: number;
+  latestTimestamp?: string | null;
+  recommendedAction?: string | null;
+  incidentIds?: string[];
+};
+
+type ServiceIncidentsData = {
+  incidents?: ServiceIncident[];
+  count?: number;
+  matched?: number;
+  total?: number;
+  summary?: {
+    groupCount?: number;
+    groups?: ServiceIncidentSummaryGroup[];
+  };
 };
 
 type ApiResponse<T> = {
@@ -404,6 +426,24 @@ function incidentHandlingLabel(incident: IncidentRecord): string {
   const state = incidentHandlingState(incident);
   if (state === "unacknowledged") return "needs ack";
   return state;
+}
+
+function incidentSeverityRank(value?: ServiceIncidentSeverity | null): number {
+  if (value === "critical") return 4;
+  if (value === "error") return 3;
+  if (value === "warning") return 2;
+  if (value === "info") return 1;
+  return 0;
+}
+
+function sortIncidentSummaryGroups(groups: ServiceIncidentSummaryGroup[]): ServiceIncidentSummaryGroup[] {
+  return [...groups].sort((left, right) => {
+    const severityDelta = incidentSeverityRank(right.severity) - incidentSeverityRank(left.severity);
+    if (severityDelta !== 0) return severityDelta;
+    const countDelta = (right.count ?? 0) - (left.count ?? 0);
+    if (countDelta !== 0) return countDelta;
+    return new Date(right.latestTimestamp ?? 0).getTime() - new Date(left.latestTimestamp ?? 0).getTime();
+  });
 }
 
 function deriveIncidentTimeline(incident: IncidentRecord): ServiceTraceTimelineItem[] {
@@ -1012,6 +1052,47 @@ function IncidentRow({
         {formatRelativeTime(incident.latestTimestamp)}
       </span>
     </button>
+  );
+}
+
+function IncidentSummaryGroupRow({ group }: { group: ServiceIncidentSummaryGroup }) {
+  const severityTone = incidentSeverityTone(group.severity);
+  const incidentCount = group.count ?? group.incidentIds?.length ?? 0;
+  return (
+    <div className={cn("service-incident-summary-group", `service-incident-priority-${severityTone}`)}>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant="outline"
+            className={cn(
+              "h-4 shrink-0 px-1.5 text-[9px]",
+              `service-incident-severity-${severityTone}`,
+            )}
+          >
+            {formatIncidentField(group.severity)}
+          </Badge>
+          <Badge variant="outline" className="h-4 max-w-36 truncate px-1.5 text-[9px]">
+            {formatIncidentField(group.escalation)}
+          </Badge>
+          <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-[9px]">
+            {formatIncidentField(group.state)}
+          </Badge>
+        </div>
+        <p className="mt-2 text-xs font-semibold leading-5 text-foreground">
+          {group.recommendedAction || "Inspect incident details."}
+        </p>
+        <p className="mt-1 truncate text-[10px] text-muted-foreground">
+          {group.incidentIds?.slice(0, 4).join(" / ") || "No incident IDs"}
+          {(group.incidentIds?.length ?? 0) > 4 ? ` +${(group.incidentIds?.length ?? 0) - 4}` : ""}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-xl font-black tracking-[-0.05em] text-foreground">{incidentCount}</p>
+        <p className="text-[10px] font-bold text-muted-foreground">
+          latest {formatRelativeTime(group.latestTimestamp)}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -1750,6 +1831,7 @@ export function ServicePanel() {
   const [status, setStatus] = useState<ServiceStatusData | null>(null);
   const [events, setEvents] = useState<ServiceEventsData | null>(null);
   const [jobs, setJobs] = useState<ServiceJobsData | null>(null);
+  const [incidents, setIncidents] = useState<ServiceIncidentsData | null>(null);
   const [trace, setTrace] = useState<ServiceTraceData | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceError, setTraceError] = useState("");
@@ -1804,20 +1886,23 @@ export function ServicePanel() {
       if (windowOption?.milliseconds) {
         params.set("since", new Date(Date.now() - windowOption.milliseconds).toISOString());
       }
-      const [statusResp, jobsResp, eventsResp] = await Promise.all([
+      const [statusResp, jobsResp, eventsResp, incidentsResp] = await Promise.all([
         fetch(`${serviceBase(activePort)}/status`),
         fetch(`${serviceBase(activePort)}/jobs?limit=8`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
+        fetch(`${serviceBase(activePort)}/incidents?summary=true&limit=50`),
       ]);
       const statusJson = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
       const jobsJson = (await jobsResp.json()) as ApiResponse<ServiceJobsData>;
       const eventsJson = (await eventsResp.json()) as ApiResponse<ServiceEventsData>;
+      const incidentsJson = (await incidentsResp.json()) as ApiResponse<ServiceIncidentsData>;
       if (!statusJson.success) throw new Error(statusJson.error || "Service status failed");
       if (!jobsJson.success) throw new Error(jobsJson.error || "Service jobs failed");
       if (!eventsJson.success) throw new Error(eventsJson.error || "Service events failed");
       setStatus(statusJson.data ?? null);
       setJobs(jobsJson.data ?? null);
       setEvents(eventsJson.data ?? null);
+      setIncidents(incidentsJson.success ? incidentsJson.data ?? null : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service API unavailable");
     } finally {
@@ -1829,6 +1914,7 @@ export function ServicePanel() {
     setStatus(null);
     setJobs(null);
     setEvents(null);
+    setIncidents(null);
     setTrace(null);
     setTraceError("");
     setError("");
@@ -2062,6 +2148,10 @@ export function ServicePanel() {
     acknowledged: incidentRecords.filter((incident) => incidentHandlingState(incident) === "acknowledged").length,
     resolved: incidentRecords.filter((incident) => incidentHandlingState(incident) === "resolved").length,
   }), [incidentRecords]);
+  const incidentSummaryGroups = useMemo(
+    () => sortIncidentSummaryGroups(incidents?.summary?.groups ?? []),
+    [incidents?.summary?.groups],
+  );
   const sessionRecords = useMemo(
     () => Object.values(serviceState?.sessions ?? {}),
     [serviceState?.sessions],
@@ -2308,6 +2398,30 @@ export function ServicePanel() {
                 <p className="truncate text-[11px] text-muted-foreground">
                   {incidentHandlingSummary.unacknowledged} unacknowledged / {incidentHandlingSummary.acknowledged} acknowledged / {incidentHandlingSummary.resolved} resolved
                 </p>
+              </div>
+            </div>
+            <div className="service-incident-summary">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                  Remedy groups
+                </p>
+                <span className="text-[10px] font-bold text-muted-foreground">
+                  {incidents?.summary?.groupCount ?? incidentSummaryGroups.length} groups / {incidents?.matched ?? 0} matched
+                </span>
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {incidentSummaryGroups.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-center text-xs text-muted-foreground">
+                    No incident remedy groups yet.
+                  </p>
+                ) : (
+                  incidentSummaryGroups.slice(0, 4).map((group) => (
+                    <IncidentSummaryGroupRow
+                      key={`${group.escalation ?? "unknown"}-${group.severity ?? "unknown"}-${group.state ?? "unknown"}`}
+                      group={group}
+                    />
+                  ))
+                )}
               </div>
             </div>
             <div className="service-filter-bar" aria-label="Incident handling filters">

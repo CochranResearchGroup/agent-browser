@@ -1184,6 +1184,25 @@ body {
   line-height: 1.5;
 }
 
+.service-incident-summary {
+  margin-top: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 1.15rem;
+  background:
+    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--destructive) 10%, transparent), transparent 50%),
+    color-mix(in srgb, var(--foreground) 3%, transparent);
+  padding: 0.75rem;
+}
+
+.service-incident-summary-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 1rem;
+  padding: 0.72rem 0.78rem;
+}
+
 .service-incident-history {
   display: grid;
   gap: 0.35rem;
