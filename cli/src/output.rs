@@ -3556,6 +3556,8 @@ Notes:
   - service_trace reads persisted service state and returns related events, jobs, incidents, activity, and ownership summary contexts and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, and since filters as CLI and HTTP.
   - service_profile_upsert, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
+  - Profile mutations reject caller_supplied profiles without userDataDir and per_service profiles with more than one sharedServiceIds entry.
+  - Session mutations infer owner from agentName, then serviceName, when owner is omitted; profileId must reference a persisted profile, and profile sharedServiceIds allow-lists are enforced.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
   - Service jobs persist serviceName, agentName, and taskName when commands provide them.
   - Service job namingWarnings values are missing_service_name, missing_agent_name, and missing_task_name. hasNamingWarning is true when namingWarnings is non-empty.

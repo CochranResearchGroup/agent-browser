@@ -126,6 +126,13 @@ These schemas cover the authoritative path ID, mutation flag, and returned or
 removed record payload for persisted profile, session, site policy, and
 provider writes.
 
+Profile mutation inputs are policy checked before persistence. The
+`caller_supplied` allocation requires `userDataDir`, and `per_service` profiles
+may list at most one `sharedServiceIds` entry. Session mutation inputs infer
+`owner` from `agentName`, then `serviceName`, when omitted, require `profileId`
+to reference a persisted profile, and enforce profile `sharedServiceIds`
+allow-lists.
+
 The operator remedy mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:
 

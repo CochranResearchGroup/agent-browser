@@ -56,7 +56,7 @@ Runtime profiles are the safest default for recurring automation because they ke
 - Use a separate browser process when profile isolation, keyring behavior, extension state, or resource ownership matters more than process count.
 - Use a custom `--profile <path>` only when an external profile directory is part of the contract.
 
-Configured service profiles and sessions can describe ownership, lease behavior, cleanup policy, keyring posture, browser linkage, and caller labels. Current browser launch behavior still comes from `runtimeProfiles`, `--runtime-profile`, `--profile`, and the normal launch flags.
+Configured service profiles and sessions can describe ownership, lease behavior, cleanup policy, keyring posture, browser linkage, and caller labels. Profile writes reject `caller_supplied` records without `userDataDir` and `per_service` records with multiple `sharedServiceIds` values. Session writes infer `owner` from `agentName`, then `serviceName`, when omitted; `profileId` must reference a persisted profile, and profile `sharedServiceIds` allow-lists are enforced. Current browser launch behavior still comes from `runtimeProfiles`, `--runtime-profile`, `--profile`, and the normal launch flags.
 
 ## Browser health and recovery
 

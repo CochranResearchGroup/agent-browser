@@ -116,7 +116,7 @@ try {
     allocation: 'per_service',
     keyring: 'basic_password_store',
     persistent: true,
-    sharedServiceIds: ['JournalDownloader'],
+    sharedServiceIds: [serviceName],
   });
   assert(httpProfile.success === true, `HTTP profile upsert failed: ${JSON.stringify(httpProfile)}`);
   assertServiceProfileUpsertResponseSchemaRecord(
@@ -168,7 +168,7 @@ try {
       (profile) =>
         profile.id === 'journal-downloader' &&
         profile.allocation === 'per_service' &&
-        profile.sharedServiceIds?.includes('JournalDownloader'),
+        profile.sharedServiceIds?.includes(serviceName),
     ),
     `MCP profiles resource did not include HTTP-upserted profile: ${JSON.stringify(mcpProfiles)}`,
   );
@@ -195,11 +195,18 @@ try {
     sessionUpsertResponseSchema,
     'MCP session upsert response',
   );
+  assert(
+    mcpSession.data?.session?.owner?.agent === agentName,
+    `MCP session owner was not inferred from agentName: ${JSON.stringify(mcpSession)}`,
+  );
 
   const httpSessions = await httpJson(port, 'GET', '/api/service/sessions');
   assert(
     httpSessions.data?.sessions?.some(
-      (session) => session.id === 'journal-run' && session.profileId === 'journal-downloader',
+      (session) =>
+        session.id === 'journal-run' &&
+        session.profileId === 'journal-downloader' &&
+        session.owner?.agent === agentName,
     ),
     `HTTP sessions did not include MCP-upserted session: ${JSON.stringify(httpSessions)}`,
   );

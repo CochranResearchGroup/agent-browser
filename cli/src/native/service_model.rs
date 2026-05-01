@@ -2162,6 +2162,34 @@ pub enum ServiceActor {
     System,
 }
 
+impl ServiceActor {
+    /// Infer the most specific service actor available from caller labels.
+    pub fn from_caller_context(service_name: Option<&str>, agent_name: Option<&str>) -> Self {
+        if let Some(agent_name) = non_empty_label(agent_name) {
+            return ServiceActor::Agent(agent_name.to_string());
+        }
+        if let Some(service_name) = non_empty_label(service_name) {
+            return ServiceActor::ApiClient(service_name.to_string());
+        }
+        ServiceActor::System
+    }
+
+    pub fn is_system(&self) -> bool {
+        matches!(self, ServiceActor::System)
+    }
+}
+
+fn non_empty_label(value: Option<&str>) -> Option<&str> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
+}
+
 /// Lease semantics for a session or tab.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

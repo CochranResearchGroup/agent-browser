@@ -5,7 +5,7 @@
 
 use super::service_model::{
     BrowserProfile, BrowserSession, LeaseState, ProfileAllocationPolicy, ProfileKeyringPolicy,
-    ServiceState, SessionCleanupPolicy,
+    ServiceActor, ServiceState, SessionCleanupPolicy,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -93,6 +93,12 @@ pub(crate) fn upsert_service_profile_and_session(
         .or(session.service_name.clone());
     session.agent_name = metadata.agent_name.clone().or(session.agent_name.clone());
     session.task_name = metadata.task_name.clone().or(session.task_name.clone());
+    if session.owner.is_system() {
+        session.owner = ServiceActor::from_caller_context(
+            session.service_name.as_deref(),
+            session.agent_name.as_deref(),
+        );
+    }
     session.profile_id = profile_id.or(session.profile_id.clone());
     session.lease = if session.profile_id.is_some() {
         LeaseState::Exclusive
@@ -191,6 +197,7 @@ mod tests {
         assert_eq!(session.service_name.as_deref(), Some("JournalDownloader"));
         assert_eq!(session.agent_name.as_deref(), Some("codex"));
         assert_eq!(session.task_name.as_deref(), Some("probe-acs-website"));
+        assert_eq!(session.owner, ServiceActor::Agent("codex".to_string()));
         assert_eq!(session.lease, LeaseState::Exclusive);
         assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
         assert_eq!(session.browser_ids, vec!["session:persist-session"]);
