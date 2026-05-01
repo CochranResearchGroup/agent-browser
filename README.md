@@ -545,6 +545,8 @@ that select a runtime profile or custom profile path now bind the active browser
 record to a service profile. MCP typed browser tools accept the same target
 profile hints, so clients can use `browser_navigate` or other typed tools
 without falling back to `browser_command`.
+Run `pnpm test:service-profile-target-mcp-live` to validate the live typed MCP
+target-hint profile selection path.
 When commands include `serviceName`, `agentName`, or `taskName`, the active
 session record also captures that caller context for traceability. Profile
 selection should prefer a profile with credentials and usable auth state for

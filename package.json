@@ -30,6 +30,7 @@
     "test:service-collections-live": "node scripts/smoke-service-collections.js",
     "test:service-reconcile-live": "node scripts/smoke-service-reconcile-mcp.js",
     "test:service-profile-live": "node scripts/smoke-service-profile-mcp.js",
+    "test:service-profile-target-mcp-live": "node scripts/smoke-service-profile-target-mcp.js",
     "test:service-profile-http-live": "node scripts/smoke-service-profile-http.js",
     "test:service-recovery-http-live": "node scripts/smoke-service-recovery-http.js",
     "test:service-recovery-mcp-live": "node scripts/smoke-service-recovery-mcp.js",
