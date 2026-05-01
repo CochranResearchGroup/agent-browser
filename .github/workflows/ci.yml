@@ -91,6 +91,9 @@ jobs:
         run: pnpm install --filter dashboard
         working-directory: packages/dashboard
 
+      - name: Test dashboard contracts
+        run: pnpm test:dashboard-incident-summary
+
       - name: Build dashboard
         run: pnpm build
         working-directory: packages/dashboard

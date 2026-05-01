@@ -40,10 +40,14 @@ import {
 import {
   formatIncidentField,
   incidentPriorityView,
-  incidentSeverityTone,
   type ServiceIncidentEscalation,
   type ServiceIncidentSeverity,
 } from "@/lib/service-incidents";
+import {
+  incidentSummaryGroupViews,
+  type ServiceIncidentSummaryGroupView,
+  type ServiceIncidentsData,
+} from "@/lib/service-incident-summary";
 
 type ControlPlaneSnapshot = {
   worker_state?: string;
@@ -189,27 +193,6 @@ type ServiceIncidentActivityData = {
   incident?: ServiceIncident;
   activity?: ServiceTraceTimelineItem[];
   count?: number;
-};
-
-type ServiceIncidentSummaryGroup = {
-  escalation?: ServiceIncidentEscalation | null;
-  severity?: ServiceIncidentSeverity | null;
-  state?: string | null;
-  count?: number;
-  latestTimestamp?: string | null;
-  recommendedAction?: string | null;
-  incidentIds?: string[];
-};
-
-type ServiceIncidentsData = {
-  incidents?: ServiceIncident[];
-  count?: number;
-  matched?: number;
-  total?: number;
-  summary?: {
-    groupCount?: number;
-    groups?: ServiceIncidentSummaryGroup[];
-  };
 };
 
 type ApiResponse<T> = {
@@ -426,24 +409,6 @@ function incidentHandlingLabel(incident: IncidentRecord): string {
   const state = incidentHandlingState(incident);
   if (state === "unacknowledged") return "needs ack";
   return state;
-}
-
-function incidentSeverityRank(value?: ServiceIncidentSeverity | null): number {
-  if (value === "critical") return 4;
-  if (value === "error") return 3;
-  if (value === "warning") return 2;
-  if (value === "info") return 1;
-  return 0;
-}
-
-function sortIncidentSummaryGroups(groups: ServiceIncidentSummaryGroup[]): ServiceIncidentSummaryGroup[] {
-  return [...groups].sort((left, right) => {
-    const severityDelta = incidentSeverityRank(right.severity) - incidentSeverityRank(left.severity);
-    if (severityDelta !== 0) return severityDelta;
-    const countDelta = (right.count ?? 0) - (left.count ?? 0);
-    if (countDelta !== 0) return countDelta;
-    return new Date(right.latestTimestamp ?? 0).getTime() - new Date(left.latestTimestamp ?? 0).getTime();
-  });
 }
 
 function deriveIncidentTimeline(incident: IncidentRecord): ServiceTraceTimelineItem[] {
@@ -1055,39 +1020,36 @@ function IncidentRow({
   );
 }
 
-function IncidentSummaryGroupRow({ group }: { group: ServiceIncidentSummaryGroup }) {
-  const severityTone = incidentSeverityTone(group.severity);
-  const incidentCount = group.count ?? group.incidentIds?.length ?? 0;
+function IncidentSummaryGroupRow({ group }: { group: ServiceIncidentSummaryGroupView }) {
   return (
-    <div className={cn("service-incident-summary-group", `service-incident-priority-${severityTone}`)}>
+    <div className={cn("service-incident-summary-group", `service-incident-priority-${group.severityTone}`)}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge
             variant="outline"
             className={cn(
               "h-4 shrink-0 px-1.5 text-[9px]",
-              `service-incident-severity-${severityTone}`,
+              `service-incident-severity-${group.severityTone}`,
             )}
           >
-            {formatIncidentField(group.severity)}
+            {group.severityLabel}
           </Badge>
           <Badge variant="outline" className="h-4 max-w-36 truncate px-1.5 text-[9px]">
-            {formatIncidentField(group.escalation)}
+            {group.escalationLabel}
           </Badge>
           <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-[9px]">
-            {formatIncidentField(group.state)}
+            {group.stateLabel}
           </Badge>
         </div>
         <p className="mt-2 text-xs font-semibold leading-5 text-foreground">
-          {group.recommendedAction || "Inspect incident details."}
+          {group.recommendedAction}
         </p>
         <p className="mt-1 truncate text-[10px] text-muted-foreground">
-          {group.incidentIds?.slice(0, 4).join(" / ") || "No incident IDs"}
-          {(group.incidentIds?.length ?? 0) > 4 ? ` +${(group.incidentIds?.length ?? 0) - 4}` : ""}
+          {group.incidentIdLabel}
         </p>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-xl font-black tracking-[-0.05em] text-foreground">{incidentCount}</p>
+        <p className="text-xl font-black tracking-[-0.05em] text-foreground">{group.count}</p>
         <p className="text-[10px] font-bold text-muted-foreground">
           latest {formatRelativeTime(group.latestTimestamp)}
         </p>
@@ -2149,7 +2111,7 @@ export function ServicePanel() {
     resolved: incidentRecords.filter((incident) => incidentHandlingState(incident) === "resolved").length,
   }), [incidentRecords]);
   const incidentSummaryGroups = useMemo(
-    () => sortIncidentSummaryGroups(incidents?.summary?.groups ?? []),
+    () => incidentSummaryGroupViews(incidents?.summary?.groups ?? []),
     [incidents?.summary?.groups],
   );
   const sessionRecords = useMemo(
@@ -2417,7 +2379,7 @@ export function ServicePanel() {
                 ) : (
                   incidentSummaryGroups.slice(0, 4).map((group) => (
                     <IncidentSummaryGroupRow
-                      key={`${group.escalation ?? "unknown"}-${group.severity ?? "unknown"}-${group.state ?? "unknown"}`}
+                      key={group.key}
                       group={group}
                     />
                   ))

@@ -24,6 +24,7 @@
     "postinstall": "node scripts/postinstall.js",
     "build:dashboard": "cd packages/dashboard && pnpm build",
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
+    "test:dashboard-incident-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-incident-summary.js",
     "test:service-api-mcp-parity": "node scripts/check-service-api-mcp-parity.js",
     "test:mcp-stdio": "node scripts/smoke-mcp-stdio.js",
     "test:mcp-live": "node scripts/smoke-mcp-live.js",
