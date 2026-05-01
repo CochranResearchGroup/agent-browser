@@ -196,6 +196,32 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(profile_id) = service_profile_id(path) {
+            let cmd = match service_profile_upsert_command(profile_id, body_str) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
+        if let Some(service_session_id) = service_session_id(path) {
+            let cmd = match service_session_upsert_command(service_session_id, body_str) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(site_policy_id) = service_site_policy_id(path) {
             let cmd = match service_site_policy_upsert_command(site_policy_id, body_str) {
                 Ok(cmd) => cmd,
@@ -229,6 +255,24 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "DELETE" {
+        if let Some(profile_id) = service_profile_id(path) {
+            let result =
+                relay_service_command(session_name, service_profile_delete_command(profile_id))
+                    .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
+        if let Some(service_session_id) = service_session_id(path) {
+            let result = relay_service_command(
+                session_name,
+                service_session_delete_command(service_session_id),
+            )
+            .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(site_policy_id) = service_site_policy_id(path) {
             let result = relay_service_command(
                 session_name,
@@ -983,6 +1027,16 @@ fn service_site_policy_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
+fn service_profile_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/profiles/")
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
+fn service_session_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/sessions/")
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
 fn service_provider_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/providers/")
         .filter(|id| !id.is_empty() && !id.contains('/'))
@@ -1016,6 +1070,42 @@ fn service_job_cancel_command(job_id: &str) -> Value {
     json!({
         "action": "service_job_cancel",
         "jobId": job_id,
+    })
+}
+
+fn service_profile_upsert_command(profile_id: &str, body: &str) -> Result<Value, String> {
+    let profile = parse_service_config_body(body, "profile")?;
+    Ok(json!({
+        "id": format!("http-service-profile-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_profile_upsert",
+        "profileId": profile_id,
+        "profile": profile,
+    }))
+}
+
+fn service_profile_delete_command(profile_id: &str) -> Value {
+    json!({
+        "id": format!("http-service-profile-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_profile_delete",
+        "profileId": profile_id,
+    })
+}
+
+fn service_session_upsert_command(session_id: &str, body: &str) -> Result<Value, String> {
+    let session = parse_service_config_body(body, "session")?;
+    Ok(json!({
+        "id": format!("http-service-session-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_session_upsert",
+        "sessionId": session_id,
+        "session": session,
+    }))
+}
+
+fn service_session_delete_command(session_id: &str) -> Value {
+    json!({
+        "id": format!("http-service-session-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_session_delete",
+        "sessionId": session_id,
     })
 }
 
@@ -1861,12 +1951,30 @@ mod tests {
     #[test]
     fn service_config_entity_ids_map_mutation_paths() {
         assert_eq!(
+            service_profile_id("/api/service/profiles/journal-downloader"),
+            Some("journal-downloader")
+        );
+        assert_eq!(
+            service_session_id("/api/service/sessions/journal-run"),
+            Some("journal-run")
+        );
+        assert_eq!(
             service_site_policy_id("/api/service/site-policies/google"),
             Some("google")
         );
         assert_eq!(
             service_provider_id("/api/service/providers/manual"),
             Some("manual")
+        );
+        assert_eq!(service_profile_id("/api/service/profiles/"), None);
+        assert_eq!(
+            service_profile_id("/api/service/profiles/journal/extra"),
+            None
+        );
+        assert_eq!(service_session_id("/api/service/sessions/"), None);
+        assert_eq!(
+            service_session_id("/api/service/sessions/journal/extra"),
+            None
         );
         assert_eq!(service_site_policy_id("/api/service/site-policies/"), None);
         assert_eq!(

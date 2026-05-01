@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-upsert-response.v1.schema.json",
+  "title": "agent-browser service profile upsert response",
+  "description": "Stable API shape for service profile upsert responses returned by HTTP service APIs and MCP service_profile_upsert.",
+  "type": "object",
+  "required": [
+    "id",
+    "profile",
+    "upserted"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "profile": {
+      "type": "object"
+    },
+    "upserted": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

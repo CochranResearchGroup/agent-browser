@@ -5,7 +5,9 @@
 
 use serde_json::Value;
 
-use super::service_model::{ServiceProvider, ServiceState, SitePolicy};
+use super::service_model::{
+    BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SitePolicy,
+};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 fn validate_entity_id(id: &str, label: &str) -> Result<(), String> {
@@ -60,6 +62,50 @@ pub fn delete_site_policy(
     Ok(state.site_policies.remove(id))
 }
 
+/// Upsert one service profile record into persisted service state.
+pub fn upsert_profile(
+    state: &mut ServiceState,
+    id: &str,
+    body: Value,
+) -> Result<BrowserProfile, String> {
+    let body = object_body_with_path_id(body, id, "profile")?;
+    let profile = serde_json::from_value::<BrowserProfile>(body)
+        .map_err(|err| format!("Invalid profile: {err}"))?;
+    state.profiles.insert(id.to_string(), profile.clone());
+    Ok(profile)
+}
+
+/// Delete one service profile record from persisted service state.
+pub fn delete_profile(
+    state: &mut ServiceState,
+    id: &str,
+) -> Result<Option<BrowserProfile>, String> {
+    validate_entity_id(id, "profile")?;
+    Ok(state.profiles.remove(id))
+}
+
+/// Upsert one service session record into persisted service state.
+pub fn upsert_session(
+    state: &mut ServiceState,
+    id: &str,
+    body: Value,
+) -> Result<BrowserSession, String> {
+    let body = object_body_with_path_id(body, id, "session")?;
+    let session = serde_json::from_value::<BrowserSession>(body)
+        .map_err(|err| format!("Invalid session: {err}"))?;
+    state.sessions.insert(id.to_string(), session.clone());
+    Ok(session)
+}
+
+/// Delete one service session record from persisted service state.
+pub fn delete_session(
+    state: &mut ServiceState,
+    id: &str,
+) -> Result<Option<BrowserSession>, String> {
+    validate_entity_id(id, "session")?;
+    Ok(state.sessions.remove(id))
+}
+
 /// Upsert one service provider record into persisted service state.
 pub fn upsert_provider(
     state: &mut ServiceState,
@@ -80,6 +126,30 @@ pub fn delete_provider(
 ) -> Result<Option<ServiceProvider>, String> {
     validate_entity_id(id, "provider")?;
     Ok(state.providers.remove(id))
+}
+
+/// Upsert one persisted profile record under the serialized state mutator.
+pub fn upsert_persisted_profile(id: &str, body: Value) -> Result<BrowserProfile, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    upsert_profile_in_repository(&repository, id, body)
+}
+
+/// Delete one persisted profile record under the serialized state mutator.
+pub fn delete_persisted_profile(id: &str) -> Result<Option<BrowserProfile>, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    delete_profile_in_repository(&repository, id)
+}
+
+/// Upsert one persisted session record under the serialized state mutator.
+pub fn upsert_persisted_session(id: &str, body: Value) -> Result<BrowserSession, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    upsert_session_in_repository(&repository, id, body)
+}
+
+/// Delete one persisted session record under the serialized state mutator.
+pub fn delete_persisted_session(id: &str) -> Result<Option<BrowserSession>, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    delete_session_in_repository(&repository, id)
 }
 
 /// Upsert one persisted site-policy record under the serialized state mutator.
@@ -104,6 +174,36 @@ pub fn upsert_persisted_provider(id: &str, body: Value) -> Result<ServiceProvide
 pub fn delete_persisted_provider(id: &str) -> Result<Option<ServiceProvider>, String> {
     let repository = LockedServiceStateRepository::default_json()?;
     delete_provider_in_repository(&repository, id)
+}
+
+pub fn upsert_profile_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+    body: Value,
+) -> Result<BrowserProfile, String> {
+    repository.mutate(|state| upsert_profile(state, id, body))
+}
+
+pub fn delete_profile_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+) -> Result<Option<BrowserProfile>, String> {
+    repository.mutate(|state| delete_profile(state, id))
+}
+
+pub fn upsert_session_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+    body: Value,
+) -> Result<BrowserSession, String> {
+    repository.mutate(|state| upsert_session(state, id, body))
+}
+
+pub fn delete_session_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+) -> Result<Option<BrowserSession>, String> {
+    repository.mutate(|state| delete_session(state, id))
 }
 
 pub fn upsert_site_policy_in_repository(
@@ -177,6 +277,45 @@ mod tests {
     }
 
     #[test]
+    fn upsert_profile_sets_path_id_and_defaults() {
+        let mut state = ServiceState::default();
+
+        let profile = upsert_profile(
+            &mut state,
+            "journal-downloader",
+            json!({
+                "name": "Journal Downloader",
+                "allocation": "per_service",
+                "keyring": "basic_password_store",
+                "persistent": true
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(profile.id, "journal-downloader");
+        assert_eq!(profile.name, "Journal Downloader");
+        assert!(profile.persistent);
+        assert!(state.profiles.contains_key("journal-downloader"));
+    }
+
+    #[test]
+    fn upsert_session_rejects_body_id_mismatch() {
+        let mut state = ServiceState::default();
+
+        let err = upsert_session(
+            &mut state,
+            "journal-run",
+            json!({
+                "id": "other",
+                "serviceName": "JournalDownloader"
+            }),
+        )
+        .unwrap_err();
+
+        assert!(err.contains("does not match path id"));
+    }
+
+    #[test]
     fn upsert_provider_rejects_body_id_mismatch() {
         let mut state = ServiceState::default();
 
@@ -218,6 +357,30 @@ mod tests {
         let store = JsonServiceStateStore::new(&path);
         let repository = LockedServiceStateRepository::new(store.clone());
 
+        let profile = upsert_profile_in_repository(
+            &repository,
+            "journal-downloader",
+            json!({
+                "name": "Journal Downloader",
+                "allocation": "per_service",
+                "keyring": "basic_password_store",
+                "persistent": true
+            }),
+        )
+        .unwrap();
+        let session = upsert_session_in_repository(
+            &repository,
+            "journal-run",
+            json!({
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "profileId": "journal-downloader",
+                "lease": "exclusive",
+                "cleanup": "close_browser"
+            }),
+        )
+        .unwrap();
         let policy = upsert_site_policy_in_repository(
             &repository,
             "google",
@@ -236,11 +399,17 @@ mod tests {
             }),
         )
         .unwrap();
+        let removed_session = delete_session_in_repository(&repository, "journal-run").unwrap();
         let removed = delete_provider_in_repository(&repository, "manual").unwrap();
 
         let persisted = store.load().unwrap();
+        assert_eq!(profile.id, "journal-downloader");
+        assert_eq!(session.id, "journal-run");
         assert_eq!(policy.id, "google");
         assert_eq!(provider.id, "manual");
+        assert!(removed_session.is_some());
+        assert!(persisted.profiles.contains_key("journal-downloader"));
+        assert!(!persisted.sessions.contains_key("journal-run"));
         assert!(removed.is_some());
         assert!(persisted.site_policies.contains_key("google"));
         assert!(!persisted.providers.contains_key("manual"));

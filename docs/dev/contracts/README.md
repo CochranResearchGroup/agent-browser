@@ -113,13 +113,18 @@ These schemas guard the collection array field and `count` field.
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:
 
+- `service-profile-upsert-response.v1.schema.json`
+- `service-profile-delete-response.v1.schema.json`
+- `service-session-upsert-response.v1.schema.json`
+- `service-session-delete-response.v1.schema.json`
 - `service-site-policy-upsert-response.v1.schema.json`
 - `service-site-policy-delete-response.v1.schema.json`
 - `service-provider-upsert-response.v1.schema.json`
 - `service-provider-delete-response.v1.schema.json`
 
 These schemas cover the authoritative path ID, mutation flag, and returned or
-removed record payload for persisted site policy and provider writes.
+removed record payload for persisted profile, session, site policy, and
+provider writes.
 
 The operator remedy mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

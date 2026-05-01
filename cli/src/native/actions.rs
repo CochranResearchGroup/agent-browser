@@ -40,8 +40,9 @@ use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
 use super::service_config::{
-    delete_persisted_provider, delete_persisted_site_policy, upsert_persisted_provider,
-    upsert_persisted_site_policy,
+    delete_persisted_profile, delete_persisted_provider, delete_persisted_session,
+    delete_persisted_site_policy, upsert_persisted_profile, upsert_persisted_provider,
+    upsert_persisted_session, upsert_persisted_site_policy,
 };
 use super::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
@@ -1901,6 +1902,10 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             | "service_reconcile"
             | "service_job_cancel"
             | "service_browser_retry"
+            | "service_profile_upsert"
+            | "service_profile_delete"
+            | "service_session_upsert"
+            | "service_session_delete"
             | "service_site_policy_upsert"
             | "service_site_policy_delete"
             | "service_provider_upsert"
@@ -2104,6 +2109,10 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_reconcile" => handle_service_reconcile(cmd).await,
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_browser_retry" => handle_service_browser_retry(cmd).await,
+        "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
+        "service_profile_delete" => handle_service_profile_delete(cmd).await,
+        "service_session_upsert" => handle_service_session_upsert(cmd).await,
+        "service_session_delete" => handle_service_session_delete(cmd).await,
         "service_site_policy_upsert" => handle_service_site_policy_upsert(cmd).await,
         "service_site_policy_delete" => handle_service_site_policy_delete(cmd).await,
         "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
@@ -6365,6 +6374,52 @@ async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_profile_upsert(cmd: &Value) -> Result<Value, String> {
+    let profile_id = required_service_config_id(cmd, "profileId")?;
+    let body = cmd.get("profile").cloned().ok_or("Missing profile")?;
+    let profile = upsert_persisted_profile(profile_id, body)?;
+
+    Ok(json!({
+        "id": profile_id,
+        "profile": profile,
+        "upserted": true,
+    }))
+}
+
+async fn handle_service_profile_delete(cmd: &Value) -> Result<Value, String> {
+    let profile_id = required_service_config_id(cmd, "profileId")?;
+    let removed = delete_persisted_profile(profile_id)?;
+
+    Ok(json!({
+        "id": profile_id,
+        "deleted": removed.is_some(),
+        "profile": removed,
+    }))
+}
+
+async fn handle_service_session_upsert(cmd: &Value) -> Result<Value, String> {
+    let session_id = required_service_config_id(cmd, "sessionId")?;
+    let body = cmd.get("session").cloned().ok_or("Missing session")?;
+    let session = upsert_persisted_session(session_id, body)?;
+
+    Ok(json!({
+        "id": session_id,
+        "session": session,
+        "upserted": true,
+    }))
+}
+
+async fn handle_service_session_delete(cmd: &Value) -> Result<Value, String> {
+    let session_id = required_service_config_id(cmd, "sessionId")?;
+    let removed = delete_persisted_session(session_id)?;
+
+    Ok(json!({
+        "id": session_id,
+        "deleted": removed.is_some(),
+        "session": removed,
+    }))
+}
+
 async fn handle_service_site_policy_upsert(cmd: &Value) -> Result<Value, String> {
     let site_policy_id = required_service_config_id(cmd, "sitePolicyId")?;
     let body = cmd.get("sitePolicy").cloned().ok_or("Missing sitePolicy")?;
@@ -9770,9 +9825,13 @@ mod tests {
         assert_service_incident_record_contract, assert_service_incident_resolve_response_contract,
         assert_service_incidents_response_contract, assert_service_job_cancel_response_contract,
         assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
+        assert_service_profile_delete_response_contract,
+        assert_service_profile_upsert_response_contract,
         assert_service_provider_delete_response_contract,
         assert_service_provider_upsert_response_contract,
         assert_service_reconcile_response_contract,
+        assert_service_session_delete_response_contract,
+        assert_service_session_upsert_response_contract,
         assert_service_site_policy_delete_response_contract,
         assert_service_site_policy_upsert_response_contract,
         assert_service_status_response_contract, assert_service_trace_activity_record_contract,
@@ -11926,6 +11985,50 @@ mod tests {
         let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
         let mut state = DaemonState::new();
 
+        let upsert_profile = execute_command(
+            &json!({
+                "action": "service_profile_upsert",
+                "id": "svc-profile-upsert-1",
+                "profileId": "journal-downloader",
+                "profile": {
+                    "name": "Journal Downloader",
+                    "allocation": "per_service",
+                    "keyring": "basic_password_store",
+                    "persistent": true,
+                    "sharedServiceIds": ["JournalDownloader"]
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(upsert_profile["success"], true);
+        assert_service_profile_upsert_response_contract(&upsert_profile["data"]);
+        assert_eq!(
+            upsert_profile["data"]["profile"]["id"],
+            "journal-downloader"
+        );
+
+        let upsert_session = execute_command(
+            &json!({
+                "action": "service_session_upsert",
+                "id": "svc-session-upsert-1",
+                "sessionId": "journal-run",
+                "session": {
+                    "serviceName": "JournalDownloader",
+                    "agentName": "codex",
+                    "taskName": "probeACSwebsite",
+                    "profileId": "journal-downloader",
+                    "lease": "exclusive",
+                    "cleanup": "close_browser"
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(upsert_session["success"], true);
+        assert_service_session_upsert_response_contract(&upsert_session["data"]);
+        assert_eq!(upsert_session["data"]["session"]["id"], "journal-run");
+
         let upsert_policy = execute_command(
             &json!({
                 "action": "service_site_policy_upsert",
@@ -11963,6 +12066,14 @@ mod tests {
 
         let persisted = store.load().unwrap();
         assert_eq!(
+            persisted.profiles["journal-downloader"].shared_service_ids,
+            vec!["JournalDownloader".to_string()]
+        );
+        assert_eq!(
+            persisted.sessions["journal-run"].service_name.as_deref(),
+            Some("JournalDownloader")
+        );
+        assert_eq!(
             persisted.site_policies["google"].origin_pattern,
             "https://accounts.google.com"
         );
@@ -11970,6 +12081,38 @@ mod tests {
             persisted.providers["manual"].display_name,
             "Dashboard approval"
         );
+
+        let delete_session = execute_command(
+            &json!({
+                "action": "service_session_delete",
+                "id": "svc-session-delete-1",
+                "sessionId": "journal-run"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(delete_session["success"], true);
+        assert_service_session_delete_response_contract(&delete_session["data"]);
+        assert_eq!(delete_session["data"]["deleted"], true);
+        assert!(!store.load().unwrap().sessions.contains_key("journal-run"));
+
+        let delete_profile = execute_command(
+            &json!({
+                "action": "service_profile_delete",
+                "id": "svc-profile-delete-1",
+                "profileId": "journal-downloader"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(delete_profile["success"], true);
+        assert_service_profile_delete_response_contract(&delete_profile["data"]);
+        assert_eq!(delete_profile["data"]["deleted"], true);
+        assert!(!store
+            .load()
+            .unwrap()
+            .profiles
+            .contains_key("journal-downloader"));
 
         let delete_provider = execute_command(
             &json!({

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-delete-response.v1.schema.json",
+  "title": "agent-browser service profile delete response",
+  "description": "Stable API shape for service profile delete responses returned by HTTP service APIs and MCP service_profile_delete.",
+  "type": "object",
+  "required": [
+    "id",
+    "deleted",
+    "profile"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "deleted": {
+      "type": "boolean"
+    },
+    "profile": {
+      "type": ["object", "null"]
+    }
+  },
+  "additionalProperties": true
+}

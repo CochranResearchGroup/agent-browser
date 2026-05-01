@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-session-upsert-response.v1.schema.json",
+  "title": "agent-browser service session upsert response",
+  "description": "Stable API shape for service session upsert responses returned by HTTP service APIs and MCP service_session_upsert.",
+  "type": "object",
+  "required": [
+    "id",
+    "session",
+    "upserted"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "session": {
+      "type": "object"
+    },
+    "upserted": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

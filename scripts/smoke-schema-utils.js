@@ -281,6 +281,40 @@ export function assertServiceSitePolicyDeleteResponseSchemaRecord(response, sche
   );
 }
 
+export function assertServiceProfileUpsertResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(response.upserted === true, `${label} upserted should be true: ${JSON.stringify(response)}`);
+  assert(response.profile && typeof response.profile === 'object', `${label} missing profile object`);
+}
+
+export function assertServiceProfileDeleteResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(typeof response.deleted === 'boolean', `${label} missing deleted boolean`);
+  assert(
+    response.profile === null || (response.profile && typeof response.profile === 'object'),
+    `${label} profile should be object or null`,
+  );
+}
+
+export function assertServiceSessionUpsertResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(response.upserted === true, `${label} upserted should be true: ${JSON.stringify(response)}`);
+  assert(response.session && typeof response.session === 'object', `${label} missing session object`);
+}
+
+export function assertServiceSessionDeleteResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(typeof response.deleted === 'boolean', `${label} missing deleted boolean`);
+  assert(
+    response.session === null || (response.session && typeof response.session === 'object'),
+    `${label} session should be object or null`,
+  );
+}
+
 export function assertServiceProviderUpsertResponseSchemaRecord(response, schema, label) {
   assertRequiredFields(response, schema, label);
   assert(typeof response.id === 'string', `${label} missing id string`);

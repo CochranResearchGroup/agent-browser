@@ -90,7 +90,11 @@ Common service routes:
 ```text
 GET  /api/service/status
 GET  /api/service/profiles
+POST /api/service/profiles/<id>
+DELETE /api/service/profiles/<id>
 GET  /api/service/sessions
+POST /api/service/sessions/<id>
+DELETE /api/service/sessions/<id>
 GET  /api/service/browsers
 GET  /api/service/tabs
 GET  /api/service/site-policies
@@ -113,6 +117,10 @@ POST /api/service/browsers/<id>/retry
 State-changing config routes use the path ID as authoritative. Requests with a conflicting nested `id` field are rejected:
 
 ```text
+POST   /api/service/profiles/<id>
+DELETE /api/service/profiles/<id>
+POST   /api/service/sessions/<id>
+DELETE /api/service/sessions/<id>
 POST   /api/service/site-policies/<id>
 DELETE /api/service/site-policies/<id>
 POST   /api/service/providers/<id>
@@ -170,4 +178,3 @@ Run the Rust service tests when the release includes service implementation chan
 ```bash
 cargo test --manifest-path cli/Cargo.toml service_ -- --test-threads=1
 ```
-

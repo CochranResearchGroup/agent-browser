@@ -11,8 +11,12 @@ import {
   runCli,
 } from './smoke-utils.js';
 import {
+  assertServiceProfileDeleteResponseSchemaRecord,
+  assertServiceProfileUpsertResponseSchemaRecord,
   assertServiceProviderDeleteResponseSchemaRecord,
   assertServiceProviderUpsertResponseSchemaRecord,
+  assertServiceSessionDeleteResponseSchemaRecord,
+  assertServiceSessionUpsertResponseSchemaRecord,
   assertServiceSitePolicyDeleteResponseSchemaRecord,
   assertServiceSitePolicyUpsertResponseSchemaRecord,
   loadServiceRecordSchema,
@@ -25,6 +29,18 @@ const serviceName = 'ServiceConfigSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'configMutationParity';
 const traceFields = { serviceName, agentName, taskName };
+const profileUpsertResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-profile-upsert-response.v1.schema.json',
+);
+const profileDeleteResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-profile-delete-response.v1.schema.json',
+);
+const sessionUpsertResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-session-upsert-response.v1.schema.json',
+);
+const sessionDeleteResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-session-delete-response.v1.schema.json',
+);
 const sitePolicyUpsertResponseSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-site-policy-upsert-response.v1.schema.json',
 );
@@ -95,6 +111,24 @@ function assertCollectionMissing(collection, key, id, label) {
 try {
   const port = await enableStream();
 
+  const httpProfile = await httpJson(port, 'POST', '/api/service/profiles/journal-downloader', {
+    name: 'Journal Downloader',
+    allocation: 'per_service',
+    keyring: 'basic_password_store',
+    persistent: true,
+    sharedServiceIds: ['JournalDownloader'],
+  });
+  assert(httpProfile.success === true, `HTTP profile upsert failed: ${JSON.stringify(httpProfile)}`);
+  assertServiceProfileUpsertResponseSchemaRecord(
+    httpProfile.data,
+    profileUpsertResponseSchema,
+    'HTTP profile upsert response',
+  );
+  assert(
+    httpProfile.data?.profile?.id === 'journal-downloader',
+    `HTTP profile id mismatch: ${JSON.stringify(httpProfile)}`,
+  );
+
   const httpPolicy = await httpJson(port, 'POST', '/api/service/site-policies/google', {
     originPattern: 'https://accounts.google.com',
     interactionMode: 'human_like_input',
@@ -122,6 +156,53 @@ try {
   });
   assert(initialize.capabilities?.tools, 'MCP tools capability missing');
   notify('notifications/initialized');
+
+  const mcpProfilesResource = await send('resources/read', { uri: 'agent-browser://profiles' });
+  const mcpProfiles = parseMcpJsonResource(
+    mcpProfilesResource,
+    'agent-browser://profiles',
+    'MCP profiles resource',
+  );
+  assert(
+    mcpProfiles.profiles?.some(
+      (profile) =>
+        profile.id === 'journal-downloader' &&
+        profile.allocation === 'per_service' &&
+        profile.sharedServiceIds?.includes('JournalDownloader'),
+    ),
+    `MCP profiles resource did not include HTTP-upserted profile: ${JSON.stringify(mcpProfiles)}`,
+  );
+
+  const mcpSessionResult = await send('tools/call', {
+    name: 'service_session_upsert',
+    arguments: {
+      id: 'journal-run',
+      session: {
+        serviceName,
+        agentName,
+        taskName,
+        profileId: 'journal-downloader',
+        lease: 'exclusive',
+        cleanup: 'close_browser',
+      },
+      ...traceFields,
+    },
+  });
+  const mcpSession = parseMcpToolPayload(mcpSessionResult, 'MCP service_session_upsert');
+  assert(mcpSession.success === true, `MCP session upsert failed: ${JSON.stringify(mcpSession)}`);
+  assertServiceSessionUpsertResponseSchemaRecord(
+    mcpSession.data,
+    sessionUpsertResponseSchema,
+    'MCP session upsert response',
+  );
+
+  const httpSessions = await httpJson(port, 'GET', '/api/service/sessions');
+  assert(
+    httpSessions.data?.sessions?.some(
+      (session) => session.id === 'journal-run' && session.profileId === 'journal-downloader',
+    ),
+    `HTTP sessions did not include MCP-upserted session: ${JSON.stringify(httpSessions)}`,
+  );
 
   const mcpPoliciesResource = await send('resources/read', { uri: 'agent-browser://site-policies' });
   const mcpPolicies = parseMcpJsonResource(
@@ -185,6 +266,46 @@ try {
 
   const httpPoliciesAfterDelete = await httpJson(port, 'GET', '/api/service/site-policies');
   assertCollectionMissing(httpPoliciesAfterDelete.data, 'sitePolicies', 'google', 'HTTP site-policies');
+
+  const httpDeleteSession = await httpJson(port, 'DELETE', '/api/service/sessions/journal-run');
+  assert(
+    httpDeleteSession.success === true && httpDeleteSession.data?.deleted === true,
+    `HTTP session delete failed: ${JSON.stringify(httpDeleteSession)}`,
+  );
+  assertServiceSessionDeleteResponseSchemaRecord(
+    httpDeleteSession.data,
+    sessionDeleteResponseSchema,
+    'HTTP session delete response',
+  );
+
+  const mcpProfilesBeforeProfileDelete = await send('resources/read', { uri: 'agent-browser://profiles' });
+  const profilesBeforeProfileDelete = parseMcpJsonResource(
+    mcpProfilesBeforeProfileDelete,
+    'agent-browser://profiles',
+    'MCP profiles before profile delete',
+  );
+  assert(
+    profilesBeforeProfileDelete.profiles?.some((profile) => profile.id === 'journal-downloader'),
+    `MCP profiles lost profile before delete: ${JSON.stringify(profilesBeforeProfileDelete)}`,
+  );
+
+  const mcpDeleteProfileResult = await send('tools/call', {
+    name: 'service_profile_delete',
+    arguments: { id: 'journal-downloader', ...traceFields },
+  });
+  const mcpDeleteProfile = parseMcpToolPayload(
+    mcpDeleteProfileResult,
+    'MCP service_profile_delete',
+  );
+  assert(mcpDeleteProfile.success === true, `MCP profile delete failed: ${JSON.stringify(mcpDeleteProfile)}`);
+  assertServiceProfileDeleteResponseSchemaRecord(
+    mcpDeleteProfile.data,
+    profileDeleteResponseSchema,
+    'MCP profile delete response',
+  );
+
+  const httpProfilesAfterDelete = await httpJson(port, 'GET', '/api/service/profiles');
+  assertCollectionMissing(httpProfilesAfterDelete.data, 'profiles', 'journal-downloader', 'HTTP profiles');
 
   const httpDeleteProvider = await httpJson(port, 'DELETE', '/api/service/providers/manual');
   assert(

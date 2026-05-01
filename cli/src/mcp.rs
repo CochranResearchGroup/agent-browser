@@ -637,6 +637,128 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_profile_upsert",
+            "title": "Upsert service profile",
+            "description": "Persist one service profile record into service state. The id argument is authoritative and must match profile.id when the nested object includes an id.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Profile id, for example journal-downloader."
+                    },
+                    "profile": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Full profile object using ServiceState camelCase field names."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id", "profile"]
+            }
+        }),
+        json!({
+            "name": "service_profile_delete",
+            "title": "Delete service profile",
+            "description": "Delete one persisted service profile record by id.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Profile id to delete."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id"]
+            }
+        }),
+        json!({
+            "name": "service_session_upsert",
+            "title": "Upsert service session",
+            "description": "Persist one service session record into service state. The id argument is authoritative and must match session.id when the nested object includes an id.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Session id, for example journal-run."
+                    },
+                    "session": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Full session object using ServiceState camelCase field names."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id", "session"]
+            }
+        }),
+        json!({
+            "name": "service_session_delete",
+            "title": "Delete service session",
+            "description": "Delete one persisted service session record by id.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Session id to delete."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id"]
+            }
+        }),
+        json!({
             "name": "service_site_policy_upsert",
             "title": "Upsert service site policy",
             "description": "Persist one service site-policy record into service state. The id argument is authoritative and must match sitePolicy.id when the nested object includes an id.",
@@ -3270,6 +3392,10 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_browser_retry" => call_service_browser_retry(arguments, session),
         "service_incidents" => call_service_incidents(arguments, session),
         "service_trace" => call_service_trace(arguments, session),
+        "service_profile_upsert" => call_service_profile_upsert(arguments, session),
+        "service_profile_delete" => call_service_profile_delete(arguments, session),
+        "service_session_upsert" => call_service_session_upsert(arguments, session),
+        "service_session_delete" => call_service_session_delete(arguments, session),
         "service_site_policy_upsert" => call_service_site_policy_upsert(arguments, session),
         "service_site_policy_delete" => call_service_site_policy_delete(arguments, session),
         "service_provider_upsert" => call_service_provider_upsert(arguments, session),
@@ -3551,6 +3677,53 @@ fn call_service_site_policy_delete(
     let command = service_site_policy_delete_command(id, service_name, agent_name, task_name);
 
     send_queued_tool_command("service_site_policy_delete", session, trace, command)
+}
+
+fn call_service_profile_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let profile = required_object_argument(arguments, "profile")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_profile_upsert_command(id, &profile, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_profile_upsert", session, trace, command)
+}
+
+fn call_service_profile_delete(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_profile_delete_command(id, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_profile_delete", session, trace, command)
+}
+
+fn call_service_session_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let service_session = required_object_argument(arguments, "session")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command =
+        service_session_upsert_command(id, &service_session, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_session_upsert", session, trace, command)
+}
+
+fn call_service_session_delete(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_session_delete_command(id, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_session_delete", session, trace, command)
 }
 
 fn call_service_provider_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -5007,6 +5180,70 @@ fn service_site_policy_upsert_command(
         "action": "service_site_policy_upsert",
         "sitePolicyId": site_policy_id,
         "sitePolicy": site_policy,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_profile_upsert_command(
+    profile_id: &str,
+    profile: &Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-profile-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_profile_upsert",
+        "profileId": profile_id,
+        "profile": profile,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_profile_delete_command(
+    profile_id: &str,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-profile-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_profile_delete",
+        "profileId": profile_id,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_session_upsert_command(
+    session_id: &str,
+    service_session: &Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-session-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_session_upsert",
+        "sessionId": session_id,
+        "session": service_session,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_session_delete_command(
+    session_id: &str,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-session-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_session_delete",
+        "sessionId": session_id,
     });
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
@@ -7358,24 +7595,35 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "service_profile_upsert"));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "service_session_upsert"));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "service_site_policy_upsert"));
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()
             .iter()
             .any(|tool| tool["name"] == "service_provider_upsert"));
-        response["result"]["tools"]
-            .as_array_mut()
+        let browser_and_trace_tools: Vec<Value> = response["result"]["tools"]
+            .as_array()
             .unwrap()
-            .remove(1);
-        response["result"]["tools"]
-            .as_array_mut()
-            .unwrap()
-            .remove(1);
-        response["result"]["tools"]
-            .as_array_mut()
-            .unwrap()
-            .drain(1..5);
+            .iter()
+            .filter(|tool| {
+                let name = tool["name"].as_str().unwrap_or_default();
+                name == "service_job_cancel"
+                    || name.starts_with("browser_")
+                    || name == "service_trace"
+            })
+            .cloned()
+            .collect();
+        response["result"]["tools"] = Value::Array(browser_and_trace_tools);
         assert_eq!(response["result"]["tools"][1]["name"], "browser_snapshot");
         assert!(
             response["result"]["tools"][1]["inputSchema"]["properties"]["interactive"].is_object()
@@ -8111,6 +8359,22 @@ mod tests {
 
     #[test]
     fn service_config_tools_validate_required_args_before_daemon_call() {
+        let missing_profile = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":"profile","method":"tools/call","params":{"name":"service_profile_upsert","arguments":{"id":"journal-downloader"}}}"#,
+            "default",
+        )
+        .unwrap();
+        assert_eq!(missing_profile["id"], "profile");
+        assert_eq!(missing_profile["error"]["code"], -32602);
+
+        let missing_session = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":"session","method":"tools/call","params":{"name":"service_session_upsert","arguments":{"id":"journal-run"}}}"#,
+            "default",
+        )
+        .unwrap();
+        assert_eq!(missing_session["id"], "session");
+        assert_eq!(missing_session["error"]["code"], -32602);
+
         let missing_policy = handle_jsonrpc_line(
             r#"{"jsonrpc":"2.0","id":"policy","method":"tools/call","params":{"name":"service_site_policy_upsert","arguments":{"id":"google"}}}"#,
             "default",

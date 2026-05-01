@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-session-delete-response.v1.schema.json",
+  "title": "agent-browser service session delete response",
+  "description": "Stable API shape for service session delete responses returned by HTTP service APIs and MCP service_session_delete.",
+  "type": "object",
+  "required": [
+    "id",
+    "deleted",
+    "session"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "deleted": {
+      "type": "boolean"
+    },
+    "session": {
+      "type": ["object", "null"]
+    }
+  },
+  "additionalProperties": true
+}

@@ -902,6 +902,66 @@ pub fn assert_service_job_record_contract(value: &serde_json::Value) {
 }
 
 #[cfg(test)]
+pub fn assert_service_profile_upsert_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "profile upsert response",
+        value,
+        &["id", "profile", "upserted"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert_eq!(value["upserted"], true);
+    assert_service_profile_record_contract(&value["profile"]);
+}
+
+#[cfg(test)]
+pub fn assert_service_profile_delete_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "profile delete response",
+        value,
+        &["id", "deleted", "profile"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert!(value["deleted"].is_boolean());
+    if value["profile"].is_object() {
+        assert_service_profile_record_contract(&value["profile"]);
+    } else {
+        assert!(value["profile"].is_null());
+    }
+}
+
+#[cfg(test)]
+pub fn assert_service_session_upsert_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "session upsert response",
+        value,
+        &["id", "session", "upserted"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert_eq!(value["upserted"], true);
+    assert_service_session_record_contract(&value["session"]);
+}
+
+#[cfg(test)]
+pub fn assert_service_session_delete_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "session delete response",
+        value,
+        &["id", "deleted", "session"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert!(value["deleted"].is_boolean());
+    if value["session"].is_object() {
+        assert_service_session_record_contract(&value["session"]);
+    } else {
+        assert!(value["session"].is_null());
+    }
+}
+
+#[cfg(test)]
 pub fn assert_service_site_policy_upsert_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "site policy upsert response",
@@ -2839,6 +2899,22 @@ mod tests {
 
     #[test]
     fn service_config_mutation_response_contracts_match_wire_shape() {
+        let profile_upsert_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-profile-upsert-response.v1.schema.json"
+        ))
+        .unwrap();
+        let profile_delete_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-profile-delete-response.v1.schema.json"
+        ))
+        .unwrap();
+        let session_upsert_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-session-upsert-response.v1.schema.json"
+        ))
+        .unwrap();
+        let session_delete_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-session-delete-response.v1.schema.json"
+        ))
+        .unwrap();
         let site_policy_upsert_schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/service-site-policy-upsert-response.v1.schema.json"
         ))
@@ -2856,6 +2932,10 @@ mod tests {
         ))
         .unwrap();
 
+        assert_schema_required_fields(&profile_upsert_schema, &["id", "profile", "upserted"]);
+        assert_schema_required_fields(&profile_delete_schema, &["id", "deleted", "profile"]);
+        assert_schema_required_fields(&session_upsert_schema, &["id", "session", "upserted"]);
+        assert_schema_required_fields(&session_delete_schema, &["id", "deleted", "session"]);
         assert_schema_required_fields(
             &site_policy_upsert_schema,
             &["id", "sitePolicy", "upserted"],
@@ -2864,6 +2944,34 @@ mod tests {
         assert_schema_required_fields(&provider_upsert_schema, &["id", "provider", "upserted"]);
         assert_schema_required_fields(&provider_delete_schema, &["id", "deleted", "provider"]);
 
+        let profile = json!({
+            "id": "journal-downloader",
+            "name": "Journal Downloader",
+            "userDataDir": null,
+            "sitePolicyIds": [],
+            "defaultBrowserHost": null,
+            "allocation": "per_service",
+            "keyring": "basic_password_store",
+            "sharedServiceIds": [],
+            "credentialProviderIds": [],
+            "manualLoginPreferred": false,
+            "persistent": true,
+            "tags": [],
+        });
+        let session = json!({
+            "id": "journal-run",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite",
+            "owner": "system",
+            "lease": "exclusive",
+            "profileId": "journal-downloader",
+            "cleanup": "close_browser",
+            "browserIds": [],
+            "tabIds": [],
+            "createdAt": null,
+            "expiresAt": null,
+        });
         let site_policy = json!({
             "id": "google",
             "originPattern": "https://accounts.google.com",
@@ -2888,6 +2996,26 @@ mod tests {
             "capabilities": ["human_approval"],
         });
 
+        assert_service_profile_upsert_response_contract(&json!({
+            "id": "journal-downloader",
+            "profile": profile.clone(),
+            "upserted": true,
+        }));
+        assert_service_profile_delete_response_contract(&json!({
+            "id": "journal-downloader",
+            "deleted": true,
+            "profile": profile,
+        }));
+        assert_service_session_upsert_response_contract(&json!({
+            "id": "journal-run",
+            "session": session.clone(),
+            "upserted": true,
+        }));
+        assert_service_session_delete_response_contract(&json!({
+            "id": "journal-run",
+            "deleted": true,
+            "session": session,
+        }));
         assert_service_site_policy_upsert_response_contract(&json!({
             "id": "google",
             "sitePolicy": site_policy.clone(),
