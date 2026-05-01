@@ -2,7 +2,12 @@
 set -euo pipefail
 
 manifest_path="${CARGO_MANIFEST_PATH:-cli/Cargo.toml}"
-profile="${CARGO_TEST_PROFILE:-ci}"
+profile="${CARGO_TEST_PROFILE:-}"
+
+cargo_test=(cargo test --manifest-path "$manifest_path")
+if [[ -n "$profile" ]]; then
+  cargo_test+=(--profile "$profile")
+fi
 
 # These modules mutate process-global environment variables or user-scoped
 # runtime state during tests. Keep them out of the parallel pass, then run them
@@ -29,10 +34,10 @@ for filter in "${serial_filters[@]}"; do
 done
 
 echo "Running parallel-safe Rust tests"
-cargo test --profile "$profile" --manifest-path "$manifest_path" -- "${skip_args[@]}"
+"${cargo_test[@]}" -- "${skip_args[@]}"
 
 echo "Running env-mutating Rust tests serially"
 for filter in "${serial_filters[@]}"; do
   echo "Running serial Rust test partition: $filter"
-  cargo test --profile "$profile" --manifest-path "$manifest_path" "$filter" -- --test-threads=1
+  "${cargo_test[@]}" "$filter" -- --test-threads=1
 done
