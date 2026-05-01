@@ -3211,7 +3211,7 @@ fn browser_command_tool_schema() -> Value {
                 "params": {
                     "type": "object",
                     "additionalProperties": true,
-                    "description": "Action parameters. These are copied into the queued daemon command after id/action are reserved."
+                    "description": "Action parameters. These are copied into the queued daemon command after id/action are reserved. For first-command browser launch selection, include targetServiceId, targetService, targetServiceIds, or targetServices here."
                 },
                 "jobTimeoutMs": {
                     "type": "integer",

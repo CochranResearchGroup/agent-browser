@@ -21,6 +21,12 @@ pub(crate) struct ServiceLaunchMetadata {
     pub(crate) cleanup: SessionCleanupPolicy,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ProfileSelectionRequest {
+    pub(crate) service_name: Option<String>,
+    pub(crate) target_service_ids: Vec<String>,
+}
+
 pub(crate) fn service_profile_id(
     profile: Option<&str>,
     runtime_profile: Option<&str>,
@@ -31,6 +37,22 @@ pub(crate) fn service_profile_id(
     profile
         .filter(|value| !value.trim().is_empty())
         .map(|profile| format!("custom:{}", stable_short_hash(profile)))
+}
+
+pub(crate) fn select_service_profile_for_request(
+    service_state: &ServiceState,
+    request: &ProfileSelectionRequest,
+) -> Option<String> {
+    service_state
+        .profiles
+        .iter()
+        .filter(|(_, profile)| profile_allows_service(profile, request.service_name.as_deref()))
+        .filter_map(|(id, profile)| {
+            let score = profile_selection_score(profile, request);
+            (score > 0).then(|| (score, id.clone()))
+        })
+        .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
+        .map(|(_, id)| id)
 }
 
 pub(crate) fn upsert_service_profile_and_session(
@@ -112,6 +134,50 @@ pub(crate) fn upsert_service_profile_and_session(
     );
 }
 
+fn profile_allows_service(profile: &BrowserProfile, service_name: Option<&str>) -> bool {
+    if profile.shared_service_ids.is_empty() {
+        return true;
+    }
+    service_name.is_some_and(|service_name| {
+        profile
+            .shared_service_ids
+            .iter()
+            .any(|allowed| allowed == service_name)
+    })
+}
+
+fn profile_selection_score(profile: &BrowserProfile, request: &ProfileSelectionRequest) -> usize {
+    let mut score = 0;
+    for target_service_id in &request.target_service_ids {
+        if profile
+            .authenticated_service_ids
+            .iter()
+            .any(|candidate| candidate == target_service_id)
+        {
+            score += 1000;
+        }
+        if profile
+            .target_service_ids
+            .iter()
+            .any(|candidate| candidate == target_service_id)
+        {
+            score += 100;
+        }
+    }
+    if request.service_name.as_deref().is_some_and(|service_name| {
+        profile
+            .shared_service_ids
+            .iter()
+            .any(|allowed| allowed == service_name)
+    }) {
+        score += 10;
+    }
+    if profile.persistent {
+        score += 1;
+    }
+    score
+}
+
 fn merge_unique(values: &mut Vec<String>, value: String) {
     if !values.contains(&value) {
         values.push(value);
@@ -153,6 +219,96 @@ mod tests {
             profile_id,
             service_profile_id(Some("/tmp/browser-profile"), None).unwrap()
         );
+    }
+
+    #[test]
+    fn test_select_service_profile_prefers_authenticated_target_match() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "target-only".to_string(),
+            BrowserProfile {
+                id: "target-only".to_string(),
+                name: "Target only".to_string(),
+                target_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        service_state.profiles.insert(
+            "authenticated".to_string(),
+            BrowserProfile {
+                id: "authenticated".to_string(),
+                name: "Authenticated".to_string(),
+                target_service_ids: vec!["acs".to_string()],
+                authenticated_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let selected = select_service_profile_for_request(
+            &service_state,
+            &ProfileSelectionRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                target_service_ids: vec!["acs".to_string()],
+            },
+        );
+
+        assert_eq!(selected.as_deref(), Some("authenticated"));
+    }
+
+    #[test]
+    fn test_select_service_profile_respects_service_allow_list() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "restricted".to_string(),
+            BrowserProfile {
+                id: "restricted".to_string(),
+                name: "Restricted".to_string(),
+                target_service_ids: vec!["acs".to_string()],
+                authenticated_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["OtherService".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let selected = select_service_profile_for_request(
+            &service_state,
+            &ProfileSelectionRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                target_service_ids: vec!["acs".to_string()],
+            },
+        );
+
+        assert!(selected.is_none());
+    }
+
+    #[test]
+    fn test_select_service_profile_uses_service_match_as_fallback() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "service-profile".to_string(),
+            BrowserProfile {
+                id: "service-profile".to_string(),
+                name: "Service profile".to_string(),
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let selected = select_service_profile_for_request(
+            &service_state,
+            &ProfileSelectionRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                target_service_ids: Vec::new(),
+            },
+        );
+
+        assert_eq!(selected.as_deref(), Some("service-profile"));
     }
 
     #[test]

@@ -57,13 +57,16 @@ use super::service_incidents::{
     service_incidents_response, ServiceIncidentFilters,
 };
 use super::service_jobs::cancel_persisted_service_job;
-use super::service_lifecycle::{service_profile_id, ServiceLaunchMetadata};
+use super::service_lifecycle::{
+    select_service_profile_for_request, service_profile_id, ProfileSelectionRequest,
+    ServiceLaunchMetadata,
+};
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
     JobState as ServiceJobState, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind,
     ServiceState, SessionCleanupPolicy,
 };
-use super::service_store::LockedServiceStateRepository;
+use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
 use super::snapshot::{self, SnapshotOptions};
 use super::state;
@@ -311,6 +314,59 @@ fn launch_profile_from_sources(cmd: &Value) -> Option<String> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .or_else(|| env::var("AGENT_BROWSER_PROFILE").ok())
+}
+
+fn target_service_ids_from_command(cmd: &Value) -> Vec<String> {
+    let mut values = Vec::new();
+    for key in ["targetServiceId", "targetService", "target_service_id"] {
+        if let Some(value) = cmd.get(key).and_then(|value| value.as_str()) {
+            merge_target_service_id(&mut values, value);
+        }
+    }
+    for key in ["targetServiceIds", "targetServices", "target_service_ids"] {
+        if let Some(raw_values) = cmd.get(key).and_then(|value| value.as_array()) {
+            for value in raw_values.iter().filter_map(|value| value.as_str()) {
+                merge_target_service_id(&mut values, value);
+            }
+        }
+    }
+    values
+}
+
+fn merge_target_service_id(values: &mut Vec<String>, value: &str) {
+    let trimmed = value.trim();
+    if !trimmed.is_empty() && !values.iter().any(|existing| existing == trimmed) {
+        values.push(trimmed.to_string());
+    }
+}
+
+fn apply_service_profile_selection(options: &mut LaunchOptions, cmd: &Value) -> Option<String> {
+    if options.profile.is_some() || options.runtime_profile.is_some() {
+        return None;
+    }
+    let request = ProfileSelectionRequest {
+        service_name: optional_command_string(cmd, "serviceName"),
+        target_service_ids: target_service_ids_from_command(cmd),
+    };
+    if request.service_name.is_none() && request.target_service_ids.is_empty() {
+        return None;
+    }
+    let repository = LockedServiceStateRepository::default_json().ok()?;
+    let service_state = repository.load_snapshot().ok()?;
+    let profile_id = select_service_profile_for_request(&service_state, &request)?;
+    let profile = service_state.profiles.get(&profile_id)?;
+    // Keep the service profile ID visible in launch metadata while honoring
+    // custom profile directories persisted on service-owned profile records.
+    options.runtime_profile = Some(profile_id.clone());
+    if let Some(user_data_dir) = profile
+        .user_data_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        options.profile = Some(user_data_dir.to_string());
+    }
+    Some(profile_id)
 }
 
 fn close_behavior_for_attached_browser(
@@ -2280,6 +2336,7 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
         options.viewport_size = Some(server.viewport().await);
     }
     let engine = env::var("AGENT_BROWSER_ENGINE").ok();
+    apply_service_profile_selection(&mut options, command);
     let metadata = ServiceLaunchMetadata::from_launch_options(&options, Some(command));
 
     // Store proxy credentials for Fetch.authRequired handling
@@ -2536,7 +2593,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         });
     let storage_state = cmd.get("storageState").and_then(|v| v.as_str());
 
-    let launch_options = LaunchOptions {
+    let mut launch_options = LaunchOptions {
         headless,
         executable_path: cmd
             .get("executablePath")
@@ -2610,6 +2667,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         manual_login: false,
         attachable: false,
     };
+    apply_service_profile_selection(&mut launch_options, cmd);
     let metadata = ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd));
 
     let new_hash = launch_hash(&launch_options);
@@ -9836,7 +9894,7 @@ mod tests {
         assert_service_site_policy_upsert_response_contract,
         assert_service_status_response_contract, assert_service_trace_activity_record_contract,
         assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
-        service_job_naming_warning_values, BrowserProcess,
+        service_job_naming_warning_values, BrowserProcess, BrowserProfile,
     };
     use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -9854,6 +9912,96 @@ mod tests {
             "agent-browser-{label}-{}-{nanos}",
             std::process::id()
         ))
+    }
+
+    #[test]
+    fn test_target_service_ids_from_command_accepts_singular_and_arrays() {
+        let command = json!({
+            "targetServiceId": "google",
+            "targetServices": ["acs", " google ", "", 7],
+            "target_service_ids": ["microsoft"]
+        });
+
+        assert_eq!(
+            target_service_ids_from_command(&command),
+            vec![
+                "google".to_string(),
+                "acs".to_string(),
+                "microsoft".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_apply_service_profile_selection_prefers_authenticated_target() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("profile-selection-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "journal-default".to_string(),
+            BrowserProfile {
+                id: "journal-default".to_string(),
+                name: "Journal default".to_string(),
+                user_data_dir: Some(home.join("journal-default").display().to_string()),
+                target_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        service_state.profiles.insert(
+            "journal-auth".to_string(),
+            BrowserProfile {
+                id: "journal-auth".to_string(),
+                name: "Journal authenticated".to_string(),
+                user_data_dir: Some(home.join("journal-auth").display().to_string()),
+                target_service_ids: vec!["acs".to_string()],
+                authenticated_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+            .save(&service_state)
+            .expect("service state should be persisted");
+
+        let mut options = LaunchOptions::default();
+        let selected = apply_service_profile_selection(
+            &mut options,
+            &json!({
+                "serviceName": "JournalDownloader",
+                "targetServiceId": "acs"
+            }),
+        );
+
+        assert_eq!(selected.as_deref(), Some("journal-auth"));
+        assert_eq!(options.runtime_profile.as_deref(), Some("journal-auth"));
+        let expected_profile = home.join("journal-auth").display().to_string();
+        assert_eq!(options.profile.as_deref(), Some(expected_profile.as_str()));
+    }
+
+    #[test]
+    fn test_apply_service_profile_selection_preserves_explicit_profile() {
+        let mut options = LaunchOptions {
+            profile: Some("/tmp/explicit-profile".to_string()),
+            ..LaunchOptions::default()
+        };
+
+        let selected = apply_service_profile_selection(
+            &mut options,
+            &json!({
+                "serviceName": "JournalDownloader",
+                "targetServiceId": "acs"
+            }),
+        );
+
+        assert!(selected.is_none());
+        assert_eq!(options.profile.as_deref(), Some("/tmp/explicit-profile"));
+        assert!(options.runtime_profile.is_none());
     }
 
     #[tokio::test]

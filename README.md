@@ -535,10 +535,14 @@ launch and before the requested command runs.
 The `service.profiles` and `service.sessions` maps define service control-plane
 metadata for profile allocation, keyring posture, caller ownership, profile
 binding, lease state, and cleanup policy. These records are exposed through
-service status, MCP resources, and the HTTP service APIs. Current browser
-launch behavior still comes from `runtimeProfiles`, `--runtime-profile`,
-`--profile`, and existing launch flags. Launches that select a runtime profile
-or custom profile path now bind the active browser record to a service profile.
+service status, MCP resources, and the HTTP service APIs. Explicit
+`--runtime-profile` and `--profile` values still win. When a launch command omits
+both, `serviceName` plus `targetServiceId`, `targetService`, `targetServiceIds`,
+or `targetServices` lets agent-browser choose a persisted service profile. The
+selector first prefers `authenticatedServiceIds` matches, then
+`targetServiceIds` matches, then the caller `sharedServiceIds` match. Launches
+that select a runtime profile or custom profile path now bind the active browser
+record to a service profile.
 When commands include `serviceName`, `agentName`, or `taskName`, the active
 session record also captures that caller context for traceability. Profile
 selection should prefer a profile with credentials and usable auth state for
