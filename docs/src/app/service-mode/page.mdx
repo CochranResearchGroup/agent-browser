@@ -172,7 +172,7 @@ cd docs && pnpm build
 git diff --check
 ```
 
-Ordinary fast CI runs the HTTP and MCP incident-summary smokes after the Rust suite, so grouped service incident remedies stay covered without starting Chrome.
+Ordinary fast CI runs the HTTP and MCP incident-summary smokes after the Rust suite, so grouped service incident remedies stay covered without starting Chrome. Run both incident-summary smokes before changing incident summary grouping or filters; together they guard HTTP `summary=true` and MCP `service_incidents` with `summary: true` across state, severity, escalation, handling-state, browser, profile, session, service, agent, task, and since filters.
 
 Run the broader service health smoke when Chrome-backed live validation is required:
 

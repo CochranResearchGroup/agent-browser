@@ -53,6 +53,14 @@ The schema covers list and detail responses, including the returned incident
 array, count, matched and total counters, list filters, and detail-only related
 events and jobs.
 
+When changing incident summary grouping or filters, run both no-launch guards:
+`pnpm test:service-incident-summary-http` and
+`pnpm test:service-incident-summary-mcp`. Together they verify that HTTP
+`summary=true` and MCP `service_incidents` with `summary: true` preserve the
+same grouped remedy contract across state, severity, escalation,
+handling-state, browser, profile, session, service, agent, task, and since
+filters.
+
 ## Service Event Record v1
 
 `service-event-record.v1.schema.json` describes retained service event records
