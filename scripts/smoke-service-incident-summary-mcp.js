@@ -2,10 +2,12 @@
 
 import {
   assert,
+  assertIncidentSummaryFilteredResponse,
   assertIncidentSummarySmokeShape,
   closeSession,
   createMcpStdioClient,
   createSmokeContext,
+  incidentSummarySmokeFilterCases,
   parseJsonOutput,
   parseMcpToolPayload,
   runCli,
@@ -106,6 +108,25 @@ try {
   );
   assert(incidents.data.count === 3, `MCP incidents summary response count mismatch: ${JSON.stringify(incidents)}`);
   assertIncidentSummarySmokeShape(incidents.data.summary, 'MCP incidents');
+
+  for (const filterCase of incidentSummarySmokeFilterCases({ serviceName, agentName, taskName, session })) {
+    const filteredResult = await send('tools/call', {
+      name: 'service_incidents',
+      arguments: filterCase.mcpArguments,
+    });
+    const filtered = parseMcpToolPayload(filteredResult, `MCP service_incidents ${filterCase.label}`);
+    assert(filtered.success === true, `MCP ${filterCase.label} failed: ${JSON.stringify(filtered)}`);
+    assertServiceIncidentsResponseSchemaRecord(
+      filtered.data,
+      incidentsResponseSchema,
+      `MCP incidents ${filterCase.label} response`,
+    );
+    assertIncidentSummaryFilteredResponse(
+      filtered.data,
+      filterCase.expected,
+      `MCP incidents ${filterCase.label}`,
+    );
+  }
 
   await cleanup();
   console.log('Service incident MCP summary smoke passed');

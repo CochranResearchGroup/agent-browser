@@ -163,6 +163,111 @@ function findIncidentSummaryGroup(summary, escalation, severity, state) {
   );
 }
 
+export function incidentSummarySmokeFilterCases({
+  agentName,
+  serviceName,
+  session,
+  taskName,
+}) {
+  return [
+    {
+      label: 'critical active unacknowledged filters',
+      httpQuery:
+        `summary=true&limit=20&state=active&severity=critical&escalation=os_degraded_possible` +
+        `&handling-state=unacknowledged&profile-id=summary-profile&session-id=${encodeURIComponent(session)}` +
+        `&service-name=${encodeURIComponent(serviceName)}&agent-name=${encodeURIComponent(agentName)}` +
+        `&task-name=${encodeURIComponent(taskName)}`,
+      mcpArguments: {
+        summary: true,
+        limit: 20,
+        state: 'active',
+        severity: 'critical',
+        escalation: 'os_degraded_possible',
+        handlingState: 'unacknowledged',
+        profileId: 'summary-profile',
+        sessionId: session,
+        serviceName,
+        agentName,
+        taskName,
+      },
+      expected: {
+        count: 2,
+        matched: 2,
+        groupCount: 1,
+        groups: [
+          {
+            escalation: 'os_degraded_possible',
+            severity: 'critical',
+            state: 'active',
+            count: 2,
+            incidentIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+            recommendedActionIncludes: 'host OS',
+          },
+        ],
+      },
+    },
+    {
+      label: 'warning browser and since filters',
+      httpQuery:
+        `summary=true&limit=20&state=active&severity=warning&escalation=browser_degraded` +
+        `&browser-id=browser-summary-degraded&since=2026-05-01T10%3A02%3A00Z` +
+        `&service-name=${encodeURIComponent(serviceName)}&agent-name=${encodeURIComponent(agentName)}` +
+        `&task-name=${encodeURIComponent(taskName)}`,
+      mcpArguments: {
+        summary: true,
+        limit: 20,
+        state: 'active',
+        severity: 'warning',
+        escalation: 'browser_degraded',
+        browserId: 'browser-summary-degraded',
+        since: '2026-05-01T10:02:00Z',
+        serviceName,
+        agentName,
+        taskName,
+      },
+      expected: {
+        count: 1,
+        matched: 1,
+        groupCount: 1,
+        groups: [
+          {
+            escalation: 'browser_degraded',
+            severity: 'warning',
+            state: 'active',
+            count: 1,
+            incidentIds: ['browser-summary-degraded'],
+            recommendedActionIncludes: 'browser health',
+          },
+        ],
+      },
+    },
+    {
+      label: 'nonmatching dashboard summary filters',
+      httpQuery:
+        `summary=true&limit=20&state=active&severity=critical&escalation=os_degraded_possible` +
+        `&since=2026-05-01T10%3A02%3A00Z&service-name=${encodeURIComponent(serviceName)}` +
+        `&agent-name=${encodeURIComponent(agentName)}&task-name=${encodeURIComponent(taskName)}`,
+      mcpArguments: {
+        summary: true,
+        limit: 20,
+        state: 'active',
+        severity: 'critical',
+        escalation: 'os_degraded_possible',
+        since: '2026-05-01T10:02:00Z',
+        serviceName,
+        agentName,
+        taskName,
+      },
+      expected: {
+        count: 0,
+        matched: 0,
+        groupCount: 0,
+        groups: [],
+      },
+    },
+  ];
+}
+
 export function assertIncidentSummarySmokeShape(summary, label) {
   assert(summary && typeof summary === 'object', `${label} missing summary object: ${JSON.stringify(summary)}`);
   assert(Number.isInteger(summary.groupCount), `${label} summary missing groupCount: ${JSON.stringify(summary)}`);
@@ -189,6 +294,48 @@ export function assertIncidentSummarySmokeShape(summary, label) {
     warning.incidentIds.includes('browser-summary-degraded'),
     `${label} summary warning IDs mismatch: ${JSON.stringify(warning)}`,
   );
+}
+
+export function assertIncidentSummaryFilteredResponse(data, expected, label) {
+  assert(data && typeof data === 'object', `${label} missing response data: ${JSON.stringify(data)}`);
+  assert(data.count === expected.count, `${label} count mismatch: ${JSON.stringify(data)}`);
+  assert(data.matched === expected.matched, `${label} matched mismatch: ${JSON.stringify(data)}`);
+  assert(data.summary && typeof data.summary === 'object', `${label} missing summary: ${JSON.stringify(data)}`);
+  assert(
+    data.summary.groupCount === expected.groupCount,
+    `${label} summary group count mismatch: ${JSON.stringify(data.summary)}`,
+  );
+  assert(
+    Array.isArray(data.summary.groups),
+    `${label} summary groups missing: ${JSON.stringify(data.summary)}`,
+  );
+  assert(
+    data.summary.groups.length === expected.groupCount,
+    `${label} summary groups length mismatch: ${JSON.stringify(data.summary)}`,
+  );
+
+  for (const expectedGroup of expected.groups) {
+    const group = findIncidentSummaryGroup(
+      data.summary,
+      expectedGroup.escalation,
+      expectedGroup.severity,
+      expectedGroup.state,
+    );
+    assert(group, `${label} missing expected group ${JSON.stringify(expectedGroup)} in ${JSON.stringify(data.summary)}`);
+    assert(group.count === expectedGroup.count, `${label} group count mismatch: ${JSON.stringify(group)}`);
+    for (const incidentId of expectedGroup.incidentIds) {
+      assert(
+        group.incidentIds.includes(incidentId),
+        `${label} missing incident ${incidentId} in ${JSON.stringify(group)}`,
+      );
+    }
+    if (expectedGroup.recommendedActionIncludes) {
+      assert(
+        group.recommendedAction.includes(expectedGroup.recommendedActionIncludes),
+        `${label} recommended action mismatch: ${JSON.stringify(group)}`,
+      );
+    }
+  }
 }
 
 export function httpJson(port, method, path, body) {

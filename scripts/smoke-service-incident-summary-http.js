@@ -2,10 +2,12 @@
 
 import {
   assert,
+  assertIncidentSummaryFilteredResponse,
   assertIncidentSummarySmokeShape,
   closeSession,
   createSmokeContext,
   httpJson,
+  incidentSummarySmokeFilterCases,
   parseJsonOutput,
   runCli,
   seedIncidentSummarySmokeEvents,
@@ -82,6 +84,21 @@ try {
   );
   assert(incidents.data.count === 3, `HTTP incidents summary response count mismatch: ${JSON.stringify(incidents)}`);
   assertIncidentSummarySmokeShape(incidents.data.summary, 'HTTP incidents');
+
+  for (const filterCase of incidentSummarySmokeFilterCases({ serviceName, agentName, taskName, session })) {
+    const filtered = await httpJson(port, 'GET', `/api/service/incidents?${filterCase.httpQuery}`);
+    assert(filtered.success === true, `HTTP ${filterCase.label} failed: ${JSON.stringify(filtered)}`);
+    assertServiceIncidentsResponseSchemaRecord(
+      filtered.data,
+      incidentsResponseSchema,
+      `HTTP incidents ${filterCase.label} response`,
+    );
+    assertIncidentSummaryFilteredResponse(
+      filtered.data,
+      filterCase.expected,
+      `HTTP incidents ${filterCase.label}`,
+    );
+  }
 
   await cleanup();
   console.log('Service incident HTTP summary smoke passed');
