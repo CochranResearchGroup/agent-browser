@@ -188,6 +188,9 @@ fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
 }
 
 fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
+    if let Some(summary) = data.get("summary") {
+        return format_service_incident_summary_text(summary);
+    }
     if let Some(incident) = data.get("incident") {
         let timestamp = incident
             .get("latestTimestamp")
@@ -302,6 +305,57 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
             )
         })
         .collect::<Vec<_>>();
+    Some(lines.join("\n"))
+}
+
+fn format_service_incident_summary_text(summary: &serde_json::Value) -> Option<String> {
+    let groups = summary.get("groups").and_then(|value| value.as_array())?;
+    if groups.is_empty() {
+        return Some("No service incidents".to_string());
+    }
+
+    let mut lines = vec![format!("Incident groups: {}", groups.len())];
+    lines.extend(groups.iter().map(|group| {
+        let escalation = group
+            .get("escalation")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none");
+        let severity = group
+            .get("severity")
+            .and_then(|value| value.as_str())
+            .unwrap_or("info");
+        let state = group
+            .get("state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let count = group
+            .get("count")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        let latest = group
+            .get("latestTimestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown-time");
+        let action = group
+            .get("recommendedAction")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Inspect incident details.");
+        let ids = group
+            .get("incidentIds")
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "none".to_string());
+        format!(
+            "{severity} escalation={escalation} state={state} count={count} latest={latest} incidents={ids}\n  next={action}"
+        )
+    }));
     Some(lines.join("\n"))
 }
 
@@ -3449,7 +3503,7 @@ Usage:
   agent-browser service activity <incident-id>
   agent-browser service trace [--limit <n>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
-  agent-browser service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service incidents [--summary] [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
 
 Commands:
@@ -3470,7 +3524,7 @@ Commands:
   activity              Show a normalized incident timeline from related events, jobs, and handling metadata
   trace                 Show events, jobs, incidents, and activity for one service/task trace
   jobs                  Show recent service control-plane jobs
-  incidents             Show grouped retained service incidents
+  incidents             Show grouped retained service incidents, or summary groups with --summary
   events                Show recent service reconciliation, launch, browser health, recovery, and tab lifecycle events
 
 Notes:
@@ -3484,6 +3538,7 @@ Notes:
   - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - Incidents include severity, escalation, and recommendedAction so clients share one operator priority contract.
+  - service incidents --summary groups the current filtered incident set by escalation, severity, and state with recommended next actions.
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
@@ -3542,6 +3597,7 @@ Examples:
   agent-browser service jobs --id <job-id>
   agent-browser service jobs --state failed --action navigate
   agent-browser service incidents --limit 20
+  agent-browser service incidents --summary --state active --handling-state unacknowledged
   agent-browser service incidents --id browser-1
   agent-browser service incidents --handling-state unacknowledged
   agent-browser service incidents --severity critical --escalation os_degraded_possible
@@ -3991,7 +4047,7 @@ Service:
   service activity           Show a normalized retained incident timeline
   service trace              Show related service trace records in one response
   service jobs               Show recent service control-plane jobs
-  service incidents          Show grouped retained service incidents
+  service incidents          Show grouped retained service incidents; add --summary for operator remedy groups
   service events             Show recent service events
 
 MCP:
@@ -4285,6 +4341,7 @@ Examples:
   agent-browser service trace            # Inspect related service trace records
   agent-browser service jobs             # Inspect recent service control jobs
   agent-browser service incidents        # Inspect grouped retained service incidents
+  agent-browser service incidents --summary # Inspect grouped operator remedies
   agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile
@@ -4402,10 +4459,10 @@ pub fn print_version() {
 mod tests {
     use super::{
         format_service_browsers_text, format_service_challenges_text, format_service_events_text,
-        format_service_jobs_text, format_service_profiles_text, format_service_providers_text,
-        format_service_sessions_text, format_service_site_policies_text,
-        format_service_status_text, format_service_tabs_text, format_service_trace_text,
-        format_storage_text,
+        format_service_incidents_text, format_service_jobs_text, format_service_profiles_text,
+        format_service_providers_text, format_service_sessions_text,
+        format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
+        format_service_trace_text, format_storage_text,
     };
     use serde_json::json;
 
@@ -4744,6 +4801,31 @@ mod tests {
         assert_eq!(
             rendered,
             "2026-04-25T00:00:00Z queued action=navigate id=job-1 namingWarnings=missing_agent_name"
+        );
+    }
+
+    #[test]
+    fn test_format_service_incidents_text_prefers_summary_groups() {
+        let data = json!({
+            "summary": {
+                "groups": [{
+                    "escalation": "os_degraded_possible",
+                    "severity": "critical",
+                    "state": "active",
+                    "count": 2,
+                    "latestTimestamp": "2026-05-01T00:00:00Z",
+                    "recommendedAction": "Inspect the host OS.",
+                    "incidentIds": ["browser-1", "browser-2"]
+                }]
+            },
+            "incidents": []
+        });
+
+        let rendered = format_service_incidents_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Incident groups: 1\ncritical escalation=os_degraded_possible state=active count=2 latest=2026-05-01T00:00:00Z incidents=browser-1,browser-2\n  next=Inspect the host OS."
         );
     }
 

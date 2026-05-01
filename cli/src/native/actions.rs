@@ -1,6 +1,6 @@
 use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::future::Future;
@@ -6694,7 +6694,11 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         .and_then(|value| value.as_u64())
         .map(|value| value as usize)
         .unwrap_or(20);
-    service_incidents_response(
+    let summarize = cmd
+        .get("summary")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let mut response = service_incidents_response(
         &service_state,
         ServiceIncidentFilters {
             limit,
@@ -6712,7 +6716,84 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
             task_name: cmd.get("taskName").and_then(|value| value.as_str()),
             since: cmd.get("since").and_then(|value| value.as_str()),
         },
-    )
+    )?;
+    if summarize {
+        let incidents = response
+            .get("incidents")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+        response["summary"] = service_incident_summary(&incidents);
+    }
+    Ok(response)
+}
+
+fn service_incident_summary(incidents: &[Value]) -> Value {
+    let mut groups = BTreeMap::<(String, String, String), Vec<&Value>>::new();
+    for incident in incidents {
+        let escalation = incident
+            .get("escalation")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none")
+            .to_string();
+        let severity = incident
+            .get("severity")
+            .and_then(|value| value.as_str())
+            .unwrap_or("info")
+            .to_string();
+        let state = incident
+            .get("state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+        groups
+            .entry((escalation, severity, state))
+            .or_default()
+            .push(incident);
+    }
+
+    let groups = groups
+        .into_iter()
+        .map(|((escalation, severity, state), incidents)| {
+            let recommended_action = incidents
+                .iter()
+                .filter_map(|incident| {
+                    incident
+                        .get("recommendedAction")
+                        .and_then(|value| value.as_str())
+                        .filter(|value| !value.is_empty())
+                })
+                .next()
+                .unwrap_or("Inspect incident details.");
+            let ids = incidents
+                .iter()
+                .filter_map(|incident| incident.get("id").and_then(|value| value.as_str()))
+                .collect::<Vec<_>>();
+            let newest = incidents
+                .iter()
+                .filter_map(|incident| {
+                    incident
+                        .get("latestTimestamp")
+                        .and_then(|value| value.as_str())
+                })
+                .max()
+                .unwrap_or("unknown-time");
+            json!({
+                "escalation": escalation,
+                "severity": severity,
+                "state": state,
+                "count": incidents.len(),
+                "latestTimestamp": newest,
+                "recommendedAction": recommended_action,
+                "incidentIds": ids,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "groupCount": groups.len(),
+        "groups": groups,
+    })
 }
 
 async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
@@ -11619,6 +11700,66 @@ mod tests {
             result["data"]["incidents"][0]["escalation"],
             "os_degraded_possible"
         );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_summary_groups_by_operator_remedy() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-summary",
+            "summary": true,
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "browser-degraded",
+                        "browserId": "browser-degraded",
+                        "label": "browser-degraded",
+                        "state": "active",
+                        "severity": "warning",
+                        "escalation": "browser_degraded",
+                        "recommendedAction": "Inspect browser health.",
+                        "latestTimestamp": "2026-04-27T00:00:00Z",
+                        "latestMessage": "Polite close failed",
+                        "latestKind": "browser_health_changed",
+                        "currentHealth": "degraded"
+                    },
+                    {
+                        "id": "browser-faulted",
+                        "browserId": "browser-faulted",
+                        "label": "browser-faulted",
+                        "state": "active",
+                        "severity": "critical",
+                        "escalation": "os_degraded_possible",
+                        "recommendedAction": "Inspect the host OS.",
+                        "latestTimestamp": "2026-04-27T00:01:00Z",
+                        "latestMessage": "Force kill failed",
+                        "latestKind": "browser_health_changed",
+                        "currentHealth": "faulted"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_incidents_response_contract(&result["data"]);
+        assert_eq!(result["data"]["summary"]["groupCount"], 2);
+        let groups = result["data"]["summary"]["groups"].as_array().unwrap();
+        assert!(groups.iter().any(|group| {
+            group["escalation"] == "browser_degraded"
+                && group["severity"] == "warning"
+                && group["count"] == 1
+                && group["recommendedAction"] == "Inspect browser health."
+        }));
+        assert!(groups.iter().any(|group| {
+            group["escalation"] == "os_degraded_possible"
+                && group["severity"] == "critical"
+                && group["count"] == 1
+                && group["recommendedAction"] == "Inspect the host OS."
+        }));
         assert!(state.browser.is_none());
     }
 

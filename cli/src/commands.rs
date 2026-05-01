@@ -1467,7 +1467,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }
             Some("incidents") => {
                 let usage =
-                    "service incidents [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
+                    "service incidents [--summary] [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
                 let mut cmd = json!({
                     "id": id,
                     "action": "service_incidents",
@@ -1476,6 +1476,9 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 let mut i = 1;
                 while i < rest.len() {
                     match rest[i] {
+                        "--summary" => {
+                            cmd["summary"] = json!(true);
+                        }
                         "--limit" => {
                             let Some(raw) = rest.get(i + 1) else {
                                 return Err(ParseError::InvalidValue {
@@ -5216,13 +5219,14 @@ mod tests {
     fn test_service_incidents_filters() {
         let cmd = parse_command(
             &args(
-                "service incidents --limit 7 --state active --severity critical --escalation os_degraded_possible --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
+                "service incidents --summary --limit 7 --state active --severity critical --escalation os_degraded_possible --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
             ),
             &default_flags(),
         )
         .unwrap();
 
         assert_eq!(cmd["action"], "service_incidents");
+        assert_eq!(cmd["summary"], true);
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");
         assert_eq!(cmd["severity"], "critical");
