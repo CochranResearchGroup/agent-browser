@@ -423,6 +423,8 @@ Use `agent-browser service status --watch` or `agent-browser service watch` for 
 
 Launch-shaping options such as `--args` or `AGENT_BROWSER_ARGS` apply only to commands that can launch a browser. Service inspection commands such as `service status`, `service sessions`, and `mcp read` must remain read-only and must not start Chrome just because launch defaults are configured.
 
+Run `pnpm test:service-status-no-launch` to validate that service status remains read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
+
 Use `agent-browser service reconcile` to run persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `~/.agent-browser/service/state.json`, refreshes live tab records for reachable browser CDP endpoints, and returns the reconciled service state plus total and changed browser counts. The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError`, bounded recent control-plane job records in `jobs`, a derived `incidents` collection grouped by browser or service scope, and a bounded `events` log for reconciliation summaries, browser health transitions, browser recovery starts, ownership repairs, and tab lifecycle changes.
 
 Use `agent-browser service cancel <job-id>` to mark a queued service job cancelled before it dispatches or request cooperative cancellation for a running job. Running cancellation drops the active service future, records the job as `cancelled`, and cleans up browser state before the worker accepts more work. Terminal jobs are rejected rather than rewritten. Add `--reason <text>` to record why a queued job was cancelled.
