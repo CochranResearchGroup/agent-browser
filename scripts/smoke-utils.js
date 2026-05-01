@@ -95,6 +95,102 @@ export function parseJsonOutput(output, label) {
   }
 }
 
+export function seedIncidentSummarySmokeEvents(context, {
+  agentName,
+  serviceName,
+  taskName,
+}) {
+  const serviceDir = join(context.agentHome, 'service');
+  const statePath = join(serviceDir, 'state.json');
+  mkdirSync(serviceDir, { recursive: true });
+  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  state.events = [
+    {
+      id: 'event-summary-critical-1',
+      timestamp: '2026-05-01T10:00:00Z',
+      kind: 'browser_health_changed',
+      message: 'Browser browser-summary-faulted-1 faulted',
+      browserId: 'browser-summary-faulted-1',
+      profileId: 'summary-profile',
+      sessionId: context.session,
+      serviceName,
+      agentName,
+      taskName,
+      previousHealth: 'ready',
+      currentHealth: 'faulted',
+      details: { failureClass: 'force_kill_failed' },
+    },
+    {
+      id: 'event-summary-critical-2',
+      timestamp: '2026-05-01T10:01:00Z',
+      kind: 'browser_health_changed',
+      message: 'Browser browser-summary-faulted-2 faulted',
+      browserId: 'browser-summary-faulted-2',
+      profileId: 'summary-profile',
+      sessionId: context.session,
+      serviceName,
+      agentName,
+      taskName,
+      previousHealth: 'ready',
+      currentHealth: 'faulted',
+      details: { failureClass: 'force_kill_failed' },
+    },
+    {
+      id: 'event-summary-warning',
+      timestamp: '2026-05-01T10:02:00Z',
+      kind: 'browser_health_changed',
+      message: 'Browser browser-summary-degraded degraded',
+      browserId: 'browser-summary-degraded',
+      profileId: 'summary-profile',
+      sessionId: context.session,
+      serviceName,
+      agentName,
+      taskName,
+      previousHealth: 'ready',
+      currentHealth: 'degraded',
+      details: { failureClass: 'polite_close_failed' },
+    },
+  ];
+  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+}
+
+function findIncidentSummaryGroup(summary, escalation, severity, state) {
+  return summary.groups.find(
+    (group) =>
+      group.escalation === escalation &&
+      group.severity === severity &&
+      group.state === state,
+  );
+}
+
+export function assertIncidentSummarySmokeShape(summary, label) {
+  assert(summary && typeof summary === 'object', `${label} missing summary object: ${JSON.stringify(summary)}`);
+  assert(Number.isInteger(summary.groupCount), `${label} summary missing groupCount: ${JSON.stringify(summary)}`);
+  assert(Array.isArray(summary.groups), `${label} summary missing groups: ${JSON.stringify(summary)}`);
+  assert(summary.groupCount === summary.groups.length, `${label} summary count mismatch: ${JSON.stringify(summary)}`);
+
+  const critical = findIncidentSummaryGroup(summary, 'os_degraded_possible', 'critical', 'active');
+  assert(critical, `${label} summary missing critical OS group: ${JSON.stringify(summary)}`);
+  assert(critical.count === 2, `${label} summary critical count mismatch: ${JSON.stringify(critical)}`);
+  assert(
+    critical.incidentIds.includes('browser-summary-faulted-1') &&
+      critical.incidentIds.includes('browser-summary-faulted-2'),
+    `${label} summary critical IDs mismatch: ${JSON.stringify(critical)}`,
+  );
+  assert(
+    critical.recommendedAction.includes('host OS'),
+    `${label} summary critical remedy mismatch: ${JSON.stringify(critical)}`,
+  );
+
+  const warning = findIncidentSummaryGroup(summary, 'browser_degraded', 'warning', 'active');
+  assert(warning, `${label} summary missing degraded-browser group: ${JSON.stringify(summary)}`);
+  assert(warning.count === 1, `${label} summary warning count mismatch: ${JSON.stringify(warning)}`);
+  assert(
+    warning.incidentIds.includes('browser-summary-degraded'),
+    `${label} summary warning IDs mismatch: ${JSON.stringify(warning)}`,
+  );
+}
+
 export function httpJson(port, method, path, body) {
   return new Promise((resolve, reject) => {
     const rawBody = body === undefined ? undefined : JSON.stringify(body);
