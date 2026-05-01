@@ -1877,7 +1877,8 @@ fn main() {
         });
 
     // Launch headed browser or configure browser options (without CDP or provider)
-    if (flags.headed
+    if !command_skips_browser_launch_for_prestart(&cmd)
+        && (flags.headed
         || flags.cli_headed  // User explicitly set --headed (even if false)
         || flags.executable_path.is_some()
         || flags.runtime_profile.is_some()
@@ -2306,6 +2307,12 @@ fn run_batch(flags: &Flags, bail: bool, arg_commands: Option<Vec<Vec<String>>>) 
     }
 }
 
+fn command_skips_browser_launch_for_prestart(cmd: &serde_json::Value) -> bool {
+    crate::native::actions::action_skips_browser_launch(
+        cmd.get("action").and_then(|v| v.as_str()).unwrap_or(""),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2377,5 +2384,26 @@ mod tests {
             parsed["error"],
             "Daemon process exited during startup:\nline \"quoted\"\u{001b}[2mansi\u{001b}[22m"
         );
+    }
+
+    #[test]
+    fn test_command_skips_browser_launch_for_service_status() {
+        assert!(command_skips_browser_launch_for_prestart(&json!({
+            "action": "service_status"
+        })));
+    }
+
+    #[test]
+    fn test_command_skips_browser_launch_for_close() {
+        assert!(command_skips_browser_launch_for_prestart(&json!({
+            "action": "close"
+        })));
+    }
+
+    #[test]
+    fn test_command_does_not_skip_browser_launch_for_navigation() {
+        assert!(!command_skips_browser_launch_for_prestart(&json!({
+            "action": "navigate"
+        })));
     }
 }

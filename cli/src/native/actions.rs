@@ -155,6 +155,58 @@ pub struct PendingConfirmation {
     pub cmd: Value,
 }
 
+pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
+    matches!(
+        action,
+        "" | "launch"
+            | "close"
+            | "har_stop"
+            | "credentials_set"
+            | "credentials_get"
+            | "credentials_delete"
+            | "credentials_list"
+            | "auth_save"
+            | "auth_show"
+            | "auth_delete"
+            | "auth_list"
+            | "state_list"
+            | "state_show"
+            | "state_clear"
+            | "state_clean"
+            | "state_rename"
+            | "device_list"
+            | "stream_enable"
+            | "stream_disable"
+            | "stream_status"
+            | "service_status"
+            | "service_reconcile"
+            | "service_job_cancel"
+            | "service_browser_retry"
+            | "service_profile_upsert"
+            | "service_profile_delete"
+            | "service_session_upsert"
+            | "service_session_delete"
+            | "service_site_policy_upsert"
+            | "service_site_policy_delete"
+            | "service_provider_upsert"
+            | "service_provider_delete"
+            | "service_incident_acknowledge"
+            | "service_incident_resolve"
+            | "service_incident_activity"
+            | "service_trace"
+            | "service_profiles"
+            | "service_sessions"
+            | "service_browsers"
+            | "service_tabs"
+            | "service_site_policies"
+            | "service_providers"
+            | "service_challenges"
+            | "service_jobs"
+            | "service_incidents"
+            | "service_events"
+    )
+}
+
 /// Captured request/response metadata used to export HAR 1.2 files.
 pub struct HarEntry {
     pub request_id: String,
@@ -1932,55 +1984,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         }
     }
 
-    let skip_launch = matches!(
-        action,
-        "" | "launch"
-            | "close"
-            | "har_stop"
-            | "credentials_set"
-            | "credentials_get"
-            | "credentials_delete"
-            | "credentials_list"
-            | "auth_save"
-            | "auth_show"
-            | "auth_delete"
-            | "auth_list"
-            | "state_list"
-            | "state_show"
-            | "state_clear"
-            | "state_clean"
-            | "state_rename"
-            | "device_list"
-            | "stream_enable"
-            | "stream_disable"
-            | "stream_status"
-            | "service_status"
-            | "service_reconcile"
-            | "service_job_cancel"
-            | "service_browser_retry"
-            | "service_profile_upsert"
-            | "service_profile_delete"
-            | "service_session_upsert"
-            | "service_session_delete"
-            | "service_site_policy_upsert"
-            | "service_site_policy_delete"
-            | "service_provider_upsert"
-            | "service_provider_delete"
-            | "service_incident_acknowledge"
-            | "service_incident_resolve"
-            | "service_incident_activity"
-            | "service_trace"
-            | "service_profiles"
-            | "service_sessions"
-            | "service_browsers"
-            | "service_tabs"
-            | "service_site_policies"
-            | "service_providers"
-            | "service_challenges"
-            | "service_jobs"
-            | "service_incidents"
-            | "service_events"
-    );
+    let skip_launch = action_skips_browser_launch(action);
     if !skip_launch {
         // Check if existing connection is stale and needs re-launch.
         // First do a fast, non-blocking check: did the browser process crash/exit?
