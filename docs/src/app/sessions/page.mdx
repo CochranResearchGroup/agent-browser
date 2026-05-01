@@ -34,6 +34,8 @@ Each session has its own:
 
 If you do not pass <code>--profile</code> or <code>--runtime-profile</code>, agent-browser uses a stable Chrome user-data-dir at <code>~/.agent-browser/runtime-profiles/default/user-data</code>. This keeps manual sign-in state across runs without any extra setup.
 
+If the default runtime profile is locked by a live browser PID, do not treat a fresh isolated profile as the generic safe fallback. agent-browser is designed to own session and job management so operators do not have to coordinate which browser is busy. For authenticated work, inspect <code>agent-browser service status</code>, <code>agent-browser runtime status</code>, or the dashboard service view, then reuse the managed runtime profile through the service/session control plane or attach to the intended browser. Switch to a new isolated profile only for explicitly unauthenticated throwaway QA, or when the operator asked for a separate browser identity.
+
 ```bash
 # Create and register a managed profile when needed
 agent-browser runtime create work --set-default
@@ -56,7 +58,7 @@ It stores:
 - Browser cache
 - Login sessions
 
-If you need a different persistent profile or multiple isolated Chrome instances at the same time, pass <code>--runtime-profile &lt;name&gt;</code> or <code>--profile &lt;path&gt;</code> explicitly.
+If you need a different persistent identity, pass <code>--runtime-profile &lt;name&gt;</code> or <code>--profile &lt;path&gt;</code> explicitly. Do this for separate account lanes, not merely because another job is already using the browser.
 
 If you need automation to bind to the still-open manual browser, use an attachable manual launch:
 

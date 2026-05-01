@@ -584,6 +584,16 @@ agent-browser runtime create work --set-default
 If you do not pass `--profile` or `--runtime-profile`, agent-browser launches Chrome with a stable
 user-data-dir at `~/.agent-browser/runtime-profiles/default/user-data`.
 
+If the default runtime profile is locked by a live browser PID, do not treat a
+fresh isolated profile as the generic safe fallback. agent-browser is designed
+to own session and job management so operators do not have to coordinate which
+browser is busy. For authenticated work, inspect `agent-browser service status`,
+`agent-browser runtime status`, or the dashboard service view, then reuse the
+managed runtime profile through the service/session control plane or attach to
+the intended browser. Switch to a new isolated profile only for explicitly
+unauthenticated throwaway QA, or when the operator asked for a separate browser
+identity.
+
 For Google and similar SSO flows, the preferred bootstrap is a detached manual login first:
 
 ```bash
@@ -623,8 +633,9 @@ This default profile keeps:
 - Browser cache
 - Signed-in browser sessions
 
-If you need a different persistent profile or multiple isolated Chrome
-instances at the same time, pass `--runtime-profile <name>` or `--profile <path>` explicitly.
+If you need a different persistent identity, pass `--runtime-profile <name>` or
+`--profile <path>` explicitly. Do this for separate account lanes, not merely
+because another job is already using the browser.
 
 ## Named runtime profiles
 

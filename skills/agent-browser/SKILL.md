@@ -67,6 +67,8 @@ This is materially more reliable than a fresh headless session for sites like Go
 
 By default, agent-browser uses a stable runtime profile at `~/.agent-browser/runtime-profiles/default/user-data`. If a user signs in manually once, later runs reuse that state automatically. Use `--runtime-profile <name>` for a named managed profile, or `--profile <path>` for a custom user-data-dir path.
 
+When the default runtime profile is locked by a live browser PID, do not treat a fresh isolated profile as the generic safe fallback. agent-browser is meant to own session and job management so operators do not have to coordinate which browser is busy. If the task needs existing login state, inspect `agent-browser service status`, `agent-browser runtime status`, or the dashboard service view, then reuse the managed runtime profile through the service/session control plane or attach to the intended browser. Switch to a new isolated profile only for explicitly unauthenticated throwaway QA, or when the operator asked for a separate browser identity.
+
 Runtime profiles can also be declared in `agent-browser.json` via
 `defaultRuntimeProfile` and `runtimeProfiles.<name>`. Today that config can
 drive `userDataDir`, launch defaults, auth session naming, and service login
@@ -87,8 +89,10 @@ agent-browser runtime create work --set-default
 ```
 
 When automating a site that requires login, prefer managed runtime profiles for
-recurring work. Use the other options only when you specifically need portable
-state, temporary reuse, or isolated session behavior.
+recurring work. Let agent-browser coordinate sessions and jobs for an already
+open managed browser instead of manually avoiding it. Use the other options
+only when you specifically need portable state, temporary reuse, or isolated
+session behavior.
 
 When automating a site that requires login, choose the approach that fits:
 
