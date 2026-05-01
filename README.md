@@ -549,6 +549,8 @@ Run `pnpm test:service-profile-target-mcp-live` to validate the live typed MCP
 target-hint profile selection path.
 Run `pnpm test:service-status-no-launch` to validate that service status remains
 read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
+Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
+read-only under the same launch defaults.
 When commands include `serviceName`, `agentName`, or `taskName`, the active
 session record also captures that caller context for traceability. Profile
 selection should prefer a profile with credentials and usable auth state for
