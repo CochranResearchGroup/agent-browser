@@ -624,6 +624,12 @@ with detached <code>runtime login</code>, close Chrome, then relaunch the same
 profile with <code>--attachable</code> for automation.
 Use <code>--leave-open</code> when you want <code>close</code> to detach from a
 managed runtime-profile browser instead of shutting it down.
+If a runtime profile is locked by a live browser PID and the task needs
+existing login state, inspect <code>service status</code> or
+<code>runtime status</code>, then reuse the managed browser through
+service/session control or attach to the intended runtime profile. Use
+<code>--profile &lt;path&gt;</code> only for separate browser identities or
+unauthenticated throwaway work.
 
 ## Dashboard
 

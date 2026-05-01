@@ -735,16 +735,20 @@ fn ensure_profile_not_in_use(user_data_dir: &Path) -> Result<(), String> {
     {
         if let Some(pid) = singleton_lock_pid(user_data_dir) {
             if pid != std::process::id() && pid_is_running(pid) {
-                return Err(format!(
-                    "Chrome profile {} is already in use by PID {}. Close the existing browser or use --profile <path> for an isolated profile.",
-                    user_data_dir.display(),
-                    pid
-                ));
+                return Err(locked_profile_message(user_data_dir, pid));
             }
         }
     }
 
     Ok(())
+}
+
+fn locked_profile_message(user_data_dir: &Path, pid: u32) -> String {
+    format!(
+        "Chrome profile {} is already in use by PID {}. If this task needs the existing login state, do not switch to a fresh isolated profile. Inspect `agent-browser service status` or `agent-browser runtime status`, then reuse the managed browser through the service/session control plane or attach to the intended runtime profile. Use `--profile <path>` only for explicitly separate browser identities or unauthenticated throwaway work.",
+        user_data_dir.display(),
+        pid
+    )
 }
 
 fn cleanup_stale_profile_lock(user_data_dir: &Path) {
@@ -1966,6 +1970,10 @@ mod tests {
 
         let err = ensure_profile_not_in_use(&dir).unwrap_err();
         assert!(err.contains("already in use"));
+        assert!(err.contains("service status"));
+        assert!(err.contains("runtime status"));
+        assert!(err.contains("service/session control plane"));
+        assert!(err.contains("unauthenticated throwaway work"));
         let _ = child.kill();
         let _ = child.wait();
     }

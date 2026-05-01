@@ -3878,6 +3878,13 @@ Commands:
   login [url]           Launch a detached headed browser for manual sign-in
   attach [name]         Bind the current automation session to a runtime profile
 
+Locked profiles:
+  If the default runtime profile is locked by a live browser PID and the task
+  needs existing login state, inspect `service status` or `runtime status`,
+  then reuse the managed browser through service/session control or attach to
+  the intended runtime profile. Use `--profile <path>` only for separate
+  browser identities or unauthenticated throwaway work.
+
 Global Options:
   --json                        Output as JSON
   --runtime-profile <name>      Select runtime profile name
