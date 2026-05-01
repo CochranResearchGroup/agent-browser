@@ -172,6 +172,8 @@ cd docs && pnpm build
 git diff --check
 ```
 
+Ordinary fast CI runs the HTTP and MCP incident-summary smokes after the Rust suite, so grouped service incident remedies stay covered without starting Chrome.
+
 Run the broader service health smoke when Chrome-backed live validation is required:
 
 ```bash

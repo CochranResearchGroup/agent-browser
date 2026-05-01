@@ -551,6 +551,8 @@ Run `pnpm test:service-status-no-launch` to validate that service status remains
 read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
+Fast CI runs the no-launch HTTP and MCP incident-summary smokes after the Rust
+suite, covering grouped service incident remedies without starting Chrome.
 Run `pnpm test:service-shutdown-faulted-live` to validate that a force-kill
 failure leaves the persisted service browser record `faulted` and escalates the
 incident as possible OS degradation.

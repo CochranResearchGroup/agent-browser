@@ -52,6 +52,11 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
@@ -59,6 +64,11 @@ jobs:
 
       - name: Run Rust tests
         run: scripts/ci/rust-tests.sh
+
+      - name: Run no-launch service smokes
+        run: |
+          node scripts/smoke-service-incident-summary-http.js
+          node scripts/smoke-service-incident-summary-mcp.js
 
   dashboard:
     name: Dashboard
