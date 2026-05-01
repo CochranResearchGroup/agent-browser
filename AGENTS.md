@@ -122,7 +122,7 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 ### CI Cadence
 
-Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, Rust Quality, and Rust. Rust Quality runs Linux format and clippy checks before the Rust unit-test job starts, so style or lint failures fail fast without spending time on the serial unit suite. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
+Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, Rust Quality, and Rust. Rust Quality runs Linux format and clippy checks before the Rust unit-test job starts, so style or lint failures fail fast without spending time on the unit suite. The Rust job uses `scripts/ci/rust-tests.sh` to run parallel-safe tests first, then env-mutating test modules serially in the same job so coverage is preserved without duplicate CI compile work. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
 
 ### Linting and Formatting
 

@@ -58,10 +58,7 @@ jobs:
           workspaces: cli
 
       - name: Run Rust tests
-        # The unit suite mutates process-global environment and user-scoped
-        # state in several legacy tests. Run it serially in CI so release gates
-        # validate behavior instead of test-runner scheduling.
-        run: cargo test --profile ci --manifest-path cli/Cargo.toml -- --test-threads=1
+        run: scripts/ci/rust-tests.sh
 
   dashboard:
     name: Dashboard
