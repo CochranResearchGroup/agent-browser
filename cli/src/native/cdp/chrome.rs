@@ -133,6 +133,12 @@ impl ChromeProcess {
             }
         };
         outcome.force_kill_succeeded = child_kill_ok && process_group_kill_ok && wait_ok;
+        if std::env::var_os("AGENT_BROWSER_TEST_FORCE_KILL_FAILURE").is_some() {
+            outcome.force_kill_succeeded = false;
+            outcome
+                .errors
+                .push("Failed to force kill Chrome process: forced by smoke test".to_string());
+        }
         outcome
     }
 

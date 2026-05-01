@@ -67,6 +67,8 @@ When a queued browser command finds that the active browser has exited or CDP is
 
 Close handling uses two remedies. First, agent-browser attempts a polite browser shutdown. If polite shutdown fails, the browser record is degraded. Then it force kills owned browser processes when needed. If force kill fails, the browser record is faulted and the incident can escalate as possible OS degradation.
 
+Run `pnpm test:service-shutdown-faulted-live` to validate the faulted shutdown path.
+
 ## Service records
 
 The CLI, HTTP API, MCP resources, and dashboard share the same service concepts:
