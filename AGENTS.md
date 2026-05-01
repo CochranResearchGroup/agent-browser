@@ -120,6 +120,10 @@ Runs the ignored e2e suite that launches real headless Chrome instances and exer
 
 The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, navigation, snapshots, screenshots, form interaction, cookies, storage, tabs, element queries, viewport/emulation, domain filtering, diff, state management, error handling, and Phase 8 commands.
 
+### CI Cadence
+
+Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, and Linux Rust format, clippy, and unit tests. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
+
 ### Linting and Formatting
 
 ```bash
