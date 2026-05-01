@@ -62,6 +62,15 @@ fn e2e_temp_home(label: &str) -> std::path::PathBuf {
     path
 }
 
+fn e2e_temp_profile(label: &str) -> (std::path::PathBuf, String) {
+    let path = e2e_temp_home(&format!("{label}-profile"));
+    let profile = path
+        .to_str()
+        .expect("profile dir should be valid utf-8")
+        .to_string();
+    (path, profile)
+}
+
 async fn start_hanging_navigation_server() -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -1215,22 +1224,13 @@ async fn e2e_storage() {
 #[ignore]
 async fn e2e_tabs() {
     let guard = EnvGuard::new(&["AGENT_BROWSER_SESSION"]);
-    let profile_dir = std::env::temp_dir().join(format!(
-        "agent-browser-e2e-tabs-profile-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos()
-    ));
-    std::fs::create_dir_all(&profile_dir).expect("profile dir should be created");
+    let (profile_dir, profile) = e2e_temp_profile("tabs");
     guard.set("AGENT_BROWSER_SESSION", "e2e-tabs");
-    let profile = profile_dir.to_str().expect("profile dir should be utf-8");
 
     let mut state = DaemonState::new();
 
     let resp = execute_command(
-        &json!({ "id": "1", "action": "launch", "headless": true, "profile": profile }),
+        &json!({ "id": "1", "action": "launch", "headless": true, "profile": profile.as_str() }),
         &mut state,
     )
     .await;
@@ -2610,10 +2610,7 @@ async fn e2e_error_handling() {
 #[tokio::test]
 #[ignore]
 async fn e2e_profile_cookie_persistence() {
-    let profile_dir = std::env::temp_dir().join(format!(
-        "agent-browser-e2e-profile-{}",
-        uuid::Uuid::new_v4()
-    ));
+    let (profile_dir, profile) = e2e_temp_profile("cookie-persistence");
 
     // Session 1: launch with profile, set a cookie, close
     {
@@ -2624,7 +2621,7 @@ async fn e2e_profile_cookie_persistence() {
                 "id": "1",
                 "action": "launch",
                 "headless": true,
-                "profile": profile_dir.to_str().unwrap()
+                "profile": profile.as_str()
             }),
             &mut state,
         )
@@ -2678,7 +2675,7 @@ async fn e2e_profile_cookie_persistence() {
                 "id": "10",
                 "action": "launch",
                 "headless": true,
-                "profile": profile_dir.to_str().unwrap()
+                "profile": profile.as_str()
             }),
             &mut state,
         )
@@ -3080,15 +3077,12 @@ async fn e2e_material_checkbox_check_uncheck() {
 #[tokio::test]
 #[ignore]
 async fn e2e_snapshot_cursor_interactive() {
-    let profile_dir = e2e_temp_home("snapshot-cursor-interactive-profile");
-    let profile = profile_dir
-        .to_str()
-        .expect("profile dir should be valid utf-8");
+    let (profile_dir, profile) = e2e_temp_profile("snapshot-cursor-interactive");
 
     let mut state = DaemonState::new();
 
     let resp = execute_command(
-        &json!({ "id": "1", "action": "launch", "headless": true, "profile": profile }),
+        &json!({ "id": "1", "action": "launch", "headless": true, "profile": profile.as_str() }),
         &mut state,
     )
     .await;
@@ -4308,13 +4302,8 @@ async fn e2e_stream_frame_metadata_respects_custom_viewport() {
             .as_nanos()
     ));
     std::fs::create_dir_all(&socket_dir).expect("socket dir should be created");
-    let profile_dir = e2e_temp_home("stream-viewport-profile");
-    guard.set(
-        "AGENT_BROWSER_PROFILE",
-        profile_dir
-            .to_str()
-            .expect("profile dir should be valid utf-8"),
-    );
+    let (profile_dir, profile) = e2e_temp_profile("stream-viewport");
+    guard.set("AGENT_BROWSER_PROFILE", &profile);
     guard.set(
         "AGENT_BROWSER_SOCKET_DIR",
         socket_dir.to_str().expect("socket dir should be utf-8"),
