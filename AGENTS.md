@@ -124,6 +124,14 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, Rust Quality, and Rust. Rust Quality runs Linux format and clippy checks before the Rust unit-test job starts, so style or lint failures fail fast without spending time on the unit suite. The Rust job uses `scripts/ci/rust-tests.sh` with Cargo's default test profile to run parallel-safe tests first, then env-mutating test modules serially in the same job so coverage is preserved without duplicate CI compile work. Set `CARGO_TEST_PROFILE=ci` when intentionally validating the optimized CI profile locally. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
 
+Do not babysit GitHub Actions as part of normal implementation closeout. CI
+evaluation is a separate task and should only include active waiting, log
+analysis, reruns, or further CI tuning when the maintainer explicitly asks for
+CI evaluation or release gating. For ordinary commits, it is acceptable to do
+one lazy status check for a run that should already have completed, then report
+the current state without waiting. If the run is still queued or in progress,
+leave the run URL and move on unless the user asked for active monitoring.
+
 ### Linting and Formatting
 
 ```bash
