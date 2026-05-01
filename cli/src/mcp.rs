@@ -493,7 +493,7 @@ fn initialize_result(params: Option<&Value>) -> Value {
 }
 
 fn service_mcp_tools() -> Vec<Value> {
-    vec![
+    let tools = vec![
         json!({
             "name": "service_job_cancel",
             "title": "Cancel service job",
@@ -1709,7 +1709,63 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": []
             }
         }),
-    ]
+    ];
+    tools
+        .into_iter()
+        .map(with_browser_target_profile_hint_properties)
+        .collect()
+}
+
+fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
+    let is_browser_tool = tool
+        .get("name")
+        .and_then(Value::as_str)
+        .is_some_and(|name| name.starts_with("browser_"));
+    if !is_browser_tool {
+        return tool;
+    }
+    let Some(properties) = tool
+        .get_mut("inputSchema")
+        .and_then(|schema| schema.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+    else {
+        return tool;
+    };
+    if !properties.contains_key("serviceName") {
+        return tool;
+    }
+
+    properties.insert(
+        "targetServiceId".to_string(),
+        json!({
+            "type": "string",
+            "description": "Target site or identity provider for profile selection, for example google, microsoft, or acs."
+        }),
+    );
+    properties.insert(
+        "targetService".to_string(),
+        json!({
+            "type": "string",
+            "description": "Alias for targetServiceId."
+        }),
+    );
+    properties.insert(
+        "targetServiceIds".to_string(),
+        json!({
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Target sites or identity providers for profile selection."
+        }),
+    );
+    properties.insert(
+        "targetServices".to_string(),
+        json!({
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Alias for targetServiceIds."
+        }),
+    );
+    tool
 }
 
 #[derive(Clone, Copy)]
@@ -7021,6 +7077,35 @@ fn optional_string_array_argument(
     required_string_array_argument(arguments, name).map(Some)
 }
 
+fn optional_string_value_array_argument<'a>(
+    arguments: &'a Value,
+    name: &str,
+) -> Result<Option<&'a [Value]>, JsonRpcError> {
+    match arguments.get(name) {
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => {
+            let values = value.as_array().ok_or_else(|| {
+                JsonRpcError::invalid_params(&format!(
+                    "{} must be a non-empty array of strings",
+                    name
+                ))
+            })?;
+            if values.is_empty()
+                || values
+                    .iter()
+                    .any(|value| value.as_str().is_none_or(|value| value.trim().is_empty()))
+            {
+                return Err(JsonRpcError::invalid_params(&format!(
+                    "{} must be a non-empty array of strings",
+                    name
+                )));
+            }
+            Ok(Some(values.as_slice()))
+        }
+        None => Ok(None),
+    }
+}
+
 fn optional_cookie_array_argument(arguments: &Value) -> Result<Option<&[Value]>, JsonRpcError> {
     match arguments.get("cookies") {
         Some(value) if value.is_null() => Ok(None),
@@ -7240,6 +7325,10 @@ struct ServiceToolContext<'a> {
     service_name: Option<&'a str>,
     agent_name: Option<&'a str>,
     task_name: Option<&'a str>,
+    target_service_id: Option<&'a str>,
+    target_service: Option<&'a str>,
+    target_service_ids: Option<&'a [Value]>,
+    target_services: Option<&'a [Value]>,
 }
 
 impl<'a> ServiceToolContext<'a> {
@@ -7249,11 +7338,35 @@ impl<'a> ServiceToolContext<'a> {
             service_name: optional_string_argument(arguments, "serviceName")?,
             agent_name: optional_string_argument(arguments, "agentName")?,
             task_name: optional_string_argument(arguments, "taskName")?,
+            target_service_id: optional_string_argument(arguments, "targetServiceId")?,
+            target_service: optional_string_argument(arguments, "targetService")?,
+            target_service_ids: optional_string_value_array_argument(
+                arguments,
+                "targetServiceIds",
+            )?,
+            target_services: optional_string_value_array_argument(arguments, "targetServices")?,
         })
     }
 
     fn trace(self) -> Value {
-        service_tool_trace(self.service_name, self.agent_name, self.task_name)
+        let mut trace = service_tool_trace(self.service_name, self.agent_name, self.task_name);
+        self.apply_target_profile_hints(&mut trace);
+        trace
+    }
+
+    fn apply_target_profile_hints(self, command: &mut Value) {
+        if let Some(target_service_id) = self.target_service_id {
+            command["targetServiceId"] = json!(target_service_id);
+        }
+        if let Some(target_service) = self.target_service {
+            command["targetService"] = json!(target_service);
+        }
+        if let Some(target_service_ids) = self.target_service_ids {
+            command["targetServiceIds"] = json!(target_service_ids);
+        }
+        if let Some(target_services) = self.target_services {
+            command["targetServices"] = json!(target_services);
+        }
     }
 }
 
@@ -7282,8 +7395,11 @@ fn send_queued_tool_command(
     tool_name: &str,
     session: &str,
     trace: Value,
-    command: Value,
+    mut command: Value,
 ) -> Result<Value, JsonRpcError> {
+    if tool_name.starts_with("browser_") {
+        copy_target_profile_hints(&trace, &mut command);
+    }
     let response = send_command(command, session).map_err(|err| JsonRpcError {
         code: -32603,
         message: "Internal error",
@@ -7297,6 +7413,19 @@ fn send_queued_tool_command(
     Ok(tool_response_from_daemon(
         tool_name, session, trace, response,
     ))
+}
+
+fn copy_target_profile_hints(source: &Value, command: &mut Value) {
+    for key in [
+        "targetServiceId",
+        "targetService",
+        "targetServiceIds",
+        "targetServices",
+    ] {
+        if let Some(value) = source.get(key) {
+            command[key] = value.clone();
+        }
+    }
 }
 
 fn tool_response_from_daemon(
@@ -9198,6 +9327,47 @@ mod tests {
         assert_eq!(trace["serviceName"], "JournalDownloader");
         assert_eq!(trace["agentName"], "agent-a");
         assert_eq!(trace["taskName"], "probeACSwebsite");
+    }
+
+    #[test]
+    fn browser_tool_schemas_include_target_profile_hints() {
+        let tools = service_mcp_tools();
+        let navigate = tools
+            .iter()
+            .find(|tool| tool["name"] == "browser_navigate")
+            .expect("browser_navigate schema should be listed");
+        let service_trace = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_trace")
+            .expect("service_trace schema should be listed");
+
+        assert!(navigate["inputSchema"]["properties"]["targetServiceId"].is_object());
+        assert!(navigate["inputSchema"]["properties"]["targetServiceIds"].is_object());
+        assert!(service_trace["inputSchema"]["properties"]["targetServiceId"].is_null());
+    }
+
+    #[test]
+    fn service_tool_context_copies_target_profile_hints_to_browser_commands() {
+        let arguments = json!({
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "targetServiceId": "google",
+            "targetServices": ["acs", "microsoft"]
+        });
+        let context = ServiceToolContext::from_arguments(&arguments).unwrap();
+        let trace = context.trace();
+        let mut command = json!({
+            "action": "navigate",
+            "url": "https://example.com"
+        });
+
+        copy_target_profile_hints(&trace, &mut command);
+
+        assert_eq!(trace["targetServiceId"], "google");
+        assert_eq!(trace["targetServices"][0], "acs");
+        assert_eq!(command["targetServiceId"], "google");
+        assert_eq!(command["targetServices"][1], "microsoft");
     }
 
     #[test]
