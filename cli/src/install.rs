@@ -246,6 +246,13 @@ fn http_client() -> Result<reqwest::Client, String> {
 }
 
 async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
+    download_bytes_with_retry_backoff(url, true).await
+}
+
+async fn download_bytes_with_retry_backoff(
+    url: &str,
+    wait_between_retries: bool,
+) -> Result<Vec<u8>, String> {
     let client = http_client()?;
     let max_retries = 3;
     let mut last_err = String::new();
@@ -257,7 +264,9 @@ async fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
                 attempt + 1,
                 max_retries
             );
-            tokio::time::sleep(std::time::Duration::from_secs(1 << attempt)).await;
+            if wait_between_retries {
+                tokio::time::sleep(std::time::Duration::from_secs(1 << attempt)).await;
+            }
         }
 
         let resp = match client.get(url).send().await {
@@ -818,7 +827,7 @@ mod tests {
         });
 
         let url = format!("http://127.0.0.1:{}/test.zip", port);
-        let result = download_bytes(&url).await;
+        let result = download_bytes_with_retry_backoff(&url, false).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), body);
         server.await.unwrap();
@@ -835,7 +844,7 @@ mod tests {
         });
 
         let url = format!("http://127.0.0.1:{}/test.zip", port);
-        let result = download_bytes(&url).await;
+        let result = download_bytes_with_retry_backoff(&url, false).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -862,7 +871,7 @@ mod tests {
         });
 
         let url = format!("http://127.0.0.1:{}/test.zip", port);
-        let result = download_bytes(&url).await;
+        let result = download_bytes_with_retry_backoff(&url, false).await;
         assert!(
             result.is_ok(),
             "expected success after retries: {:?}",
@@ -886,7 +895,7 @@ mod tests {
         });
 
         let url = format!("http://127.0.0.1:{}/test.zip", port);
-        let result = download_bytes(&url).await;
+        let result = download_bytes_with_retry_backoff(&url, false).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -909,7 +918,7 @@ mod tests {
         });
 
         let url = format!("http://127.0.0.1:{}/test.zip", port);
-        let result = download_bytes(&url).await;
+        let result = download_bytes_with_retry_backoff(&url, false).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("HTTP 403"));
         server.await.unwrap();
@@ -941,12 +950,17 @@ mod tests {
 
     #[test]
     fn download_bytes_connection_refused_includes_details() {
-        // Use a port that nothing is listening on
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
-        let result = rt.block_on(download_bytes("http://127.0.0.1:1/test.zip"));
+        let url = rt.block_on(async {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            drop(listener);
+            format!("http://127.0.0.1:{}/test.zip", port)
+        });
+        let result = rt.block_on(download_bytes_with_retry_backoff(&url, false));
         assert!(result.is_err());
         let err = result.unwrap_err();
         // The new code should include a network-level connection failure cause
