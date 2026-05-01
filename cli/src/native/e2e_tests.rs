@@ -6,6 +6,12 @@
 //!
 //! Run serially to avoid Chrome instance contention:
 //!   cargo test e2e -- --ignored --test-threads=1
+//!
+//! Keep these tests isolated from the default runtime profile. The CI job sets
+//! AGENT_BROWSER_PROFILE to a runner-local temp profile for the whole suite.
+//! Tests that need a specific profile should use e2e_temp_profile() and remove
+//! the directory during cleanup. Do not let tests depend on or mutate
+//! ~/.agent-browser/runtime-profiles/default/user-data.
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use futures_util::StreamExt;

@@ -111,11 +111,12 @@ Runs all unit tests (~320 tests). These are fast and don't require Chrome.
 cd cli && cargo test e2e -- --ignored --test-threads=1
 ```
 
-Runs 18 e2e tests that launch real headless Chrome instances and exercise the full native daemon command pipeline. Requirements:
+Runs the ignored e2e suite that launches real headless Chrome instances and exercises the full native daemon command pipeline. Requirements:
 
 - Chrome must be installed
 - Must run serially (`--test-threads=1`) to avoid Chrome instance contention
 - Tests are `#[ignore]`'d so they don't run during normal `cargo test`
+- E2E tests must not depend on or mutate the default runtime profile at `~/.agent-browser/runtime-profiles/default/user-data`. The CI job sets `AGENT_BROWSER_PROFILE` to a runner-local temp profile for the whole suite. Tests that need a dedicated profile should use `e2e_temp_profile()` and clean it up.
 
 The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, navigation, snapshots, screenshots, form interaction, cookies, storage, tabs, element queries, viewport/emulation, domain filtering, diff, state management, error handling, and Phase 8 commands.
 
