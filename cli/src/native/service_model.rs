@@ -312,6 +312,8 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
             "name",
             "userDataDir",
             "sitePolicyIds",
+            "targetServiceIds",
+            "authenticatedServiceIds",
             "defaultBrowserHost",
             "allocation",
             "keyring",
@@ -324,6 +326,8 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
         &[
             "user_data_dir",
             "site_policy_ids",
+            "target_service_ids",
+            "authenticated_service_ids",
             "default_browser_host",
             "shared_service_ids",
             "credential_provider_ids",
@@ -336,6 +340,8 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
     assert!(SERVICE_PROFILE_ALLOCATION_VALUES.contains(&value["allocation"].as_str().unwrap()));
     assert!(SERVICE_PROFILE_KEYRING_VALUES.contains(&value["keyring"].as_str().unwrap()));
     assert!(value["sitePolicyIds"].is_array());
+    assert!(value["targetServiceIds"].is_array());
+    assert!(value["authenticatedServiceIds"].is_array());
     assert!(value["sharedServiceIds"].is_array());
     assert!(value["credentialProviderIds"].is_array());
     assert!(value["tags"].is_array());
@@ -1692,6 +1698,16 @@ pub struct BrowserProfile {
     pub name: String,
     pub user_data_dir: Option<String>,
     pub site_policy_ids: Vec<String>,
+    /// Target sites or identity providers this profile is intended to satisfy.
+    ///
+    /// Examples include google, microsoft, acs, and publisher-specific login
+    /// systems. These are not caller service names; they describe stored
+    /// credential or login-state scope.
+    pub target_service_ids: Vec<String>,
+    /// Target services currently believed to have usable authenticated state.
+    ///
+    /// This is advisory until active auth probes can refresh it.
+    pub authenticated_service_ids: Vec<String>,
     pub default_browser_host: Option<BrowserHost>,
     pub allocation: ProfileAllocationPolicy,
     pub keyring: ProfileKeyringPolicy,
@@ -2977,6 +2993,8 @@ mod tests {
             "name": "Journal Downloader",
             "userDataDir": null,
             "sitePolicyIds": [],
+            "targetServiceIds": ["acs"],
+            "authenticatedServiceIds": [],
             "defaultBrowserHost": null,
             "allocation": "per_service",
             "keyring": "basic_password_store",
@@ -3522,6 +3540,8 @@ mod tests {
                     name: "Work".to_string(),
                     allocation: ProfileAllocationPolicy::PerService,
                     keyring: ProfileKeyringPolicy::ManualLoginProfile,
+                    target_service_ids: vec!["google".to_string(), "acs".to_string()],
+                    authenticated_service_ids: vec!["google".to_string()],
                     shared_service_ids: vec!["JournalDownloader".to_string()],
                     credential_provider_ids: vec!["keepassxc".to_string()],
                     manual_login_preferred: true,

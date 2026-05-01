@@ -116,6 +116,8 @@ try {
     allocation: 'per_service',
     keyring: 'basic_password_store',
     persistent: true,
+    targetServiceIds: ['acs'],
+    authenticatedServiceIds: ['acs'],
     sharedServiceIds: [serviceName],
   });
   assert(httpProfile.success === true, `HTTP profile upsert failed: ${JSON.stringify(httpProfile)}`);
@@ -168,6 +170,8 @@ try {
       (profile) =>
         profile.id === 'journal-downloader' &&
         profile.allocation === 'per_service' &&
+        profile.targetServiceIds?.includes('acs') &&
+        profile.authenticatedServiceIds?.includes('acs') &&
         profile.sharedServiceIds?.includes(serviceName),
     ),
     `MCP profiles resource did not include HTTP-upserted profile: ${JSON.stringify(mcpProfiles)}`,

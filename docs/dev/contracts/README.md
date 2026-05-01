@@ -133,6 +133,12 @@ may list at most one `sharedServiceIds` entry. Session mutation inputs infer
 to reference a persisted profile, and enforce profile `sharedServiceIds`
 allow-lists.
 
+Profile records separate caller ownership from target login scope.
+`sharedServiceIds` names caller services allowed to use the profile,
+`targetServiceIds` names target sites or identity providers whose credentials
+or login state should live in the profile, and `authenticatedServiceIds` names
+targets currently believed to have usable authenticated state.
+
 The operator remedy mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:
 

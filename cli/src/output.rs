@@ -576,13 +576,37 @@ fn format_service_profile_line(profile: &serde_json::Value) -> String {
         })
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "none".to_string());
+    let targets = profile
+        .get("targetServiceIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+    let authenticated = profile
+        .get("authenticatedServiceIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
     let user_data = profile
         .get("userDataDir")
         .and_then(|value| value.as_str())
         .unwrap_or("none");
 
     format!(
-        "{id} name={name} allocation={allocation} keyring={keyring} persistent={persistent} manual_login={manual_login} services={services} user_data={user_data}"
+        "{id} name={name} allocation={allocation} keyring={keyring} persistent={persistent} manual_login={manual_login} services={services} targets={targets} authenticated={authenticated} user_data={user_data}"
     )
 }
 
@@ -3556,6 +3580,7 @@ Notes:
   - service_trace reads persisted service state and returns related events, jobs, incidents, activity, and ownership summary contexts and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, and since filters as CLI and HTTP.
   - service_profile_upsert, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
+  - Service profile records distinguish caller service sharing from target-service login scope: sharedServiceIds lists allowed caller services, targetServiceIds lists intended login targets, and authenticatedServiceIds lists targets currently believed authenticated.
   - Profile mutations reject caller_supplied profiles without userDataDir and per_service profiles with more than one sharedServiceIds entry.
   - Session mutations infer owner from agentName, then serviceName, when owner is omitted; profileId must reference a persisted profile, and profile sharedServiceIds allow-lists are enforced.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
@@ -4470,6 +4495,8 @@ mod tests {
                         "persistent": true,
                         "manualLoginPreferred": false,
                         "sharedServiceIds": ["JournalDownloader"],
+                        "targetServiceIds": ["acs"],
+                        "authenticatedServiceIds": ["acs"],
                         "userDataDir": "/tmp/work-profile"
                     }
                 },
@@ -4501,7 +4528,7 @@ mod tests {
         );
         assert!(rendered.contains("Profiles: 1"));
         assert!(rendered.contains(
-            "work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader user_data=/tmp/work-profile"
+            "work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs user_data=/tmp/work-profile"
         ));
         assert!(rendered.contains("Sessions: 1"));
         assert!(rendered.contains(
@@ -4570,6 +4597,8 @@ mod tests {
                 "persistent": true,
                 "manualLoginPreferred": false,
                 "sharedServiceIds": ["JournalDownloader"],
+                "targetServiceIds": ["acs"],
+                "authenticatedServiceIds": ["acs"],
                 "userDataDir": "/tmp/work-profile"
             }]
         });
@@ -4578,7 +4607,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader user_data=/tmp/work-profile"
+            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs user_data=/tmp/work-profile"
         );
     }
 

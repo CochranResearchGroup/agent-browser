@@ -9,6 +9,8 @@
     "name",
     "userDataDir",
     "sitePolicyIds",
+    "targetServiceIds",
+    "authenticatedServiceIds",
     "defaultBrowserHost",
     "allocation",
     "keyring",
@@ -29,6 +31,18 @@
       "type": ["string", "null"]
     },
     "sitePolicyIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "targetServiceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "authenticatedServiceIds": {
       "type": "array",
       "items": {
         "type": "string"

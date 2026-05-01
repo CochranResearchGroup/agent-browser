@@ -501,6 +501,8 @@ stable per-profile defaults and service-specific login hints.
         "name": "Work",
         "allocation": "per_service",
         "keyring": "basic_password_store",
+        "targetServiceIds": ["google", "acs"],
+        "authenticatedServiceIds": ["google"],
         "sharedServiceIds": ["JournalDownloader"],
         "manualLoginPreferred": true
       }
@@ -538,9 +540,14 @@ launch behavior still comes from `runtimeProfiles`, `--runtime-profile`,
 `--profile`, and existing launch flags. Launches that select a runtime profile
 or custom profile path now bind the active browser record to a service profile.
 When commands include `serviceName`, `agentName`, or `taskName`, the active
-session record also captures that caller context for traceability. Config
-mutations enforce profile/session ownership policy: `caller_supplied` profiles
-must include `userDataDir`, `per_service` profiles may list at most one
+session record also captures that caller context for traceability. Profile
+selection should prefer a profile with credentials and usable auth state for
+the target site or identity provider, not merely the profile owned by the
+calling service. Use `targetServiceIds` to record intended target services such
+as `google`, `microsoft`, or `acs`, and `authenticatedServiceIds` for target
+services currently believed to have usable login state. Config mutations
+enforce profile/session ownership policy: `caller_supplied` profiles must
+include `userDataDir`, `per_service` profiles may list at most one
 `sharedServiceIds` entry, session `profileId` must reference a persisted
 profile, and omitted session `owner` values are inferred from `agentName` or
 `serviceName`.
@@ -1395,7 +1402,7 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/browser/focus" -H "content-type
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/clear" -H "content-type: application/json" -d '{"selector":"#query"}'
 curl "http://127.0.0.1:<stream-port>/api/service/status"
 curl "http://127.0.0.1:<stream-port>/api/service/profiles"
-curl -X POST "http://127.0.0.1:<stream-port>/api/service/profiles/journal-downloader" -H "content-type: application/json" -d '{"name":"Journal Downloader","allocation":"per_service","keyring":"basic_password_store","persistent":true,"sharedServiceIds":["JournalDownloader"]}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/profiles/journal-downloader" -H "content-type: application/json" -d '{"name":"Journal Downloader","allocation":"per_service","keyring":"basic_password_store","persistent":true,"targetServiceIds":["acs"],"authenticatedServiceIds":["acs"],"sharedServiceIds":["JournalDownloader"]}'
 curl -X DELETE "http://127.0.0.1:<stream-port>/api/service/profiles/journal-downloader"
 curl "http://127.0.0.1:<stream-port>/api/service/sessions"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/sessions/journal-run" -H "content-type: application/json" -d '{"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","profileId":"journal-downloader","lease":"exclusive","cleanup":"close_browser"}'

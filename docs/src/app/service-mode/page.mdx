@@ -53,10 +53,11 @@ Runtime profiles are the safest default for recurring automation because they ke
 
 - Use one shared profile when several tasks intentionally operate as the same browser identity.
 - Use a service-specific profile when a service needs durable login state but should not share cookies or extensions with unrelated services.
+- Prefer the profile that has credentials and usable auth state for the target site or identity provider.
 - Use a separate browser process when profile isolation, keyring behavior, extension state, or resource ownership matters more than process count.
 - Use a custom `--profile <path>` only when an external profile directory is part of the contract.
 
-Configured service profiles and sessions can describe ownership, lease behavior, cleanup policy, keyring posture, browser linkage, and caller labels. Profile writes reject `caller_supplied` records without `userDataDir` and `per_service` records with multiple `sharedServiceIds` values. Session writes infer `owner` from `agentName`, then `serviceName`, when omitted; `profileId` must reference a persisted profile, and profile `sharedServiceIds` allow-lists are enforced. Current browser launch behavior still comes from `runtimeProfiles`, `--runtime-profile`, `--profile`, and the normal launch flags.
+Configured service profiles and sessions can describe ownership, lease behavior, cleanup policy, keyring posture, browser linkage, caller labels, intended target services, and currently believed authenticated target services. `targetServiceIds` records target sites or identity providers such as `google`, `microsoft`, or `acs`; `authenticatedServiceIds` records targets currently believed to have usable login state. Profile writes reject `caller_supplied` records without `userDataDir` and `per_service` records with multiple `sharedServiceIds` values. Session writes infer `owner` from `agentName`, then `serviceName`, when omitted; `profileId` must reference a persisted profile, and profile `sharedServiceIds` allow-lists are enforced. Current browser launch behavior still comes from `runtimeProfiles`, `--runtime-profile`, `--profile`, and the normal launch flags.
 
 ## Browser health and recovery
 
