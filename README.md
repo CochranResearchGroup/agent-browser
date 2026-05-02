@@ -553,6 +553,9 @@ Run `pnpm test:service-request-live` to validate that HTTP
 actions with profile hints and retained job metadata.
 Run `pnpm test:service-status-no-launch` to validate that service status remains
 read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
+Run `pnpm test:service-contracts-no-launch` to validate that HTTP
+`/api/service/contracts` returns compatibility metadata without launching or
+recording a browser.
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
 Fast CI runs the no-launch HTTP and MCP incident-summary smokes after the Rust
