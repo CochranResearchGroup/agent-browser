@@ -558,11 +558,13 @@ Run `pnpm test:service-contracts-no-launch` to validate that HTTP
 recording a browser.
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
-Fast CI runs the no-launch HTTP and MCP incident-summary smokes after the Rust
-suite, covering grouped service incident remedies without starting Chrome. Run
-both smokes before changing incident summary grouping or filters; together they
-guard HTTP `summary=true` and MCP `service_incidents` with `summary: true`
-across state, severity, escalation, handling-state, browser, profile, session,
+Fast CI runs the no-launch service contract metadata smoke and the no-launch
+HTTP and MCP incident-summary smokes after the Rust suite, covering service
+contract metadata and grouped service incident remedies without starting
+Chrome. Run both incident-summary smokes before changing incident summary
+grouping or filters; together they guard HTTP `summary=true` and MCP
+`service_incidents` with `summary: true` across state, severity, escalation,
+handling-state, browser, profile, session,
 service, agent, task, and since filters.
 Run `pnpm test:service-shutdown-faulted-live` to validate that a force-kill
 failure leaves the persisted service browser record `faulted` and escalates the

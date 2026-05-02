@@ -67,6 +67,7 @@ jobs:
 
       - name: Run no-launch service smokes
         run: |
+          node scripts/smoke-service-contracts-no-launch.js
           node scripts/smoke-service-incident-summary-http.js
           node scripts/smoke-service-incident-summary-mcp.js
 
