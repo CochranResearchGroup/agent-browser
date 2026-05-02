@@ -59,13 +59,13 @@ use super::service_incidents::{
 };
 use super::service_jobs::cancel_persisted_service_job;
 use super::service_lifecycle::{
-    select_service_profile_for_request, service_profile_id, ProfileSelectionRequest,
-    ServiceLaunchMetadata,
+    profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
+    ProfileSelectionRequest, ServiceLaunchMetadata,
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
-    JobState as ServiceJobState, ProfileKeyringPolicy, ProfileSelectionReason, ServiceEvent,
-    ServiceEventKind, ServiceState, SessionCleanupPolicy,
+    JobState as ServiceJobState, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
@@ -588,6 +588,60 @@ fn persist_current_browser_health(
         None,
         metadata,
     );
+}
+
+/// Enforces service-owned profile leases before Chrome starts.
+///
+/// The current scheduling contract is deterministic rejection for another
+/// active exclusive holder. The same retained session may still reuse its
+/// browser, and non-service launches keep the existing direct-control behavior.
+fn ensure_service_profile_lease_available(
+    metadata: &ServiceLaunchMetadata,
+    session_id: &str,
+) -> Result<(), String> {
+    if metadata.service_name.is_none() {
+        return Ok(());
+    }
+    let Some(profile_id) = metadata.profile_id.as_deref() else {
+        return Ok(());
+    };
+    let repository = match LockedServiceStateRepository::default_json() {
+        Ok(repository) => repository,
+        Err(_) => return Ok(()),
+    };
+    let service_state = match repository.load_snapshot() {
+        Ok(service_state) => service_state,
+        Err(_) => return Ok(()),
+    };
+    ensure_service_profile_lease_available_in_state(
+        &service_state,
+        metadata,
+        session_id,
+        profile_id,
+    )
+}
+
+fn ensure_service_profile_lease_available_in_state(
+    service_state: &ServiceState,
+    metadata: &ServiceLaunchMetadata,
+    session_id: &str,
+    profile_id: &str,
+) -> Result<(), String> {
+    let lease_telemetry = profile_lease_telemetry(service_state, session_id, profile_id);
+    if lease_telemetry.disposition != ProfileLeaseDisposition::ActiveLeaseConflict {
+        return Ok(());
+    }
+
+    let service_label = metadata
+        .service_name
+        .as_deref()
+        .unwrap_or("unknown service");
+    Err(format!(
+        "Service profile lease conflict for profile '{}': service '{}' cannot launch while exclusive session(s) {} already hold the profile. Retry after those sessions release the profile or request a different profile.",
+        profile_id,
+        service_label,
+        lease_telemetry.conflict_session_ids.join(", ")
+    ))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2421,6 +2475,7 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
     let selection_reason = apply_service_profile_selection(&mut options, command);
     let metadata =
         ServiceLaunchMetadata::from_launch_options(&options, Some(command), selection_reason);
+    ensure_service_profile_lease_available(&metadata, &state.session_id)?;
 
     // Store proxy credentials for Fetch.authRequired handling
     let has_proxy_auth = options.proxy_username.is_some();
@@ -2760,6 +2815,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
     let metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
+    ensure_service_profile_lease_available(&metadata, &state.session_id)?;
 
     let new_hash = launch_hash(&launch_options);
 
@@ -10024,7 +10080,7 @@ mod tests {
         assert_service_site_policy_upsert_response_contract,
         assert_service_status_response_contract, assert_service_trace_activity_record_contract,
         assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
-        service_job_naming_warning_values, BrowserProcess, BrowserProfile,
+        service_job_naming_warning_values, BrowserProcess, BrowserProfile, BrowserSession,
     };
     use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -10166,6 +10222,74 @@ mod tests {
         assert!(selected.is_none());
         assert_eq!(options.profile.as_deref(), Some("/tmp/explicit-profile"));
         assert!(options.runtime_profile.is_none());
+    }
+
+    #[test]
+    fn test_service_profile_lease_guard_rejects_conflicting_service_launch() {
+        let mut service_state = ServiceState::default();
+        service_state.sessions.insert(
+            "active-session".to_string(),
+            BrowserSession {
+                id: "active-session".to_string(),
+                profile_id: Some("acs-profile".to_string()),
+                lease: LeaseState::Exclusive,
+                ..BrowserSession::default()
+            },
+        );
+        let metadata = ServiceLaunchMetadata {
+            profile_id: Some("acs-profile".to_string()),
+            service_name: Some("JournalDownloader".to_string()),
+            ..ServiceLaunchMetadata::default()
+        };
+
+        let err = ensure_service_profile_lease_available_in_state(
+            &service_state,
+            &metadata,
+            "new-session",
+            "acs-profile",
+        )
+        .unwrap_err();
+
+        assert!(err.contains("Service profile lease conflict"));
+        assert!(err.contains("active-session"));
+    }
+
+    #[test]
+    fn test_service_profile_lease_guard_allows_same_session_reuse() {
+        let service_state = ServiceState {
+            sessions: BTreeMap::from([(
+                "active-session".to_string(),
+                BrowserSession {
+                    id: "active-session".to_string(),
+                    profile_id: Some("acs-profile".to_string()),
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "session:active-session".to_string(),
+                BrowserProcess {
+                    id: "session:active-session".to_string(),
+                    profile_id: Some("acs-profile".to_string()),
+                    active_session_ids: vec!["active-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let metadata = ServiceLaunchMetadata {
+            profile_id: Some("acs-profile".to_string()),
+            service_name: Some("JournalDownloader".to_string()),
+            ..ServiceLaunchMetadata::default()
+        };
+
+        ensure_service_profile_lease_available_in_state(
+            &service_state,
+            &metadata,
+            "active-session",
+            "acs-profile",
+        )
+        .expect("same session should be able to reuse its retained browser");
     }
 
     #[test]

@@ -4,9 +4,9 @@
 //! model, while command parsing and browser process control remain in actions.
 
 use super::service_model::{
-    BrowserProcess, BrowserProfile, BrowserSession, LeaseState, ProfileAllocationPolicy,
-    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason, ServiceActor,
-    ServiceState, SessionCleanupPolicy,
+    BrowserProfile, BrowserSession, LeaseState, ProfileAllocationPolicy, ProfileKeyringPolicy,
+    ProfileLeaseDisposition, ProfileSelectionReason, ServiceActor, ServiceState,
+    SessionCleanupPolicy,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -168,12 +168,12 @@ pub(crate) fn upsert_service_profile_and_session(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ProfileLeaseTelemetry {
-    disposition: ProfileLeaseDisposition,
-    conflict_session_ids: Vec<String>,
+pub(crate) struct ProfileLeaseTelemetry {
+    pub(crate) disposition: ProfileLeaseDisposition,
+    pub(crate) conflict_session_ids: Vec<String>,
 }
 
-fn profile_lease_telemetry(
+pub(crate) fn profile_lease_telemetry(
     service_state: &ServiceState,
     session_id: &str,
     profile_id: &str,
@@ -193,12 +193,12 @@ fn profile_lease_telemetry(
     let mut conflict_session_ids = service_state
         .sessions
         .iter()
-        .filter_map(|(candidate_id, session)| {
-            (candidate_id != session_id
+        .filter(|(candidate_id, session)| {
+            candidate_id.as_str() != session_id
                 && session.profile_id.as_deref() == Some(profile_id)
-                && session.lease == LeaseState::Exclusive)
-                .then(|| candidate_id.clone())
+                && session.lease == LeaseState::Exclusive
         })
+        .map(|(candidate_id, _)| candidate_id.clone())
         .collect::<Vec<_>>();
     conflict_session_ids.sort();
     conflict_session_ids.dedup();
@@ -312,6 +312,7 @@ fn stable_short_hash(value: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_model::BrowserProcess;
 
     #[test]
     fn test_service_profile_id_prefers_runtime_profile() {
