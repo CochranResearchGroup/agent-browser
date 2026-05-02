@@ -15,6 +15,13 @@ pnpm --filter agent-browser-service-client-example dry-run
 The dry run validates imports and prints the request and trace query without
 contacting a running agent-browser service.
 
+The repo-level live smoke validates the same example against an isolated
+daemon and browser session:
+
+```bash
+pnpm test:service-client-example-live
+```
+
 ## Live Run
 
 Start or identify an agent-browser stream port, then pass it as the base URL:

@@ -95,7 +95,7 @@ The HTTP service request object follows <code>docs/dev/contracts/service-request
 
 Read-side software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service jobs, events, incidents, incident activity, and trace responses.
 
-The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It sends a service request, reads <code>getServiceTrace</code>, and has a dry-run check through <code>pnpm test:service-client-example</code>.
+The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It sends a service request, reads <code>getServiceTrace</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>.
 
 ## Operator request model
 
