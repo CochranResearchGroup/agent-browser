@@ -309,6 +309,101 @@ export interface ServicePermissionsData {
   granted: string[];
 }
 
+export interface ServiceCookieRecord {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires?: number;
+  size?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  session?: boolean;
+  sameSite?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceCookiesData {
+  cookies: ServiceCookieRecord[];
+}
+
+export interface ServiceClearedData {
+  cleared: true;
+}
+
+export type ServiceStorageGetData =
+  | { key: string; value: unknown }
+  | { data: Record<string, unknown> };
+
+export interface ServiceConsoleMessage {
+  type: string;
+  text: string;
+  args?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface ServiceConsoleData {
+  messages: ServiceConsoleMessage[];
+}
+
+export interface ServiceErrorEntry {
+  text: string;
+  url?: string | null;
+  line?: number | null;
+  column?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceErrorsData {
+  errors: ServiceErrorEntry[];
+}
+
+export interface ServicePathData {
+  path: string;
+}
+
+export interface ServiceResponseBodyData {
+  body: string;
+  status: number;
+  headers: Record<string, unknown>;
+}
+
+export interface ServiceHarStartData {
+  started: true;
+}
+
+export interface ServiceHarStopData {
+  path: string;
+  requestCount: number;
+}
+
+export interface ServiceRouteData {
+  routed: string;
+}
+
+export interface ServiceUnrouteData {
+  unrouted: string;
+}
+
+export interface ServiceTrackedRequest {
+  url: string;
+  method: string;
+  headers: Record<string, unknown>;
+  timestamp: number;
+  resourceType: string;
+  requestId: string;
+  postData?: string;
+  status?: number;
+  responseHeaders?: Record<string, unknown>;
+  mimeType?: string;
+  responseBody?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceRequestsData {
+  requests: ServiceTrackedRequest[];
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   tab_new: ServiceTabNewData;
@@ -350,6 +445,24 @@ export interface ServiceRequestActionDataMap {
   geolocation: ServiceGeolocationData;
   permissions: ServicePermissionsData;
   emulatemedia: ServiceSetData;
+  cookies_get: ServiceCookiesData;
+  cookies_set: ServiceSetData;
+  cookies_clear: ServiceClearedData;
+  storage_get: ServiceStorageGetData;
+  storage_set: ServiceSetData;
+  storage_clear: ServiceClearedData;
+  console: ServiceConsoleData | ServiceClearedData;
+  errors: ServiceErrorsData;
+  download: ServicePathData;
+  waitfordownload: ServicePathData;
+  pdf: ServicePathData;
+  responsebody: ServiceResponseBodyData;
+  har_start: ServiceHarStartData;
+  har_stop: ServiceHarStopData;
+  route: ServiceRouteData;
+  unroute: ServiceUnrouteData;
+  requests: ServiceRequestsData | ServiceClearedData;
+  request_detail: ServiceTrackedRequest;
 }
 
 export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =

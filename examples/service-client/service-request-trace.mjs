@@ -152,11 +152,24 @@ export async function runServiceWorkflow({
       jobTimeoutMs: 30000,
     }),
   });
+  const consoleResult = await postServiceRequest({
+    baseUrl,
+    request: createServiceRequest({
+      serviceName,
+      agentName,
+      taskName,
+      siteId,
+      loginId,
+      action: 'console',
+      jobTimeoutMs: 30000,
+    }),
+  });
   const cancelResult = cancelJobId ? await cancelServiceJob({ baseUrl, jobId: cancelJobId }) : null;
   const trace = await getServiceTrace({
     baseUrl,
     query: { serviceName, agentName, taskName, limit: 50 },
   });
+  const consoleMessageCount = countConsoleMessages(consoleResult.data);
 
   return {
     dryRun: false,
@@ -169,10 +182,12 @@ export async function runServiceWorkflow({
       waitKind: waitResult.data?.waited,
       viewportWidth: viewportResult.data?.width,
       viewportHeight: viewportResult.data?.height,
+      consoleMessages: consoleMessageCount,
     },
     titleResult,
     waitResult,
     viewportResult,
+    consoleResult,
     cancelResult,
     traceSummary: {
       events: trace.counts.events,
@@ -189,6 +204,16 @@ export async function runServiceWorkflow({
       taskName: job.taskName,
     })),
   };
+}
+
+/**
+ * @param {import('@agent-browser/client/service-request').ServiceRequestDataForAction<'console'> | undefined} data
+ */
+function countConsoleMessages(data) {
+  if (!data || !('messages' in data) || !Array.isArray(data.messages)) {
+    return 0;
+  }
+  return data.messages.length;
 }
 
 /**

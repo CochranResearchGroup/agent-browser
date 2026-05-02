@@ -1552,8 +1552,9 @@ and `requestServiceTab` return `ServiceRequestResponse`, the standard service
 command envelope with `success`, optional `data`, optional `error`, optional
 `warning`, and action-specific fields. Literal requests for navigation, tabs,
 snapshots, screenshots, URL and title reads, element text/value/state reads,
-attributes, HTML, styles, counts, bounding boxes, common interactions, and
-browser environment controls get typed `data` shapes through
+attributes, HTML, styles, counts, bounding boxes, common interactions, browser
+environment controls, network/storage reads, and artifact commands get typed
+`data` shapes through
 `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new`
 data. Use `pnpm test:service-client-contract`,
 `pnpm test:service-client-types`, `pnpm test:service-client-exports`,
