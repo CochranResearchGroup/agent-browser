@@ -538,7 +538,8 @@ binding, lease state, and cleanup policy. These records are exposed through
 service status, MCP resources, and the HTTP service APIs. Explicit
 `--runtime-profile` and `--profile` values still win. When a launch command omits
 both, `serviceName` plus `targetServiceId`, `targetService`, `targetServiceIds`,
-or `targetServices` lets agent-browser choose a persisted service profile. The
+`targetServices`, `siteId`, `siteIds`, `loginId`, or `loginIds` lets
+agent-browser choose a persisted service profile. The
 selector first prefers `authenticatedServiceIds` matches, then
 `targetServiceIds` matches, then the caller `sharedServiceIds` match. Launches
 that select a runtime profile or custom profile path now bind the active browser
@@ -566,7 +567,9 @@ selection should prefer a profile with credentials and usable auth state for
 the target site or identity provider, not merely the profile owned by the
 calling service. Use `targetServiceIds` to record intended target services such
 as `google`, `microsoft`, or `acs`, and `authenticatedServiceIds` for target
-services currently believed to have usable login state. Config mutations
+services currently believed to have usable login state. Request payloads can
+use `siteId` or `loginId` as caller-facing aliases when that matches the
+operator's vocabulary better than target service. Config mutations
 enforce profile/session ownership policy: `caller_supplied` profiles must
 include `userDataDir`, `per_service` profiles may list at most one
 `sharedServiceIds` entry, session `profileId` must reference a persisted

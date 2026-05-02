@@ -371,12 +371,28 @@ fn launch_profile_from_sources(cmd: &Value) -> Option<String> {
 
 fn target_service_ids_from_command(cmd: &Value) -> Vec<String> {
     let mut values = Vec::new();
-    for key in ["targetServiceId", "targetService", "target_service_id"] {
+    for key in [
+        "targetServiceId",
+        "targetService",
+        "siteId",
+        "loginId",
+        "target_service_id",
+        "site_id",
+        "login_id",
+    ] {
         if let Some(value) = cmd.get(key).and_then(|value| value.as_str()) {
             merge_target_service_id(&mut values, value);
         }
     }
-    for key in ["targetServiceIds", "targetServices", "target_service_ids"] {
+    for key in [
+        "targetServiceIds",
+        "targetServices",
+        "siteIds",
+        "loginIds",
+        "target_service_ids",
+        "site_ids",
+        "login_ids",
+    ] {
         if let Some(raw_values) = cmd.get(key).and_then(|value| value.as_array()) {
             for value in raw_values.iter().filter_map(|value| value.as_str()) {
                 merge_target_service_id(&mut values, value);
@@ -10008,14 +10024,20 @@ mod tests {
         let command = json!({
             "targetServiceId": "google",
             "targetServices": ["acs", " google ", "", 7],
-            "target_service_ids": ["microsoft"]
+            "siteId": "nih",
+            "loginIds": ["orcid", "acs"],
+            "target_service_ids": ["microsoft"],
+            "login_id": "era"
         });
 
         assert_eq!(
             target_service_ids_from_command(&command),
             vec![
                 "google".to_string(),
+                "nih".to_string(),
+                "era".to_string(),
                 "acs".to_string(),
+                "orcid".to_string(),
                 "microsoft".to_string()
             ]
         );

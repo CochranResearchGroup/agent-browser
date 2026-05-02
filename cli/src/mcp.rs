@@ -1771,6 +1771,36 @@ fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
             "description": "Alias for targetServiceIds."
         }),
     );
+    properties.insert(
+        "siteId".to_string(),
+        json!({
+            "type": "string",
+            "description": "Site identifier alias for targetServiceId, for example google, microsoft, or acs."
+        }),
+    );
+    properties.insert(
+        "loginId".to_string(),
+        json!({
+            "type": "string",
+            "description": "Login identity alias for targetServiceId when the caller thinks in credential or SSO scope."
+        }),
+    );
+    properties.insert(
+        "siteIds".to_string(),
+        json!({
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Site identifier aliases for targetServiceIds."
+        }),
+    );
+    properties.insert(
+        "loginIds".to_string(),
+        json!({
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Login identity aliases for targetServiceIds."
+        }),
+    );
     tool
 }
 
@@ -7344,6 +7374,10 @@ struct ServiceToolContext<'a> {
     target_service: Option<&'a str>,
     target_service_ids: Option<&'a [Value]>,
     target_services: Option<&'a [Value]>,
+    site_id: Option<&'a str>,
+    login_id: Option<&'a str>,
+    site_ids: Option<&'a [Value]>,
+    login_ids: Option<&'a [Value]>,
 }
 
 impl<'a> ServiceToolContext<'a> {
@@ -7360,6 +7394,10 @@ impl<'a> ServiceToolContext<'a> {
                 "targetServiceIds",
             )?,
             target_services: optional_string_value_array_argument(arguments, "targetServices")?,
+            site_id: optional_string_argument(arguments, "siteId")?,
+            login_id: optional_string_argument(arguments, "loginId")?,
+            site_ids: optional_string_value_array_argument(arguments, "siteIds")?,
+            login_ids: optional_string_value_array_argument(arguments, "loginIds")?,
         })
     }
 
@@ -7381,6 +7419,18 @@ impl<'a> ServiceToolContext<'a> {
         }
         if let Some(target_services) = self.target_services {
             command["targetServices"] = json!(target_services);
+        }
+        if let Some(site_id) = self.site_id {
+            command["siteId"] = json!(site_id);
+        }
+        if let Some(login_id) = self.login_id {
+            command["loginId"] = json!(login_id);
+        }
+        if let Some(site_ids) = self.site_ids {
+            command["siteIds"] = json!(site_ids);
+        }
+        if let Some(login_ids) = self.login_ids {
+            command["loginIds"] = json!(login_ids);
         }
     }
 }
@@ -7436,6 +7486,10 @@ fn copy_target_profile_hints(source: &Value, command: &mut Value) {
         "targetService",
         "targetServiceIds",
         "targetServices",
+        "siteId",
+        "loginId",
+        "siteIds",
+        "loginIds",
     ] {
         if let Some(value) = source.get(key) {
             command[key] = value.clone();
@@ -9375,7 +9429,10 @@ mod tests {
 
         assert!(navigate["inputSchema"]["properties"]["targetServiceId"].is_object());
         assert!(navigate["inputSchema"]["properties"]["targetServiceIds"].is_object());
+        assert!(navigate["inputSchema"]["properties"]["siteId"].is_object());
+        assert!(navigate["inputSchema"]["properties"]["loginIds"].is_object());
         assert!(service_trace["inputSchema"]["properties"]["targetServiceId"].is_null());
+        assert!(service_trace["inputSchema"]["properties"]["siteId"].is_null());
     }
 
     #[test]
@@ -9385,7 +9442,9 @@ mod tests {
             "agentName": "agent-a",
             "taskName": "probeACSwebsite",
             "targetServiceId": "google",
-            "targetServices": ["acs", "microsoft"]
+            "targetServices": ["acs", "microsoft"],
+            "siteId": "nih",
+            "loginIds": ["orcid"]
         });
         let context = ServiceToolContext::from_arguments(&arguments).unwrap();
         let trace = context.trace();
@@ -9398,8 +9457,12 @@ mod tests {
 
         assert_eq!(trace["targetServiceId"], "google");
         assert_eq!(trace["targetServices"][0], "acs");
+        assert_eq!(trace["siteId"], "nih");
+        assert_eq!(trace["loginIds"][0], "orcid");
         assert_eq!(command["targetServiceId"], "google");
         assert_eq!(command["targetServices"][1], "microsoft");
+        assert_eq!(command["siteId"], "nih");
+        assert_eq!(command["loginIds"][0], "orcid");
     }
 
     #[test]
