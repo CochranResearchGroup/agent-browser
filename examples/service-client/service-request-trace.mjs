@@ -124,6 +124,10 @@ export async function runServiceWorkflow({
     dryRun: false,
     profileRegistration,
     commandResult,
+    commandResultData: {
+      tabIndex: commandResult.data?.index,
+      tabUrl: commandResult.data?.url,
+    },
     cancelResult,
     traceSummary: {
       events: trace.counts.events,

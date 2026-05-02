@@ -78,22 +78,77 @@ ${stringFieldLines}
 ${stringArrayFieldLines}
 }
 
+export type ServiceRequestForAction<TAction extends ServiceRequestAction> =
+  Omit<ServiceRequest, "action"> & { action: TAction };
+
 export interface ServiceRequestMcpToolCall {
   name: ${JSON.stringify(mcpToolName)};
   arguments: ServiceRequest;
 }
 
-export interface ServiceRequestHttpOptions {
+export interface ServiceRequestHttpOptions<TRequest extends ServiceRequest = ServiceRequest> {
   baseUrl: string;
-  request: ServiceRequest;
+  request: TRequest;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
 }
 
-export interface ServiceRequestResponse {
+export interface ServiceNavigateData {
+  url: string;
+  title?: string;
+}
+
+export interface ServiceTabNewData {
+  index: number;
+  url: string;
+}
+
+export interface ServiceSnapshotRef {
+  role: string;
+  name: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceSnapshotData {
+  snapshot: string;
+  origin: string;
+  refs: Record<string, ServiceSnapshotRef>;
+}
+
+export interface ServiceScreenshotAnnotationBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ServiceScreenshotAnnotation {
+  ref: string;
+  number: number;
+  role: string;
+  name?: string;
+  box: ServiceScreenshotAnnotationBox;
+}
+
+export interface ServiceScreenshotData {
+  path: string;
+  annotations?: ServiceScreenshotAnnotation[];
+}
+
+export interface ServiceRequestActionDataMap {
+  navigate: ServiceNavigateData;
+  tab_new: ServiceTabNewData;
+  snapshot: ServiceSnapshotData;
+  screenshot: ServiceScreenshotData;
+}
+
+export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =
+  TAction extends keyof ServiceRequestActionDataMap ? ServiceRequestActionDataMap[TAction] : unknown;
+
+export interface ServiceRequestResponse<TData = unknown> {
   id?: string;
   success: boolean;
-  data?: unknown;
+  data?: TData;
   error?: unknown;
   warning?: unknown;
   [key: string]: unknown;
@@ -116,11 +171,13 @@ export declare const SERVICE_REQUEST_STRING_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_ARRAY_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_MCP_TOOL_NAME: ${JSON.stringify(mcpToolName)};
 
-export declare function createServiceRequest(input: ServiceRequest): ServiceRequest;
+export declare function createServiceRequest<TRequest extends ServiceRequest>(input: TRequest): TRequest;
 export declare function createServiceRequestMcpToolCall(input: ServiceRequest): ServiceRequestMcpToolCall;
-export declare function postServiceRequest(options: ServiceRequestHttpOptions): Promise<ServiceRequestResponse>;
-export declare function createServiceTabRequest(input: ServiceTabRequestOptions): ServiceRequest;
-export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<ServiceRequestResponse>;
+export declare function postServiceRequest<TRequest extends ServiceRequest>(
+  options: ServiceRequestHttpOptions<TRequest>,
+): Promise<ServiceRequestResponse<ServiceRequestDataForAction<TRequest["action"]>>>;
+export declare function createServiceTabRequest(input: ServiceTabRequestOptions): ServiceRequestForAction<"tab_new">;
+export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<ServiceRequestResponse<ServiceTabNewData>>;
 `;
 }
 
