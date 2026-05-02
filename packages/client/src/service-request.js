@@ -1,0 +1,103 @@
+// @ts-check
+
+import {
+  SERVICE_REQUEST_ACTIONS,
+  SERVICE_REQUEST_MCP_TOOL_NAME,
+  SERVICE_REQUEST_STRING_ARRAY_FIELDS,
+  SERVICE_REQUEST_STRING_FIELDS,
+} from './service-request.generated.js';
+
+const actionSet = new Set(SERVICE_REQUEST_ACTIONS);
+
+/**
+ * @typedef {import('./service-request.generated.js').ServiceRequest} ServiceRequest
+ * @typedef {import('./service-request.generated.js').ServiceRequestHttpOptions} ServiceRequestHttpOptions
+ */
+
+export {
+  SERVICE_REQUEST_ACTIONS,
+  SERVICE_REQUEST_MCP_TOOL_NAME,
+  SERVICE_REQUEST_STRING_ARRAY_FIELDS,
+  SERVICE_REQUEST_STRING_FIELDS,
+} from './service-request.generated.js';
+
+/**
+ * @param {ServiceRequest} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceRequest(input) {
+  assertPlainObject(input, 'service request');
+  const record = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (input));
+  if (!actionSet.has(input.action)) {
+    throw new TypeError(`Unsupported service request action: ${String(input.action)}`);
+  }
+  if (Object.hasOwn(input, 'params')) {
+    assertPlainObject(input.params, 'service request params');
+  }
+  if (
+    Object.hasOwn(input, 'jobTimeoutMs') &&
+    (!Number.isInteger(record.jobTimeoutMs) || Number(record.jobTimeoutMs) < 1)
+  ) {
+    throw new TypeError('service request jobTimeoutMs must be a positive integer');
+  }
+  for (const field of SERVICE_REQUEST_STRING_FIELDS) {
+    if (Object.hasOwn(input, field) && typeof record[field] !== 'string') {
+      throw new TypeError(`service request ${field} must be a string`);
+    }
+  }
+  for (const field of SERVICE_REQUEST_STRING_ARRAY_FIELDS) {
+    if (Object.hasOwn(input, field)) {
+      const value = record[field];
+      if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+        throw new TypeError(`service request ${field} must be an array of strings`);
+      }
+    }
+  }
+
+  return { ...input };
+}
+
+/**
+ * @param {ServiceRequest} input
+ */
+export function createServiceRequestMcpToolCall(input) {
+  return {
+    name: SERVICE_REQUEST_MCP_TOOL_NAME,
+    arguments: createServiceRequest(input),
+  };
+}
+
+/**
+ * @param {ServiceRequestHttpOptions} options
+ */
+export async function postServiceRequest({ baseUrl, request, fetch = globalThis.fetch, signal }) {
+  if (typeof fetch !== 'function') {
+    throw new TypeError('postServiceRequest requires a fetch implementation');
+  }
+  if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
+    throw new TypeError('postServiceRequest requires a baseUrl string');
+  }
+
+  const response = await fetch(new URL('/api/service/request', baseUrl), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(createServiceRequest(request)),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`agent-browser service request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} label
+ */
+function assertPlainObject(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${label} must be an object`);
+  }
+}

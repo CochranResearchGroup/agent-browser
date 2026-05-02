@@ -4,6 +4,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  SERVICE_REQUEST_ACTIONS,
+  createServiceRequest,
+  createServiceRequestMcpToolCall,
+  postServiceRequest,
+} from '../packages/client/src/service-request.js';
+import {
   assert,
   closeSession,
   createMcpStdioClient,
@@ -142,8 +148,12 @@ try {
   assert(status.success === true, `service status failed: ${statusResult.stdout}${statusResult.stderr}`);
 
   const port = await ensureStreamPort();
+  assert(
+    SERVICE_REQUEST_ACTIONS.length === serviceRequestSchema.properties.action.enum.length,
+    'generated service request action list drifted from schema',
+  );
   const httpUrl = smokeDataUrl('HTTP Service Request Smoke', 'HTTP Service Request Smoke');
-  const httpRequest = {
+  const httpRequest = createServiceRequest({
     serviceName,
     agentName,
     taskName: httpTaskName,
@@ -156,9 +166,12 @@ try {
       action: 'ignored-by-service-request',
     },
     jobTimeoutMs: 30000,
-  };
+  });
   assertServiceRequestPayloadSchemaRecord(httpRequest, serviceRequestSchema, 'HTTP service request payload');
-  const httpResponse = await httpJson(port, 'POST', '/api/service/request', httpRequest);
+  const httpResponse = await postServiceRequest({
+    baseUrl: `http://127.0.0.1:${port}`,
+    request: httpRequest,
+  });
   assert(httpResponse.success === true, `HTTP service request failed: ${JSON.stringify(httpResponse)}`);
   assert(
     httpResponse.data?.url?.startsWith('data:text/html'),
@@ -189,22 +202,19 @@ try {
   mcp.notify('notifications/initialized');
 
   const mcpUrl = smokeDataUrl('MCP Service Request Smoke', 'MCP Service Request Smoke');
-  const mcpToolCall = {
-    name: 'service_request',
-    arguments: {
-      serviceName,
-      agentName,
-      taskName: mcpTaskName,
-      siteId: targetServiceId,
-      loginIds: ['orcid'],
-      action: 'navigate',
-      params: {
-        url: mcpUrl,
-        waitUntil: 'load',
-      },
-      jobTimeoutMs: 30000,
+  const mcpToolCall = createServiceRequestMcpToolCall({
+    serviceName,
+    agentName,
+    taskName: mcpTaskName,
+    siteId: targetServiceId,
+    loginIds: ['orcid'],
+    action: 'navigate',
+    params: {
+      url: mcpUrl,
+      waitUntil: 'load',
     },
-  };
+    jobTimeoutMs: 30000,
+  });
   assertServiceRequestMcpToolCallSchemaRecord(
     mcpToolCall,
     serviceRequestMcpToolCallSchema,

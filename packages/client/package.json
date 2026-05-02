@@ -1,0 +1,14 @@
+{
+  "name": "@agent-browser/client",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./service-request": {
+      "types": "./src/service-request.generated.d.ts",
+      "import": "./src/service-request.js"
+    }
+  },
+  "scripts": {
+    "check": "node ../../scripts/generate-service-request-client.js --check"
+  }
+}

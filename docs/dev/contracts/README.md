@@ -42,6 +42,13 @@ drive profile selection for the requested site or login scope.
 `service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
 wrapper for invoking `service_request` with the same intent object.
 
+`packages/client/src/service-request.generated.d.ts` and
+`packages/client/src/service-request.generated.js` are generated from these
+schemas. Run `pnpm generate:service-client` after changing the schemas and
+`pnpm test:service-client-contract` to verify the generated client surface is
+current. Run `pnpm test:service-client-types` to type-check the runtime helper
+against those declarations.
+
 ## Service Incident Record v1
 
 `service-incident-record.v1.schema.json` describes grouped service incident

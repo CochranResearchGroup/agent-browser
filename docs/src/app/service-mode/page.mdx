@@ -39,18 +39,9 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/browser/navigate" \
 For software clients, prefer one explicit service request object when the caller wants agent-browser to select the profile, serialize CDP access, and retain trace metadata:
 
 ```ts
-type ServiceRequest = {
-  serviceName: string;
-  agentName?: string;
-  taskName: string;
-  siteId?: string;
-  loginId?: string;
-  action: 'navigate' | 'click' | 'fill' | 'wait' | 'snapshot' | string;
-  params?: Record<string, unknown>;
-  jobTimeoutMs?: number;
-};
+import { createServiceRequest, postServiceRequest } from '@agent-browser/client/service-request';
 
-const request: ServiceRequest = {
+const request = createServiceRequest({
   serviceName: 'JournalDownloader',
   agentName: 'article-probe-agent',
   taskName: 'probeACSwebsite',
@@ -61,19 +52,12 @@ const request: ServiceRequest = {
     waitUntil: 'load',
   },
   jobTimeoutMs: 30000,
-};
-
-const response = await fetch(`http://127.0.0.1:${streamPort}/api/service/request`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(request),
 });
 
-if (!response.ok) {
-  throw new Error(`agent-browser service request failed: ${response.status}`);
-}
-
-const result = await response.json();
+const result = await postServiceRequest({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  request,
+});
 ```
 
 Use MCP when an agent runtime wants resources and tools without scraping CLI text:
@@ -107,7 +91,7 @@ An MCP client sends the same intent shape through `tools/call`:
 
 MCP tool callers should include `serviceName`, `agentName`, and `taskName` whenever those values are known. Anonymous callers remain compatible, but service jobs record `namingWarnings` so operators can find unlabelled automation.
 
-The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>.
+The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. The private workspace package <code>@agent-browser/client</code> generates its service request helpers and types from those schemas.
 
 ## Operator request model
 
