@@ -36,6 +36,15 @@ Agents should usually interact through MCP. Independent software projects
 should usually interact through an HTTP and WebSocket API. The CLI should
 become a compatibility client over the same service authority.
 
+The preferred client contract is intent-based. Operators, agents, and software
+clients request a tab, target site or login identity, and named caller context.
+agent-browser decides which managed profile and browser can satisfy that
+request, dispatches CDP work through the queue, and records the resulting
+service state. Explicit runtime-profile requests are supported when a caller
+knows where the needed login state lives. Caller-supplied profile paths remain
+an override for workflows that intentionally bring their own browser identity,
+not the default coordination model.
+
 ## Architecture Split
 
 The service architecture should keep these surfaces separate:

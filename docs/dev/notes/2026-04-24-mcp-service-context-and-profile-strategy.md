@@ -30,6 +30,20 @@ provide it. Read-only resources can remain global for now, but mutation tools
 should include caller context before browser control tools are added. Audit
 events should carry the same context as event ownership matures.
 
+## Operator Request Model
+
+The default service interaction should be intent-based. Operators, agents, and
+software clients request a tab, browser action, target site or login identity,
+and caller context. agent-browser owns profile selection, browser reuse, queue
+ordering, and collision avoidance.
+
+Callers may request a particular managed runtime profile when they know the
+desired target-service credentials or auth state live there. Callers may also
+bring an external profile when direct control is part of the workflow contract.
+That caller-supplied profile path is an override mode. The normal mode is for
+agent-browser to choose and coordinate the managed profile and browser so
+callers can focus on the target workflow.
+
 ## Profile Strategy
 
 A browser profile represents one browser identity per site. Different services

@@ -88,11 +88,15 @@ To create and track a managed profile explicitly, use:
 agent-browser runtime create work --set-default
 ```
 
-When automating a site that requires login, prefer managed runtime profiles for
-recurring work. Let agent-browser coordinate sessions and jobs for an already
-open managed browser instead of manually avoiding it. Use the other options
-only when you specifically need portable state, temporary reuse, or isolated
-session behavior.
+When automating a site that requires login, prefer intent-based service use
+over manual profile coordination. Ask for the target site or login identity,
+include `serviceName`, `agentName`, and `taskName` when available, and let
+agent-browser select or reuse the managed profile and browser through its
+queue. Request a specific managed runtime profile only when you know that
+profile has the needed login state. Use `--profile <path>` only when bringing
+an external profile is part of the contract. The default assumption is that
+agent-browser owns browser and profile coordination so operators and agents do
+not waste effort avoiding another job's browser.
 
 When automating a site that requires login, choose the approach that fits:
 

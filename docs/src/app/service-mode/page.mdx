@@ -47,6 +47,14 @@ agent-browser mcp read agent-browser://jobs
 
 MCP tool callers should include `serviceName`, `agentName`, and `taskName` whenever those values are known. Anonymous callers remain compatible, but service jobs record `namingWarnings` so operators can find unlabelled automation.
 
+## Operator request model
+
+agent-browser owns browsers, profiles, tabs, queues, and job dispatch by default. Operators, agents, and software clients should usually request intent instead of taking direct responsibility for browser coordination. A normal request says which site or login identity is needed, what tab or browser action should happen, and which service, agent, and task owns the work. agent-browser then selects or reuses the right managed profile, attaches to an existing managed browser when possible, queues CDP control deterministically, and records the state needed for debugging.
+
+Use `serviceName`, `agentName`, `taskName`, and target-service hints such as `targetServiceId`, `targetService`, `targetServiceIds`, or `targetServices` to make this request explicit. A service named `JournalDownloader` can request an ACS-authenticated tab for `probeACSwebsite`; agent-browser should decide whether the current ACS-authenticated profile and browser can be shared, whether a service-specific profile is required, or whether a new browser process is justified by isolation policy.
+
+Operators can still request a particular managed runtime profile when they know the desired login state lives there. They can also bring their own profile with `--profile <path>` or equivalent API fields when they want more direct control over a browser identity. That is an override mode, not the default service model. The normal path is to let agent-browser perform deterministic profile selection, queue sharing, browser reuse, and collision avoidance so callers can spend their limited reasoning budget on the target workflow.
+
 ## Profile and session planning
 
 Runtime profiles are the safest default for recurring automation because they keep Chrome user data, cookies, site storage, and login state in a managed path. A single profile can represent one user identity per site, so profile allocation is a service design decision:
