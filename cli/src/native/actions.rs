@@ -13,7 +13,8 @@ use tokio::sync::{broadcast, oneshot, RwLock};
 
 use crate::connection::get_socket_dir;
 use crate::runtime_profile::{
-    clear_runtime_state, pid_is_running, read_runtime_state, runtime_profile_user_data_dir,
+    clear_runtime_state, pid_is_running, read_devtools_port, read_runtime_state,
+    runtime_profile_user_data_dir,
 };
 
 use super::auth;
@@ -1728,6 +1729,55 @@ fn runtime_profile_pid(runtime_profile: Option<&str>) -> Option<u32> {
         .map(|state| state.browser_pid)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ManagedRuntimeAttachTarget {
+    runtime_profile: String,
+    browser_pid: u32,
+    cdp_port: u16,
+}
+
+fn managed_runtime_attach_target(
+    runtime_profile: Option<&str>,
+) -> Option<ManagedRuntimeAttachTarget> {
+    let runtime_profile = runtime_profile?;
+    let state = read_runtime_state(runtime_profile).ok().flatten()?;
+    if !pid_is_running(state.browser_pid) {
+        return None;
+    }
+    let cdp_port = state
+        .devtools_port
+        .or_else(|| read_devtools_port(std::path::Path::new(&state.user_data_dir)))?;
+    Some(ManagedRuntimeAttachTarget {
+        runtime_profile: runtime_profile.to_string(),
+        browser_pid: state.browser_pid,
+        cdp_port,
+    })
+}
+
+async fn attach_managed_runtime_browser(
+    state: &mut DaemonState,
+    target: &ManagedRuntimeAttachTarget,
+    leave_open: bool,
+    metadata: ServiceLaunchMetadata,
+) -> Result<(), String> {
+    state.reset_input_state();
+    state.attached_runtime_profile = Some(target.runtime_profile.clone());
+    state.attached_browser_pid = Some(target.browser_pid);
+    state.close_behavior = close_behavior_for_attached_browser(true, leave_open);
+    state.browser = Some(BrowserManager::connect_cdp(&target.cdp_port.to_string()).await?);
+    state.subscribe_to_browser_events();
+    state.start_fetch_handler();
+    state.start_dialog_handler();
+    state.update_stream_client().await;
+    persist_current_browser_health(
+        state,
+        ServiceBrowserHost::AttachedExisting,
+        ServiceBrowserHealth::Ready,
+        Some(metadata),
+    );
+    Ok(())
+}
+
 fn env_u64_or_default(name: &str, default: u64) -> u64 {
     env::var(name)
         .ok()
@@ -2465,6 +2515,13 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
         ServiceBrowserHost::LocalHeaded
     };
     let hash = launch_hash(&options);
+    if engine.as_deref().unwrap_or("chrome") == "chrome" {
+        if let Some(target) = managed_runtime_attach_target(options.runtime_profile.as_deref()) {
+            attach_managed_runtime_browser(state, &target, leave_open, metadata).await?;
+            state.launch_hash = Some(hash);
+            return Ok(());
+        }
+    }
     let mgr = BrowserManager::launch(options, engine.as_deref()).await?;
     state.reset_input_state();
     state.attached_runtime_profile = None;
@@ -2887,6 +2944,21 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     state.engine = engine.as_deref().unwrap_or("chrome").to_string();
     write_engine_file(&state.session_id, &state.engine);
     write_extensions_file(&state.session_id);
+    if engine.as_deref().unwrap_or("chrome") == "chrome" {
+        if let Some(target) =
+            managed_runtime_attach_target(launch_options.runtime_profile.as_deref())
+        {
+            attach_managed_runtime_browser(state, &target, leave_open, metadata).await?;
+            state.launch_hash = Some(new_hash);
+            return Ok(json!({
+                "launched": true,
+                "attachedToExistingBrowser": true,
+                "runtimeProfile": target.runtime_profile,
+                "browserPid": target.browser_pid,
+                "cdpPort": target.cdp_port,
+            }));
+        }
+    }
     state.reset_input_state();
     state.attached_runtime_profile = None;
     state.attached_browser_pid = None;
@@ -10019,6 +10091,69 @@ mod tests {
         assert!(selected.is_none());
         assert_eq!(options.profile.as_deref(), Some("/tmp/explicit-profile"));
         assert!(options.runtime_profile.is_none());
+    }
+
+    #[test]
+    fn test_managed_runtime_attach_target_uses_runtime_state() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("managed-runtime-attach-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+
+        let runtime_profile = "managed-attach-test";
+        let user_data_dir = home.join("managed-user-data");
+        fs::create_dir_all(&user_data_dir).expect("user data dir should be created");
+        crate::runtime_profile::write_runtime_state(&crate::runtime_profile::RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: std::process::id(),
+            headed: true,
+            launch_mode: "automation".to_string(),
+            devtools_port: Some(9333),
+            ws_url: Some("ws://127.0.0.1:9333/devtools/browser/test".to_string()),
+        })
+        .expect("runtime state should be written");
+
+        let target = managed_runtime_attach_target(Some(runtime_profile))
+            .expect("live runtime state should produce attach target");
+
+        assert_eq!(target.runtime_profile, runtime_profile);
+        assert_eq!(target.browser_pid, std::process::id());
+        assert_eq!(target.cdp_port, 9333);
+    }
+
+    #[test]
+    fn test_managed_runtime_attach_target_reads_devtools_active_port() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("managed-runtime-devtools-file-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+
+        let runtime_profile = "managed-devtools-file-test";
+        let user_data_dir = home.join("managed-user-data");
+        fs::create_dir_all(&user_data_dir).expect("user data dir should be created");
+        fs::write(
+            user_data_dir.join("DevToolsActivePort"),
+            "9444\n/devtools/browser/test",
+        )
+        .expect("DevToolsActivePort should be written");
+        crate::runtime_profile::write_runtime_state(&crate::runtime_profile::RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: std::process::id(),
+            headed: true,
+            launch_mode: "automation".to_string(),
+            devtools_port: None,
+            ws_url: None,
+        })
+        .expect("runtime state should be written");
+
+        let target = managed_runtime_attach_target(Some(runtime_profile))
+            .expect("DevToolsActivePort should produce attach target");
+
+        assert_eq!(target.runtime_profile, runtime_profile);
+        assert_eq!(target.browser_pid, std::process::id());
+        assert_eq!(target.cdp_port, 9444);
     }
 
     #[tokio::test]

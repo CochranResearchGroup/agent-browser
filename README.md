@@ -593,6 +593,10 @@ managed runtime profile through the service/session control plane or attach to
 the intended browser. Switch to a new isolated profile only for explicitly
 unauthenticated throwaway QA, or when the operator asked for a separate browser
 identity.
+When a selected managed runtime profile already has a live agent-browser browser
+with a DevTools port, normal launch commands automatically reuse that browser
+through the session control plane instead of trying to start a second Chrome on
+the locked profile.
 
 For Google and similar SSO flows, the preferred bootstrap is a detached manual login first:
 

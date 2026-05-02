@@ -3884,6 +3884,8 @@ Locked profiles:
   then reuse the managed browser through service/session control or attach to
   the intended runtime profile. Use `--profile <path>` only for separate
   browser identities or unauthenticated throwaway work.
+  Normal launch commands automatically reuse a selected managed runtime
+  browser when agent-browser runtime state shows a live PID and DevTools port.
 
 Global Options:
   --json                        Output as JSON
