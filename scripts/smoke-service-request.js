@@ -14,7 +14,12 @@ import {
   runCli,
   smokeDataUrl,
 } from './smoke-utils.js';
-import { parseMcpJsonResource } from './smoke-schema-utils.js';
+import {
+  assertServiceJobsResponseSchemaRecord,
+  assertServiceJobSchemaRecord,
+  loadServiceRecordSchema,
+  parseMcpJsonResource,
+} from './smoke-schema-utils.js';
 
 const context = createSmokeContext({
   prefix: 'ab-service-request-',
@@ -31,6 +36,8 @@ const selectedUserDataDir = join(tempHome, 'selected-profile-user-data');
 const fallbackUserDataDir = join(tempHome, 'fallback-profile-user-data');
 const httpTaskName = 'httpServiceRequestSmoke';
 const mcpTaskName = 'mcpServiceRequestSmoke';
+const jobRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-job-record.v1.schema.json');
+const jobsResponseSchema = loadServiceRecordSchema('../docs/dev/contracts/service-jobs-response.v1.schema.json');
 
 let mcp;
 const timeout = setTimeout(() => {
@@ -203,25 +210,48 @@ try {
 
   const jobsResponse = await httpJson(port, 'GET', '/api/service/jobs?limit=50');
   assert(jobsResponse.success === true, `HTTP service jobs failed: ${JSON.stringify(jobsResponse)}`);
+  assertServiceJobsResponseSchemaRecord(
+    jobsResponse.data,
+    jobsResponseSchema,
+    'HTTP service request jobs response',
+  );
   const jobs = jobsResponse.data?.jobs ?? [];
   const httpJob = findJob(jobs, {
     prefix: 'http-service-request-navigate-',
     taskName: httpTaskName,
   });
   assert(httpJob, `HTTP service request job missing: ${JSON.stringify(jobs)}`);
+  assertServiceJobSchemaRecord(httpJob, jobRecordSchema, 'HTTP service request job');
   assert(httpJob.action === 'navigate', `HTTP service request job action mismatch: ${JSON.stringify(httpJob)}`);
   assert(httpJob.state === 'succeeded', `HTTP service request job did not succeed: ${JSON.stringify(httpJob)}`);
+
+  const httpJobDetail = await httpJson(port, 'GET', `/api/service/jobs/${encodeURIComponent(httpJob.id)}`);
+  assert(httpJobDetail.success === true, `HTTP service request job detail failed: ${JSON.stringify(httpJobDetail)}`);
+  assertServiceJobsResponseSchemaRecord(
+    httpJobDetail.data,
+    jobsResponseSchema,
+    'HTTP service request job detail response',
+  );
+  assertServiceJobSchemaRecord(httpJobDetail.data.job, jobRecordSchema, 'HTTP service request job detail');
+  assert(httpJobDetail.data.job.id === httpJob.id, 'HTTP service request job detail returned wrong job');
 
   const mcpJob = findJob(jobs, {
     prefix: 'mcp-service-request-navigate-',
     taskName: mcpTaskName,
   });
   assert(mcpJob, `MCP service_request job missing: ${JSON.stringify(jobs)}`);
+  assertServiceJobSchemaRecord(mcpJob, jobRecordSchema, 'MCP service_request job');
   assert(mcpJob.action === 'navigate', `MCP service_request job action mismatch: ${JSON.stringify(mcpJob)}`);
   assert(mcpJob.state === 'succeeded', `MCP service_request job did not succeed: ${JSON.stringify(mcpJob)}`);
 
   const mcpJobsResource = await mcp.send('resources/read', { uri: 'agent-browser://jobs' });
   const mcpJobs = parseMcpJsonResource(mcpJobsResource, 'agent-browser://jobs', 'MCP jobs resource');
+  assert(Array.isArray(mcpJobs.jobs), `MCP jobs resource missing jobs array: ${JSON.stringify(mcpJobs)}`);
+  assert(Number.isInteger(mcpJobs.count), `MCP jobs resource missing count integer: ${JSON.stringify(mcpJobs)}`);
+  assert(mcpJobs.count === mcpJobs.jobs.length, `MCP jobs resource count mismatch: ${JSON.stringify(mcpJobs)}`);
+  for (const [index, job] of mcpJobs.jobs.entries()) {
+    assertServiceJobSchemaRecord(job, jobRecordSchema, `MCP jobs resource job ${index}`);
+  }
   assert(
     findJob(mcpJobs.jobs ?? [], {
       prefix: 'mcp-service-request-navigate-',
