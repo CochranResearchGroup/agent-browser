@@ -457,7 +457,7 @@ HTTP service request objects follow `docs/dev/contracts/service-request.v1.schem
 
 Software clients in this repo can use `@agent-browser/client/service-request` for generated `createServiceRequest`, `createServiceRequestMcpToolCall`, `postServiceRequest`, and TypeScript declarations. Run `pnpm generate:service-client` after changing the service request schemas, then run `pnpm test:service-client-contract` and `pnpm test:service-client-types` to verify the generated client surface is current.
 
-Use `@agent-browser/client/service-observability` for generated read helpers around service jobs, events, incidents, incident activity, and traces. It exposes `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`, `getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
+Use `@agent-browser/client/service-observability` for generated HTTP helpers around service status, collections, reconcile, jobs, events, incidents, incident activity, and traces. It exposes `getServiceStatus`, `getServiceProfiles`, `getServiceBrowsers`, `getServiceSessions`, `getServiceTabs`, `getServiceSitePolicies`, `getServiceProviders`, `getServiceChallenges`, `postServiceReconcile`, `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`, `getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
 
 Use `examples/service-client/` as the copyable software-client workflow for request plus trace. Run `pnpm test:service-client-example` to validate it in dry-run mode, or `pnpm test:service-client-example-live` to validate it against an isolated live daemon and browser session.
 

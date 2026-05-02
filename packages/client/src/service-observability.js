@@ -19,9 +19,91 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceIncidentActivityResponse} ServiceIncidentActivityResponse
  * @typedef {import('./service-observability.generated.js').ServiceIncidentsResponse} ServiceIncidentsResponse
  * @typedef {import('./service-observability.generated.js').ServiceJobsResponse} ServiceJobsResponse
+ * @typedef {import('./service-observability.generated.js').ServiceBrowsersResponse} ServiceBrowsersResponse
+ * @typedef {import('./service-observability.generated.js').ServiceChallengesResponse} ServiceChallengesResponse
+ * @typedef {import('./service-observability.generated.js').ServiceObservabilityHttpOptions} ServiceObservabilityHttpOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProvidersResponse} ServiceProvidersResponse
  * @typedef {import('./service-observability.generated.js').ServiceQueryOptions} ServiceQueryOptions
+ * @typedef {import('./service-observability.generated.js').ServiceReconcileResponse} ServiceReconcileResponse
+ * @typedef {import('./service-observability.generated.js').ServiceSessionsResponse} ServiceSessionsResponse
+ * @typedef {import('./service-observability.generated.js').ServiceSitePoliciesResponse} ServiceSitePoliciesResponse
+ * @typedef {import('./service-observability.generated.js').ServiceStatusResponse} ServiceStatusResponse
+ * @typedef {import('./service-observability.generated.js').ServiceTabsResponse} ServiceTabsResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceResponse} ServiceTraceResponse
  */
+
+/**
+ * @param {ServiceObservabilityHttpOptions} options
+ * @returns {Promise<ServiceStatusResponse>}
+ */
+export function getServiceStatus(options) {
+  return serviceGet(options, '/api/service/status');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceProfilesResponse>}
+ */
+export function getServiceProfiles(options) {
+  return serviceGet(options, '/api/service/profiles');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceBrowsersResponse>}
+ */
+export function getServiceBrowsers(options) {
+  return serviceGet(options, '/api/service/browsers');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceSessionsResponse>}
+ */
+export function getServiceSessions(options) {
+  return serviceGet(options, '/api/service/sessions');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceTabsResponse>}
+ */
+export function getServiceTabs(options) {
+  return serviceGet(options, '/api/service/tabs');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceSitePoliciesResponse>}
+ */
+export function getServiceSitePolicies(options) {
+  return serviceGet(options, '/api/service/site-policies');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceProvidersResponse>}
+ */
+export function getServiceProviders(options) {
+  return serviceGet(options, '/api/service/providers');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceChallengesResponse>}
+ */
+export function getServiceChallenges(options) {
+  return serviceGet(options, '/api/service/challenges');
+}
+
+/**
+ * @param {ServiceObservabilityHttpOptions} options
+ * @returns {Promise<ServiceReconcileResponse>}
+ */
+export function postServiceReconcile(options) {
+  return servicePost(options, '/api/service/reconcile');
+}
 
 /**
  * @param {ServiceQueryOptions} options
@@ -107,6 +189,37 @@ async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, query }, 
   const payload = await response.json();
   if (!payload?.success) {
     throw new Error(`agent-browser service read failed: ${JSON.stringify(payload)}`);
+  }
+
+  return payload.data;
+}
+
+/**
+ * @template TResult
+ * @param {{ baseUrl: string, fetch?: typeof globalThis.fetch, signal?: AbortSignal }} options
+ * @param {string} pathname
+ * @returns {Promise<TResult>}
+ */
+async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathname) {
+  if (typeof fetch !== 'function') {
+    throw new TypeError('service observability helpers require a fetch implementation');
+  }
+  if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
+    throw new TypeError('service observability helpers require a baseUrl string');
+  }
+
+  const response = await fetch(new URL(pathname, baseUrl), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`agent-browser service write failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!payload?.success) {
+    throw new Error(`agent-browser service write failed: ${JSON.stringify(payload)}`);
   }
 
   return payload.data;

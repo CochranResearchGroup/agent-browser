@@ -1508,10 +1508,11 @@ verify it is current.
 
 For read-side software clients, import
 `@agent-browser/client/service-observability`. It exposes typed helpers for
+`getServiceStatus`, collection reads for profiles, browsers, sessions, tabs,
+site policies, providers, and challenges, `postServiceReconcile`,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
-`getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`,
-with declarations generated from the service job, event, incident, incident
-activity, and trace schemas.
+`getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
+Declarations are generated from the matching service contract schemas.
 
 See `examples/service-client/` for a copyable workflow that sends a service
 request and then reads the matching trace. Run

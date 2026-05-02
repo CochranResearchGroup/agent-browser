@@ -9,6 +9,22 @@ const repoRoot = path.resolve(scriptDir, '..');
 const check = process.argv.includes('--check');
 
 const schemas = {
+  statusResponse: readSchema('service-status-response.v1.schema.json'),
+  profile: readSchema('service-profile-record.v1.schema.json'),
+  profilesResponse: readSchema('service-profiles-response.v1.schema.json'),
+  browser: readSchema('service-browser-record.v1.schema.json'),
+  browsersResponse: readSchema('service-browsers-response.v1.schema.json'),
+  session: readSchema('service-session-record.v1.schema.json'),
+  sessionsResponse: readSchema('service-sessions-response.v1.schema.json'),
+  tab: readSchema('service-tab-record.v1.schema.json'),
+  tabsResponse: readSchema('service-tabs-response.v1.schema.json'),
+  sitePolicy: readSchema('service-site-policy-record.v1.schema.json'),
+  sitePoliciesResponse: readSchema('service-site-policies-response.v1.schema.json'),
+  provider: readSchema('service-provider-record.v1.schema.json'),
+  providersResponse: readSchema('service-providers-response.v1.schema.json'),
+  challenge: readSchema('service-challenge-record.v1.schema.json'),
+  challengesResponse: readSchema('service-challenges-response.v1.schema.json'),
+  reconcileResponse: readSchema('service-reconcile-response.v1.schema.json'),
   job: readSchema('service-job-record.v1.schema.json'),
   jobsResponse: readSchema('service-jobs-response.v1.schema.json'),
   incident: readSchema('service-incident-record.v1.schema.json'),
@@ -123,6 +139,59 @@ export interface ServiceJobRecord {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileRecord {
+  id: string;
+  name: string;
+  userDataDir: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserRecord {
+  id: string;
+  profileId: string | null;
+  health: ServiceBrowserHealthState;
+  [key: string]: unknown;
+}
+
+export interface ServiceSessionRecord {
+  id: string;
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  profileId: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceTabRecord {
+  id: string;
+  browserId: string | null;
+  sessionId: string | null;
+  lifecycle: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceSitePolicyRecord {
+  id: string;
+  originPattern: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceProviderRecord {
+  id: string;
+  kind: string;
+  displayName: string | null;
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+export interface ServiceChallengeRecord {
+  id: string;
+  tabId: string | null;
+  kind: string;
+  state: string;
+  [key: string]: unknown;
+}
+
 export interface ServiceEventRecord {
   id: string;
   timestamp: string;
@@ -165,14 +234,54 @@ export interface ServiceIncidentRecord {
 
 export interface ServiceListResponse<TRecord> {
   count: number;
-  matched: number;
-  total: number;
+  matched?: number;
+  total?: number;
   [key: string]: unknown;
 }
 
 export interface ServiceJobsResponse extends ServiceListResponse<ServiceJobRecord> {
   jobs: ServiceJobRecord[];
   job?: ServiceJobRecord;
+}
+
+export interface ServiceStatusResponse {
+  control_plane?: Record<string, unknown>;
+  service_state: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ServiceProfilesResponse extends ServiceListResponse<ServiceProfileRecord> {
+  profiles: ServiceProfileRecord[];
+}
+
+export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {
+  browsers: ServiceBrowserRecord[];
+}
+
+export interface ServiceSessionsResponse extends ServiceListResponse<ServiceSessionRecord> {
+  sessions: ServiceSessionRecord[];
+}
+
+export interface ServiceTabsResponse extends ServiceListResponse<ServiceTabRecord> {
+  tabs: ServiceTabRecord[];
+}
+
+export interface ServiceSitePoliciesResponse extends ServiceListResponse<ServiceSitePolicyRecord> {
+  sitePolicies: ServiceSitePolicyRecord[];
+}
+
+export interface ServiceProvidersResponse extends ServiceListResponse<ServiceProviderRecord> {
+  providers: ServiceProviderRecord[];
+}
+
+export interface ServiceChallengesResponse extends ServiceListResponse<ServiceChallengeRecord> {
+  challenges: ServiceChallengeRecord[];
+}
+
+export interface ServiceReconcileResponse {
+  reconciled: boolean;
+  service_state: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface ServiceEventsResponse extends ServiceListResponse<ServiceEventRecord> {
@@ -247,6 +356,15 @@ ${Object.entries(constants)
   .map(([name]) => `export declare const ${name}: readonly string[];`)
   .join('\n')}
 
+export declare function getServiceStatus(options: ServiceObservabilityHttpOptions): Promise<ServiceStatusResponse>;
+export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
+export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
+export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
+export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;
+export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
+export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
+export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;
+export declare function postServiceReconcile(options: ServiceObservabilityHttpOptions): Promise<ServiceReconcileResponse>;
 export declare function getServiceJobs(options: ServiceQueryOptions): Promise<ServiceJobsResponse>;
 export declare function getServiceJob(options: ServiceIdOptions): Promise<ServiceJobsResponse>;
 export declare function getServiceEvents(options: ServiceQueryOptions): Promise<ServiceEventsResponse>;

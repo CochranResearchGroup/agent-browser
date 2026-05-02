@@ -93,7 +93,7 @@ MCP tool callers should include `serviceName`, `agentName`, and `taskName` whene
 
 The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. The private workspace package <code>@agent-browser/client</code> generates its service request helpers and types from those schemas.
 
-Read-side software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service jobs, events, incidents, incident activity, and trace responses.
+Read-side software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service collections, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges.
 
 The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It sends a service request, reads <code>getServiceTrace</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>.
 

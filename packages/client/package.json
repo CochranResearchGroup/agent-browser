@@ -13,6 +13,6 @@
     }
   },
   "scripts": {
-    "check": "node ../../scripts/generate-service-request-client.js --check"
+    "check": "node ../../scripts/generate-service-request-client.js --check && node ../../scripts/generate-service-observability-client.js --check"
   }
 }

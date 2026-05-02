@@ -4,6 +4,17 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  getServiceBrowsers,
+  getServiceChallenges,
+  getServiceProfiles,
+  getServiceProviders,
+  getServiceSessions,
+  getServiceSitePolicies,
+  getServiceStatus,
+  getServiceTabs,
+  postServiceReconcile,
+} from '../packages/client/src/service-observability.js';
+import {
   assert,
   assertServiceOwnershipHandoff,
   assertServiceOwnershipRepairEvent,
@@ -311,12 +322,17 @@ try {
   assert(httpStatus.success === true, `HTTP service status failed: ${JSON.stringify(httpStatus)}`);
   assertServiceStatusResponseSchemaRecord(httpStatus.data, statusResponseSchema, 'HTTP service status response');
 
+  const serviceBaseUrl = `http://127.0.0.1:${port}`;
+  const clientStatus = await getServiceStatus({ baseUrl: serviceBaseUrl });
+  assertServiceStatusResponseSchemaRecord(clientStatus, statusResponseSchema, 'client service status response');
+
   const checks = [
     {
       command: 'profiles',
       endpoint: '/api/service/profiles',
       key: 'profiles',
       mcpUri: 'agent-browser://profiles',
+      clientRead: () => getServiceProfiles({ baseUrl: serviceBaseUrl }),
       predicate: (item) =>
         item.id === expectedProfileId &&
         item.sharedServiceIds?.includes(serviceName) &&
@@ -327,6 +343,7 @@ try {
       endpoint: '/api/service/sessions',
       key: 'sessions',
       mcpUri: 'agent-browser://sessions',
+      clientRead: () => getServiceSessions({ baseUrl: serviceBaseUrl }),
       predicate: (item) =>
         item.id === expectedSessionId &&
         item.profileId === expectedProfileId &&
@@ -337,6 +354,7 @@ try {
       endpoint: '/api/service/browsers',
       key: 'browsers',
       mcpUri: 'agent-browser://browsers',
+      clientRead: () => getServiceBrowsers({ baseUrl: serviceBaseUrl }),
       predicate: (item) => item.id === expectedBrowserId && item.health === 'ready',
     },
     {
@@ -344,6 +362,7 @@ try {
       endpoint: '/api/service/tabs',
       key: 'tabs',
       mcpUri: 'agent-browser://tabs',
+      clientRead: () => getServiceTabs({ baseUrl: serviceBaseUrl }),
       predicate: (item) =>
         item.id === expectedTab.id &&
         item.browserId === expectedBrowserId &&
@@ -355,6 +374,7 @@ try {
       endpoint: '/api/service/site-policies',
       key: 'sitePolicies',
       mcpUri: 'agent-browser://site-policies',
+      clientRead: () => getServiceSitePolicies({ baseUrl: serviceBaseUrl }),
       predicate: (item) =>
         item.id === 'google' &&
         item.originPattern === 'https://accounts.google.com' &&
@@ -366,6 +386,7 @@ try {
       endpoint: '/api/service/providers',
       key: 'providers',
       mcpUri: 'agent-browser://providers',
+      clientRead: () => getServiceProviders({ baseUrl: serviceBaseUrl }),
       predicate: (item) =>
         item.id === 'manual' &&
         item.kind === 'manual_approval' &&
@@ -377,6 +398,7 @@ try {
       endpoint: '/api/service/challenges',
       key: 'challenges',
       mcpUri: 'agent-browser://challenges',
+      clientRead: () => getServiceChallenges({ baseUrl: serviceBaseUrl }),
       predicate: (item) =>
         item.id === 'challenge-1' &&
         item.tabId === expectedTab.id &&
@@ -395,6 +417,10 @@ try {
     assertSchemaCollection(httpCollection.data, check.key, `HTTP ${check.endpoint}`);
     assertContains(httpCollection.data, check.key, check.predicate, `HTTP ${check.endpoint}`);
 
+    const clientCollection = await check.clientRead();
+    assertSchemaCollection(clientCollection, check.key, `client ${check.endpoint}`);
+    assertContains(clientCollection, check.key, check.predicate, `client ${check.endpoint}`);
+
     const mcpCollection = await serviceMcpCollection(check.mcpUri, check.key);
     assertSchemaCollection(mcpCollection, check.key, `MCP ${check.mcpUri}`);
     assertContains(mcpCollection, check.key, check.predicate, `MCP ${check.mcpUri}`);
@@ -406,8 +432,7 @@ try {
     ...handoffScenario,
   });
 
-  const httpReconcile = await httpJson(port, 'POST', '/api/service/reconcile');
-  assert(httpReconcile.success === true, `HTTP service reconcile failed: ${JSON.stringify(httpReconcile)}`);
+  const httpReconcile = { data: await postServiceReconcile({ baseUrl: serviceBaseUrl }) };
   assertServiceOwnershipHandoff(
     {
       sessions: Object.values(httpReconcile.data?.service_state?.sessions || {}),
