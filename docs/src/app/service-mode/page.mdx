@@ -93,6 +93,8 @@ MCP tool callers should include `serviceName`, `agentName`, and `taskName` whene
 
 The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. The private workspace package <code>@agent-browser/client</code> generates its service request helpers and types from those schemas.
 
+Read-side software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service jobs, events, incidents, incident activity, and trace responses.
+
 ## Operator request model
 
 agent-browser owns browsers, profiles, tabs, queues, and job dispatch by default. Operators, agents, and software clients should usually request intent instead of taking direct responsibility for browser coordination. A normal request says which site or login identity is needed, what tab or browser action should happen, and which service, agent, and task owns the work. agent-browser then selects or reuses the right managed profile, attaches to an existing managed browser when possible, queues CDP control deterministically, and records the state needed for debugging.

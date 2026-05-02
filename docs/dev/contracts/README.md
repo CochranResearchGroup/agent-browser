@@ -49,6 +49,12 @@ schemas. Run `pnpm generate:service-client` after changing the schemas and
 current. Run `pnpm test:service-client-types` to type-check the runtime helper
 against those declarations.
 
+`packages/client/src/service-observability.generated.d.ts` and
+`packages/client/src/service-observability.generated.js` are generated from the
+service job, event, incident, incident activity, and trace schemas. The
+`@agent-browser/client/service-observability` helper reads those HTTP endpoints
+and returns the generated response types.
+
 ## Service Incident Record v1
 
 `service-incident-record.v1.schema.json` describes grouped service incident

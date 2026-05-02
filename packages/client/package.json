@@ -6,6 +6,10 @@
     "./service-request": {
       "types": "./src/service-request.generated.d.ts",
       "import": "./src/service-request.js"
+    },
+    "./service-observability": {
+      "types": "./src/service-observability.generated.d.ts",
+      "import": "./src/service-observability.js"
     }
   },
   "scripts": {

@@ -4,6 +4,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  getServiceEvents,
+  getServiceJob,
+  getServiceJobs,
+  getServiceTrace,
+} from '../packages/client/src/service-observability.js';
+import {
   SERVICE_REQUEST_ACTIONS,
   createServiceRequest,
   createServiceRequestMcpToolCall,
@@ -233,14 +239,17 @@ try {
     `MCP service_request did not navigate to data URL: ${JSON.stringify(mcpPayload.data)}`,
   );
 
-  const jobsResponse = await httpJson(port, 'GET', '/api/service/jobs?limit=50');
-  assert(jobsResponse.success === true, `HTTP service jobs failed: ${JSON.stringify(jobsResponse)}`);
+  const serviceBaseUrl = `http://127.0.0.1:${port}`;
+  const jobsResponseData = await getServiceJobs({
+    baseUrl: serviceBaseUrl,
+    query: { limit: 50 },
+  });
   assertServiceJobsResponseSchemaRecord(
-    jobsResponse.data,
+    jobsResponseData,
     jobsResponseSchema,
     'HTTP service request jobs response',
   );
-  const jobs = jobsResponse.data?.jobs ?? [];
+  const jobs = jobsResponseData?.jobs ?? [];
   const httpJob = findJob(jobs, {
     prefix: 'http-service-request-navigate-',
     taskName: httpTaskName,
@@ -250,15 +259,17 @@ try {
   assert(httpJob.action === 'navigate', `HTTP service request job action mismatch: ${JSON.stringify(httpJob)}`);
   assert(httpJob.state === 'succeeded', `HTTP service request job did not succeed: ${JSON.stringify(httpJob)}`);
 
-  const httpJobDetail = await httpJson(port, 'GET', `/api/service/jobs/${encodeURIComponent(httpJob.id)}`);
-  assert(httpJobDetail.success === true, `HTTP service request job detail failed: ${JSON.stringify(httpJobDetail)}`);
+  const httpJobDetail = await getServiceJob({
+    baseUrl: serviceBaseUrl,
+    id: httpJob.id,
+  });
   assertServiceJobsResponseSchemaRecord(
-    httpJobDetail.data,
+    httpJobDetail,
     jobsResponseSchema,
     'HTTP service request job detail response',
   );
-  assertServiceJobSchemaRecord(httpJobDetail.data.job, jobRecordSchema, 'HTTP service request job detail');
-  assert(httpJobDetail.data.job.id === httpJob.id, 'HTTP service request job detail returned wrong job');
+  assertServiceJobSchemaRecord(httpJobDetail.job, jobRecordSchema, 'HTTP service request job detail');
+  assert(httpJobDetail.job.id === httpJob.id, 'HTTP service request job detail returned wrong job');
 
   const mcpJob = findJob(jobs, {
     prefix: 'mcp-service-request-navigate-',
@@ -268,6 +279,26 @@ try {
   assertServiceJobSchemaRecord(mcpJob, jobRecordSchema, 'MCP service_request job');
   assert(mcpJob.action === 'navigate', `MCP service_request job action mismatch: ${JSON.stringify(mcpJob)}`);
   assert(mcpJob.state === 'succeeded', `MCP service_request job did not succeed: ${JSON.stringify(mcpJob)}`);
+
+  const eventsResponse = await getServiceEvents({
+    baseUrl: serviceBaseUrl,
+    query: { limit: 20 },
+  });
+  assert(Array.isArray(eventsResponse.events), `service events client missing events: ${JSON.stringify(eventsResponse)}`);
+  assert(Number.isInteger(eventsResponse.count), `service events client missing count: ${JSON.stringify(eventsResponse)}`);
+
+  const traceResponse = await getServiceTrace({
+    baseUrl: serviceBaseUrl,
+    query: { serviceName, limit: 50 },
+  });
+  assert(
+    traceResponse.jobs.some((job) => job.id === httpJob.id),
+    `service trace client missing HTTP job: ${JSON.stringify(traceResponse.jobs)}`,
+  );
+  assert(
+    traceResponse.jobs.some((job) => job.id === mcpJob.id),
+    `service trace client missing MCP job: ${JSON.stringify(traceResponse.jobs)}`,
+  );
 
   const mcpJobsResource = await mcp.send('resources/read', { uri: 'agent-browser://jobs' });
   const mcpJobs = parseMcpJsonResource(mcpJobsResource, 'agent-browser://jobs', 'MCP jobs resource');
