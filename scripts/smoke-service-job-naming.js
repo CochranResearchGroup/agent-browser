@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+import { setTimeout as delay } from 'node:timers/promises';
+
+import {
+  cancelServiceJob,
+} from '../packages/client/src/service-observability.js';
 import {
   assert,
   assertServiceTracePayload,
@@ -12,6 +17,7 @@ import {
   smokeDataUrl,
 } from './smoke-utils.js';
 import {
+  assertServiceJobCancelResponseSchemaRecord,
   assertServiceJobsResponseSchemaRecord,
   assertServiceJobSchemaRecord,
   loadServiceRecordSchema,
@@ -25,8 +31,13 @@ const agentName = 'smoke-agent';
 const taskName = 'jobNamingSmoke';
 const unnamedJobId = `job-naming-unnamed-${process.pid}`;
 const namedJobId = `job-naming-named-${process.pid}`;
+const runningJobId = `job-naming-running-${process.pid}`;
+const cancelJobId = `job-naming-cancel-${process.pid}`;
 const jobRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-job-record.v1.schema.json');
 const jobsResponseSchema = loadServiceRecordSchema('../docs/dev/contracts/service-jobs-response.v1.schema.json');
+const jobCancelResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-job-cancel-response.v1.schema.json',
+);
 
 let mcp;
 
@@ -101,6 +112,59 @@ try {
   }
   const port = stream.data?.port;
   assert(Number.isInteger(port) && port > 0, `stream status did not return a port: ${JSON.stringify(stream)}`);
+  const serviceBaseUrl = `http://127.0.0.1:${port}`;
+
+  const runningWaitResponsePromise = fetch(`${serviceBaseUrl}/api/browser/wait`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      id: runningJobId,
+      selector: '#this-element-never-appears',
+      state: 'visible',
+      timeoutMs: 5000,
+      serviceName,
+      agentName,
+      taskName,
+    }),
+  }).then((response) => response.json());
+  await delay(250);
+  const queuedWaitResponsePromise = fetch(`${serviceBaseUrl}/api/browser/wait`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      id: cancelJobId,
+      selector: '#this-element-also-never-appears',
+      state: 'visible',
+      timeoutMs: 30000,
+      serviceName,
+      agentName,
+      taskName,
+    }),
+  }).then((response) => response.json());
+  await delay(250);
+  const cancelled = await cancelServiceJob({
+    baseUrl: serviceBaseUrl,
+    jobId: cancelJobId,
+  });
+  assertServiceJobCancelResponseSchemaRecord(
+    cancelled,
+    jobCancelResponseSchema,
+    'client service job cancel response',
+  );
+  assert(cancelled.cancelled === true, `client service job cancel did not cancel: ${JSON.stringify(cancelled)}`);
+  assert(cancelled.job?.state === 'cancelled', `cancelled job state mismatch: ${JSON.stringify(cancelled)}`);
+  const queuedWaitResponse = await queuedWaitResponsePromise;
+  assert(
+    queuedWaitResponse.success === false &&
+      typeof queuedWaitResponse.error === 'string' &&
+      queuedWaitResponse.error.includes('cancelled before dispatch'),
+    `cancelled queued wait did not report cancellation: ${JSON.stringify(queuedWaitResponse)}`,
+  );
+  const runningWaitResponse = await runningWaitResponsePromise;
+  assert(
+    runningWaitResponse.success === false,
+    `front-running wait unexpectedly succeeded: ${JSON.stringify(runningWaitResponse)}`,
+  );
 
   await serviceCommand(port, {
     id: unnamedJobId,

@@ -37,6 +37,13 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProviderDeleteResponse} ServiceProviderDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProviderMutationOptions} ServiceProviderMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProviderUpsertResponse} ServiceProviderUpsertResponse
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserRetryOptions} ServiceBrowserRetryOptions
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserRetryResponse} ServiceBrowserRetryResponse
+ * @typedef {import('./service-observability.generated.js').ServiceIncidentAcknowledgeResponse} ServiceIncidentAcknowledgeResponse
+ * @typedef {import('./service-observability.generated.js').ServiceIncidentMutationOptions} ServiceIncidentMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceIncidentResolveResponse} ServiceIncidentResolveResponse
+ * @typedef {import('./service-observability.generated.js').ServiceJobCancelOptions} ServiceJobCancelOptions
+ * @typedef {import('./service-observability.generated.js').ServiceJobCancelResponse} ServiceJobCancelResponse
  * @typedef {import('./service-observability.generated.js').ServiceSessionDeleteResponse} ServiceSessionDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceSessionMutationOptions} ServiceSessionMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceSessionUpsertResponse} ServiceSessionUpsertResponse
@@ -182,6 +189,54 @@ export function deleteServiceProvider({ id, ...options }) {
 }
 
 /**
+ * @param {ServiceJobCancelOptions} options
+ * @returns {Promise<ServiceJobCancelResponse>}
+ */
+export function cancelServiceJob({ jobId, ...options }) {
+  return servicePost(options, `/api/service/jobs/${encodeURIComponent(jobId)}/cancel`);
+}
+
+/**
+ * @param {ServiceBrowserRetryOptions} options
+ * @returns {Promise<ServiceBrowserRetryResponse>}
+ */
+export function retryServiceBrowser({ browserId, by, note, serviceName, agentName, taskName, ...options }) {
+  return servicePost(options, `/api/service/browsers/${browserId}/retry`, undefined, {
+    by,
+    note,
+    'service-name': serviceName,
+    'agent-name': agentName,
+    'task-name': taskName,
+  });
+}
+
+/**
+ * @param {ServiceIncidentMutationOptions} options
+ * @returns {Promise<ServiceIncidentAcknowledgeResponse>}
+ */
+export function acknowledgeServiceIncident({ incidentId, by, note, ...options }) {
+  return servicePost(
+    options,
+    `/api/service/incidents/${encodeURIComponent(incidentId)}/acknowledge`,
+    undefined,
+    { by, note },
+  );
+}
+
+/**
+ * @param {ServiceIncidentMutationOptions} options
+ * @returns {Promise<ServiceIncidentResolveResponse>}
+ */
+export function resolveServiceIncident({ incidentId, by, note, ...options }) {
+  return servicePost(
+    options,
+    `/api/service/incidents/${encodeURIComponent(incidentId)}/resolve`,
+    undefined,
+    { by, note },
+  );
+}
+
+/**
  * @param {ServiceQueryOptions} options
  * @returns {Promise<ServiceJobsResponse>}
  */
@@ -275,9 +330,10 @@ async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, query }, 
  * @param {{ baseUrl: string, fetch?: typeof globalThis.fetch, signal?: AbortSignal }} options
  * @param {string} pathname
  * @param {unknown} [body]
+ * @param {Record<string, string | number | boolean | null | undefined>} [query]
  * @returns {Promise<TResult>}
  */
-async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathname, body = undefined) {
+async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathname, body = undefined, query = undefined) {
   if (typeof fetch !== 'function') {
     throw new TypeError('service observability helpers require a fetch implementation');
   }
@@ -285,7 +341,10 @@ async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathna
     throw new TypeError('service observability helpers require a baseUrl string');
   }
 
-  const response = await fetch(new URL(pathname, baseUrl), {
+  const url = new URL(pathname, baseUrl);
+  appendQuery(url, query);
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),

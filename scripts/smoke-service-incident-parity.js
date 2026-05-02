@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
 import {
+  acknowledgeServiceIncident,
+  resolveServiceIncident,
+} from '../packages/client/src/service-observability.js';
+import {
   appendPriorRecoveryAttempt,
   assert,
   assertHttpMcpServiceTraceEventParity,
@@ -393,45 +397,45 @@ try {
     );
   }
 
-  const acknowledged = await httpJson(
-    port,
-    'POST',
-    `/api/service/incidents/${encodeURIComponent(browserId)}/acknowledge?by=operator&note=triaged`,
-  );
-  assert(acknowledged.success === true, `HTTP incident acknowledge failed: ${JSON.stringify(acknowledged)}`);
+  const acknowledged = await acknowledgeServiceIncident({
+    baseUrl: `http://127.0.0.1:${port}`,
+    incidentId: browserId,
+    by: 'operator',
+    note: 'triaged',
+  });
   assertServiceIncidentAcknowledgeResponseSchemaRecord(
-    acknowledged.data,
+    acknowledged,
     incidentAcknowledgeResponseSchema,
-    'HTTP incident acknowledge response',
+    'client incident acknowledge response',
   );
   assertServiceIncidentSchemaRecord(
-    acknowledged.data.incident,
+    acknowledged.incident,
     incidentRecordSchema,
-    'HTTP incident acknowledge',
+    'client incident acknowledge',
   );
   assert(
-    acknowledged.data.incident.acknowledgedBy === 'operator',
+    acknowledged.incident.acknowledgedBy === 'operator',
     `HTTP incident acknowledge actor mismatch: ${JSON.stringify(acknowledged)}`,
   );
 
-  const resolved = await httpJson(
-    port,
-    'POST',
-    `/api/service/incidents/${encodeURIComponent(browserId)}/resolve?by=operator&note=recovered`,
-  );
-  assert(resolved.success === true, `HTTP incident resolve failed: ${JSON.stringify(resolved)}`);
+  const resolved = await resolveServiceIncident({
+    baseUrl: `http://127.0.0.1:${port}`,
+    incidentId: browserId,
+    by: 'operator',
+    note: 'recovered',
+  });
   assertServiceIncidentResolveResponseSchemaRecord(
-    resolved.data,
+    resolved,
     incidentResolveResponseSchema,
-    'HTTP incident resolve response',
+    'client incident resolve response',
   );
   assertServiceIncidentSchemaRecord(
-    resolved.data.incident,
+    resolved.incident,
     incidentRecordSchema,
-    'HTTP incident resolve',
+    'client incident resolve',
   );
   assert(
-    resolved.data.incident.resolvedBy === 'operator',
+    resolved.incident.resolvedBy === 'operator',
     `HTTP incident resolve actor mismatch: ${JSON.stringify(resolved)}`,
   );
 

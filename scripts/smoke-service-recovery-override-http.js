@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import {
+  retryServiceBrowser,
+} from '../packages/client/src/service-observability.js';
+import {
   appendPriorRecoveryAttempt,
   assert,
   assertRecoveryBudgetBlockedEvents,
@@ -134,21 +137,18 @@ try {
   const blockedEvents = trace.data.events;
   assertRecoveryBudgetBlockedEvents(blockedEvents, { browserId, label: 'HTTP recovery override' });
 
-  const retry = await httpJson(
-    port,
-    'POST',
-    `/api/service/browsers/${browserId}/retry?by=${encodeURIComponent(
-      retryActor,
-    )}&note=${encodeURIComponent(
-      'HTTP smoke retry after intentional budget exhaustion',
-    )}&service-name=${encodeURIComponent(serviceName)}&agent-name=${encodeURIComponent(
-      agentName,
-    )}&task-name=${encodeURIComponent(taskName)}`,
-  );
-  assert(retry.success === true, `HTTP retry failed: ${JSON.stringify(retry)}`);
-  assert(retry.data?.retryEnabled === true, `HTTP retry did not enable recovery: ${JSON.stringify(retry)}`);
+  const retry = await retryServiceBrowser({
+    baseUrl: `http://127.0.0.1:${port}`,
+    browserId,
+    by: retryActor,
+    note: 'HTTP smoke retry after intentional budget exhaustion',
+    serviceName,
+    agentName,
+    taskName,
+  });
+  assert(retry.retryEnabled === true, `HTTP retry did not enable recovery: ${JSON.stringify(retry)}`);
   assert(
-    retry.data?.browser?.health === 'process_exited',
+    retry.browser?.health === 'process_exited',
     `HTTP retry did not move browser back to process_exited: ${JSON.stringify(retry)}`,
   );
 

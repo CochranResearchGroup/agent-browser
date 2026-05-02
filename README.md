@@ -1511,6 +1511,7 @@ For read-side software clients, import
 `getServiceStatus`, collection reads for profiles, browsers, sessions, tabs,
 site policies, providers, and challenges, `postServiceReconcile`,
 upsert and delete helpers for profiles, sessions, site policies, and providers,
+operator remedy helpers for job cancel, browser retry, and incident handling,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
 `getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
 Declarations are generated from the matching service contract schemas.

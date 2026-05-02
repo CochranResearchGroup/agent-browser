@@ -340,6 +340,31 @@ export interface ServiceProviderDeleteResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceJobCancelResponse {
+  cancelled: boolean;
+  job: ServiceJobRecord;
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserRetryResponse {
+  retryEnabled: boolean;
+  browser: ServiceBrowserRecord;
+  incident: ServiceIncidentRecord | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceIncidentAcknowledgeResponse {
+  acknowledged: boolean;
+  incident: ServiceIncidentRecord;
+  [key: string]: unknown;
+}
+
+export interface ServiceIncidentResolveResponse {
+  resolved: boolean;
+  incident: ServiceIncidentRecord;
+  [key: string]: unknown;
+}
+
 export interface ServiceEventsResponse extends ServiceListResponse<ServiceEventRecord> {
   events: ServiceEventRecord[];
 }
@@ -420,6 +445,25 @@ export interface ServiceProviderMutationOptions extends ServiceIdOptions {
   provider: Record<string, unknown>;
 }
 
+export interface ServiceJobCancelOptions extends ServiceObservabilityHttpOptions {
+  jobId: string;
+}
+
+export interface ServiceBrowserRetryOptions extends ServiceObservabilityHttpOptions {
+  browserId: string;
+  by?: string;
+  note?: string;
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+}
+
+export interface ServiceIncidentMutationOptions extends ServiceObservabilityHttpOptions {
+  incidentId: string;
+  by?: string;
+  note?: string;
+}
+
 export interface ServiceIncidentActivityOptions extends ServiceObservabilityHttpOptions {
   incidentId: string;
 }
@@ -445,6 +489,10 @@ export declare function upsertServiceSitePolicy(options: ServiceSitePolicyMutati
 export declare function deleteServiceSitePolicy(options: ServiceIdOptions): Promise<ServiceSitePolicyDeleteResponse>;
 export declare function upsertServiceProvider(options: ServiceProviderMutationOptions): Promise<ServiceProviderUpsertResponse>;
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
+export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;
+export declare function retryServiceBrowser(options: ServiceBrowserRetryOptions): Promise<ServiceBrowserRetryResponse>;
+export declare function acknowledgeServiceIncident(options: ServiceIncidentMutationOptions): Promise<ServiceIncidentAcknowledgeResponse>;
+export declare function resolveServiceIncident(options: ServiceIncidentMutationOptions): Promise<ServiceIncidentResolveResponse>;
 export declare function getServiceJobs(options: ServiceQueryOptions): Promise<ServiceJobsResponse>;
 export declare function getServiceJob(options: ServiceIdOptions): Promise<ServiceJobsResponse>;
 export declare function getServiceEvents(options: ServiceQueryOptions): Promise<ServiceEventsResponse>;
