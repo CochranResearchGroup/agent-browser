@@ -39,7 +39,7 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/browser/navigate" \
 For software clients, prefer one explicit service request object when the caller wants agent-browser to select the profile, serialize CDP access, and retain trace metadata:
 
 ```ts
-import { createServiceRequest, postServiceRequest } from '@agent-browser/client/service-request';
+import { createServiceRequest, postServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
 
 const request = createServiceRequest({
   serviceName: 'JournalDownloader',
@@ -57,6 +57,17 @@ const request = createServiceRequest({
 const result = await postServiceRequest({
   baseUrl: `http://127.0.0.1:${streamPort}`,
   request,
+});
+
+const tab = await requestServiceTab({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  serviceName: 'JournalDownloader',
+  agentName: 'article-probe-agent',
+  taskName: 'probeACSwebsite',
+  siteId: 'acs',
+  loginId: 'acs',
+  url: 'https://example.com',
+  jobTimeoutMs: 30000,
 });
 ```
 
@@ -91,7 +102,7 @@ An MCP client sends the same intent shape through `tools/call`:
 
 MCP tool callers should include `serviceName`, `agentName`, and `taskName` whenever those values are known. Anonymous callers remain compatible, but service jobs record `namingWarnings` so operators can find unlabelled automation.
 
-The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. The private workspace package <code>@agent-browser/client</code> generates its service request helpers and types from those schemas.
+The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. The private workspace package <code>@agent-browser/client</code> generates its service request helpers and types from those schemas, including <code>requestServiceTab</code> for the common software-client path where a service asks for a queued tab by site or login identity.
 
 Read-side software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
 
@@ -189,7 +200,7 @@ POST   /api/service/providers/<id>
 DELETE /api/service/providers/<id>
 ```
 
-Named browser-control routes accept the same action fields as the underlying command, plus trace fields such as `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs`. `POST /api/service/request` accepts one intent object with `serviceName`, `agentName`, `taskName`, `siteId`, `loginId`, target-service hints, `action`, `params`, and `jobTimeoutMs`, then queues the requested browser action through the same service-owned control path. Its request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>.
+Named browser-control routes accept the same action fields as the underlying command, plus trace fields such as `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs`. `POST /api/service/request` accepts one intent object with `serviceName`, `agentName`, `taskName`, `siteId`, `loginId`, target-service hints, explicit `profile` or `runtimeProfile` hints, `action`, `params`, and `jobTimeoutMs`, then queues the requested browser action through the same service-owned control path. Its request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>.
 
 ## MCP shape
 

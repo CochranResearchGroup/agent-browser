@@ -13,7 +13,9 @@ import {
   SERVICE_REQUEST_ACTIONS,
   createServiceRequest,
   createServiceRequestMcpToolCall,
+  createServiceTabRequest,
   postServiceRequest,
+  requestServiceTab,
 } from '../packages/client/src/service-request.js';
 import {
   assert,
@@ -50,6 +52,7 @@ const selectedUserDataDir = join(tempHome, 'selected-profile-user-data');
 const fallbackUserDataDir = join(tempHome, 'fallback-profile-user-data');
 const httpTaskName = 'httpServiceRequestSmoke';
 const mcpTaskName = 'mcpServiceRequestSmoke';
+const tabTaskName = 'serviceTabRequestSmoke';
 const jobRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-job-record.v1.schema.json');
 const jobsResponseSchema = loadServiceRecordSchema('../docs/dev/contracts/service-jobs-response.v1.schema.json');
 const serviceRequestSchema = loadServiceRecordSchema('../docs/dev/contracts/service-request.v1.schema.json');
@@ -174,6 +177,19 @@ try {
     jobTimeoutMs: 30000,
   });
   assertServiceRequestPayloadSchemaRecord(httpRequest, serviceRequestSchema, 'HTTP service request payload');
+  const explicitProfileRequest = createServiceRequest({
+    serviceName,
+    agentName,
+    taskName: 'explicitProfileContractSmoke',
+    action: 'tab_list',
+    profile: selectedUserDataDir,
+    runtimeProfile: selectedProfileId,
+  });
+  assertServiceRequestPayloadSchemaRecord(
+    explicitProfileRequest,
+    serviceRequestSchema,
+    'explicit profile service request payload',
+  );
   const httpResponse = await postServiceRequest({
     baseUrl: `http://127.0.0.1:${port}`,
     request: httpRequest,
@@ -192,6 +208,30 @@ try {
     activeSession.profileId === selectedProfileId,
     `HTTP service request selected wrong profile: ${JSON.stringify(activeSession)}`,
   );
+
+  const serviceBaseUrl = `http://127.0.0.1:${port}`;
+  const tabUrl = smokeDataUrl('Service Tab Request Smoke', 'Service Tab Request Smoke');
+  const tabRequest = createServiceTabRequest({
+    serviceName,
+    agentName,
+    taskName: tabTaskName,
+    siteId: targetServiceId,
+    loginId: targetServiceId,
+    url: tabUrl,
+    jobTimeoutMs: 30000,
+  });
+  assertServiceRequestPayloadSchemaRecord(tabRequest, serviceRequestSchema, 'client service tab request payload');
+  const tabResponse = await requestServiceTab({
+    baseUrl: serviceBaseUrl,
+    serviceName,
+    agentName,
+    taskName: tabTaskName,
+    siteId: targetServiceId,
+    loginId: targetServiceId,
+    url: tabUrl,
+    jobTimeoutMs: 30000,
+  });
+  assert(tabResponse.success === true, `client service tab request failed: ${JSON.stringify(tabResponse)}`);
 
   mcp = createMcpStdioClient({
     context,
@@ -239,7 +279,6 @@ try {
     `MCP service_request did not navigate to data URL: ${JSON.stringify(mcpPayload.data)}`,
   );
 
-  const serviceBaseUrl = `http://127.0.0.1:${port}`;
   const jobsResponseData = await getServiceJobs({
     baseUrl: serviceBaseUrl,
     query: { limit: 50 },
@@ -258,6 +297,15 @@ try {
   assertServiceJobSchemaRecord(httpJob, jobRecordSchema, 'HTTP service request job');
   assert(httpJob.action === 'navigate', `HTTP service request job action mismatch: ${JSON.stringify(httpJob)}`);
   assert(httpJob.state === 'succeeded', `HTTP service request job did not succeed: ${JSON.stringify(httpJob)}`);
+
+  const tabJob = findJob(jobs, {
+    prefix: 'http-service-request-tab_new-',
+    taskName: tabTaskName,
+  });
+  assert(tabJob, `client service tab request job missing: ${JSON.stringify(jobs)}`);
+  assertServiceJobSchemaRecord(tabJob, jobRecordSchema, 'client service tab request job');
+  assert(tabJob.action === 'tab_new', `client service tab request action mismatch: ${JSON.stringify(tabJob)}`);
+  assert(tabJob.state === 'succeeded', `client service tab request did not succeed: ${JSON.stringify(tabJob)}`);
 
   const httpJobDetail = await getServiceJob({
     baseUrl: serviceBaseUrl,

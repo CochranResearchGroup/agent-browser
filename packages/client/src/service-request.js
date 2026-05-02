@@ -12,6 +12,8 @@ const actionSet = new Set(SERVICE_REQUEST_ACTIONS);
 /**
  * @typedef {import('./service-request.generated.js').ServiceRequest} ServiceRequest
  * @typedef {import('./service-request.generated.js').ServiceRequestHttpOptions} ServiceRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceTabRequestHttpOptions} ServiceTabRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceTabRequestOptions} ServiceTabRequestOptions
  */
 
 export {
@@ -68,6 +70,32 @@ export function createServiceRequestMcpToolCall(input) {
 }
 
 /**
+ * @param {ServiceTabRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceTabRequest(input) {
+  assertPlainObject(input, 'service tab request');
+  const { url, params, ...request } = input;
+  if (url !== undefined && typeof url !== 'string') {
+    throw new TypeError('service tab request url must be a string');
+  }
+  if (params !== undefined) {
+    assertPlainObject(params, 'service tab request params');
+  }
+
+  const tabParams = { ...(params ?? {}) };
+  if (url !== undefined) {
+    tabParams.url = url;
+  }
+
+  return createServiceRequest({
+    ...request,
+    action: 'tab_new',
+    ...(Object.keys(tabParams).length > 0 ? { params: tabParams } : {}),
+  });
+}
+
+/**
  * @param {ServiceRequestHttpOptions} options
  */
 export async function postServiceRequest({ baseUrl, request, fetch = globalThis.fetch, signal }) {
@@ -90,6 +118,18 @@ export async function postServiceRequest({ baseUrl, request, fetch = globalThis.
   }
 
   return response.json();
+}
+
+/**
+ * @param {ServiceTabRequestHttpOptions} options
+ */
+export async function requestServiceTab({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceTabRequest(request),
+  });
 }
 
 /**

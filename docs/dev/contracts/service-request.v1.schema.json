@@ -145,6 +145,14 @@
         "type": "string"
       },
       "description": "Login identity aliases for targetServiceIds."
+    },
+    "profile": {
+      "type": "string",
+      "description": "Explicit caller-supplied profile path for bring-your-own-profile requests."
+    },
+    "runtimeProfile": {
+      "type": "string",
+      "description": "Explicit managed runtime profile name when the caller knows where the needed login state lives."
     }
   },
   "additionalProperties": false
