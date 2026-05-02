@@ -80,12 +80,123 @@ const files = {
   readme: read('README.md'),
   skill: read('skills/agent-browser/SKILL.md'),
   docs: read('docs/src/app/commands/page.mdx'),
+  serviceModeDocs: read('docs/src/app/service-mode/page.mdx'),
 };
 
 const failures = [];
-const serviceSurface = [['service_request', 'POST', '/api/service/request']].map(
-  ([tool, method, route]) => ({ tool, method, route }),
-);
+const serviceSurface = [
+  {
+    tool: 'service_request',
+    method: 'POST',
+    route: '/api/service/request',
+    httpNeedles: ['path == "/api/service/request"'],
+  },
+  {
+    tool: 'service_job_cancel',
+    method: 'POST',
+    route: '/api/service/jobs/<id>/cancel',
+    docsNeedles: ['/api/service/jobs/<job-id>/cancel', '/api/service/jobs/<id>/cancel'],
+    httpNeedles: ['service_job_cancel_id(path)', '"/api/service/jobs/"', '"/cancel"'],
+  },
+  {
+    tool: 'service_browser_retry',
+    method: 'POST',
+    route: '/api/service/browsers/<id>/retry',
+    docsNeedles: ['/api/service/browsers/<browser-id>/retry', '/api/service/browsers/<id>/retry'],
+    httpNeedles: ['service_browser_retry_id(path)', '"/api/service/browsers/"', '"/retry"'],
+  },
+  {
+    tool: 'service_incidents',
+    method: 'GET',
+    route: '/api/service/incidents',
+    httpNeedles: ['path == "/api/service/incidents"', 'service_incidents_command(query)'],
+  },
+  {
+    tool: 'service_trace',
+    method: 'GET',
+    route: '/api/service/trace',
+    httpNeedles: ['path == "/api/service/trace"', 'service_trace_command(query)'],
+  },
+  {
+    tool: 'service_profile_upsert',
+    method: 'POST',
+    route: '/api/service/profiles/<id>',
+    httpNeedles: ['service_profile_id(path)', 'service_profile_upsert_command(profile_id, body_str)'],
+  },
+  {
+    tool: 'service_profile_delete',
+    method: 'DELETE',
+    route: '/api/service/profiles/<id>',
+    httpNeedles: ['service_profile_id(path)', 'service_profile_delete_command(profile_id)'],
+  },
+  {
+    tool: 'service_session_upsert',
+    method: 'POST',
+    route: '/api/service/sessions/<id>',
+    httpNeedles: [
+      'service_session_id(path)',
+      'service_session_upsert_command(service_session_id, body_str)',
+    ],
+  },
+  {
+    tool: 'service_session_delete',
+    method: 'DELETE',
+    route: '/api/service/sessions/<id>',
+    httpNeedles: ['service_session_id(path)', 'service_session_delete_command(service_session_id)'],
+  },
+  {
+    tool: 'service_site_policy_upsert',
+    method: 'POST',
+    route: '/api/service/site-policies/<id>',
+    httpNeedles: [
+      'service_site_policy_id(path)',
+      'service_site_policy_upsert_command(site_policy_id, body_str)',
+    ],
+  },
+  {
+    tool: 'service_site_policy_delete',
+    method: 'DELETE',
+    route: '/api/service/site-policies/<id>',
+    httpNeedles: [
+      'service_site_policy_id(path)',
+      'service_site_policy_delete_command(site_policy_id)',
+    ],
+  },
+  {
+    tool: 'service_provider_upsert',
+    method: 'POST',
+    route: '/api/service/providers/<id>',
+    httpNeedles: ['service_provider_id(path)', 'service_provider_upsert_command(provider_id, body_str)'],
+  },
+  {
+    tool: 'service_provider_delete',
+    method: 'DELETE',
+    route: '/api/service/providers/<id>',
+    httpNeedles: ['service_provider_id(path)', 'service_provider_delete_command(provider_id)'],
+  },
+];
+
+const serviceResourceSurface = [
+  { resource: 'agent-browser://profiles', route: '/api/service/profiles' },
+  { resource: 'agent-browser://sessions', route: '/api/service/sessions' },
+  { resource: 'agent-browser://browsers', route: '/api/service/browsers' },
+  { resource: 'agent-browser://tabs', route: '/api/service/tabs' },
+  { resource: 'agent-browser://site-policies', route: '/api/service/site-policies' },
+  { resource: 'agent-browser://providers', route: '/api/service/providers' },
+  { resource: 'agent-browser://challenges', route: '/api/service/challenges' },
+  { resource: 'agent-browser://jobs', route: '/api/service/jobs' },
+  { resource: 'agent-browser://events', route: '/api/service/events' },
+  { resource: 'agent-browser://incidents', route: '/api/service/incidents' },
+  {
+    resource: 'agent-browser://incidents/{incident_id}/activity',
+    route: '/api/service/incidents/<id>/activity',
+    docsNeedles: [
+      '/api/service/incidents/<incident-id>/activity',
+      '/api/service/incidents/<id>/activity',
+    ],
+    httpNeedles: ['service_incident_action_id(path, "/activity")'],
+  },
+];
 
 for (const entry of browserSurface) {
   expectIncludes(files.mcp, entry.tool, `MCP source exposes ${entry.tool}`);
@@ -107,19 +218,35 @@ for (const entry of browserSurface) {
 
 for (const entry of serviceSurface) {
   expectIncludes(files.mcp, entry.tool, `MCP source exposes ${entry.tool}`);
-  expectIncludes(
-    files.http,
-    `path == "${entry.route}"`,
-    `HTTP source exposes ${entry.method} ${entry.route}`,
-  );
+  for (const needle of entry.httpNeedles) {
+    expectIncludes(files.http, needle, `HTTP source exposes ${entry.method} ${entry.route}`);
+  }
 
   for (const [label, source] of [
     ['README.md', files.readme],
     ['skills/agent-browser/SKILL.md', files.skill],
     ['docs/src/app/commands/page.mdx', files.docs],
+    ['docs/src/app/service-mode/page.mdx', files.serviceModeDocs],
   ]) {
     expectIncludes(source, entry.tool, `${label} mentions ${entry.tool}`);
-    expectIncludes(source, entry.route, `${label} mentions ${entry.route}`);
+    expectAnyIncludes(source, entry.docsNeedles ?? [entry.route], `${label} mentions ${entry.route}`);
+  }
+}
+
+for (const entry of serviceResourceSurface) {
+  expectIncludes(files.mcp, entry.resource, `MCP source exposes resource ${entry.resource}`);
+  for (const needle of entry.httpNeedles ?? [entry.route.replace('/<id>', '')]) {
+    expectIncludes(files.http, needle, `HTTP source exposes ${entry.route}`);
+  }
+
+  for (const [label, source] of [
+    ['README.md', files.readme],
+    ['skills/agent-browser/SKILL.md', files.skill],
+    ['docs/src/app/commands/page.mdx', files.docs],
+    ['docs/src/app/service-mode/page.mdx', files.serviceModeDocs],
+  ]) {
+    expectIncludes(source, entry.resource, `${label} mentions ${entry.resource}`);
+    expectAnyIncludes(source, entry.docsNeedles ?? [entry.route], `${label} mentions ${entry.route}`);
   }
 }
 
@@ -132,7 +259,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `Service API/MCP parity check passed for ${browserSurface.length} browser controls and ${serviceSurface.length} service controls`,
+  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service tools, and ${serviceResourceSurface.length} service resources`,
 );
 
 function read(relativePath) {
@@ -141,6 +268,12 @@ function read(relativePath) {
 
 function expectIncludes(source, needle, message) {
   if (!source.includes(needle)) {
+    failures.push(message);
+  }
+}
+
+function expectAnyIncludes(source, needles, message) {
+  if (!needles.some((needle) => source.includes(needle))) {
     failures.push(message);
   }
 }
