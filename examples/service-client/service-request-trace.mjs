@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // @ts-check
 
-import { createServiceRequest, postServiceRequest } from '@agent-browser/client/service-request';
-import { getServiceTrace } from '@agent-browser/client/service-observability';
+import { createServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
+import { cancelServiceJob, getServiceTrace } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://example.com';
 const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | undefined>, exit(code?: number): never }} */ (
@@ -17,30 +17,31 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   agentName?: string;
  *   taskName?: string;
  *   siteId?: string;
+ *   loginId?: string;
+ *   cancelJobId?: string;
  *   dryRun?: boolean;
  * }} WorkflowOptions
  */
 
 /**
- * @param {Omit<WorkflowOptions, 'baseUrl' | 'dryRun'>} options
+ * @param {Omit<WorkflowOptions, 'baseUrl' | 'dryRun' | 'cancelJobId'>} options
  */
-export function buildServiceRequest({
+export function buildServiceTabRequest({
   url = DEFAULT_URL,
   serviceName = 'JournalDownloader',
   agentName = 'article-probe-agent',
   taskName = 'probeACSwebsite',
   siteId = 'example',
+  loginId = siteId,
 } = {}) {
   return createServiceRequest({
     serviceName,
     agentName,
     taskName,
     siteId,
-    action: 'navigate',
-    params: {
-      url,
-      waitUntil: 'load',
-    },
+    loginId,
+    action: 'tab_new',
+    params: { url },
     jobTimeoutMs: 30000,
   });
 }
@@ -55,15 +56,18 @@ export async function runServiceWorkflow({
   agentName = 'article-probe-agent',
   taskName = 'probeACSwebsite',
   siteId = 'example',
+  loginId = siteId,
+  cancelJobId,
   dryRun = false,
 } = {}) {
-  const request = buildServiceRequest({ url, serviceName, agentName, taskName, siteId });
+  const request = buildServiceTabRequest({ url, serviceName, agentName, taskName, siteId, loginId });
 
   if (dryRun) {
     return {
       dryRun: true,
       request,
       traceQuery: { serviceName, agentName, taskName, limit: 50 },
+      cancelRequest: cancelJobId ? { jobId: cancelJobId, remedy: 'cancelServiceJob' } : null,
     };
   }
 
@@ -71,7 +75,17 @@ export async function runServiceWorkflow({
     throw new Error('Missing baseUrl. Pass --base-url http://127.0.0.1:<stream-port>.');
   }
 
-  const commandResult = await postServiceRequest({ baseUrl, request });
+  const commandResult = await requestServiceTab({
+    baseUrl,
+    url,
+    serviceName,
+    agentName,
+    taskName,
+    siteId,
+    loginId,
+    jobTimeoutMs: 30000,
+  });
+  const cancelResult = cancelJobId ? await cancelServiceJob({ baseUrl, jobId: cancelJobId }) : null;
   const trace = await getServiceTrace({
     baseUrl,
     query: { serviceName, agentName, taskName, limit: 50 },
@@ -80,6 +94,7 @@ export async function runServiceWorkflow({
   return {
     dryRun: false,
     commandResult,
+    cancelResult,
     traceSummary: {
       events: trace.counts.events,
       jobs: trace.counts.jobs,
@@ -121,6 +136,7 @@ function parseArgs(args) {
     agentName: nodeProcess.env.AGENT_BROWSER_EXAMPLE_AGENT || 'article-probe-agent',
     taskName: nodeProcess.env.AGENT_BROWSER_EXAMPLE_TASK || 'probeACSwebsite',
     siteId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_SITE || 'example',
+    cancelJobId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_CANCEL_JOB_ID,
     dryRun: false,
   };
 
@@ -140,6 +156,10 @@ function parseArgs(args) {
       parsed.taskName = requiredValue(args, ++index, arg);
     } else if (arg === '--site-id') {
       parsed.siteId = requiredValue(args, ++index, arg);
+    } else if (arg === '--login-id') {
+      parsed.loginId = requiredValue(args, ++index, arg);
+    } else if (arg === '--cancel-job-id') {
+      parsed.cancelJobId = requiredValue(args, ++index, arg);
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }

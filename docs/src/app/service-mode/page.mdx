@@ -106,7 +106,7 @@ The HTTP service request object follows <code>docs/dev/contracts/service-request
 
 Read-side software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
 
-The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It sends a service request, reads <code>getServiceTrace</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>.
+The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, can cancel a known queued job with <code>cancelServiceJob</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>.
 
 ## Operator request model
 

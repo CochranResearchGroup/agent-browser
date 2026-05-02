@@ -2,8 +2,9 @@
 
 This example shows the software-client workflow for agent-browser service mode:
 
-- send one intent-based browser request with `postServiceRequest`
+- request one intent-based service tab with `requestServiceTab`
 - read the matching service trace with `getServiceTrace`
+- optionally cancel a queued job with `cancelServiceJob`
 - keep `serviceName`, `agentName`, and `taskName` attached to both calls
 
 ## Dry Run
@@ -33,7 +34,8 @@ pnpm --filter agent-browser-service-client-example exec node service-request-tra
   --service-name JournalDownloader \
   --agent-name article-probe-agent \
   --task-name probeACSwebsite \
-  --site-id example
+  --site-id example \
+  --login-id example
 ```
 
 You can also set `AGENT_BROWSER_SERVICE_BASE_URL` instead of passing
@@ -42,3 +44,9 @@ You can also set `AGENT_BROWSER_SERVICE_BASE_URL` instead of passing
 The script prints the command result, trace counts, and the latest retained
 jobs so software projects can confirm that the request and trace metadata are
 connected.
+
+Pass `--cancel-job-id <job-id>` when your software already knows a queued job
+that should be cancelled. The script calls `cancelServiceJob` and prints the
+cancellation result alongside the tab request and trace output. Use
+`pnpm test:service-job-naming-live` for the repo-local live smoke that creates
+and cancels a queued job end to end.

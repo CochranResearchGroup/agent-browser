@@ -154,22 +154,20 @@ try {
     taskName,
     '--site-id',
     targetServiceId,
+    '--login-id',
+    targetServiceId,
   ]);
   const output = parseJsonOutput(exampleResult.stdout, 'service client example');
 
   assert(output.dryRun === false, `example did not run live: ${JSON.stringify(output)}`);
   assert(
     output.commandResult?.success === true,
-    `example service request failed: ${JSON.stringify(output.commandResult)}`,
-  );
-  assert(
-    output.commandResult?.data?.url?.startsWith('data:text/html'),
-    `example did not navigate to smoke page: ${JSON.stringify(output.commandResult)}`,
+    `example service tab request failed: ${JSON.stringify(output.commandResult)}`,
   );
   assert(output.traceSummary?.jobs >= 1, `example trace summary missed jobs: ${JSON.stringify(output)}`);
   const latestJob = output.latestJobs?.find(
     (job) =>
-      job.action === 'navigate' &&
+      job.action === 'tab_new' &&
       job.state === 'succeeded' &&
       job.serviceName === serviceName &&
       job.agentName === agentName &&
