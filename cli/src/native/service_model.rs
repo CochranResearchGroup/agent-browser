@@ -73,6 +73,8 @@ pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 4] = [
     "target_match",
     "service_allow_list",
 ];
+pub const SERVICE_PROFILE_LEASE_DISPOSITION_VALUES: [&str; 3] =
+    ["new_browser", "reused_browser", "active_lease_conflict"];
 pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
     "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
 ];
@@ -399,6 +401,8 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
             "lease",
             "profileId",
             "profileSelectionReason",
+            "profileLeaseDisposition",
+            "profileLeaseConflictSessionIds",
             "cleanup",
             "browserIds",
             "tabIds",
@@ -411,6 +415,8 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
             "task_name",
             "profile_id",
             "profile_selection_reason",
+            "profile_lease_disposition",
+            "profile_lease_conflict_session_ids",
             "browser_ids",
             "tab_ids",
             "created_at",
@@ -421,6 +427,10 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
     if let Some(reason) = value["profileSelectionReason"].as_str() {
         assert!(SERVICE_PROFILE_SELECTION_REASON_VALUES.contains(&reason));
     }
+    if let Some(disposition) = value["profileLeaseDisposition"].as_str() {
+        assert!(SERVICE_PROFILE_LEASE_DISPOSITION_VALUES.contains(&disposition));
+    }
+    assert!(value["profileLeaseConflictSessionIds"].is_array());
     assert!(SERVICE_SESSION_CLEANUP_VALUES.contains(&value["cleanup"].as_str().unwrap()));
     assert!(value["browserIds"].is_array());
     assert!(value["tabIds"].is_array());
@@ -1833,6 +1843,10 @@ pub struct BrowserSession {
     pub profile_id: Option<String>,
     /// Why this session's profile was selected, when agent-browser can infer it.
     pub profile_selection_reason: Option<ProfileSelectionReason>,
+    /// Whether the selected profile is new, reused, or already leased elsewhere.
+    pub profile_lease_disposition: Option<ProfileLeaseDisposition>,
+    /// Other sessions currently holding an exclusive lease on the same profile.
+    pub profile_lease_conflict_session_ids: Vec<String>,
     pub cleanup: SessionCleanupPolicy,
     pub browser_ids: Vec<String>,
     pub tab_ids: Vec<String>,
@@ -1851,6 +1865,8 @@ impl Default for BrowserSession {
             lease: LeaseState::Shared,
             profile_id: None,
             profile_selection_reason: None,
+            profile_lease_disposition: None,
+            profile_lease_conflict_session_ids: Vec::new(),
             cleanup: SessionCleanupPolicy::Detach,
             browser_ids: Vec::new(),
             tab_ids: Vec::new(),
@@ -1872,6 +1888,18 @@ pub enum ProfileSelectionReason {
     TargetMatch,
     /// Selected profile was chosen by caller service allow-list fallback.
     ServiceAllowList,
+}
+
+/// Current lease relationship between a session and its selected profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileLeaseDisposition {
+    /// No retained browser or exclusive session was already using the profile.
+    NewBrowser,
+    /// This session already had a retained browser for the selected profile.
+    ReusedBrowser,
+    /// Another exclusive session already references the selected profile.
+    ActiveLeaseConflict,
 }
 
 /// Current service view of a CDP target or browser tab.
@@ -2690,6 +2718,10 @@ mod tests {
             json!(SERVICE_PROFILE_SELECTION_REASON_VALUES.to_vec())
         );
         assert_eq!(
+            session_schema["properties"]["profileLeaseDisposition"]["oneOf"][0]["enum"],
+            json!(SERVICE_PROFILE_LEASE_DISPOSITION_VALUES.to_vec())
+        );
+        assert_eq!(
             session_schema["properties"]["cleanup"]["enum"],
             json!(SERVICE_SESSION_CLEANUP_VALUES.to_vec())
         );
@@ -2747,6 +2779,8 @@ mod tests {
                 "lease",
                 "profileId",
                 "profileSelectionReason",
+                "profileLeaseDisposition",
+                "profileLeaseConflictSessionIds",
                 "cleanup",
             ],
         );
@@ -2784,6 +2818,7 @@ mod tests {
             lease: LeaseState::Exclusive,
             profile_id: Some("profile-1".to_string()),
             profile_selection_reason: Some(ProfileSelectionReason::AuthenticatedTarget),
+            profile_lease_disposition: Some(ProfileLeaseDisposition::NewBrowser),
             cleanup: SessionCleanupPolicy::CloseTabs,
             ..BrowserSession::default()
         };
@@ -3082,6 +3117,8 @@ mod tests {
             "lease": "exclusive",
             "profileId": "journal-downloader",
             "profileSelectionReason": "authenticated_target",
+            "profileLeaseDisposition": "new_browser",
+            "profileLeaseConflictSessionIds": [],
             "cleanup": "close_browser",
             "browserIds": [],
             "tabIds": [],

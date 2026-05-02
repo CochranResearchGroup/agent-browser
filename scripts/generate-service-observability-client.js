@@ -160,6 +160,8 @@ export interface ServiceSessionRecord {
   taskName: string | null;
   profileId: string | null;
   profileSelectionReason: 'explicit_profile' | 'authenticated_target' | 'target_match' | 'service_allow_list' | null;
+  profileLeaseDisposition: 'new_browser' | 'reused_browser' | 'active_lease_conflict' | null;
+  profileLeaseConflictSessionIds: string[];
   [key: string]: unknown;
 }
 

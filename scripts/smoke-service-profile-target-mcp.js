@@ -215,6 +215,15 @@ try {
     `Session selected profile for wrong reason: ${JSON.stringify(activeSession)}`,
   );
   assert(
+    activeSession.profileLeaseDisposition === 'new_browser',
+    `Session recorded wrong profile lease disposition: ${JSON.stringify(activeSession)}`,
+  );
+  assert(
+    Array.isArray(activeSession.profileLeaseConflictSessionIds) &&
+      activeSession.profileLeaseConflictSessionIds.length === 0,
+    `Session recorded unexpected profile lease conflicts: ${JSON.stringify(activeSession)}`,
+  );
+  assert(
     activeSession.serviceName === serviceName,
     `Session serviceName was ${activeSession.serviceName}`,
   );
@@ -237,6 +246,9 @@ try {
       event.sessionId === session &&
       event.profileId === selectedProfileId &&
       event.details?.profileSelectionReason === 'authenticated_target' &&
+      event.details?.profileLeaseDisposition === 'new_browser' &&
+      Array.isArray(event.details?.profileLeaseConflictSessionIds) &&
+      event.details.profileLeaseConflictSessionIds.length === 0 &&
       event.serviceName === serviceName &&
       event.agentName === agentName &&
       event.taskName === taskName,

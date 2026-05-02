@@ -13,6 +13,8 @@
     "lease",
     "profileId",
     "profileSelectionReason",
+    "profileLeaseDisposition",
+    "profileLeaseConflictSessionIds",
     "cleanup",
     "browserIds",
     "tabIds",
@@ -62,6 +64,29 @@
           "type": "null"
         }
       ]
+    },
+    "profileLeaseDisposition": {
+      "description": "Current relationship between this session and the selected profile lease.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "new_browser",
+            "reused_browser",
+            "active_lease_conflict"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "profileLeaseConflictSessionIds": {
+      "description": "Other retained exclusive sessions that reference the same profile.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "cleanup": {
       "type": "string",

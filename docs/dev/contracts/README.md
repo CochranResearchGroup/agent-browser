@@ -184,6 +184,10 @@ Session records include `profileSelectionReason` so clients can distinguish
 `authenticated_target`, `target_match`, `service_allow_list`, and
 `explicit_profile` profile choices without reconstructing selector behavior
 from events.
+They also include `profileLeaseDisposition` and
+`profileLeaseConflictSessionIds` so clients can see whether the selected
+profile started a new browser, reused a retained session browser, or overlapped
+another exclusive session.
 
 The operator remedy mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

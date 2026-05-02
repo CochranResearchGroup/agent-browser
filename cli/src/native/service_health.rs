@@ -1332,6 +1332,17 @@ pub fn record_browser_launch_recorded_event(
         .first()
         .and_then(|session_id| state.sessions.get(session_id))
         .and_then(|session| session.profile_selection_reason);
+    let profile_lease_disposition = current
+        .active_session_ids
+        .first()
+        .and_then(|session_id| state.sessions.get(session_id))
+        .and_then(|session| session.profile_lease_disposition);
+    let profile_lease_conflict_session_ids = current
+        .active_session_ids
+        .first()
+        .and_then(|session_id| state.sessions.get(session_id))
+        .map(|session| session.profile_lease_conflict_session_ids.clone())
+        .unwrap_or_default();
     let mut event = ServiceEvent {
         kind: ServiceEventKind::BrowserLaunchRecorded,
         message: format!("Browser {} launch metadata recorded", browser_id),
@@ -1348,6 +1359,8 @@ pub fn record_browser_launch_recorded_event(
             "pid": current.pid,
             "cdpEndpoint": current.cdp_endpoint,
             "profileSelectionReason": profile_selection_reason,
+            "profileLeaseDisposition": profile_lease_disposition,
+            "profileLeaseConflictSessionIds": profile_lease_conflict_session_ids,
         })),
         ..new_service_event()
     };

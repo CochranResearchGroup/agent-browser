@@ -4,8 +4,9 @@
 //! model, while command parsing and browser process control remain in actions.
 
 use super::service_model::{
-    BrowserProfile, BrowserSession, LeaseState, ProfileAllocationPolicy, ProfileKeyringPolicy,
-    ProfileSelectionReason, ServiceActor, ServiceState, SessionCleanupPolicy,
+    BrowserProcess, BrowserProfile, BrowserSession, LeaseState, ProfileAllocationPolicy,
+    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason, ServiceActor,
+    ServiceState, SessionCleanupPolicy,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -117,6 +118,16 @@ pub(crate) fn upsert_service_profile_and_session(
         }
     }
 
+    let selected_profile_id = profile_id.clone().or_else(|| {
+        service_state
+            .sessions
+            .get(session_id)
+            .and_then(|session| session.profile_id.clone())
+    });
+    let lease_telemetry = selected_profile_id
+        .as_deref()
+        .map(|profile_id| profile_lease_telemetry(service_state, session_id, profile_id));
+
     let session = service_state
         .sessions
         .entry(session_id.to_string())
@@ -140,6 +151,10 @@ pub(crate) fn upsert_service_profile_and_session(
     session.profile_selection_reason = metadata
         .profile_selection_reason
         .or(session.profile_selection_reason);
+    if let Some(lease_telemetry) = lease_telemetry {
+        session.profile_lease_disposition = Some(lease_telemetry.disposition);
+        session.profile_lease_conflict_session_ids = lease_telemetry.conflict_session_ids;
+    }
     session.lease = if session.profile_id.is_some() {
         LeaseState::Exclusive
     } else {
@@ -150,6 +165,56 @@ pub(crate) fn upsert_service_profile_and_session(
         &mut session.browser_ids,
         service_browser_id_for_session(session_id),
     );
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProfileLeaseTelemetry {
+    disposition: ProfileLeaseDisposition,
+    conflict_session_ids: Vec<String>,
+}
+
+fn profile_lease_telemetry(
+    service_state: &ServiceState,
+    session_id: &str,
+    profile_id: &str,
+) -> ProfileLeaseTelemetry {
+    let current_browser_id = service_browser_id_for_session(session_id);
+    let has_current_browser =
+        service_state
+            .browsers
+            .get(&current_browser_id)
+            .is_some_and(|browser| {
+                browser.profile_id.as_deref() == Some(profile_id)
+                    && browser
+                        .active_session_ids
+                        .iter()
+                        .any(|active_session_id| active_session_id == session_id)
+            });
+    let mut conflict_session_ids = service_state
+        .sessions
+        .iter()
+        .filter_map(|(candidate_id, session)| {
+            (candidate_id != session_id
+                && session.profile_id.as_deref() == Some(profile_id)
+                && session.lease == LeaseState::Exclusive)
+                .then(|| candidate_id.clone())
+        })
+        .collect::<Vec<_>>();
+    conflict_session_ids.sort();
+    conflict_session_ids.dedup();
+
+    let disposition = if !conflict_session_ids.is_empty() {
+        ProfileLeaseDisposition::ActiveLeaseConflict
+    } else if has_current_browser {
+        ProfileLeaseDisposition::ReusedBrowser
+    } else {
+        ProfileLeaseDisposition::NewBrowser
+    };
+
+    ProfileLeaseTelemetry {
+        disposition,
+        conflict_session_ids,
+    }
 }
 
 fn profile_allows_service(profile: &BrowserProfile, service_name: Option<&str>) -> bool {
@@ -466,7 +531,85 @@ mod tests {
             session.profile_selection_reason,
             Some(ProfileSelectionReason::ExplicitProfile)
         );
+        assert_eq!(
+            session.profile_lease_disposition,
+            Some(ProfileLeaseDisposition::NewBrowser)
+        );
+        assert!(session.profile_lease_conflict_session_ids.is_empty());
         assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
         assert_eq!(session.browser_ids, vec!["session:persist-session"]);
+    }
+
+    #[test]
+    fn test_upsert_service_session_records_reused_browser_lease_disposition() {
+        let mut service_state = ServiceState::default();
+        service_state.browsers.insert(
+            "session:persist-session".to_string(),
+            BrowserProcess {
+                id: "session:persist-session".to_string(),
+                profile_id: Some("work".to_string()),
+                active_session_ids: vec!["persist-session".to_string()],
+                ..BrowserProcess::default()
+            },
+        );
+        let metadata = ServiceLaunchMetadata {
+            profile_id: Some("work".to_string()),
+            profile_name: Some("Work".to_string()),
+            persistent_profile: true,
+            profile_selection_reason: Some(ProfileSelectionReason::AuthenticatedTarget),
+            ..ServiceLaunchMetadata::default()
+        };
+
+        upsert_service_profile_and_session(
+            &mut service_state,
+            "persist-session",
+            metadata.profile_id.clone(),
+            &metadata,
+        );
+
+        let session = &service_state.sessions["persist-session"];
+        assert_eq!(
+            session.profile_lease_disposition,
+            Some(ProfileLeaseDisposition::ReusedBrowser)
+        );
+        assert!(session.profile_lease_conflict_session_ids.is_empty());
+    }
+
+    #[test]
+    fn test_upsert_service_session_records_active_lease_conflict() {
+        let mut service_state = ServiceState::default();
+        service_state.sessions.insert(
+            "other-session".to_string(),
+            BrowserSession {
+                id: "other-session".to_string(),
+                profile_id: Some("work".to_string()),
+                lease: LeaseState::Exclusive,
+                ..BrowserSession::default()
+            },
+        );
+        let metadata = ServiceLaunchMetadata {
+            profile_id: Some("work".to_string()),
+            profile_name: Some("Work".to_string()),
+            persistent_profile: true,
+            profile_selection_reason: Some(ProfileSelectionReason::AuthenticatedTarget),
+            ..ServiceLaunchMetadata::default()
+        };
+
+        upsert_service_profile_and_session(
+            &mut service_state,
+            "persist-session",
+            metadata.profile_id.clone(),
+            &metadata,
+        );
+
+        let session = &service_state.sessions["persist-session"];
+        assert_eq!(
+            session.profile_lease_disposition,
+            Some(ProfileLeaseDisposition::ActiveLeaseConflict)
+        );
+        assert_eq!(
+            session.profile_lease_conflict_session_ids,
+            vec!["other-session".to_string()]
+        );
     }
 }

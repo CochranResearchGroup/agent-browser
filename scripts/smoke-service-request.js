@@ -228,6 +228,15 @@ try {
     activeSession.profileSelectionReason === 'authenticated_target',
     `HTTP service request selected profile for wrong reason: ${JSON.stringify(activeSession)}`,
   );
+  assert(
+    activeSession.profileLeaseDisposition === 'new_browser',
+    `HTTP service request recorded wrong profile lease disposition: ${JSON.stringify(activeSession)}`,
+  );
+  assert(
+    Array.isArray(activeSession.profileLeaseConflictSessionIds) &&
+      activeSession.profileLeaseConflictSessionIds.length === 0,
+    `HTTP service request recorded unexpected profile lease conflicts: ${JSON.stringify(activeSession)}`,
+  );
 
   const serviceBaseUrl = `http://127.0.0.1:${port}`;
   const tabUrl = smokeDataUrl('Service Tab Request Smoke', 'Service Tab Request Smoke');
