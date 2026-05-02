@@ -78,9 +78,25 @@ async function main() {
     () =>
       createServiceRequest({
         action: 'navigate',
+        profileLeaseWaitTimeoutMs: 0,
+      }),
+    /profileLeaseWaitTimeoutMs must be a positive integer/,
+  );
+  assert.throws(
+    () =>
+      createServiceRequest({
+        action: 'navigate',
         serviceName: 42,
       }),
     /service request serviceName must be a string/,
+  );
+  assert.throws(
+    () =>
+      createServiceRequest({
+        action: 'navigate',
+        profileLeasePolicy: 'maybe',
+      }),
+    /profileLeasePolicy must be reject or wait/,
   );
   assert.throws(
     () =>
@@ -104,6 +120,8 @@ async function main() {
       waitUntil: 'load',
     },
     jobTimeoutMs: 30_000,
+    profileLeasePolicy: 'wait',
+    profileLeaseWaitTimeoutMs: 5_000,
   });
   assert.deepEqual(request, {
     serviceName: 'JournalDownloader',
@@ -118,6 +136,8 @@ async function main() {
       waitUntil: 'load',
     },
     jobTimeoutMs: 30_000,
+    profileLeasePolicy: 'wait',
+    profileLeaseWaitTimeoutMs: 5_000,
   });
 
   const mcpToolCall = createServiceRequestMcpToolCall(request);

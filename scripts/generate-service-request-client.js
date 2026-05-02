@@ -26,6 +26,9 @@ const stringFields = Object.entries(requestSchema.properties)
 const stringArrayFields = Object.entries(requestSchema.properties)
   .filter(([, property]) => property.type === 'array' && property.items?.type === 'string')
   .map(([name]) => name);
+const integerFields = Object.entries(requestSchema.properties)
+  .filter(([, property]) => property.type === 'integer')
+  .map(([name]) => name);
 const requiredFields = requestSchema.required;
 const mcpToolName = mcpToolCallSchema.properties.name.const;
 
@@ -55,6 +58,8 @@ export const SERVICE_REQUEST_STRING_FIELDS = ${json(stringFields)};
 
 export const SERVICE_REQUEST_STRING_ARRAY_FIELDS = ${json(stringArrayFields)};
 
+export const SERVICE_REQUEST_INTEGER_FIELDS = ${json(integerFields)};
+
 export const SERVICE_REQUEST_MCP_TOOL_NAME = ${json(mcpToolName)};
 `;
 }
@@ -66,6 +71,7 @@ function renderGeneratedTypes() {
     .map((field) => `  ${field}?: string;`)
     .join('\n');
   const stringArrayFieldLines = stringArrayFields.map((field) => `  ${field}?: string[];`).join('\n');
+  const integerFieldLines = integerFields.map((field) => `  ${field}?: number;`).join('\n');
 
   return `${generatedHeader('ts')}export type ServiceRequestAction =
 ${actionUnion};
@@ -73,9 +79,9 @@ ${actionUnion};
 export interface ServiceRequest {
   action: ServiceRequestAction;
   params?: Record<string, unknown>;
-  jobTimeoutMs?: number;
 ${stringFieldLines}
 ${stringArrayFieldLines}
+${integerFieldLines}
 }
 
 export type ServiceRequestForAction<TAction extends ServiceRequestAction> =
@@ -517,6 +523,7 @@ export declare const SERVICE_REQUEST_ACTIONS: readonly ServiceRequestAction[];
 export declare const SERVICE_REQUEST_REQUIRED_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_ARRAY_FIELDS: readonly string[];
+export declare const SERVICE_REQUEST_INTEGER_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_MCP_TOOL_NAME: ${JSON.stringify(mcpToolName)};
 
 export declare function createServiceRequest<TRequest extends ServiceRequest>(input: TRequest): TRequest;

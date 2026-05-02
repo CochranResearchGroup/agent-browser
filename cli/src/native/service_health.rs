@@ -10,8 +10,8 @@ use super::browser::BrowserShutdownOutcome;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
 use super::service_model::{
     BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserSession,
-    BrowserTab, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceReconciliationSnapshot,
-    ServiceState, TabLifecycle,
+    BrowserTab, LeaseState, ServiceEvent, ServiceEventKind, ServiceIncident,
+    ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -706,6 +706,10 @@ pub(crate) fn persist_closed_browser_health_in_repository(
             &browser,
             shutdown_details,
         );
+        if let Some(session) = service_state.sessions.get_mut(session_id) {
+            session.lease = LeaseState::Released;
+            session.profile_lease_conflict_session_ids.clear();
+        }
         service_state.browsers.insert(id, browser);
         Ok(())
     })

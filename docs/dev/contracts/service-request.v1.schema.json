@@ -90,6 +90,19 @@
       "minimum": 1,
       "description": "Optional worker-bound timeout for this queued service request."
     },
+    "profileLeasePolicy": {
+      "type": "string",
+      "enum": [
+        "reject",
+        "wait"
+      ],
+      "description": "How service-scoped launches handle active exclusive leases on the selected profile. reject fails before browser start. wait polls until the lease releases or profileLeaseWaitTimeoutMs elapses."
+    },
+    "profileLeaseWaitTimeoutMs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum time to wait for profileLeasePolicy=wait before failing the service request."
+    },
     "serviceName": {
       "type": "string",
       "description": "Calling service name, for example JournalDownloader."

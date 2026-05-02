@@ -8,6 +8,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::{broadcast, oneshot, RwLock};
 
@@ -88,6 +89,14 @@ use super::webdriver::safari;
 /// After navigation completes, `auth_login` explicitly waits for form selectors
 /// to appear before filling/clicking.
 pub const AUTH_LOGIN_WAIT_UNTIL: WaitUntil = WaitUntil::Load;
+const DEFAULT_PROFILE_LEASE_WAIT_TIMEOUT_MS: u64 = 30_000;
+const PROFILE_LEASE_WAIT_POLL_MS: u64 = 250;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProfileLeasePolicy {
+    Reject,
+    Wait,
+}
 
 /// Poll interval used while waiting for auth form selectors to appear.
 const AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS: u64 = 100;
@@ -595,9 +604,10 @@ fn persist_current_browser_health(
 /// The current scheduling contract is deterministic rejection for another
 /// active exclusive holder. The same retained session may still reuse its
 /// browser, and non-service launches keep the existing direct-control behavior.
-fn ensure_service_profile_lease_available(
+async fn ensure_service_profile_lease_available(
     metadata: &ServiceLaunchMetadata,
     session_id: &str,
+    command: &Value,
 ) -> Result<(), String> {
     if metadata.service_name.is_none() {
         return Ok(());
@@ -605,15 +615,53 @@ fn ensure_service_profile_lease_available(
     let Some(profile_id) = metadata.profile_id.as_deref() else {
         return Ok(());
     };
+    let policy = profile_lease_policy_from_command(command)?;
+    let wait_timeout_ms = profile_lease_wait_timeout_ms_from_command(command)?;
+    let started_at = Instant::now();
+
+    loop {
+        let conflict_session_ids =
+            service_profile_lease_conflict_session_ids(metadata, session_id, profile_id);
+        if conflict_session_ids.is_empty() {
+            return Ok(());
+        }
+
+        if policy == ProfileLeasePolicy::Reject {
+            return Err(service_profile_lease_conflict_error(
+                metadata,
+                profile_id,
+                &conflict_session_ids,
+                None,
+            ));
+        }
+
+        if started_at.elapsed() >= Duration::from_millis(wait_timeout_ms) {
+            return Err(service_profile_lease_conflict_error(
+                metadata,
+                profile_id,
+                &conflict_session_ids,
+                Some(wait_timeout_ms),
+            ));
+        }
+
+        tokio::time::sleep(Duration::from_millis(PROFILE_LEASE_WAIT_POLL_MS)).await;
+    }
+}
+
+fn service_profile_lease_conflict_session_ids(
+    metadata: &ServiceLaunchMetadata,
+    session_id: &str,
+    profile_id: &str,
+) -> Vec<String> {
     let repository = match LockedServiceStateRepository::default_json() {
         Ok(repository) => repository,
-        Err(_) => return Ok(()),
+        Err(_) => return Vec::new(),
     };
     let service_state = match repository.load_snapshot() {
         Ok(service_state) => service_state,
-        Err(_) => return Ok(()),
+        Err(_) => return Vec::new(),
     };
-    ensure_service_profile_lease_available_in_state(
+    service_profile_lease_conflict_session_ids_in_state(
         &service_state,
         metadata,
         session_id,
@@ -621,27 +669,61 @@ fn ensure_service_profile_lease_available(
     )
 }
 
-fn ensure_service_profile_lease_available_in_state(
+fn service_profile_lease_conflict_session_ids_in_state(
     service_state: &ServiceState,
-    metadata: &ServiceLaunchMetadata,
+    _metadata: &ServiceLaunchMetadata,
     session_id: &str,
     profile_id: &str,
-) -> Result<(), String> {
+) -> Vec<String> {
     let lease_telemetry = profile_lease_telemetry(service_state, session_id, profile_id);
     if lease_telemetry.disposition != ProfileLeaseDisposition::ActiveLeaseConflict {
-        return Ok(());
+        return Vec::new();
     }
 
+    lease_telemetry.conflict_session_ids
+}
+
+fn service_profile_lease_conflict_error(
+    metadata: &ServiceLaunchMetadata,
+    profile_id: &str,
+    conflict_session_ids: &[String],
+    wait_timeout_ms: Option<u64>,
+) -> String {
     let service_label = metadata
         .service_name
         .as_deref()
         .unwrap_or("unknown service");
-    Err(format!(
-        "Service profile lease conflict for profile '{}': service '{}' cannot launch while exclusive session(s) {} already hold the profile. Retry after those sessions release the profile or request a different profile.",
+    let wait_detail = wait_timeout_ms
+        .map(|timeout| format!(" after waiting {} ms", timeout))
+        .unwrap_or_default();
+    format!(
+        "Service profile lease conflict for profile '{}': service '{}' cannot launch{} while exclusive session(s) {} already hold the profile. Retry after those sessions release the profile, set profileLeasePolicy to wait, or request a different profile.",
         profile_id,
         service_label,
-        lease_telemetry.conflict_session_ids.join(", ")
-    ))
+        wait_detail,
+        conflict_session_ids.join(", ")
+    )
+}
+
+fn profile_lease_policy_from_command(command: &Value) -> Result<ProfileLeasePolicy, String> {
+    match optional_command_string(command, "profileLeasePolicy").as_deref() {
+        None | Some("reject") => Ok(ProfileLeasePolicy::Reject),
+        Some("wait") => Ok(ProfileLeasePolicy::Wait),
+        Some(value) => Err(format!(
+            "profileLeasePolicy must be 'reject' or 'wait', got '{}'",
+            value
+        )),
+    }
+}
+
+fn profile_lease_wait_timeout_ms_from_command(command: &Value) -> Result<u64, String> {
+    match command.get("profileLeaseWaitTimeoutMs") {
+        None => Ok(DEFAULT_PROFILE_LEASE_WAIT_TIMEOUT_MS),
+        Some(value) => value
+            .as_u64()
+            .filter(|timeout| *timeout > 0)
+            .ok_or_else(|| "profileLeaseWaitTimeoutMs must be a positive integer".to_string()),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2475,7 +2557,7 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
     let selection_reason = apply_service_profile_selection(&mut options, command);
     let metadata =
         ServiceLaunchMetadata::from_launch_options(&options, Some(command), selection_reason);
-    ensure_service_profile_lease_available(&metadata, &state.session_id)?;
+    ensure_service_profile_lease_available(&metadata, &state.session_id, command).await?;
 
     // Store proxy credentials for Fetch.authRequired handling
     let has_proxy_auth = options.proxy_username.is_some();
@@ -2815,7 +2897,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
     let metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
-    ensure_service_profile_lease_available(&metadata, &state.session_id)?;
+    ensure_service_profile_lease_available(&metadata, &state.session_id, cmd).await?;
 
     let new_hash = launch_hash(&launch_options);
 
@@ -10242,16 +10324,15 @@ mod tests {
             ..ServiceLaunchMetadata::default()
         };
 
-        let err = ensure_service_profile_lease_available_in_state(
+        let conflict_session_ids = service_profile_lease_conflict_session_ids_in_state(
             &service_state,
             &metadata,
             "new-session",
             "acs-profile",
         )
-        .unwrap_err();
+        .join(", ");
 
-        assert!(err.contains("Service profile lease conflict"));
-        assert!(err.contains("active-session"));
+        assert_eq!(conflict_session_ids, "active-session");
     }
 
     #[test]
@@ -10283,13 +10364,85 @@ mod tests {
             ..ServiceLaunchMetadata::default()
         };
 
-        ensure_service_profile_lease_available_in_state(
+        let conflict_session_ids = service_profile_lease_conflict_session_ids_in_state(
             &service_state,
             &metadata,
             "active-session",
             "acs-profile",
+        );
+
+        assert!(conflict_session_ids.is_empty());
+    }
+
+    #[test]
+    fn test_profile_lease_policy_rejects_invalid_value() {
+        let err = profile_lease_policy_from_command(&json!({
+            "profileLeasePolicy": "maybe"
+        }))
+        .unwrap_err();
+
+        assert!(err.contains("profileLeasePolicy must be"));
+    }
+
+    #[test]
+    fn test_profile_lease_wait_timeout_requires_positive_integer() {
+        let err = profile_lease_wait_timeout_ms_from_command(&json!({
+            "profileLeaseWaitTimeoutMs": 0
+        }))
+        .unwrap_err();
+
+        assert!(err.contains("profileLeaseWaitTimeoutMs must be a positive integer"));
+    }
+
+    #[tokio::test]
+    async fn test_service_profile_lease_guard_waits_for_release() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("profile-lease-wait-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                sessions: BTreeMap::from([(
+                    "active-session".to_string(),
+                    BrowserSession {
+                        id: "active-session".to_string(),
+                        profile_id: Some("acs-profile".to_string()),
+                        lease: LeaseState::Exclusive,
+                        ..BrowserSession::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .expect("service state should be persisted");
+
+        let release_store = store.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            let mut state = release_store.load().expect("state should load");
+            state.sessions.get_mut("active-session").unwrap().lease = LeaseState::Released;
+            release_store.save(&state).expect("state should save");
+        });
+
+        let metadata = ServiceLaunchMetadata {
+            profile_id: Some("acs-profile".to_string()),
+            service_name: Some("JournalDownloader".to_string()),
+            ..ServiceLaunchMetadata::default()
+        };
+
+        ensure_service_profile_lease_available(
+            &metadata,
+            "new-session",
+            &json!({
+                "profileLeasePolicy": "wait",
+                "profileLeaseWaitTimeoutMs": 2_000
+            }),
         )
-        .expect("same session should be able to reuse its retained browser");
+        .await
+        .expect("wait policy should allow launch after release");
+
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]
@@ -13742,6 +13895,16 @@ mod tests {
                         ..BrowserProcess::default()
                     },
                 )]),
+                sessions: BTreeMap::from([(
+                    "close-reason-session".to_string(),
+                    BrowserSession {
+                        id: "close-reason-session".to_string(),
+                        profile_id: Some("work".to_string()),
+                        lease: LeaseState::Exclusive,
+                        profile_lease_conflict_session_ids: vec!["other-session".to_string()],
+                        ..BrowserSession::default()
+                    },
+                )]),
                 ..ServiceState::default()
             })
             .unwrap();
@@ -13802,6 +13965,13 @@ mod tests {
         assert!(persisted.browsers[browser_id]
             .last_health_observation
             .is_none());
+        assert_eq!(
+            persisted.sessions["close-reason-session"].lease,
+            LeaseState::Released
+        );
+        assert!(persisted.sessions["close-reason-session"]
+            .profile_lease_conflict_session_ids
+            .is_empty());
 
         let _ = fs::remove_dir_all(&home);
     }

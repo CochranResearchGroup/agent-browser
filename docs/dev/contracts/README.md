@@ -37,7 +37,9 @@ accepted by:
 The schema requires only `action` for compatibility, but callers should include
 `serviceName`, `agentName`, and `taskName` when known so retained jobs remain
 traceable. Target hints such as `siteId`, `loginId`, and `targetServiceId`
-drive profile selection for the requested site or login scope.
+drive profile selection for the requested site or login scope. `profileLeasePolicy`
+can be `reject` or `wait`; `wait` uses `profileLeaseWaitTimeoutMs` to bound how
+long the service request waits for another exclusive profile lease to release.
 
 `service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
 wrapper for invoking `service_request` with the same intent object.
@@ -186,8 +188,9 @@ Session records include `profileSelectionReason` so clients can distinguish
 from events.
 They also include `profileLeaseDisposition` and
 `profileLeaseConflictSessionIds` so clients can see whether the selected
-profile started a new browser, reused a retained session browser, or overlapped
-another exclusive session.
+profile started a new browser, reused a retained session browser, or hit
+another exclusive session. Service-scoped launches reject or wait on active
+exclusive conflicts according to `profileLeasePolicy`.
 
 The operator remedy mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

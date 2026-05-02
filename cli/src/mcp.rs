@@ -462,6 +462,16 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minimum": 1,
                         "description": "Optional worker-bound timeout for this queued service request."
                     },
+                    "profileLeasePolicy": {
+                        "type": "string",
+                        "enum": ["reject", "wait"],
+                        "description": "How service-scoped launches handle active exclusive leases on the selected profile. reject fails before browser start; wait polls until the lease releases or profileLeaseWaitTimeoutMs elapses."
+                    },
+                    "profileLeaseWaitTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum time to wait for profileLeasePolicy=wait before failing the request."
+                    },
                     "serviceName": {
                         "type": "string",
                         "description": "Calling service name, for example JournalDownloader."
@@ -1763,6 +1773,22 @@ fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
         return tool;
     }
 
+    properties.insert(
+        "profileLeasePolicy".to_string(),
+        json!({
+            "type": "string",
+            "enum": ["reject", "wait"],
+            "description": "How service-scoped launches handle active exclusive leases on the selected profile."
+        }),
+    );
+    properties.insert(
+        "profileLeaseWaitTimeoutMs".to_string(),
+        json!({
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum time to wait for profileLeasePolicy=wait before failing the request."
+        }),
+    );
     properties.insert(
         "targetServiceId".to_string(),
         json!({
@@ -7084,6 +7110,10 @@ fn optional_enum_string_argument<'a>(
     Ok(value)
 }
 
+fn optional_profile_lease_policy_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
+    optional_enum_string_argument(arguments, "profileLeasePolicy", &["reject", "wait"])
+}
+
 fn required_string_argument<'a>(arguments: &'a Value, name: &str) -> Result<&'a str, JsonRpcError> {
     optional_string_argument(arguments, name)?
         .ok_or_else(|| JsonRpcError::invalid_params(&format!("{} is required", name)))
@@ -7423,6 +7453,8 @@ fn service_tool_trace(
 #[derive(Clone, Copy)]
 struct ServiceToolContext<'a> {
     job_timeout_ms: Option<u64>,
+    profile_lease_policy: Option<&'a str>,
+    profile_lease_wait_timeout_ms: Option<u64>,
     service_name: Option<&'a str>,
     agent_name: Option<&'a str>,
     task_name: Option<&'a str>,
@@ -7440,6 +7472,11 @@ impl<'a> ServiceToolContext<'a> {
     fn from_arguments(arguments: &'a Value) -> Result<Self, JsonRpcError> {
         Ok(Self {
             job_timeout_ms: optional_positive_u64_argument(arguments, "jobTimeoutMs")?,
+            profile_lease_policy: optional_profile_lease_policy_argument(arguments)?,
+            profile_lease_wait_timeout_ms: optional_positive_u64_argument(
+                arguments,
+                "profileLeaseWaitTimeoutMs",
+            )?,
             service_name: optional_string_argument(arguments, "serviceName")?,
             agent_name: optional_string_argument(arguments, "agentName")?,
             task_name: optional_string_argument(arguments, "taskName")?,
@@ -7464,6 +7501,12 @@ impl<'a> ServiceToolContext<'a> {
     }
 
     fn apply_target_profile_hints(self, command: &mut Value) {
+        if let Some(profile_lease_policy) = self.profile_lease_policy {
+            command["profileLeasePolicy"] = json!(profile_lease_policy);
+        }
+        if let Some(profile_lease_wait_timeout_ms) = self.profile_lease_wait_timeout_ms {
+            command["profileLeaseWaitTimeoutMs"] = json!(profile_lease_wait_timeout_ms);
+        }
         if let Some(target_service_id) = self.target_service_id {
             command["targetServiceId"] = json!(target_service_id);
         }
@@ -7538,6 +7581,8 @@ fn send_queued_tool_command(
 
 fn copy_target_profile_hints(source: &Value, command: &mut Value) {
     for key in [
+        "profileLeasePolicy",
+        "profileLeaseWaitTimeoutMs",
         "targetServiceId",
         "targetService",
         "targetServiceIds",
@@ -9535,7 +9580,9 @@ mod tests {
             "taskName": "probeACSwebsite",
             "siteId": "acs",
             "loginIds": ["orcid"],
-            "jobTimeoutMs": 1000
+            "jobTimeoutMs": 1000,
+            "profileLeasePolicy": "wait",
+            "profileLeaseWaitTimeoutMs": 2500
         }))
         .unwrap();
 
@@ -9552,6 +9599,8 @@ mod tests {
         assert_eq!(command["siteId"], "acs");
         assert_eq!(command["loginIds"][0], "orcid");
         assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["profileLeasePolicy"], "wait");
+        assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
     }
 
     #[test]
@@ -9563,7 +9612,9 @@ mod tests {
             "targetServiceId": "google",
             "targetServices": ["acs", "microsoft"],
             "siteId": "nih",
-            "loginIds": ["orcid"]
+            "loginIds": ["orcid"],
+            "profileLeasePolicy": "wait",
+            "profileLeaseWaitTimeoutMs": 2500
         });
         let context = ServiceToolContext::from_arguments(&arguments).unwrap();
         let trace = context.trace();
@@ -9578,10 +9629,14 @@ mod tests {
         assert_eq!(trace["targetServices"][0], "acs");
         assert_eq!(trace["siteId"], "nih");
         assert_eq!(trace["loginIds"][0], "orcid");
+        assert_eq!(trace["profileLeasePolicy"], "wait");
+        assert_eq!(trace["profileLeaseWaitTimeoutMs"], 2500);
         assert_eq!(command["targetServiceId"], "google");
         assert_eq!(command["targetServices"][1], "microsoft");
         assert_eq!(command["siteId"], "nih");
         assert_eq!(command["loginIds"][0], "orcid");
+        assert_eq!(command["profileLeasePolicy"], "wait");
+        assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
     }
 
     #[test]

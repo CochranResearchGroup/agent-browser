@@ -1004,6 +1004,8 @@ fn service_request_command(body: &str) -> Result<Value, String> {
     }
     for key in [
         "jobTimeoutMs",
+        "profileLeasePolicy",
+        "profileLeaseWaitTimeoutMs",
         "serviceName",
         "agentName",
         "taskName",
@@ -2129,7 +2131,7 @@ mod tests {
     #[test]
     fn service_request_command_maps_request_object() {
         let command = service_request_command(
-            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"jobTimeoutMs":1000}"##,
+            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"jobTimeoutMs":1000,"profileLeasePolicy":"wait","profileLeaseWaitTimeoutMs":2500}"##,
         )
         .unwrap();
 
@@ -2144,6 +2146,8 @@ mod tests {
         assert_eq!(command["siteId"], "acs");
         assert_eq!(command["loginIds"][0], "orcid");
         assert_eq!(command["jobTimeoutMs"], 1000);
+        assert_eq!(command["profileLeasePolicy"], "wait");
+        assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
     }
 
     #[test]

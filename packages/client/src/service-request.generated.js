@@ -76,6 +76,7 @@ export const SERVICE_REQUEST_REQUIRED_FIELDS = [
 
 export const SERVICE_REQUEST_STRING_FIELDS = [
   "action",
+  "profileLeasePolicy",
   "serviceName",
   "agentName",
   "taskName",
@@ -92,6 +93,11 @@ export const SERVICE_REQUEST_STRING_ARRAY_FIELDS = [
   "targetServices",
   "siteIds",
   "loginIds"
+];
+
+export const SERVICE_REQUEST_INTEGER_FIELDS = [
+  "jobTimeoutMs",
+  "profileLeaseWaitTimeoutMs"
 ];
 
 export const SERVICE_REQUEST_MCP_TOOL_NAME = "service_request";

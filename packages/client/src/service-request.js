@@ -2,6 +2,7 @@
 
 import {
   SERVICE_REQUEST_ACTIONS,
+  SERVICE_REQUEST_INTEGER_FIELDS,
   SERVICE_REQUEST_MCP_TOOL_NAME,
   SERVICE_REQUEST_STRING_ARRAY_FIELDS,
   SERVICE_REQUEST_STRING_FIELDS,
@@ -19,6 +20,7 @@ const actionSet = new Set(SERVICE_REQUEST_ACTIONS);
 
 export {
   SERVICE_REQUEST_ACTIONS,
+  SERVICE_REQUEST_INTEGER_FIELDS,
   SERVICE_REQUEST_MCP_TOOL_NAME,
   SERVICE_REQUEST_STRING_ARRAY_FIELDS,
   SERVICE_REQUEST_STRING_FIELDS,
@@ -37,16 +39,25 @@ export function createServiceRequest(input) {
   if (Object.hasOwn(input, 'params')) {
     assertPlainObject(input.params, 'service request params');
   }
-  if (
-    Object.hasOwn(input, 'jobTimeoutMs') &&
-    (!Number.isInteger(record.jobTimeoutMs) || Number(record.jobTimeoutMs) < 1)
-  ) {
-    throw new TypeError('service request jobTimeoutMs must be a positive integer');
+  for (const field of SERVICE_REQUEST_INTEGER_FIELDS) {
+    if (
+      Object.hasOwn(input, field) &&
+      (!Number.isInteger(record[field]) || Number(record[field]) < 1)
+    ) {
+      throw new TypeError(`service request ${field} must be a positive integer`);
+    }
   }
   for (const field of SERVICE_REQUEST_STRING_FIELDS) {
     if (Object.hasOwn(input, field) && typeof record[field] !== 'string') {
       throw new TypeError(`service request ${field} must be a string`);
     }
+  }
+  if (
+    Object.hasOwn(input, 'profileLeasePolicy') &&
+    record.profileLeasePolicy !== 'reject' &&
+    record.profileLeasePolicy !== 'wait'
+  ) {
+    throw new TypeError('service request profileLeasePolicy must be reject or wait');
   }
   for (const field of SERVICE_REQUEST_STRING_ARRAY_FIELDS) {
     if (Object.hasOwn(input, field)) {

@@ -72,7 +72,7 @@ export type ServiceRequestAction =
 export interface ServiceRequest {
   action: ServiceRequestAction;
   params?: Record<string, unknown>;
-  jobTimeoutMs?: number;
+  profileLeasePolicy?: string;
   serviceName?: string;
   agentName?: string;
   taskName?: string;
@@ -86,6 +86,8 @@ export interface ServiceRequest {
   targetServices?: string[];
   siteIds?: string[];
   loginIds?: string[];
+  jobTimeoutMs?: number;
+  profileLeaseWaitTimeoutMs?: number;
 }
 
 export type ServiceRequestForAction<TAction extends ServiceRequestAction> =
@@ -527,6 +529,7 @@ export declare const SERVICE_REQUEST_ACTIONS: readonly ServiceRequestAction[];
 export declare const SERVICE_REQUEST_REQUIRED_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_ARRAY_FIELDS: readonly string[];
+export declare const SERVICE_REQUEST_INTEGER_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_MCP_TOOL_NAME: "service_request";
 
 export declare function createServiceRequest<TRequest extends ServiceRequest>(input: TRequest): TRequest;
