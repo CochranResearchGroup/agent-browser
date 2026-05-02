@@ -26,6 +26,22 @@ by:
 The schema covers list and detail responses, including the returned job array,
 count, matched and total counters, and the detail-only `job` field.
 
+## Service Request v1
+
+`service-request.v1.schema.json` describes the service request intent object
+accepted by:
+
+- HTTP `POST /api/service/request`
+- MCP `service_request` `arguments`
+
+The schema requires only `action` for compatibility, but callers should include
+`serviceName`, `agentName`, and `taskName` when known so retained jobs remain
+traceable. Target hints such as `siteId`, `loginId`, and `targetServiceId`
+drive profile selection for the requested site or login scope.
+
+`service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
+wrapper for invoking `service_request` with the same intent object.
+
 ## Service Incident Record v1
 
 `service-incident-record.v1.schema.json` describes grouped service incident

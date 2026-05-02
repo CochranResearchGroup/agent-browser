@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-request-mcp-tool-call.v1.schema.json",
+  "title": "agent-browser MCP service_request tool call",
+  "description": "Stable MCP tools/call payload shape for invoking service_request with one service request intent object.",
+  "type": "object",
+  "required": [
+    "name",
+    "arguments"
+  ],
+  "properties": {
+    "name": {
+      "const": "service_request"
+    },
+    "arguments": {
+      "$ref": "service-request.v1.schema.json"
+    }
+  },
+  "additionalProperties": false
+}

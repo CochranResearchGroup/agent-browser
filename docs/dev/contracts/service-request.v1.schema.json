@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-request.v1.schema.json",
+  "title": "agent-browser service request",
+  "description": "Stable input shape for HTTP POST /api/service/request and MCP service_request arguments. The action field is required for compatibility; serviceName, agentName, and taskName should be supplied when known so retained jobs remain traceable.",
+  "type": "object",
+  "required": [
+    "action"
+  ],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "navigate",
+        "back",
+        "forward",
+        "reload",
+        "tab_new",
+        "tab_switch",
+        "tab_close",
+        "tab_list",
+        "url",
+        "title",
+        "viewport",
+        "user_agent",
+        "emulatemedia",
+        "timezone",
+        "locale",
+        "geolocation",
+        "permissions",
+        "cookies_get",
+        "cookies_set",
+        "cookies_clear",
+        "storage_get",
+        "storage_set",
+        "storage_clear",
+        "console",
+        "errors",
+        "setcontent",
+        "headers",
+        "offline",
+        "dialog",
+        "clipboard",
+        "upload",
+        "download",
+        "waitfordownload",
+        "pdf",
+        "responsebody",
+        "har_start",
+        "har_stop",
+        "route",
+        "unroute",
+        "requests",
+        "request_detail",
+        "snapshot",
+        "screenshot",
+        "click",
+        "fill",
+        "wait",
+        "type",
+        "press",
+        "hover",
+        "select",
+        "gettext",
+        "inputvalue",
+        "isvisible",
+        "getattribute",
+        "innerhtml",
+        "styles",
+        "count",
+        "boundingbox",
+        "isenabled",
+        "ischecked",
+        "check",
+        "uncheck",
+        "scroll",
+        "scrollintoview",
+        "focus",
+        "clear"
+      ],
+      "description": "Underlying browser-control action to queue through the service worker."
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Action-specific parameters. Reserved id and action fields inside params are ignored by the service request wrapper."
+    },
+    "jobTimeoutMs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional worker-bound timeout for this queued service request."
+    },
+    "serviceName": {
+      "type": "string",
+      "description": "Calling service name, for example JournalDownloader."
+    },
+    "agentName": {
+      "type": "string",
+      "description": "Calling agent name."
+    },
+    "taskName": {
+      "type": "string",
+      "description": "Calling task name, for example probeACSwebsite."
+    },
+    "targetServiceId": {
+      "type": "string",
+      "description": "Target site or identity provider for profile selection."
+    },
+    "targetService": {
+      "type": "string",
+      "description": "Alias for targetServiceId."
+    },
+    "targetServiceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Target sites or identity providers for profile selection."
+    },
+    "targetServices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Alias for targetServiceIds."
+    },
+    "siteId": {
+      "type": "string",
+      "description": "Site identifier alias for targetServiceId."
+    },
+    "siteIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Site identifier aliases for targetServiceIds."
+    },
+    "loginId": {
+      "type": "string",
+      "description": "Login identity alias for targetServiceId."
+    },
+    "loginIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Login identity aliases for targetServiceIds."
+    }
+  },
+  "additionalProperties": false
+}

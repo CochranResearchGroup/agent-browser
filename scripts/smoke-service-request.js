@@ -17,6 +17,8 @@ import {
 import {
   assertServiceJobsResponseSchemaRecord,
   assertServiceJobSchemaRecord,
+  assertServiceRequestMcpToolCallSchemaRecord,
+  assertServiceRequestPayloadSchemaRecord,
   loadServiceRecordSchema,
   parseMcpJsonResource,
 } from './smoke-schema-utils.js';
@@ -38,6 +40,10 @@ const httpTaskName = 'httpServiceRequestSmoke';
 const mcpTaskName = 'mcpServiceRequestSmoke';
 const jobRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-job-record.v1.schema.json');
 const jobsResponseSchema = loadServiceRecordSchema('../docs/dev/contracts/service-jobs-response.v1.schema.json');
+const serviceRequestSchema = loadServiceRecordSchema('../docs/dev/contracts/service-request.v1.schema.json');
+const serviceRequestMcpToolCallSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json',
+);
 
 let mcp;
 const timeout = setTimeout(() => {
@@ -137,7 +143,7 @@ try {
 
   const port = await ensureStreamPort();
   const httpUrl = smokeDataUrl('HTTP Service Request Smoke', 'HTTP Service Request Smoke');
-  const httpResponse = await httpJson(port, 'POST', '/api/service/request', {
+  const httpRequest = {
     serviceName,
     agentName,
     taskName: httpTaskName,
@@ -150,7 +156,9 @@ try {
       action: 'ignored-by-service-request',
     },
     jobTimeoutMs: 30000,
-  });
+  };
+  assertServiceRequestPayloadSchemaRecord(httpRequest, serviceRequestSchema, 'HTTP service request payload');
+  const httpResponse = await httpJson(port, 'POST', '/api/service/request', httpRequest);
   assert(httpResponse.success === true, `HTTP service request failed: ${JSON.stringify(httpResponse)}`);
   assert(
     httpResponse.data?.url?.startsWith('data:text/html'),
@@ -181,7 +189,7 @@ try {
   mcp.notify('notifications/initialized');
 
   const mcpUrl = smokeDataUrl('MCP Service Request Smoke', 'MCP Service Request Smoke');
-  const mcpResult = await mcp.send('tools/call', {
+  const mcpToolCall = {
     name: 'service_request',
     arguments: {
       serviceName,
@@ -196,7 +204,14 @@ try {
       },
       jobTimeoutMs: 30000,
     },
-  });
+  };
+  assertServiceRequestMcpToolCallSchemaRecord(
+    mcpToolCall,
+    serviceRequestMcpToolCallSchema,
+    serviceRequestSchema,
+    'MCP service_request tool call',
+  );
+  const mcpResult = await mcp.send('tools/call', mcpToolCall);
   const mcpPayload = parseMcpToolPayload(mcpResult, 'service_request');
   assert(mcpPayload.success === true, `MCP service_request failed: ${JSON.stringify(mcpPayload)}`);
   assert(mcpPayload.tool === 'service_request', `MCP payload tool mismatch: ${JSON.stringify(mcpPayload)}`);

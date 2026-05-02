@@ -262,6 +262,53 @@ export function assertServiceJobsResponseSchemaRecord(response, schema, label) {
   }
 }
 
+export function assertServiceRequestPayloadSchemaRecord(payload, schema, label) {
+  assertRequiredFields(payload, schema, label);
+  assertNoSnakeCaseFields(payload, ['service_name', 'agent_name', 'task_name'], label);
+  for (const key of Object.keys(payload)) {
+    assert(schema.properties[key], `${label} has non-contract field ${key}: ${JSON.stringify(payload)}`);
+  }
+  assert(schemaEnum(schema, 'action').includes(payload.action), `${label} action is outside schema enum`);
+  if (Object.hasOwn(payload, 'params')) {
+    assert(
+      payload.params && typeof payload.params === 'object' && !Array.isArray(payload.params),
+      `${label} params must be an object: ${JSON.stringify(payload)}`,
+    );
+  }
+  if (Object.hasOwn(payload, 'jobTimeoutMs')) {
+    assert(Number.isInteger(payload.jobTimeoutMs) && payload.jobTimeoutMs >= 1, `${label} invalid jobTimeoutMs`);
+  }
+  for (const field of [
+    'serviceName',
+    'agentName',
+    'taskName',
+    'targetServiceId',
+    'targetService',
+    'siteId',
+    'loginId',
+  ]) {
+    if (Object.hasOwn(payload, field)) {
+      assert(typeof payload[field] === 'string', `${label} ${field} must be a string`);
+    }
+  }
+  for (const field of ['targetServiceIds', 'targetServices', 'siteIds', 'loginIds']) {
+    if (Object.hasOwn(payload, field)) {
+      assert(Array.isArray(payload[field]), `${label} ${field} must be an array`);
+      assert(payload[field].every((item) => typeof item === 'string'), `${label} ${field} must contain strings`);
+    }
+  }
+}
+
+export function assertServiceRequestMcpToolCallSchemaRecord(payload, schema, requestSchema, label) {
+  assertRequiredFields(payload, schema, label);
+  for (const key of Object.keys(payload)) {
+    assert(schema.properties[key], `${label} has non-contract field ${key}: ${JSON.stringify(payload)}`);
+  }
+  assert(payload.name === 'service_request', `${label} name must be service_request`);
+  assert(payload.arguments && typeof payload.arguments === 'object', `${label} missing arguments object`);
+  assertServiceRequestPayloadSchemaRecord(payload.arguments, requestSchema, `${label} arguments`);
+}
+
 export function assertServiceSitePolicyUpsertResponseSchemaRecord(response, schema, label) {
   assertRequiredFields(response, schema, label);
   assertNoSnakeCaseFields(response, ['site_policy'], label);

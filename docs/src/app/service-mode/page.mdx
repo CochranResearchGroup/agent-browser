@@ -107,6 +107,8 @@ An MCP client sends the same intent shape through `tools/call`:
 
 MCP tool callers should include `serviceName`, `agentName`, and `taskName` whenever those values are known. Anonymous callers remain compatible, but service jobs record `namingWarnings` so operators can find unlabelled automation.
 
+The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>.
+
 ## Operator request model
 
 agent-browser owns browsers, profiles, tabs, queues, and job dispatch by default. Operators, agents, and software clients should usually request intent instead of taking direct responsibility for browser coordination. A normal request says which site or login identity is needed, what tab or browser action should happen, and which service, agent, and task owns the work. agent-browser then selects or reuses the right managed profile, attaches to an existing managed browser when possible, queues CDP control deterministically, and records the state needed for debugging.
@@ -199,7 +201,7 @@ POST   /api/service/providers/<id>
 DELETE /api/service/providers/<id>
 ```
 
-Named browser-control routes accept the same action fields as the underlying command, plus trace fields such as `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs`. `POST /api/service/request` accepts one intent object with `serviceName`, `agentName`, `taskName`, `siteId`, `loginId`, target-service hints, `action`, `params`, and `jobTimeoutMs`, then queues the requested browser action through the same service-owned control path.
+Named browser-control routes accept the same action fields as the underlying command, plus trace fields such as `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs`. `POST /api/service/request` accepts one intent object with `serviceName`, `agentName`, `taskName`, `siteId`, `loginId`, target-service hints, `action`, `params`, and `jobTimeoutMs`, then queues the requested browser action through the same service-owned control path. Its request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>.
 
 ## MCP shape
 
