@@ -156,6 +156,10 @@ try {
     targetServiceId,
     '--login-id',
     targetServiceId,
+    '--register-profile-id',
+    profileId,
+    '--profile-user-data-dir',
+    userDataDir,
   ]);
   const output = parseJsonOutput(exampleResult.stdout, 'service client example');
 
@@ -163,6 +167,12 @@ try {
   assert(
     output.commandResult?.success === true,
     `example service tab request failed: ${JSON.stringify(output.commandResult)}`,
+  );
+  assert(
+    output.profileRegistration?.upserted === true &&
+      output.profileRegistration?.profile?.id === profileId &&
+      output.profileRegistration?.profile?.authenticatedServiceIds?.includes(targetServiceId),
+    `example did not register login profile: ${JSON.stringify(output.profileRegistration)}`,
   );
   assert(output.traceSummary?.jobs >= 1, `example trace summary missed jobs: ${JSON.stringify(output)}`);
   const latestJob = output.latestJobs?.find(

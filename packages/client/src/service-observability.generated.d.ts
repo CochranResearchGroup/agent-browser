@@ -382,6 +382,24 @@ export interface ServiceProfileMutationOptions extends ServiceIdOptions {
   profile: Record<string, unknown>;
 }
 
+export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabilityHttpOptions {
+  id: string;
+  serviceName: string;
+  loginId?: string;
+  siteId?: string;
+  targetServiceId?: string;
+  targetServiceIds?: string[];
+  authenticatedServiceIds?: string[];
+  sharedServiceIds?: string[];
+  name?: string;
+  allocation?: string;
+  keyring?: string;
+  persistent?: boolean;
+  authenticated?: boolean;
+  userDataDir?: string;
+  profile?: Record<string, unknown>;
+}
+
 export interface ServiceSessionMutationOptions extends ServiceIdOptions {
   session: Record<string, unknown>;
 }
@@ -437,6 +455,7 @@ export declare function getServiceProviders(options: ServiceQueryOptions): Promi
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;
 export declare function postServiceReconcile(options: ServiceObservabilityHttpOptions): Promise<ServiceReconcileResponse>;
 export declare function upsertServiceProfile(options: ServiceProfileMutationOptions): Promise<ServiceProfileUpsertResponse>;
+export declare function registerServiceLoginProfile(options: ServiceLoginProfileRegistrationOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;
 export declare function upsertServiceSession(options: ServiceSessionMutationOptions): Promise<ServiceSessionUpsertResponse>;
 export declare function deleteServiceSession(options: ServiceIdOptions): Promise<ServiceSessionDeleteResponse>;

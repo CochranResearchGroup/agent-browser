@@ -2,6 +2,7 @@
 
 This example shows the software-client workflow for agent-browser service mode:
 
+- register or refresh a login profile with `registerServiceLoginProfile`
 - request one intent-based service tab with `requestServiceTab`
 - read the matching service trace with `getServiceTrace`
 - optionally cancel a queued job with `cancelServiceJob`
@@ -35,7 +36,8 @@ pnpm --filter agent-browser-service-client-example exec node service-request-tra
   --agent-name article-probe-agent \
   --task-name probeACSwebsite \
   --site-id example \
-  --login-id example
+  --login-id example \
+  --register-profile-id journal-example
 ```
 
 You can also set `AGENT_BROWSER_SERVICE_BASE_URL` instead of passing
@@ -52,22 +54,15 @@ identity and let agent-browser choose the browser profile. Register profiles
 with the target identities they can serve, then request tabs with `loginId`,
 `siteId`, or `targetServiceId`.
 
-```json
-{
-  "service": {
-    "profiles": {
-      "journal-acs": {
-        "name": "Journal Downloader ACS",
-        "allocation": "per_service",
-        "keyring": "basic_password_store",
-        "persistent": true,
-        "targetServiceIds": ["acs"],
-        "authenticatedServiceIds": ["acs"],
-        "sharedServiceIds": ["JournalDownloader"]
-      }
-    }
-  }
-}
+```js
+import { registerServiceLoginProfile } from '@agent-browser/client/service-observability';
+
+await registerServiceLoginProfile({
+  baseUrl: 'http://127.0.0.1:4849',
+  id: 'journal-acs',
+  serviceName: 'JournalDownloader',
+  loginId: 'acs',
+});
 ```
 
 ```js

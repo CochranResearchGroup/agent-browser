@@ -31,6 +31,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceStatusResponse} ServiceStatusResponse
  * @typedef {import('./service-observability.generated.js').ServiceTabsResponse} ServiceTabsResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceResponse} ServiceTraceResponse
+ * @typedef {import('./service-observability.generated.js').ServiceLoginProfileRegistrationOptions} ServiceLoginProfileRegistrationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileMutationOptions} ServiceProfileMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileUpsertResponse} ServiceProfileUpsertResponse
@@ -130,6 +131,63 @@ export function postServiceReconcile(options) {
  */
 export function upsertServiceProfile({ id, profile, ...options }) {
   return servicePost(options, `/api/service/profiles/${encodeURIComponent(id)}`, profile);
+}
+
+/**
+ * @param {ServiceLoginProfileRegistrationOptions} options
+ * @returns {Promise<ServiceProfileUpsertResponse>}
+ */
+export function registerServiceLoginProfile({
+  id,
+  serviceName,
+  loginId,
+  siteId,
+  targetServiceId,
+  targetServiceIds = [],
+  authenticatedServiceIds = [],
+  sharedServiceIds = [],
+  name,
+  allocation = 'per_service',
+  keyring = 'basic_password_store',
+  persistent = true,
+  authenticated = true,
+  userDataDir,
+  profile = {},
+  ...options
+}) {
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new TypeError('registerServiceLoginProfile requires an id string');
+  }
+  const targetId = loginId ?? siteId ?? targetServiceId;
+  if (!targetId && targetServiceIds.length === 0) {
+    throw new TypeError('registerServiceLoginProfile requires loginId, siteId, targetServiceId, or targetServiceIds');
+  }
+  if (typeof serviceName !== 'string' || serviceName.length === 0) {
+    throw new TypeError('registerServiceLoginProfile requires a serviceName string');
+  }
+
+  const targets = uniqueStrings([...targetServiceIds, targetId]);
+  const authenticatedTargets = authenticated
+    ? uniqueStrings([...authenticatedServiceIds, ...targets])
+    : uniqueStrings(authenticatedServiceIds);
+  const sharedServices = uniqueStrings([...sharedServiceIds, serviceName]);
+  const userDataDirRecord = userDataDir === undefined ? {} : { userDataDir };
+
+  return upsertServiceProfile({
+    ...options,
+    id,
+    profile: {
+      name: name ?? id,
+      allocation,
+      keyring,
+      persistent,
+      targetServiceIds: targets,
+      authenticatedServiceIds: authenticatedTargets,
+      sharedServiceIds: sharedServices,
+      ...userDataDirRecord,
+      ...profile,
+    },
+  });
 }
 
 /**
@@ -400,4 +458,12 @@ function appendQuery(url, query) {
     if (value === null || value === undefined) continue;
     url.searchParams.set(key, String(value));
   }
+}
+
+/**
+ * @param {unknown[]} values
+ * @returns {string[]}
+ */
+function uniqueStrings(values) {
+  return [...new Set(values.flatMap((value) => (typeof value === 'string' && value.length > 0 ? [value] : [])))];
 }

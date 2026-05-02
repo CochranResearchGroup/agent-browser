@@ -40,6 +40,7 @@ For software clients, prefer one explicit service request object when the caller
 
 ```ts
 import { createServiceRequest, postServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
+import { registerServiceLoginProfile } from '@agent-browser/client/service-observability';
 
 const request = createServiceRequest({
   serviceName: 'JournalDownloader',
@@ -104,7 +105,7 @@ MCP tool callers should include `serviceName`, `agentName`, and `taskName` whene
 
 The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. The private workspace package <code>@agent-browser/client</code> generates its service request helpers and types from those schemas, including <code>requestServiceTab</code> for the common software-client path where a service asks for a queued tab by site or login identity.
 
-Read-side software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
+Read-side and service-configuration software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. <code>registerServiceLoginProfile</code> wraps the common software-client recipe for registering a profile by login identity. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
 
 The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, can cancel a known queued job with <code>cancelServiceJob</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>.
 
@@ -120,22 +121,13 @@ Operators can still request a particular managed runtime profile when they know 
 
 Software clients should request the identity they need, not the browser process they hope is free. Register the profile once with the target identities it can serve:
 
-```json
-{
-  "service": {
-    "profiles": {
-      "journal-acs": {
-        "name": "Journal Downloader ACS",
-        "allocation": "per_service",
-        "keyring": "basic_password_store",
-        "persistent": true,
-        "targetServiceIds": ["acs"],
-        "authenticatedServiceIds": ["acs"],
-        "sharedServiceIds": ["JournalDownloader"]
-      }
-    }
-  }
-}
+```ts
+await registerServiceLoginProfile({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  id: 'journal-acs',
+  serviceName: 'JournalDownloader',
+  loginId: 'acs',
+});
 ```
 
 Then request a tab by login identity through the service client:

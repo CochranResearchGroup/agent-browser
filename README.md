@@ -583,22 +583,13 @@ Software clients should normally request the login identity they need and let
 agent-browser choose the matching profile. Register the profile with its target
 identity and the service allowed to use it:
 
-```json
-{
-  "service": {
-    "profiles": {
-      "journal-acs": {
-        "name": "Journal Downloader ACS",
-        "allocation": "per_service",
-        "keyring": "basic_password_store",
-        "persistent": true,
-        "targetServiceIds": ["acs"],
-        "authenticatedServiceIds": ["acs"],
-        "sharedServiceIds": ["JournalDownloader"]
-      }
-    }
-  }
-}
+```ts
+await registerServiceLoginProfile({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  id: 'journal-acs',
+  serviceName: 'JournalDownloader',
+  loginId: 'acs',
+});
 ```
 
 Then request the tab by `loginId`:
@@ -1557,11 +1548,12 @@ service request schemas. Run `pnpm generate:service-client` after changing
 `pnpm test:service-client-contract` and `pnpm test:service-client-types` to
 verify it is current.
 
-For read-side software clients, import
+For read-side and service-configuration software clients, import
 `@agent-browser/client/service-observability`. It exposes typed helpers for
 `getServiceStatus`, collection reads for profiles, browsers, sessions, tabs,
 site policies, providers, and challenges, `postServiceReconcile`,
 upsert and delete helpers for profiles, sessions, site policies, and providers,
+`registerServiceLoginProfile` for the common login-identity profile recipe,
 operator remedy helpers for job cancel, browser retry, and incident handling,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
 `getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
