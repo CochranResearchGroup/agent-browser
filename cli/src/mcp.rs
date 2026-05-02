@@ -7862,42 +7862,38 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], "tools");
-        assert_eq!(response["result"]["tools"][0]["name"], "service_job_cancel");
-        assert_eq!(
-            response["result"]["tools"][0]["inputSchema"]["required"][0],
-            "jobId"
-        );
+        let tools = response["result"]["tools"].as_array().unwrap();
+        let service_job_cancel = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_job_cancel")
+            .expect("service_job_cancel schema should be listed");
+        assert_eq!(service_job_cancel["inputSchema"]["required"][0], "jobId");
+        assert!(service_job_cancel["inputSchema"]["properties"]["serviceName"].is_object());
+        assert!(service_job_cancel["inputSchema"]["properties"]["agentName"].is_object());
+        assert!(service_job_cancel["inputSchema"]["properties"]["taskName"].is_object());
+        let service_browser_retry = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_browser_retry")
+            .expect("service_browser_retry schema should be listed");
+        assert!(service_browser_retry["inputSchema"]["required"][0] == "browserId");
+        assert!(service_browser_retry["inputSchema"]["properties"]["serviceName"].is_object());
+        let service_incidents = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_incidents")
+            .expect("service_incidents schema should be listed");
         assert!(
-            response["result"]["tools"][0]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][0]["inputSchema"]["properties"]["agentName"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][0]["inputSchema"]["properties"]["taskName"].is_object()
-        );
-        assert_eq!(
-            response["result"]["tools"][1]["name"],
-            "service_browser_retry"
-        );
-        assert!(response["result"]["tools"][1]["inputSchema"]["required"][0] == "browserId");
-        assert!(
-            response["result"]["tools"][1]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][2]["name"], "service_incidents");
-        assert!(
-            response["result"]["tools"][2]["inputSchema"]["properties"]["severity"]["enum"]
+            service_incidents["inputSchema"]["properties"]["severity"]["enum"]
                 .as_array()
                 .unwrap()
                 .contains(&json!("critical"))
         );
         assert!(
-            response["result"]["tools"][2]["inputSchema"]["properties"]["escalation"]["enum"]
+            service_incidents["inputSchema"]["properties"]["escalation"]["enum"]
                 .as_array()
                 .unwrap()
                 .contains(&json!("os_degraded_possible"))
         );
-        assert!(response["result"]["tools"][2]["inputSchema"]["properties"]["summary"].is_object());
+        assert!(service_incidents["inputSchema"]["properties"]["summary"].is_object());
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()
