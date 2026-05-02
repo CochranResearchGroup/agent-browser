@@ -67,6 +67,10 @@ export async function runServiceWorkflow({
       dryRun: true,
       request,
       traceQuery: { serviceName, agentName, taskName, limit: 50 },
+      profileSelection: {
+        requestedIdentity: loginId || siteId,
+        preferredProfileFields: ['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds'],
+      },
       cancelRequest: cancelJobId ? { jobId: cancelJobId, remedy: 'cancelServiceJob' } : null,
     };
   }
@@ -136,6 +140,7 @@ function parseArgs(args) {
     agentName: nodeProcess.env.AGENT_BROWSER_EXAMPLE_AGENT || 'article-probe-agent',
     taskName: nodeProcess.env.AGENT_BROWSER_EXAMPLE_TASK || 'probeACSwebsite',
     siteId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_SITE || 'example',
+    loginId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_LOGIN || nodeProcess.env.AGENT_BROWSER_EXAMPLE_SITE || 'example',
     cancelJobId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_CANCEL_JOB_ID,
     dryRun: false,
   };

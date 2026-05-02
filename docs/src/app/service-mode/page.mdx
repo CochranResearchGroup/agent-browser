@@ -116,6 +116,43 @@ Use `serviceName`, `agentName`, `taskName`, and target-service hints such as `ta
 
 Operators can still request a particular managed runtime profile when they know the desired login state lives there. They can also bring their own profile with `--profile <path>` or equivalent API fields when they want more direct control over a browser identity. That is an override mode, not the default service model. The normal path is to let agent-browser perform deterministic profile selection, queue sharing, browser reuse, and collision avoidance so callers can spend their limited reasoning budget on the target workflow.
 
+## Login Identity API Recipe
+
+Software clients should request the identity they need, not the browser process they hope is free. Register the profile once with the target identities it can serve:
+
+```json
+{
+  "service": {
+    "profiles": {
+      "journal-acs": {
+        "name": "Journal Downloader ACS",
+        "allocation": "per_service",
+        "keyring": "basic_password_store",
+        "persistent": true,
+        "targetServiceIds": ["acs"],
+        "authenticatedServiceIds": ["acs"],
+        "sharedServiceIds": ["JournalDownloader"]
+      }
+    }
+  }
+}
+```
+
+Then request a tab by login identity through the service client:
+
+```ts
+await requestServiceTab({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  serviceName: 'JournalDownloader',
+  agentName: 'article-probe-agent',
+  taskName: 'probeACSwebsite',
+  loginId: 'acs',
+  url: 'https://example.com',
+});
+```
+
+agent-browser first prefers profiles whose <code>authenticatedServiceIds</code> match the requested identity, then profiles whose <code>targetServiceIds</code> match, then profiles shared with the calling service through <code>sharedServiceIds</code>. Use explicit <code>profile</code> or <code>runtimeProfile</code> request fields only for override workflows where the caller intentionally takes responsibility for the browser identity.
+
 ## Profile and session planning
 
 Runtime profiles are the safest default for recurring automation because they keep Chrome user data, cookies, site storage, and login state in a managed path. A single profile can represent one user identity per site, so profile allocation is a service design decision:

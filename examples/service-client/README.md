@@ -45,6 +45,47 @@ The script prints the command result, trace counts, and the latest retained
 jobs so software projects can confirm that the request and trace metadata are
 connected.
 
+## Profile Selection By Login Identity
+
+The normal software-client contract is to name the desired site or login
+identity and let agent-browser choose the browser profile. Register profiles
+with the target identities they can serve, then request tabs with `loginId`,
+`siteId`, or `targetServiceId`.
+
+```json
+{
+  "service": {
+    "profiles": {
+      "journal-acs": {
+        "name": "Journal Downloader ACS",
+        "allocation": "per_service",
+        "keyring": "basic_password_store",
+        "persistent": true,
+        "targetServiceIds": ["acs"],
+        "authenticatedServiceIds": ["acs"],
+        "sharedServiceIds": ["JournalDownloader"]
+      }
+    }
+  }
+}
+```
+
+```js
+await requestServiceTab({
+  baseUrl: 'http://127.0.0.1:4849',
+  serviceName: 'JournalDownloader',
+  agentName: 'article-probe-agent',
+  taskName: 'probeACSwebsite',
+  loginId: 'acs',
+  url: 'https://example.com',
+});
+```
+
+The selector prefers profiles whose `authenticatedServiceIds` match the
+requested identity, then profiles whose `targetServiceIds` match, then profiles
+shared with the calling service. Pass `profile` or `runtimeProfile` only when
+you intentionally want to override service-owned selection.
+
 Pass `--cancel-job-id <job-id>` when your software already knows a queued job
 that should be cancelled. The script calls `cancelServiceJob` and prints the
 cancellation result alongside the tab request and trace output. Use

@@ -579,6 +579,46 @@ include `userDataDir`, `per_service` profiles may list at most one
 profile, and omitted session `owner` values are inferred from `agentName` or
 `serviceName`.
 
+Software clients should normally request the login identity they need and let
+agent-browser choose the matching profile. Register the profile with its target
+identity and the service allowed to use it:
+
+```json
+{
+  "service": {
+    "profiles": {
+      "journal-acs": {
+        "name": "Journal Downloader ACS",
+        "allocation": "per_service",
+        "keyring": "basic_password_store",
+        "persistent": true,
+        "targetServiceIds": ["acs"],
+        "authenticatedServiceIds": ["acs"],
+        "sharedServiceIds": ["JournalDownloader"]
+      }
+    }
+  }
+}
+```
+
+Then request the tab by `loginId`:
+
+```ts
+await requestServiceTab({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  serviceName: 'JournalDownloader',
+  agentName: 'article-probe-agent',
+  taskName: 'probeACSwebsite',
+  loginId: 'acs',
+  url: 'https://example.com',
+});
+```
+
+The selector prefers `authenticatedServiceIds`, then `targetServiceIds`, then
+`sharedServiceIds`. Pass `profile` or `runtimeProfile` only for override
+workflows where the caller intentionally takes direct responsibility for the
+browser identity.
+
 You can register a runtime profile into user config explicitly:
 
 ```bash
