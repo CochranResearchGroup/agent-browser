@@ -750,6 +750,7 @@ pub fn assert_service_incidents_response_contract(value: &serde_json::Value) {
                 "agentName",
                 "taskName",
                 "since",
+                "remediesOnly",
                 "limit",
             ],
             &[
@@ -763,6 +764,7 @@ pub fn assert_service_incidents_response_contract(value: &serde_json::Value) {
             ],
         );
         assert!(filters["limit"].is_u64());
+        assert!(filters["remediesOnly"].is_boolean());
     }
     if let Some(incident) = value.get("incident") {
         assert_service_incident_record_contract(incident);
@@ -2853,6 +2855,7 @@ mod tests {
                 "agentName": "codex",
                 "taskName": "probeACSwebsite",
                 "since": null,
+                "remediesOnly": true,
                 "limit": 20,
             },
             "incidents": [incident.clone()],

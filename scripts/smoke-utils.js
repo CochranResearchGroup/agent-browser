@@ -171,6 +171,43 @@ export function incidentSummarySmokeFilterCases({
 }) {
   return [
     {
+      label: 'compact remedy groups',
+      httpQuery:
+        `summary=true&remedies=true&limit=20&service-name=${encodeURIComponent(serviceName)}` +
+        `&agent-name=${encodeURIComponent(agentName)}&task-name=${encodeURIComponent(taskName)}`,
+      mcpArguments: {
+        summary: true,
+        remediesOnly: true,
+        limit: 20,
+        serviceName,
+        agentName,
+        taskName,
+      },
+      expected: {
+        count: 3,
+        matched: 3,
+        groupCount: 2,
+        groups: [
+          {
+            escalation: 'os_degraded_possible',
+            severity: 'critical',
+            state: 'active',
+            count: 2,
+            incidentIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+            recommendedActionIncludes: 'host OS',
+          },
+          {
+            escalation: 'browser_degraded',
+            severity: 'warning',
+            state: 'active',
+            count: 1,
+            incidentIds: ['browser-summary-degraded'],
+            recommendedActionIncludes: 'browser health',
+          },
+        ],
+      },
+    },
+    {
       label: 'critical active unacknowledged filters',
       httpQuery:
         `summary=true&limit=20&state=active&severity=critical&escalation=os_degraded_possible` +

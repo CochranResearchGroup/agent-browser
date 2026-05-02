@@ -1465,19 +1465,33 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }
                 Ok(cmd)
             }
-            Some("incidents") => {
-                let usage =
-                    "service incidents [--summary] [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]";
+            Some("incidents") | Some("remedies") => {
+                let remedies_shortcut = rest[0] == "remedies";
+                let usage = if remedies_shortcut {
+                    "service remedies [--limit <n>] [--handling-state <state>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]"
+                } else {
+                    "service incidents [--summary] [--remedies] [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]"
+                };
                 let mut cmd = json!({
                     "id": id,
                     "action": "service_incidents",
                     "serviceState": flags.service_state.clone(),
                 });
+                if remedies_shortcut {
+                    cmd["summary"] = json!(true);
+                    cmd["remediesOnly"] = json!(true);
+                    cmd["state"] = json!("active");
+                }
                 let mut i = 1;
                 while i < rest.len() {
                     match rest[i] {
                         "--summary" => {
                             cmd["summary"] = json!(true);
+                        }
+                        "--remedies" => {
+                            cmd["summary"] = json!(true);
+                            cmd["remediesOnly"] = json!(true);
+                            cmd["state"] = json!("active");
                         }
                         "--limit" => {
                             let Some(raw) = rest.get(i + 1) else {
@@ -1687,7 +1701,11 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         }
                         flag => {
                             return Err(ParseError::InvalidValue {
-                                message: format!("Unknown flag for service incidents: {}", flag),
+                                message: format!(
+                                    "Unknown flag for service {}: {}",
+                                    if remedies_shortcut { "remedies" } else { "incidents" },
+                                    flag
+                                ),
                                 usage,
                             });
                         }
@@ -5219,7 +5237,7 @@ mod tests {
     fn test_service_incidents_filters() {
         let cmd = parse_command(
             &args(
-                "service incidents --summary --limit 7 --state active --severity critical --escalation os_degraded_possible --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
+                "service incidents --summary --remedies --limit 7 --state active --severity critical --escalation os_degraded_possible --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --profile-id work --session-id session-1 --service-name JournalDownloader --agent-name codex --task-name probeACSwebsite --since 2026-04-22T00:00:00Z",
             ),
             &default_flags(),
         )
@@ -5227,6 +5245,7 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_incidents");
         assert_eq!(cmd["summary"], true);
+        assert_eq!(cmd["remediesOnly"], true);
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");
         assert_eq!(cmd["severity"], "critical");
@@ -5240,6 +5259,22 @@ mod tests {
         assert_eq!(cmd["agentName"], "codex");
         assert_eq!(cmd["taskName"], "probeACSwebsite");
         assert_eq!(cmd["since"], "2026-04-22T00:00:00Z");
+    }
+
+    #[test]
+    fn test_service_remedies_shortcut() {
+        let cmd = parse_command(
+            &args("service remedies --limit 5 --service-name JournalDownloader"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_incidents");
+        assert_eq!(cmd["summary"], true);
+        assert_eq!(cmd["remediesOnly"], true);
+        assert_eq!(cmd["state"], "active");
+        assert_eq!(cmd["limit"], 5);
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
     }
 
     #[test]

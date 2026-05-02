@@ -26,6 +26,7 @@
         "agentName",
         "taskName",
         "since",
+        "remediesOnly",
         "limit"
       ],
       "properties": {
@@ -93,6 +94,10 @@
         "since": {
           "type": ["string", "null"],
           "format": "date-time"
+        },
+        "remediesOnly": {
+          "type": "boolean",
+          "description": "True when the response is narrowed to browser_degraded and os_degraded_possible operator remedy groups."
         },
         "limit": {
           "type": "integer",

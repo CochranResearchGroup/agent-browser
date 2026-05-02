@@ -3503,7 +3503,8 @@ Usage:
   agent-browser service activity <incident-id>
   agent-browser service trace [--limit <n>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
-  agent-browser service incidents [--summary] [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service incidents [--summary] [--remedies] [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service remedies [--limit <n>] [--handling-state <state>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
 
 Commands:
@@ -3524,7 +3525,8 @@ Commands:
   activity              Show a normalized incident timeline from related events, jobs, and handling metadata
   trace                 Show events, jobs, incidents, and activity for one service/task trace
   jobs                  Show recent service control-plane jobs
-  incidents             Show grouped retained service incidents, or summary groups with --summary
+  incidents             Show grouped retained service incidents, summary groups, or remedy groups with --remedies
+  remedies              Show active browser_degraded and os_degraded_possible incident remedy groups
   events                Show recent service reconciliation, launch, browser health, recovery, and tab lifecycle events
 
 Notes:
@@ -3539,6 +3541,7 @@ Notes:
   - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - Incidents include severity, escalation, and recommendedAction so clients share one operator priority contract.
   - service incidents --summary groups the current filtered incident set by escalation, severity, and state with recommended next actions.
+  - service incidents --remedies and service remedies show active browser_degraded and os_degraded_possible groups for compact operator triage.
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
@@ -3599,6 +3602,8 @@ Examples:
   agent-browser service jobs --state failed --action navigate
   agent-browser service incidents --limit 20
   agent-browser service incidents --summary --state active --handling-state unacknowledged
+  agent-browser service incidents --remedies
+  agent-browser service remedies
   agent-browser service incidents --id browser-1
   agent-browser service incidents --handling-state unacknowledged
   agent-browser service incidents --severity critical --escalation os_degraded_possible
@@ -4061,6 +4066,7 @@ Service:
   service trace              Show related service trace records in one response
   service jobs               Show recent service control-plane jobs
   service incidents          Show grouped retained service incidents; add --summary for operator remedy groups
+  service remedies           Show active degraded-browser and possible OS-degraded remedy groups
   service events             Show recent service events
 
 MCP:
@@ -4355,6 +4361,7 @@ Examples:
   agent-browser service jobs             # Inspect recent service control jobs
   agent-browser service incidents        # Inspect grouped retained service incidents
   agent-browser service incidents --summary # Inspect grouped operator remedies
+  agent-browser service remedies         # Inspect degraded-browser and OS-degraded remedies
   agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile

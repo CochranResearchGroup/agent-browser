@@ -27,6 +27,7 @@ pub(crate) struct ServiceIncidentFilters<'a> {
     pub agent_name: Option<&'a str>,
     pub task_name: Option<&'a str>,
     pub since: Option<&'a str>,
+    pub remedies_only: bool,
 }
 
 /// Build the canonical filtered service incident response for CLI, HTTP, and MCP.
@@ -87,6 +88,12 @@ pub(crate) fn service_incidents_response(
                 && filters
                     .browser_id
                     .is_none_or(|expected| incident.browser_id.as_deref() == Some(expected))
+                && (!filters.remedies_only
+                    || matches!(
+                        incident.escalation,
+                        ServiceIncidentEscalation::BrowserDegraded
+                            | ServiceIncidentEscalation::OsDegradedPossible
+                    ))
                 && service_incident_matches_trace_filters(incident, service_state, &filters)
                 && since.is_none_or(|minimum| service_incident_at_or_after(incident, minimum))
         })
@@ -110,6 +117,7 @@ pub(crate) fn service_incidents_response(
             "agentName": filters.agent_name,
             "taskName": filters.task_name,
             "since": filters.since,
+            "remediesOnly": filters.remedies_only,
             "limit": limit,
         },
         "incidents": incidents,

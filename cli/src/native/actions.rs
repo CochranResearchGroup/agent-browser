@@ -6782,16 +6782,26 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
         .and_then(|value| value.as_u64())
         .map(|value| value as usize)
         .unwrap_or(20);
+    let remedies_only = cmd
+        .get("remediesOnly")
+        .or_else(|| cmd.get("remedies"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
     let summarize = cmd
         .get("summary")
         .and_then(|value| value.as_bool())
-        .unwrap_or(false);
+        .unwrap_or(false)
+        || remedies_only;
+    let incident_state = cmd
+        .get("state")
+        .and_then(|value| value.as_str())
+        .or(if remedies_only { Some("active") } else { None });
     let mut response = service_incidents_response(
         &service_state,
         ServiceIncidentFilters {
             limit,
             incident_id: cmd.get("incidentId").and_then(|value| value.as_str()),
-            state: cmd.get("state").and_then(|value| value.as_str()),
+            state: incident_state,
             severity: cmd.get("severity").and_then(|value| value.as_str()),
             escalation: cmd.get("escalation").and_then(|value| value.as_str()),
             handling_state: cmd.get("handlingState").and_then(|value| value.as_str()),
@@ -6803,6 +6813,7 @@ async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
             agent_name: cmd.get("agentName").and_then(|value| value.as_str()),
             task_name: cmd.get("taskName").and_then(|value| value.as_str()),
             since: cmd.get("since").and_then(|value| value.as_str()),
+            remedies_only,
         },
     )?;
     if summarize {
@@ -11565,6 +11576,77 @@ mod tests {
         assert_eq!(result["data"]["matched"], 2);
         assert_eq!(result["data"]["total"], 2);
         assert_eq!(result["data"]["incidents"][0]["id"], "service");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_incidents_remedies_only_groups_operator_ladder() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_incidents",
+            "id": "svc-incidents-remedies",
+            "summary": true,
+            "remediesOnly": true,
+            "serviceState": {
+                "incidents": [
+                    {
+                        "id": "browser-degraded",
+                        "browserId": "browser-degraded",
+                        "label": "browser-degraded",
+                        "state": "active",
+                        "severity": "warning",
+                        "escalation": "browser_degraded",
+                        "recommendedAction": "Inspect browser health.",
+                        "currentHealth": "degraded",
+                        "latestTimestamp": "2026-05-01T00:00:00Z",
+                        "latestMessage": "Polite close failed",
+                        "latestKind": "browser_health_changed"
+                    },
+                    {
+                        "id": "browser-faulted",
+                        "browserId": "browser-faulted",
+                        "label": "browser-faulted",
+                        "state": "active",
+                        "severity": "critical",
+                        "escalation": "os_degraded_possible",
+                        "recommendedAction": "Inspect the host OS.",
+                        "currentHealth": "faulted",
+                        "latestTimestamp": "2026-05-01T00:01:00Z",
+                        "latestMessage": "Force kill failed",
+                        "latestKind": "browser_health_changed"
+                    },
+                    {
+                        "id": "browser-recovery",
+                        "browserId": "browser-recovery",
+                        "label": "browser-recovery",
+                        "state": "active",
+                        "severity": "error",
+                        "escalation": "browser_recovery",
+                        "recommendedAction": "Review recovery trace.",
+                        "currentHealth": "process_exited",
+                        "latestTimestamp": "2026-05-01T00:02:00Z",
+                        "latestMessage": "Browser exited",
+                        "latestKind": "browser_health_changed"
+                    }
+                ]
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_incidents_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 2);
+        assert_eq!(result["data"]["matched"], 2);
+        assert_eq!(result["data"]["filters"]["remediesOnly"], true);
+        let summary_groups = result["data"]["summary"]["groups"].as_array().unwrap();
+        assert_eq!(summary_groups.len(), 2);
+        assert!(summary_groups
+            .iter()
+            .any(|group| group["escalation"] == "browser_degraded"));
+        assert!(summary_groups
+            .iter()
+            .any(|group| group["escalation"] == "os_degraded_possible"));
         assert!(state.browser.is_none());
     }
 

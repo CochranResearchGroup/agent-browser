@@ -1406,6 +1406,14 @@ fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
             "summary" => {
                 cmd["summary"] = json!(parse_query_bool("summary", &value)?);
             }
+            "remedies" | "remediesOnly" | "remedies_only" | "remedies-only" => {
+                let enabled = parse_query_bool(&key, &value)?;
+                cmd["remediesOnly"] = json!(enabled);
+                if enabled {
+                    cmd["summary"] = json!(true);
+                    cmd["state"] = json!("active");
+                }
+            }
             "limit" => {
                 let limit = value
                     .parse::<usize>()
@@ -1776,12 +1784,13 @@ mod tests {
     #[test]
     fn service_incidents_command_maps_query_filters() {
         let cmd = service_incidents_command(Some(
-            "summary=true&id=incident-1&limit=7&state=active&severity=critical&escalation=os_degraded_possible&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
+            "summary=true&remedies=true&id=incident-1&limit=7&state=active&severity=critical&escalation=os_degraded_possible&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
         ))
         .unwrap();
 
         assert_eq!(cmd["action"], "service_incidents");
         assert_eq!(cmd["summary"], true);
+        assert_eq!(cmd["remediesOnly"], true);
         assert_eq!(cmd["incidentId"], "incident-1");
         assert_eq!(cmd["limit"], 7);
         assert_eq!(cmd["state"], "active");

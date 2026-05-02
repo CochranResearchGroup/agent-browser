@@ -603,6 +603,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "boolean",
                         "description": "When true, include summary groups by escalation, severity, and state with recommended next actions."
                     },
+                    "remediesOnly": {
+                        "type": "boolean",
+                        "description": "When true, return only active browser_degraded and os_degraded_possible remedy groups for operator triage."
+                    },
                     "state": {
                         "type": "string",
                         "enum": ["active", "recovered", "service"],
@@ -3694,17 +3698,17 @@ fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, Jso
         message: "Internal error",
         data: Some(json!({ "message": err, "tool": "service_incidents" })),
     })?;
-    let summarize = optional_bool_argument(arguments, "summary")?.unwrap_or(false);
+    let remedies_only = optional_bool_argument(arguments, "remediesOnly")?.unwrap_or(false);
+    let summarize = optional_bool_argument(arguments, "summary")?.unwrap_or(false) || remedies_only;
+    let incident_state =
+        optional_enum_string_argument(arguments, "state", &["active", "recovered", "service"])?
+            .or(if remedies_only { Some("active") } else { None });
     let mut data = service_incidents_response(
         &state,
         ServiceIncidentFilters {
             limit,
             incident_id: optional_string_argument(arguments, "incidentId")?,
-            state: optional_enum_string_argument(
-                arguments,
-                "state",
-                &["active", "recovered", "service"],
-            )?,
+            state: incident_state,
             severity: optional_enum_string_argument(
                 arguments,
                 "severity",
@@ -3744,6 +3748,7 @@ fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, Jso
             agent_name,
             task_name,
             since: optional_string_argument(arguments, "since")?,
+            remedies_only,
         },
     )
     .map_err(|err| JsonRpcError {
