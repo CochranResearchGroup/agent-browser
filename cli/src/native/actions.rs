@@ -64,8 +64,8 @@ use super::service_lifecycle::{
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
-    JobState as ServiceJobState, ProfileKeyringPolicy, ServiceEvent, ServiceEventKind,
-    ServiceState, SessionCleanupPolicy,
+    JobState as ServiceJobState, ProfileKeyringPolicy, ProfileSelectionReason, ServiceEvent,
+    ServiceEventKind, ServiceState, SessionCleanupPolicy,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
@@ -409,7 +409,10 @@ fn merge_target_service_id(values: &mut Vec<String>, value: &str) {
     }
 }
 
-fn apply_service_profile_selection(options: &mut LaunchOptions, cmd: &Value) -> Option<String> {
+fn apply_service_profile_selection(
+    options: &mut LaunchOptions,
+    cmd: &Value,
+) -> Option<ProfileSelectionReason> {
     if options.profile.is_some() || options.runtime_profile.is_some() {
         return None;
     }
@@ -422,11 +425,11 @@ fn apply_service_profile_selection(options: &mut LaunchOptions, cmd: &Value) -> 
     }
     let repository = LockedServiceStateRepository::default_json().ok()?;
     let service_state = repository.load_snapshot().ok()?;
-    let profile_id = select_service_profile_for_request(&service_state, &request)?;
-    let profile = service_state.profiles.get(&profile_id)?;
+    let selection = select_service_profile_for_request(&service_state, &request)?;
+    let profile = service_state.profiles.get(&selection.profile_id)?;
     // Keep the service profile ID visible in launch metadata while honoring
     // custom profile directories persisted on service-owned profile records.
-    options.runtime_profile = Some(profile_id.clone());
+    options.runtime_profile = Some(selection.profile_id.clone());
     if let Some(user_data_dir) = profile
         .user_data_dir
         .as_deref()
@@ -435,7 +438,7 @@ fn apply_service_profile_selection(options: &mut LaunchOptions, cmd: &Value) -> 
     {
         options.profile = Some(user_data_dir.to_string());
     }
-    Some(profile_id)
+    Some(selection.reason)
 }
 
 fn close_behavior_for_attached_browser(
@@ -468,7 +471,11 @@ impl ServiceLaunchMetadata {
     /// Captures the service-model metadata that can be inferred from a launch
     /// command before Chrome starts, so every launch path writes the same
     /// browser/profile/session relationships into persisted service state.
-    fn from_launch_options(options: &LaunchOptions, command: Option<&Value>) -> Self {
+    fn from_launch_options(
+        options: &LaunchOptions,
+        command: Option<&Value>,
+        selection_reason: Option<ProfileSelectionReason>,
+    ) -> Self {
         let profile_id = service_profile_id(
             options.profile.as_deref(),
             options.runtime_profile.as_deref(),
@@ -489,7 +496,7 @@ impl ServiceLaunchMetadata {
             } else {
                 ProfileKeyringPolicy::BasicPasswordStore
             },
-            profile_id,
+            profile_id: profile_id.clone(),
             service_name: command.and_then(|cmd| optional_command_string(cmd, "serviceName")),
             agent_name: command.and_then(|cmd| optional_command_string(cmd, "agentName")),
             task_name: command.and_then(|cmd| optional_command_string(cmd, "taskName")),
@@ -502,6 +509,11 @@ impl ServiceLaunchMetadata {
             } else {
                 SessionCleanupPolicy::CloseBrowser
             },
+            profile_selection_reason: selection_reason.or_else(|| {
+                profile_id
+                    .is_some()
+                    .then_some(ProfileSelectionReason::ExplicitProfile)
+            }),
         }
     }
 }
@@ -2406,8 +2418,9 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
         options.viewport_size = Some(server.viewport().await);
     }
     let engine = env::var("AGENT_BROWSER_ENGINE").ok();
-    apply_service_profile_selection(&mut options, command);
-    let metadata = ServiceLaunchMetadata::from_launch_options(&options, Some(command));
+    let selection_reason = apply_service_profile_selection(&mut options, command);
+    let metadata =
+        ServiceLaunchMetadata::from_launch_options(&options, Some(command), selection_reason);
 
     // Store proxy credentials for Fetch.authRequired handling
     let has_proxy_auth = options.proxy_username.is_some();
@@ -2744,8 +2757,9 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         manual_login: false,
         attachable: false,
     };
-    apply_service_profile_selection(&mut launch_options, cmd);
-    let metadata = ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd));
+    let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
+    let metadata =
+        ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
 
     let new_hash = launch_hash(&launch_options);
 
@@ -10128,7 +10142,7 @@ mod tests {
             }),
         );
 
-        assert_eq!(selected.as_deref(), Some("journal-auth"));
+        assert_eq!(selected, Some(ProfileSelectionReason::AuthenticatedTarget));
         assert_eq!(options.runtime_profile.as_deref(), Some("journal-auth"));
         let expected_profile = home.join("journal-auth").display().to_string();
         assert_eq!(options.profile.as_deref(), Some(expected_profile.as_str()));
@@ -13115,6 +13129,7 @@ mod tests {
                 agent_name: Some("codex".to_string()),
                 task_name: Some("probe-acs-website".to_string()),
                 cleanup: SessionCleanupPolicy::Detach,
+                profile_selection_reason: Some(ProfileSelectionReason::ExplicitProfile),
             }),
         )
         .unwrap();

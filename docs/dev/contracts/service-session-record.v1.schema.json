@@ -12,6 +12,7 @@
     "owner",
     "lease",
     "profileId",
+    "profileSelectionReason",
     "cleanup",
     "browserIds",
     "tabIds",
@@ -44,6 +45,23 @@
     },
     "profileId": {
       "type": ["string", "null"]
+    },
+    "profileSelectionReason": {
+      "description": "Why agent-browser selected this session profile, or null when the reason is not known.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "explicit_profile",
+            "authenticated_target",
+            "target_match",
+            "service_allow_list"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "cleanup": {
       "type": "string",

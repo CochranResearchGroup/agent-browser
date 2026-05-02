@@ -685,6 +685,7 @@ fn format_service_session_line(session: &serde_json::Value) -> String {
     let agent = value_str(session, "agentName", "none");
     let task = value_str(session, "taskName", "none");
     let profile = value_str(session, "profileId", "none");
+    let profile_reason = value_str(session, "profileSelectionReason", "unknown");
     let lease = value_str(session, "lease", "unknown");
     let cleanup = value_str(session, "cleanup", "unknown");
     let browsers = session
@@ -701,7 +702,7 @@ fn format_service_session_line(session: &serde_json::Value) -> String {
         .unwrap_or_else(|| "none".to_string());
 
     format!(
-        "{id} service={service} agent={agent} task={task} profile={profile} lease={lease} cleanup={cleanup} browsers={browsers}"
+        "{id} service={service} agent={agent} task={task} profile={profile} profile_reason={profile_reason} lease={lease} cleanup={cleanup} browsers={browsers}"
     )
 }
 
@@ -3550,7 +3551,7 @@ Notes:
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, browser, and session summary lines for operator traceability.
-  - Text service profiles and sessions focus retained service-owned identity, lease, profile, and browser-linkage records.
+  - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
   - Text service site-policies focuses origin, host, interaction, challenge, login, and profile-required policy fields.
@@ -3560,7 +3561,7 @@ Notes:
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - Reconciliation emits a reconciliation event with details.action=session_tab_ownership_repaired when it removes stale session/tab ownership links.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError.
-  - The bounded events log records reconciliation summaries, browser launch metadata, browser health transitions, browser recovery starts, and tab lifecycle changes.
+  - The bounded events log records reconciliation summaries, browser launch metadata including profileSelectionReason when known, browser health transitions, browser recovery starts, and tab lifecycle changes.
   - Event filters match kind, browser ID, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes named browser control endpoints at /api/browser/url, /api/browser/title, /api/browser/tabs, /api/browser/navigate, /api/browser/back, /api/browser/forward, /api/browser/reload, /api/browser/new-tab, /api/browser/switch-tab, /api/browser/close-tab, /api/browser/viewport, /api/browser/user-agent, /api/browser/media, /api/browser/timezone, /api/browser/locale, /api/browser/geolocation, /api/browser/permissions, /api/browser/cookies/get, /api/browser/cookies/set, /api/browser/cookies/clear, /api/browser/storage/get, /api/browser/storage/set, /api/browser/storage/clear, /api/browser/console, /api/browser/errors, /api/browser/set-content, /api/browser/headers, /api/browser/offline, /api/browser/dialog, /api/browser/clipboard, /api/browser/upload, /api/browser/download, /api/browser/wait-for-download, /api/browser/pdf, /api/browser/response-body, /api/browser/har/start, /api/browser/har/stop, /api/browser/route, /api/browser/unroute, /api/browser/requests, /api/browser/request-detail, /api/browser/snapshot, /api/browser/screenshot, /api/browser/click, /api/browser/fill, /api/browser/wait, /api/browser/type, /api/browser/press, /api/browser/hover, /api/browser/select, /api/browser/get-text, /api/browser/get-value, /api/browser/is-visible, /api/browser/get-attribute, /api/browser/get-html, /api/browser/get-styles, /api/browser/count, /api/browser/get-box, /api/browser/is-enabled, /api/browser/is-checked, /api/browser/check, /api/browser/uncheck, /api/browser/scroll, /api/browser/scroll-into-view, /api/browser/focus, and /api/browser/clear.
   - The stream server exposes the service surface at /api/service/status, /api/service/request, /api/service/profiles, /api/service/profiles/<id>, /api/service/sessions, /api/service/sessions/<id>, /api/service/browsers, /api/service/tabs, /api/service/site-policies, /api/service/site-policies/<id>, /api/service/providers, /api/service/providers/<id>, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
@@ -3571,7 +3572,7 @@ Notes:
   - Browser launch, close, and command-time stale-browser detection update the active session's persisted browser health record before relaunch.
   - Close first attempts polite browser shutdown, then force kill for owned browser processes. Polite shutdown failure records degraded browser health; force-kill failure records faulted health with an OS-degraded warning.
   - pnpm test:service-shutdown-health-live validates the polite-shutdown failure remedy against live service state.
-  - Runtime profile and custom profile launches populate linked service profile and session records.
+  - Runtime profile and custom profile launches populate linked service profile and session records, including profileSelectionReason when known.
   - Commands should include serviceName, agentName, and taskName when available for traceability.
   - Configured profiles, sessions, site policies, and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 
@@ -3647,6 +3648,7 @@ Notes:
   - service_profile_upsert, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
   - Service profile records distinguish caller service sharing from target-service login scope: sharedServiceIds lists allowed caller services, targetServiceIds lists intended login targets, and authenticatedServiceIds lists targets currently believed authenticated.
   - Launch commands without explicit profile or runtimeProfile can include serviceName plus targetServiceId, targetService, targetServiceIds, targetServices, siteId, siteIds, loginId, or loginIds so persisted service profiles are selected by authenticated target match, then target match, then caller service match.
+  - Session records expose profileSelectionReason as authenticated_target, target_match, service_allow_list, explicit_profile, or null, and browser_launch_recorded events mirror that value in details.profileSelectionReason when known.
   - Profile mutations reject caller_supplied profiles without userDataDir and per_service profiles with more than one sharedServiceIds entry.
   - Session mutations infer owner from agentName, then serviceName, when owner is omitted; profileId must reference a persisted profile, and profile sharedServiceIds allow-lists are enforced.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
@@ -4587,6 +4589,7 @@ mod tests {
                         "agentName": "codex",
                         "taskName": "probeACSwebsite",
                         "profileId": "work",
+                        "profileSelectionReason": "authenticated_target",
                         "lease": "exclusive",
                         "cleanup": "close_browser",
                         "browserIds": ["session:runtime-session"]
@@ -4612,7 +4615,7 @@ mod tests {
         ));
         assert!(rendered.contains("Sessions: 1"));
         assert!(rendered.contains(
-            "runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work lease=exclusive cleanup=close_browser browsers=session:runtime-session"
+            "runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work profile_reason=authenticated_target lease=exclusive cleanup=close_browser browsers=session:runtime-session"
         ));
     }
 
@@ -4700,6 +4703,7 @@ mod tests {
                 "agentName": "codex",
                 "taskName": "probeACSwebsite",
                 "profileId": "work",
+                "profileSelectionReason": "authenticated_target",
                 "lease": "exclusive",
                 "cleanup": "close_browser",
                 "browserIds": ["session:runtime-session"]
@@ -4710,7 +4714,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Sessions: 1\n  runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work lease=exclusive cleanup=close_browser browsers=session:runtime-session"
+            "Sessions: 1\n  runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work profile_reason=authenticated_target lease=exclusive cleanup=close_browser browsers=session:runtime-session"
         );
     }
 

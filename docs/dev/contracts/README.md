@@ -180,6 +180,10 @@ Profile records separate caller ownership from target login scope.
 `targetServiceIds` names target sites or identity providers whose credentials
 or login state should live in the profile, and `authenticatedServiceIds` names
 targets currently believed to have usable authenticated state.
+Session records include `profileSelectionReason` so clients can distinguish
+`authenticated_target`, `target_match`, `service_allow_list`, and
+`explicit_profile` profile choices without reconstructing selector behavior
+from events.
 
 The operator remedy mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

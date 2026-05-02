@@ -5,7 +5,7 @@
 
 use super::service_model::{
     BrowserProfile, BrowserSession, LeaseState, ProfileAllocationPolicy, ProfileKeyringPolicy,
-    ServiceActor, ServiceState, SessionCleanupPolicy,
+    ProfileSelectionReason, ServiceActor, ServiceState, SessionCleanupPolicy,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -19,12 +19,19 @@ pub(crate) struct ServiceLaunchMetadata {
     pub(crate) agent_name: Option<String>,
     pub(crate) task_name: Option<String>,
     pub(crate) cleanup: SessionCleanupPolicy,
+    pub(crate) profile_selection_reason: Option<ProfileSelectionReason>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ProfileSelectionRequest {
     pub(crate) service_name: Option<String>,
     pub(crate) target_service_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProfileSelection {
+    pub(crate) profile_id: String,
+    pub(crate) reason: ProfileSelectionReason,
 }
 
 pub(crate) fn service_profile_id(
@@ -42,17 +49,25 @@ pub(crate) fn service_profile_id(
 pub(crate) fn select_service_profile_for_request(
     service_state: &ServiceState,
     request: &ProfileSelectionRequest,
-) -> Option<String> {
+) -> Option<ProfileSelection> {
+    select_service_profile_for_request_id(service_state, request)
+        .map(|(profile_id, reason)| ProfileSelection { profile_id, reason })
+}
+
+fn select_service_profile_for_request_id(
+    service_state: &ServiceState,
+    request: &ProfileSelectionRequest,
+) -> Option<(String, ProfileSelectionReason)> {
     service_state
         .profiles
         .iter()
         .filter(|(_, profile)| profile_allows_service(profile, request.service_name.as_deref()))
         .filter_map(|(id, profile)| {
             let rank = profile_selection_rank(profile, request);
-            rank.is_match().then(|| (rank, id.clone()))
+            rank.reason().map(|reason| (rank, id.clone(), reason))
         })
         .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
-        .map(|(_, id)| id)
+        .map(|(_, id, reason)| (id, reason))
 }
 
 pub(crate) fn upsert_service_profile_and_session(
@@ -122,6 +137,9 @@ pub(crate) fn upsert_service_profile_and_session(
         );
     }
     session.profile_id = profile_id.or(session.profile_id.clone());
+    session.profile_selection_reason = metadata
+        .profile_selection_reason
+        .or(session.profile_selection_reason);
     session.lease = if session.profile_id.is_some() {
         LeaseState::Exclusive
     } else {
@@ -155,10 +173,16 @@ struct ProfileSelectionRank {
 }
 
 impl ProfileSelectionRank {
-    fn is_match(self) -> bool {
-        self.authenticated_target_matches > 0
-            || self.target_matches > 0
-            || self.caller_service_match
+    fn reason(self) -> Option<ProfileSelectionReason> {
+        if self.authenticated_target_matches > 0 {
+            Some(ProfileSelectionReason::AuthenticatedTarget)
+        } else if self.target_matches > 0 {
+            Some(ProfileSelectionReason::TargetMatch)
+        } else if self.caller_service_match {
+            Some(ProfileSelectionReason::ServiceAllowList)
+        } else {
+            None
+        }
     }
 }
 
@@ -279,7 +303,9 @@ mod tests {
             },
         );
 
-        assert_eq!(selected.as_deref(), Some("authenticated"));
+        let selected = selected.expect("authenticated profile should be selected");
+        assert_eq!(selected.profile_id, "authenticated");
+        assert_eq!(selected.reason, ProfileSelectionReason::AuthenticatedTarget);
     }
 
     #[test]
@@ -332,7 +358,9 @@ mod tests {
             },
         );
 
-        assert_eq!(selected.as_deref(), Some("authenticated"));
+        let selected = selected.expect("authenticated profile should be selected");
+        assert_eq!(selected.profile_id, "authenticated");
+        assert_eq!(selected.reason, ProfileSelectionReason::AuthenticatedTarget);
     }
 
     #[test]
@@ -384,7 +412,9 @@ mod tests {
             },
         );
 
-        assert_eq!(selected.as_deref(), Some("service-profile"));
+        let selected = selected.expect("service allow-list fallback should be selected");
+        assert_eq!(selected.profile_id, "service-profile");
+        assert_eq!(selected.reason, ProfileSelectionReason::ServiceAllowList);
     }
 
     #[test]
@@ -400,6 +430,7 @@ mod tests {
             agent_name: Some("codex".to_string()),
             task_name: Some("probe-acs-website".to_string()),
             cleanup: SessionCleanupPolicy::Detach,
+            profile_selection_reason: Some(ProfileSelectionReason::ExplicitProfile),
         };
 
         upsert_service_profile_and_session(
@@ -431,6 +462,10 @@ mod tests {
         assert_eq!(session.task_name.as_deref(), Some("probe-acs-website"));
         assert_eq!(session.owner, ServiceActor::Agent("codex".to_string()));
         assert_eq!(session.lease, LeaseState::Exclusive);
+        assert_eq!(
+            session.profile_selection_reason,
+            Some(ProfileSelectionReason::ExplicitProfile)
+        );
         assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
         assert_eq!(session.browser_ids, vec!["session:persist-session"]);
     }

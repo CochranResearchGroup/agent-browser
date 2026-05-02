@@ -1327,6 +1327,11 @@ pub fn record_browser_launch_recorded_event(
     previous: Option<&BrowserProcess>,
     current: &BrowserProcess,
 ) {
+    let profile_selection_reason = current
+        .active_session_ids
+        .first()
+        .and_then(|session_id| state.sessions.get(session_id))
+        .and_then(|session| session.profile_selection_reason);
     let mut event = ServiceEvent {
         kind: ServiceEventKind::BrowserLaunchRecorded,
         message: format!("Browser {} launch metadata recorded", browser_id),
@@ -1342,6 +1347,7 @@ pub fn record_browser_launch_recorded_event(
             "host": current.host,
             "pid": current.pid,
             "cdpEndpoint": current.cdp_endpoint,
+            "profileSelectionReason": profile_selection_reason,
         })),
         ..new_service_event()
     };

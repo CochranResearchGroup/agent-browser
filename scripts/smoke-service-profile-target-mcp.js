@@ -211,6 +211,10 @@ try {
     `Session selected wrong profile: ${JSON.stringify(activeSession)}`,
   );
   assert(
+    activeSession.profileSelectionReason === 'authenticated_target',
+    `Session selected profile for wrong reason: ${JSON.stringify(activeSession)}`,
+  );
+  assert(
     activeSession.serviceName === serviceName,
     `Session serviceName was ${activeSession.serviceName}`,
   );
@@ -232,6 +236,7 @@ try {
       event.kind === 'browser_launch_recorded' &&
       event.sessionId === session &&
       event.profileId === selectedProfileId &&
+      event.details?.profileSelectionReason === 'authenticated_target' &&
       event.serviceName === serviceName &&
       event.agentName === agentName &&
       event.taskName === taskName,

@@ -67,6 +67,12 @@ pub const SERVICE_LEASE_STATE_VALUES: [&str; 5] = [
 ];
 pub const SERVICE_SESSION_CLEANUP_VALUES: [&str; 4] =
     ["detach", "close_tabs", "close_browser", "release_only"];
+pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 4] = [
+    "explicit_profile",
+    "authenticated_target",
+    "target_match",
+    "service_allow_list",
+];
 pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
     "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
 ];
@@ -392,6 +398,7 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
             "owner",
             "lease",
             "profileId",
+            "profileSelectionReason",
             "cleanup",
             "browserIds",
             "tabIds",
@@ -403,6 +410,7 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
             "agent_name",
             "task_name",
             "profile_id",
+            "profile_selection_reason",
             "browser_ids",
             "tab_ids",
             "created_at",
@@ -410,6 +418,9 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
         ],
     );
     assert!(SERVICE_LEASE_STATE_VALUES.contains(&value["lease"].as_str().unwrap()));
+    if let Some(reason) = value["profileSelectionReason"].as_str() {
+        assert!(SERVICE_PROFILE_SELECTION_REASON_VALUES.contains(&reason));
+    }
     assert!(SERVICE_SESSION_CLEANUP_VALUES.contains(&value["cleanup"].as_str().unwrap()));
     assert!(value["browserIds"].is_array());
     assert!(value["tabIds"].is_array());
@@ -1820,6 +1831,8 @@ pub struct BrowserSession {
     pub owner: ServiceActor,
     pub lease: LeaseState,
     pub profile_id: Option<String>,
+    /// Why this session's profile was selected, when agent-browser can infer it.
+    pub profile_selection_reason: Option<ProfileSelectionReason>,
     pub cleanup: SessionCleanupPolicy,
     pub browser_ids: Vec<String>,
     pub tab_ids: Vec<String>,
@@ -1837,6 +1850,7 @@ impl Default for BrowserSession {
             owner: ServiceActor::System,
             lease: LeaseState::Shared,
             profile_id: None,
+            profile_selection_reason: None,
             cleanup: SessionCleanupPolicy::Detach,
             browser_ids: Vec::new(),
             tab_ids: Vec::new(),
@@ -1844,6 +1858,20 @@ impl Default for BrowserSession {
             expires_at: None,
         }
     }
+}
+
+/// Explanation for a service session's chosen profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileSelectionReason {
+    /// Caller explicitly supplied a profile or runtime profile override.
+    ExplicitProfile,
+    /// Selected profile has authenticated state for a requested target service.
+    AuthenticatedTarget,
+    /// Selected profile targets a requested site or identity provider.
+    TargetMatch,
+    /// Selected profile was chosen by caller service allow-list fallback.
+    ServiceAllowList,
 }
 
 /// Current service view of a CDP target or browser tab.
@@ -2658,6 +2686,10 @@ mod tests {
             json!(SERVICE_LEASE_STATE_VALUES.to_vec())
         );
         assert_eq!(
+            session_schema["properties"]["profileSelectionReason"]["oneOf"][0]["enum"],
+            json!(SERVICE_PROFILE_SELECTION_REASON_VALUES.to_vec())
+        );
+        assert_eq!(
             session_schema["properties"]["cleanup"]["enum"],
             json!(SERVICE_SESSION_CLEANUP_VALUES.to_vec())
         );
@@ -2709,7 +2741,14 @@ mod tests {
         assert_schema_required_fields(&browser_schema, &["id", "profileId", "host", "health"]);
         assert_schema_required_fields(
             &session_schema,
-            &["id", "serviceName", "lease", "profileId", "cleanup"],
+            &[
+                "id",
+                "serviceName",
+                "lease",
+                "profileId",
+                "profileSelectionReason",
+                "cleanup",
+            ],
         );
         assert_schema_required_fields(&tab_schema, &["id", "browserId", "sessionId", "lifecycle"]);
         assert_schema_required_fields(
@@ -2744,6 +2783,7 @@ mod tests {
             task_name: Some("probeACSwebsite".to_string()),
             lease: LeaseState::Exclusive,
             profile_id: Some("profile-1".to_string()),
+            profile_selection_reason: Some(ProfileSelectionReason::AuthenticatedTarget),
             cleanup: SessionCleanupPolicy::CloseTabs,
             ..BrowserSession::default()
         };
@@ -3041,6 +3081,7 @@ mod tests {
             "owner": "system",
             "lease": "exclusive",
             "profileId": "journal-downloader",
+            "profileSelectionReason": "authenticated_target",
             "cleanup": "close_browser",
             "browserIds": [],
             "tabIds": [],

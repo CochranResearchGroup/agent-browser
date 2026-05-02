@@ -108,6 +108,7 @@ export interface ServiceSessionRecord {
   agentName: string | null;
   taskName: string | null;
   profileId: string | null;
+  profileSelectionReason: 'explicit_profile' | 'authenticated_target' | 'target_match' | 'service_allow_list' | null;
   [key: string]: unknown;
 }
 

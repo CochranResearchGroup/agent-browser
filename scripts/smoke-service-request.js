@@ -224,6 +224,10 @@ try {
     activeSession.profileId === selectedProfileId,
     `HTTP service request selected wrong profile: ${JSON.stringify(activeSession)}`,
   );
+  assert(
+    activeSession.profileSelectionReason === 'authenticated_target',
+    `HTTP service request selected profile for wrong reason: ${JSON.stringify(activeSession)}`,
+  );
 
   const serviceBaseUrl = `http://127.0.0.1:${port}`;
   const tabUrl = smokeDataUrl('Service Tab Request Smoke', 'Service Tab Request Smoke');
