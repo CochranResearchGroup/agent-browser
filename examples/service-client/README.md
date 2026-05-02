@@ -43,9 +43,9 @@ pnpm --filter agent-browser-service-client-example exec node service-request-tra
 You can also set `AGENT_BROWSER_SERVICE_BASE_URL` instead of passing
 `--base-url`.
 
-The script prints the command result, typed tab, title, and wait result fields,
-trace counts, and the latest retained jobs so software projects can confirm
-that the request and trace metadata are connected.
+The script prints the command result, typed tab, title, wait, and viewport
+result fields, trace counts, and the latest retained jobs so software projects
+can confirm that the request and trace metadata are connected.
 
 ## Profile Selection By Login Identity
 

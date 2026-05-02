@@ -263,6 +263,42 @@ export interface ServiceScrollIntoViewData {
   scrolled: string;
 }
 
+export interface ServiceSetData {
+  set: true;
+}
+
+export interface ServiceOfflineData {
+  offline: boolean;
+}
+
+export interface ServiceViewportData {
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+  mobile: boolean;
+}
+
+export interface ServiceUserAgentData {
+  userAgent: string;
+}
+
+export interface ServiceTimezoneData {
+  timezoneId: string;
+}
+
+export interface ServiceLocaleData {
+  locale: string;
+}
+
+export interface ServiceGeolocationData {
+  latitude: number;
+  longitude: number;
+}
+
+export interface ServicePermissionsData {
+  granted: string[];
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   tab_new: ServiceTabNewData;
@@ -294,6 +330,16 @@ export interface ServiceRequestActionDataMap {
   focus: ServiceFocusData;
   clear: ServiceClearData;
   scrollintoview: ServiceScrollIntoViewData;
+  setcontent: ServiceSetData;
+  headers: ServiceSetData;
+  offline: ServiceOfflineData;
+  viewport: ServiceViewportData;
+  user_agent: ServiceUserAgentData;
+  timezone: ServiceTimezoneData;
+  locale: ServiceLocaleData;
+  geolocation: ServiceGeolocationData;
+  permissions: ServicePermissionsData;
+  emulatemedia: ServiceSetData;
 }
 
 export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =

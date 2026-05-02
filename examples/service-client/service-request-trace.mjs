@@ -139,6 +139,19 @@ export async function runServiceWorkflow({
       jobTimeoutMs: 30000,
     }),
   });
+  const viewportResult = await postServiceRequest({
+    baseUrl,
+    request: createServiceRequest({
+      serviceName,
+      agentName,
+      taskName,
+      siteId,
+      loginId,
+      action: 'viewport',
+      params: { width: 1024, height: 768 },
+      jobTimeoutMs: 30000,
+    }),
+  });
   const cancelResult = cancelJobId ? await cancelServiceJob({ baseUrl, jobId: cancelJobId }) : null;
   const trace = await getServiceTrace({
     baseUrl,
@@ -154,9 +167,12 @@ export async function runServiceWorkflow({
       tabUrl: commandResult.data?.url,
       pageTitle: titleResult.data?.title,
       waitKind: waitResult.data?.waited,
+      viewportWidth: viewportResult.data?.width,
+      viewportHeight: viewportResult.data?.height,
     },
     titleResult,
     waitResult,
+    viewportResult,
     cancelResult,
     traceSummary: {
       events: trace.counts.events,
