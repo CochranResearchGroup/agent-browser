@@ -103,6 +103,17 @@ export interface ServiceTabNewData {
   url: string;
 }
 
+export interface ServiceTabSwitchData {
+  index: number;
+  url: string;
+  title: string;
+}
+
+export interface ServiceTabCloseData {
+  closed: number;
+  activeIndex: number;
+}
+
 export interface ServiceTabRecord {
   index: number;
   title: string;
@@ -299,6 +310,22 @@ export interface ServicePermissionsData {
   granted: string[];
 }
 
+export type ServiceDialogData =
+  | { hasDialog: true; type: string; message: string; defaultPrompt?: string }
+  | { hasDialog: false }
+  | { handled: true; accepted: boolean };
+
+export type ServiceClipboardData =
+  | { text: unknown }
+  | { written: string }
+  | { copied: true }
+  | { pasted: true };
+
+export interface ServiceUploadData {
+  uploaded: number;
+  selector: string;
+}
+
 export interface ServiceCookieRecord {
   name: string;
   value: string;
@@ -396,7 +423,12 @@ export interface ServiceRequestsData {
 
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
+  back: ServiceUrlData;
+  forward: ServiceUrlData;
+  reload: ServiceUrlData;
   tab_new: ServiceTabNewData;
+  tab_switch: ServiceTabSwitchData;
+  tab_close: ServiceTabCloseData;
   tab_list: ServiceTabListData;
   url: ServiceUrlData;
   title: ServiceTitleData;
@@ -435,6 +467,9 @@ export interface ServiceRequestActionDataMap {
   geolocation: ServiceGeolocationData;
   permissions: ServicePermissionsData;
   emulatemedia: ServiceSetData;
+  dialog: ServiceDialogData;
+  clipboard: ServiceClipboardData;
+  upload: ServiceUploadData;
   cookies_get: ServiceCookiesData;
   cookies_set: ServiceSetData;
   cookies_clear: ServiceClearedData;

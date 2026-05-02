@@ -1550,11 +1550,9 @@ service request helpers, and observability helpers are current, including
 package export resolution through `@agent-browser/client`. `postServiceRequest`
 and `requestServiceTab` return `ServiceRequestResponse`, the standard service
 command envelope with `success`, optional `data`, optional `error`, optional
-`warning`, and action-specific fields. Literal requests for navigation, tabs,
-snapshots, screenshots, URL and title reads, element text/value/state reads,
-attributes, HTML, styles, counts, bounding boxes, common interactions, browser
-environment controls, network/storage reads, and artifact commands get typed
-`data` shapes through
+`warning`, and action-specific fields. Every action currently listed in
+`docs/dev/contracts/service-request.v1.schema.json` gets a typed `data` shape
+through
 `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new`
 data. Use `pnpm test:service-client-contract`,
 `pnpm test:service-client-types`, `pnpm test:service-client-exports`,

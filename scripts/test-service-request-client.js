@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   createServiceRequest,
@@ -9,6 +10,26 @@ import {
   postServiceRequest,
   requestServiceTab,
 } from '../packages/client/src/service-request.js';
+
+function assertServiceRequestActionDataCoverage() {
+  const schema = JSON.parse(
+    readFileSync(
+      new URL('../docs/dev/contracts/service-request.v1.schema.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  const generatorSource = readFileSync(
+    new URL('./generate-service-request-client.js', import.meta.url),
+    'utf8',
+  );
+  const mapBody = generatorSource.match(/export interface ServiceRequestActionDataMap \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(mapBody, 'ServiceRequestActionDataMap must exist in the service request generator');
+
+  const actions = schema.properties.action.enum;
+  const mappedActions = [...mapBody.matchAll(/^\s*([a-z0-9_]+):/gm)].map((match) => match[1]);
+  assert.deepEqual(actions.filter((action) => !mappedActions.includes(action)), []);
+  assert.deepEqual(mappedActions.filter((action) => !actions.includes(action)), []);
+}
 
 function createFetchRecorder(payload = { success: true, data: { jobId: 'job-1' } }) {
   const calls = [];
@@ -28,6 +49,8 @@ function createFetchRecorder(payload = { success: true, data: { jobId: 'job-1' }
 }
 
 async function main() {
+  assertServiceRequestActionDataCoverage();
+
   assert.throws(
     () =>
       createServiceRequest({
