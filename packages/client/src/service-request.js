@@ -12,6 +12,7 @@ const actionSet = new Set(SERVICE_REQUEST_ACTIONS);
 /**
  * @typedef {import('./service-request.generated.js').ServiceRequest} ServiceRequest
  * @typedef {import('./service-request.generated.js').ServiceRequestHttpOptions} ServiceRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceRequestResponse} ServiceRequestResponse
  * @typedef {import('./service-request.generated.js').ServiceTabRequestHttpOptions} ServiceTabRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestOptions} ServiceTabRequestOptions
  */
@@ -97,6 +98,7 @@ export function createServiceTabRequest(input) {
 
 /**
  * @param {ServiceRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
  */
 export async function postServiceRequest({ baseUrl, request, fetch = globalThis.fetch, signal }) {
   if (typeof fetch !== 'function') {
@@ -122,6 +124,7 @@ export async function postServiceRequest({ baseUrl, request, fetch = globalThis.
 
 /**
  * @param {ServiceTabRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
  */
 export async function requestServiceTab({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
   return postServiceRequest({

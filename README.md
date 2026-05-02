@@ -1545,9 +1545,12 @@ const tab = await requestServiceTab({
 The private workspace package `@agent-browser/client` is generated from the
 service request schemas. Run `pnpm generate:service-client` after changing
 `docs/dev/contracts/service-request*.json`, and run `pnpm test:service-client`
-to verify generated files, helper types, service request helpers, and
-observability helpers are current, including package export resolution through
-`@agent-browser/client`. Use `pnpm test:service-client-contract`,
+to verify generated files, helper types, typed service command responses,
+service request helpers, and observability helpers are current, including
+package export resolution through `@agent-browser/client`. `postServiceRequest`
+and `requestServiceTab` return `ServiceRequestResponse`, the standard service
+command envelope with `success`, optional `data`, optional `error`, optional
+`warning`, and action-specific fields. Use `pnpm test:service-client-contract`,
 `pnpm test:service-client-types`, `pnpm test:service-client-exports`,
 `pnpm test:service-request-client`, or `pnpm test:service-observability-client`
 when only one client contract needs validation.

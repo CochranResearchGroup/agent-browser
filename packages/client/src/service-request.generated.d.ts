@@ -100,6 +100,15 @@ export interface ServiceRequestHttpOptions {
   signal?: AbortSignal;
 }
 
+export interface ServiceRequestResponse {
+  id?: string;
+  success: boolean;
+  data?: unknown;
+  error?: unknown;
+  warning?: unknown;
+  [key: string]: unknown;
+}
+
 export interface ServiceTabRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
   url?: string;
   params?: Record<string, unknown>;
@@ -119,6 +128,6 @@ export declare const SERVICE_REQUEST_MCP_TOOL_NAME: "service_request";
 
 export declare function createServiceRequest(input: ServiceRequest): ServiceRequest;
 export declare function createServiceRequestMcpToolCall(input: ServiceRequest): ServiceRequestMcpToolCall;
-export declare function postServiceRequest(options: ServiceRequestHttpOptions): Promise<unknown>;
+export declare function postServiceRequest(options: ServiceRequestHttpOptions): Promise<ServiceRequestResponse>;
 export declare function createServiceTabRequest(input: ServiceTabRequestOptions): ServiceRequest;
-export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<unknown>;
+export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<ServiceRequestResponse>;
