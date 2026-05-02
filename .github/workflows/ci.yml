@@ -98,6 +98,29 @@ jobs:
         run: pnpm build
         working-directory: packages/dashboard
 
+  service-client:
+    name: Service Client
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Install TypeScript dependency slice
+        run: pnpm install --frozen-lockfile --filter docs
+
+      - name: Test service client contracts
+        run: pnpm test:service-client
+
   rust-cross:
     name: Rust (${{ matrix.os }} - ${{ matrix.target }})
     if: >-
