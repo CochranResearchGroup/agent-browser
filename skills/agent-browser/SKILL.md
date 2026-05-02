@@ -531,6 +531,18 @@ When a session stream server is running, use `GET /api/browser/url`, `GET /api/b
 
 Use `POST /api/service/request` on the stream port when a software client wants to submit one explicit request object with caller context, site or login hints, target-service hints, `action`, `params`, and `jobTimeoutMs`. The route queues the requested browser action through the same service-owned control path as MCP `service_request`.
 
+For software integrations, use one intent object and let agent-browser handle profile selection and queueing:
+
+```json
+{"serviceName":"JournalDownloader","agentName":"article-probe-agent","taskName":"probeACSwebsite","siteId":"acs","action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"jobTimeoutMs":30000}
+```
+
+For MCP integrations, send the same fields as the `arguments` for `service_request`:
+
+```json
+{"name":"service_request","arguments":{"serviceName":"JournalDownloader","agentName":"article-probe-agent","taskName":"probeACSwebsite","siteId":"acs","action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"jobTimeoutMs":30000}}
+```
+
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs` in config, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable the background loop.
 
 Service control jobs do not time out at the worker boundary by default. Set `service.jobTimeoutMs`, pass `--service-job-timeout <ms>`, or set `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to mark long-running dispatched jobs as `timed_out`. Use `0` to disable it.

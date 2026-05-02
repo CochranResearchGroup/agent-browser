@@ -36,6 +36,46 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/browser/navigate" \
   -d '{"url":"https://example.com","serviceName":"JournalDownloader","agentName":"article-probe-agent","taskName":"probeACSwebsite"}'
 ```
 
+For software clients, prefer one explicit service request object when the caller wants agent-browser to select the profile, serialize CDP access, and retain trace metadata:
+
+```ts
+type ServiceRequest = {
+  serviceName: string;
+  agentName?: string;
+  taskName: string;
+  siteId?: string;
+  loginId?: string;
+  action: 'navigate' | 'click' | 'fill' | 'wait' | 'snapshot' | string;
+  params?: Record<string, unknown>;
+  jobTimeoutMs?: number;
+};
+
+const request: ServiceRequest = {
+  serviceName: 'JournalDownloader',
+  agentName: 'article-probe-agent',
+  taskName: 'probeACSwebsite',
+  siteId: 'acs',
+  action: 'navigate',
+  params: {
+    url: 'https://example.com',
+    waitUntil: 'load',
+  },
+  jobTimeoutMs: 30000,
+};
+
+const response = await fetch(`http://127.0.0.1:${streamPort}/api/service/request`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(request),
+});
+
+if (!response.ok) {
+  throw new Error(`agent-browser service request failed: ${response.status}`);
+}
+
+const result = await response.json();
+```
+
 Use MCP when an agent runtime wants resources and tools without scraping CLI text:
 
 ```bash
@@ -43,6 +83,26 @@ agent-browser mcp serve
 agent-browser mcp resources
 agent-browser mcp read agent-browser://browsers
 agent-browser mcp read agent-browser://jobs
+```
+
+An MCP client sends the same intent shape through `tools/call`:
+
+```json
+{
+  "name": "service_request",
+  "arguments": {
+    "serviceName": "JournalDownloader",
+    "agentName": "article-probe-agent",
+    "taskName": "probeACSwebsite",
+    "siteId": "acs",
+    "action": "navigate",
+    "params": {
+      "url": "https://example.com",
+      "waitUntil": "load"
+    },
+    "jobTimeoutMs": 30000
+  }
+}
 ```
 
 MCP tool callers should include `serviceName`, `agentName`, and `taskName` whenever those values are known. Anonymous callers remain compatible, but service jobs record `namingWarnings` so operators can find unlabelled automation.
