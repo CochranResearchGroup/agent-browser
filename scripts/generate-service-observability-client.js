@@ -284,6 +284,62 @@ export interface ServiceReconcileResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileUpsertResponse {
+  id: string;
+  upserted: boolean;
+  profile: ServiceProfileRecord;
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileDeleteResponse {
+  id: string;
+  deleted: boolean;
+  profile: ServiceProfileRecord | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceSessionUpsertResponse {
+  id: string;
+  upserted: boolean;
+  session: ServiceSessionRecord;
+  [key: string]: unknown;
+}
+
+export interface ServiceSessionDeleteResponse {
+  id: string;
+  deleted: boolean;
+  session: ServiceSessionRecord | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceSitePolicyUpsertResponse {
+  id: string;
+  upserted: boolean;
+  sitePolicy: ServiceSitePolicyRecord;
+  [key: string]: unknown;
+}
+
+export interface ServiceSitePolicyDeleteResponse {
+  id: string;
+  deleted: boolean;
+  sitePolicy: ServiceSitePolicyRecord | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceProviderUpsertResponse {
+  id: string;
+  upserted: boolean;
+  provider: ServiceProviderRecord;
+  [key: string]: unknown;
+}
+
+export interface ServiceProviderDeleteResponse {
+  id: string;
+  deleted: boolean;
+  provider: ServiceProviderRecord | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceEventsResponse extends ServiceListResponse<ServiceEventRecord> {
   events: ServiceEventRecord[];
 }
@@ -348,6 +404,22 @@ export interface ServiceIdOptions extends ServiceObservabilityHttpOptions {
   id: string;
 }
 
+export interface ServiceProfileMutationOptions extends ServiceIdOptions {
+  profile: Record<string, unknown>;
+}
+
+export interface ServiceSessionMutationOptions extends ServiceIdOptions {
+  session: Record<string, unknown>;
+}
+
+export interface ServiceSitePolicyMutationOptions extends ServiceIdOptions {
+  sitePolicy: Record<string, unknown>;
+}
+
+export interface ServiceProviderMutationOptions extends ServiceIdOptions {
+  provider: Record<string, unknown>;
+}
+
 export interface ServiceIncidentActivityOptions extends ServiceObservabilityHttpOptions {
   incidentId: string;
 }
@@ -365,6 +437,14 @@ export declare function getServiceSitePolicies(options: ServiceQueryOptions): Pr
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;
 export declare function postServiceReconcile(options: ServiceObservabilityHttpOptions): Promise<ServiceReconcileResponse>;
+export declare function upsertServiceProfile(options: ServiceProfileMutationOptions): Promise<ServiceProfileUpsertResponse>;
+export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;
+export declare function upsertServiceSession(options: ServiceSessionMutationOptions): Promise<ServiceSessionUpsertResponse>;
+export declare function deleteServiceSession(options: ServiceIdOptions): Promise<ServiceSessionDeleteResponse>;
+export declare function upsertServiceSitePolicy(options: ServiceSitePolicyMutationOptions): Promise<ServiceSitePolicyUpsertResponse>;
+export declare function deleteServiceSitePolicy(options: ServiceIdOptions): Promise<ServiceSitePolicyDeleteResponse>;
+export declare function upsertServiceProvider(options: ServiceProviderMutationOptions): Promise<ServiceProviderUpsertResponse>;
+export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
 export declare function getServiceJobs(options: ServiceQueryOptions): Promise<ServiceJobsResponse>;
 export declare function getServiceJob(options: ServiceIdOptions): Promise<ServiceJobsResponse>;
 export declare function getServiceEvents(options: ServiceQueryOptions): Promise<ServiceEventsResponse>;

@@ -31,6 +31,18 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceStatusResponse} ServiceStatusResponse
  * @typedef {import('./service-observability.generated.js').ServiceTabsResponse} ServiceTabsResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceResponse} ServiceTraceResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileMutationOptions} ServiceProfileMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileUpsertResponse} ServiceProfileUpsertResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProviderDeleteResponse} ServiceProviderDeleteResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProviderMutationOptions} ServiceProviderMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProviderUpsertResponse} ServiceProviderUpsertResponse
+ * @typedef {import('./service-observability.generated.js').ServiceSessionDeleteResponse} ServiceSessionDeleteResponse
+ * @typedef {import('./service-observability.generated.js').ServiceSessionMutationOptions} ServiceSessionMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceSessionUpsertResponse} ServiceSessionUpsertResponse
+ * @typedef {import('./service-observability.generated.js').ServiceSitePolicyDeleteResponse} ServiceSitePolicyDeleteResponse
+ * @typedef {import('./service-observability.generated.js').ServiceSitePolicyMutationOptions} ServiceSitePolicyMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceSitePolicyUpsertResponse} ServiceSitePolicyUpsertResponse
  */
 
 /**
@@ -103,6 +115,70 @@ export function getServiceChallenges(options) {
  */
 export function postServiceReconcile(options) {
   return servicePost(options, '/api/service/reconcile');
+}
+
+/**
+ * @param {ServiceProfileMutationOptions} options
+ * @returns {Promise<ServiceProfileUpsertResponse>}
+ */
+export function upsertServiceProfile({ id, profile, ...options }) {
+  return servicePost(options, `/api/service/profiles/${encodeURIComponent(id)}`, profile);
+}
+
+/**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceProfileDeleteResponse>}
+ */
+export function deleteServiceProfile({ id, ...options }) {
+  return serviceDelete(options, `/api/service/profiles/${encodeURIComponent(id)}`);
+}
+
+/**
+ * @param {ServiceSessionMutationOptions} options
+ * @returns {Promise<ServiceSessionUpsertResponse>}
+ */
+export function upsertServiceSession({ id, session, ...options }) {
+  return servicePost(options, `/api/service/sessions/${encodeURIComponent(id)}`, session);
+}
+
+/**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceSessionDeleteResponse>}
+ */
+export function deleteServiceSession({ id, ...options }) {
+  return serviceDelete(options, `/api/service/sessions/${encodeURIComponent(id)}`);
+}
+
+/**
+ * @param {ServiceSitePolicyMutationOptions} options
+ * @returns {Promise<ServiceSitePolicyUpsertResponse>}
+ */
+export function upsertServiceSitePolicy({ id, sitePolicy, ...options }) {
+  return servicePost(options, `/api/service/site-policies/${encodeURIComponent(id)}`, sitePolicy);
+}
+
+/**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceSitePolicyDeleteResponse>}
+ */
+export function deleteServiceSitePolicy({ id, ...options }) {
+  return serviceDelete(options, `/api/service/site-policies/${encodeURIComponent(id)}`);
+}
+
+/**
+ * @param {ServiceProviderMutationOptions} options
+ * @returns {Promise<ServiceProviderUpsertResponse>}
+ */
+export function upsertServiceProvider({ id, provider, ...options }) {
+  return servicePost(options, `/api/service/providers/${encodeURIComponent(id)}`, provider);
+}
+
+/**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceProviderDeleteResponse>}
+ */
+export function deleteServiceProvider({ id, ...options }) {
+  return serviceDelete(options, `/api/service/providers/${encodeURIComponent(id)}`);
 }
 
 /**
@@ -198,9 +274,10 @@ async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, query }, 
  * @template TResult
  * @param {{ baseUrl: string, fetch?: typeof globalThis.fetch, signal?: AbortSignal }} options
  * @param {string} pathname
+ * @param {unknown} [body]
  * @returns {Promise<TResult>}
  */
-async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathname) {
+async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathname, body = undefined) {
   if (typeof fetch !== 'function') {
     throw new TypeError('service observability helpers require a fetch implementation');
   }
@@ -211,6 +288,7 @@ async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathna
   const response = await fetch(new URL(pathname, baseUrl), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
   if (!response.ok) {
@@ -220,6 +298,33 @@ async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathna
   const payload = await response.json();
   if (!payload?.success) {
     throw new Error(`agent-browser service write failed: ${JSON.stringify(payload)}`);
+  }
+
+  return payload.data;
+}
+
+/**
+ * @template TResult
+ * @param {{ baseUrl: string, fetch?: typeof globalThis.fetch, signal?: AbortSignal }} options
+ * @param {string} pathname
+ * @returns {Promise<TResult>}
+ */
+async function serviceDelete({ baseUrl, fetch = globalThis.fetch, signal }, pathname) {
+  if (typeof fetch !== 'function') {
+    throw new TypeError('service observability helpers require a fetch implementation');
+  }
+  if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
+    throw new TypeError('service observability helpers require a baseUrl string');
+  }
+
+  const response = await fetch(new URL(pathname, baseUrl), { method: 'DELETE', signal });
+  if (!response.ok) {
+    throw new Error(`agent-browser service delete failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!payload?.success) {
+    throw new Error(`agent-browser service delete failed: ${JSON.stringify(payload)}`);
   }
 
   return payload.data;

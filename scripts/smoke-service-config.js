@@ -1,6 +1,20 @@
 #!/usr/bin/env node
 
 import {
+  deleteServiceProfile,
+  deleteServiceProvider,
+  deleteServiceSession,
+  deleteServiceSitePolicy,
+  getServiceProfiles,
+  getServiceProviders,
+  getServiceSessions,
+  getServiceSitePolicies,
+  upsertServiceProfile,
+  upsertServiceProvider,
+  upsertServiceSession,
+  upsertServiceSitePolicy,
+} from '../packages/client/src/service-observability.js';
+import {
   assert,
   closeSession,
   createMcpStdioClient,
@@ -110,41 +124,82 @@ function assertCollectionMissing(collection, key, id, label) {
 
 try {
   const port = await enableStream();
+  const serviceBaseUrl = `http://127.0.0.1:${port}`;
 
-  const httpProfile = await httpJson(port, 'POST', '/api/service/profiles/journal-downloader', {
-    name: 'Journal Downloader',
-    allocation: 'per_service',
-    keyring: 'basic_password_store',
-    persistent: true,
-    targetServiceIds: ['acs'],
-    authenticatedServiceIds: ['acs'],
-    sharedServiceIds: [serviceName],
+  const httpProfile = await upsertServiceProfile({
+    baseUrl: serviceBaseUrl,
+    id: 'journal-downloader',
+    profile: {
+      name: 'Journal Downloader',
+      allocation: 'per_service',
+      keyring: 'basic_password_store',
+      persistent: true,
+      targetServiceIds: ['acs'],
+      authenticatedServiceIds: ['acs'],
+      sharedServiceIds: [serviceName],
+    },
   });
-  assert(httpProfile.success === true, `HTTP profile upsert failed: ${JSON.stringify(httpProfile)}`);
   assertServiceProfileUpsertResponseSchemaRecord(
-    httpProfile.data,
+    httpProfile,
     profileUpsertResponseSchema,
-    'HTTP profile upsert response',
+    'client profile upsert response',
   );
   assert(
-    httpProfile.data?.profile?.id === 'journal-downloader',
+    httpProfile.profile?.id === 'journal-downloader',
     `HTTP profile id mismatch: ${JSON.stringify(httpProfile)}`,
   );
-
-  const httpPolicy = await httpJson(port, 'POST', '/api/service/site-policies/google', {
-    originPattern: 'https://accounts.google.com',
-    interactionMode: 'human_like_input',
-    challengePolicy: 'avoid_first',
-    manualLoginPreferred: true,
-    profileRequired: true,
+  const clientProfile = await upsertServiceProfile({
+    baseUrl: serviceBaseUrl,
+    id: 'client-profile',
+    profile: {
+      name: 'Client Profile',
+      allocation: 'per_service',
+      keyring: 'basic_password_store',
+      persistent: true,
+      targetServiceIds: ['client-target'],
+      sharedServiceIds: [serviceName],
+    },
   });
-  assert(httpPolicy.success === true, `HTTP site policy upsert failed: ${JSON.stringify(httpPolicy)}`);
-  assertServiceSitePolicyUpsertResponseSchemaRecord(
-    httpPolicy.data,
-    sitePolicyUpsertResponseSchema,
-    'HTTP site policy upsert response',
+  assertServiceProfileUpsertResponseSchemaRecord(
+    clientProfile,
+    profileUpsertResponseSchema,
+    'client extra profile upsert response',
   );
-  assert(httpPolicy.data?.sitePolicy?.id === 'google', `HTTP policy id mismatch: ${JSON.stringify(httpPolicy)}`);
+  assert(clientProfile.profile?.id === 'client-profile', `client profile id mismatch: ${JSON.stringify(clientProfile)}`);
+
+  const httpPolicy = await upsertServiceSitePolicy({
+    baseUrl: serviceBaseUrl,
+    id: 'google',
+    sitePolicy: {
+      originPattern: 'https://accounts.google.com',
+      interactionMode: 'human_like_input',
+      challengePolicy: 'avoid_first',
+      manualLoginPreferred: true,
+      profileRequired: true,
+    },
+  });
+  assertServiceSitePolicyUpsertResponseSchemaRecord(
+    httpPolicy,
+    sitePolicyUpsertResponseSchema,
+    'client site policy upsert response',
+  );
+  assert(httpPolicy.sitePolicy?.id === 'google', `HTTP policy id mismatch: ${JSON.stringify(httpPolicy)}`);
+  const clientPolicy = await upsertServiceSitePolicy({
+    baseUrl: serviceBaseUrl,
+    id: 'client-google',
+    sitePolicy: {
+      originPattern: 'https://client.example.com',
+      interactionMode: 'human_like_input',
+      challengePolicy: 'avoid_first',
+      manualLoginPreferred: false,
+      profileRequired: false,
+    },
+  });
+  assertServiceSitePolicyUpsertResponseSchemaRecord(
+    clientPolicy,
+    sitePolicyUpsertResponseSchema,
+    'client extra site policy upsert response',
+  );
 
   mcp = createMcpStdioClient({
     context,
@@ -204,9 +259,28 @@ try {
     `MCP session owner was not inferred from agentName: ${JSON.stringify(mcpSession)}`,
   );
 
-  const httpSessions = await httpJson(port, 'GET', '/api/service/sessions');
+  const clientSession = await upsertServiceSession({
+    baseUrl: serviceBaseUrl,
+    id: 'client-run',
+    session: {
+      serviceName,
+      agentName,
+      taskName,
+      profileId: 'journal-downloader',
+      lease: 'shared',
+      cleanup: 'release_only',
+    },
+  });
+  assertServiceSessionUpsertResponseSchemaRecord(
+    clientSession,
+    sessionUpsertResponseSchema,
+    'client session upsert response',
+  );
+  assert(clientSession.session?.id === 'client-run', `client session id mismatch: ${JSON.stringify(clientSession)}`);
+
+  const httpSessions = await getServiceSessions({ baseUrl: serviceBaseUrl });
   assert(
-    httpSessions.data?.sessions?.some(
+    httpSessions.sessions?.some(
       (session) =>
         session.id === 'journal-run' &&
         session.profileId === 'journal-downloader' &&
@@ -252,9 +326,29 @@ try {
     'MCP provider upsert response',
   );
 
-  const httpProviders = await httpJson(port, 'GET', '/api/service/providers');
+  const clientProvider = await upsertServiceProvider({
+    baseUrl: serviceBaseUrl,
+    id: 'client-manual',
+    provider: {
+      kind: 'manual_approval',
+      displayName: 'Client approval',
+      enabled: true,
+      capabilities: ['human_approval'],
+    },
+  });
+  assertServiceProviderUpsertResponseSchemaRecord(
+    clientProvider,
+    providerUpsertResponseSchema,
+    'client provider upsert response',
+  );
   assert(
-    httpProviders.data?.providers?.some(
+    clientProvider.provider?.id === 'client-manual',
+    `client provider id mismatch: ${JSON.stringify(clientProvider)}`,
+  );
+
+  const httpProviders = await getServiceProviders({ baseUrl: serviceBaseUrl });
+  assert(
+    httpProviders.providers?.some(
       (provider) => provider.id === 'manual' && provider.displayName === 'Dashboard approval',
     ),
     `HTTP providers did not include MCP-upserted provider: ${JSON.stringify(httpProviders)}`,
@@ -275,18 +369,42 @@ try {
     'MCP site policy delete response',
   );
 
-  const httpPoliciesAfterDelete = await httpJson(port, 'GET', '/api/service/site-policies');
-  assertCollectionMissing(httpPoliciesAfterDelete.data, 'sitePolicies', 'google', 'HTTP site-policies');
+  const clientDeletePolicy = await deleteServiceSitePolicy({
+    baseUrl: serviceBaseUrl,
+    id: 'client-google',
+  });
+  assertServiceSitePolicyDeleteResponseSchemaRecord(
+    clientDeletePolicy,
+    sitePolicyDeleteResponseSchema,
+    'client site policy delete response',
+  );
 
-  const httpDeleteSession = await httpJson(port, 'DELETE', '/api/service/sessions/journal-run');
+  const httpPoliciesAfterDelete = await getServiceSitePolicies({ baseUrl: serviceBaseUrl });
+  assertCollectionMissing(httpPoliciesAfterDelete, 'sitePolicies', 'google', 'HTTP site-policies');
+  assertCollectionMissing(httpPoliciesAfterDelete, 'sitePolicies', 'client-google', 'HTTP site-policies');
+
+  const httpDeleteSession = await deleteServiceSession({
+    baseUrl: serviceBaseUrl,
+    id: 'journal-run',
+  });
   assert(
-    httpDeleteSession.success === true && httpDeleteSession.data?.deleted === true,
+    httpDeleteSession.deleted === true,
     `HTTP session delete failed: ${JSON.stringify(httpDeleteSession)}`,
   );
   assertServiceSessionDeleteResponseSchemaRecord(
-    httpDeleteSession.data,
+    httpDeleteSession,
     sessionDeleteResponseSchema,
-    'HTTP session delete response',
+    'client session delete response',
+  );
+
+  const clientDeleteSession = await deleteServiceSession({
+    baseUrl: serviceBaseUrl,
+    id: 'client-run',
+  });
+  assertServiceSessionDeleteResponseSchemaRecord(
+    clientDeleteSession,
+    sessionDeleteResponseSchema,
+    'client extra session delete response',
   );
 
   const mcpProfilesBeforeProfileDelete = await send('resources/read', { uri: 'agent-browser://profiles' });
@@ -315,18 +433,42 @@ try {
     'MCP profile delete response',
   );
 
-  const httpProfilesAfterDelete = await httpJson(port, 'GET', '/api/service/profiles');
-  assertCollectionMissing(httpProfilesAfterDelete.data, 'profiles', 'journal-downloader', 'HTTP profiles');
+  const clientDeleteProfile = await deleteServiceProfile({
+    baseUrl: serviceBaseUrl,
+    id: 'client-profile',
+  });
+  assertServiceProfileDeleteResponseSchemaRecord(
+    clientDeleteProfile,
+    profileDeleteResponseSchema,
+    'client profile delete response',
+  );
 
-  const httpDeleteProvider = await httpJson(port, 'DELETE', '/api/service/providers/manual');
+  const httpProfilesAfterDelete = await getServiceProfiles({ baseUrl: serviceBaseUrl });
+  assertCollectionMissing(httpProfilesAfterDelete, 'profiles', 'journal-downloader', 'HTTP profiles');
+  assertCollectionMissing(httpProfilesAfterDelete, 'profiles', 'client-profile', 'HTTP profiles');
+
+  const httpDeleteProvider = await deleteServiceProvider({
+    baseUrl: serviceBaseUrl,
+    id: 'manual',
+  });
   assert(
-    httpDeleteProvider.success === true && httpDeleteProvider.data?.deleted === true,
+    httpDeleteProvider.deleted === true,
     `HTTP provider delete failed: ${JSON.stringify(httpDeleteProvider)}`,
   );
   assertServiceProviderDeleteResponseSchemaRecord(
-    httpDeleteProvider.data,
+    httpDeleteProvider,
     providerDeleteResponseSchema,
-    'HTTP provider delete response',
+    'client provider delete response',
+  );
+
+  const clientDeleteProvider = await deleteServiceProvider({
+    baseUrl: serviceBaseUrl,
+    id: 'client-manual',
+  });
+  assertServiceProviderDeleteResponseSchemaRecord(
+    clientDeleteProvider,
+    providerDeleteResponseSchema,
+    'client extra provider delete response',
   );
 
   const mcpProvidersResource = await send('resources/read', { uri: 'agent-browser://providers' });
