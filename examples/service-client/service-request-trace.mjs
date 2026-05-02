@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 
-import { createServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
+import { createServiceRequest, postServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
 import { cancelServiceJob, getServiceTrace, registerServiceLoginProfile } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://example.com';
@@ -114,6 +114,18 @@ export async function runServiceWorkflow({
     loginId,
     jobTimeoutMs: 30000,
   });
+  const titleResult = await postServiceRequest({
+    baseUrl,
+    request: createServiceRequest({
+      serviceName,
+      agentName,
+      taskName,
+      siteId,
+      loginId,
+      action: 'title',
+      jobTimeoutMs: 30000,
+    }),
+  });
   const cancelResult = cancelJobId ? await cancelServiceJob({ baseUrl, jobId: cancelJobId }) : null;
   const trace = await getServiceTrace({
     baseUrl,
@@ -127,7 +139,9 @@ export async function runServiceWorkflow({
     commandResultData: {
       tabIndex: commandResult.data?.index,
       tabUrl: commandResult.data?.url,
+      pageTitle: titleResult.data?.title,
     },
+    titleResult,
     cancelResult,
     traceSummary: {
       events: trace.counts.events,

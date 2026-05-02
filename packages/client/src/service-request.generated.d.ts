@@ -113,6 +113,29 @@ export interface ServiceTabNewData {
   url: string;
 }
 
+export interface ServiceTabRecord {
+  index: number;
+  title: string;
+  url: string;
+  type: string;
+  active: boolean;
+  targetId?: string;
+  sessionId?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceTabListData {
+  tabs: ServiceTabRecord[];
+}
+
+export interface ServiceUrlData {
+  url: string;
+}
+
+export interface ServiceTitleData {
+  title: string;
+}
+
 export interface ServiceSnapshotRef {
   role: string;
   name: string;
@@ -145,11 +168,69 @@ export interface ServiceScreenshotData {
   annotations?: ServiceScreenshotAnnotation[];
 }
 
+export interface ServiceTextData {
+  text: string;
+  origin?: string;
+}
+
+export interface ServiceValueData {
+  value: unknown;
+  origin?: string;
+}
+
+export interface ServiceHtmlData {
+  html: string;
+}
+
+export interface ServiceVisibilityData {
+  visible: boolean;
+  origin: string;
+}
+
+export interface ServiceEnabledData {
+  enabled: boolean;
+  origin: string;
+}
+
+export interface ServiceCheckedData {
+  checked: boolean;
+  origin: string;
+}
+
+export interface ServiceCountData {
+  count: number;
+  selector: string;
+}
+
+export interface ServiceBoundingBoxData {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ServiceStylesData {
+  styles: Record<string, string>;
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   tab_new: ServiceTabNewData;
+  tab_list: ServiceTabListData;
+  url: ServiceUrlData;
+  title: ServiceTitleData;
   snapshot: ServiceSnapshotData;
   screenshot: ServiceScreenshotData;
+  gettext: ServiceTextData;
+  inputvalue: ServiceValueData;
+  isvisible: ServiceVisibilityData;
+  getattribute: ServiceValueData;
+  innerhtml: ServiceHtmlData;
+  styles: ServiceStylesData;
+  count: ServiceCountData;
+  boundingbox: ServiceBoundingBoxData;
+  isenabled: ServiceEnabledData;
+  ischecked: ServiceCheckedData;
 }
 
 export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =
