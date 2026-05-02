@@ -115,8 +115,8 @@ jobs:
         with:
           version: 10
 
-      - name: Install TypeScript dependency slice
-        run: pnpm install --frozen-lockfile --filter docs
+      - name: Install service client dependency slice
+        run: pnpm install --frozen-lockfile --filter docs --filter agent-browser-service-client-example
 
       - name: Test service client contracts
         run: pnpm test:service-client

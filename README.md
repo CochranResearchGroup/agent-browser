@@ -1546,10 +1546,11 @@ The private workspace package `@agent-browser/client` is generated from the
 service request schemas. Run `pnpm generate:service-client` after changing
 `docs/dev/contracts/service-request*.json`, and run `pnpm test:service-client`
 to verify generated files, helper types, service request helpers, and
-observability helpers are current. Use `pnpm test:service-client-contract`,
-`pnpm test:service-client-types`, `pnpm test:service-request-client`, or
-`pnpm test:service-observability-client` when only one client contract needs
-validation.
+observability helpers are current, including package export resolution through
+`@agent-browser/client`. Use `pnpm test:service-client-contract`,
+`pnpm test:service-client-types`, `pnpm test:service-client-exports`,
+`pnpm test:service-request-client`, or `pnpm test:service-observability-client`
+when only one client contract needs validation.
 
 For read-side and service-configuration software clients, import
 `@agent-browser/client/service-observability`. It exposes typed helpers for
