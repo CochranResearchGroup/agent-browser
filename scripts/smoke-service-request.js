@@ -46,6 +46,21 @@ const { agentHome, session, tempHome } = context;
 const serviceName = 'ServiceRequestSmoke';
 const agentName = 'smoke-agent';
 const targetServiceId = 'acs';
+const fallbackTargetServiceIds = [
+  targetServiceId,
+  'google',
+  'microsoft',
+  'orcid',
+  'nih',
+  'pubmed',
+  'crossref',
+  'scopus',
+  'wos',
+  'canvas',
+  'github',
+  'gmail',
+  'outlook',
+];
 const selectedProfileId = `service-request-selected-${process.pid}`;
 const fallbackProfileId = `service-request-fallback-${process.pid}`;
 const selectedUserDataDir = join(tempHome, 'selected-profile-user-data');
@@ -77,7 +92,7 @@ function seedServiceState() {
             id: fallbackProfileId,
             name: 'Fallback service request profile',
             userDataDir: fallbackUserDataDir,
-            targetServiceIds: [targetServiceId],
+            targetServiceIds: fallbackTargetServiceIds,
             sharedServiceIds: [serviceName],
             persistent: true,
           },
@@ -167,6 +182,7 @@ try {
     agentName,
     taskName: httpTaskName,
     siteId: targetServiceId,
+    targetServices: fallbackTargetServiceIds.slice(1),
     action: 'navigate',
     params: {
       url: httpUrl,
@@ -217,6 +233,7 @@ try {
     taskName: tabTaskName,
     siteId: targetServiceId,
     loginId: targetServiceId,
+    targetServices: fallbackTargetServiceIds.slice(1),
     url: tabUrl,
     jobTimeoutMs: 30000,
   });
@@ -228,6 +245,7 @@ try {
     taskName: tabTaskName,
     siteId: targetServiceId,
     loginId: targetServiceId,
+    targetServices: fallbackTargetServiceIds.slice(1),
     url: tabUrl,
     jobTimeoutMs: 30000,
   });
@@ -253,6 +271,7 @@ try {
     agentName,
     taskName: mcpTaskName,
     siteId: targetServiceId,
+    targetServices: fallbackTargetServiceIds.slice(1),
     loginIds: ['orcid'],
     action: 'navigate',
     params: {

@@ -48,8 +48,8 @@ pub(crate) fn select_service_profile_for_request(
         .iter()
         .filter(|(_, profile)| profile_allows_service(profile, request.service_name.as_deref()))
         .filter_map(|(id, profile)| {
-            let score = profile_selection_score(profile, request);
-            (score > 0).then(|| (score, id.clone()))
+            let rank = profile_selection_rank(profile, request);
+            rank.is_match().then(|| (rank, id.clone()))
         })
         .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
         .map(|(_, id)| id)
@@ -146,36 +146,59 @@ fn profile_allows_service(profile: &BrowserProfile, service_name: Option<&str>) 
     })
 }
 
-fn profile_selection_score(profile: &BrowserProfile, request: &ProfileSelectionRequest) -> usize {
-    let mut score = 0;
-    for target_service_id in &request.target_service_ids {
-        if profile
-            .authenticated_service_ids
-            .iter()
-            .any(|candidate| candidate == target_service_id)
-        {
-            score += 1000;
-        }
-        if profile
-            .target_service_ids
-            .iter()
-            .any(|candidate| candidate == target_service_id)
-        {
-            score += 100;
-        }
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct ProfileSelectionRank {
+    authenticated_target_matches: usize,
+    target_matches: usize,
+    caller_service_match: bool,
+    persistent: bool,
+}
+
+impl ProfileSelectionRank {
+    fn is_match(self) -> bool {
+        self.authenticated_target_matches > 0
+            || self.target_matches > 0
+            || self.caller_service_match
     }
-    if request.service_name.as_deref().is_some_and(|service_name| {
+}
+
+fn profile_selection_rank(
+    profile: &BrowserProfile,
+    request: &ProfileSelectionRequest,
+) -> ProfileSelectionRank {
+    let authenticated_target_matches = request
+        .target_service_ids
+        .iter()
+        .filter(|target_service_id| {
+            profile
+                .authenticated_service_ids
+                .iter()
+                .any(|candidate| candidate == *target_service_id)
+        })
+        .count();
+    let target_matches = request
+        .target_service_ids
+        .iter()
+        .filter(|target_service_id| {
+            profile
+                .target_service_ids
+                .iter()
+                .any(|candidate| candidate == *target_service_id)
+        })
+        .count();
+    let caller_service_match = request.service_name.as_deref().is_some_and(|service_name| {
         profile
             .shared_service_ids
             .iter()
             .any(|allowed| allowed == service_name)
-    }) {
-        score += 10;
+    });
+
+    ProfileSelectionRank {
+        authenticated_target_matches,
+        target_matches,
+        caller_service_match,
+        persistent: profile.persistent,
     }
-    if profile.persistent {
-        score += 1;
-    }
-    score
 }
 
 fn merge_unique(values: &mut Vec<String>, value: String) {
@@ -253,6 +276,59 @@ mod tests {
             &ProfileSelectionRequest {
                 service_name: Some("JournalDownloader".to_string()),
                 target_service_ids: vec!["acs".to_string()],
+            },
+        );
+
+        assert_eq!(selected.as_deref(), Some("authenticated"));
+    }
+
+    #[test]
+    fn test_select_service_profile_authenticated_match_beats_many_target_matches() {
+        let broad_target_service_ids = vec![
+            "acs".to_string(),
+            "google".to_string(),
+            "microsoft".to_string(),
+            "orcid".to_string(),
+            "nih".to_string(),
+            "pubmed".to_string(),
+            "crossref".to_string(),
+            "scopus".to_string(),
+            "wos".to_string(),
+            "canvas".to_string(),
+            "github".to_string(),
+            "gmail".to_string(),
+            "outlook".to_string(),
+        ];
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "many-targets".to_string(),
+            BrowserProfile {
+                id: "many-targets".to_string(),
+                name: "Many target scopes".to_string(),
+                target_service_ids: broad_target_service_ids.clone(),
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        service_state.profiles.insert(
+            "authenticated".to_string(),
+            BrowserProfile {
+                id: "authenticated".to_string(),
+                name: "Authenticated".to_string(),
+                target_service_ids: vec!["acs".to_string()],
+                authenticated_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let selected = select_service_profile_for_request(
+            &service_state,
+            &ProfileSelectionRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                target_service_ids: broad_target_service_ids,
             },
         );
 

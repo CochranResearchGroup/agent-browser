@@ -25,6 +25,21 @@ const serviceName = 'ProfileTargetMcpSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'typedNavigateProfileTargetSmoke';
 const targetServiceId = 'acs';
+const fallbackTargetServiceIds = [
+  targetServiceId,
+  'google',
+  'microsoft',
+  'orcid',
+  'nih',
+  'pubmed',
+  'crossref',
+  'scopus',
+  'wos',
+  'canvas',
+  'github',
+  'gmail',
+  'outlook',
+];
 const selectedProfileId = `profile-target-${process.pid}`;
 const fallbackProfileId = `profile-fallback-${process.pid}`;
 const selectedUserDataDir = join(tempHome, 'selected-profile-user-data');
@@ -55,7 +70,7 @@ function seedServiceState() {
             id: fallbackProfileId,
             name: 'Fallback target profile',
             userDataDir: fallbackUserDataDir,
-            targetServiceIds: [targetServiceId],
+            targetServiceIds: fallbackTargetServiceIds,
             sharedServiceIds: [serviceName],
             persistent: true,
           },
@@ -134,6 +149,7 @@ try {
       agentName,
       taskName,
       targetServiceId,
+      targetServiceIds: fallbackTargetServiceIds.slice(1),
     },
   });
   const navigatePayload = parseMcpToolPayload(navigateResult, 'browser_navigate');

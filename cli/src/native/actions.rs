@@ -10068,7 +10068,21 @@ mod tests {
                 id: "journal-default".to_string(),
                 name: "Journal default".to_string(),
                 user_data_dir: Some(home.join("journal-default").display().to_string()),
-                target_service_ids: vec!["acs".to_string()],
+                target_service_ids: vec![
+                    "acs".to_string(),
+                    "google".to_string(),
+                    "microsoft".to_string(),
+                    "orcid".to_string(),
+                    "nih".to_string(),
+                    "pubmed".to_string(),
+                    "crossref".to_string(),
+                    "scopus".to_string(),
+                    "wos".to_string(),
+                    "canvas".to_string(),
+                    "github".to_string(),
+                    "gmail".to_string(),
+                    "outlook".to_string(),
+                ],
                 shared_service_ids: vec!["JournalDownloader".to_string()],
                 persistent: true,
                 ..BrowserProfile::default()
@@ -10096,7 +10110,21 @@ mod tests {
             &mut options,
             &json!({
                 "serviceName": "JournalDownloader",
-                "targetServiceId": "acs"
+                "targetServiceId": "acs",
+                "targetServices": [
+                    "google",
+                    "microsoft",
+                    "orcid",
+                    "nih",
+                    "pubmed",
+                    "crossref",
+                    "scopus",
+                    "wos",
+                    "canvas",
+                    "github",
+                    "gmail",
+                    "outlook"
+                ]
             }),
         );
 
