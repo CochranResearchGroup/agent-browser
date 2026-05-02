@@ -1,0 +1,11 @@
+{
+  "name": "agent-browser-service-client-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dry-run": "node service-request-trace.mjs --dry-run"
+  },
+  "dependencies": {
+    "@agent-browser/client": "workspace:*"
+  }
+}
