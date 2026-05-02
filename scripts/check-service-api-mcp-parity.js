@@ -83,12 +83,33 @@ const files = {
 };
 
 const failures = [];
+const serviceSurface = [['service_request', 'POST', '/api/service/request']].map(
+  ([tool, method, route]) => ({ tool, method, route }),
+);
 
 for (const entry of browserSurface) {
   expectIncludes(files.mcp, entry.tool, `MCP source exposes ${entry.tool}`);
   expectIncludes(
     files.http,
     `("${entry.method}", "${entry.route}")`,
+    `HTTP source exposes ${entry.method} ${entry.route}`,
+  );
+
+  for (const [label, source] of [
+    ['README.md', files.readme],
+    ['skills/agent-browser/SKILL.md', files.skill],
+    ['docs/src/app/commands/page.mdx', files.docs],
+  ]) {
+    expectIncludes(source, entry.tool, `${label} mentions ${entry.tool}`);
+    expectIncludes(source, entry.route, `${label} mentions ${entry.route}`);
+  }
+}
+
+for (const entry of serviceSurface) {
+  expectIncludes(files.mcp, entry.tool, `MCP source exposes ${entry.tool}`);
+  expectIncludes(
+    files.http,
+    `path == "${entry.route}"`,
     `HTTP source exposes ${entry.method} ${entry.route}`,
   );
 
@@ -110,7 +131,9 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Service API/MCP parity check passed for ${browserSurface.length} browser controls`);
+console.log(
+  `Service API/MCP parity check passed for ${browserSurface.length} browser controls and ${serviceSurface.length} service controls`,
+);
 
 function read(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');

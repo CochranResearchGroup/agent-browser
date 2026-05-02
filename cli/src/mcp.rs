@@ -497,6 +497,81 @@ fn initialize_result(params: Option<&Value>) -> Value {
 fn service_mcp_tools() -> Vec<Value> {
     let tools = vec![
         json!({
+            "name": "service_request",
+            "title": "Queue service browser request",
+            "description": "Queue one intent-based browser request through the service control plane. Use serviceName, agentName, taskName, siteId or loginId, action, and params so agent-browser can select the managed profile and dispatch through the browser queue.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": BROWSER_COMMAND_ALLOWED_ACTIONS,
+                        "description": "Underlying browser-control action to queue."
+                    },
+                    "params": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Action parameters. These are copied into the queued daemon command after id/action are reserved."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional worker-bound timeout for this queued service request."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    },
+                    "targetServiceId": {
+                        "type": "string",
+                        "description": "Target site or identity provider for profile selection."
+                    },
+                    "targetService": {
+                        "type": "string",
+                        "description": "Alias for targetServiceId."
+                    },
+                    "targetServiceIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Target sites or identity providers for profile selection."
+                    },
+                    "targetServices": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Alias for targetServiceIds."
+                    },
+                    "siteId": {
+                        "type": "string",
+                        "description": "Site identifier alias for targetServiceId."
+                    },
+                    "siteIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Site identifier aliases for targetServiceIds."
+                    },
+                    "loginId": {
+                        "type": "string",
+                        "description": "Login identity alias for targetServiceId."
+                    },
+                    "loginIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Login identity aliases for targetServiceIds."
+                    }
+                },
+                "required": ["action"]
+            }
+        }),
+        json!({
             "name": "service_job_cancel",
             "title": "Cancel service job",
             "description": "Cancel a queued service job or request cancellation for a running service job. Include serviceName, agentName, and taskName when available to make multi-agent traces debuggable.",
@@ -3492,6 +3567,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_site_policy_delete" => call_service_site_policy_delete(arguments, session),
         "service_provider_upsert" => call_service_provider_upsert(arguments, session),
         "service_provider_delete" => call_service_provider_delete(arguments, session),
+        "service_request" => call_service_request(arguments, session),
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
         "browser_requests" => call_browser_requests(arguments, session),
@@ -3904,6 +3980,38 @@ fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonR
     });
 
     send_queued_tool_command("browser_command", session, trace, command)
+}
+
+fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcError> {
+    let action = required_string_argument(arguments, "action")?;
+    if !BROWSER_COMMAND_ALLOWED_ACTIONS.contains(&action) {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service_request action '{}' is not supported",
+            action
+        )));
+    }
+    let params = optional_object_argument(arguments, "params")?;
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let mut command = browser_command_command(BrowserCommandArgs {
+        action,
+        params,
+        job_timeout_ms: context.job_timeout_ms,
+        service_name: context.service_name,
+        agent_name: context.agent_name,
+        task_name: context.task_name,
+    });
+    if let Some(id) = command.get("id").and_then(Value::as_str) {
+        let new_id = id.replacen("mcp-browser-command-", "mcp-service-request-", 1);
+        command["id"] = json!(new_id);
+    }
+    context.apply_target_profile_hints(&mut command);
+    Ok((trace, command))
+}
+
+fn call_service_request(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let (trace, command) = service_request_command(arguments)?;
+    send_queued_tool_command("service_request", session, trace, command)
 }
 
 fn call_browser_navigate(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -9418,6 +9526,10 @@ mod tests {
     #[test]
     fn browser_tool_schemas_include_target_profile_hints() {
         let tools = service_mcp_tools();
+        let service_request = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_request")
+            .expect("service_request schema should be listed");
         let navigate = tools
             .iter()
             .find(|tool| tool["name"] == "browser_navigate")
@@ -9431,8 +9543,43 @@ mod tests {
         assert!(navigate["inputSchema"]["properties"]["targetServiceIds"].is_object());
         assert!(navigate["inputSchema"]["properties"]["siteId"].is_object());
         assert!(navigate["inputSchema"]["properties"]["loginIds"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["siteId"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["loginIds"].is_object());
         assert!(service_trace["inputSchema"]["properties"]["targetServiceId"].is_null());
         assert!(service_trace["inputSchema"]["properties"]["siteId"].is_null());
+    }
+
+    #[test]
+    fn service_request_command_builds_intent_command() {
+        let (trace, command) = service_request_command(&json!({
+            "action": "navigate",
+            "params": {
+                "url": "https://example.com",
+                "id": "ignored",
+                "action": "ignored"
+            },
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "siteId": "acs",
+            "loginIds": ["orcid"],
+            "jobTimeoutMs": 1000
+        }))
+        .unwrap();
+
+        assert_eq!(trace["serviceName"], "JournalDownloader");
+        assert_eq!(trace["siteId"], "acs");
+        assert_eq!(command["action"], "navigate");
+        assert!(command["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("mcp-service-request-navigate-")));
+        assert_eq!(command["url"], "https://example.com");
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+        assert_eq!(command["siteId"], "acs");
+        assert_eq!(command["loginIds"][0], "orcid");
+        assert_eq!(command["jobTimeoutMs"], 1000);
     }
 
     #[test]

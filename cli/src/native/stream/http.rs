@@ -15,6 +15,75 @@ use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
 use super::discovery::discover_sessions;
 
+const SERVICE_REQUEST_ALLOWED_ACTIONS: &[&str] = &[
+    "navigate",
+    "back",
+    "forward",
+    "reload",
+    "tab_new",
+    "tab_switch",
+    "tab_close",
+    "tab_list",
+    "url",
+    "title",
+    "viewport",
+    "user_agent",
+    "emulatemedia",
+    "timezone",
+    "locale",
+    "geolocation",
+    "permissions",
+    "cookies_get",
+    "cookies_set",
+    "cookies_clear",
+    "storage_get",
+    "storage_set",
+    "storage_clear",
+    "console",
+    "errors",
+    "setcontent",
+    "headers",
+    "offline",
+    "dialog",
+    "clipboard",
+    "upload",
+    "download",
+    "waitfordownload",
+    "pdf",
+    "responsebody",
+    "har_start",
+    "har_stop",
+    "route",
+    "unroute",
+    "requests",
+    "request_detail",
+    "snapshot",
+    "screenshot",
+    "click",
+    "fill",
+    "wait",
+    "type",
+    "press",
+    "hover",
+    "select",
+    "gettext",
+    "inputvalue",
+    "isvisible",
+    "getattribute",
+    "innerhtml",
+    "styles",
+    "count",
+    "boundingbox",
+    "isenabled",
+    "ischecked",
+    "check",
+    "uncheck",
+    "scroll",
+    "scrollintoview",
+    "focus",
+    "clear",
+];
+
 #[derive(Embed)]
 #[folder = "../packages/dashboard/out/"]
 struct DashboardAssets;
@@ -145,6 +214,19 @@ pub(super) async fn handle_http_request(
 
         if path == "/api/service/reconcile" {
             let result = relay_service_command(session_name, service_reconcile_command()).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
+        if path == "/api/service/request" {
+            let cmd = match service_request_command(body_str) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
             write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
@@ -933,6 +1015,64 @@ fn browser_body_command(action: &str, id_prefix: &str, body: &str) -> Result<Val
         command["id"] = json!(format!("{}-{}", id_prefix, uuid::Uuid::new_v4()));
     }
     command["action"] = json!(action);
+    Ok(command)
+}
+
+fn service_request_command(body: &str) -> Result<Value, String> {
+    let request = if body.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str::<Value>(body).map_err(|err| format!("Invalid JSON: {}", err))?
+    };
+
+    let request = request
+        .as_object()
+        .ok_or_else(|| "Service request body must be a JSON object".to_string())?;
+    let action = request
+        .get("action")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "service request requires action".to_string())?;
+    if !SERVICE_REQUEST_ALLOWED_ACTIONS.contains(&action) {
+        return Err(format!(
+            "service request action '{}' is not supported",
+            action
+        ));
+    }
+    let mut command = json!({
+        "id": format!("http-service-request-{}-{}", action, uuid::Uuid::new_v4()),
+        "action": action,
+    });
+    if let Some(params) = request.get("params") {
+        let params = params
+            .as_object()
+            .ok_or_else(|| "service request params must be a JSON object".to_string())?;
+        for (key, value) in params {
+            if key != "id" && key != "action" {
+                command[key] = value.clone();
+            }
+        }
+    }
+    for key in [
+        "jobTimeoutMs",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "targetServiceId",
+        "targetService",
+        "targetServiceIds",
+        "targetServices",
+        "siteId",
+        "siteIds",
+        "loginId",
+        "loginIds",
+        "profile",
+        "runtimeProfile",
+    ] {
+        if let Some(value) = request.get(key) {
+            command[key] = value.clone();
+        }
+    }
     Ok(command)
 }
 
@@ -2026,6 +2166,26 @@ mod tests {
         assert_eq!(tabs["agentName"], "codex");
         assert_eq!(tabs["taskName"], "probeACSwebsite");
         assert_eq!(tabs["jobTimeoutMs"], 1000);
+    }
+
+    #[test]
+    fn service_request_command_maps_request_object() {
+        let command = service_request_command(
+            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"jobTimeoutMs":1000}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "navigate");
+        assert!(command["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("http-service-request-navigate-")));
+        assert_eq!(command["url"], "https://example.com");
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "codex");
+        assert_eq!(command["taskName"], "probeACSwebsite");
+        assert_eq!(command["siteId"], "acs");
+        assert_eq!(command["loginIds"][0], "orcid");
+        assert_eq!(command["jobTimeoutMs"], 1000);
     }
 
     #[test]

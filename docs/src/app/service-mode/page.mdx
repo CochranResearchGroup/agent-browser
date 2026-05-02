@@ -65,7 +65,7 @@ Runtime profiles are the safest default for recurring automation because they ke
 - Use a separate browser process when profile isolation, keyring behavior, extension state, or resource ownership matters more than process count.
 - Use a custom `--profile <path>` only when an external profile directory is part of the contract.
 
-Configured service profiles and sessions can describe ownership, lease behavior, cleanup policy, keyring posture, browser linkage, caller labels, intended target services, and currently believed authenticated target services. `targetServiceIds` records target sites or identity providers such as `google`, `microsoft`, or `acs`; `authenticatedServiceIds` records targets currently believed to have usable login state. Profile writes reject `caller_supplied` records without `userDataDir` and `per_service` records with multiple `sharedServiceIds` values. Session writes infer `owner` from `agentName`, then `serviceName`, when omitted; `profileId` must reference a persisted profile, and profile `sharedServiceIds` allow-lists are enforced. Explicit `--runtime-profile` and `--profile` values still win. When a launch command omits both, `serviceName` plus `targetServiceId`, `targetService`, `targetServiceIds`, `targetServices`, `siteId`, `siteIds`, `loginId`, or `loginIds` lets agent-browser choose a persisted service profile. The selector first prefers `authenticatedServiceIds` matches, then `targetServiceIds` matches, then the caller `sharedServiceIds` match. MCP typed browser tools accept the same target profile hints, so clients can stay on typed schemas for profile-aware first commands. Run `pnpm test:service-profile-target-mcp-live` to validate this live MCP path.
+Configured service profiles and sessions can describe ownership, lease behavior, cleanup policy, keyring posture, browser linkage, caller labels, intended target services, and currently believed authenticated target services. `targetServiceIds` records target sites or identity providers such as `google`, `microsoft`, or `acs`; `authenticatedServiceIds` records targets currently believed to have usable login state. Profile writes reject `caller_supplied` records without `userDataDir` and `per_service` records with multiple `sharedServiceIds` values. Session writes infer `owner` from `agentName`, then `serviceName`, when omitted; `profileId` must reference a persisted profile, and profile `sharedServiceIds` allow-lists are enforced. Explicit `--runtime-profile` and `--profile` values still win. When a launch command omits both, `serviceName` plus `targetServiceId`, `targetService`, `targetServiceIds`, `targetServices`, `siteId`, `siteIds`, `loginId`, or `loginIds` lets agent-browser choose a persisted service profile. The selector first prefers `authenticatedServiceIds` matches, then `targetServiceIds` matches, then the caller `sharedServiceIds` match. MCP typed browser tools and `service_request` accept the same target profile hints, so clients can stay on typed schemas or send one explicit service request object for profile-aware first commands. Run `pnpm test:service-profile-target-mcp-live` to validate this live MCP path.
 
 ## Browser health and recovery
 
@@ -121,6 +121,7 @@ POST /api/service/incidents/<id>/acknowledge
 POST /api/service/incidents/<id>/resolve
 GET  /api/service/events
 GET  /api/service/trace
+POST /api/service/request
 POST /api/service/reconcile
 POST /api/service/browsers/<id>/retry
 ```
@@ -138,7 +139,7 @@ POST   /api/service/providers/<id>
 DELETE /api/service/providers/<id>
 ```
 
-Named browser-control routes accept the same action fields as the underlying command, plus trace fields such as `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs`.
+Named browser-control routes accept the same action fields as the underlying command, plus trace fields such as `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs`. `POST /api/service/request` accepts one intent object with `serviceName`, `agentName`, `taskName`, `siteId`, `loginId`, target-service hints, `action`, `params`, and `jobTimeoutMs`, then queues the requested browser action through the same service-owned control path.
 
 ## MCP shape
 
@@ -158,7 +159,7 @@ agent-browser://incidents
 agent-browser://incidents/{incident_id}/activity
 ```
 
-Service tools include `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_trace`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, and `service_provider_delete`. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`.
+Service tools include `service_request`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_trace`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, and `service_provider_delete`. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`.
 
 Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fills, waits, keyboard actions, element reads, cookies, storage, headers, offline mode, viewport, geolocation, permissions, timezone, locale, media, dialogs, uploads, downloads, HAR capture, request routing, console, errors, PDFs, response bodies, and clipboard operations. Use `browser_command` only for browser actions that do not yet have a typed tool.
 
