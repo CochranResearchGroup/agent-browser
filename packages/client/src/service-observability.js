@@ -38,6 +38,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProviderDeleteResponse} ServiceProviderDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProviderMutationOptions} ServiceProviderMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProviderUpsertResponse} ServiceProviderUpsertResponse
+ * @typedef {import('./service-observability.generated.js').ServiceContractsResponse} ServiceContractsResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowserRetryOptions} ServiceBrowserRetryOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserRetryResponse} ServiceBrowserRetryResponse
  * @typedef {import('./service-observability.generated.js').ServiceIncidentAcknowledgeResponse} ServiceIncidentAcknowledgeResponse
@@ -59,6 +60,14 @@ export {
  */
 export function getServiceStatus(options) {
   return serviceGet(options, '/api/service/status');
+}
+
+/**
+ * @param {ServiceObservabilityHttpOptions} options
+ * @returns {Promise<ServiceContractsResponse>}
+ */
+export function getServiceContracts(options) {
+  return serviceGet(options, '/api/service/contracts');
 }
 
 /**

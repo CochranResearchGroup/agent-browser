@@ -4,6 +4,9 @@ use serde_json::{json, Value};
 
 use crate::connection::{send_command, Response};
 use crate::native::service_activity::service_incident_activity_response;
+use crate::native::service_contracts::{
+    service_contracts_metadata, SERVICE_CONTRACTS_RESOURCE, SERVICE_REQUEST_ACTIONS,
+};
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
 };
@@ -24,74 +27,7 @@ const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
-const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
-    "navigate",
-    "back",
-    "forward",
-    "reload",
-    "tab_new",
-    "tab_switch",
-    "tab_close",
-    "tab_list",
-    "url",
-    "title",
-    "viewport",
-    "user_agent",
-    "emulatemedia",
-    "timezone",
-    "locale",
-    "geolocation",
-    "permissions",
-    "cookies_get",
-    "cookies_set",
-    "cookies_clear",
-    "storage_get",
-    "storage_set",
-    "storage_clear",
-    "console",
-    "errors",
-    "setcontent",
-    "headers",
-    "offline",
-    "dialog",
-    "clipboard",
-    "upload",
-    "download",
-    "waitfordownload",
-    "pdf",
-    "responsebody",
-    "har_start",
-    "har_stop",
-    "route",
-    "unroute",
-    "requests",
-    "request_detail",
-    "snapshot",
-    "screenshot",
-    "click",
-    "fill",
-    "wait",
-    "type",
-    "press",
-    "hover",
-    "select",
-    "gettext",
-    "inputvalue",
-    "isvisible",
-    "getattribute",
-    "innerhtml",
-    "styles",
-    "count",
-    "boundingbox",
-    "isenabled",
-    "ischecked",
-    "check",
-    "uncheck",
-    "scroll",
-    "scrollintoview",
-    "focus",
-    "clear",
-];
+const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
 
 /// Run the local MCP command surface.
 ///
@@ -172,6 +108,12 @@ fn mcp_command_response(args: &[String]) -> Result<Value, String> {
 fn service_mcp_resources() -> Vec<Value> {
     vec![
         json!({
+            "uri": SERVICE_CONTRACTS_RESOURCE,
+            "name": "Service contracts",
+            "mimeType": "application/json",
+            "description": "Runtime compatibility metadata for service HTTP and MCP contracts"
+        }),
+        json!({
             "uri": INCIDENTS_RESOURCE,
             "name": "Service incidents",
             "mimeType": "application/json",
@@ -250,6 +192,7 @@ fn read_service_mcp_resource(uri: &str) -> Result<Value, String> {
 
 fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Result<Value, String> {
     let contents = match uri {
+        SERVICE_CONTRACTS_RESOURCE => service_contracts_metadata(),
         INCIDENTS_RESOURCE => json!({
             "incidents": state.incidents,
             "count": state.incidents.len(),
@@ -7727,19 +7670,23 @@ mod tests {
         let response = mcp_command_response(&["mcp".to_string(), "resources".to_string()]).unwrap();
 
         assert_eq!(response["success"], true);
-        assert_eq!(response["data"]["resources"][0]["uri"], INCIDENTS_RESOURCE);
-        assert_eq!(response["data"]["resources"][1]["uri"], PROFILES_RESOURCE);
-        assert_eq!(response["data"]["resources"][2]["uri"], SESSIONS_RESOURCE);
-        assert_eq!(response["data"]["resources"][3]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][4]["uri"], TABS_RESOURCE);
         assert_eq!(
-            response["data"]["resources"][5]["uri"],
+            response["data"]["resources"][0]["uri"],
+            SERVICE_CONTRACTS_RESOURCE
+        );
+        assert_eq!(response["data"]["resources"][1]["uri"], INCIDENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][2]["uri"], PROFILES_RESOURCE);
+        assert_eq!(response["data"]["resources"][3]["uri"], SESSIONS_RESOURCE);
+        assert_eq!(response["data"]["resources"][4]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][5]["uri"], TABS_RESOURCE);
+        assert_eq!(
+            response["data"]["resources"][6]["uri"],
             SITE_POLICIES_RESOURCE
         );
-        assert_eq!(response["data"]["resources"][6]["uri"], PROVIDERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][7]["uri"], CHALLENGES_RESOURCE);
-        assert_eq!(response["data"]["resources"][8]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["data"]["resources"][9]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][7]["uri"], PROVIDERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][8]["uri"], CHALLENGES_RESOURCE);
+        assert_eq!(response["data"]["resources"][9]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["data"]["resources"][10]["uri"], EVENTS_RESOURCE);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
@@ -7787,26 +7734,30 @@ mod tests {
         assert_eq!(response["id"], "r1");
         assert_eq!(
             response["result"]["resources"][0]["uri"],
+            SERVICE_CONTRACTS_RESOURCE
+        );
+        assert_eq!(
+            response["result"]["resources"][1]["uri"],
             INCIDENTS_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][1]["uri"], PROFILES_RESOURCE);
-        assert_eq!(response["result"]["resources"][2]["uri"], SESSIONS_RESOURCE);
-        assert_eq!(response["result"]["resources"][3]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["result"]["resources"][4]["uri"], TABS_RESOURCE);
+        assert_eq!(response["result"]["resources"][2]["uri"], PROFILES_RESOURCE);
+        assert_eq!(response["result"]["resources"][3]["uri"], SESSIONS_RESOURCE);
+        assert_eq!(response["result"]["resources"][4]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["result"]["resources"][5]["uri"], TABS_RESOURCE);
         assert_eq!(
-            response["result"]["resources"][5]["uri"],
+            response["result"]["resources"][6]["uri"],
             SITE_POLICIES_RESOURCE
         );
         assert_eq!(
-            response["result"]["resources"][6]["uri"],
+            response["result"]["resources"][7]["uri"],
             PROVIDERS_RESOURCE
         );
         assert_eq!(
-            response["result"]["resources"][7]["uri"],
+            response["result"]["resources"][8]["uri"],
             CHALLENGES_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][8]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["result"]["resources"][9]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["result"]["resources"][9]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["result"]["resources"][10]["uri"], EVENTS_RESOURCE);
     }
 
     #[test]
@@ -7821,6 +7772,26 @@ mod tests {
         assert_eq!(
             response["result"]["resourceTemplates"][0]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
+        );
+    }
+
+    #[test]
+    fn read_contracts_resource_returns_service_request_metadata() {
+        let resource = read_service_mcp_resource_from_state(
+            SERVICE_CONTRACTS_RESOURCE,
+            &ServiceState::default(),
+        )
+        .unwrap();
+
+        assert_eq!(resource["uri"], SERVICE_CONTRACTS_RESOURCE);
+        assert_eq!(resource["contents"]["schemaVersion"], "v1");
+        assert_eq!(
+            resource["contents"]["contracts"]["serviceRequest"]["http"]["route"],
+            "/api/service/request"
+        );
+        assert_eq!(
+            resource["contents"]["contracts"]["serviceRequest"]["mcp"]["tool"],
+            "service_request"
         );
     }
 

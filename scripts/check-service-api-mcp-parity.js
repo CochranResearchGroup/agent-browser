@@ -75,8 +75,8 @@ const browserSurface = [
 ].map(([tool, method, route]) => ({ tool, method, route }));
 
 const files = {
-  mcp: read('cli/src/mcp.rs'),
-  http: read('cli/src/native/stream/http.rs'),
+  mcp: `${read('cli/src/mcp.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
+  http: `${read('cli/src/native/stream/http.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   readme: read('README.md'),
   skill: read('skills/agent-browser/SKILL.md'),
   docs: read('docs/src/app/commands/page.mdx'),
@@ -89,7 +89,7 @@ const serviceSurface = [
     tool: 'service_request',
     method: 'POST',
     route: '/api/service/request',
-    httpNeedles: ['path == "/api/service/request"'],
+    httpNeedles: ['path == SERVICE_REQUEST_HTTP_ROUTE'],
   },
   {
     tool: 'service_job_cancel',
@@ -177,6 +177,7 @@ const serviceSurface = [
 ];
 
 const serviceResourceSurface = [
+  { resource: 'agent-browser://contracts', route: '/api/service/contracts' },
   { resource: 'agent-browser://profiles', route: '/api/service/profiles' },
   { resource: 'agent-browser://sessions', route: '/api/service/sessions' },
   { resource: 'agent-browser://browsers', route: '/api/service/browsers' },

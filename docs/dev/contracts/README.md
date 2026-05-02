@@ -42,6 +42,10 @@ drive profile selection for the requested site or login scope.
 `service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
 wrapper for invoking `service_request` with the same intent object.
 
+HTTP `GET /api/service/contracts` and MCP `agent-browser://contracts` expose
+runtime compatibility metadata for these contract IDs, their shared `v1`
+version, route and tool names, and the supported service request action list.
+
 `packages/client/src/service-request.generated.d.ts` and
 `packages/client/src/service-request.generated.js` are generated from these
 schemas. Run `pnpm generate:service-client` after changing the schemas and
@@ -53,7 +57,8 @@ against those declarations.
 `packages/client/src/service-observability.generated.js` are generated from the
 service job, event, incident, incident activity, and trace schemas. The
 `@agent-browser/client/service-observability` helper reads those HTTP endpoints
-and returns the generated response types.
+and returns the generated response types, including `getServiceContracts` for
+the runtime compatibility metadata endpoint.
 
 ## Service Incident Record v1
 

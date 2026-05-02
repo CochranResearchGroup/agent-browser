@@ -9,80 +9,16 @@ use tokio::sync::RwLock;
 use crate::connection::resolve_port;
 use crate::connection::{attach_daemon_auth_token, get_socket_dir};
 use crate::flags::parse_flags;
+use crate::native::service_contracts::{
+    service_contracts_metadata, SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
+};
 use crate::native::service_model::ServiceState;
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
 use super::discovery::discover_sessions;
 
-const SERVICE_REQUEST_ALLOWED_ACTIONS: &[&str] = &[
-    "navigate",
-    "back",
-    "forward",
-    "reload",
-    "tab_new",
-    "tab_switch",
-    "tab_close",
-    "tab_list",
-    "url",
-    "title",
-    "viewport",
-    "user_agent",
-    "emulatemedia",
-    "timezone",
-    "locale",
-    "geolocation",
-    "permissions",
-    "cookies_get",
-    "cookies_set",
-    "cookies_clear",
-    "storage_get",
-    "storage_set",
-    "storage_clear",
-    "console",
-    "errors",
-    "setcontent",
-    "headers",
-    "offline",
-    "dialog",
-    "clipboard",
-    "upload",
-    "download",
-    "waitfordownload",
-    "pdf",
-    "responsebody",
-    "har_start",
-    "har_stop",
-    "route",
-    "unroute",
-    "requests",
-    "request_detail",
-    "snapshot",
-    "screenshot",
-    "click",
-    "fill",
-    "wait",
-    "type",
-    "press",
-    "hover",
-    "select",
-    "gettext",
-    "inputvalue",
-    "isvisible",
-    "getattribute",
-    "innerhtml",
-    "styles",
-    "count",
-    "boundingbox",
-    "isenabled",
-    "ischecked",
-    "check",
-    "uncheck",
-    "scroll",
-    "scrollintoview",
-    "focus",
-    "clear",
-];
+const SERVICE_REQUEST_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
 
 #[derive(Embed)]
 #[folder = "../packages/dashboard/out/"]
@@ -218,7 +154,7 @@ pub(super) async fn handle_http_request(
             return;
         }
 
-        if path == "/api/service/request" {
+        if path == SERVICE_REQUEST_HTTP_ROUTE {
             let cmd = match service_request_command(body_str) {
                 Ok(cmd) => cmd,
                 Err(err) => {
@@ -372,6 +308,19 @@ pub(super) async fn handle_http_request(
             write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
+    }
+
+    if method == "GET" && path == "/api/service/contracts" {
+        write_json_value(
+            &mut stream,
+            "200 OK",
+            json!({
+                "success": true,
+                "data": service_contracts_metadata(),
+            }),
+        )
+        .await;
+        return;
     }
 
     if method == "GET" && path == "/api/service/status" {

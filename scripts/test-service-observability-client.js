@@ -2,9 +2,12 @@
 
 import assert from 'node:assert/strict';
 
-import { registerServiceLoginProfile } from '../packages/client/src/service-observability.js';
+import {
+  getServiceContracts,
+  registerServiceLoginProfile,
+} from '../packages/client/src/service-observability.js';
 
-function createFetchRecorder() {
+function createFetchRecorder(payload) {
   const calls = [];
   const fetch = async (url, init = {}) => {
     calls.push({
@@ -14,20 +17,43 @@ function createFetchRecorder() {
     });
     return {
       ok: true,
-      json: async () => ({
-        success: true,
-        data: {
-          id: 'profile-id',
-          upserted: true,
-          profile: calls.at(-1)?.body,
+      json: async () =>
+        payload ?? {
+          success: true,
+          data: {
+            id: 'profile-id',
+            upserted: true,
+            profile: calls.at(-1)?.body,
+          },
         },
-      }),
     };
   };
   return { calls, fetch };
 }
 
 async function main() {
+  const contracts = createFetchRecorder({
+    success: true,
+    data: {
+      schemaVersion: 'v1',
+      contracts: {
+        serviceRequest: {
+          version: 'v1',
+          schemaId: 'https://agent-browser.local/contracts/service-request.v1.schema.json',
+        },
+      },
+      http: {},
+      mcp: {},
+    },
+  });
+  const contractResult = await getServiceContracts({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: contracts.fetch,
+  });
+  assert.equal(contracts.calls[0].url, 'http://127.0.0.1:4849/api/service/contracts');
+  assert.equal(contracts.calls[0].init.method, 'GET');
+  assert.equal(contractResult.schemaVersion, 'v1');
+
   assert.throws(
     () =>
       registerServiceLoginProfile({

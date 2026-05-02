@@ -3631,6 +3631,7 @@ Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
   - MCP tools include service_request, service_job_cancel, service_incidents, service_trace, service_profile_upsert, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, service_provider_delete, browser_navigate, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_get, browser_cookies_set, browser_cookies_clear, browser_storage_get, browser_storage_set, browser_storage_clear, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_start, browser_har_stop, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, browser_clipboard, browser_back, browser_forward, browser_reload, browser_tab_new, browser_tab_switch, browser_tab_close, browser_set_content, browser_command, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, browser_fill, browser_wait, browser_type, browser_press, browser_hover, browser_select, browser_get_text, browser_get_value, browser_get_attribute, browser_get_html, browser_get_styles, browser_count, browser_get_box, browser_is_visible, browser_is_enabled, browser_check, browser_is_checked, browser_uncheck, browser_scroll, browser_scroll_into_view, browser_focus, and browser_clear.
   - service_request accepts one intent object with serviceName, agentName, taskName, siteId/loginId, targetServiceId, profile or runtimeProfile hints, action, params, and jobTimeoutMs, then queues the browser command through the same service-owned control path.
+  - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks.
   - browser_navigate, browser_back, browser_forward, browser_reload, browser_tab_*, browser_set_content, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_*, browser_storage_*, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_*, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, and browser_clipboard provide typed schemas for common navigation, tab, page-content, request-inspection, session-shaping, observability, artifact, file-transfer, HAR, routing, cookie, and storage workflows.
   - browser_command queues remaining HTTP-parity actions with params copied into the queued daemon command when a typed browser_* tool is not yet available.
   - Example browser_command arguments: {"action":"navigate","params":{"url":"https://example.com","waitUntil":"load","targetServiceId":"acs"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}.
@@ -3661,7 +3662,7 @@ Notes:
   - service_trace responses follow docs/dev/contracts/service-trace-response.v1.schema.json, with summary and activity records covered by the matching service-trace-summary and service-trace-activity schemas.
   - Incident activity responses follow docs/dev/contracts/service-incident-activity-response.v1.schema.json.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
-  - Implemented resources are agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
+  - Implemented resources are agent-browser://contracts, agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
 
 Global Options:
@@ -3672,6 +3673,7 @@ Examples:
   agent-browser mcp resources
   agent-browser mcp read agent-browser://incidents
   agent-browser mcp read agent-browser://profiles
+  agent-browser mcp read agent-browser://contracts
   agent-browser mcp read agent-browser://sessions
   agent-browser mcp read agent-browser://browsers
   agent-browser mcp read agent-browser://tabs

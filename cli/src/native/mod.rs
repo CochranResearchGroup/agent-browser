@@ -37,6 +37,8 @@ pub mod service_activity;
 #[allow(dead_code)]
 pub mod service_config;
 #[allow(dead_code)]
+pub mod service_contracts;
+#[allow(dead_code)]
 pub mod service_health;
 #[allow(dead_code)]
 pub mod service_incidents;

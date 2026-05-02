@@ -250,6 +250,35 @@ export interface ServiceStatusResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceContractEndpoint {
+  method?: string;
+  route?: string;
+  tool?: string;
+  argumentsSchemaId?: string;
+  toolCallSchemaId?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceContractRecord {
+  version: string;
+  schemaId: string;
+  schemaPath?: string;
+  http?: ServiceContractEndpoint;
+  mcp?: ServiceContractEndpoint;
+  actions?: string[];
+  actionCount?: number;
+  tool?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceContractsResponse {
+  schemaVersion: string;
+  contracts: Record<string, ServiceContractRecord>;
+  http: Record<string, unknown>;
+  mcp: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface ServiceProfilesResponse extends ServiceListResponse<ServiceProfileRecord> {
   profiles: ServiceProfileRecord[];
 }
@@ -491,6 +520,7 @@ ${Object.entries(constants)
   .join('\n')}
 
 export declare function getServiceStatus(options: ServiceObservabilityHttpOptions): Promise<ServiceStatusResponse>;
+export declare function getServiceContracts(options: ServiceObservabilityHttpOptions): Promise<ServiceContractsResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;

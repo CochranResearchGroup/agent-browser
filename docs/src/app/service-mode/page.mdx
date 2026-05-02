@@ -103,9 +103,9 @@ An MCP client sends the same intent shape through `tools/call`:
 
 MCP tool callers should include `serviceName`, `agentName`, and `taskName` whenever those values are known. Anonymous callers remain compatible, but service jobs record `namingWarnings` so operators can find unlabelled automation.
 
-The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. The private workspace package <code>@agent-browser/client</code> generates its service request helpers and types from those schemas, including <code>requestServiceTab</code> for the common software-client path where a service asks for a queued tab by site or login identity. <code>postServiceRequest</code> and <code>requestServiceTab</code> return <code>ServiceRequestResponse</code>, the standard service command envelope with <code>success</code>, optional <code>data</code>, optional <code>error</code>, optional <code>warning</code>, and action-specific fields. Every action currently listed in <code>docs/dev/contracts/service-request.v1.schema.json</code> gets a typed <code>data</code> shape through <code>ServiceRequestDataForAction</code>; <code>requestServiceTab</code> returns typed <code>tab_new</code> data. Run <code>pnpm test:service-client</code> after client schema or helper changes to validate generated files, types, package export resolution, typed service command responses, service request helpers, and observability helpers.
+The HTTP service request object follows <code>docs/dev/contracts/service-request.v1.schema.json</code>. The MCP <code>tools/call</code> wrapper follows <code>docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json</code>. HTTP <code>GET /api/service/contracts</code> and MCP <code>agent-browser://contracts</code> expose the same compatibility metadata for schema IDs, contract versions, routes, MCP tools, and supported service-request actions. The private workspace package <code>@agent-browser/client</code> generates its service request helpers and types from those schemas, including <code>requestServiceTab</code> for the common software-client path where a service asks for a queued tab by site or login identity. <code>postServiceRequest</code> and <code>requestServiceTab</code> return <code>ServiceRequestResponse</code>, the standard service command envelope with <code>success</code>, optional <code>data</code>, optional <code>error</code>, optional <code>warning</code>, and action-specific fields. Every action currently listed in <code>docs/dev/contracts/service-request.v1.schema.json</code> gets a typed <code>data</code> shape through <code>ServiceRequestDataForAction</code>; <code>requestServiceTab</code> returns typed <code>tab_new</code> data. Run <code>pnpm test:service-client</code> after client schema or helper changes to validate generated files, types, package export resolution, typed service command responses, service request helpers, and observability helpers.
 
-Read-side and service-configuration software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. <code>registerServiceLoginProfile</code> wraps the common software-client recipe for registering a profile by login identity. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
+Read-side and service-configuration software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service contract metadata, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. <code>getServiceContracts</code> reads the compatibility metadata endpoint. <code>registerServiceLoginProfile</code> wraps the common software-client recipe for registering a profile by login identity. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
 
 The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, can cancel a known queued job with <code>cancelServiceJob</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>.
 
@@ -190,6 +190,7 @@ Common service routes:
 
 ```text
 GET  /api/service/status
+GET  /api/service/contracts
 GET  /api/service/profiles
 POST /api/service/profiles/<id>
 DELETE /api/service/profiles/<id>
@@ -237,6 +238,7 @@ Named browser-control routes accept the same action fields as the underlying com
 
 ```text
 agent-browser://profiles
+agent-browser://contracts
 agent-browser://sessions
 agent-browser://browsers
 agent-browser://tabs
