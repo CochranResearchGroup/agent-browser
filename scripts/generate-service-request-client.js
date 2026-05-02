@@ -203,6 +203,66 @@ export interface ServiceStylesData {
   styles: Record<string, string>;
 }
 
+export interface ServiceClickData {
+  clicked: string;
+  newTab?: boolean;
+  url?: string;
+  fallbackNavigation?: boolean;
+  deferredActivation?: boolean;
+}
+
+export interface ServiceFillData {
+  filled: string;
+}
+
+export interface ServiceTypeData {
+  typed: string;
+}
+
+export interface ServicePressData {
+  pressed: string;
+}
+
+export interface ServiceHoverData {
+  hovered: string;
+}
+
+export interface ServiceScrollData {
+  scrolled: true;
+}
+
+export interface ServiceSelectData {
+  selected: string[];
+}
+
+export interface ServiceCheckData {
+  checked: string;
+}
+
+export interface ServiceUncheckData {
+  unchecked: string;
+}
+
+export type ServiceWaitData =
+  | { waited: "text"; text: string }
+  | { waited: "selector"; selector: string }
+  | { waited: "url"; url: string }
+  | { waited: "function" }
+  | { waited: "load"; state: string }
+  | { waited: "timeout"; ms: number };
+
+export interface ServiceFocusData {
+  focused: string;
+}
+
+export interface ServiceClearData {
+  cleared: string;
+}
+
+export interface ServiceScrollIntoViewData {
+  scrolled: string;
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   tab_new: ServiceTabNewData;
@@ -221,6 +281,19 @@ export interface ServiceRequestActionDataMap {
   boundingbox: ServiceBoundingBoxData;
   isenabled: ServiceEnabledData;
   ischecked: ServiceCheckedData;
+  click: ServiceClickData;
+  fill: ServiceFillData;
+  type: ServiceTypeData;
+  press: ServicePressData;
+  hover: ServiceHoverData;
+  scroll: ServiceScrollData;
+  select: ServiceSelectData;
+  check: ServiceCheckData;
+  uncheck: ServiceUncheckData;
+  wait: ServiceWaitData;
+  focus: ServiceFocusData;
+  clear: ServiceClearData;
+  scrollintoview: ServiceScrollIntoViewData;
 }
 
 export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =

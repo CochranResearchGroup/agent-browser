@@ -126,6 +126,19 @@ export async function runServiceWorkflow({
       jobTimeoutMs: 30000,
     }),
   });
+  const waitResult = await postServiceRequest({
+    baseUrl,
+    request: createServiceRequest({
+      serviceName,
+      agentName,
+      taskName,
+      siteId,
+      loginId,
+      action: 'wait',
+      params: { timeoutMs: 1 },
+      jobTimeoutMs: 30000,
+    }),
+  });
   const cancelResult = cancelJobId ? await cancelServiceJob({ baseUrl, jobId: cancelJobId }) : null;
   const trace = await getServiceTrace({
     baseUrl,
@@ -140,8 +153,10 @@ export async function runServiceWorkflow({
       tabIndex: commandResult.data?.index,
       tabUrl: commandResult.data?.url,
       pageTitle: titleResult.data?.title,
+      waitKind: waitResult.data?.waited,
     },
     titleResult,
+    waitResult,
     cancelResult,
     traceSummary: {
       events: trace.counts.events,
