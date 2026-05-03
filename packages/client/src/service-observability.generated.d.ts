@@ -396,13 +396,62 @@ export interface ServiceIncidentActivityResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceTraceProfileLeaseWait {
+  jobId: string;
+  profileId: string | null;
+  outcome: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  waitedMs: number | null;
+  retryAfterMs: number | null;
+  conflictSessionIds: string[];
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceTraceProfileLeaseWaitSummary {
+  count: number;
+  activeCount: number;
+  completedCount: number;
+  waits: ServiceTraceProfileLeaseWait[];
+  [key: string]: unknown;
+}
+
+export interface ServiceTraceSummaryContext {
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  browserId: string | null;
+  profileId: string | null;
+  sessionId: string | null;
+  namingWarnings: ServiceNamingWarning[];
+  hasNamingWarning: boolean;
+  eventCount: number;
+  jobCount: number;
+  incidentCount: number;
+  activityCount: number;
+  latestTimestamp: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceTraceSummary {
+  contextCount: number;
+  hasTraceContext: boolean;
+  namingWarningCount: number;
+  profileLeaseWaits: ServiceTraceProfileLeaseWaitSummary;
+  contexts: ServiceTraceSummaryContext[];
+  [key: string]: unknown;
+}
+
 export interface ServiceTraceResponse {
   filters: Record<string, unknown>;
   events: ServiceEventRecord[];
   jobs: ServiceJobRecord[];
   incidents: ServiceIncidentRecord[];
   activity: Record<string, unknown>[];
-  summary: Record<string, unknown>;
+  summary: ServiceTraceSummary;
   counts: Record<'events' | 'jobs' | 'incidents' | 'activity', number>;
   matched: Record<'events' | 'jobs' | 'incidents' | 'activity', number>;
   total: Record<'events' | 'jobs' | 'incidents', number>;

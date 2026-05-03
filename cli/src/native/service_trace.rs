@@ -4,7 +4,9 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
 
 use super::service_activity::service_incident_activity_items;
-use super::service_model::{JobTarget, ServiceEvent, ServiceIncident, ServiceJob, ServiceState};
+use super::service_model::{
+    JobTarget, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceJob, ServiceState,
+};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct ServiceTraceFilters<'a> {
@@ -183,6 +185,21 @@ struct TraceContextSummary {
     latest_timestamp: Option<String>,
 }
 
+#[derive(Debug, Clone, Default)]
+struct ProfileLeaseWaitSummary {
+    job_id: String,
+    profile_id: Option<String>,
+    outcome: Option<String>,
+    started_at: Option<String>,
+    ended_at: Option<String>,
+    waited_ms: Option<u64>,
+    retry_after_ms: Option<u64>,
+    conflict_session_ids: Vec<String>,
+    service_name: Option<String>,
+    agent_name: Option<String>,
+    task_name: Option<String>,
+}
+
 /// Compact owner/context rollup for dashboards, MCP agents, and API clients.
 fn service_trace_summary(
     service_state: &ServiceState,
@@ -323,7 +340,121 @@ fn service_trace_summary(
         "contextCount": context_count,
         "hasTraceContext": has_trace_context,
         "namingWarningCount": naming_warning_count,
+        "profileLeaseWaits": service_trace_profile_lease_wait_summary(events),
         "contexts": contexts,
+    })
+}
+
+fn service_trace_profile_lease_wait_summary(events: &[ServiceEvent]) -> Value {
+    let mut waits = BTreeMap::<String, ProfileLeaseWaitSummary>::new();
+    let mut wait_events = events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.kind,
+                ServiceEventKind::ProfileLeaseWaitStarted | ServiceEventKind::ProfileLeaseWaitEnded
+            )
+        })
+        .collect::<Vec<_>>();
+    wait_events.sort_by(|left, right| left.timestamp.cmp(&right.timestamp));
+    for event in wait_events {
+        let details = event.details.as_ref();
+        let job_id = details
+            .and_then(|details| details.get("jobId"))
+            .and_then(|value| value.as_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or(&event.id)
+            .to_string();
+        let wait = waits
+            .entry(job_id.clone())
+            .or_insert_with(|| ProfileLeaseWaitSummary {
+                job_id,
+                ..ProfileLeaseWaitSummary::default()
+            });
+        wait.profile_id = event
+            .profile_id
+            .clone()
+            .or_else(|| {
+                details
+                    .and_then(|details| details.get("profileId"))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+            })
+            .or_else(|| wait.profile_id.clone());
+        wait.service_name = wait.service_name.clone().or(event.service_name.clone());
+        wait.agent_name = wait.agent_name.clone().or(event.agent_name.clone());
+        wait.task_name = wait.task_name.clone().or(event.task_name.clone());
+        wait.retry_after_ms = details
+            .and_then(|details| details.get("retryAfterMs"))
+            .and_then(|value| value.as_u64())
+            .or(wait.retry_after_ms);
+        let conflict_session_ids = details
+            .and_then(|details| details.get("conflictSessionIds"))
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str())
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !conflict_session_ids.is_empty() {
+            wait.conflict_session_ids = conflict_session_ids;
+        }
+
+        match event.kind {
+            ServiceEventKind::ProfileLeaseWaitStarted => {
+                wait.started_at = Some(event.timestamp.clone());
+                wait.outcome = details
+                    .and_then(|details| details.get("outcome"))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+                    .or_else(|| Some("started".to_string()));
+            }
+            ServiceEventKind::ProfileLeaseWaitEnded => {
+                wait.ended_at = Some(event.timestamp.clone());
+                wait.waited_ms = details
+                    .and_then(|details| details.get("waitedMs"))
+                    .and_then(|value| value.as_u64());
+                wait.outcome = details
+                    .and_then(|details| details.get("outcome"))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+                    .or_else(|| Some("ended".to_string()));
+            }
+            _ => {}
+        }
+    }
+
+    let waits = waits
+        .into_values()
+        .map(|wait| {
+            json!({
+                "jobId": wait.job_id,
+                "profileId": wait.profile_id,
+                "outcome": wait.outcome.unwrap_or_else(|| "unknown".to_string()),
+                "startedAt": wait.started_at,
+                "endedAt": wait.ended_at,
+                "waitedMs": wait.waited_ms,
+                "retryAfterMs": wait.retry_after_ms,
+                "conflictSessionIds": wait.conflict_session_ids,
+                "serviceName": wait.service_name,
+                "agentName": wait.agent_name,
+                "taskName": wait.task_name,
+            })
+        })
+        .collect::<Vec<_>>();
+    let active_count = waits
+        .iter()
+        .filter(|wait| wait.get("endedAt").is_none_or(|value| value.is_null()))
+        .count();
+    let completed_count = waits.len().saturating_sub(active_count);
+    json!({
+        "count": waits.len(),
+        "activeCount": active_count,
+        "completedCount": completed_count,
+        "waits": waits,
     })
 }
 

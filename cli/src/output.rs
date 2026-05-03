@@ -536,6 +536,25 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
 }
 
 fn format_service_trace_profile_lease_wait_text(data: &serde_json::Value) -> Option<String> {
+    if let Some(profile_lease_waits) = data
+        .get("summary")
+        .and_then(|summary| summary.get("profileLeaseWaits"))
+    {
+        if let Some(waits) = profile_lease_waits
+            .get("waits")
+            .and_then(|value| value.as_array())
+            .filter(|waits| !waits.is_empty())
+        {
+            let mut lines = vec![format!("Profile lease waits: {}", waits.len())];
+            lines.extend(
+                waits
+                    .iter()
+                    .map(format_service_trace_profile_lease_wait_summary_line),
+            );
+            return Some(lines.join("\n"));
+        }
+    }
+
     let events = data.get("events").and_then(|value| value.as_array())?;
     let mut waits = events
         .iter()
@@ -570,6 +589,66 @@ fn format_service_trace_profile_lease_wait_text(data: &serde_json::Value) -> Opt
             .map(format_service_trace_profile_lease_wait_line),
     );
     Some(lines.join("\n"))
+}
+
+fn format_service_trace_profile_lease_wait_summary_line(wait: &serde_json::Value) -> String {
+    let timestamp = wait
+        .get("endedAt")
+        .and_then(|value| value.as_str())
+        .or_else(|| wait.get("startedAt").and_then(|value| value.as_str()))
+        .unwrap_or("unknown-time");
+    let job = wait
+        .get("jobId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-job");
+    let profile = wait
+        .get("profileId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-profile");
+    let outcome = wait
+        .get("outcome")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let waited = wait
+        .get("waitedMs")
+        .and_then(|value| value.as_u64())
+        .map(|value| format!(" waited_ms={value}"))
+        .unwrap_or_default();
+    let retry = wait
+        .get("retryAfterMs")
+        .and_then(|value| value.as_u64())
+        .map(|value| format!(" retry_after_ms={value}"))
+        .unwrap_or_default();
+    let conflicts = wait
+        .get("conflictSessionIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+    let service = wait
+        .get("serviceName")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" service={value}"))
+        .unwrap_or_default();
+    let agent = wait
+        .get("agentName")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" agent={value}"))
+        .unwrap_or_default();
+    let task = wait
+        .get("taskName")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" task={value}"))
+        .unwrap_or_default();
+    format!(
+        "  {timestamp} profile_lease_wait job={job} profile={profile} outcome={outcome}{waited}{retry} conflicts={conflicts}{service}{agent}{task}"
+    )
 }
 
 fn format_service_trace_profile_lease_wait_line(event: &serde_json::Value) -> String {
@@ -5009,7 +5088,25 @@ mod tests {
                     "hasNamingWarning": false,
                     "namingWarnings": [],
                     "latestTimestamp": "2026-04-25T00:00:00Z"
-                }]
+                }],
+                "profileLeaseWaits": {
+                    "count": 1,
+                    "activeCount": 0,
+                    "completedCount": 1,
+                    "waits": [{
+                        "jobId": "job-1",
+                        "profileId": "work",
+                        "outcome": "ready",
+                        "startedAt": "2026-04-25T00:00:00Z",
+                        "endedAt": "2026-04-25T00:00:03Z",
+                        "waitedMs": 3000,
+                        "retryAfterMs": 50,
+                        "conflictSessionIds": ["active-session"],
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite"
+                    }]
+                }
             },
             "activity": [{
                 "id": "activity-1",
@@ -5060,7 +5157,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\nProfile lease waits: 2\n  2026-04-25T00:00:00Z profile_lease_wait_started job=job-1 profile=work outcome=started retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n  2026-04-25T00:00:03Z profile_lease_wait_ended job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 

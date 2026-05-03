@@ -216,7 +216,9 @@ response returned by `agent-browser service trace`, HTTP `GET
 
 `service-trace-summary-record.v1.schema.json` describes the `summary` object
 returned by `agent-browser service trace`, HTTP `GET /api/service/trace`, and
-MCP `service_trace`.
+MCP `service_trace`. Its `profileLeaseWaits` object provides a per-job rollup
+of profile lease waits, including outcome, timing, conflict sessions, and trace
+labels, so clients do not need to reconstruct waits from raw event pairs.
 
 `service-trace-activity-record.v1.schema.json` describes normalized `activity`
 items returned by:

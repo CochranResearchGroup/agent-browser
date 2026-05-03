@@ -580,6 +580,7 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
             "contextCount",
             "hasTraceContext",
             "namingWarningCount",
+            "profileLeaseWaits",
             "contexts",
         ],
         &["context_count", "has_trace_context", "naming_warning_count"],
@@ -591,6 +592,52 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
     );
     assert!(value["hasTraceContext"].is_boolean());
     assert!(value["namingWarningCount"].is_u64());
+    let profile_lease_waits = &value["profileLeaseWaits"];
+    assert_record_fields(
+        "trace profile lease waits",
+        profile_lease_waits,
+        &["count", "activeCount", "completedCount", "waits"],
+        &["active_count", "completed_count"],
+    );
+    let waits = profile_lease_waits["waits"].as_array().unwrap();
+    assert_eq!(
+        profile_lease_waits["count"].as_u64().unwrap(),
+        waits.len() as u64
+    );
+    assert!(profile_lease_waits["activeCount"].is_u64());
+    assert!(profile_lease_waits["completedCount"].is_u64());
+    for wait in waits {
+        assert_record_fields(
+            "trace profile lease wait",
+            wait,
+            &[
+                "jobId",
+                "profileId",
+                "outcome",
+                "startedAt",
+                "endedAt",
+                "waitedMs",
+                "retryAfterMs",
+                "conflictSessionIds",
+                "serviceName",
+                "agentName",
+                "taskName",
+            ],
+            &[
+                "job_id",
+                "profile_id",
+                "started_at",
+                "ended_at",
+                "waited_ms",
+                "retry_after_ms",
+                "conflict_session_ids",
+                "service_name",
+                "agent_name",
+                "task_name",
+            ],
+        );
+        assert!(wait["conflictSessionIds"].is_array());
+    }
     for context in contexts {
         assert_record_fields(
             "trace summary context",
@@ -3525,6 +3572,7 @@ mod tests {
                 "contextCount",
                 "hasTraceContext",
                 "namingWarningCount",
+                "profileLeaseWaits",
                 "contexts",
             ],
         );
@@ -3537,6 +3585,12 @@ mod tests {
             "contextCount": 1,
             "hasTraceContext": true,
             "namingWarningCount": 0,
+            "profileLeaseWaits": {
+                "count": 0,
+                "activeCount": 0,
+                "completedCount": 0,
+                "waits": [],
+            },
             "contexts": [{
                 "serviceName": "JournalDownloader",
                 "agentName": "codex",

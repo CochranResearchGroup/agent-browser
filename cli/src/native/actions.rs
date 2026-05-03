@@ -12518,7 +12518,6 @@ mod tests {
             "serviceName": "JournalDownloader",
             "taskName": "probeACSwebsite",
             "profileId": "work",
-            "sessionId": "session-1",
             "serviceState": {
                 "events": [
                     {
@@ -12532,6 +12531,41 @@ mod tests {
                         "serviceName": "JournalDownloader",
                         "agentName": "codex",
                         "taskName": "probeACSwebsite"
+                    },
+                    {
+                        "id": "event-wait-started",
+                        "timestamp": "2026-04-22T00:00:30Z",
+                        "kind": "profile_lease_wait_started",
+                        "message": "Service job job-1 started waiting for profile lease work",
+                        "profileId": "work",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "details": {
+                            "jobId": "job-1",
+                            "outcome": "started",
+                            "profileId": "work",
+                            "conflictSessionIds": ["active-session"],
+                            "retryAfterMs": 50
+                        }
+                    },
+                    {
+                        "id": "event-wait-ended",
+                        "timestamp": "2026-04-22T00:01:30Z",
+                        "kind": "profile_lease_wait_ended",
+                        "message": "Service job job-1 ended profile lease wait for work with outcome ready",
+                        "profileId": "work",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "details": {
+                            "jobId": "job-1",
+                            "outcome": "ready",
+                            "profileId": "work",
+                            "conflictSessionIds": ["active-session"],
+                            "retryAfterMs": 50,
+                            "waitedMs": 60000
+                        }
                     },
                     {
                         "id": "event-2",
@@ -12609,7 +12643,7 @@ mod tests {
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
-        assert_eq!(result["data"]["counts"]["events"], 1);
+        assert_eq!(result["data"]["counts"]["events"], 3);
         assert_eq!(result["data"]["counts"]["jobs"], 1);
         assert_eq!(result["data"]["counts"]["incidents"], 1);
         assert_eq!(result["data"]["counts"]["activity"], 2);
@@ -12623,9 +12657,26 @@ mod tests {
         assert_eq!(result["data"]["activity"][1]["jobId"], "job-1");
         assert_service_trace_activity_record_contract(&result["data"]["activity"][1]);
         assert_service_trace_summary_record_contract(&result["data"]["summary"]);
-        assert_eq!(result["data"]["summary"]["contextCount"], 2);
+        assert_eq!(result["data"]["summary"]["contextCount"], 3);
         assert_eq!(result["data"]["summary"]["hasTraceContext"], true);
         assert_eq!(result["data"]["summary"]["namingWarningCount"], 1);
+        assert_eq!(result["data"]["summary"]["profileLeaseWaits"]["count"], 1);
+        assert_eq!(
+            result["data"]["summary"]["profileLeaseWaits"]["completedCount"],
+            1
+        );
+        assert_eq!(
+            result["data"]["summary"]["profileLeaseWaits"]["waits"][0]["jobId"],
+            "job-1"
+        );
+        assert_eq!(
+            result["data"]["summary"]["profileLeaseWaits"]["waits"][0]["outcome"],
+            "ready"
+        );
+        assert_eq!(
+            result["data"]["summary"]["profileLeaseWaits"]["waits"][0]["waitedMs"],
+            60000
+        );
         let owned_context = result["data"]["summary"]["contexts"]
             .as_array()
             .unwrap()
@@ -12645,6 +12696,21 @@ mod tests {
         assert_eq!(owned_context["hasNamingWarning"], false);
         assert_eq!(owned_context["namingWarnings"].as_array().unwrap().len(), 0);
         assert_eq!(owned_context["latestTimestamp"], "2026-04-22T00:02:00Z");
+        let wait_context = result["data"]["summary"]["contexts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|context| {
+                context["serviceName"] == "JournalDownloader"
+                    && context["agentName"] == "codex"
+                    && context["taskName"] == "probeACSwebsite"
+                    && context["profileId"] == "work"
+                    && context["browserId"].is_null()
+                    && context["sessionId"].is_null()
+            })
+            .expect("trace summary should include a profile lease wait context");
+        assert_eq!(wait_context["eventCount"], 2);
+        assert_eq!(wait_context["hasNamingWarning"], false);
         let incident_context = result["data"]["summary"]["contexts"]
             .as_array()
             .unwrap()

@@ -8,6 +8,7 @@
     "contextCount",
     "hasTraceContext",
     "namingWarningCount",
+    "profileLeaseWaits",
     "contexts"
   ],
   "properties": {
@@ -21,6 +22,92 @@
     "namingWarningCount": {
       "type": "integer",
       "minimum": 0
+    },
+    "profileLeaseWaits": {
+      "type": "object",
+      "required": [
+        "count",
+        "activeCount",
+        "completedCount",
+        "waits"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activeCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "waits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "jobId",
+              "profileId",
+              "outcome",
+              "startedAt",
+              "endedAt",
+              "waitedMs",
+              "retryAfterMs",
+              "conflictSessionIds",
+              "serviceName",
+              "agentName",
+              "taskName"
+            ],
+            "properties": {
+              "jobId": {
+                "type": "string"
+              },
+              "profileId": {
+                "type": ["string", "null"]
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              },
+              "endedAt": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              },
+              "waitedMs": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "retryAfterMs": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "conflictSessionIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "serviceName": {
+                "type": ["string", "null"]
+              },
+              "agentName": {
+                "type": ["string", "null"]
+              },
+              "taskName": {
+                "type": ["string", "null"]
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
     },
     "contexts": {
       "type": "array",
