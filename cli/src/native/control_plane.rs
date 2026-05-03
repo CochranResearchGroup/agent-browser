@@ -2,11 +2,13 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::{mpsc, oneshot};
 
-use super::actions::{execute_command, DaemonState};
+use super::actions::{
+    execute_command, service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate,
+};
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
@@ -83,6 +85,7 @@ pub struct ControlRequest {
     pub timeout_ms: Option<u64>,
     pub cancellation: RunningJobCancel,
     pub submitted_at_wall: String,
+    pub profile_lease_wait_started_at: Option<Instant>,
     pub response_tx: oneshot::Sender<Value>,
 }
 
@@ -133,6 +136,7 @@ impl ControlPlaneWorker {
         let running_cancellations = Arc::new(Mutex::new(HashMap::new()));
         tokio::spawn(run_worker(
             state,
+            tx.clone(),
             rx,
             status.clone(),
             service_reconcile_interval_ms,
@@ -239,6 +243,7 @@ impl ControlPlaneHandle {
             timeout_ms,
             cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
+            profile_lease_wait_started_at: None,
             response_tx,
         };
 
@@ -363,6 +368,32 @@ fn persist_reconciled_service_state(before: &ServiceState, reconciled: &ServiceS
     let reconciled = reconciled.clone();
     if let Ok(repository) = LockedServiceStateRepository::default_json() {
         let _ = persist_reconciled_service_state_in_repository(&repository, &before, &reconciled);
+    }
+}
+
+enum SchedulerLeaseDecision {
+    Ready,
+    Reject(String),
+    Wait { retry_after_ms: u64 },
+}
+
+fn scheduler_profile_lease_gate(
+    request: &mut ControlRequest,
+    session_id: &str,
+) -> SchedulerLeaseDecision {
+    let waited_ms = request
+        .profile_lease_wait_started_at
+        .map(|started_at| started_at.elapsed().as_millis() as u64);
+    match service_profile_lease_gate(&request.command, session_id, waited_ms) {
+        Ok(ServiceProfileLeaseGate::Ready) => SchedulerLeaseDecision::Ready,
+        Ok(ServiceProfileLeaseGate::Reject { error }) => SchedulerLeaseDecision::Reject(error),
+        Ok(ServiceProfileLeaseGate::Wait { retry_after_ms, .. }) => {
+            if request.profile_lease_wait_started_at.is_none() {
+                request.profile_lease_wait_started_at = Some(Instant::now());
+            }
+            SchedulerLeaseDecision::Wait { retry_after_ms }
+        }
+        Err(error) => SchedulerLeaseDecision::Reject(error),
     }
 }
 
@@ -716,6 +747,7 @@ impl BrowserHealth {
 
 async fn run_worker(
     mut state: DaemonState,
+    tx: mpsc::Sender<WorkerMessage>,
     mut rx: mpsc::Receiver<WorkerMessage>,
     status: Arc<ControlPlaneStatus>,
     service_reconcile_interval_ms: Option<u64>,
@@ -740,7 +772,7 @@ async fn run_worker(
 
                 match message {
                     WorkerMessage::Request(request) => {
-                        let request = *request;
+                        let mut request = *request;
                         status.queue_depth.fetch_sub(1, Ordering::Relaxed);
                         if service_job_cancelled(&request.job_id) {
                             let _ = request.response_tx.send(json!({
@@ -749,6 +781,44 @@ async fn run_worker(
                                 "error": "Service job was cancelled before dispatch",
                             }));
                             continue;
+                        }
+                        match scheduler_profile_lease_gate(&mut request, &state.session_id) {
+                            SchedulerLeaseDecision::Ready => {}
+                            SchedulerLeaseDecision::Reject(error) => {
+                                persist_service_job_failed_to_enqueue(&request, &error);
+                                let _ = request.response_tx.send(json!({
+                                    "id": request.id,
+                                    "success": false,
+                                    "error": error,
+                                }));
+                                continue;
+                            }
+                            SchedulerLeaseDecision::Wait { retry_after_ms } => {
+                                status.queue_depth.fetch_add(1, Ordering::Relaxed);
+                                let tx = tx.clone();
+                                let status = status.clone();
+                                tokio::spawn(async move {
+                                    tokio::time::sleep(Duration::from_millis(retry_after_ms)).await;
+                                    if let Err(err) = tx.send(WorkerMessage::Request(Box::new(request))).await {
+                                        let WorkerMessage::Request(request) = err.0 else {
+                                            status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+                                            return;
+                                        };
+                                        let request = *request;
+                                        status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+                                        persist_service_job_failed_to_enqueue(
+                                            &request,
+                                            "Control plane worker is stopped while waiting for profile lease",
+                                        );
+                                        let _ = request.response_tx.send(json!({
+                                            "id": request.id,
+                                            "success": false,
+                                            "error": "Control plane worker is stopped while waiting for profile lease",
+                                        }));
+                                    }
+                                });
+                                continue;
+                            }
                         }
                         status.set_state(WorkerState::Busy);
                         persist_service_job_running(&request);
@@ -918,6 +988,7 @@ mod tests {
     use super::super::service_jobs::{
         cancel_service_job_in_repository, mutate_service_jobs_in_repository, MAX_SERVICE_JOBS,
     };
+    use super::super::service_model::{BrowserSession, LeaseState};
     use super::super::service_store::{JsonServiceStateStore, ServiceStateStore};
     use super::*;
     use crate::test_utils::EnvGuard;
@@ -1525,6 +1596,71 @@ mod tests {
                 JobState::Succeeded
             );
         }
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn profile_lease_wait_requeues_without_blocking_worker() {
+        let home = temp_home("control-plane-profile-lease-wait");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                sessions: std::collections::BTreeMap::from([(
+                    "active-session".to_string(),
+                    BrowserSession {
+                        id: "active-session".to_string(),
+                        profile_id: Some("acs-profile".to_string()),
+                        lease: LeaseState::Exclusive,
+                        ..BrowserSession::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let handle = ControlPlaneWorker::start(DaemonState::new());
+        let waiting_handle = handle.clone();
+        let waiting = tokio::spawn(async move {
+            waiting_handle
+                .submit(json!({
+                    "id": "lease-wait-job",
+                    "action": "state_list",
+                    "serviceName": "JournalDownloader",
+                    "agentName": "unit-test",
+                    "taskName": "profileLeaseWait",
+                    "runtimeProfile": "acs-profile",
+                    "profileLeasePolicy": "wait",
+                    "profileLeaseWaitTimeoutMs": 2_000
+                }))
+                .await
+        });
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let quick_response = handle
+            .submit(json!({
+                "id": "quick-job",
+                "action": "state_list",
+                "serviceName": "JournalDownloader",
+                "agentName": "unit-test",
+                "taskName": "quickWhileLeaseWaiting"
+            }))
+            .await;
+        assert_eq!(quick_response["success"], true);
+
+        let mut released = store.load().unwrap();
+        released.sessions.get_mut("active-session").unwrap().lease = LeaseState::Released;
+        store.save(&released).unwrap();
+
+        let waiting_response = waiting.await.unwrap();
+        assert_eq!(waiting_response["success"], true);
+        handle.shutdown().await;
+
+        let persisted = store.load().unwrap();
+        assert_eq!(persisted.jobs["quick-job"].state, JobState::Succeeded);
+        assert_eq!(persisted.jobs["lease-wait-job"].state, JobState::Succeeded);
+        assert!(persisted.jobs["lease-wait-job"].started_at.is_some());
 
         let _ = std::fs::remove_dir_all(&home);
     }

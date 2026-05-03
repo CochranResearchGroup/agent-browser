@@ -552,8 +552,9 @@ as `new_browser`, `reused_browser`, or `active_lease_conflict` plus
 `profileLeaseConflictSessionIds` when another exclusive session already holds
 the same profile. Service-scoped launches reject active exclusive profile
 conflicts by default before browser start; set `profileLeasePolicy: "wait"` and
-`profileLeaseWaitTimeoutMs` to wait for release instead. Same-session retained
-browser reuse remains allowed. MCP typed browser tools accept the same target profile hints,
+`profileLeaseWaitTimeoutMs` to keep the job queued while polling for release,
+leaving the worker available for other commands. Same-session retained browser
+reuse remains allowed. MCP typed browser tools accept the same target profile hints,
 so clients can use `browser_navigate` or other typed tools
 without falling back to `browser_command`.
 Run `pnpm test:service-profile-target-mcp-live` to validate the live typed MCP
@@ -629,7 +630,8 @@ whether the selected profile opened a new browser, reused a retained session
 browser, or hit another exclusive profile lease. Active exclusive conflicts are
 rejected before a service-scoped launch starts another browser unless
 `profileLeasePolicy: "wait"` is supplied with a bounded
-`profileLeaseWaitTimeoutMs`. Pass `profile` or `runtimeProfile` only for override
+`profileLeaseWaitTimeoutMs`; waiting jobs stay queued and do not occupy the
+running worker. Pass `profile` or `runtimeProfile` only for override
 workflows where the caller intentionally takes direct responsibility for the
 browser identity.
 
@@ -1400,6 +1402,8 @@ agent-browser service events --kind tab_lifecycle_changed
 
 The response includes worker state, browser health, queue depth, persisted service state from `~/.agent-browser/service/state.json`, and configured service-mode profiles, sessions, site policies, and providers from `agent-browser.json` and `~/.agent-browser/config.json`. In text mode, it summarizes profiles, browsers, and sessions with service, agent, task, profile, profile selection reason, profile lease disposition, lease conflicts, lease, cleanup, browser linkage, health, and retained observation fields. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, unreachable CDP endpoints without a PID are marked `unreachable`, and endpoints that answer health probes but fail target-list discovery are marked `degraded`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active. When reconciliation removes stale session/tab ownership links, it appends a `reconciliation` event with `details.action: "session_tab_ownership_repaired"` and the removed relationships. Configured profiles, sessions, site policies, and providers override entries with the same IDs from the persisted state. Browser launch, close, and command-time stale-browser detection update the persisted browser health records for the active session. Browser records retain the latest non-ready health evidence in `lastHealthObservation`, so service status clients can inspect failure metadata without reconstructing events. Use `service profiles`, `service sessions`, `service browsers`, `service tabs`, `service site-policies`, `service providers`, and `service challenges` for focused collection views without parsing the full status payload. Unexpected process-exit health and recovery events include `details.processExitCause: "unexpected_process_exit"` and `details.failureClass: "browser_process_exited"`; active local Chrome exits also include `processExitDetection`, `processExitPid`, and exit code or signal when available. During close, agent-browser first tries a polite browser shutdown and then force kills owned browser processes if needed; close-generated health events include `details.shutdownReasonKind: "operator_requested_close"`, `details.processExitCause: "operator_requested_close"`, and shutdown outcome flags. Polite shutdown failure leaves the browser record `degraded`, and force-kill failure leaves it `faulted` with an OS-degraded warning. When a queued command finds the active browser process exited or the CDP connection disconnected, agent-browser records that failure before cleanup and relaunch. Runtime profile and custom profile launches also populate linked service profile and session records, including `serviceName`, `agentName`, `taskName`, `profileSelectionReason`, `profileLeaseDisposition`, and `profileLeaseConflictSessionIds` when the caller provides enough context. Service-scoped launches reject active exclusive profile conflicts by default before starting another browser; set `profileLeasePolicy: "wait"` and `profileLeaseWaitTimeoutMs` to wait for release instead. Same-session retained browser reuse remains allowed.
 
+With `profileLeasePolicy: "wait"`, the control-plane scheduler keeps the blocked request queued while it polls for profile release, so the worker can continue dispatching unrelated service requests.
+
 Run `pnpm test:service-collections-live` to validate that CLI, HTTP, and MCP expose matching service-owned profile, session, browser, tab, site-policy, provider, and challenge collections for one live runtime-profile session.
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
@@ -1583,7 +1587,7 @@ through
 `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new`
 data. Service request helpers accept `profileLeasePolicy: "reject"` or
 `"wait"` plus `profileLeaseWaitTimeoutMs` for callers that want agent-browser to
-wait for a profile lease rather than fail immediately. Use `pnpm test:service-client-contract`,
+keep a request queued for a profile lease rather than fail immediately. Use `pnpm test:service-client-contract`,
 `pnpm test:service-client-types`, `pnpm test:service-client-exports`,
 `pnpm test:service-request-client`, or `pnpm test:service-observability-client`
 when only one client contract needs validation.
