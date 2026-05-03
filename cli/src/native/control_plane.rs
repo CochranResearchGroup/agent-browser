@@ -157,7 +157,7 @@ impl ControlPlaneHandle {
         json!({
             "id": id,
             "success": true,
-            "data": self.status_payload(),
+            "data": self.status_payload(0),
         })
     }
 
@@ -165,7 +165,9 @@ impl ControlPlaneHandle {
         let mut service_state = serde_json::from_value::<ServiceState>(service_state)
             .unwrap_or_else(|_| ServiceState::default());
         let before = service_state.clone();
-        service_state.control_plane = Some(self.status_snapshot());
+        let waiting_profile_lease_job_count =
+            service_state_waiting_profile_lease_job_count(&service_state);
+        service_state.control_plane = Some(self.status_snapshot(waiting_profile_lease_job_count));
         reconcile_service_state(&mut service_state).await;
         persist_reconciled_service_state(&before, &service_state);
 
@@ -173,29 +175,31 @@ impl ControlPlaneHandle {
             "id": id,
             "success": true,
             "data": {
-                "control_plane": self.status_payload(),
+                "control_plane": self.status_payload(waiting_profile_lease_job_count),
                 "service_state": service_state,
             },
         })
     }
 
-    fn status_snapshot(&self) -> ControlPlaneSnapshot {
+    fn status_snapshot(&self, waiting_profile_lease_job_count: usize) -> ControlPlaneSnapshot {
         ControlPlaneSnapshot {
             worker_state: self.status.worker_state().as_str().to_string(),
             browser_health: self.status.browser_health().as_str().to_string(),
             queue_depth: self.status.queue_depth(),
             queue_capacity: self.tx.max_capacity(),
+            waiting_profile_lease_job_count,
             service_job_timeout_ms: self.service_job_timeout_ms,
             updated_at: Some(current_timestamp()),
         }
     }
 
-    fn status_payload(&self) -> Value {
+    fn status_payload(&self, waiting_profile_lease_job_count: usize) -> Value {
         json!({
             "worker_state": self.status.worker_state().as_str(),
             "browser_health": self.status.browser_health().as_str(),
             "queue_depth": self.status.queue_depth(),
             "queue_capacity": self.tx.max_capacity(),
+            "waiting_profile_lease_job_count": waiting_profile_lease_job_count,
             "service_job_timeout_ms": self.service_job_timeout_ms,
         })
     }
@@ -460,6 +464,14 @@ fn persist_process_exited_browser_health_in_repository(
         service_state.browsers.insert(id, browser);
         Ok(())
     })
+}
+
+fn service_state_waiting_profile_lease_job_count(service_state: &ServiceState) -> usize {
+    service_state
+        .jobs
+        .values()
+        .filter(|job| job.state == JobState::WaitingProfileLease)
+        .count()
 }
 
 /// Persist a bounded audit record for each control-plane request.
@@ -1175,6 +1187,12 @@ mod tests {
                 .and_then(|v| v.as_u64()),
             Some(0)
         );
+        assert_eq!(
+            response
+                .pointer("/data/waiting_profile_lease_job_count")
+                .and_then(|v| v.as_u64()),
+            Some(0)
+        );
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
@@ -1194,6 +1212,18 @@ mod tests {
                         "google": {
                             "id": "google",
                             "originPattern": "https://accounts.google.com"
+                        }
+                    },
+                    "jobs": {
+                        "lease-wait": {
+                            "id": "lease-wait",
+                            "action": "navigate",
+                            "state": "waiting_profile_lease"
+                        },
+                        "queued": {
+                            "id": "queued",
+                            "action": "click",
+                            "state": "queued"
                         }
                     }
                 }),
@@ -1219,6 +1249,12 @@ mod tests {
         );
         assert_eq!(
             response
+                .pointer("/data/control_plane/waiting_profile_lease_job_count")
+                .and_then(|v| v.as_u64()),
+            Some(1)
+        );
+        assert_eq!(
+            response
                 .pointer("/data/service_state/sitePolicies/google/id")
                 .and_then(|v| v.as_str()),
             Some("google")
@@ -1228,6 +1264,12 @@ mod tests {
                 .pointer("/data/service_state/controlPlane/queueCapacity")
                 .and_then(|v| v.as_u64()),
             Some(DEFAULT_QUEUE_CAPACITY as u64)
+        );
+        assert_eq!(
+            response
+                .pointer("/data/service_state/controlPlane/waitingProfileLeaseJobCount")
+                .and_then(|v| v.as_u64()),
+            Some(1)
         );
         assert_eq!(
             response

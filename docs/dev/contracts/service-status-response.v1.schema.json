@@ -8,6 +8,35 @@
     "service_state"
   ],
   "properties": {
+    "control_plane": {
+      "type": "object",
+      "properties": {
+        "worker_state": {
+          "type": "string"
+        },
+        "browser_health": {
+          "type": "string"
+        },
+        "queue_depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "queue_capacity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "waiting_profile_lease_job_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of retained service jobs currently waiting for profile lease release."
+        },
+        "service_job_timeout_ms": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
     "service_state": {
       "type": "object"
     }

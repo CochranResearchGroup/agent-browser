@@ -932,6 +932,10 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
         .and_then(|value| value.get("queueCapacity"))
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
+    let waiting_profile_leases = control_plane
+        .and_then(|value| value.get("waitingProfileLeaseJobCount"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
     let worker_state = control_plane
         .map(|value| value_str(value, "workerState", "unknown"))
         .unwrap_or("unknown");
@@ -941,7 +945,7 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
 
     let mut lines = vec![
         format!(
-            "Service: worker={worker_state} browser={browser_health} queue={queue_depth}/{queue_capacity} browsers={browser_count} tabs={tab_count}"
+            "Service: worker={worker_state} browser={browser_health} queue={queue_depth}/{queue_capacity} waiting_profile_leases={waiting_profile_leases} browsers={browser_count} tabs={tab_count}"
         ),
         format!(
             "Reconciliation: last={} browsers={} changed={} error={}",
@@ -3522,7 +3526,7 @@ Usage:
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
 
 Commands:
-  status                Show worker state, browser health, queue depth, configured site policies, and providers
+  status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
   profiles              Show retained service profile records
@@ -4065,7 +4069,7 @@ Streaming:
   stream status              Show streaming status and active port
 
 Service:
-  service status             Show service worker health and configured service state
+  service status             Show service worker health, profile lease waits, and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
   service profiles           Show retained service profile records
@@ -4574,7 +4578,8 @@ mod tests {
                     "workerState": "idle",
                     "browserHealth": "ready",
                     "queueDepth": 1,
-                    "queueCapacity": 64
+                    "queueCapacity": 64,
+                    "waitingProfileLeaseJobCount": 2
                 },
                 "reconciliation": {
                     "lastReconciledAt": "2026-04-25T00:00:00Z",
@@ -4623,7 +4628,7 @@ mod tests {
         let rendered = format_service_status_text(&data).unwrap();
 
         assert!(
-            rendered.contains("Service: worker=idle browser=ready queue=1/64 browsers=1 tabs=0")
+            rendered.contains("Service: worker=idle browser=ready queue=1/64 waiting_profile_leases=2 browsers=1 tabs=0")
         );
         assert!(rendered.contains("Profiles: 1"));
         assert!(rendered.contains(

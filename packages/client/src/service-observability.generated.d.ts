@@ -197,8 +197,18 @@ export interface ServiceJobsResponse extends ServiceListResponse<ServiceJobRecor
   job?: ServiceJobRecord;
 }
 
+export interface ServiceControlPlaneStatus {
+  worker_state?: string;
+  browser_health?: string;
+  queue_depth?: number;
+  queue_capacity?: number;
+  waiting_profile_lease_job_count?: number;
+  service_job_timeout_ms?: number | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceStatusResponse {
-  control_plane?: Record<string, unknown>;
+  control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown>;
   [key: string]: unknown;
 }

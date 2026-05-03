@@ -1153,6 +1153,15 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
         &["serviceState"],
     );
     assert!(value["service_state"].is_object());
+    if let Some(control_plane) = value.get("control_plane") {
+        assert_record_fields(
+            "service status control plane",
+            control_plane,
+            &["waiting_profile_lease_job_count"],
+            &["waitingProfileLeaseJobCount"],
+        );
+        assert!(control_plane["waiting_profile_lease_job_count"].is_u64());
+    }
 }
 
 #[cfg(test)]
@@ -1736,6 +1745,8 @@ pub struct ControlPlaneSnapshot {
     pub browser_health: String,
     pub queue_depth: usize,
     pub queue_capacity: usize,
+    /// Number of retained jobs currently delayed by profile lease contention.
+    pub waiting_profile_lease_job_count: usize,
     pub service_job_timeout_ms: Option<u64>,
     pub updated_at: Option<String>,
 }
@@ -3395,7 +3406,13 @@ mod tests {
         ];
 
         assert_schema_required_fields(&status_schema, &["service_state"]);
+        assert!(status_schema["properties"]["control_plane"]["properties"]
+            .get("waiting_profile_lease_job_count")
+            .is_some());
         assert_service_status_response_contract(&json!({
+            "control_plane": {
+                "waiting_profile_lease_job_count": 0
+            },
             "service_state": {},
         }));
 
@@ -3619,6 +3636,7 @@ mod tests {
                 browser_health: "Ready".to_string(),
                 queue_depth: 0,
                 queue_capacity: 256,
+                waiting_profile_lease_job_count: 1,
                 service_job_timeout_ms: Some(5000),
                 updated_at: Some("2026-04-22T00:00:00Z".to_string()),
             }),

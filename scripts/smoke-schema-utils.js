@@ -89,6 +89,12 @@ export function assertServiceStatusResponseSchemaRecord(response, schema, label)
   assertRequiredFields(response, schema, label);
   assertNoSnakeCaseFields(response, ['serviceState'], label);
   assert(response.service_state && typeof response.service_state === 'object', `${label} missing service_state object`);
+  if (response.control_plane) {
+    assert(
+      Number.isInteger(response.control_plane.waiting_profile_lease_job_count),
+      `${label} missing waiting_profile_lease_job_count integer`,
+    );
+  }
 }
 
 export function assertServiceTraceSummarySchemaRecord(summary, schema, label) {

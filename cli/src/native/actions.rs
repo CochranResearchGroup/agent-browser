@@ -6548,11 +6548,29 @@ async fn handle_stream_status(state: &DaemonState) -> Result<Value, String> {
 }
 
 async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
+    let mut service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let waiting_profile_lease_job_count = service_state
+        .jobs
+        .values()
+        .filter(|job| job.state == ServiceJobState::WaitingProfileLease)
+        .count();
+    if let Some(control_plane) = service_state.control_plane.as_mut() {
+        control_plane.waiting_profile_lease_job_count = waiting_profile_lease_job_count;
+    } else {
+        service_state.control_plane = Some(super::service_model::ControlPlaneSnapshot {
+            waiting_profile_lease_job_count,
+            ..super::service_model::ControlPlaneSnapshot::default()
+        });
+    }
+
     Ok(json!({
-        "service_state": cmd
-            .get("serviceState")
-            .cloned()
-            .unwrap_or_else(|| json!({})),
+        "service_state": service_state,
     }))
 }
 
@@ -11334,10 +11352,28 @@ mod tests {
             "action": "service_status",
             "id": "svc1",
             "serviceState": {
+                "controlPlane": {
+                    "workerState": "ready",
+                    "browserHealth": "NotStarted",
+                    "queueDepth": 2,
+                    "queueCapacity": 64
+                },
                 "sitePolicies": {
                     "google": {
                         "id": "google",
                         "originPattern": "https://accounts.google.com"
+                    }
+                },
+                "jobs": {
+                    "lease-wait": {
+                        "id": "lease-wait",
+                        "action": "navigate",
+                        "state": "waiting_profile_lease"
+                    },
+                    "queued": {
+                        "id": "queued",
+                        "action": "click",
+                        "state": "queued"
                     }
                 }
             }
@@ -11349,6 +11385,10 @@ mod tests {
         assert_eq!(
             result["data"]["service_state"]["sitePolicies"]["google"]["id"],
             "google"
+        );
+        assert_eq!(
+            result["data"]["service_state"]["controlPlane"]["waitingProfileLeaseJobCount"],
+            1
         );
         assert!(state.browser.is_none());
     }

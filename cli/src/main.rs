@@ -80,6 +80,10 @@ fn format_service_watch_line(resp: &connection::Response) -> String {
         .get("queue_depth")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
+    let waiting_profile_leases = control_plane
+        .get("waiting_profile_lease_job_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     let last_reconciled = reconciliation
         .get("lastReconciledAt")
         .and_then(|v| v.as_str())
@@ -99,7 +103,7 @@ fn format_service_watch_line(resp: &connection::Response) -> String {
         .unwrap_or("none");
 
     format!(
-        "worker={worker} browser={browser} queue={queue_depth} reconciled={last_reconciled} browsers={browser_count} changed={changed_browsers} error={last_error}"
+        "worker={worker} browser={browser} queue={queue_depth} waiting_profile_leases={waiting_profile_leases} reconciled={last_reconciled} browsers={browser_count} changed={changed_browsers} error={last_error}"
     )
 }
 
