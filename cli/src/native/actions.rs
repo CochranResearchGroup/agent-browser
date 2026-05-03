@@ -7185,6 +7185,8 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
         ServiceEventKind::BrowserRecoveryOverride => "browser_recovery_override",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
+        ServiceEventKind::ProfileLeaseWaitStarted => "profile_lease_wait_started",
+        ServiceEventKind::ProfileLeaseWaitEnded => "profile_lease_wait_ended",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
         ServiceEventKind::IncidentResolved => "incident_resolved",

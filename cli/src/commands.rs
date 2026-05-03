@@ -1754,6 +1754,8 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 | "browser_recovery_started"
                                 | "browser_recovery_override"
                                 | "tab_lifecycle_changed"
+                                | "profile_lease_wait_started"
+                                | "profile_lease_wait_ended"
                                 | "reconciliation_error"
                                 | "incident_acknowledged"
                                 | "incident_resolved" => {
@@ -5412,6 +5414,23 @@ mod tests {
         .unwrap();
 
         assert_eq!(cmd["kind"], "tab_lifecycle_changed");
+    }
+
+    #[test]
+    fn test_service_events_accepts_profile_lease_wait_kinds() {
+        let started = parse_command(
+            &args("service events --kind profile_lease_wait_started"),
+            &default_flags(),
+        )
+        .unwrap();
+        let ended = parse_command(
+            &args("service events --kind profile_lease_wait_ended"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(started["kind"], "profile_lease_wait_started");
+        assert_eq!(ended["kind"], "profile_lease_wait_ended");
     }
 
     #[test]

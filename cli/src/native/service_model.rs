@@ -141,25 +141,29 @@ pub const SERVICE_CHALLENGE_STATE_VALUES: [&str; 6] = [
     "failed",
     "denied",
 ];
-pub const SERVICE_EVENT_KIND_VALUES: [&str; 9] = [
+pub const SERVICE_EVENT_KIND_VALUES: [&str; 11] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
     "browser_recovery_started",
     "browser_recovery_override",
     "tab_lifecycle_changed",
+    "profile_lease_wait_started",
+    "profile_lease_wait_ended",
     "reconciliation_error",
     "incident_acknowledged",
     "incident_resolved",
 ];
 pub const SERVICE_TRACE_ACTIVITY_SOURCE_VALUES: [&str; 3] = ["event", "job", "metadata"];
-pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 12] = [
+pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 14] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
     "browser_recovery_started",
     "browser_recovery_override",
     "tab_lifecycle_changed",
+    "profile_lease_wait_started",
+    "profile_lease_wait_ended",
     "reconciliation_error",
     "incident_acknowledged",
     "incident_resolved",
@@ -1356,6 +1360,8 @@ pub enum ServiceEventKind {
     BrowserRecoveryStarted,
     BrowserRecoveryOverride,
     TabLifecycleChanged,
+    ProfileLeaseWaitStarted,
+    ProfileLeaseWaitEnded,
     ReconciliationError,
     IncidentAcknowledged,
     IncidentResolved,
@@ -1603,7 +1609,9 @@ fn service_event_is_incident(event: &ServiceEvent) -> bool {
         ServiceEventKind::Reconciliation
         | ServiceEventKind::BrowserLaunchRecorded
         | ServiceEventKind::BrowserRecoveryStarted
-        | ServiceEventKind::TabLifecycleChanged => false,
+        | ServiceEventKind::TabLifecycleChanged
+        | ServiceEventKind::ProfileLeaseWaitStarted
+        | ServiceEventKind::ProfileLeaseWaitEnded => false,
     }
 }
 
@@ -1699,6 +1707,8 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
         ServiceEventKind::BrowserRecoveryOverride => "browser_recovery_override",
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
+        ServiceEventKind::ProfileLeaseWaitStarted => "profile_lease_wait_started",
+        ServiceEventKind::ProfileLeaseWaitEnded => "profile_lease_wait_ended",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
         ServiceEventKind::IncidentResolved => "incident_resolved",

@@ -51,6 +51,8 @@ export type ServiceEventKind =
   | "browser_recovery_started"
   | "browser_recovery_override"
   | "tab_lifecycle_changed"
+  | "profile_lease_wait_started"
+  | "profile_lease_wait_ended"
   | "reconciliation_error"
   | "incident_acknowledged"
   | "incident_resolved";

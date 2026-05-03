@@ -20,13 +20,14 @@ use super::service_jobs::{
 };
 use super::service_model::{
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
-    ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceJob, ServiceState,
-    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceEvent,
+    ServiceEventKind, ServiceJob, ServiceState, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
+const MAX_SERVICE_EVENTS: usize = 100;
 
 #[derive(Clone)]
 pub struct ControlPlaneHandle {
@@ -86,6 +87,9 @@ pub struct ControlRequest {
     pub cancellation: RunningJobCancel,
     pub submitted_at_wall: String,
     pub profile_lease_wait_started_at: Option<Instant>,
+    pub profile_lease_wait_profile_id: Option<String>,
+    pub profile_lease_wait_conflict_session_ids: Vec<String>,
+    pub profile_lease_wait_retry_after_ms: Option<u64>,
     pub response_tx: oneshot::Sender<Value>,
 }
 
@@ -248,6 +252,9 @@ impl ControlPlaneHandle {
             cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
             profile_lease_wait_started_at: None,
+            profile_lease_wait_profile_id: None,
+            profile_lease_wait_conflict_session_ids: Vec::new(),
+            profile_lease_wait_retry_after_ms: None,
             response_tx,
         };
 
@@ -382,6 +389,7 @@ enum SchedulerLeaseDecision {
         retry_after_ms: u64,
         profile_id: String,
         conflict_session_ids: Vec<String>,
+        first_wait: bool,
     },
 }
 
@@ -400,13 +408,18 @@ fn scheduler_profile_lease_gate(
             profile_id,
             conflict_session_ids,
         }) => {
-            if request.profile_lease_wait_started_at.is_none() {
+            let first_wait = request.profile_lease_wait_started_at.is_none();
+            if first_wait {
                 request.profile_lease_wait_started_at = Some(Instant::now());
             }
+            request.profile_lease_wait_profile_id = Some(profile_id.clone());
+            request.profile_lease_wait_conflict_session_ids = conflict_session_ids.clone();
+            request.profile_lease_wait_retry_after_ms = Some(retry_after_ms);
             SchedulerLeaseDecision::Wait {
                 retry_after_ms,
                 profile_id,
                 conflict_session_ids,
+                first_wait,
             }
         }
         Err(error) => SchedulerLeaseDecision::Reject(error),
@@ -528,6 +541,113 @@ fn persist_service_job_waiting_profile_lease(
         })),
         ..ServiceJob::default()
     });
+}
+
+fn record_profile_lease_wait_started_event(
+    request: &ControlRequest,
+    profile_id: &str,
+    conflict_session_ids: &[String],
+    retry_after_ms: u64,
+) {
+    record_profile_lease_wait_event(
+        request,
+        ProfileLeaseWaitEvent {
+            kind: ServiceEventKind::ProfileLeaseWaitStarted,
+            outcome: "started",
+            profile_id: Some(profile_id),
+            conflict_session_ids,
+            retry_after_ms: Some(retry_after_ms),
+            waited_ms: None,
+            error: None,
+        },
+    );
+}
+
+fn record_profile_lease_wait_ended_event(
+    request: &ControlRequest,
+    outcome: &str,
+    error: Option<&str>,
+) {
+    let waited_ms = request
+        .profile_lease_wait_started_at
+        .map(|started_at| started_at.elapsed().as_millis() as u64);
+    record_profile_lease_wait_event(
+        request,
+        ProfileLeaseWaitEvent {
+            kind: ServiceEventKind::ProfileLeaseWaitEnded,
+            outcome,
+            profile_id: request.profile_lease_wait_profile_id.as_deref(),
+            conflict_session_ids: &request.profile_lease_wait_conflict_session_ids,
+            retry_after_ms: request.profile_lease_wait_retry_after_ms,
+            waited_ms,
+            error,
+        },
+    );
+}
+
+struct ProfileLeaseWaitEvent<'a> {
+    kind: ServiceEventKind,
+    outcome: &'a str,
+    profile_id: Option<&'a str>,
+    conflict_session_ids: &'a [String],
+    retry_after_ms: Option<u64>,
+    waited_ms: Option<u64>,
+    error: Option<&'a str>,
+}
+
+fn record_profile_lease_wait_event(request: &ControlRequest, event: ProfileLeaseWaitEvent<'_>) {
+    mutate_persisted_service_jobs(|state| {
+        let mut details = json!({
+            "jobId": service_job_id(request),
+            "action": request.action,
+            "outcome": event.outcome,
+            "profileId": event.profile_id,
+            "conflictSessionIds": event.conflict_session_ids,
+            "retryAfterMs": event.retry_after_ms,
+            "waitedMs": event.waited_ms,
+        });
+        if let Some(error) = event.error {
+            details["error"] = json!(error);
+        }
+        state.events.push(ServiceEvent {
+            id: format!("event-{}", uuid::Uuid::new_v4()),
+            timestamp: current_timestamp(),
+            kind: event.kind,
+            message: profile_lease_wait_event_message(request, event.outcome, event.profile_id),
+            profile_id: event.profile_id.map(str::to_string),
+            session_id: None,
+            service_name: request.service_name.clone(),
+            agent_name: request.agent_name.clone(),
+            task_name: request.task_name.clone(),
+            details: Some(details),
+            ..ServiceEvent::default()
+        });
+        if state.events.len() > MAX_SERVICE_EVENTS {
+            let excess = state.events.len() - MAX_SERVICE_EVENTS;
+            state.events.drain(0..excess);
+        }
+    });
+}
+
+fn profile_lease_wait_event_message(
+    request: &ControlRequest,
+    outcome: &str,
+    profile_id: Option<&str>,
+) -> String {
+    let profile = profile_id.unwrap_or("unknown profile");
+    match outcome {
+        "started" => format!(
+            "Service job {} started waiting for profile lease {}",
+            service_job_id(request),
+            profile
+        ),
+        _ => format!(
+            "Service job {} ended profile lease wait for {} with outcome {}",
+            service_job_id(request),
+            profile,
+            outcome
+        ),
+    }
 }
 
 fn persist_service_job_running(request: &ControlRequest) {
@@ -829,6 +949,13 @@ async fn run_worker(
                         let mut request = *request;
                         status.queue_depth.fetch_sub(1, Ordering::Relaxed);
                         if service_job_cancelled(&request.job_id) {
+                            if request.profile_lease_wait_started_at.is_some() {
+                                record_profile_lease_wait_ended_event(
+                                    &request,
+                                    "cancelled",
+                                    Some("Service job was cancelled before dispatch"),
+                                );
+                            }
                             let _ = request.response_tx.send(json!({
                                 "id": request.id,
                                 "success": false,
@@ -837,8 +964,19 @@ async fn run_worker(
                             continue;
                         }
                         match scheduler_profile_lease_gate(&mut request, &state.session_id) {
-                            SchedulerLeaseDecision::Ready => {}
+                            SchedulerLeaseDecision::Ready => {
+                                if request.profile_lease_wait_started_at.is_some() {
+                                    record_profile_lease_wait_ended_event(&request, "ready", None);
+                                }
+                            }
                             SchedulerLeaseDecision::Reject(error) => {
+                                if request.profile_lease_wait_started_at.is_some() {
+                                    record_profile_lease_wait_ended_event(
+                                        &request,
+                                        "timed_out",
+                                        Some(&error),
+                                    );
+                                }
                                 persist_service_job_failed_to_enqueue(&request, &error);
                                 let _ = request.response_tx.send(json!({
                                     "id": request.id,
@@ -851,6 +989,7 @@ async fn run_worker(
                                 retry_after_ms,
                                 profile_id,
                                 conflict_session_ids,
+                                first_wait,
                             } => {
                                 persist_service_job_waiting_profile_lease(
                                     &request,
@@ -858,6 +997,14 @@ async fn run_worker(
                                     &profile_id,
                                     &conflict_session_ids,
                                 );
+                                if first_wait {
+                                    record_profile_lease_wait_started_event(
+                                        &request,
+                                        &profile_id,
+                                        &conflict_session_ids,
+                                        retry_after_ms,
+                                    );
+                                }
                                 status.queue_depth.fetch_add(1, Ordering::Relaxed);
                                 let tx = tx.clone();
                                 let status = status.clone();
@@ -874,6 +1021,13 @@ async fn run_worker(
                                             &request,
                                             "Control plane worker is stopped while waiting for profile lease",
                                         );
+                                        if request.profile_lease_wait_started_at.is_some() {
+                                            record_profile_lease_wait_ended_event(
+                                                &request,
+                                                "worker_stopped",
+                                                Some("Control plane worker is stopped while waiting for profile lease"),
+                                            );
+                                        }
                                         let _ = request.response_tx.send(json!({
                                             "id": request.id,
                                             "success": false,
@@ -1792,6 +1946,17 @@ mod tests {
             json!(["active-session"])
         );
         assert!(waiting_job.started_at.is_none());
+        assert!(waiting_snapshot.events.iter().any(|event| {
+            event.kind == ServiceEventKind::ProfileLeaseWaitStarted
+                && event.profile_id.as_deref() == Some("acs-profile")
+                && event.service_name.as_deref() == Some("JournalDownloader")
+                && event.agent_name.as_deref() == Some("unit-test")
+                && event.task_name.as_deref() == Some("profileLeaseWait")
+                && event.details.as_ref().unwrap()["jobId"] == "lease-wait-job"
+                && event.details.as_ref().unwrap()["outcome"] == "started"
+                && event.details.as_ref().unwrap()["conflictSessionIds"]
+                    == json!(["active-session"])
+        }));
 
         let mut released = store.load().unwrap();
         released.sessions.get_mut("active-session").unwrap().lease = LeaseState::Released;
@@ -1805,6 +1970,15 @@ mod tests {
         assert_eq!(persisted.jobs["quick-job"].state, JobState::Succeeded);
         assert_eq!(persisted.jobs["lease-wait-job"].state, JobState::Succeeded);
         assert!(persisted.jobs["lease-wait-job"].started_at.is_some());
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::ProfileLeaseWaitEnded
+                && event.profile_id.as_deref() == Some("acs-profile")
+                && event.details.as_ref().unwrap()["jobId"] == "lease-wait-job"
+                && event.details.as_ref().unwrap()["outcome"] == "ready"
+                && event.details.as_ref().unwrap()["waitedMs"]
+                    .as_u64()
+                    .is_some()
+        }));
 
         let _ = std::fs::remove_dir_all(&home);
     }

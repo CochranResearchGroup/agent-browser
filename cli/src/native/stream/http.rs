@@ -1361,6 +1361,8 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
                 | "browser_recovery_started"
                 | "browser_recovery_override"
                 | "tab_lifecycle_changed"
+                | "profile_lease_wait_started"
+                | "profile_lease_wait_ended"
                 | "reconciliation_error"
                 | "incident_acknowledged"
                 | "incident_resolved" => {
@@ -1757,6 +1759,15 @@ mod tests {
         let cmd = service_events_command(Some("kind=tab_lifecycle_changed")).unwrap();
 
         assert_eq!(cmd["kind"], "tab_lifecycle_changed");
+    }
+
+    #[test]
+    fn service_events_command_accepts_profile_lease_wait_kinds() {
+        let started = service_events_command(Some("kind=profile_lease_wait_started")).unwrap();
+        let ended = service_events_command(Some("kind=profile_lease_wait_ended")).unwrap();
+
+        assert_eq!(started["kind"], "profile_lease_wait_started");
+        assert_eq!(ended["kind"], "profile_lease_wait_ended");
     }
 
     #[test]

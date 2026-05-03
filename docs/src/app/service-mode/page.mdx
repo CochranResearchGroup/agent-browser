@@ -183,7 +183,7 @@ The CLI, HTTP API, MCP resources, and dashboard share the same service concepts:
 - `jobs` describe queued, waiting-on-profile-lease, running, succeeded, failed, cancelled, and timed-out service work.
 - `controlPlane.waitingProfileLeaseJobCount` summarizes current profile lease wait pressure without requiring a separate jobs query.
 - `incidents` group operational issues with severity, escalation, handling state, and recommended action.
-- `events` record launch, reconciliation, health, recovery, tab lifecycle, and incident-handling changes.
+- `events` record launch, reconciliation, health, recovery, profile lease wait, tab lifecycle, and incident-handling changes.
 - `sitePolicies`, `providers`, and `challenges` describe site-specific automation posture, browser providers, and retained challenge state.
 
 The repo keeps JSON schemas for these contracts under `docs/dev/contracts/`. HTTP and MCP collection envelopes are expected to remain aligned with those schemas.
