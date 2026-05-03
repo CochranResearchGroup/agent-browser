@@ -110,9 +110,9 @@ Use `runtime login --attachable` only for sites where DevTools during manual log
 
 For the always-on service roadmap, this workflow means a new Google profile is
 not ready for automation just because it exists or is allocatable. It must be
-manually seated first.
+manually seeded first.
 
-In service terms, a Google target identity needs a `needs_manual_seating`
+In service terms, a Google target identity needs a `needs_manual_seeding`
 readiness state until a user has launched the managed runtime profile without
 DevTools, completed sign-in, closed Chrome, and allowed agent-browser to
 relaunch the same profile for attachable automation. This state is distinct
@@ -120,8 +120,8 @@ from stale auth, a crashed browser, a locked profile, or a lease conflict. The
 correct remedy is an operator-facing manual bootstrap, not an automated CDP
 login attempt.
 
-Once seated, the profile can still become stale later. Freshness probes should
-then answer whether the existing seated profile remains authenticated for the
+Once seeded, the profile can still become stale later. Freshness probes should
+then answer whether the existing seeded profile remains authenticated for the
 requested target service or login ID.
 
 ## Canonical Workflow

@@ -127,7 +127,7 @@ modeled explicitly.
 Live testing in `google-runtime-profile-login.md` and
 `2026-04-16-google-runtime-profile-live-test-report.md` showed that Google can
 reject sign-in when Chrome is launched with an attached DevTools port. A new
-Google profile therefore needs a manual seating phase:
+Google profile therefore needs a manual seeding phase:
 
 1. agent-browser launches headed Chrome for the target runtime profile without
    DevTools.
@@ -138,18 +138,18 @@ Google profile therefore needs a manual seating phase:
 
 For the service model, this means a Google target identity can be:
 
-- `needs_manual_seating`: no source-backed evidence says the profile has been
+- `needs_manual_seeding`: no source-backed evidence says the profile has been
   manually signed in without DevTools for this target identity
-- `seated_unknown_freshness`: the profile was manually seated, but the service
+- `seeded_unknown_freshness`: the profile was manually seeded, but the service
   has not recently verified target auth state
 - `fresh`: the service recently verified authenticated state for the requested
   target service or login ID
 - `stale`: the service has previous auth evidence, but it is outside the
   configured freshness window or a probe failed
 - `blocked_by_attached_devtools`: a first-login attempt is being requested
-  through an attached CDP browser for a policy that requires detached seating
+  through an attached CDP browser for a policy that requires detached seeding
 
-The important policy distinction is that `needs_manual_seating` is not a
+The important policy distinction is that `needs_manual_seeding` is not a
 browser crash, profile lock, lease conflict, or ordinary stale-cookie problem.
 The recommended action should be an operator-facing manual bootstrap: launch
 detached `runtime login`, complete Google sign-in, close Chrome, then let the
@@ -163,11 +163,11 @@ freshness before adding more dashboard panels.
 The next useful slice is an identity freshness and profile readiness model:
 
 - record when a profile was last known to satisfy a target service or login ID
-- record when a target service or identity requires detached manual seating
+- record when a target service or identity requires detached manual seeding
   before first automation, starting with Google sign-in
 - expose whether authenticated target state is fresh, stale, unknown, or needs
   operator verification
-- expose the recommended manual seating action when the right profile is not
+- expose the recommended manual seeding action when the right profile is not
   yet usable for Google sign-in automation
 - add a no-browser-launch status surface for profile readiness
 - add a bounded live smoke that marks one target service authenticated, opens a
