@@ -562,6 +562,10 @@ target-hint profile selection path.
 Run `pnpm test:service-request-live` to validate that HTTP
 `/api/service/request` and MCP `service_request` queue intent-based browser
 actions with profile hints and retained job metadata.
+Run `pnpm test:service-profile-lease-wait-live` during manual full-CI or
+release-gating checks that touch profile selection, profile lease waiting,
+service request, trace summary, dashboard trace, or service observability
+client behavior. It intentionally stays out of ordinary CI.
 Run `pnpm test:service-status-no-launch` to validate that service status remains
 read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
 Run `pnpm test:service-contracts-no-launch` to validate that HTTP

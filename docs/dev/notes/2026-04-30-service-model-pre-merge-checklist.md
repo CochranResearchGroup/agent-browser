@@ -21,6 +21,7 @@ cargo test --manifest-path cli/Cargo.toml service_ -- --test-threads=1
 pnpm test:service-api-mcp-parity
 cd docs && pnpm build
 pnpm test:service-health-live
+pnpm test:service-profile-lease-wait-live
 git diff --check
 ```
 
@@ -48,6 +49,10 @@ to isolate the failing surface.
 - `pnpm test:service-health-live` proves the minimum always-on service behavior
   with live Chrome sessions: shutdown remedies, recovery traces, retry override,
   HTTP/MCP incident parity, and job naming warnings.
+- `pnpm test:service-profile-lease-wait-live` proves profile lease contention is
+  queued through the service control plane and recorded in
+  `service_trace.summary.profileLeaseWaits` without adding the smoke to
+  ordinary CI.
 - `git diff --check` catches whitespace and patch hygiene issues before commit
   or handoff.
 
@@ -61,6 +66,9 @@ For an actual release, also follow the release process in `AGENTS.md`:
 - update `CHANGELOG.md` with exactly one active release marker block
 - update `docs/src/app/changelog/page.mdx`
 - include contributors from the git log since the previous tag
+- run `pnpm test:service-profile-lease-wait-live` when the release includes
+  profile selection, lease waiting, service request, trace summary, dashboard
+  trace, or service observability client changes
 - validate the release workflow with the GitHub Actions `Release` workflow in
   `dry_run` mode before release-sensitive changes are merged
 

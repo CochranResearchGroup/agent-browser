@@ -278,6 +278,7 @@ pnpm test:service-contracts-no-launch
 pnpm test:service-incident-summary-http
 pnpm test:service-incident-summary-mcp
 pnpm test:service-request-live
+pnpm test:service-profile-lease-wait-live
 cd docs && pnpm build
 git diff --check
 ```
@@ -288,6 +289,12 @@ Run the broader service health smoke when Chrome-backed live validation is requi
 
 ```bash
 pnpm test:service-health-live
+```
+
+Run the profile lease wait smoke when service request, profile selection, lease contention, trace summary, dashboard trace, or service observability client behavior changes:
+
+```bash
+pnpm test:service-profile-lease-wait-live
 ```
 
 Run the Rust service tests when the release includes service implementation changes:
