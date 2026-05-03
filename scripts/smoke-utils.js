@@ -808,6 +808,7 @@ export function assertServiceTracePayload(payload, label = 'Service trace', { to
   assert(Array.isArray(payload.data?.activity), `${label} missing activity array`);
   assert(payload.data?.summary && typeof payload.data.summary === 'object', `${label} missing summary object`);
   assert(Array.isArray(payload.data.summary.contexts), `${label} summary missing contexts array`);
+  assertProfileLeaseWaitSummary(payload.data.summary.profileLeaseWaits, `${label} profile lease wait summary`);
   assert(
     payload.data.summary.contextCount === payload.data.summary.contexts.length,
     `${label} summary context count does not match returned contexts`,
@@ -821,6 +822,35 @@ export function assertServiceTracePayload(payload, label = 'Service trace', { to
     `${label} event count does not match returned events`,
   );
   return payload;
+}
+
+function assertProfileLeaseWaitSummary(summary, label) {
+  assert(summary && typeof summary === 'object', `${label} missing`);
+  assert(Number.isInteger(summary.count), `${label} missing count`);
+  assert(Number.isInteger(summary.activeCount), `${label} missing active count`);
+  assert(Number.isInteger(summary.completedCount), `${label} missing completed count`);
+  assert(Array.isArray(summary.waits), `${label} missing waits array`);
+  assert(summary.count === summary.waits.length, `${label} count does not match waits length`);
+  assert(
+    summary.activeCount + summary.completedCount === summary.count,
+    `${label} active/completed counts do not match total`,
+  );
+
+  for (const [index, wait] of summary.waits.entries()) {
+    const waitLabel = `${label} wait[${index}]`;
+    assert(wait && typeof wait === 'object', `${waitLabel} missing`);
+    assert(typeof wait.jobId === 'string' && wait.jobId.length > 0, `${waitLabel} missing jobId`);
+    assert(wait.profileId === null || typeof wait.profileId === 'string', `${waitLabel} invalid profileId`);
+    assert(typeof wait.outcome === 'string' && wait.outcome.length > 0, `${waitLabel} missing outcome`);
+    assert(wait.startedAt === null || typeof wait.startedAt === 'string', `${waitLabel} invalid startedAt`);
+    assert(wait.endedAt === null || typeof wait.endedAt === 'string', `${waitLabel} invalid endedAt`);
+    assert(wait.waitedMs === null || Number.isInteger(wait.waitedMs), `${waitLabel} invalid waitedMs`);
+    assert(wait.retryAfterMs === null || Number.isInteger(wait.retryAfterMs), `${waitLabel} invalid retryAfterMs`);
+    assert(Array.isArray(wait.conflictSessionIds), `${waitLabel} missing conflictSessionIds`);
+    assert(wait.serviceName === null || typeof wait.serviceName === 'string', `${waitLabel} invalid serviceName`);
+    assert(wait.agentName === null || typeof wait.agentName === 'string', `${waitLabel} invalid agentName`);
+    assert(wait.taskName === null || typeof wait.taskName === 'string', `${waitLabel} invalid taskName`);
+  }
 }
 
 export function assertHttpMcpServiceTraceEventParity({
@@ -840,6 +870,11 @@ export function assertHttpMcpServiceTraceEventParity({
   assert(
     mcpEvent.id === httpEvent.id,
     `HTTP/MCP trace event mismatch: http=${httpEvent.id} mcp=${mcpEvent.id}`,
+  );
+  assert(
+    JSON.stringify(mcpTrace.data.summary.profileLeaseWaits) ===
+      JSON.stringify(httpTrace.data.summary.profileLeaseWaits),
+    `${label} HTTP/MCP profile lease wait summary mismatch: http=${JSON.stringify(httpTrace.data.summary.profileLeaseWaits)} mcp=${JSON.stringify(mcpTrace.data.summary.profileLeaseWaits)}`,
   );
 
   return { httpEvent, mcpEvent };
