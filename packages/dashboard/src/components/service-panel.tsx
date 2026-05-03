@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import {
   AlertTriangle,
@@ -197,6 +197,10 @@ type ServiceStatusData = {
   control_plane?: ControlPlaneSnapshot;
   service_state?: ServiceState;
   profileAllocations?: ServiceProfileAllocation[];
+};
+
+type ServiceProfileAllocationData = {
+  profileAllocation?: ServiceProfileAllocation;
 };
 
 type ServiceEventsData = {
@@ -1473,9 +1477,13 @@ function ProfileAllocationRow({
 
 function ProfileAllocationDetailDialog({
   allocation,
+  loading,
+  error,
   onOpenChange,
 }: {
   allocation: ServiceProfileAllocation | null;
+  loading: boolean;
+  error: string;
   onOpenChange: (open: boolean) => void;
 }) {
   const raw = formatDetails(allocation);
@@ -1489,10 +1497,24 @@ function ProfileAllocationDetailDialog({
                 {allocation.profileName || allocation.profileId || "Profile allocation"}
               </DialogTitle>
               <DialogDescription>
-                {allocation.leaseState ?? "unknown"} / {allocation.recommendedAction ?? "inspect"}
+                {loading
+                  ? "Refreshing allocation from service API"
+                  : `${allocation.leaseState ?? "unknown"} / ${allocation.recommendedAction ?? "inspect"}`}
               </DialogDescription>
             </DialogHeader>
             <div className="service-event-dialog-body">
+              {loading && (
+                <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-foreground/[0.03] px-3 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Loading current allocation row
+                </div>
+              )}
+              {error && (
+                <div className="flex items-start gap-2 rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
               <div className="service-event-detail-grid">
                 <EventDetailItem label="Profile ID" value={allocation.profileId} />
                 <EventDetailItem label="Profile name" value={allocation.profileName} />
@@ -2069,6 +2091,9 @@ export function ServicePanel() {
   const [selectedTab, setSelectedTab] = useState<ServiceTab | null>(null);
   const [selectedJob, setSelectedJob] = useState<ServiceJob | null>(null);
   const [selectedProfileAllocation, setSelectedProfileAllocation] = useState<ServiceProfileAllocation | null>(null);
+  const [selectedProfileAllocationLoading, setSelectedProfileAllocationLoading] = useState(false);
+  const [selectedProfileAllocationError, setSelectedProfileAllocationError] = useState("");
+  const profileAllocationLookupId = useRef(0);
 
   const canFetch = activePort > 0 && !!activeSession;
   const activeFilterCount =
@@ -2242,6 +2267,36 @@ export function ServicePanel() {
     } catch (err) {
       setSelectedJob(job);
       setError(err instanceof Error ? err.message : "Service job lookup unavailable");
+    }
+  }, [activePort, canFetch]);
+
+  const inspectProfileAllocation = useCallback(async (allocation: ServiceProfileAllocation) => {
+    const lookupId = profileAllocationLookupId.current + 1;
+    profileAllocationLookupId.current = lookupId;
+    setSelectedProfileAllocation(allocation);
+    setSelectedProfileAllocationError("");
+    if (!canFetch || !allocation.profileId) return;
+    setSelectedProfileAllocationLoading(true);
+    try {
+      const resp = await fetch(
+        `${serviceBase(activePort)}/profiles/${encodeURIComponent(allocation.profileId)}/allocation`,
+      );
+      const json = (await resp.json()) as ApiResponse<ServiceProfileAllocationData>;
+      if (!json.success) throw new Error(json.error || "Service profile allocation lookup failed");
+      if (profileAllocationLookupId.current === lookupId) {
+        setSelectedProfileAllocation(json.data?.profileAllocation ?? allocation);
+      }
+    } catch (err) {
+      if (profileAllocationLookupId.current === lookupId) {
+        setSelectedProfileAllocation(allocation);
+        setSelectedProfileAllocationError(
+          err instanceof Error ? err.message : "Service profile allocation lookup unavailable",
+        );
+      }
+    } finally {
+      if (profileAllocationLookupId.current === lookupId) {
+        setSelectedProfileAllocationLoading(false);
+      }
     }
   }, [activePort, canFetch]);
 
@@ -2439,8 +2494,15 @@ export function ServicePanel() {
       />
       <ProfileAllocationDetailDialog
         allocation={selectedProfileAllocation}
+        loading={selectedProfileAllocationLoading}
+        error={selectedProfileAllocationError}
         onOpenChange={(open) => {
-          if (!open) setSelectedProfileAllocation(null);
+          if (!open) {
+            profileAllocationLookupId.current += 1;
+            setSelectedProfileAllocation(null);
+            setSelectedProfileAllocationError("");
+            setSelectedProfileAllocationLoading(false);
+          }
         }}
       />
       <div className="service-panel-hero">
@@ -2608,7 +2670,7 @@ export function ServicePanel() {
                   <ProfileAllocationRow
                     key={allocation.profileId || `profile-allocation-${index}`}
                     allocation={allocation}
-                    onSelect={setSelectedProfileAllocation}
+                    onSelect={inspectProfileAllocation}
                   />
                 ))
               )}
