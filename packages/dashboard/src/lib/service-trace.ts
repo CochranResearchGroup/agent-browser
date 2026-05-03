@@ -54,6 +54,20 @@ export type ServiceTraceTimelineItem = {
   jobId?: string | null;
 };
 
+export type ServiceTraceProfileLeaseWait = {
+  jobId: string;
+  profileId?: string | null;
+  outcome: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  waitedMs?: number | null;
+  retryAfterMs?: number | null;
+  conflictSessionIds?: string[];
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+};
+
 export type ServiceTraceData = {
   filters?: ServiceTraceFiltersData;
   events?: ServiceTraceEvent[];
@@ -64,6 +78,12 @@ export type ServiceTraceData = {
     contextCount?: number;
     hasTraceContext?: boolean;
     namingWarningCount?: number;
+    profileLeaseWaits?: {
+      count?: number;
+      activeCount?: number;
+      completedCount?: number;
+      waits?: ServiceTraceProfileLeaseWait[];
+    };
     contexts?: {
       serviceName?: string | null;
       agentName?: string | null;
@@ -205,6 +225,17 @@ export function traceSummaryCards(trace: ServiceTraceData | null, limit = 4): Se
         ],
       };
     });
+}
+
+export function traceProfileLeaseWaits(trace: ServiceTraceData | null): ServiceTraceProfileLeaseWait[] {
+  return [...(trace?.summary?.profileLeaseWaits?.waits ?? [])].sort((left, right) => {
+    const leftActive = left.endedAt ? 0 : 1;
+    const rightActive = right.endedAt ? 0 : 1;
+    if (leftActive !== rightActive) return rightActive - leftActive;
+    const leftTimestamp = left.endedAt ?? left.startedAt ?? "";
+    const rightTimestamp = right.endedAt ?? right.startedAt ?? "";
+    return rightTimestamp.localeCompare(leftTimestamp);
+  });
 }
 
 function traceNamingWarningLabel(warnings?: string[]): string | null {

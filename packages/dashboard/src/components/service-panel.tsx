@@ -30,6 +30,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   normalizeServiceTraceData,
+  traceProfileLeaseWaits,
   traceFilterSummary,
   traceSummaryCards,
   traceTimelineItems,
@@ -332,6 +333,16 @@ function formatAbsoluteTime(value?: string | null): string {
     dateStyle: "medium",
     timeStyle: "medium",
   });
+}
+
+function formatDurationMs(value?: number | null): string {
+  if (value === undefined || value === null) return "unknown";
+  if (value < 1000) return `${value} ms`;
+  const seconds = value / 1000;
+  if (seconds < 60) return `${seconds.toFixed(seconds >= 10 ? 0 : 1)} s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
 }
 
 function formatDetails(value: unknown): string {
@@ -715,6 +726,8 @@ function TraceExplorer({
   const counts = trace?.counts;
   const matched = trace?.matched;
   const summaryCards = traceSummaryCards(trace);
+  const profileLeaseWaits = traceProfileLeaseWaits(trace);
+  const profileLeaseWaitSummary = trace?.summary?.profileLeaseWaits;
   const hasFilters =
     !!filters.serviceName.trim() ||
     !!filters.agentName.trim() ||
@@ -904,6 +917,72 @@ function TraceExplorer({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+      {trace && (
+        <div className="service-trace-waits" aria-label="Profile lease wait summary">
+          <div className="service-trace-contexts-header">
+            <span>Profile lease waits</span>
+            <Badge variant="outline" className="rounded-full px-2 py-0 text-[9px] uppercase">
+              {profileLeaseWaitSummary?.count ?? profileLeaseWaits.length} waits
+            </Badge>
+            {(profileLeaseWaitSummary?.activeCount ?? 0) > 0 && (
+              <Badge variant="destructive" className="rounded-full px-2 py-0 text-[9px] uppercase">
+                {profileLeaseWaitSummary?.activeCount} active
+              </Badge>
+            )}
+          </div>
+          {profileLeaseWaits.length === 0 ? (
+            <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-center text-xs text-muted-foreground">
+              No profile lease contention was returned for this trace.
+            </p>
+          ) : (
+            <div className="service-trace-wait-grid">
+              {profileLeaseWaits.map((wait) => {
+                const timestamp = wait.endedAt ?? wait.startedAt;
+                const active = !wait.endedAt;
+                const conflictCount = wait.conflictSessionIds?.length ?? 0;
+                return (
+                  <div
+                    key={`${wait.jobId}:${wait.startedAt ?? ""}:${wait.endedAt ?? ""}`}
+                    className={cn("service-trace-wait-card", active && "service-trace-wait-card-active")}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-xs font-black text-foreground">
+                        {wait.profileId ?? "unknown profile"}
+                      </span>
+                      <Badge
+                        variant={active ? "destructive" : "outline"}
+                        className="ml-auto shrink-0 rounded-full px-1.5 py-0 text-[9px]"
+                      >
+                        {active ? "waiting" : wait.outcome}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 truncate text-[11px] font-bold text-muted-foreground">
+                      {wait.serviceName ?? "unlabeled service"} / {wait.taskName ?? "untitled task"}
+                    </p>
+                    <div className="service-trace-wait-metrics">
+                      <span>{formatDurationMs(wait.waitedMs)} waited</span>
+                      <span>{conflictCount} conflicts</span>
+                      {wait.retryAfterMs !== undefined && wait.retryAfterMs !== null && (
+                        <span>{formatDurationMs(wait.retryAfterMs)} retry</span>
+                      )}
+                    </div>
+                    <div className="service-trace-context-meta">
+                      <span>job {wait.jobId}</span>
+                      {wait.agentName && <span>agent {wait.agentName}</span>}
+                      {timestamp && <span>{formatRelativeTime(timestamp)}</span>}
+                    </div>
+                    {conflictCount > 0 && (
+                      <p className="mt-2 truncate text-[10px] text-muted-foreground">
+                        Conflicts: {wait.conflictSessionIds?.join(", ")}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
