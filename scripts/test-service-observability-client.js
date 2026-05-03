@@ -83,8 +83,20 @@ async function main() {
         profileName: 'Work',
         allocation: 'per_service',
         keyring: 'basic_password_store',
-        targetServiceIds: ['acs'],
-        authenticatedServiceIds: ['acs'],
+        targetServiceIds: ['google'],
+        authenticatedServiceIds: [],
+        targetReadiness: [
+          {
+            targetServiceId: 'google',
+            loginId: null,
+            state: 'needs_manual_seeding',
+            manualSeedingRequired: true,
+            evidence: 'manual_seed_required_without_authenticated_hint',
+            recommendedAction: 'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+            lastVerifiedAt: null,
+            freshnessExpiresAt: null,
+          },
+        ],
         sharedServiceIds: ['JournalDownloader'],
         holderSessionIds: ['session-1'],
         holderCount: 1,
@@ -110,6 +122,7 @@ async function main() {
   assert.equal(allocation.calls[0].url, 'http://127.0.0.1:4849/api/service/profiles/work/allocation');
   assert.equal(allocation.calls[0].init.method, 'GET');
   assert.equal(allocationResult.profileAllocation.profileId, 'work');
+  assert.equal(allocationResult.profileAllocation.targetReadiness[0].state, 'needs_manual_seeding');
 
   const trace = createFetchRecorder({
     success: true,

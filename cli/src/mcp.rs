@@ -191,6 +191,8 @@ fn read_service_mcp_resource(uri: &str) -> Result<Value, String> {
 }
 
 fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Result<Value, String> {
+    let mut state = state.clone();
+    state.refresh_profile_readiness();
     let contents = match uri {
         SERVICE_CONTRACTS_RESOURCE => service_contracts_metadata(),
         INCIDENTS_RESOURCE => json!({
@@ -198,7 +200,7 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             "count": state.incidents.len(),
         }),
         PROFILES_RESOURCE => {
-            let profile_allocations = service_profile_allocations(state);
+            let profile_allocations = service_profile_allocations(&state);
             let profiles = state.profiles.values().cloned().collect::<Vec<_>>();
             json!({
                 "profiles": profiles,
@@ -268,7 +270,7 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
         }),
         _ => {
             if let Some(incident_id) = incident_activity_resource_id(uri) {
-                service_incident_activity_response(state, incident_id)?
+                service_incident_activity_response(&state, incident_id)?
             } else {
                 return Err(format!("Unknown MCP resource URI: {}", uri));
             }

@@ -125,6 +125,7 @@ type ServiceProfileAllocation = {
   keyring?: string;
   targetServiceIds?: string[];
   authenticatedServiceIds?: string[];
+  targetReadiness?: ServiceProfileTargetReadiness[];
   sharedServiceIds?: string[];
   holderSessionIds?: string[];
   holderCount?: number;
@@ -139,6 +140,17 @@ type ServiceProfileAllocation = {
   taskNames?: string[];
   browserIds?: string[];
   tabIds?: string[];
+};
+
+type ServiceProfileTargetReadiness = {
+  targetServiceId?: string;
+  loginId?: string | null;
+  state?: string;
+  manualSeedingRequired?: boolean;
+  evidence?: string;
+  recommendedAction?: string;
+  lastVerifiedAt?: string | null;
+  freshnessExpiresAt?: string | null;
 };
 
 type ServiceTab = {
@@ -1540,6 +1552,7 @@ function ProfileAllocationDetailDialog({
               <ProfileAllocationTokenSection title="Tasks" values={allocation.taskNames} />
               <ProfileAllocationTokenSection title="Target services" values={allocation.targetServiceIds} />
               <ProfileAllocationTokenSection title="Authenticated services" values={allocation.authenticatedServiceIds} />
+              <ProfileReadinessSection rows={allocation.targetReadiness} />
               <ProfileAllocationTokenSection title="Shared services" values={allocation.sharedServiceIds} />
               <ProfileAllocationTokenSection title="Browsers" values={allocation.browserIds} />
               <ProfileAllocationTokenSection title="Tabs" values={allocation.tabIds} />
@@ -1556,6 +1569,34 @@ function ProfileAllocationDetailDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ProfileReadinessSection({ rows }: { rows?: ServiceProfileTargetReadiness[] }) {
+  const items = rows?.filter((row) => row.targetServiceId?.trim()) ?? [];
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+        Target readiness
+      </p>
+      <div className="flex flex-col gap-2">
+        {items.map((row, index) => (
+          <div
+            key={`${row.targetServiceId}-${row.loginId ?? "default"}-${index}`}
+            className="rounded-2xl border border-border/70 bg-foreground/[0.03] px-3 py-2 text-xs"
+          >
+            <div className="font-black text-foreground">
+              {row.targetServiceId}
+              {row.loginId ? ` / ${row.loginId}` : ""}
+            </div>
+            <div className="mt-1 text-muted-foreground">
+              {row.state ?? "unknown"} / {row.recommendedAction ?? "inspect"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

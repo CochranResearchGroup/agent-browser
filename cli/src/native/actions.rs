@@ -6569,6 +6569,7 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
             ..super::service_model::ControlPlaneSnapshot::default()
         });
     }
+    service_state.refresh_profile_readiness();
 
     let profile_allocations = service_profile_allocations(&service_state);
 
@@ -6580,13 +6581,14 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
 
 /// Return the service-owned profile collection without the full status payload.
 async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
-    let service_state = cmd
+    let mut service_state = cmd
         .get("serviceState")
         .cloned()
         .map(serde_json::from_value::<ServiceState>)
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
+    service_state.refresh_profile_readiness();
     let profile_allocations = service_profile_allocations(&service_state);
     let mut profiles = service_state.profiles.into_values().collect::<Vec<_>>();
     profiles.sort_by(|left, right| left.id.cmp(&right.id));
@@ -11472,9 +11474,16 @@ mod tests {
                         "name": "Work",
                         "allocation": "per_service",
                         "keyring": "basic_password_store",
-                        "targetServiceIds": ["acs"],
-                        "authenticatedServiceIds": ["acs"],
+                        "targetServiceIds": ["google"],
+                        "authenticatedServiceIds": [],
                         "sharedServiceIds": ["JournalDownloader"]
+                    }
+                },
+                "sitePolicies": {
+                    "google": {
+                        "id": "google",
+                        "originPattern": "https://accounts.google.com",
+                        "manualLoginPreferred": true
                     }
                 },
                 "sessions": {
@@ -11525,7 +11534,19 @@ mod tests {
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["profiles"][0]["id"], "work");
         assert_eq!(result["data"]["profiles"][0]["name"], "Work");
+        assert_eq!(
+            result["data"]["profiles"][0]["targetReadiness"][0]["state"],
+            "needs_manual_seeding"
+        );
+        assert_eq!(
+            result["data"]["profiles"][0]["targetReadiness"][0]["recommendedAction"],
+            "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+        );
         assert_eq!(result["data"]["profileAllocations"][0]["profileId"], "work");
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["targetReadiness"][0]["state"],
+            "needs_manual_seeding"
+        );
         assert_eq!(
             result["data"]["profileAllocations"][0]["leaseState"],
             "conflicted"

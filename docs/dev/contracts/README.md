@@ -142,9 +142,13 @@ collection APIs and the matching MCP resources:
 - `service-challenge-record.v1.schema.json`
 
 These schemas cover `profiles`, `browsers`, `sessions`, `tabs`,
-`sitePolicies`, `providers`, and `challenges` records. They are guarded by Rust
-model tests and MCP resource tests so software clients can consume the same
-camelCase record fields from HTTP and MCP without inferring Rust internals.
+`sitePolicies`, `providers`, and `challenges` records. Profile records include
+derived `targetReadiness` rows for no-launch target-service readiness. Google
+targets without authenticated evidence report `needs_manual_seeding` and
+recommend detached `runtime login` before attachable automation. They are
+guarded by Rust model tests and MCP resource tests so software clients can
+consume the same camelCase record fields from HTTP and MCP without inferring
+Rust internals.
 
 The matching collection response schemas cover the compact collection envelopes
 returned by CLI, HTTP, and MCP resources:
@@ -159,7 +163,9 @@ returned by CLI, HTTP, and MCP resources:
 
 These schemas guard the collection array field and `count` field. The profiles
 response also includes the same derived `profileAllocations` view returned by
-service status and the MCP profiles resource.
+service status and the MCP profiles resource. Profile allocation rows include
+the same `targetReadiness` rows as the profile record so detail clients do not
+have to join back to the full profile collection.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a
@@ -193,7 +199,8 @@ Profile records separate caller ownership from target login scope.
 `sharedServiceIds` names caller services allowed to use the profile,
 `targetServiceIds` names target sites or identity providers whose credentials
 or login state should live in the profile, and `authenticatedServiceIds` names
-targets currently believed to have usable authenticated state.
+targets currently believed to have usable authenticated state. `targetReadiness`
+is the no-launch readiness view derived from those hints and site policy.
 Session records include `profileSelectionReason` so clients can distinguish
 `authenticated_target`, `target_match`, `service_allow_list`, and
 `explicit_profile` profile choices without reconstructing selector behavior

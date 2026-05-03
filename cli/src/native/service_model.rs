@@ -75,6 +75,14 @@ pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 4] = [
 ];
 pub const SERVICE_PROFILE_LEASE_DISPOSITION_VALUES: [&str; 3] =
     ["new_browser", "reused_browser", "active_lease_conflict"];
+pub const SERVICE_PROFILE_READINESS_VALUES: [&str; 6] = [
+    "unknown",
+    "needs_manual_seeding",
+    "seeded_unknown_freshness",
+    "fresh",
+    "stale",
+    "blocked_by_attached_devtools",
+];
 pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
     "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
 ];
@@ -333,6 +341,7 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
             "sharedServiceIds",
             "credentialProviderIds",
             "manualLoginPreferred",
+            "targetReadiness",
             "persistent",
             "tags",
         ],
@@ -345,6 +354,7 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
             "shared_service_ids",
             "credential_provider_ids",
             "manual_login_preferred",
+            "target_readiness",
         ],
     );
     if let Some(host) = value["defaultBrowserHost"].as_str() {
@@ -357,7 +367,38 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
     assert!(value["authenticatedServiceIds"].is_array());
     assert!(value["sharedServiceIds"].is_array());
     assert!(value["credentialProviderIds"].is_array());
+    assert!(value["targetReadiness"].is_array());
+    for readiness in value["targetReadiness"].as_array().unwrap() {
+        assert_service_profile_readiness_contract(readiness);
+    }
     assert!(value["tags"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_profile_readiness_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "profile target readiness",
+        value,
+        &[
+            "targetServiceId",
+            "loginId",
+            "state",
+            "manualSeedingRequired",
+            "evidence",
+            "recommendedAction",
+            "lastVerifiedAt",
+            "freshnessExpiresAt",
+        ],
+        &[
+            "target_service_id",
+            "login_id",
+            "manual_seeding_required",
+            "recommended_action",
+            "last_verified_at",
+            "freshness_expires_at",
+        ],
+    );
+    assert!(SERVICE_PROFILE_READINESS_VALUES.contains(&value["state"].as_str().unwrap()));
 }
 
 #[cfg(test)]
@@ -1230,6 +1271,7 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
             "keyring",
             "targetServiceIds",
             "authenticatedServiceIds",
+            "targetReadiness",
             "sharedServiceIds",
             "holderSessionIds",
             "holderCount",
@@ -1250,6 +1292,7 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
             "profile_name",
             "target_service_ids",
             "authenticated_service_ids",
+            "target_readiness",
             "shared_service_ids",
             "holder_session_ids",
             "holder_count",
@@ -1270,6 +1313,10 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
     assert!(SERVICE_PROFILE_KEYRING_VALUES.contains(&value["keyring"].as_str().unwrap()));
     assert!(value["targetServiceIds"].is_array());
     assert!(value["authenticatedServiceIds"].is_array());
+    assert!(value["targetReadiness"].is_array());
+    for readiness in value["targetReadiness"].as_array().unwrap() {
+        assert_service_profile_readiness_contract(readiness);
+    }
     assert!(value["sharedServiceIds"].is_array());
     assert!(value["holderSessionIds"].is_array());
     assert!(value["holderCount"].is_u64());
@@ -1346,8 +1393,17 @@ impl ServiceState {
         self.providers.extend(configured.providers);
     }
 
+    /// Refresh profile target-readiness rows from retained service policy.
+    pub fn refresh_profile_readiness(&mut self) {
+        let site_policies = self.site_policies.clone();
+        for profile in self.profiles.values_mut() {
+            profile.target_readiness = derive_profile_target_readiness(profile, &site_policies);
+        }
+    }
+
     /// Refresh bounded derived collections before persistence or API exposure.
     pub fn refresh_derived_views(&mut self) {
+        self.refresh_profile_readiness();
         let preserved_metadata = self
             .incidents
             .iter()
@@ -1403,6 +1459,7 @@ pub struct ServiceProfileAllocation {
     pub keyring: ProfileKeyringPolicy,
     pub target_service_ids: Vec<String>,
     pub authenticated_service_ids: Vec<String>,
+    pub target_readiness: Vec<ProfileTargetReadiness>,
     pub shared_service_ids: Vec<String>,
     pub holder_session_ids: Vec<String>,
     pub holder_count: usize,
@@ -1558,6 +1615,9 @@ fn service_profile_allocation(
         authenticated_service_ids: profile
             .map(|profile| sorted_strings(profile.authenticated_service_ids.iter()))
             .unwrap_or_default(),
+        target_readiness: profile
+            .map(|profile| profile.target_readiness.clone())
+            .unwrap_or_default(),
         shared_service_ids: profile
             .map(|profile| sorted_strings(profile.shared_service_ids.iter()))
             .unwrap_or_default(),
@@ -1575,6 +1635,99 @@ fn service_profile_allocation(
         browser_ids: browser_ids.into_iter().collect(),
         tab_ids: tab_ids.into_iter().collect(),
     }
+}
+
+fn derive_profile_target_readiness(
+    profile: &BrowserProfile,
+    site_policies: &BTreeMap<String, SitePolicy>,
+) -> Vec<ProfileTargetReadiness> {
+    let mut target_service_ids = profile
+        .target_service_ids
+        .iter()
+        .chain(profile.authenticated_service_ids.iter())
+        .filter(|target| !target.is_empty())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    for site_policy_id in &profile.site_policy_ids {
+        if let Some(policy) = site_policies.get(site_policy_id) {
+            if !policy.id.is_empty() {
+                target_service_ids.insert(policy.id.clone());
+            }
+        }
+    }
+
+    target_service_ids
+        .into_iter()
+        .map(|target_service_id| {
+            derive_target_readiness_for_profile(profile, site_policies, &target_service_id)
+        })
+        .collect()
+}
+
+fn derive_target_readiness_for_profile(
+    profile: &BrowserProfile,
+    site_policies: &BTreeMap<String, SitePolicy>,
+    target_service_id: &str,
+) -> ProfileTargetReadiness {
+    let authenticated = profile
+        .authenticated_service_ids
+        .iter()
+        .any(|id| id == target_service_id);
+    let manual_seeding_required =
+        target_requires_detached_manual_seeding(profile, site_policies, target_service_id);
+    let (state, evidence, recommended_action) = if authenticated {
+        (
+            ProfileReadinessState::SeededUnknownFreshness,
+            "profile_authenticated_service_hint".to_string(),
+            "probe_target_auth_or_reuse_if_acceptable".to_string(),
+        )
+    } else if manual_seeding_required {
+        (
+            ProfileReadinessState::NeedsManualSeeding,
+            "manual_seed_required_without_authenticated_hint".to_string(),
+            "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+                .to_string(),
+        )
+    } else {
+        (
+            ProfileReadinessState::Unknown,
+            "no_authenticated_service_hint".to_string(),
+            "verify_or_seed_profile_before_authenticated_work".to_string(),
+        )
+    };
+
+    ProfileTargetReadiness {
+        target_service_id: target_service_id.to_string(),
+        login_id: None,
+        state,
+        manual_seeding_required,
+        evidence,
+        recommended_action,
+        last_verified_at: None,
+        freshness_expires_at: None,
+    }
+}
+
+fn target_requires_detached_manual_seeding(
+    profile: &BrowserProfile,
+    site_policies: &BTreeMap<String, SitePolicy>,
+    target_service_id: &str,
+) -> bool {
+    profile.manual_login_preferred
+        || target_is_google_signin(target_service_id)
+        || site_policies
+            .get(target_service_id)
+            .map(|policy| policy.manual_login_preferred)
+            .unwrap_or(false)
+}
+
+fn target_is_google_signin(target_service_id: &str) -> bool {
+    let normalized = target_service_id.to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "google" | "gmail" | "google-login" | "google_signin" | "google-signin"
+    )
 }
 
 fn is_inactive_lease(lease: LeaseState) -> bool {
@@ -2151,8 +2304,46 @@ pub struct BrowserProfile {
     pub shared_service_ids: Vec<String>,
     pub credential_provider_ids: Vec<String>,
     pub manual_login_preferred: bool,
+    /// No-launch readiness rows for target services or login identities.
+    ///
+    /// These rows are derived from retained profile and site-policy state. They
+    /// do not prove live authentication until a future probe records freshness
+    /// evidence.
+    pub target_readiness: Vec<ProfileTargetReadiness>,
     pub persistent: bool,
     pub tags: Vec<String>,
+}
+
+/// No-launch service view of whether a profile can satisfy a target identity.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ProfileTargetReadiness {
+    pub target_service_id: String,
+    pub login_id: Option<String>,
+    pub state: ProfileReadinessState,
+    pub manual_seeding_required: bool,
+    pub evidence: String,
+    pub recommended_action: String,
+    pub last_verified_at: Option<String>,
+    pub freshness_expires_at: Option<String>,
+}
+
+/// Profile readiness state for one target service or login identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileReadinessState {
+    Unknown,
+    NeedsManualSeeding,
+    SeededUnknownFreshness,
+    Fresh,
+    Stale,
+    BlockedByAttachedDevtools,
+}
+
+impl Default for ProfileReadinessState {
+    fn default() -> Self {
+        Self::Unknown
+    }
 }
 
 /// A supervised or attached browser process known to the service.
@@ -3157,7 +3348,18 @@ mod tests {
 
         assert_schema_required_fields(
             &profile_schema,
-            &["id", "name", "defaultBrowserHost", "allocation", "keyring"],
+            &[
+                "id",
+                "name",
+                "defaultBrowserHost",
+                "allocation",
+                "keyring",
+                "targetReadiness",
+            ],
+        );
+        assert_eq!(
+            profile_schema["$defs"]["profileTargetReadiness"]["properties"]["state"]["enum"],
+            json!(SERVICE_PROFILE_READINESS_VALUES.to_vec())
         );
         assert_schema_required_fields(&browser_schema, &["id", "profileId", "host", "health"]);
         assert_schema_required_fields(
@@ -3494,6 +3696,7 @@ mod tests {
             "sharedServiceIds": [],
             "credentialProviderIds": [],
             "manualLoginPreferred": false,
+            "targetReadiness": [],
             "persistent": true,
             "tags": [],
         });
@@ -4498,6 +4701,60 @@ mod tests {
             persisted.providers["manual"].display_name,
             "Dashboard approval"
         );
+    }
+
+    #[test]
+    fn refresh_profile_readiness_marks_google_profiles_for_manual_seeding() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([
+                (
+                    "google-new".to_string(),
+                    BrowserProfile {
+                        id: "google-new".to_string(),
+                        name: "Google New".to_string(),
+                        target_service_ids: vec!["google".to_string()],
+                        ..BrowserProfile::default()
+                    },
+                ),
+                (
+                    "google-seeded".to_string(),
+                    BrowserProfile {
+                        id: "google-seeded".to_string(),
+                        name: "Google Seeded".to_string(),
+                        target_service_ids: vec!["google".to_string()],
+                        authenticated_service_ids: vec!["google".to_string()],
+                        ..BrowserProfile::default()
+                    },
+                ),
+            ]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    manual_login_preferred: true,
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_profile_readiness();
+
+        let new_google = &state.profiles["google-new"].target_readiness[0];
+        assert_eq!(new_google.target_service_id, "google");
+        assert_eq!(new_google.state, ProfileReadinessState::NeedsManualSeeding);
+        assert!(new_google.manual_seeding_required);
+        assert_eq!(
+            new_google.recommended_action,
+            "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+        );
+
+        let seeded_google = &state.profiles["google-seeded"].target_readiness[0];
+        assert_eq!(
+            seeded_google.state,
+            ProfileReadinessState::SeededUnknownFreshness
+        );
+        assert!(seeded_google.manual_seeding_required);
     }
 
     #[test]

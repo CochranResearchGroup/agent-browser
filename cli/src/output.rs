@@ -800,6 +800,25 @@ fn value_string_list(value: &serde_json::Value, key: &str) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
+fn format_profile_readiness(value: &serde_json::Value) -> String {
+    value
+        .get("targetReadiness")
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| {
+                    let target = row.get("targetServiceId")?.as_str()?;
+                    let state = value_str(row, "state", "unknown");
+                    let action = value_str(row, "recommendedAction", "unknown");
+                    Some(format!("{target}:{state}:{action}"))
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string())
+}
+
 fn sorted_object_values(value: &serde_json::Value, key: &str) -> Vec<serde_json::Value> {
     let mut values = value
         .get(key)
@@ -822,9 +841,10 @@ fn format_service_profile_allocation_line(allocation: &serde_json::Value) -> Str
     let tasks = value_string_list(allocation, "taskNames");
     let browsers = value_string_list(allocation, "browserIds");
     let tabs = value_string_list(allocation, "tabIds");
+    let readiness = format_profile_readiness(allocation);
 
     format!(
-        "{profile} state={state} action={action} holders={holders} waiting={waiting} conflicts={conflicts} services={services} agents={agents} tasks={tasks} browsers={browsers} tabs={tabs}"
+        "{profile} state={state} action={action} readiness={readiness} holders={holders} waiting={waiting} conflicts={conflicts} services={services} agents={agents} tasks={tasks} browsers={browsers} tabs={tabs}"
     )
 }
 
@@ -875,9 +895,10 @@ fn format_service_profile_line(profile: &serde_json::Value) -> String {
         .get("userDataDir")
         .and_then(|value| value.as_str())
         .unwrap_or("none");
+    let readiness = format_profile_readiness(profile);
 
     format!(
-        "{id} name={name} allocation={allocation} keyring={keyring} persistent={persistent} manual_login={manual_login} services={services} targets={targets} authenticated={authenticated} user_data={user_data}"
+        "{id} name={name} allocation={allocation} keyring={keyring} persistent={persistent} manual_login={manual_login} services={services} targets={targets} authenticated={authenticated} readiness={readiness} user_data={user_data}"
     )
 }
 
@@ -3820,6 +3841,7 @@ Notes:
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, and recommended actions.
+  - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding.
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
@@ -3918,6 +3940,7 @@ Notes:
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP.
   - service_profile_upsert, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
   - Service profile records distinguish caller service sharing from target-service login scope: sharedServiceIds lists allowed caller services, targetServiceIds lists intended login targets, and authenticatedServiceIds lists targets currently believed authenticated.
+  - Service profile records and profile allocation rows include targetReadiness, a no-launch readiness view for target services. Google targets without authenticated evidence report needs_manual_seeding and recommend detached runtime login before attachable automation.
   - Launch commands without explicit profile or runtimeProfile can include serviceName plus targetServiceId, targetService, targetServiceIds, targetServices, siteId, siteIds, loginId, or loginIds so persisted service profiles are selected by authenticated target match, then target match, then caller service match.
   - Session records expose profileSelectionReason as authenticated_target, target_match, service_allow_list, explicit_profile, or null, and expose profileLeaseDisposition as new_browser, reused_browser, active_lease_conflict, or null. browser_launch_recorded events mirror those values in details when known, and service-scoped launches reject or keep the job queued on active exclusive profile conflicts according to profileLeasePolicy.
   - Profile mutations reject caller_supplied profiles without userDataDir and per_service profiles with more than one sharedServiceIds entry.

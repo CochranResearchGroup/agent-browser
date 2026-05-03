@@ -35,6 +35,7 @@
         "keyring",
         "targetServiceIds",
         "authenticatedServiceIds",
+        "targetReadiness",
         "sharedServiceIds",
         "holderSessionIds",
         "holderCount",
@@ -73,6 +74,13 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "targetReadiness": {
+          "description": "Derived no-launch readiness rows for target services or login identities this profile may satisfy.",
+          "type": "array",
+          "items": {
+            "$ref": "service-profile-record.v1.schema.json#/$defs/profileTargetReadiness"
           }
         },
         "sharedServiceIds": {

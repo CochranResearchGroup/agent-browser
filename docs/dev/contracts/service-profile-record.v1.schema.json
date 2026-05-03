@@ -17,6 +17,7 @@
     "sharedServiceIds",
     "credentialProviderIds",
     "manualLoginPreferred",
+    "targetReadiness",
     "persistent",
     "tags"
   ],
@@ -100,6 +101,13 @@
     "manualLoginPreferred": {
       "type": "boolean"
     },
+    "targetReadiness": {
+      "description": "Derived no-launch readiness rows for target services or login identities this profile may satisfy.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profileTargetReadiness"
+      }
+    },
     "persistent": {
       "type": "boolean"
     },
@@ -108,6 +116,56 @@
       "items": {
         "type": "string"
       }
+    }
+  },
+  "$defs": {
+    "profileTargetReadiness": {
+      "type": "object",
+      "required": [
+        "targetServiceId",
+        "loginId",
+        "state",
+        "manualSeedingRequired",
+        "evidence",
+        "recommendedAction",
+        "lastVerifiedAt",
+        "freshnessExpiresAt"
+      ],
+      "properties": {
+        "targetServiceId": {
+          "type": "string"
+        },
+        "loginId": {
+          "type": ["string", "null"]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "needs_manual_seeding",
+            "seeded_unknown_freshness",
+            "fresh",
+            "stale",
+            "blocked_by_attached_devtools"
+          ]
+        },
+        "manualSeedingRequired": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "recommendedAction": {
+          "type": "string"
+        },
+        "lastVerifiedAt": {
+          "type": ["string", "null"]
+        },
+        "freshnessExpiresAt": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true

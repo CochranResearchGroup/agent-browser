@@ -1614,7 +1614,10 @@ fn load_service_state_snapshot() -> Value {
 }
 
 fn load_service_state() -> ServiceState {
-    serde_json::from_value(load_service_state_snapshot()).unwrap_or_default()
+    let mut service_state: ServiceState =
+        serde_json::from_value(load_service_state_snapshot()).unwrap_or_default();
+    service_state.refresh_profile_readiness();
+    service_state
 }
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {

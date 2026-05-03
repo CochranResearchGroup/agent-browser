@@ -95,6 +95,26 @@ export interface ServiceProfileRecord {
   id: string;
   name: string;
   userDataDir: string | null;
+  targetReadiness: ServiceProfileTargetReadiness[];
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileTargetReadiness {
+  targetServiceId: string;
+  loginId: string | null;
+  state:
+    | 'unknown'
+    | 'needs_manual_seeding'
+    | 'seeded_unknown_freshness'
+    | 'fresh'
+    | 'stale'
+    | 'blocked_by_attached_devtools'
+    | string;
+  manualSeedingRequired: boolean;
+  evidence: string;
+  recommendedAction: string;
+  lastVerifiedAt: string | null;
+  freshnessExpiresAt: string | null;
   [key: string]: unknown;
 }
 
@@ -105,6 +125,7 @@ export interface ServiceProfileAllocation {
   keyring: string;
   targetServiceIds: string[];
   authenticatedServiceIds: string[];
+  targetReadiness: ServiceProfileTargetReadiness[];
   sharedServiceIds: string[];
   holderSessionIds: string[];
   holderCount: number;
