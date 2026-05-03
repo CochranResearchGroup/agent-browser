@@ -114,6 +114,29 @@ type ServiceSession = {
   expiresAt?: string | null;
 };
 
+type ServiceProfileAllocation = {
+  profileId: string;
+  profileName?: string;
+  allocation?: string;
+  keyring?: string;
+  targetServiceIds?: string[];
+  authenticatedServiceIds?: string[];
+  sharedServiceIds?: string[];
+  holderSessionIds?: string[];
+  holderCount?: number;
+  exclusiveHolderSessionIds?: string[];
+  waitingJobIds?: string[];
+  waitingJobCount?: number;
+  conflictSessionIds?: string[];
+  leaseState?: string;
+  recommendedAction?: string;
+  serviceNames?: string[];
+  agentNames?: string[];
+  taskNames?: string[];
+  browserIds?: string[];
+  tabIds?: string[];
+};
+
 type ServiceTab = {
   id: string;
   browserId?: string;
@@ -173,6 +196,7 @@ type ServiceState = {
 type ServiceStatusData = {
   control_plane?: ControlPlaneSnapshot;
   service_state?: ServiceState;
+  profileAllocations?: ServiceProfileAllocation[];
 };
 
 type ServiceEventsData = {
@@ -388,6 +412,19 @@ function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
   if (["notstarted", "not_started", "idle", ""].includes(normalized)) return "neutral";
   if (["cdp_disconnected", "unreachable", "process_exited"].includes(normalized)) return "bad";
   return "warn";
+}
+
+function profileAllocationTone(value?: string): "good" | "warn" | "bad" | "neutral" {
+  const normalized = (value ?? "").toLowerCase();
+  if (normalized === "available" || normalized === "shared") return "good";
+  if (normalized === "exclusive" || normalized === "waiting") return "warn";
+  if (normalized === "conflicted") return "bad";
+  return "neutral";
+}
+
+function formatStringList(values?: string[], fallback = "none"): string {
+  const normalized = values?.filter((value) => value.trim().length > 0) ?? [];
+  return normalized.length > 0 ? normalized.join(", ") : fallback;
 }
 
 function formatHealthLabel(value?: string | null): string {
@@ -1390,6 +1427,39 @@ function JobDetailDialog({
   );
 }
 
+function ProfileAllocationRow({ allocation }: { allocation: ServiceProfileAllocation }) {
+  const tone = profileAllocationTone(allocation.leaseState);
+  const holderCount = allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0;
+  const waitingCount = allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0;
+  return (
+    <div className="service-browser-row service-profile-allocation-row">
+      <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-bold text-foreground">
+            {allocation.profileName || allocation.profileId || "unnamed profile"}
+          </span>
+          <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
+            {allocation.leaseState ?? "unknown"}
+          </Badge>
+          <Badge variant="outline" className="h-4 max-w-32 truncate px-1.5 text-[9px]">
+            {allocation.recommendedAction ?? "inspect"}
+          </Badge>
+        </div>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {holderCount} holders / {waitingCount} waiting / {allocation.browserIds?.length ?? 0} browsers / {allocation.tabIds?.length ?? 0} tabs
+        </p>
+        <div className="mt-2 grid gap-1 text-[10px] text-muted-foreground sm:grid-cols-2">
+          <span className="truncate">service: {formatStringList(allocation.serviceNames)}</span>
+          <span className="truncate">task: {formatStringList(allocation.taskNames)}</span>
+          <span className="truncate">holders: {formatStringList(allocation.holderSessionIds)}</span>
+          <span className="truncate">conflicts: {formatStringList(allocation.conflictSessionIds)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ServiceSessionRow({
   session,
   onSelect,
@@ -2197,6 +2267,10 @@ export function ServicePanel() {
     () => Object.values(serviceState?.sessions ?? {}),
     [serviceState?.sessions],
   );
+  const profileAllocations = useMemo(
+    () => status?.profileAllocations ?? [],
+    [status?.profileAllocations],
+  );
   const tabRecords = useMemo(
     () => Object.values(serviceState?.tabs ?? {}),
     [serviceState?.tabs],
@@ -2407,6 +2481,34 @@ export function ServicePanel() {
                     key={browser.id || browser.cdpEndpoint || `browser-${index}`}
                     browser={browser}
                     onSelect={setSelectedBrowser}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="service-summary-card">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
+                  Profile allocation
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {profileAllocations.length} backend-owned allocation rows
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1">
+              {profileAllocations.length === 0 ? (
+                <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                  No profile allocation rows yet.
+                </p>
+              ) : (
+                profileAllocations.map((allocation, index) => (
+                  <ProfileAllocationRow
+                    key={allocation.profileId || `profile-allocation-${index}`}
+                    allocation={allocation}
                   />
                 ))
               )}

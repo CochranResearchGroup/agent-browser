@@ -3649,9 +3649,9 @@ The Service view includes a remembered operator identity, optional notes, an
 incident history timeline, a shared events/jobs/incidents/activity trace
 explorer for service, agent, task, browser, profile, session, and time-window
 debugging with ownership summary cards, a browser-health transition timeline,
-a grouped incident browser panel with acknowledgement and resolution actions,
-and incident filters for handling state plus crash, disconnect, recovery,
-timeout, and cancellation signals.
+the backend-owned profileAllocations view, a grouped incident browser panel
+with acknowledgement and resolution actions, and incident filters for handling
+state plus crash, disconnect, recovery, timeout, and cancellation signals.
 
 Subcommands:
   start [--port <n>]   Start the dashboard server (default port: 4848)
