@@ -80,6 +80,7 @@ function assertNoBrowserLaunchState() {
 try {
   const port = await enableStream();
   const contracts = await httpJson(port, 'GET', '/api/service/contracts');
+  const status = await httpJson(port, 'GET', '/api/service/status');
 
   assert(contracts.success === true, `HTTP service contracts failed: ${JSON.stringify(contracts)}`);
   assert(contracts.data?.schemaVersion === 'v1', `contracts schemaVersion mismatch: ${JSON.stringify(contracts)}`);
@@ -104,6 +105,15 @@ try {
     contracts.data.contracts.serviceRequest.actionCount ===
       contracts.data.contracts.serviceRequest.actions.length,
     `serviceRequest action count mismatch: ${JSON.stringify(contracts.data.contracts.serviceRequest)}`,
+  );
+  assert(status.success === true, `HTTP service status failed: ${JSON.stringify(status)}`);
+  assert(
+    Array.isArray(status.data?.profileAllocations),
+    `dashboard service status profileAllocations missing: ${JSON.stringify(status.data)}`,
+  );
+  assert(
+    status.data.profileAllocations.length === 0,
+    `no-launch service status unexpectedly reported profile allocations: ${JSON.stringify(status.data.profileAllocations)}`,
   );
 
   assertNoBrowserLaunchState();

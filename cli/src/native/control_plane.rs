@@ -19,10 +19,11 @@ use super::service_jobs::{
     cancel_persisted_service_job, load_service_job_in_repository, mutate_persisted_service_jobs,
 };
 use super::service_model::{
-    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
-    ControlPlaneSnapshot, JobPriority, JobState, JobTarget, ServiceActor, ServiceEvent,
-    ServiceEventKind, ServiceJob, ServiceState, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    service_profile_allocations, BrowserHealth as ServiceBrowserHealth,
+    BrowserHost as ServiceBrowserHost, BrowserProcess, ControlPlaneSnapshot, JobPriority, JobState,
+    JobTarget, ServiceActor, ServiceEvent, ServiceEventKind, ServiceJob, ServiceState,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -174,12 +175,14 @@ impl ControlPlaneHandle {
         service_state.control_plane = Some(self.status_snapshot(waiting_profile_lease_job_count));
         reconcile_service_state(&mut service_state).await;
         persist_reconciled_service_state(&before, &service_state);
+        let profile_allocations = service_profile_allocations(&service_state);
 
         json!({
             "id": id,
             "success": true,
             "data": {
                 "control_plane": self.status_payload(waiting_profile_lease_job_count),
+                "profileAllocations": profile_allocations,
                 "service_state": service_state,
             },
         })
@@ -1372,12 +1375,29 @@ mod tests {
                         "lease-wait": {
                             "id": "lease-wait",
                             "action": "navigate",
-                            "state": "waiting_profile_lease"
+                            "state": "waiting_profile_lease",
+                            "result": {
+                                "profileId": "work",
+                                "conflictSessionIds": ["holder"]
+                            }
                         },
                         "queued": {
                             "id": "queued",
                             "action": "click",
                             "state": "queued"
+                        }
+                    },
+                    "profiles": {
+                        "work": {
+                            "id": "work",
+                            "name": "Work"
+                        }
+                    },
+                    "sessions": {
+                        "holder": {
+                            "id": "holder",
+                            "profileId": "work",
+                            "lease": "exclusive"
                         }
                     }
                 }),
@@ -1406,6 +1426,18 @@ mod tests {
                 .pointer("/data/control_plane/waiting_profile_lease_job_count")
                 .and_then(|v| v.as_u64()),
             Some(1)
+        );
+        assert_eq!(
+            response
+                .pointer("/data/profileAllocations/0/profileId")
+                .and_then(|v| v.as_str()),
+            Some("work")
+        );
+        assert_eq!(
+            response
+                .pointer("/data/profileAllocations/0/recommendedAction")
+                .and_then(|v| v.as_str()),
+            Some("release_holder_or_redirect_waiting_jobs")
         );
         assert_eq!(
             response

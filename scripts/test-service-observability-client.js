@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   getServiceContracts,
+  getServiceStatus,
   getServiceTrace,
   registerServiceLoginProfile,
 } from '../packages/client/src/service-observability.js';
@@ -54,6 +55,24 @@ async function main() {
   assert.equal(contracts.calls[0].url, 'http://127.0.0.1:4849/api/service/contracts');
   assert.equal(contracts.calls[0].init.method, 'GET');
   assert.equal(contractResult.schemaVersion, 'v1');
+
+  const status = createFetchRecorder({
+    success: true,
+    data: {
+      control_plane: {
+        waiting_profile_lease_job_count: 0,
+      },
+      service_state: {},
+      profileAllocations: [],
+    },
+  });
+  const statusResult = await getServiceStatus({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: status.fetch,
+  });
+  assert.equal(status.calls[0].url, 'http://127.0.0.1:4849/api/service/status');
+  assert.equal(status.calls[0].init.method, 'GET');
+  assert.deepEqual(statusResult.profileAllocations, []);
 
   const trace = createFetchRecorder({
     success: true,
