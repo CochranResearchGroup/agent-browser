@@ -26,6 +26,7 @@
     "build:dashboard": "cd packages/dashboard && pnpm build",
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
     "test:dashboard-incident-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-incident-summary.js",
+    "test:dashboard-profile-allocation": "node --no-warnings --experimental-strip-types scripts/test-dashboard-profile-allocation.js",
     "test:service-api-mcp-parity": "node scripts/check-service-api-mcp-parity.js",
     "test:service-client": "pnpm test:service-client-contract && pnpm test:service-client-types && pnpm test:service-client-exports && pnpm test:service-request-client && pnpm test:service-observability-client",
     "test:service-client-contract": "node scripts/generate-service-request-client.js --check && node scripts/generate-service-observability-client.js --check",

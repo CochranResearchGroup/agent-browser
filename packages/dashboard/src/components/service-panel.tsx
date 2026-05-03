@@ -49,6 +49,10 @@ import {
   type ServiceIncidentSummaryGroupView,
   type ServiceIncidentsData,
 } from "@/lib/service-incident-summary";
+import {
+  profileAllocationFromLookupPayload,
+  serviceProfileAllocationLookupUrl,
+} from "@/lib/service-profile-allocation";
 
 type ControlPlaneSnapshot = {
   worker_state?: string;
@@ -2278,13 +2282,10 @@ export function ServicePanel() {
     if (!canFetch || !allocation.profileId) return;
     setSelectedProfileAllocationLoading(true);
     try {
-      const resp = await fetch(
-        `${serviceBase(activePort)}/profiles/${encodeURIComponent(allocation.profileId)}/allocation`,
-      );
+      const resp = await fetch(serviceProfileAllocationLookupUrl(serviceBase(activePort), allocation.profileId));
       const json = (await resp.json()) as ApiResponse<ServiceProfileAllocationData>;
-      if (!json.success) throw new Error(json.error || "Service profile allocation lookup failed");
       if (profileAllocationLookupId.current === lookupId) {
-        setSelectedProfileAllocation(json.data?.profileAllocation ?? allocation);
+        setSelectedProfileAllocation(profileAllocationFromLookupPayload(json, allocation));
       }
     } catch (err) {
       if (profileAllocationLookupId.current === lookupId) {
