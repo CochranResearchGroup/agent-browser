@@ -524,12 +524,117 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
             }
         }
     }
+    if let Some(wait_text) = format_service_trace_profile_lease_wait_text(data) {
+        lines.push(wait_text);
+    }
     if let Some(activity_text) = format_service_incident_activity_text(data) {
         if activity > 0 {
             lines.push(activity_text);
         }
     }
     Some(lines.join("\n"))
+}
+
+fn format_service_trace_profile_lease_wait_text(data: &serde_json::Value) -> Option<String> {
+    let events = data.get("events").and_then(|value| value.as_array())?;
+    let mut waits = events
+        .iter()
+        .filter(|event| {
+            event
+                .get("kind")
+                .and_then(|value| value.as_str())
+                .is_some_and(|kind| {
+                    kind == "profile_lease_wait_ended" || kind == "profile_lease_wait_started"
+                })
+        })
+        .collect::<Vec<_>>();
+    if waits.is_empty() {
+        return None;
+    }
+    waits.sort_by(|left, right| {
+        let left_time = left
+            .get("timestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let right_time = right
+            .get("timestamp")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        left_time.cmp(right_time)
+    });
+
+    let mut lines = vec![format!("Profile lease waits: {}", waits.len())];
+    lines.extend(
+        waits
+            .into_iter()
+            .map(format_service_trace_profile_lease_wait_line),
+    );
+    Some(lines.join("\n"))
+}
+
+fn format_service_trace_profile_lease_wait_line(event: &serde_json::Value) -> String {
+    let timestamp = event
+        .get("timestamp")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-time");
+    let kind = event
+        .get("kind")
+        .and_then(|value| value.as_str())
+        .unwrap_or("profile_lease_wait");
+    let details = event.get("details").unwrap_or(&serde_json::Value::Null);
+    let job = details
+        .get("jobId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-job");
+    let profile = event
+        .get("profileId")
+        .and_then(|value| value.as_str())
+        .or_else(|| details.get("profileId").and_then(|value| value.as_str()))
+        .unwrap_or("unknown-profile");
+    let outcome = details
+        .get("outcome")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let waited = details
+        .get("waitedMs")
+        .and_then(|value| value.as_u64())
+        .map(|value| format!(" waited_ms={value}"))
+        .unwrap_or_default();
+    let retry = details
+        .get("retryAfterMs")
+        .and_then(|value| value.as_u64())
+        .map(|value| format!(" retry_after_ms={value}"))
+        .unwrap_or_default();
+    let conflicts = details
+        .get("conflictSessionIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string());
+    let service = event
+        .get("serviceName")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" service={value}"))
+        .unwrap_or_default();
+    let agent = event
+        .get("agentName")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" agent={value}"))
+        .unwrap_or_default();
+    let task = event
+        .get("taskName")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" task={value}"))
+        .unwrap_or_default();
+    format!(
+        "  {timestamp} {kind} job={job} profile={profile} outcome={outcome}{waited}{retry} conflicts={conflicts}{service}{agent}{task}"
+    )
 }
 
 fn format_service_jobs_text(data: &serde_json::Value) -> Option<String> {
@@ -3563,7 +3668,7 @@ Notes:
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
-  - Trace returns related events, jobs, incidents, normalized activity, and a compact summary of service, agent, task, browser, profile, and session ownership in one response.
+  - Trace returns related events, jobs, incidents, normalized activity, profile lease wait summaries, and compact service, agent, task, browser, profile, and session ownership in one response.
   - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, failureClass, processExitCause for process exits, retry-budget details, and recovery policy source metadata.
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
@@ -3662,7 +3767,7 @@ Notes:
   - Example browser_command arguments: {"action":"navigate","params":{"url":"https://example.com","waitUntil":"load","targetServiceId":"acs"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}.
   - Typed browser_* tools also accept targetServiceId, targetService, targetServiceIds, targetServices, siteId, siteIds, loginId, and loginIds for first-command profile selection.
   - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
-  - service_trace reads persisted service state and returns related events, jobs, incidents, activity, and ownership summary contexts and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
+  - service_trace reads persisted service state and returns related events, jobs, incidents, activity, profile lease wait summaries, ownership summary contexts, and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP.
   - service_profile_upsert, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP.
   - Service profile records distinguish caller service sharing from target-service login scope: sharedServiceIds lists allowed caller services, targetServiceIds lists intended login targets, and authenticatedServiceIds lists targets currently believed authenticated.
@@ -4881,7 +4986,7 @@ mod tests {
     fn test_format_service_trace_text_includes_activity_trace_context() {
         let data = json!({
             "counts": {
-                "events": 1,
+                "events": 2,
                 "jobs": 1,
                 "incidents": 1,
                 "activity": 1
@@ -4918,6 +5023,36 @@ mod tests {
                 "agentName": "codex",
                 "taskName": "probeACSwebsite",
                 "message": "Browser failed"
+            }],
+            "events": [{
+                "id": "event-wait-started",
+                "timestamp": "2026-04-25T00:00:00Z",
+                "kind": "profile_lease_wait_started",
+                "profileId": "work",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "details": {
+                    "jobId": "job-1",
+                    "outcome": "started",
+                    "conflictSessionIds": ["active-session"],
+                    "retryAfterMs": 50
+                }
+            }, {
+                "id": "event-wait-ended",
+                "timestamp": "2026-04-25T00:00:03Z",
+                "kind": "profile_lease_wait_ended",
+                "profileId": "work",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite",
+                "details": {
+                    "jobId": "job-1",
+                    "outcome": "ready",
+                    "conflictSessionIds": ["active-session"],
+                    "retryAfterMs": 50,
+                    "waitedMs": 3000
+                }
             }]
         });
 
@@ -4925,7 +5060,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=1 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\nProfile lease waits: 2\n  2026-04-25T00:00:00Z profile_lease_wait_started job=job-1 profile=work outcome=started retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n  2026-04-25T00:00:03Z profile_lease_wait_ended job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 
