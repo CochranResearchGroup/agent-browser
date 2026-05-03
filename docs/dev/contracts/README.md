@@ -158,6 +158,11 @@ These schemas guard the collection array field and `count` field. The profiles
 response also includes the same derived `profileAllocations` view returned by
 service status and the MCP profiles resource.
 
+`service-profile-allocation-response.v1.schema.json` describes the response
+envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a
+software client needs one derived profile allocation row without fetching the
+full profile collection.
+
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:
 

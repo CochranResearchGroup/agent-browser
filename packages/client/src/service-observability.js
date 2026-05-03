@@ -33,6 +33,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceTraceResponse} ServiceTraceResponse
  * @typedef {import('./service-observability.generated.js').ServiceLoginProfileRegistrationOptions} ServiceLoginProfileRegistrationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileMutationOptions} ServiceProfileMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileUpsertResponse} ServiceProfileUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceProviderDeleteResponse} ServiceProviderDeleteResponse
@@ -76,6 +77,15 @@ export function getServiceContracts(options) {
  */
 export function getServiceProfiles(options) {
   return serviceGet(options, '/api/service/profiles');
+}
+
+/**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceProfileAllocationResponse>}
+ */
+export function getServiceProfileAllocation({ id, ...options }) {
+  assertServiceId(id, 'getServiceProfileAllocation');
+  return serviceGet(options, `/api/service/profiles/${encodeURIComponent(id)}/allocation`);
 }
 
 /**
@@ -466,6 +476,17 @@ function appendQuery(url, query) {
   for (const [key, value] of Object.entries(query)) {
     if (value === null || value === undefined) continue;
     url.searchParams.set(key, String(value));
+  }
+}
+
+/**
+ * @param {unknown} id
+ * @param {string} helperName
+ * @returns {asserts id is string}
+ */
+function assertServiceId(id, helperName) {
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new TypeError(`${helperName} requires an id string`);
   }
 }
 

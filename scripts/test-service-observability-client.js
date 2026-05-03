@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   getServiceContracts,
+  getServiceProfileAllocation,
   getServiceStatus,
   getServiceTrace,
   registerServiceLoginProfile,
@@ -73,6 +74,42 @@ async function main() {
   assert.equal(status.calls[0].url, 'http://127.0.0.1:4849/api/service/status');
   assert.equal(status.calls[0].init.method, 'GET');
   assert.deepEqual(statusResult.profileAllocations, []);
+
+  const allocation = createFetchRecorder({
+    success: true,
+    data: {
+      profileAllocation: {
+        profileId: 'work',
+        profileName: 'Work',
+        allocation: 'per_service',
+        keyring: 'basic_password_store',
+        targetServiceIds: ['acs'],
+        authenticatedServiceIds: ['acs'],
+        sharedServiceIds: ['JournalDownloader'],
+        holderSessionIds: ['session-1'],
+        holderCount: 1,
+        exclusiveHolderSessionIds: [],
+        waitingJobIds: [],
+        waitingJobCount: 0,
+        conflictSessionIds: [],
+        leaseState: 'shared',
+        recommendedAction: 'shared_profile_in_use',
+        serviceNames: ['JournalDownloader'],
+        agentNames: ['codex'],
+        taskNames: ['probeACSwebsite'],
+        browserIds: ['browser-1'],
+        tabIds: ['tab-1'],
+      },
+    },
+  });
+  const allocationResult = await getServiceProfileAllocation({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: allocation.fetch,
+    id: 'work',
+  });
+  assert.equal(allocation.calls[0].url, 'http://127.0.0.1:4849/api/service/profiles/work/allocation');
+  assert.equal(allocation.calls[0].init.method, 'GET');
+  assert.equal(allocationResult.profileAllocation.profileId, 'work');
 
   const trace = createFetchRecorder({
     success: true,

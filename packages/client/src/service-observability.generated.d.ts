@@ -274,6 +274,11 @@ export interface ServiceProfilesResponse extends ServiceListResponse<ServiceProf
   profileAllocations: ServiceProfileAllocation[];
 }
 
+export interface ServiceProfileAllocationResponse {
+  profileAllocation: ServiceProfileAllocation;
+  [key: string]: unknown;
+}
+
 export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {
   browsers: ServiceBrowserRecord[];
 }
@@ -568,6 +573,7 @@ export declare const SERVICE_BROWSER_HEALTH_STATES: readonly string[];
 export declare function getServiceStatus(options: ServiceObservabilityHttpOptions): Promise<ServiceStatusResponse>;
 export declare function getServiceContracts(options: ServiceObservabilityHttpOptions): Promise<ServiceContractsResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
+export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;

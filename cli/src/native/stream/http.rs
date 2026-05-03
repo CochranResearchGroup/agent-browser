@@ -330,6 +330,39 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" {
+        if let Some(profile_id) = service_profile_allocation_id(path) {
+            let service_state = load_service_state();
+            let profile_allocation = service_profile_allocations(&service_state)
+                .into_iter()
+                .find(|allocation| allocation.profile_id == profile_id);
+            match profile_allocation {
+                Some(profile_allocation) => {
+                    write_json_value(
+                        &mut stream,
+                        "200 OK",
+                        json!({
+                            "success": true,
+                            "data": {
+                                "profileAllocation": profile_allocation,
+                            },
+                        }),
+                    )
+                    .await;
+                }
+                None => {
+                    write_json_result(
+                        &mut stream,
+                        Err(format!("Profile allocation not found: {profile_id}")),
+                        "404 Not Found",
+                    )
+                    .await;
+                }
+            }
+            return;
+        }
+    }
+
+    if method == "GET" {
         if let Some(command) = browser_api_command(method, path, query, "") {
             match command {
                 Ok(cmd) => {
@@ -1122,6 +1155,12 @@ fn service_site_policy_id(path: &str) -> Option<&str> {
 
 fn service_profile_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/profiles/")
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
+fn service_profile_allocation_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/profiles/")
+        .and_then(|suffix| suffix.strip_suffix("/allocation"))
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
@@ -2079,6 +2118,10 @@ mod tests {
             Some("journal-downloader")
         );
         assert_eq!(
+            service_profile_allocation_id("/api/service/profiles/journal-downloader/allocation"),
+            Some("journal-downloader")
+        );
+        assert_eq!(
             service_session_id("/api/service/sessions/journal-run"),
             Some("journal-run")
         );
@@ -2091,6 +2134,14 @@ mod tests {
             Some("manual")
         );
         assert_eq!(service_profile_id("/api/service/profiles/"), None);
+        assert_eq!(
+            service_profile_allocation_id("/api/service/profiles/journal/extra/allocation"),
+            None
+        );
+        assert_eq!(
+            service_profile_allocation_id("/api/service/profiles/journal-downloader"),
+            None
+        );
         assert_eq!(
             service_profile_id("/api/service/profiles/journal/extra"),
             None

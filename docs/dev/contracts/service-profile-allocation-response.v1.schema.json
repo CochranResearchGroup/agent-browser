@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-allocation-response.v1.schema.json",
+  "title": "agent-browser service profile allocation response",
+  "description": "Stable API shape for a single derived service-owned profile allocation row returned by HTTP service APIs and service observability clients.",
+  "type": "object",
+  "required": [
+    "profileAllocation"
+  ],
+  "properties": {
+    "profileAllocation": {
+      "$ref": "service-profiles-response.v1.schema.json#/$defs/profileAllocation"
+    }
+  },
+  "additionalProperties": true
+}
