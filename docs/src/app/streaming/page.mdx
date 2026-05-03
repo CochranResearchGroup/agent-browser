@@ -141,6 +141,8 @@ curl -X POST "http://127.0.0.1:9223/api/service/reconcile"
 
 HTTP <code>GET /api/service/profiles/&lt;id&gt;/allocation</code> returns one derived <code>profileAllocations</code> row for software clients that do not need the full profile collection. Its response follows <code>docs/dev/contracts/service-profile-allocation-response.v1.schema.json</code>.
 
+HTTP <code>GET /api/service/contracts</code> advertises this response as the HTTP-only <code>serviceProfileAllocationResponse</code> contract so software clients can discover the route and schema from runtime compatibility metadata.
+
 With <code>profileLeasePolicy: "wait"</code>, the control-plane scheduler keeps the blocked request queued while it polls for profile release, so the worker can continue dispatching unrelated service requests. Waiting lease requests stay queued until the selected profile becomes available or <code>profileLeaseWaitTimeoutMs</code> expires. The retained service event log records <code>profile_lease_wait_started</code> and <code>profile_lease_wait_ended</code> entries with the job ID, outcome, conflicting session IDs, retry timing, and waited timing when known.
 
 HTTP <code>/api/service/jobs</code> and <code>/api/service/jobs/&lt;id&gt;</code> return service job records matching the repo schema at <code>docs/dev/contracts/service-job-record.v1.schema.json</code>. Their response envelopes follow <code>docs/dev/contracts/service-jobs-response.v1.schema.json</code>.

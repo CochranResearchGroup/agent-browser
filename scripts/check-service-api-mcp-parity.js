@@ -212,6 +212,9 @@ const serviceHttpOnlySurface = [
     httpNeedles: [
       'service_profile_allocation_id(path)',
       '"profileAllocation"',
+      'SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE',
+      'SERVICE_PROFILE_ALLOCATION_RESPONSE_SCHEMA_ID',
+      '"serviceProfileAllocationResponse"',
     ],
     clientNeedles: [
       'getServiceProfileAllocation',

@@ -3,11 +3,14 @@ use serde_json::{json, Value};
 pub const SERVICE_CONTRACTS_RESOURCE: &str = "agent-browser://contracts";
 pub const SERVICE_CONTRACTS_HTTP_ROUTE: &str = "/api/service/contracts";
 pub const SERVICE_REQUEST_HTTP_ROUTE: &str = "/api/service/request";
+pub const SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE: &str = "/api/service/profiles/<id>/allocation";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const SERVICE_REQUEST_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-request.v1.schema.json";
 pub const SERVICE_REQUEST_MCP_TOOL_CALL_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-request-mcp-tool-call.v1.schema.json";
+pub const SERVICE_PROFILE_ALLOCATION_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-allocation-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 
 pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
@@ -105,10 +108,20 @@ pub fn service_contracts_metadata() -> Value {
                 "schemaPath": "docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json",
                 "tool": SERVICE_REQUEST_MCP_TOOL_NAME,
             },
+            "serviceProfileAllocationResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_PROFILE_ALLOCATION_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-profile-allocation-response.v1.schema.json",
+                "http": {
+                    "method": "GET",
+                    "route": SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE,
+                },
+            },
         },
         "http": {
             "contractsRoute": SERVICE_CONTRACTS_HTTP_ROUTE,
             "serviceRequestRoute": SERVICE_REQUEST_HTTP_ROUTE,
+            "serviceProfileAllocationRoute": SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE,
         },
         "mcp": {
             "contractsResource": SERVICE_CONTRACTS_RESOURCE,
@@ -141,6 +154,14 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceRequest"]["actionCount"],
             SERVICE_REQUEST_ACTIONS.len()
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileAllocationResponse"]["schemaId"],
+            SERVICE_PROFILE_ALLOCATION_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileAllocationResponse"]["http"]["route"],
+            SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE
         );
     }
 }

@@ -106,6 +106,29 @@ try {
       contracts.data.contracts.serviceRequest.actions.length,
     `serviceRequest action count mismatch: ${JSON.stringify(contracts.data.contracts.serviceRequest)}`,
   );
+  assert(
+    contracts.data?.contracts?.serviceProfileAllocationResponse?.schemaId ===
+      'https://agent-browser.local/contracts/service-profile-allocation-response.v1.schema.json',
+    `serviceProfileAllocationResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileAllocationResponse?.schemaPath ===
+      'docs/dev/contracts/service-profile-allocation-response.v1.schema.json',
+    `serviceProfileAllocationResponse schema path mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileAllocationResponse?.http?.method === 'GET',
+    `serviceProfileAllocationResponse HTTP method mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileAllocationResponse?.http?.route ===
+      '/api/service/profiles/<id>/allocation',
+    `serviceProfileAllocationResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,
+  );
+  assert(
+    contracts.data?.http?.serviceProfileAllocationRoute === '/api/service/profiles/<id>/allocation',
+    `serviceProfileAllocationRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
+  );
   assert(status.success === true, `HTTP service status failed: ${JSON.stringify(status)}`);
   assert(
     Array.isArray(status.data?.profileAllocations),

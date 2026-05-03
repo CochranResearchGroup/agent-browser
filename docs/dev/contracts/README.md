@@ -47,6 +47,9 @@ wrapper for invoking `service_request` with the same intent object.
 HTTP `GET /api/service/contracts` and MCP `agent-browser://contracts` expose
 runtime compatibility metadata for these contract IDs, their shared `v1`
 version, route and tool names, and the supported service request action list.
+The HTTP contracts metadata also advertises the HTTP-only
+`serviceProfileAllocationResponse` contract for
+`GET /api/service/profiles/<id>/allocation`.
 
 `packages/client/src/service-request.generated.d.ts` and
 `packages/client/src/service-request.generated.js` are generated from these
