@@ -785,6 +785,21 @@ fn value_bool_label(value: &serde_json::Value, key: &str) -> &'static str {
     }
 }
 
+fn value_string_list(value: &serde_json::Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string())
+}
+
 fn sorted_object_values(value: &serde_json::Value, key: &str) -> Vec<serde_json::Value> {
     let mut values = value
         .get(key)
@@ -793,6 +808,24 @@ fn sorted_object_values(value: &serde_json::Value, key: &str) -> Vec<serde_json:
         .unwrap_or_default();
     values.sort_by(|left, right| value_str(left, "id", "").cmp(value_str(right, "id", "")));
     values
+}
+
+fn format_service_profile_allocation_line(allocation: &serde_json::Value) -> String {
+    let profile = value_str(allocation, "profileId", "unknown-profile");
+    let state = value_str(allocation, "leaseState", "unknown");
+    let action = value_str(allocation, "recommendedAction", "unknown");
+    let holders = value_string_list(allocation, "holderSessionIds");
+    let waiting = value_string_list(allocation, "waitingJobIds");
+    let conflicts = value_string_list(allocation, "conflictSessionIds");
+    let services = value_string_list(allocation, "serviceNames");
+    let agents = value_string_list(allocation, "agentNames");
+    let tasks = value_string_list(allocation, "taskNames");
+    let browsers = value_string_list(allocation, "browserIds");
+    let tabs = value_string_list(allocation, "tabIds");
+
+    format!(
+        "{profile} state={state} action={action} holders={holders} waiting={waiting} conflicts={conflicts} services={services} agents={agents} tasks={tasks} browsers={browsers} tabs={tabs}"
+    )
 }
 
 fn format_service_profile_line(profile: &serde_json::Value) -> String {
@@ -850,6 +883,11 @@ fn format_service_profile_line(profile: &serde_json::Value) -> String {
 
 fn format_service_profiles_text(data: &serde_json::Value) -> Option<String> {
     let profiles = data.get("profiles")?.as_array()?;
+    let profile_allocations = data
+        .get("profileAllocations")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
     let mut lines = vec![format!("Profiles: {}", profiles.len())];
     if profiles.is_empty() {
         lines.push("  none".to_string());
@@ -858,6 +896,17 @@ fn format_service_profiles_text(data: &serde_json::Value) -> Option<String> {
             profiles
                 .iter()
                 .map(|profile| format!("  {}", format_service_profile_line(profile))),
+        );
+    }
+    if !profile_allocations.is_empty() {
+        lines.push(format!(
+            "Profile allocations: {}",
+            profile_allocations.len()
+        ));
+        lines.extend(
+            profile_allocations.iter().map(|allocation| {
+                format!("  {}", format_service_profile_allocation_line(allocation))
+            }),
         );
     }
     Some(lines.join("\n"))
@@ -1096,6 +1145,11 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
     let control_plane = service_state.get("controlPlane");
     let reconciliation = service_state.get("reconciliation");
     let profiles = sorted_object_values(service_state, "profiles");
+    let profile_allocations = data
+        .get("profileAllocations")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
     let browsers = sorted_object_values(service_state, "browsers");
     let sessions = sorted_object_values(service_state, "sessions");
     let browser_count = service_state
@@ -1159,6 +1213,18 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
             profiles
                 .iter()
                 .map(|profile| format!("  {}", format_service_profile_line(profile))),
+        );
+    }
+
+    if !profile_allocations.is_empty() {
+        lines.push(format!(
+            "Profile allocations: {}",
+            profile_allocations.len()
+        ));
+        lines.extend(
+            profile_allocations.iter().map(|allocation| {
+                format!("  {}", format_service_profile_allocation_line(allocation))
+            }),
         );
     }
 
@@ -3713,7 +3779,7 @@ Commands:
   status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
-  profiles              Show retained service profile records
+  profiles              Show retained service profile records and derived allocation state
   sessions              Show retained service session records
   browsers              Show retained service browser records and latest health evidence
   tabs                  Show retained service tab records
@@ -3751,7 +3817,8 @@ Notes:
   - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, failureClass, processExitCause for process exits, retry-budget details, and recovery policy source metadata.
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
-  - Text service status includes profile, browser, and session summary lines for operator traceability.
+  - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
+  - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, and recommended actions.
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
@@ -4257,7 +4324,7 @@ Service:
   service status             Show service worker health, profile lease waits, and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
-  service profiles           Show retained service profile records
+  service profiles           Show retained profile records and allocation state
   service sessions           Show retained service session records
   service browsers           Show retained browser health records
   service tabs               Show retained service tab records
@@ -4551,7 +4618,7 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
-  agent-browser service profiles         # Inspect retained service profile records
+  agent-browser service profiles         # Inspect retained service profiles and allocation state
   agent-browser service sessions         # Inspect retained service session records
   agent-browser service browsers         # Inspect retained browser health records
   agent-browser service tabs             # Inspect retained service tab records
@@ -4889,6 +4956,19 @@ mod tests {
                 "targetServiceIds": ["acs"],
                 "authenticatedServiceIds": ["acs"],
                 "userDataDir": "/tmp/work-profile"
+            }],
+            "profileAllocations": [{
+                "profileId": "work",
+                "leaseState": "conflicted",
+                "recommendedAction": "release_holder_or_redirect_waiting_jobs",
+                "holderSessionIds": ["runtime-session"],
+                "waitingJobIds": ["job-1"],
+                "conflictSessionIds": ["runtime-session"],
+                "serviceNames": ["JournalDownloader"],
+                "agentNames": ["codex"],
+                "taskNames": ["probeACSwebsite"],
+                "browserIds": ["browser-1"],
+                "tabIds": ["tab-1"]
             }]
         });
 
@@ -4896,7 +4976,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs user_data=/tmp/work-profile"
+            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs user_data=/tmp/work-profile\nProfile allocations: 1\n  work state=conflicted action=release_holder_or_redirect_waiting_jobs holders=runtime-session waiting=job-1 conflicts=runtime-session services=JournalDownloader agents=codex tasks=probeACSwebsite browsers=browser-1 tabs=tab-1"
         );
     }
 

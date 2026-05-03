@@ -6,15 +6,152 @@
   "type": "object",
   "required": [
     "profiles",
+    "profileAllocations",
     "count"
   ],
   "properties": {
     "profiles": {
       "type": "array"
     },
+    "profileAllocations": {
+      "description": "Derived service-owned profile allocation view for session holders and waiting profile-lease jobs.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profileAllocation"
+      }
+    },
     "count": {
       "type": "integer",
       "minimum": 0
+    }
+  },
+  "$defs": {
+    "profileAllocation": {
+      "type": "object",
+      "required": [
+        "profileId",
+        "profileName",
+        "allocation",
+        "keyring",
+        "targetServiceIds",
+        "authenticatedServiceIds",
+        "sharedServiceIds",
+        "holderSessionIds",
+        "holderCount",
+        "exclusiveHolderSessionIds",
+        "waitingJobIds",
+        "waitingJobCount",
+        "conflictSessionIds",
+        "leaseState",
+        "recommendedAction",
+        "serviceNames",
+        "agentNames",
+        "taskNames",
+        "browserIds",
+        "tabIds"
+      ],
+      "properties": {
+        "profileId": {
+          "type": "string"
+        },
+        "profileName": {
+          "type": "string"
+        },
+        "allocation": {
+          "type": "string"
+        },
+        "keyring": {
+          "type": "string"
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "authenticatedServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sharedServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "holderSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "holderCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exclusiveHolderSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "waitingJobIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "waitingJobCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflictSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "leaseState": {
+          "type": "string",
+          "enum": ["available", "shared", "exclusive", "waiting", "conflicted"]
+        },
+        "recommendedAction": {
+          "type": "string"
+        },
+        "serviceNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "agentNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "taskNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "browserIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tabIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true

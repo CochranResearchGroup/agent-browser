@@ -5,7 +5,8 @@
   "description": "Stable API shape for service status responses returned by CLI JSON and HTTP service APIs.",
   "type": "object",
   "required": [
-    "service_state"
+    "service_state",
+    "profileAllocations"
   ],
   "properties": {
     "control_plane": {
@@ -36,6 +37,13 @@
         }
       },
       "additionalProperties": true
+    },
+    "profileAllocations": {
+      "description": "Derived service-owned profile allocation view for session holders and waiting profile-lease jobs.",
+      "type": "array",
+      "items": {
+        "$ref": "service-profiles-response.v1.schema.json#/$defs/profileAllocation"
+      }
     },
     "service_state": {
       "type": "object"

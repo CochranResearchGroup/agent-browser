@@ -63,9 +63,10 @@ use super::service_lifecycle::{
     ProfileSelectionRequest, ServiceLaunchMetadata,
 };
 use super::service_model::{
-    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
-    JobState as ServiceJobState, ProfileKeyringPolicy, ProfileLeaseDisposition,
-    ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy,
+    service_profile_allocations, BrowserHealth as ServiceBrowserHealth,
+    BrowserHost as ServiceBrowserHost, JobState as ServiceJobState, ProfileKeyringPolicy,
+    ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
+    SessionCleanupPolicy,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
@@ -6569,8 +6570,11 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         });
     }
 
+    let profile_allocations = service_profile_allocations(&service_state);
+
     Ok(json!({
         "service_state": service_state,
+        "profileAllocations": profile_allocations,
     }))
 }
 
@@ -6583,12 +6587,14 @@ async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
+    let profile_allocations = service_profile_allocations(&service_state);
     let mut profiles = service_state.profiles.into_values().collect::<Vec<_>>();
     profiles.sort_by(|left, right| left.id.cmp(&right.id));
     let count = profiles.len();
 
     Ok(json!({
         "profiles": profiles,
+        "profileAllocations": profile_allocations,
         "count": count,
     }))
 }
@@ -11370,12 +11376,29 @@ mod tests {
                     "lease-wait": {
                         "id": "lease-wait",
                         "action": "navigate",
-                        "state": "waiting_profile_lease"
+                        "state": "waiting_profile_lease",
+                        "result": {
+                            "profileId": "work",
+                            "conflictSessionIds": ["holder"]
+                        }
                     },
                     "queued": {
                         "id": "queued",
                         "action": "click",
                         "state": "queued"
+                    }
+                },
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work"
+                    }
+                },
+                "sessions": {
+                    "holder": {
+                        "id": "holder",
+                        "profileId": "work",
+                        "lease": "exclusive"
                     }
                 }
             }
@@ -11391,6 +11414,10 @@ mod tests {
         assert_eq!(
             result["data"]["service_state"]["controlPlane"]["waitingProfileLeaseJobCount"],
             1
+        );
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["recommendedAction"],
+            "release_holder_or_redirect_waiting_jobs"
         );
         assert!(state.browser.is_none());
     }
@@ -11445,7 +11472,44 @@ mod tests {
                         "name": "Work",
                         "allocation": "per_service",
                         "keyring": "basic_password_store",
+                        "targetServiceIds": ["acs"],
+                        "authenticatedServiceIds": ["acs"],
                         "sharedServiceIds": ["JournalDownloader"]
+                    }
+                },
+                "sessions": {
+                    "holder": {
+                        "id": "holder",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "profileId": "work",
+                        "lease": "exclusive",
+                        "browserIds": ["browser-1"],
+                        "tabIds": ["tab-1"]
+                    }
+                },
+                "browsers": {
+                    "browser-1": {
+                        "id": "browser-1",
+                        "profileId": "work",
+                        "activeSessionIds": ["holder"]
+                    }
+                },
+                "jobs": {
+                    "wait": {
+                        "id": "wait",
+                        "action": "navigate",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "state": "waiting_profile_lease",
+                        "result": {
+                            "waitingProfileLease": true,
+                            "profileId": "work",
+                            "conflictSessionIds": ["holder"],
+                            "retryAfterMs": 250
+                        }
                     }
                 }
             }
@@ -11461,6 +11525,31 @@ mod tests {
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["profiles"][0]["id"], "work");
         assert_eq!(result["data"]["profiles"][0]["name"], "Work");
+        assert_eq!(result["data"]["profileAllocations"][0]["profileId"], "work");
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["leaseState"],
+            "conflicted"
+        );
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["recommendedAction"],
+            "release_holder_or_redirect_waiting_jobs"
+        );
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["holderSessionIds"][0],
+            "holder"
+        );
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["waitingJobIds"][0],
+            "wait"
+        );
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["conflictSessionIds"][0],
+            "holder"
+        );
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["serviceNames"][0],
+            "JournalDownloader"
+        );
         assert!(state.browser.is_none());
     }
 

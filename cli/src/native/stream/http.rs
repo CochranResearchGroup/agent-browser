@@ -12,7 +12,7 @@ use crate::flags::parse_flags;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
-use crate::native::service_model::ServiceState;
+use crate::native::service_model::{service_profile_allocations, ServiceState};
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
@@ -1049,9 +1049,11 @@ fn service_collection_contents(path: &str) -> Option<Value> {
     let service_state = load_service_state();
     match path {
         "/api/service/profiles" => {
+            let profile_allocations = service_profile_allocations(&service_state);
             let profiles = service_state.profiles.values().cloned().collect::<Vec<_>>();
             Some(json!({
                 "profiles": profiles,
+                "profileAllocations": profile_allocations,
                 "count": profiles.len(),
             }))
         }
@@ -2060,6 +2062,7 @@ mod tests {
         let challenges = service_collection_contents("/api/service/challenges").unwrap();
 
         assert!(profiles["profiles"].is_array());
+        assert!(profiles["profileAllocations"].is_array());
         assert!(sessions["sessions"].is_array());
         assert!(browsers["browsers"].is_array());
         assert!(tabs["tabs"].is_array());

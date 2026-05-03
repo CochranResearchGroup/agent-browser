@@ -123,7 +123,9 @@ counters for filtered event list consumers.
 
 `service-status-response.v1.schema.json` describes the full service status
 response returned by `agent-browser service status` and HTTP
-`GET /api/service/status`.
+`GET /api/service/status`. It includes the derived `profileAllocations` view so
+software clients can consume profile holder, waiting job, conflict, lease
+state, and recommended-action data without reconstructing it from raw state.
 
 The service collection record schemas describe compact records returned by HTTP
 collection APIs and the matching MCP resources:
@@ -152,7 +154,9 @@ returned by CLI, HTTP, and MCP resources:
 - `service-providers-response.v1.schema.json`
 - `service-challenges-response.v1.schema.json`
 
-These schemas guard the collection array field and `count` field.
+These schemas guard the collection array field and `count` field. The profiles
+response also includes the same derived `profileAllocations` view returned by
+service status and the MCP profiles resource.
 
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

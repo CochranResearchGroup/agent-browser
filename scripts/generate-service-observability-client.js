@@ -146,6 +146,30 @@ export interface ServiceProfileRecord {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileAllocation {
+  profileId: string;
+  profileName: string;
+  allocation: string;
+  keyring: string;
+  targetServiceIds: string[];
+  authenticatedServiceIds: string[];
+  sharedServiceIds: string[];
+  holderSessionIds: string[];
+  holderCount: number;
+  exclusiveHolderSessionIds: string[];
+  waitingJobIds: string[];
+  waitingJobCount: number;
+  conflictSessionIds: string[];
+  leaseState: 'available' | 'shared' | 'exclusive' | 'waiting' | 'conflicted' | string;
+  recommendedAction: string;
+  serviceNames: string[];
+  agentNames: string[];
+  taskNames: string[];
+  browserIds: string[];
+  tabIds: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceBrowserRecord {
   id: string;
   profileId: string | null;
@@ -260,6 +284,7 @@ export interface ServiceControlPlaneStatus {
 export interface ServiceStatusResponse {
   control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown>;
+  profileAllocations: ServiceProfileAllocation[];
   [key: string]: unknown;
 }
 
@@ -294,6 +319,7 @@ export interface ServiceContractsResponse {
 
 export interface ServiceProfilesResponse extends ServiceListResponse<ServiceProfileRecord> {
   profiles: ServiceProfileRecord[];
+  profileAllocations: ServiceProfileAllocation[];
 }
 
 export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {

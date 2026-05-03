@@ -5,7 +5,7 @@
 //! conservative so future clients can depend on stable field names.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME: &str = "missing_service_name";
 pub const SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME: &str = "missing_agent_name";
@@ -1200,10 +1200,13 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "service status response",
         value,
-        &["service_state"],
+        &["service_state", "profileAllocations"],
         &["serviceState"],
     );
     assert!(value["service_state"].is_object());
+    for allocation in value["profileAllocations"].as_array().unwrap() {
+        assert_service_profile_allocation_contract(allocation);
+    }
     if let Some(control_plane) = value.get("control_plane") {
         assert_record_fields(
             "service status control plane",
@@ -1213,6 +1216,74 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
         );
         assert!(control_plane["waiting_profile_lease_job_count"].is_u64());
     }
+}
+
+#[cfg(test)]
+pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "profile allocation",
+        value,
+        &[
+            "profileId",
+            "profileName",
+            "allocation",
+            "keyring",
+            "targetServiceIds",
+            "authenticatedServiceIds",
+            "sharedServiceIds",
+            "holderSessionIds",
+            "holderCount",
+            "exclusiveHolderSessionIds",
+            "waitingJobIds",
+            "waitingJobCount",
+            "conflictSessionIds",
+            "leaseState",
+            "recommendedAction",
+            "serviceNames",
+            "agentNames",
+            "taskNames",
+            "browserIds",
+            "tabIds",
+        ],
+        &[
+            "profile_id",
+            "profile_name",
+            "target_service_ids",
+            "authenticated_service_ids",
+            "shared_service_ids",
+            "holder_session_ids",
+            "holder_count",
+            "exclusive_holder_session_ids",
+            "waiting_job_ids",
+            "waiting_job_count",
+            "conflict_session_ids",
+            "lease_state",
+            "recommended_action",
+            "service_names",
+            "agent_names",
+            "task_names",
+            "browser_ids",
+            "tab_ids",
+        ],
+    );
+    assert!(SERVICE_PROFILE_ALLOCATION_VALUES.contains(&value["allocation"].as_str().unwrap()));
+    assert!(SERVICE_PROFILE_KEYRING_VALUES.contains(&value["keyring"].as_str().unwrap()));
+    assert!(value["targetServiceIds"].is_array());
+    assert!(value["authenticatedServiceIds"].is_array());
+    assert!(value["sharedServiceIds"].is_array());
+    assert!(value["holderSessionIds"].is_array());
+    assert!(value["holderCount"].is_u64());
+    assert!(value["exclusiveHolderSessionIds"].is_array());
+    assert!(value["waitingJobIds"].is_array());
+    assert!(value["waitingJobCount"].is_u64());
+    assert!(value["conflictSessionIds"].is_array());
+    assert!(value["leaseState"].is_string());
+    assert!(value["recommendedAction"].is_string());
+    assert!(value["serviceNames"].is_array());
+    assert!(value["agentNames"].is_array());
+    assert!(value["taskNames"].is_array());
+    assert!(value["browserIds"].is_array());
+    assert!(value["tabIds"].is_array());
 }
 
 #[cfg(test)]
@@ -1317,6 +1388,254 @@ impl ServiceState {
             })
             .collect();
     }
+}
+
+/// Backend-owned allocation summary for one profile.
+///
+/// This is derived from service state at read time so API, MCP, CLI, and UI
+/// consumers share the same profile/session coordination model.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceProfileAllocation {
+    pub profile_id: String,
+    pub profile_name: String,
+    pub allocation: ProfileAllocationPolicy,
+    pub keyring: ProfileKeyringPolicy,
+    pub target_service_ids: Vec<String>,
+    pub authenticated_service_ids: Vec<String>,
+    pub shared_service_ids: Vec<String>,
+    pub holder_session_ids: Vec<String>,
+    pub holder_count: usize,
+    pub exclusive_holder_session_ids: Vec<String>,
+    pub waiting_job_ids: Vec<String>,
+    pub waiting_job_count: usize,
+    pub conflict_session_ids: Vec<String>,
+    pub lease_state: String,
+    pub recommended_action: String,
+    pub service_names: Vec<String>,
+    pub agent_names: Vec<String>,
+    pub task_names: Vec<String>,
+    pub browser_ids: Vec<String>,
+    pub tab_ids: Vec<String>,
+}
+
+/// Return the service-owned profile allocation view sorted by profile id.
+pub fn service_profile_allocations(service_state: &ServiceState) -> Vec<ServiceProfileAllocation> {
+    let mut profile_ids = service_state
+        .profiles
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    for session in service_state.sessions.values() {
+        if let Some(profile_id) = session.profile_id.as_deref().filter(|id| !id.is_empty()) {
+            profile_ids.insert(profile_id.to_string());
+        }
+    }
+    for browser in service_state.browsers.values() {
+        if let Some(profile_id) = browser.profile_id.as_deref().filter(|id| !id.is_empty()) {
+            profile_ids.insert(profile_id.to_string());
+        }
+    }
+    for job in service_state.jobs.values() {
+        if job.state == JobState::WaitingProfileLease {
+            if let Some(profile_id) = waiting_profile_lease_profile_id(job) {
+                profile_ids.insert(profile_id.to_string());
+            }
+        }
+    }
+
+    profile_ids
+        .into_iter()
+        .map(|profile_id| service_profile_allocation(service_state, &profile_id))
+        .collect()
+}
+
+fn service_profile_allocation(
+    service_state: &ServiceState,
+    profile_id: &str,
+) -> ServiceProfileAllocation {
+    let profile = service_state.profiles.get(profile_id);
+    let mut holder_session_ids = BTreeSet::new();
+    let mut exclusive_holder_session_ids = BTreeSet::new();
+    let mut waiting_job_ids = BTreeSet::new();
+    let mut conflict_session_ids = BTreeSet::new();
+    let mut service_names = BTreeSet::new();
+    let mut agent_names = BTreeSet::new();
+    let mut task_names = BTreeSet::new();
+    let mut browser_ids = BTreeSet::new();
+    let mut tab_ids = BTreeSet::new();
+
+    for session in service_state.sessions.values() {
+        if session.profile_id.as_deref() != Some(profile_id) || is_inactive_lease(session.lease) {
+            continue;
+        }
+        holder_session_ids.insert(session.id.clone());
+        if matches!(
+            session.lease,
+            LeaseState::Exclusive | LeaseState::HumanTakeover
+        ) {
+            exclusive_holder_session_ids.insert(session.id.clone());
+        }
+        insert_non_empty(&mut service_names, session.service_name.as_deref());
+        insert_non_empty(&mut agent_names, session.agent_name.as_deref());
+        insert_non_empty(&mut task_names, session.task_name.as_deref());
+        for browser_id in &session.browser_ids {
+            insert_non_empty(&mut browser_ids, Some(browser_id));
+        }
+        for tab_id in &session.tab_ids {
+            insert_non_empty(&mut tab_ids, Some(tab_id));
+        }
+        for conflict_session_id in &session.profile_lease_conflict_session_ids {
+            insert_non_empty(&mut conflict_session_ids, Some(conflict_session_id));
+        }
+    }
+
+    for browser in service_state.browsers.values() {
+        if browser.profile_id.as_deref() == Some(profile_id) {
+            insert_non_empty(&mut browser_ids, Some(browser.id.as_str()));
+            for session_id in &browser.active_session_ids {
+                insert_non_empty(&mut holder_session_ids, Some(session_id));
+            }
+        }
+    }
+
+    for tab in service_state.tabs.values() {
+        let references_profile = tab
+            .session_id
+            .as_ref()
+            .and_then(|session_id| service_state.sessions.get(session_id))
+            .and_then(|session| session.profile_id.as_deref())
+            == Some(profile_id)
+            || tab
+                .owner_session_id
+                .as_ref()
+                .and_then(|session_id| service_state.sessions.get(session_id))
+                .and_then(|session| session.profile_id.as_deref())
+                == Some(profile_id);
+        if references_profile {
+            insert_non_empty(&mut tab_ids, Some(tab.id.as_str()));
+        }
+    }
+
+    for job in service_state.jobs.values() {
+        if job.state != JobState::WaitingProfileLease
+            || waiting_profile_lease_profile_id(job) != Some(profile_id)
+        {
+            continue;
+        }
+        insert_non_empty(&mut waiting_job_ids, Some(job.id.as_str()));
+        insert_non_empty(&mut service_names, job.service_name.as_deref());
+        insert_non_empty(&mut agent_names, job.agent_name.as_deref());
+        insert_non_empty(&mut task_names, job.task_name.as_deref());
+        for conflict_session_id in waiting_profile_lease_conflict_session_ids(job) {
+            insert_non_empty(&mut conflict_session_ids, Some(conflict_session_id));
+        }
+    }
+
+    let holder_session_ids = holder_session_ids.into_iter().collect::<Vec<_>>();
+    let exclusive_holder_session_ids = exclusive_holder_session_ids.into_iter().collect::<Vec<_>>();
+    let waiting_job_ids = waiting_job_ids.into_iter().collect::<Vec<_>>();
+    let lease_state = profile_allocation_lease_state(
+        !holder_session_ids.is_empty(),
+        !exclusive_holder_session_ids.is_empty(),
+        !waiting_job_ids.is_empty(),
+    );
+    let recommended_action = profile_allocation_recommended_action(lease_state);
+
+    ServiceProfileAllocation {
+        profile_id: profile_id.to_string(),
+        profile_name: profile
+            .map(|profile| profile.name.clone())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| profile_id.to_string()),
+        allocation: profile
+            .map(|profile| profile.allocation)
+            .unwrap_or_default(),
+        keyring: profile.map(|profile| profile.keyring).unwrap_or_default(),
+        target_service_ids: profile
+            .map(|profile| sorted_strings(profile.target_service_ids.iter()))
+            .unwrap_or_default(),
+        authenticated_service_ids: profile
+            .map(|profile| sorted_strings(profile.authenticated_service_ids.iter()))
+            .unwrap_or_default(),
+        shared_service_ids: profile
+            .map(|profile| sorted_strings(profile.shared_service_ids.iter()))
+            .unwrap_or_default(),
+        holder_count: holder_session_ids.len(),
+        waiting_job_count: waiting_job_ids.len(),
+        holder_session_ids,
+        exclusive_holder_session_ids,
+        waiting_job_ids,
+        conflict_session_ids: conflict_session_ids.into_iter().collect(),
+        lease_state: lease_state.to_string(),
+        recommended_action: recommended_action.to_string(),
+        service_names: service_names.into_iter().collect(),
+        agent_names: agent_names.into_iter().collect(),
+        task_names: task_names.into_iter().collect(),
+        browser_ids: browser_ids.into_iter().collect(),
+        tab_ids: tab_ids.into_iter().collect(),
+    }
+}
+
+fn is_inactive_lease(lease: LeaseState) -> bool {
+    matches!(lease, LeaseState::Released | LeaseState::Expired)
+}
+
+fn waiting_profile_lease_profile_id(job: &ServiceJob) -> Option<&str> {
+    job.result
+        .as_ref()
+        .and_then(|result| result.get("profileId"))
+        .and_then(|profile_id| profile_id.as_str())
+        .filter(|profile_id| !profile_id.is_empty())
+}
+
+fn waiting_profile_lease_conflict_session_ids(job: &ServiceJob) -> impl Iterator<Item = &str> {
+    job.result
+        .as_ref()
+        .and_then(|result| result.get("conflictSessionIds"))
+        .and_then(|conflicts| conflicts.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|conflict| conflict.as_str())
+        .filter(|conflict| !conflict.is_empty())
+}
+
+fn profile_allocation_lease_state(
+    has_holders: bool,
+    has_exclusive_holders: bool,
+    has_waiting_jobs: bool,
+) -> &'static str {
+    match (has_holders, has_exclusive_holders, has_waiting_jobs) {
+        (_, true, true) => "conflicted",
+        (_, _, true) => "waiting",
+        (_, true, false) => "exclusive",
+        (true, false, false) => "shared",
+        (false, false, false) => "available",
+    }
+}
+
+fn profile_allocation_recommended_action(lease_state: &str) -> &'static str {
+    match lease_state {
+        "conflicted" => "release_holder_or_redirect_waiting_jobs",
+        "waiting" => "inspect_waiting_jobs",
+        "exclusive" => "reuse_holder_or_release_profile",
+        "shared" => "shared_profile_in_use",
+        _ => "available",
+    }
+}
+
+fn insert_non_empty(values: &mut BTreeSet<String>, value: Option<&str>) {
+    if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+        values.insert(value.to_string());
+    }
+}
+
+fn sorted_strings<'a>(values: impl Iterator<Item = &'a String>) -> Vec<String> {
+    values
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 /// Bounded service event log entry for operator auditability.
@@ -3462,7 +3781,7 @@ mod tests {
             ),
         ];
 
-        assert_schema_required_fields(&status_schema, &["service_state"]);
+        assert_schema_required_fields(&status_schema, &["service_state", "profileAllocations"]);
         assert!(status_schema["properties"]["control_plane"]["properties"]
             .get("waiting_profile_lease_job_count")
             .is_some());
@@ -3471,18 +3790,24 @@ mod tests {
                 "waiting_profile_lease_job_count": 0
             },
             "service_state": {},
+            "profileAllocations": [],
         }));
 
         for (schema, field, label) in collection_schemas {
             assert_schema_required_fields(&schema, &[field, "count"]);
-            assert_service_collection_response_contract(
-                &json!({
+            let response = if field == "profiles" {
+                json!({
+                    field: [],
+                    "profileAllocations": [],
+                    "count": 0,
+                })
+            } else {
+                json!({
                     field: [],
                     "count": 0,
-                }),
-                field,
-                label,
-            );
+                })
+            };
+            assert_service_collection_response_contract(&response, field, label);
         }
     }
 

@@ -10,7 +10,7 @@ use crate::native::service_contracts::{
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
 };
-use crate::native::service_model::ServiceState;
+use crate::native::service_model::{service_profile_allocations, ServiceState};
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
 
@@ -198,9 +198,11 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             "count": state.incidents.len(),
         }),
         PROFILES_RESOURCE => {
+            let profile_allocations = service_profile_allocations(state);
             let profiles = state.profiles.values().cloned().collect::<Vec<_>>();
             json!({
                 "profiles": profiles,
+                "profileAllocations": profile_allocations,
                 "count": profiles.len(),
             })
         }
@@ -10988,8 +10990,8 @@ mod tests {
         use std::collections::BTreeMap;
 
         use crate::native::service_model::{
-            assert_service_profile_record_contract, BrowserHost, BrowserProfile,
-            ProfileAllocationPolicy, ProfileKeyringPolicy,
+            assert_service_profile_allocation_contract, assert_service_profile_record_contract,
+            BrowserHost, BrowserProfile, ProfileAllocationPolicy, ProfileKeyringPolicy,
         };
 
         let state = ServiceState {
@@ -11032,6 +11034,15 @@ mod tests {
             "basic_password_store"
         );
         assert_service_profile_record_contract(&resource["contents"]["profiles"][1]);
+        assert_eq!(
+            resource["contents"]["profileAllocations"][0]["profileId"],
+            "profile-a"
+        );
+        assert_eq!(
+            resource["contents"]["profileAllocations"][1]["profileId"],
+            "profile-b"
+        );
+        assert_service_profile_allocation_contract(&resource["contents"]["profileAllocations"][1]);
     }
 
     #[test]
