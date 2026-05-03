@@ -199,6 +199,31 @@ const serviceResourceSurface = [
   },
 ];
 
+const serviceHttpOnlySurface = [
+  {
+    method: 'GET',
+    route: '/api/service/profiles/<id>/allocation',
+    docsNeedles: [
+      '/api/service/profiles/<profile-id>/allocation',
+      '/api/service/profiles/<id>/allocation',
+      '/api/service/profiles/&lt;id&gt;/allocation',
+      '/api/service/profiles/journal-downloader/allocation',
+    ],
+    httpNeedles: [
+      'service_profile_allocation_id(path)',
+      '"profileAllocation"',
+    ],
+    clientNeedles: [
+      'getServiceProfileAllocation',
+      '/api/service/profiles/${encodeURIComponent(id)}/allocation',
+    ],
+    contractNeedles: [
+      'service-profile-allocation-response.v1.schema.json',
+      'GET /api/service/profiles/<id>/allocation',
+    ],
+  },
+];
+
 for (const entry of browserSurface) {
   expectIncludes(files.mcp, entry.tool, `MCP source exposes ${entry.tool}`);
   expectIncludes(
@@ -251,6 +276,27 @@ for (const entry of serviceResourceSurface) {
   }
 }
 
+for (const entry of serviceHttpOnlySurface) {
+  for (const needle of entry.httpNeedles) {
+    expectIncludes(files.http, needle, `HTTP source exposes ${entry.method} ${entry.route}`);
+  }
+  for (const needle of entry.clientNeedles) {
+    expectIncludes(read('packages/client/src/service-observability.js'), needle, `service client exposes ${entry.route}`);
+  }
+  for (const needle of entry.contractNeedles) {
+    expectIncludes(read('docs/dev/contracts/README.md'), needle, `contract docs mention ${entry.route}`);
+  }
+
+  for (const [label, source] of [
+    ['README.md', files.readme],
+    ['skills/agent-browser/SKILL.md', files.skill],
+    ['docs/src/app/commands/page.mdx', files.docs],
+    ['docs/src/app/service-mode/page.mdx', files.serviceModeDocs],
+  ]) {
+    expectAnyIncludes(source, entry.docsNeedles ?? [entry.route], `${label} mentions ${entry.route}`);
+  }
+}
+
 if (failures.length > 0) {
   console.error('Service API/MCP parity check failed:');
   for (const failure of failures) {
@@ -260,7 +306,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service tools, and ${serviceResourceSurface.length} service resources`,
+  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service tools, ${serviceResourceSurface.length} service resources, and ${serviceHttpOnlySurface.length} HTTP-only service routes`,
 );
 
 function read(relativePath) {

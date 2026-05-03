@@ -148,6 +148,8 @@ await requestServiceTab({
 
 agent-browser first prefers profiles whose <code>authenticatedServiceIds</code> match the requested identity, then profiles whose <code>targetServiceIds</code> match, then profiles shared with the calling service through <code>sharedServiceIds</code>. Session records expose <code>profileSelectionReason</code> as <code>authenticated_target</code>, <code>target_match</code>, <code>service_allow_list</code>, or <code>explicit_profile</code>, and launch events mirror that value in <code>details.profileSelectionReason</code>. They also expose <code>profileLeaseDisposition</code> as <code>new_browser</code>, <code>reused_browser</code>, or <code>active_lease_conflict</code> plus <code>profileLeaseConflictSessionIds</code> when another exclusive session already references the same profile. Service-scoped launches reject active exclusive profile conflicts by default before browser start; set <code>profileLeasePolicy: "wait"</code> and <code>profileLeaseWaitTimeoutMs</code> to wait for release instead. Same-session retained browser reuse remains allowed. Use explicit <code>profile</code> or <code>runtimeProfile</code> request fields only for override workflows where the caller intentionally takes responsibility for the browser identity.
 
+HTTP <code>GET /api/service/profiles/&lt;id&gt;/allocation</code> returns one derived profile allocation row when a software client wants current holder, waiting job, conflict, lease state, and recommended-action data without fetching the full profile collection.
+
 Waiting lease requests stay queued until the selected profile becomes available or <code>profileLeaseWaitTimeoutMs</code> expires.
 
 ## Profile and session planning

@@ -424,6 +424,7 @@ curl -X POST "http://127.0.0.1:<stream-port>/api/browser/focus" -H "content-type
 curl -X POST "http://127.0.0.1:<stream-port>/api/browser/clear" -H "content-type: application/json" -d '{"selector":"#query"}'
 curl "http://127.0.0.1:<stream-port>/api/service/status"
 curl "http://127.0.0.1:<stream-port>/api/service/profiles"
+curl "http://127.0.0.1:<stream-port>/api/service/profiles/journal-downloader/allocation"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/profiles/journal-downloader" -H "content-type: application/json" -d '{"name":"Journal Downloader","allocation":"per_service","keyring":"basic_password_store","persistent":true,"targetServiceIds":["acs"],"authenticatedServiceIds":["acs"],"sharedServiceIds":["JournalDownloader"]}'
 curl -X DELETE "http://127.0.0.1:<stream-port>/api/service/profiles/journal-downloader"
 curl "http://127.0.0.1:<stream-port>/api/service/sessions"
