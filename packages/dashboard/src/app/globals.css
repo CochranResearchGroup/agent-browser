@@ -1026,14 +1026,6 @@ body {
   outline-offset: 2px;
 }
 
-.service-profile-allocation-row {
-  cursor: default;
-}
-
-.service-profile-allocation-row:hover {
-  transform: none;
-}
-
 .service-browser-health-dot {
   width: 0.72rem;
   height: 0.72rem;

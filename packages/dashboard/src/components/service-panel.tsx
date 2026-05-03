@@ -1427,12 +1427,23 @@ function JobDetailDialog({
   );
 }
 
-function ProfileAllocationRow({ allocation }: { allocation: ServiceProfileAllocation }) {
+function ProfileAllocationRow({
+  allocation,
+  onSelect,
+}: {
+  allocation: ServiceProfileAllocation;
+  onSelect: (allocation: ServiceProfileAllocation) => void;
+}) {
   const tone = profileAllocationTone(allocation.leaseState);
   const holderCount = allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0;
   const waitingCount = allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0;
   return (
-    <div className="service-browser-row service-profile-allocation-row">
+    <button
+      type="button"
+      className="service-browser-row"
+      onClick={() => onSelect(allocation)}
+      aria-label={`Inspect profile allocation ${allocation.profileId}`}
+    >
       <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
@@ -1455,6 +1466,87 @@ function ProfileAllocationRow({ allocation }: { allocation: ServiceProfileAlloca
           <span className="truncate">holders: {formatStringList(allocation.holderSessionIds)}</span>
           <span className="truncate">conflicts: {formatStringList(allocation.conflictSessionIds)}</span>
         </div>
+      </div>
+    </button>
+  );
+}
+
+function ProfileAllocationDetailDialog({
+  allocation,
+  onOpenChange,
+}: {
+  allocation: ServiceProfileAllocation | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const raw = formatDetails(allocation);
+  return (
+    <Dialog open={!!allocation} onOpenChange={onOpenChange}>
+      <DialogContent className="service-event-dialog">
+        {allocation && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-8 text-xl font-black tracking-[-0.04em]">
+                {allocation.profileName || allocation.profileId || "Profile allocation"}
+              </DialogTitle>
+              <DialogDescription>
+                {allocation.leaseState ?? "unknown"} / {allocation.recommendedAction ?? "inspect"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="service-event-dialog-body">
+              <div className="service-event-detail-grid">
+                <EventDetailItem label="Profile ID" value={allocation.profileId} />
+                <EventDetailItem label="Profile name" value={allocation.profileName} />
+                <EventDetailItem label="Lease state" value={allocation.leaseState} />
+                <EventDetailItem label="Recommended action" value={allocation.recommendedAction} />
+                <EventDetailItem label="Allocation" value={allocation.allocation} />
+                <EventDetailItem label="Keyring" value={allocation.keyring} />
+                <EventDetailItem label="Holder count" value={String(allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0)} />
+                <EventDetailItem label="Waiting job count" value={String(allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0)} />
+                <EventDetailItem label="Browser count" value={String(allocation.browserIds?.length ?? 0)} />
+                <EventDetailItem label="Tab count" value={String(allocation.tabIds?.length ?? 0)} />
+              </div>
+              <ProfileAllocationTokenSection title="Holder sessions" values={allocation.holderSessionIds} />
+              <ProfileAllocationTokenSection title="Exclusive holders" values={allocation.exclusiveHolderSessionIds} />
+              <ProfileAllocationTokenSection title="Waiting jobs" values={allocation.waitingJobIds} />
+              <ProfileAllocationTokenSection title="Conflicts" values={allocation.conflictSessionIds} />
+              <ProfileAllocationTokenSection title="Services" values={allocation.serviceNames} />
+              <ProfileAllocationTokenSection title="Agents" values={allocation.agentNames} />
+              <ProfileAllocationTokenSection title="Tasks" values={allocation.taskNames} />
+              <ProfileAllocationTokenSection title="Target services" values={allocation.targetServiceIds} />
+              <ProfileAllocationTokenSection title="Authenticated services" values={allocation.authenticatedServiceIds} />
+              <ProfileAllocationTokenSection title="Shared services" values={allocation.sharedServiceIds} />
+              <ProfileAllocationTokenSection title="Browsers" values={allocation.browserIds} />
+              <ProfileAllocationTokenSection title="Tabs" values={allocation.tabIds} />
+              {raw && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Raw allocation
+                  </p>
+                  <pre className="service-event-details-json">{raw}</pre>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProfileAllocationTokenSection({ title, values }: { title: string; values?: string[] }) {
+  const items = values?.filter((value) => value.trim().length > 0) ?? [];
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+        {title}
+      </p>
+      <div className="service-token-list">
+        {items.map((value) => (
+          <Badge key={value} variant="outline" className="max-w-full truncate">
+            {value}
+          </Badge>
+        ))}
       </div>
     </div>
   );
@@ -1976,6 +2068,7 @@ export function ServicePanel() {
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
   const [selectedTab, setSelectedTab] = useState<ServiceTab | null>(null);
   const [selectedJob, setSelectedJob] = useState<ServiceJob | null>(null);
+  const [selectedProfileAllocation, setSelectedProfileAllocation] = useState<ServiceProfileAllocation | null>(null);
 
   const canFetch = activePort > 0 && !!activeSession;
   const activeFilterCount =
@@ -2344,6 +2437,12 @@ export function ServicePanel() {
         }}
         onCancel={cancelJob}
       />
+      <ProfileAllocationDetailDialog
+        allocation={selectedProfileAllocation}
+        onOpenChange={(open) => {
+          if (!open) setSelectedProfileAllocation(null);
+        }}
+      />
       <div className="service-panel-hero">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -2509,6 +2608,7 @@ export function ServicePanel() {
                   <ProfileAllocationRow
                     key={allocation.profileId || `profile-allocation-${index}`}
                     allocation={allocation}
+                    onSelect={setSelectedProfileAllocation}
                   />
                 ))
               )}
