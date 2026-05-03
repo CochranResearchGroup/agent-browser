@@ -8,6 +8,7 @@ import {
   closeSession,
   createSmokeContext,
   httpJson,
+  httpJsonResult,
   parseJsonOutput,
   runCli,
 } from './smoke-utils.js';
@@ -128,6 +129,23 @@ try {
   assert(
     contracts.data?.http?.serviceProfileAllocationRoute === '/api/service/profiles/<id>/allocation',
     `serviceProfileAllocationRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
+  );
+  const missingProfileAllocation = await httpJsonResult(
+    port,
+    'GET',
+    '/api/service/profiles/missing-profile/allocation',
+  );
+  assert(
+    missingProfileAllocation.statusCode === 404,
+    `missing profile allocation status mismatch: ${JSON.stringify(missingProfileAllocation)}`,
+  );
+  assert(
+    missingProfileAllocation.body?.success === false,
+    `missing profile allocation did not return failure envelope: ${JSON.stringify(missingProfileAllocation)}`,
+  );
+  assert(
+    missingProfileAllocation.body?.error === 'Profile allocation not found: missing-profile',
+    `missing profile allocation error mismatch: ${JSON.stringify(missingProfileAllocation)}`,
   );
   assert(status.success === true, `HTTP service status failed: ${JSON.stringify(status)}`);
   assert(
