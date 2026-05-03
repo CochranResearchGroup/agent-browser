@@ -3,6 +3,7 @@
 
 export const SERVICE_JOB_STATES = [
   "queued",
+  "waiting_profile_lease",
   "running",
   "succeeded",
   "failed",

@@ -3,6 +3,7 @@
 
 export type ServiceJobState =
   | "queued"
+  | "waiting_profile_lease"
   | "running"
   | "succeeded"
   | "failed"

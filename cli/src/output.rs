@@ -3551,7 +3551,7 @@ Notes:
   - Derived grouped incidents are retained with incident state, latest kind, and related event/job ids.
   - Incident operator metadata includes acknowledgement and resolution timestamps, actor names, and notes.
   - Acknowledgement and resolution append incident_acknowledged and incident_resolved service events.
-  - Cancel marks queued jobs before dispatch and requests cooperative cancellation for running jobs.
+  - Cancel marks queued or lease-waiting jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - Incidents include severity, escalation, and recommendedAction so clients share one operator priority contract.
   - service incidents --summary groups the current filtered incident set by escalation, severity, and state with recommended next actions.
@@ -4369,7 +4369,7 @@ Examples:
   agent-browser service site-policies    # Inspect configured service site-policy records
   agent-browser service providers        # Inspect configured service provider records
   agent-browser service challenges       # Inspect retained service challenge records
-  agent-browser service cancel <job-id>  # Cancel a queued or running service job
+  agent-browser service cancel <job-id>  # Cancel a queued, waiting, or running service job
   agent-browser service acknowledge      # Mark a retained incident acknowledged
   agent-browser service resolve          # Mark a retained incident resolved
   agent-browser service activity         # Inspect a retained incident timeline

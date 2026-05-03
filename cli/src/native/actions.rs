@@ -7176,6 +7176,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
 fn service_job_state_name(state: ServiceJobState) -> &'static str {
     match state {
         ServiceJobState::Queued => "queued",
+        ServiceJobState::WaitingProfileLease => "waiting_profile_lease",
         ServiceJobState::Running => "running",
         ServiceJobState::Succeeded => "succeeded",
         ServiceJobState::Failed => "failed",
@@ -13309,7 +13310,7 @@ mod tests {
         let cmd = json!({
             "action": "service_jobs",
             "id": "svc-jobs-2",
-            "state": "failed",
+            "state": "waiting_profile_lease",
             "jobAction": "navigate",
             "profileId": "work",
             "sessionId": "session-1",
@@ -13336,7 +13337,7 @@ mod tests {
                     "job-1": {
                         "id": "job-1",
                         "action": "navigate",
-                        "state": "failed",
+                        "state": "waiting_profile_lease",
                         "target": {"browser": "browser-1"},
                         "serviceName": "JournalDownloader",
                         "agentName": "codex",
@@ -13346,7 +13347,7 @@ mod tests {
                     "job-2": {
                         "id": "job-2",
                         "action": "navigate",
-                        "state": "failed",
+                        "state": "waiting_profile_lease",
                         "target": {"browser": "browser-1"},
                         "serviceName": "JournalDownloader",
                         "agentName": "codex",

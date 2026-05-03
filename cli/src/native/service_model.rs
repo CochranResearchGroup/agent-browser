@@ -167,8 +167,9 @@ pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 12] = [
     "service_job_cancelled",
     "service_job",
 ];
-pub const SERVICE_JOB_STATE_VALUES: [&str; 6] = [
+pub const SERVICE_JOB_STATE_VALUES: [&str; 7] = [
     "queued",
+    "waiting_profile_lease",
     "running",
     "succeeded",
     "failed",
@@ -2342,6 +2343,7 @@ pub enum JobTarget {
 #[serde(rename_all = "snake_case")]
 pub enum JobState {
     Queued,
+    WaitingProfileLease,
     Running,
     Succeeded,
     Failed,

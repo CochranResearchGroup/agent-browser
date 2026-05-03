@@ -45,7 +45,7 @@ pub fn cancel_service_job_in_repository(
             .ok_or_else(|| format!("Service job not found: {}", job_id))?;
 
         match job.state {
-            JobState::Queued => {
+            JobState::Queued | JobState::WaitingProfileLease => {
                 job.state = JobState::Cancelled;
                 job.completed_at = Some(current_timestamp());
                 job.error = Some(
@@ -105,6 +105,7 @@ fn prune_service_jobs(state: &mut ServiceState) {
 fn job_state_name(state: JobState) -> &'static str {
     match state {
         JobState::Queued => "queued",
+        JobState::WaitingProfileLease => "waiting_profile_lease",
         JobState::Running => "running",
         JobState::Succeeded => "succeeded",
         JobState::Failed => "failed",

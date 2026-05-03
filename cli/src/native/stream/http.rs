@@ -1515,7 +1515,13 @@ fn service_jobs_command(query: Option<&str>) -> Result<Value, String> {
                 cmd["jobId"] = json!(value);
             }
             "state" => match value.as_str() {
-                "queued" | "running" | "succeeded" | "failed" | "cancelled" | "timed_out" => {
+                "queued"
+                | "waiting_profile_lease"
+                | "running"
+                | "succeeded"
+                | "failed"
+                | "cancelled"
+                | "timed_out" => {
                     cmd["state"] = json!(value);
                 }
                 _ => return Err(format!("Invalid state value: {}", value)),
@@ -1824,13 +1830,13 @@ mod tests {
     #[test]
     fn service_jobs_command_maps_query_filters() {
         let cmd = service_jobs_command(Some(
-            "limit=7&state=failed&action=navigate&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
+            "limit=7&state=waiting_profile_lease&action=navigate&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
         ))
         .unwrap();
 
         assert_eq!(cmd["action"], "service_jobs");
         assert_eq!(cmd["limit"], 7);
-        assert_eq!(cmd["state"], "failed");
+        assert_eq!(cmd["state"], "waiting_profile_lease");
         assert_eq!(cmd["jobAction"], "navigate");
         assert_eq!(cmd["profileId"], "work");
         assert_eq!(cmd["sessionId"], "session-1");

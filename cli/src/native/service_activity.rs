@@ -282,6 +282,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
 fn service_job_state_name(state: JobState) -> &'static str {
     match state {
         JobState::Queued => "queued",
+        JobState::WaitingProfileLease => "waiting_profile_lease",
         JobState::Running => "running",
         JobState::Succeeded => "succeeded",
         JobState::Failed => "failed",

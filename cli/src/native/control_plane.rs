@@ -374,7 +374,11 @@ fn persist_reconciled_service_state(before: &ServiceState, reconciled: &ServiceS
 enum SchedulerLeaseDecision {
     Ready,
     Reject(String),
-    Wait { retry_after_ms: u64 },
+    Wait {
+        retry_after_ms: u64,
+        profile_id: String,
+        conflict_session_ids: Vec<String>,
+    },
 }
 
 fn scheduler_profile_lease_gate(
@@ -387,11 +391,19 @@ fn scheduler_profile_lease_gate(
     match service_profile_lease_gate(&request.command, session_id, waited_ms) {
         Ok(ServiceProfileLeaseGate::Ready) => SchedulerLeaseDecision::Ready,
         Ok(ServiceProfileLeaseGate::Reject { error }) => SchedulerLeaseDecision::Reject(error),
-        Ok(ServiceProfileLeaseGate::Wait { retry_after_ms, .. }) => {
+        Ok(ServiceProfileLeaseGate::Wait {
+            retry_after_ms,
+            profile_id,
+            conflict_session_ids,
+        }) => {
             if request.profile_lease_wait_started_at.is_none() {
                 request.profile_lease_wait_started_at = Some(Instant::now());
             }
-            SchedulerLeaseDecision::Wait { retry_after_ms }
+            SchedulerLeaseDecision::Wait {
+                retry_after_ms,
+                profile_id,
+                conflict_session_ids,
+            }
         }
         Err(error) => SchedulerLeaseDecision::Reject(error),
     }
@@ -472,6 +484,36 @@ fn persist_service_job_queued(request: &ControlRequest) {
         priority: service_job_priority(request.priority),
         submitted_at: Some(request.submitted_at_wall.clone()),
         timeout_ms: request.timeout_ms,
+        ..ServiceJob::default()
+    });
+}
+
+fn persist_service_job_waiting_profile_lease(
+    request: &ControlRequest,
+    retry_after_ms: u64,
+    profile_id: &str,
+    conflict_session_ids: &[String],
+) {
+    persist_service_job(ServiceJob {
+        id: service_job_id(request),
+        action: request.action.clone(),
+        service_name: request.service_name.clone(),
+        agent_name: request.agent_name.clone(),
+        task_name: request.task_name.clone(),
+        naming_warnings: request.naming_warnings.clone(),
+        has_naming_warning: !request.naming_warnings.is_empty(),
+        target: JobTarget::Service,
+        owner: ServiceActor::System,
+        state: JobState::WaitingProfileLease,
+        priority: service_job_priority(request.priority),
+        submitted_at: Some(request.submitted_at_wall.clone()),
+        timeout_ms: request.timeout_ms,
+        result: Some(json!({
+            "waitingProfileLease": true,
+            "profileId": profile_id,
+            "conflictSessionIds": conflict_session_ids,
+            "retryAfterMs": retry_after_ms,
+        })),
         ..ServiceJob::default()
     });
 }
@@ -793,7 +835,17 @@ async fn run_worker(
                                 }));
                                 continue;
                             }
-                            SchedulerLeaseDecision::Wait { retry_after_ms } => {
+                            SchedulerLeaseDecision::Wait {
+                                retry_after_ms,
+                                profile_id,
+                                conflict_session_ids,
+                            } => {
+                                persist_service_job_waiting_profile_lease(
+                                    &request,
+                                    retry_after_ms,
+                                    &profile_id,
+                                    &conflict_session_ids,
+                                );
                                 status.queue_depth.fetch_add(1, Ordering::Relaxed);
                                 let tx = tx.clone();
                                 let status = status.clone();
@@ -1284,6 +1336,39 @@ mod tests {
     }
 
     #[test]
+    fn cancel_service_job_in_repository_marks_profile_lease_wait_cancelled() {
+        let home = temp_home("control-plane-cancel-profile-lease-wait");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&ServiceState {
+                jobs: std::collections::BTreeMap::from([(
+                    "job-waiting".to_string(),
+                    ServiceJob {
+                        id: "job-waiting".to_string(),
+                        action: "navigate".to_string(),
+                        state: JobState::WaitingProfileLease,
+                        submitted_at: Some("2026-04-22T00:00:00Z".to_string()),
+                        ..ServiceJob::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let job =
+            cancel_service_job_in_repository(&repository, "job-waiting", Some("stale")).unwrap();
+
+        assert_eq!(job.state, JobState::Cancelled);
+        assert_eq!(job.error.as_deref(), Some("stale"));
+        assert_eq!(job.result.as_ref().unwrap()["cancelled"], true);
+
+        let persisted = store.load().unwrap();
+        assert_eq!(persisted.jobs["job-waiting"].state, JobState::Cancelled);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
     fn service_job_repository_helpers_mutate_prune_and_load() {
         let home = temp_home("control-plane-job-repository");
         let store = JsonServiceStateStore::new(home.join("state.json"));
@@ -1648,6 +1733,23 @@ mod tests {
             }))
             .await;
         assert_eq!(quick_response["success"], true);
+
+        let waiting_snapshot = store.load().unwrap();
+        let waiting_job = &waiting_snapshot.jobs["lease-wait-job"];
+        assert_eq!(waiting_job.state, JobState::WaitingProfileLease);
+        assert_eq!(
+            waiting_job.result.as_ref().unwrap()["waitingProfileLease"],
+            true
+        );
+        assert_eq!(
+            waiting_job.result.as_ref().unwrap()["profileId"],
+            "acs-profile"
+        );
+        assert_eq!(
+            waiting_job.result.as_ref().unwrap()["conflictSessionIds"],
+            json!(["active-session"])
+        );
+        assert!(waiting_job.started_at.is_none());
 
         let mut released = store.load().unwrap();
         released.sessions.get_mut("active-session").unwrap().lease = LeaseState::Released;
