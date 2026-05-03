@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   getServiceContracts,
+  getServiceTrace,
   registerServiceLoginProfile,
 } from '../packages/client/src/service-observability.js';
 
@@ -53,6 +54,82 @@ async function main() {
   assert.equal(contracts.calls[0].url, 'http://127.0.0.1:4849/api/service/contracts');
   assert.equal(contracts.calls[0].init.method, 'GET');
   assert.equal(contractResult.schemaVersion, 'v1');
+
+  const trace = createFetchRecorder({
+    success: true,
+    data: {
+      filters: {
+        serviceName: 'JournalDownloader',
+        profileId: 'profile-1',
+        limit: 20,
+      },
+      events: [],
+      jobs: [],
+      incidents: [],
+      activity: [],
+      summary: {
+        contextCount: 0,
+        hasTraceContext: false,
+        namingWarningCount: 0,
+        profileLeaseWaits: {
+          count: 1,
+          activeCount: 0,
+          completedCount: 1,
+          waits: [
+            {
+              jobId: 'job-wait-complete',
+              profileId: 'profile-1',
+              outcome: 'ready',
+              startedAt: '2026-04-25T12:00:10Z',
+              endedAt: '2026-04-25T12:00:15Z',
+              waitedMs: 5000,
+              retryAfterMs: 250,
+              conflictSessionIds: ['session-conflict'],
+              serviceName: 'JournalDownloader',
+              agentName: 'agent-a',
+              taskName: 'probeACSwebsite',
+            },
+          ],
+        },
+        contexts: [],
+      },
+      counts: {
+        events: 0,
+        jobs: 0,
+        incidents: 0,
+        activity: 0,
+      },
+      matched: {
+        events: 0,
+        jobs: 0,
+        incidents: 0,
+        activity: 0,
+      },
+      total: {
+        events: 0,
+        jobs: 0,
+        incidents: 0,
+      },
+    },
+  });
+  const traceResult = await getServiceTrace({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: trace.fetch,
+    query: {
+      'service-name': 'JournalDownloader',
+      'profile-id': 'profile-1',
+      limit: 20,
+    },
+  });
+  assert.equal(
+    trace.calls[0].url,
+    'http://127.0.0.1:4849/api/service/trace?service-name=JournalDownloader&profile-id=profile-1&limit=20',
+  );
+  assert.equal(trace.calls[0].init.method, 'GET');
+  assert.equal(traceResult.summary.profileLeaseWaits.count, 1);
+  assert.equal(traceResult.summary.profileLeaseWaits.completedCount, 1);
+  assert.equal(traceResult.summary.profileLeaseWaits.waits[0].jobId, 'job-wait-complete');
+  assert.equal(traceResult.summary.profileLeaseWaits.waits[0].waitedMs, 5000);
 
   assert.throws(
     () =>

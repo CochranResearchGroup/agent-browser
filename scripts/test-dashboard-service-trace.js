@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeServiceTraceData,
   traceFilterSummary,
+  traceProfileLeaseWaits,
   traceSummaryCards,
   traceSummaryContexts,
   traceTimelineItems,
@@ -98,6 +99,39 @@ const traceData = {
     contextCount: 2,
     hasTraceContext: true,
     namingWarningCount: 1,
+    profileLeaseWaits: {
+      count: 2,
+      activeCount: 1,
+      completedCount: 1,
+      waits: [
+        {
+          jobId: 'job-wait-complete',
+          profileId: 'profile-1',
+          outcome: 'ready',
+          startedAt: '2026-04-25T12:00:10Z',
+          endedAt: '2026-04-25T12:00:15Z',
+          waitedMs: 5000,
+          retryAfterMs: 250,
+          conflictSessionIds: ['session-conflict'],
+          serviceName: 'JournalDownloader',
+          agentName: 'agent-a',
+          taskName: 'probeACSwebsite',
+        },
+        {
+          jobId: 'job-wait-active',
+          profileId: 'profile-1',
+          outcome: 'started',
+          startedAt: '2026-04-25T12:05:00Z',
+          endedAt: null,
+          waitedMs: null,
+          retryAfterMs: 500,
+          conflictSessionIds: ['session-1', 'session-2'],
+          serviceName: 'JournalDownloader',
+          agentName: 'agent-b',
+          taskName: 'downloadIssue',
+        },
+      ],
+    },
     contexts: [
       {
         serviceName: 'SmallService',
@@ -173,6 +207,17 @@ assert.deepEqual(summaryCards[0].meta, [
 assert.deepEqual(summaryCards[0].counts, ['2 ev', '2 jobs', '0 inc', '2 act']);
 assert.equal(summaryCards[1].warning, 'Missing agent name');
 assert.equal(traceSummaryCards(null).length, 0);
+
+const profileLeaseWaits = traceProfileLeaseWaits(traceData);
+assert.deepEqual(
+  profileLeaseWaits.map((wait) => wait.jobId),
+  ['job-wait-active', 'job-wait-complete'],
+  'Active profile lease waits should sort before completed waits',
+);
+assert.equal(profileLeaseWaits[0].profileId, 'profile-1');
+assert.equal(profileLeaseWaits[0].conflictSessionIds.length, 2);
+assert.equal(profileLeaseWaits[1].waitedMs, 5000);
+assert.equal(traceProfileLeaseWaits(null).length, 0);
 
 const timeline = traceTimelineItems(traceData);
 assert.deepEqual(
