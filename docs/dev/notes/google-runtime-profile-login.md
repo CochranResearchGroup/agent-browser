@@ -106,6 +106,24 @@ For Google, Gmail, and similar SSO flows, do not start with `runtime login --att
 
 Use `runtime login --attachable` only for sites where DevTools during manual login is known to be accepted, or when the user explicitly needs automation attached to the still-open browser.
 
+## Service Model Implication
+
+For the always-on service roadmap, this workflow means a new Google profile is
+not ready for automation just because it exists or is allocatable. It must be
+manually seated first.
+
+In service terms, a Google target identity needs a `needs_manual_seating`
+readiness state until a user has launched the managed runtime profile without
+DevTools, completed sign-in, closed Chrome, and allowed agent-browser to
+relaunch the same profile for attachable automation. This state is distinct
+from stale auth, a crashed browser, a locked profile, or a lease conflict. The
+correct remedy is an operator-facing manual bootstrap, not an automated CDP
+login attempt.
+
+Once seated, the profile can still become stale later. Freshness probes should
+then answer whether the existing seated profile remains authenticated for the
+requested target service or login ID.
+
 ## Canonical Workflow
 
 Assume the signed-in runtime profile is named `google-login`.
