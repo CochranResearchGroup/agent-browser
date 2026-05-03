@@ -709,6 +709,64 @@ try {
     Array.isArray(profileCollection.data?.profiles),
     'HTTP service profiles missing profiles array',
   );
+  assert(
+    Array.isArray(status.data?.profileAllocations),
+    `HTTP service status missing profileAllocations: ${JSON.stringify(status.data)}`,
+  );
+  assert(
+    Array.isArray(profileCollection.data?.profileAllocations),
+    `HTTP service profiles missing profileAllocations: ${JSON.stringify(profileCollection.data)}`,
+  );
+  const statusProfileAllocation = status.data.profileAllocations.find(
+    (allocation) => allocation.profileId === runtimeProfile,
+  );
+  assert(
+    statusProfileAllocation,
+    `HTTP service status did not include profile allocation ${runtimeProfile}: ${JSON.stringify(status.data.profileAllocations)}`,
+  );
+  const collectionProfileAllocation = profileCollection.data.profileAllocations.find(
+    (allocation) => allocation.profileId === runtimeProfile,
+  );
+  assert(
+    collectionProfileAllocation,
+    `HTTP service profiles did not include profile allocation ${runtimeProfile}: ${JSON.stringify(profileCollection.data.profileAllocations)}`,
+  );
+  assert(
+    JSON.stringify(collectionProfileAllocation) === JSON.stringify(statusProfileAllocation),
+    `HTTP service profile allocation collection/status mismatch: ${JSON.stringify({
+      collectionProfileAllocation,
+      statusProfileAllocation,
+    })}`,
+  );
+  const singleProfileAllocation = await httpJson(
+    port,
+    'GET',
+    `/api/service/profiles/${encodeURIComponent(runtimeProfile)}/allocation`,
+  );
+  assert(
+    singleProfileAllocation.success === true,
+    `HTTP service profile allocation lookup failed: ${JSON.stringify(singleProfileAllocation)}`,
+  );
+  assert(
+    JSON.stringify(singleProfileAllocation.data?.profileAllocation) ===
+      JSON.stringify(collectionProfileAllocation),
+    `HTTP service profile allocation lookup mismatch: ${JSON.stringify({
+      singleProfileAllocation: singleProfileAllocation.data?.profileAllocation,
+      collectionProfileAllocation,
+    })}`,
+  );
+  assert(
+    singleProfileAllocation.data.profileAllocation.holderSessionIds?.includes(session),
+    `HTTP service profile allocation lookup missing holder session ${session}: ${JSON.stringify(singleProfileAllocation)}`,
+  );
+  assert(
+    singleProfileAllocation.data.profileAllocation.leaseState === 'exclusive',
+    `HTTP service profile allocation lookup leaseState was ${singleProfileAllocation.data.profileAllocation.leaseState}`,
+  );
+  assert(
+    singleProfileAllocation.data.profileAllocation.recommendedAction === 'reuse_holder_or_release_profile',
+    `HTTP service profile allocation lookup recommendedAction was ${singleProfileAllocation.data.profileAllocation.recommendedAction}`,
+  );
 
   const profile = Object.values(serviceState.profiles || {}).find(
     (profile) => profile.id === runtimeProfile,
