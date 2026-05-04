@@ -571,6 +571,10 @@ read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
 Run `pnpm test:service-contracts-no-launch` to validate that HTTP
 `/api/service/contracts` returns compatibility metadata without launching or
 recording a browser.
+Run `pnpm test:service-profile-lookup-no-launch` to validate that HTTP
+`/api/service/profiles/lookup` selects an authenticated target profile over a
+target-only profile from seeded temporary service state without launching a
+browser.
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
 Fast CI runs the no-launch service contract metadata smoke and the no-launch

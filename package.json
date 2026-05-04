@@ -46,6 +46,7 @@
     "test:service-profile-live": "node scripts/smoke-service-profile-mcp.js",
     "test:service-profile-target-mcp-live": "node scripts/smoke-service-profile-target-mcp.js",
     "test:service-profile-http-live": "node scripts/smoke-service-profile-http.js",
+    "test:service-profile-lookup-no-launch": "node scripts/smoke-service-profile-lookup.js",
     "test:service-profile-lease-wait-live": "node scripts/smoke-service-profile-lease-wait.js",
     "test:service-request-live": "node scripts/smoke-service-request.js",
     "test:service-status-no-launch": "node scripts/smoke-service-status-no-launch.js",
