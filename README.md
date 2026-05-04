@@ -574,7 +574,8 @@ recording a browser.
 Run `pnpm test:service-profile-lookup-no-launch` to validate that HTTP
 `/api/service/profiles/lookup` selects an authenticated target profile over a
 target-only profile from seeded temporary service state without launching a
-browser.
+browser. The same smoke calls `lookupServiceProfile()` against the live stream
+server so the software-client helper is covered end to end.
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
 Fast CI runs the no-launch service contract metadata smoke and the no-launch

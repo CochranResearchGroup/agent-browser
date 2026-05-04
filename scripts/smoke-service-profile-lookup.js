@@ -3,6 +3,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { lookupServiceProfile } from '../packages/client/src/service-observability.js';
+
 import {
   assert,
   closeSession,
@@ -150,6 +152,32 @@ try {
   assert(
     lookup.data?.readinessSummary?.needsManualSeeding === false,
     `profile lookup readiness summary unexpectedly requires manual seeding: ${JSON.stringify(lookup.data)}`,
+  );
+
+  const clientLookup = await lookupServiceProfile({
+    baseUrl: `http://127.0.0.1:${port}`,
+    serviceName,
+    loginId: targetServiceId,
+  });
+  assert(
+    clientLookup.selectedProfile?.id === authenticatedProfileId,
+    `client lookup did not select authenticated profile: ${JSON.stringify(clientLookup)}`,
+  );
+  assert(
+    clientLookup.selectedProfileMatch?.profileId === authenticatedProfileId,
+    `client lookup selected match id mismatch: ${JSON.stringify(clientLookup)}`,
+  );
+  assert(
+    clientLookup.selectedProfileMatch?.reason === 'authenticated_target',
+    `client lookup did not report authenticated_target: ${JSON.stringify(clientLookup)}`,
+  );
+  assert(
+    clientLookup.readiness?.profileId === authenticatedProfileId,
+    `client lookup readiness did not use selected profile: ${JSON.stringify(clientLookup)}`,
+  );
+  assert(
+    clientLookup.readinessSummary?.needsManualSeeding === false,
+    `client lookup readiness summary unexpectedly requires manual seeding: ${JSON.stringify(clientLookup)}`,
   );
 
   await cleanup();

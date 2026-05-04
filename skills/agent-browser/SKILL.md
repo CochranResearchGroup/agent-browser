@@ -446,7 +446,7 @@ Launch-shaping options such as `--args` or `AGENT_BROWSER_ARGS` apply only to co
 
 Run `pnpm test:service-status-no-launch` to validate that service status remains read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
 Run `pnpm test:service-contracts-no-launch` to validate that HTTP `GET /api/service/contracts` returns compatibility metadata without launching or recording a browser.
-Run `pnpm test:service-profile-lookup-no-launch` to validate that HTTP `GET /api/service/profiles/lookup` selects an authenticated target profile over a target-only profile from seeded temporary service state without launching a browser.
+Run `pnpm test:service-profile-lookup-no-launch` to validate that HTTP `GET /api/service/profiles/lookup` selects an authenticated target profile over a target-only profile from seeded temporary service state without launching a browser. The same smoke calls `lookupServiceProfile()` against the live stream server so the software-client helper is covered end to end.
 
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain read-only under the same launch defaults.
 

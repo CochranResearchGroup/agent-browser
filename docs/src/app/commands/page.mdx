@@ -463,7 +463,7 @@ Run <code>pnpm test:service-status-no-launch</code> to validate that service sta
 
 Run <code>pnpm test:service-contracts-no-launch</code> to validate that HTTP <code>/api/service/contracts</code> returns compatibility metadata without launching or recording a browser.
 
-Run <code>pnpm test:service-profile-lookup-no-launch</code> to validate that HTTP <code>/api/service/profiles/lookup</code> selects an authenticated target profile over a target-only profile from seeded temporary service state without launching a browser.
+Run <code>pnpm test:service-profile-lookup-no-launch</code> to validate that HTTP <code>/api/service/profiles/lookup</code> selects an authenticated target profile over a target-only profile from seeded temporary service state without launching a browser. The same smoke calls <code>lookupServiceProfile()</code> against the live stream server so the software-client helper is covered end to end.
 
 Run <code>pnpm test:mcp-read-no-launch</code> to validate that MCP resource reads remain read-only under the same launch defaults.
 
