@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-readiness-response.v1.schema.json",
+  "title": "agent-browser service profile readiness response",
+  "description": "Stable API shape for one service profile's no-launch target-readiness rows returned by HTTP service APIs and service observability clients.",
+  "type": "object",
+  "required": [
+    "profileId",
+    "targetReadiness",
+    "count"
+  ],
+  "properties": {
+    "profileId": {
+      "type": "string"
+    },
+    "targetReadiness": {
+      "description": "Derived no-launch readiness rows for target services or login identities this profile may satisfy.",
+      "type": "array",
+      "items": {
+        "$ref": "service-profile-record.v1.schema.json#/$defs/profileTargetReadiness"
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

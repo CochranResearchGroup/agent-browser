@@ -127,8 +127,31 @@ try {
     `serviceProfileAllocationResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileReadinessResponse?.schemaId ===
+      'https://agent-browser.local/contracts/service-profile-readiness-response.v1.schema.json',
+    `serviceProfileReadinessResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileReadinessResponse?.schemaPath ===
+      'docs/dev/contracts/service-profile-readiness-response.v1.schema.json',
+    `serviceProfileReadinessResponse schema path mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileReadinessResponse?.http?.method === 'GET',
+    `serviceProfileReadinessResponse HTTP method mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileReadinessResponse?.http?.route ===
+      '/api/service/profiles/<id>/readiness',
+    `serviceProfileReadinessResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
     contracts.data?.http?.serviceProfileAllocationRoute === '/api/service/profiles/<id>/allocation',
     `serviceProfileAllocationRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
+  );
+  assert(
+    contracts.data?.http?.serviceProfileReadinessRoute === '/api/service/profiles/<id>/readiness',
+    `serviceProfileReadinessRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
   );
   const missingProfileAllocation = await httpJsonResult(
     port,
@@ -146,6 +169,23 @@ try {
   assert(
     missingProfileAllocation.body?.error === 'Profile allocation not found: missing-profile',
     `missing profile allocation error mismatch: ${JSON.stringify(missingProfileAllocation)}`,
+  );
+  const missingProfileReadiness = await httpJsonResult(
+    port,
+    'GET',
+    '/api/service/profiles/missing-profile/readiness',
+  );
+  assert(
+    missingProfileReadiness.statusCode === 404,
+    `missing profile readiness status mismatch: ${JSON.stringify(missingProfileReadiness)}`,
+  );
+  assert(
+    missingProfileReadiness.body?.success === false,
+    `missing profile readiness did not return failure envelope: ${JSON.stringify(missingProfileReadiness)}`,
+  );
+  assert(
+    missingProfileReadiness.body?.error === 'Profile readiness not found: missing-profile',
+    `missing profile readiness error mismatch: ${JSON.stringify(missingProfileReadiness)}`,
   );
   assert(status.success === true, `HTTP service status failed: ${JSON.stringify(status)}`);
   assert(

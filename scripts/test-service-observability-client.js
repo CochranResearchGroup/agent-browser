@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   getServiceContracts,
   getServiceProfileAllocation,
+  getServiceProfileReadiness,
   getServiceStatus,
   getServiceTrace,
   registerServiceLoginProfile,
@@ -123,6 +124,24 @@ async function main() {
   assert.equal(allocation.calls[0].init.method, 'GET');
   assert.equal(allocationResult.profileAllocation.profileId, 'work');
   assert.equal(allocationResult.profileAllocation.targetReadiness[0].state, 'needs_manual_seeding');
+
+  const readiness = createFetchRecorder({
+    success: true,
+    data: {
+      profileId: 'work',
+      targetReadiness: allocationResult.profileAllocation.targetReadiness,
+      count: 1,
+    },
+  });
+  const readinessResult = await getServiceProfileReadiness({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: readiness.fetch,
+    id: 'work',
+  });
+  assert.equal(readiness.calls[0].url, 'http://127.0.0.1:4849/api/service/profiles/work/readiness');
+  assert.equal(readiness.calls[0].init.method, 'GET');
+  assert.equal(readinessResult.profileId, 'work');
+  assert.equal(readinessResult.targetReadiness[0].state, 'needs_manual_seeding');
 
   const trace = createFetchRecorder({
     success: true,

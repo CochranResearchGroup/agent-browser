@@ -330,6 +330,37 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" {
+        if let Some(profile_id) = service_profile_readiness_id(path) {
+            let service_state = load_service_state();
+            let profile = service_state.profiles.get(profile_id);
+            match profile {
+                Some(profile) => {
+                    write_json_value(
+                        &mut stream,
+                        "200 OK",
+                        json!({
+                            "success": true,
+                            "data": {
+                                "profileId": profile.id.clone(),
+                                "targetReadiness": profile.target_readiness.clone(),
+                                "count": profile.target_readiness.len(),
+                            },
+                        }),
+                    )
+                    .await;
+                }
+                None => {
+                    write_json_result(
+                        &mut stream,
+                        Err(format!("Profile readiness not found: {profile_id}")),
+                        "404 Not Found",
+                    )
+                    .await;
+                }
+            }
+            return;
+        }
+
         if let Some(profile_id) = service_profile_allocation_id(path) {
             let service_state = load_service_state();
             let profile_allocation = service_profile_allocations(&service_state)
@@ -1161,6 +1192,12 @@ fn service_profile_id(path: &str) -> Option<&str> {
 fn service_profile_allocation_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/profiles/")
         .and_then(|suffix| suffix.strip_suffix("/allocation"))
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
+fn service_profile_readiness_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/profiles/")
+        .and_then(|suffix| suffix.strip_suffix("/readiness"))
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
@@ -2125,6 +2162,10 @@ mod tests {
             Some("journal-downloader")
         );
         assert_eq!(
+            service_profile_readiness_id("/api/service/profiles/journal-downloader/readiness"),
+            Some("journal-downloader")
+        );
+        assert_eq!(
             service_session_id("/api/service/sessions/journal-run"),
             Some("journal-run")
         );
@@ -2142,7 +2183,15 @@ mod tests {
             None
         );
         assert_eq!(
+            service_profile_readiness_id("/api/service/profiles/journal/extra/readiness"),
+            None
+        );
+        assert_eq!(
             service_profile_allocation_id("/api/service/profiles/journal-downloader"),
+            None
+        );
+        assert_eq!(
+            service_profile_readiness_id("/api/service/profiles/journal-downloader"),
             None
         );
         assert_eq!(

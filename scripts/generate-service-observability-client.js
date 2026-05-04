@@ -13,6 +13,7 @@ const schemas = {
   profile: readSchema('service-profile-record.v1.schema.json'),
   profilesResponse: readSchema('service-profiles-response.v1.schema.json'),
   profileAllocationResponse: readSchema('service-profile-allocation-response.v1.schema.json'),
+  profileReadinessResponse: readSchema('service-profile-readiness-response.v1.schema.json'),
   browser: readSchema('service-browser-record.v1.schema.json'),
   browsersResponse: readSchema('service-browsers-response.v1.schema.json'),
   session: readSchema('service-session-record.v1.schema.json'),
@@ -349,6 +350,13 @@ export interface ServiceProfileAllocationResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileReadinessResponse {
+  profileId: string;
+  targetReadiness: ServiceProfileTargetReadiness[];
+  count: number;
+  [key: string]: unknown;
+}
+
 export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {
   browsers: ServiceBrowserRecord[];
 }
@@ -638,6 +646,7 @@ export declare function getServiceStatus(options: ServiceObservabilityHttpOption
 export declare function getServiceContracts(options: ServiceObservabilityHttpOptions): Promise<ServiceContractsResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
+export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;

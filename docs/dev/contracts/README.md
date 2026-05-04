@@ -172,6 +172,11 @@ envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a
 software client needs one derived profile allocation row without fetching the
 full profile collection.
 
+`service-profile-readiness-response.v1.schema.json` describes the response
+envelope returned by HTTP `GET /api/service/profiles/<id>/readiness` when a
+software client needs one profile's no-launch target-readiness rows without
+fetching allocation details or the full profile collection.
+
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:
 
