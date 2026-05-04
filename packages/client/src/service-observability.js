@@ -57,6 +57,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileRecord} ServiceProfileRecord
  * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityMatchOptions} ServiceProfileIdentityMatchOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityMatchResult} ServiceProfileIdentityMatchResult
+ * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityLookupOptions} ServiceProfileIdentityLookupOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityLookupResult} ServiceProfileIdentityLookupResult
  */
 
 /**
@@ -176,6 +178,26 @@ export function findServiceProfileForIdentity(profiles, options) {
     reason: null,
     matchedField: null,
     matchedIdentity: null,
+  };
+}
+
+/**
+ * @param {ServiceProfileIdentityLookupOptions} options
+ * @returns {Promise<ServiceProfileIdentityLookupResult>}
+ */
+export async function getServiceProfileForIdentity({ readinessProfileId, ...options }) {
+  const profiles = await getServiceProfiles(options);
+  const selectedProfileMatch = findServiceProfileForIdentity(profiles.profiles, options);
+  const selectedProfile = selectedProfileMatch.profile;
+  const readinessId = readinessProfileId ?? selectedProfile?.id;
+  const readiness = readinessId ? await getServiceProfileReadiness({ ...options, id: readinessId }) : null;
+
+  return {
+    profiles,
+    selectedProfile,
+    selectedProfileMatch,
+    readiness,
+    readinessSummary: summarizeServiceProfileReadiness(readiness),
   };
 }
 

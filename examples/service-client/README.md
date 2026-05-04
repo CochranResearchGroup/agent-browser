@@ -84,17 +84,20 @@ Use `findServiceProfileForIdentity()` from
 `@agent-browser/client/service-observability` when a client needs to inspect
 the profile collection itself; it returns the selected profile plus the matched
 field, identity, and selection reason.
+Use `getServiceProfileForIdentity()` when a client wants the common broker read
+path in one call: it fetches the profile collection, applies identity
+selection, reads readiness for the selected or explicit readiness profile, and
+returns the readiness summary.
 
 ## Managed Profile Broker Recipe
 
 Use `managed-profile-flow.mjs` when a software client needs the CanvaCLI-style
 profile-broker pattern:
 
-1. Inspect managed profiles with `getServiceProfiles()`.
-2. Inspect a candidate profile with `getServiceProfileReadiness({ id })`.
-3. Request the target identity with `requestServiceTab()`.
-4. Register a managed profile only when agent-browser has no suitable profile.
-5. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
+1. Inspect managed profiles and readiness with `getServiceProfileForIdentity()`.
+2. Request the target identity with `requestServiceTab()`.
+3. Register a managed profile only when agent-browser has no suitable profile.
+4. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
 
 Dry-run the recipe without contacting a service:
 

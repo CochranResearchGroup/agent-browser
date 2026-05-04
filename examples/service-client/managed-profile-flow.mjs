@@ -3,11 +3,8 @@
 
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
-  findServiceProfileForIdentity,
-  getServiceProfileReadiness,
-  getServiceProfiles,
+  getServiceProfileForIdentity,
   registerServiceLoginProfile,
-  summarizeServiceProfileReadiness,
 } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://www.canva.com/';
@@ -137,18 +134,15 @@ export async function runManagedProfileWorkflow({
     throw new Error('Missing baseUrl. Pass --base-url http://127.0.0.1:<stream-port>.');
   }
 
-  const profiles = await getServiceProfiles({ baseUrl, fetch });
-  const selectedProfileMatch = findServiceProfileForIdentity(profiles.profiles, {
+  const profileLookup = await getServiceProfileForIdentity({
+    baseUrl,
+    fetch,
     serviceName,
     loginId,
     targetServiceId,
+    readinessProfileId,
   });
-  const selectedProfile = selectedProfileMatch.profile;
-  const readiness = readinessProfileId
-    ? await getServiceProfileReadiness({ baseUrl, id: readinessProfileId, fetch })
-    : selectedProfile
-      ? await getServiceProfileReadiness({ baseUrl, id: selectedProfile.id, fetch })
-      : null;
+  const selectedProfile = profileLookup.selectedProfile;
 
   const profileRegistration =
     !selectedProfile && registerProfileId
@@ -182,9 +176,9 @@ export async function runManagedProfileWorkflow({
     dryRun: false,
     plan,
     selectedProfile: selectedProfile ? summarizeProfile(selectedProfile) : null,
-    selectedProfileMatch,
-    readiness,
-    readinessSummary: summarizeServiceProfileReadiness(readiness),
+    selectedProfileMatch: profileLookup.selectedProfileMatch,
+    readiness: profileLookup.readiness,
+    readinessSummary: profileLookup.readinessSummary,
     profileRegistration,
     tab,
   };

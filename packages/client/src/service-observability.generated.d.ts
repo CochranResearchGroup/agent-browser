@@ -577,6 +577,18 @@ export interface ServiceProfileIdentityMatchResult {
   matchedIdentity: string | null;
 }
 
+export interface ServiceProfileIdentityLookupOptions extends ServiceQueryOptions, ServiceProfileIdentityMatchOptions {
+  readinessProfileId?: string;
+}
+
+export interface ServiceProfileIdentityLookupResult {
+  profiles: ServiceProfilesResponse;
+  selectedProfile: ServiceProfileRecord | null;
+  selectedProfileMatch: ServiceProfileIdentityMatchResult;
+  readiness: ServiceProfileReadinessResponse | null;
+  readinessSummary: ServiceProfileReadinessSummary;
+}
+
 export interface ServiceSessionMutationOptions extends ServiceIdOptions {
   session: Record<string, unknown>;
 }
@@ -629,6 +641,7 @@ export declare function getServiceProfileAllocation(options: ServiceIdOptions): 
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
 export declare function summarizeServiceProfileReadiness(readiness?: ServiceProfileReadinessResponse | null): ServiceProfileReadinessSummary;
 export declare function findServiceProfileForIdentity(profiles: ServiceProfileRecord[] | undefined | null, options: ServiceProfileIdentityMatchOptions): ServiceProfileIdentityMatchResult;
+export declare function getServiceProfileForIdentity(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileIdentityLookupResult>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;

@@ -1608,8 +1608,8 @@ For read-side and service-configuration software clients, import
 browsers, sessions, tabs, site policies, providers, and challenges,
 `getServiceProfileAllocation`, `getServiceProfileReadiness`,
 `summarizeServiceProfileReadiness`, `findServiceProfileForIdentity`,
-`postServiceReconcile`, upsert and delete helpers for profiles, sessions, site
-policies, and providers,
+`getServiceProfileForIdentity`, `postServiceReconcile`, upsert and delete
+helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 operator remedy helpers for job cancel, browser retry, and incident handling,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
@@ -1618,9 +1618,9 @@ Declarations are generated from the matching service contract schemas.
 
 Software clients should treat agent-browser as the profile broker. A client
 such as CanvaCLI should request a tab with `serviceName: "CanvaCLI"` plus
-`loginId: "canva"` or `targetServiceId: "canva"` and should inspect
-`getServiceProfiles()` or `getServiceProfileReadiness({ id })` before
-registering a profile. Only call `registerServiceLoginProfile()` when
+`loginId: "canva"` or `targetServiceId: "canva"` and should call
+`getServiceProfileForIdentity()` before registering a profile. Only call
+`registerServiceLoginProfile()` when
 agent-browser has no suitable managed profile, readiness reports
 `needs_manual_seeding`, the operator wants a separate account lane, or the
 client is explicitly bringing its own profile.
@@ -1630,15 +1630,12 @@ tab with `requestServiceTab`, reads the matching trace, and can demonstrate
 known queued-job cancellation with `cancelServiceJob`. Run
 `pnpm test:service-client-example` to validate the example in dry-run mode.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
-profile-broker recipe that inspects `getServiceProfiles()`, reads
-`getServiceProfileReadiness({ id })` when a candidate profile is known,
-requests tabs by login identity, and registers a managed login profile only
-when agent-browser has no suitable one. Its output includes
+profile-broker recipe that uses `getServiceProfileForIdentity()` to inspect
+managed profiles, select by identity, read readiness when a candidate profile
+is known, request tabs by login identity, and register a managed login profile
+only when agent-browser has no suitable one. Its output includes
 `readinessSummary.needsManualSeeding` plus target service IDs and recommended
-actions when readiness says an operator must seed the profile. It uses
-`findServiceProfileForIdentity()` so software clients can reuse the same
-authenticated-target, target-match, then service-allow-list preference order.
-Run
+actions when readiness says an operator must seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke
 that proves an existing managed profile is selected without registering a new
 one. Run `pnpm test:service-client-example-live` to validate the main trace
