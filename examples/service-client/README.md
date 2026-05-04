@@ -122,6 +122,9 @@ Only add `--register-profile-id canva-default` when the service has no suitable
 managed profile or the operator intentionally wants a new account lane. The
 script registers with `authenticated: false` by default so readiness can drive
 manual seeding instead of pretending a new profile is already signed in.
+When a readiness row reports `needs_manual_seeding`, the script output includes
+`readinessSummary.needsManualSeeding: true` plus the target service IDs and
+recommended actions so the client can show operator instructions directly.
 
 Pass `--cancel-job-id <job-id>` when your software already knows a queued job
 that should be cancelled. The script calls `cancelServiceJob` and prints the

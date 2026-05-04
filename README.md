@@ -1632,7 +1632,9 @@ That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that inspects `getServiceProfiles()`, reads
 `getServiceProfileReadiness({ id })` when a candidate profile is known,
 requests tabs by login identity, and registers a managed login profile only
-when agent-browser has no suitable one. Run
+when agent-browser has no suitable one. Its output includes
+`readinessSummary.needsManualSeeding` plus target service IDs and recommended
+actions when readiness says an operator must seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke
 that proves an existing managed profile is selected without registering a new
 one. Run `pnpm test:service-client-example-live` to validate the main trace

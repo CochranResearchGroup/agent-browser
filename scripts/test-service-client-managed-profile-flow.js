@@ -14,6 +14,7 @@ const profile = {
 
 await testExistingProfileSelection();
 await testMissingProfileRegistration();
+await testManualSeedingReadinessSummary();
 
 console.log('Managed profile flow no-launch smoke passed');
 
@@ -41,6 +42,8 @@ async function testExistingProfileSelection() {
   assert.equal(result.dryRun, false);
   assert.equal(result.selectedProfile?.id, 'canva-default');
   assert.equal(result.profileRegistration, null);
+  assert.equal(result.readinessSummary?.needsManualSeeding, false);
+  assert.equal(result.readinessSummary?.manualSeedingRequired, false);
   assert.equal(result.tab?.success, true);
   assert.equal(result.tab?.data?.url, 'https://www.canva.com/');
 
@@ -102,7 +105,47 @@ async function testMissingProfileRegistration() {
   );
 }
 
-function createMockFetch({ profiles, calls, rejectRegistration = false }) {
+async function testManualSeedingReadinessSummary() {
+  const calls = [];
+  const fetch = createMockFetch({
+    profiles: [profile],
+    calls,
+    readinessState: 'needs_manual_seeding',
+    readinessRecommendedAction: 'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+    rejectRegistration: true,
+  });
+
+  const result = await runManagedProfileWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    readinessProfileId: 'canva-default',
+    registerProfileId: 'canva-default',
+    url: 'https://www.canva.com/',
+  });
+
+  assert.equal(result.selectedProfile?.id, 'canva-default');
+  assert.equal(result.profileRegistration, null);
+  assert.equal(result.readinessSummary?.needsManualSeeding, true);
+  assert.equal(result.readinessSummary?.manualSeedingRequired, true);
+  assert.deepEqual(result.readinessSummary?.targetServiceIds, ['canva']);
+  assert.deepEqual(result.readinessSummary?.recommendedActions, [
+    'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+  ]);
+  assert.equal(result.tab?.success, true);
+}
+
+function createMockFetch({
+  profiles,
+  calls,
+  readinessState = 'ready',
+  readinessRecommendedAction = 'request_tab_by_login_identity',
+  rejectRegistration = false,
+}) {
   return async (url, init = {}) => {
     const parsed = new URL(String(url));
     const method = init.method || 'GET';
@@ -118,8 +161,13 @@ function createMockFetch({ profiles, calls, rejectRegistration = false }) {
         targetReadiness: [
           {
             targetServiceId: 'canva',
-            readiness: 'ready',
-            recommendedAction: 'request_tab_by_login_identity',
+            loginId: 'canva',
+            state: readinessState,
+            manualSeedingRequired: readinessState === 'needs_manual_seeding',
+            evidence: 'mocked no-launch readiness',
+            recommendedAction: readinessRecommendedAction,
+            lastVerifiedAt: null,
+            freshnessExpiresAt: null,
           },
         ],
         count: 1,
