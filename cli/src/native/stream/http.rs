@@ -1203,6 +1203,14 @@ fn service_collection_contents(path: &str) -> Option<Value> {
 }
 
 fn service_profile_lookup_response(query: Option<&str>) -> Result<Value, String> {
+    let service_state = load_service_state();
+    service_profile_lookup_response_for_state(query, &service_state)
+}
+
+fn service_profile_lookup_response_for_state(
+    query: Option<&str>,
+    service_state: &ServiceState,
+) -> Result<Value, String> {
     let mut service_name = None;
     let mut target_service_ids = Vec::new();
     let mut readiness_profile_id = None;
@@ -1236,12 +1244,11 @@ fn service_profile_lookup_response(query: Option<&str>) -> Result<Value, String>
     target_service_ids.sort();
     target_service_ids.dedup();
 
-    let service_state = load_service_state();
     let request = ProfileSelectionRequest {
         service_name: service_name.clone(),
         target_service_ids: target_service_ids.clone(),
     };
-    let selection = select_service_profile_for_request(&service_state, &request);
+    let selection = select_service_profile_for_request(service_state, &request);
     let selected_profile = selection
         .as_ref()
         .and_then(|selection| service_state.profiles.get(&selection.profile_id))
@@ -1924,6 +1931,7 @@ mod tests {
     use crate::native::service_model::{
         assert_service_event_record_contract, assert_service_incident_record_contract,
         assert_service_job_naming_warning_contract, service_job_naming_warning_values,
+        BrowserProfile, ProfileReadinessState, ProfileTargetReadiness,
     };
 
     #[test]
@@ -1936,6 +1944,79 @@ mod tests {
             split_path_query("/api/service/status"),
             ("/api/service/status", None)
         );
+    }
+
+    #[test]
+    fn service_profile_lookup_response_prefers_authenticated_target_profile() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "target-only".to_string(),
+            BrowserProfile {
+                id: "target-only".to_string(),
+                name: "Target-only ACS profile".to_string(),
+                target_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        service_state.profiles.insert(
+            "authenticated".to_string(),
+            BrowserProfile {
+                id: "authenticated".to_string(),
+                name: "Authenticated ACS profile".to_string(),
+                target_service_ids: vec!["acs".to_string()],
+                authenticated_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                target_readiness: vec![ProfileTargetReadiness {
+                    target_service_id: "acs".to_string(),
+                    state: ProfileReadinessState::Fresh,
+                    evidence: "seeded smoke fixture".to_string(),
+                    recommended_action: "Use this profile for ACS".to_string(),
+                    ..ProfileTargetReadiness::default()
+                }],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        service_state.profiles.insert(
+            "other-service".to_string(),
+            BrowserProfile {
+                id: "other-service".to_string(),
+                name: "Other service ACS profile".to_string(),
+                target_service_ids: vec!["acs".to_string()],
+                authenticated_service_ids: vec!["acs".to_string()],
+                shared_service_ids: vec!["OtherService".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let response = service_profile_lookup_response_for_state(
+            Some("service-name=JournalDownloader&login-id=acs"),
+            &service_state,
+        )
+        .expect("profile lookup response should be built");
+
+        assert_eq!(response["query"]["serviceName"], "JournalDownloader");
+        assert_eq!(response["query"]["targetServiceIds"][0], "acs");
+        assert_eq!(response["selectedProfile"]["id"], "authenticated");
+        assert_eq!(
+            response["selectedProfileMatch"]["profileId"],
+            "authenticated"
+        );
+        assert_eq!(
+            response["selectedProfileMatch"]["reason"],
+            "authenticated_target"
+        );
+        assert_eq!(response["readiness"]["profileId"], "authenticated");
+        assert_eq!(
+            response["readiness"]["targetReadiness"][0]["state"],
+            "fresh"
+        );
+        assert_eq!(response["readinessSummary"]["needsManualSeeding"], false);
+        assert_ne!(response["selectedProfile"]["id"], "target-only");
+        assert_ne!(response["selectedProfile"]["id"], "other-service");
     }
 
     #[test]
