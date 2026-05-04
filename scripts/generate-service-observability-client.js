@@ -702,6 +702,7 @@ export declare function getServiceProfileReadiness(options: ServiceIdOptions): P
 export declare function summarizeServiceProfileReadiness(readiness?: ServiceProfileReadinessResponse | null): ServiceProfileReadinessSummary;
 export declare function findServiceProfileForIdentity(profiles: ServiceProfileRecord[] | undefined | null, options: ServiceProfileIdentityMatchOptions): ServiceProfileIdentityMatchResult;
 export declare function getServiceProfileForIdentity(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
+export declare function lookupServiceProfile(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;

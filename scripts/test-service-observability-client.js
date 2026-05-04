@@ -10,6 +10,7 @@ import {
   getServiceProfileReadiness,
   getServiceStatus,
   getServiceTrace,
+  lookupServiceProfile,
   registerServiceLoginProfile,
   summarizeServiceProfileReadiness,
 } from '../packages/client/src/service-observability.js';
@@ -275,6 +276,44 @@ async function main() {
   assert.equal(lookupResult.selectedProfileMatch.reason, 'authenticated_target');
   assert.equal(lookupResult.readiness?.profileId, 'authenticated');
   assert.equal(lookupResult.readinessSummary.needsManualSeeding, false);
+
+  const lookupAlias = createFetchRecorder((url) => {
+    assert.equal(
+      url,
+      'http://127.0.0.1:4849/api/service/profiles/lookup?serviceName=CanvaCLI&loginId=canva',
+    );
+    return {
+      success: true,
+      data: {
+        query: {
+          serviceName: 'CanvaCLI',
+          targetServiceIds: ['canva'],
+          readinessProfileId: null,
+        },
+        selectedProfile: profileMatches[2],
+        selectedProfileMatch: {
+          profileId: 'authenticated',
+          profile: profileMatches[2],
+          reason: 'authenticated_target',
+        },
+        readiness: null,
+        readinessSummary: {
+          needsManualSeeding: false,
+          manualSeedingRequired: false,
+          targetServiceIds: [],
+          recommendedActions: [],
+        },
+      },
+    };
+  });
+  const lookupAliasResult = await lookupServiceProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: lookupAlias.fetch,
+    serviceName: 'CanvaCLI',
+    loginId: 'canva',
+  });
+  assert.equal(lookupAlias.calls.length, 1);
+  assert.equal(lookupAliasResult.selectedProfile?.id, 'authenticated');
 
   const emptyLookup = createFetchRecorder({
     success: true,

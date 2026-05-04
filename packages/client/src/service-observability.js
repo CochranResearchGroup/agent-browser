@@ -206,6 +206,14 @@ export async function getServiceProfileForIdentity({ readinessProfileId, ...opti
 }
 
 /**
+ * @param {ServiceProfileIdentityLookupOptions} options
+ * @returns {Promise<ServiceProfileLookupResponse>}
+ */
+export function lookupServiceProfile(options) {
+  return getServiceProfileForIdentity(options);
+}
+
+/**
  * @param {ServiceQueryOptions} options
  * @returns {Promise<ServiceBrowsersResponse>}
  */

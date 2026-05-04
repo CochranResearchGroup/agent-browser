@@ -1613,7 +1613,7 @@ For read-side and service-configuration software clients, import
 browsers, sessions, tabs, site policies, providers, and challenges,
 `getServiceProfileAllocation`, `getServiceProfileReadiness`,
 `summarizeServiceProfileReadiness`, `findServiceProfileForIdentity`,
-`getServiceProfileForIdentity`, `postServiceReconcile`, upsert and delete
+`getServiceProfileForIdentity`, `lookupServiceProfile`, `postServiceReconcile`, upsert and delete
 helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 operator remedy helpers for job cancel, browser retry, and incident handling,
@@ -1624,10 +1624,11 @@ Declarations are generated from the matching service contract schemas.
 Software clients should treat agent-browser as the profile broker. A client
 such as CanvaCLI should request a tab with `serviceName: "CanvaCLI"` plus
 `loginId: "canva"` or `targetServiceId: "canva"` and should call
-`getServiceProfileForIdentity()` before registering a profile. That helper
-uses HTTP `GET /api/service/profiles/lookup` so agent-browser applies the same
-server-side selector used for service launches without returning the full
-profile collection. Only call `registerServiceLoginProfile()` when
+`lookupServiceProfile()` before registering a profile. That helper uses HTTP
+`GET /api/service/profiles/lookup` so agent-browser applies the same server-side
+selector used for service launches without returning the full profile
+collection. `getServiceProfileForIdentity()` remains as the older descriptive
+alias for the same route. Only call `registerServiceLoginProfile()` when
 agent-browser has no suitable managed profile, readiness reports
 `needs_manual_seeding`, the operator wants a separate account lane, or the
 client is explicitly bringing its own profile.
@@ -1637,7 +1638,7 @@ tab with `requestServiceTab`, reads the matching trace, and can demonstrate
 known queued-job cancellation with `cancelServiceJob`. Run
 `pnpm test:service-client-example` to validate the example in dry-run mode.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
-profile-broker recipe that uses `getServiceProfileForIdentity()` to inspect
+profile-broker recipe that uses `lookupServiceProfile()` to inspect
 managed profiles, select by identity, read readiness when a candidate profile
 is known, request tabs by login identity, and register a managed login profile
 only when agent-browser has no suitable one. Its output includes

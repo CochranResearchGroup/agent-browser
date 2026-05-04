@@ -3,7 +3,7 @@
 
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
-  getServiceProfileForIdentity,
+  lookupServiceProfile,
   registerServiceLoginProfile,
 } from '@agent-browser/client/service-observability';
 
@@ -60,7 +60,7 @@ export function buildManagedProfilePlan({
       'seed the profile manually when readiness reports needs_manual_seeding',
     ],
     profileInspection: {
-      helper: 'getServiceProfiles',
+      helper: 'lookupServiceProfile',
       matchFields: ['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds'],
     },
     readinessInspection: readinessProfileId
@@ -134,7 +134,7 @@ export async function runManagedProfileWorkflow({
     throw new Error('Missing baseUrl. Pass --base-url http://127.0.0.1:<stream-port>.');
   }
 
-  const profileLookup = await getServiceProfileForIdentity({
+  const profileLookup = await lookupServiceProfile({
     baseUrl,
     fetch,
     serviceName,

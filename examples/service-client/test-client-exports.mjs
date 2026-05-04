@@ -17,6 +17,7 @@ import {
   getServiceProfiles,
   getServiceStatus,
   getServiceTrace,
+  lookupServiceProfile,
   registerServiceLoginProfile,
   summarizeServiceProfileReadiness,
 } from '@agent-browser/client/service-observability';
@@ -33,6 +34,7 @@ assert.equal(typeof getServiceProfileReadiness, 'function');
 assert.equal(typeof getServiceProfiles, 'function');
 assert.equal(typeof getServiceStatus, 'function');
 assert.equal(typeof getServiceTrace, 'function');
+assert.equal(typeof lookupServiceProfile, 'function');
 assert.equal(typeof registerServiceLoginProfile, 'function');
 assert.equal(typeof summarizeServiceProfileReadiness, 'function');
 
