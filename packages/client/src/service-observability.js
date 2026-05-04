@@ -58,7 +58,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityMatchOptions} ServiceProfileIdentityMatchOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityMatchResult} ServiceProfileIdentityMatchResult
  * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityLookupOptions} ServiceProfileIdentityLookupOptions
- * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityLookupResult} ServiceProfileIdentityLookupResult
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLookupResponse} ServiceProfileLookupResponse
  */
 
 /**
@@ -183,22 +183,26 @@ export function findServiceProfileForIdentity(profiles, options) {
 
 /**
  * @param {ServiceProfileIdentityLookupOptions} options
- * @returns {Promise<ServiceProfileIdentityLookupResult>}
+ * @returns {Promise<ServiceProfileLookupResponse>}
  */
 export async function getServiceProfileForIdentity({ readinessProfileId, ...options }) {
-  const profiles = await getServiceProfiles(options);
-  const selectedProfileMatch = findServiceProfileForIdentity(profiles.profiles, options);
-  const selectedProfile = selectedProfileMatch.profile;
-  const readinessId = readinessProfileId ?? selectedProfile?.id;
-  const readiness = readinessId ? await getServiceProfileReadiness({ ...options, id: readinessId }) : null;
-
-  return {
-    profiles,
-    selectedProfile,
-    selectedProfileMatch,
-    readiness,
-    readinessSummary: summarizeServiceProfileReadiness(readiness),
-  };
+  return serviceGet(
+    {
+      ...options,
+      query: {
+        ...options.query,
+        serviceName: options.serviceName,
+        loginId: options.loginId,
+        siteId: options.siteId,
+        targetServiceId: options.targetServiceId,
+        loginIds: options.loginIds?.join(','),
+        siteIds: options.siteIds?.join(','),
+        targetServiceIds: options.targetServiceIds?.join(','),
+        readinessProfileId,
+      },
+    },
+    '/api/service/profiles/lookup',
+  );
 }
 
 /**

@@ -249,6 +249,29 @@ const serviceHttpOnlySurface = [
       'GET /api/service/profiles/<id>/readiness',
     ],
   },
+  {
+    method: 'GET',
+    route: '/api/service/profiles/lookup',
+    docsNeedles: [
+      '/api/service/profiles/lookup',
+      'getServiceProfileForIdentity',
+    ],
+    httpNeedles: [
+      'path == "/api/service/profiles/lookup"',
+      'service_profile_lookup_response(query)',
+      'SERVICE_PROFILE_LOOKUP_HTTP_ROUTE',
+      'SERVICE_PROFILE_LOOKUP_RESPONSE_SCHEMA_ID',
+      '"serviceProfileLookupResponse"',
+    ],
+    clientNeedles: [
+      'getServiceProfileForIdentity',
+      '/api/service/profiles/lookup',
+    ],
+    contractNeedles: [
+      'service-profile-lookup-response.v1.schema.json',
+      'GET /api/service/profiles/lookup',
+    ],
+  },
 ];
 
 for (const entry of browserSurface) {

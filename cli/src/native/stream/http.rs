@@ -12,6 +12,9 @@ use crate::flags::parse_flags;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
+use crate::native::service_lifecycle::{
+    select_service_profile_for_request, ProfileSelectionRequest,
+};
 use crate::native::service_model::{service_profile_allocations, ServiceState};
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
@@ -326,6 +329,26 @@ pub(super) async fn handle_http_request(
     if method == "GET" && path == "/api/service/status" {
         let result = relay_service_command(session_name, service_status_command()).await;
         write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/service/profiles/lookup" {
+        match service_profile_lookup_response(query) {
+            Ok(data) => {
+                write_json_value(
+                    &mut stream,
+                    "200 OK",
+                    json!({
+                        "success": true,
+                        "data": data,
+                    }),
+                )
+                .await;
+            }
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+            }
+        }
         return;
     }
 
@@ -1177,6 +1200,138 @@ fn service_collection_contents(path: &str) -> Option<Value> {
         }
         _ => None,
     }
+}
+
+fn service_profile_lookup_response(query: Option<&str>) -> Result<Value, String> {
+    let mut service_name = None;
+    let mut target_service_ids = Vec::new();
+    let mut readiness_profile_id = None;
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "serviceName" | "service_name" | "service-name" => service_name = non_empty(value),
+            "targetServiceId" | "target_service_id" | "target-service-id" | "targetService"
+            | "target_service" | "target-service" | "siteId" | "site_id" | "site-id"
+            | "loginId" | "login_id" | "login-id" => {
+                append_identity_values(&mut target_service_ids, &value);
+            }
+            "targetServiceIds" | "target_service_ids" | "target-service-ids" | "targetServices"
+            | "target_services" | "target-services" | "siteIds" | "site_ids" | "site-ids"
+            | "loginIds" | "login_ids" | "login-ids" => {
+                append_identity_values(&mut target_service_ids, &value);
+            }
+            "readinessProfileId" | "readiness_profile_id" | "readiness-profile-id" => {
+                readiness_profile_id = non_empty(value);
+            }
+            "" => {}
+            _ => {
+                return Err(format!(
+                    "Unknown service profile lookup query parameter: {}",
+                    key
+                ))
+            }
+        }
+    }
+
+    target_service_ids.sort();
+    target_service_ids.dedup();
+
+    let service_state = load_service_state();
+    let request = ProfileSelectionRequest {
+        service_name: service_name.clone(),
+        target_service_ids: target_service_ids.clone(),
+    };
+    let selection = select_service_profile_for_request(&service_state, &request);
+    let selected_profile = selection
+        .as_ref()
+        .and_then(|selection| service_state.profiles.get(&selection.profile_id))
+        .cloned();
+    let readiness_id = readiness_profile_id.clone().or_else(|| {
+        selection
+            .as_ref()
+            .map(|selection| selection.profile_id.clone())
+    });
+    let readiness_profile = readiness_id
+        .as_deref()
+        .and_then(|profile_id| service_state.profiles.get(profile_id));
+    let target_readiness = readiness_profile
+        .map(|profile| profile.target_readiness.clone())
+        .unwrap_or_default();
+    let target_readiness_count = target_readiness.len();
+    let readiness = readiness_id.map(|profile_id| {
+        json!({
+            "profileId": profile_id,
+            "targetReadiness": target_readiness,
+            "count": target_readiness_count,
+        })
+    });
+
+    Ok(json!({
+        "query": {
+            "serviceName": service_name,
+            "targetServiceIds": target_service_ids,
+            "readinessProfileId": readiness_profile_id,
+        },
+        "selectedProfile": selected_profile.clone(),
+        "selectedProfileMatch": selection.map(|selection| {
+            json!({
+                "profileId": selection.profile_id,
+                "profile": selected_profile,
+                "reason": selection.reason,
+            })
+        }),
+        "readiness": readiness,
+        "readinessSummary": readiness_summary(readiness.as_ref()),
+    }))
+}
+
+fn append_identity_values(target_service_ids: &mut Vec<String>, value: &str) {
+    for item in value.split(',') {
+        if let Some(item) = non_empty(item.to_string()) {
+            target_service_ids.push(item);
+        }
+    }
+}
+
+fn non_empty(value: String) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn readiness_summary(readiness: Option<&Value>) -> Value {
+    let manual_rows = readiness
+        .and_then(|readiness| readiness["targetReadiness"].as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter(|row| {
+                    row["state"] == "needs_manual_seeding"
+                        || row["manualSeedingRequired"].as_bool() == Some(true)
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let target_service_ids = manual_rows
+        .iter()
+        .filter_map(|row| row["targetServiceId"].as_str())
+        .collect::<Vec<_>>();
+    let mut recommended_actions = manual_rows
+        .iter()
+        .filter_map(|row| row["recommendedAction"].as_str())
+        .filter(|action| !action.is_empty())
+        .collect::<Vec<_>>();
+    recommended_actions.sort();
+    recommended_actions.dedup();
+
+    json!({
+        "needsManualSeeding": manual_rows.iter().any(|row| row["state"] == "needs_manual_seeding"),
+        "manualSeedingRequired": !manual_rows.is_empty(),
+        "targetServiceIds": target_service_ids,
+        "recommendedActions": recommended_actions,
+    })
 }
 
 fn service_site_policy_id(path: &str) -> Option<&str> {

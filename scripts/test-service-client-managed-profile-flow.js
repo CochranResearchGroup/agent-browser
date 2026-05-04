@@ -42,7 +42,7 @@ async function testExistingProfileSelection() {
   assert.equal(result.dryRun, false);
   assert.equal(result.selectedProfile?.id, 'canva-default');
   assert.equal(result.selectedProfileMatch?.reason, 'authenticated_target');
-  assert.equal(result.selectedProfileMatch?.matchedField, 'authenticatedServiceIds');
+  assert.equal(result.selectedProfileMatch?.profileId, 'canva-default');
   assert.equal(result.profileRegistration, null);
   assert.equal(result.readinessSummary?.needsManualSeeding, false);
   assert.equal(result.readinessSummary?.manualSeedingRequired, false);
@@ -56,7 +56,7 @@ async function testExistingProfileSelection() {
 
   assert.deepEqual(
     calls.map((call) => `${call.method} ${call.path}`),
-    ['GET /api/service/profiles', 'GET /api/service/profiles/canva-default/readiness', 'POST /api/service/request'],
+    ['GET /api/service/profiles/lookup', 'POST /api/service/request'],
   );
 }
 
@@ -81,7 +81,7 @@ async function testMissingProfileRegistration() {
 
   assert.equal(result.dryRun, false);
   assert.equal(result.selectedProfile, null);
-  assert.equal(result.selectedProfileMatch?.reason, null);
+  assert.equal(result.selectedProfileMatch, null);
   assert.equal(result.profileRegistration?.upserted, true);
   assert.equal(result.profileRegistration?.profile?.id, 'canva-default');
   assert.deepEqual(result.profileRegistration?.profile?.targetServiceIds, ['canva']);
@@ -104,7 +104,7 @@ async function testMissingProfileRegistration() {
 
   assert.deepEqual(
     calls.map((call) => `${call.method} ${call.path}`),
-    ['GET /api/service/profiles', 'POST /api/service/profiles/canva-default', 'POST /api/service/request'],
+    ['GET /api/service/profiles/lookup', 'POST /api/service/profiles/canva-default', 'POST /api/service/request'],
   );
 }
 
@@ -154,26 +154,51 @@ function createMockFetch({
     const method = init.method || 'GET';
     calls.push({ method, path: parsed.pathname, body: init.body });
 
-    if (method === 'GET' && parsed.pathname === '/api/service/profiles') {
-      return serviceResponse({ profiles, profileAllocations: [], count: profiles.length });
-    }
-
-    if (method === 'GET' && parsed.pathname === '/api/service/profiles/canva-default/readiness') {
+    if (method === 'GET' && parsed.pathname === '/api/service/profiles/lookup') {
+      const selectedProfile = profiles[0] ?? null;
+      const targetReadiness = selectedProfile
+        ? [
+            {
+              targetServiceId: 'canva',
+              loginId: 'canva',
+              state: readinessState,
+              manualSeedingRequired: readinessState === 'needs_manual_seeding',
+              evidence: 'mocked no-launch readiness',
+              recommendedAction: readinessRecommendedAction,
+              lastVerifiedAt: null,
+              freshnessExpiresAt: null,
+            },
+          ]
+        : [];
+      const readiness = selectedProfile
+        ? {
+            profileId: 'canva-default',
+            targetReadiness,
+            count: targetReadiness.length,
+          }
+        : null;
       return serviceResponse({
-        profileId: 'canva-default',
-        targetReadiness: [
-          {
-            targetServiceId: 'canva',
-            loginId: 'canva',
-            state: readinessState,
-            manualSeedingRequired: readinessState === 'needs_manual_seeding',
-            evidence: 'mocked no-launch readiness',
-            recommendedAction: readinessRecommendedAction,
-            lastVerifiedAt: null,
-            freshnessExpiresAt: null,
-          },
-        ],
-        count: 1,
+        query: {
+          serviceName: 'CanvaCLI',
+          targetServiceIds: ['canva'],
+          readinessProfileId: parsed.searchParams.get('readinessProfileId'),
+        },
+        selectedProfile,
+        selectedProfileMatch: selectedProfile
+          ? {
+              profileId: selectedProfile.id,
+              profile: selectedProfile,
+              reason: 'authenticated_target',
+            }
+          : null,
+        readiness,
+        readinessSummary: {
+          needsManualSeeding: readinessState === 'needs_manual_seeding' && Boolean(selectedProfile),
+          manualSeedingRequired: readinessState === 'needs_manual_seeding' && Boolean(selectedProfile),
+          targetServiceIds: readinessState === 'needs_manual_seeding' && selectedProfile ? ['canva'] : [],
+          recommendedActions:
+            readinessState === 'needs_manual_seeding' && selectedProfile ? [readinessRecommendedAction] : [],
+        },
       });
     }
 

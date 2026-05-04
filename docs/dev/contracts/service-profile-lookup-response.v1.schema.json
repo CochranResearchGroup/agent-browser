@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-lookup-response.v1.schema.json",
+  "title": "agent-browser service profile lookup response",
+  "description": "Stable API shape for server-authoritative service profile identity lookup returned by HTTP service APIs and service observability clients.",
+  "type": "object",
+  "required": [
+    "query",
+    "selectedProfile",
+    "selectedProfileMatch",
+    "readiness",
+    "readinessSummary"
+  ],
+  "properties": {
+    "query": {
+      "type": "object",
+      "required": ["serviceName", "targetServiceIds", "readinessProfileId"],
+      "properties": {
+        "serviceName": {
+          "type": ["string", "null"]
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "readinessProfileId": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "selectedProfile": {
+      "oneOf": [
+        {
+          "$ref": "service-profile-record.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "selectedProfileMatch": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["profileId", "profile", "reason"],
+          "properties": {
+            "profileId": {
+              "type": "string"
+            },
+            "profile": {
+              "$ref": "service-profile-record.v1.schema.json"
+            },
+            "reason": {
+              "type": "string",
+              "enum": ["authenticated_target", "target_match", "service_allow_list"]
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "readiness": {
+      "oneOf": [
+        {
+          "$ref": "service-profile-readiness-response.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "readinessSummary": {
+      "type": "object",
+      "required": [
+        "needsManualSeeding",
+        "manualSeedingRequired",
+        "targetServiceIds",
+        "recommendedActions"
+      ],
+      "properties": {
+        "needsManualSeeding": {
+          "type": "boolean"
+        },
+        "manualSeedingRequired": {
+          "type": "boolean"
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendedActions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

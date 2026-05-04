@@ -85,9 +85,9 @@ Use `findServiceProfileForIdentity()` from
 the profile collection itself; it returns the selected profile plus the matched
 field, identity, and selection reason.
 Use `getServiceProfileForIdentity()` when a client wants the common broker read
-path in one call: it fetches the profile collection, applies identity
-selection, reads readiness for the selected or explicit readiness profile, and
-returns the readiness summary.
+path in one call: it calls HTTP `GET /api/service/profiles/lookup`, lets
+agent-browser apply the authoritative selector, and returns the selected
+profile, reason, readiness, and readiness summary.
 
 ## Managed Profile Broker Recipe
 

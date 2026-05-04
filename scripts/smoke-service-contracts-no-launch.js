@@ -146,12 +146,56 @@ try {
     `serviceProfileReadinessResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileLookupResponse?.schemaId ===
+      'https://agent-browser.local/contracts/service-profile-lookup-response.v1.schema.json',
+    `serviceProfileLookupResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileLookupResponse?.schemaPath ===
+      'docs/dev/contracts/service-profile-lookup-response.v1.schema.json',
+    `serviceProfileLookupResponse schema path mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileLookupResponse?.http?.method === 'GET',
+    `serviceProfileLookupResponse HTTP method mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileLookupResponse?.http?.route ===
+      '/api/service/profiles/lookup',
+    `serviceProfileLookupResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
     contracts.data?.http?.serviceProfileAllocationRoute === '/api/service/profiles/<id>/allocation',
     `serviceProfileAllocationRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
   );
   assert(
     contracts.data?.http?.serviceProfileReadinessRoute === '/api/service/profiles/<id>/readiness',
     `serviceProfileReadinessRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
+  );
+  assert(
+    contracts.data?.http?.serviceProfileLookupRoute === '/api/service/profiles/lookup',
+    `serviceProfileLookupRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
+  );
+  const emptyProfileLookup = await httpJsonResult(
+    port,
+    'GET',
+    '/api/service/profiles/lookup?service-name=JournalDownloader&login-id=acs',
+  );
+  assert(
+    emptyProfileLookup.statusCode === 200,
+    `empty profile lookup status mismatch: ${JSON.stringify(emptyProfileLookup)}`,
+  );
+  assert(
+    emptyProfileLookup.body?.success === true,
+    `empty profile lookup did not return success envelope: ${JSON.stringify(emptyProfileLookup)}`,
+  );
+  assert(
+    emptyProfileLookup.body?.data?.selectedProfile === null,
+    `empty profile lookup selected profile mismatch: ${JSON.stringify(emptyProfileLookup)}`,
+  );
+  assert(
+    emptyProfileLookup.body?.data?.selectedProfileMatch === null,
+    `empty profile lookup selected match mismatch: ${JSON.stringify(emptyProfileLookup)}`,
   );
   const missingProfileAllocation = await httpJsonResult(
     port,

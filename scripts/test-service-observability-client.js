@@ -221,33 +221,46 @@ async function main() {
   });
 
   const profileLookup = createFetchRecorder((url) => {
-    if (url.endsWith('/api/service/profiles')) {
-      return {
-        success: true,
-        data: {
-          profiles: profileMatches,
-          count: profileMatches.length,
-          profileAllocations: [],
-        },
-      };
-    }
+    assert.equal(
+      url,
+      'http://127.0.0.1:4849/api/service/profiles/lookup?serviceName=CanvaCLI&loginId=canva',
+    );
     return {
       success: true,
       data: {
-        profileId: 'authenticated',
-        targetReadiness: [
-          {
-            targetServiceId: 'canva',
-            loginId: null,
-            state: 'ready',
-            manualSeedingRequired: false,
-            evidence: 'authenticated_hint_present',
-            recommendedAction: null,
-            lastVerifiedAt: null,
-            freshnessExpiresAt: null,
-          },
-        ],
-        count: 1,
+        query: {
+          serviceName: 'CanvaCLI',
+          targetServiceIds: ['canva'],
+          readinessProfileId: null,
+        },
+        selectedProfile: profileMatches[2],
+        selectedProfileMatch: {
+          profileId: 'authenticated',
+          profile: profileMatches[2],
+          reason: 'authenticated_target',
+        },
+        readiness: {
+          profileId: 'authenticated',
+          targetReadiness: [
+            {
+              targetServiceId: 'canva',
+              loginId: null,
+              state: 'ready',
+              manualSeedingRequired: false,
+              evidence: 'authenticated_hint_present',
+              recommendedAction: null,
+              lastVerifiedAt: null,
+              freshnessExpiresAt: null,
+            },
+          ],
+          count: 1,
+        },
+        readinessSummary: {
+          needsManualSeeding: false,
+          manualSeedingRequired: false,
+          targetServiceIds: [],
+          recommendedActions: [],
+        },
       },
     };
   });
@@ -257,9 +270,7 @@ async function main() {
     serviceName: 'CanvaCLI',
     loginId: 'canva',
   });
-  assert.equal(profileLookup.calls.length, 2);
-  assert.equal(profileLookup.calls[0].url, 'http://127.0.0.1:4849/api/service/profiles');
-  assert.equal(profileLookup.calls[1].url, 'http://127.0.0.1:4849/api/service/profiles/authenticated/readiness');
+  assert.equal(profileLookup.calls.length, 1);
   assert.equal(lookupResult.selectedProfile?.id, 'authenticated');
   assert.equal(lookupResult.selectedProfileMatch.reason, 'authenticated_target');
   assert.equal(lookupResult.readiness?.profileId, 'authenticated');
@@ -268,9 +279,20 @@ async function main() {
   const emptyLookup = createFetchRecorder({
     success: true,
     data: {
-      profiles: [],
-      count: 0,
-      profileAllocations: [],
+      query: {
+        serviceName: 'CanvaCLI',
+        targetServiceIds: ['missing'],
+        readinessProfileId: null,
+      },
+      selectedProfile: null,
+      selectedProfileMatch: null,
+      readiness: null,
+      readinessSummary: {
+        needsManualSeeding: false,
+        manualSeedingRequired: false,
+        targetServiceIds: [],
+        recommendedActions: [],
+      },
     },
   });
   const emptyLookupResult = await getServiceProfileForIdentity({

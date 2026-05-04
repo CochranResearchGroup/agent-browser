@@ -177,6 +177,12 @@ envelope returned by HTTP `GET /api/service/profiles/<id>/readiness` when a
 software client needs one profile's no-launch target-readiness rows without
 fetching allocation details or the full profile collection.
 
+`service-profile-lookup-response.v1.schema.json` describes the response
+envelope returned by HTTP `GET /api/service/profiles/lookup` when a software
+client wants agent-browser to apply the authoritative service profile selector
+for a service name plus site or login identity without fetching the full
+profile collection.
+
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:
 

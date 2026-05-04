@@ -581,12 +581,27 @@ export interface ServiceProfileIdentityLookupOptions extends ServiceQueryOptions
   readinessProfileId?: string;
 }
 
-export interface ServiceProfileIdentityLookupResult {
-  profiles: ServiceProfilesResponse;
+export interface ServiceProfileLookupQuery {
+  serviceName: string | null;
+  targetServiceIds: string[];
+  readinessProfileId: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileLookupMatch {
+  profileId: string;
+  profile: ServiceProfileRecord;
+  reason: 'authenticated_target' | 'target_match' | 'service_allow_list';
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileLookupResponse {
+  query: ServiceProfileLookupQuery;
   selectedProfile: ServiceProfileRecord | null;
-  selectedProfileMatch: ServiceProfileIdentityMatchResult;
+  selectedProfileMatch: ServiceProfileLookupMatch | null;
   readiness: ServiceProfileReadinessResponse | null;
   readinessSummary: ServiceProfileReadinessSummary;
+  [key: string]: unknown;
 }
 
 export interface ServiceSessionMutationOptions extends ServiceIdOptions {
@@ -641,7 +656,7 @@ export declare function getServiceProfileAllocation(options: ServiceIdOptions): 
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
 export declare function summarizeServiceProfileReadiness(readiness?: ServiceProfileReadinessResponse | null): ServiceProfileReadinessSummary;
 export declare function findServiceProfileForIdentity(profiles: ServiceProfileRecord[] | undefined | null, options: ServiceProfileIdentityMatchOptions): ServiceProfileIdentityMatchResult;
-export declare function getServiceProfileForIdentity(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileIdentityLookupResult>;
+export declare function getServiceProfileForIdentity(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;
