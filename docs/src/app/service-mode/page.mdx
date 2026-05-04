@@ -108,7 +108,7 @@ The HTTP service request object follows <code>docs/dev/contracts/service-request
 
 With <code>profileLeasePolicy: "wait"</code>, the control-plane scheduler keeps the blocked request queued while it polls for profile release, so the worker can continue dispatching unrelated service requests.
 
-Read-side and service-configuration software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service contract metadata, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. <code>getServiceContracts</code> reads the compatibility metadata endpoint. <code>registerServiceLoginProfile</code> wraps the common software-client recipe for registering a profile by login identity. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
+Read-side and service-configuration software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service contract metadata, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. <code>getServiceProfileAllocation</code> reads one profile's current allocation row, and <code>getServiceProfileReadiness</code> reads one profile's no-launch target readiness. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. <code>getServiceContracts</code> reads the compatibility metadata endpoint. <code>registerServiceLoginProfile</code> wraps the common software-client recipe for registering a profile by login identity. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
 
 The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, can cancel a known queued job with <code>cancelServiceJob</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>.
 
@@ -119,6 +119,14 @@ agent-browser owns browsers, profiles, tabs, queues, and job dispatch by default
 Use `serviceName`, `agentName`, `taskName`, and target-service hints such as `targetServiceId`, `targetService`, `targetServiceIds`, or `targetServices` to make this request explicit. Callers that think in site or login vocabulary can use `siteId`, `siteIds`, `loginId`, or `loginIds`; agent-browser normalizes those aliases into the same profile-selection request. A service named `JournalDownloader` can request an ACS-authenticated tab for `probeACSwebsite`; agent-browser should decide whether the current ACS-authenticated profile and browser can be shared, whether a service-specific profile is required, or whether a new browser process is justified by isolation policy.
 
 Operators can still request a particular managed runtime profile when they know the desired login state lives there. They can also bring their own profile with `--profile <path>` or equivalent API fields when they want more direct control over a browser identity. That is an override mode, not the default service model. The normal path is to let agent-browser perform deterministic profile selection, queue sharing, browser reuse, and collision avoidance so callers can spend their limited reasoning budget on the target workflow.
+
+Software clients should not create a runtime profile just because another task
+is active or because a site has a login. First inspect <code>getServiceProfiles()</code>
+or <code>getServiceProfileReadiness(&#123; id &#125;)</code>, then request the
+target identity with <code>requestServiceTab</code> or <code>POST /api/service/request</code>.
+Register a new managed login profile only when agent-browser has no suitable
+profile, readiness reports <code>needs_manual_seeding</code>, the operator wants
+a separate account lane, or the client is explicitly bringing its own profile.
 
 ## Login Identity API Recipe
 
@@ -147,6 +155,13 @@ await requestServiceTab({
 ```
 
 agent-browser first prefers profiles whose <code>authenticatedServiceIds</code> match the requested identity, then profiles whose <code>targetServiceIds</code> match, then profiles shared with the calling service through <code>sharedServiceIds</code>. Session records expose <code>profileSelectionReason</code> as <code>authenticated_target</code>, <code>target_match</code>, <code>service_allow_list</code>, or <code>explicit_profile</code>, and launch events mirror that value in <code>details.profileSelectionReason</code>. They also expose <code>profileLeaseDisposition</code> as <code>new_browser</code>, <code>reused_browser</code>, or <code>active_lease_conflict</code> plus <code>profileLeaseConflictSessionIds</code> when another exclusive session already references the same profile. Service-scoped launches reject active exclusive profile conflicts by default before browser start; set <code>profileLeasePolicy: "wait"</code> and <code>profileLeaseWaitTimeoutMs</code> to wait for release instead. Same-session retained browser reuse remains allowed. Use explicit <code>profile</code> or <code>runtimeProfile</code> request fields only for override workflows where the caller intentionally takes responsibility for the browser identity.
+
+For example, CanvaCLI should request <code>serviceName: "CanvaCLI"</code> plus
+<code>loginId: "canva"</code> or <code>targetServiceId: "canva"</code>. If no
+suitable managed Canva profile exists, register one with
+<code>registerServiceLoginProfile(&#123; id: "canva-default", serviceName: "CanvaCLI", loginId: "canva", authenticated: false &#125;)</code>,
+seed it when readiness says manual seeding is needed, and keep future work
+identity-based instead of profile-name-based.
 
 HTTP <code>GET /api/service/profiles/&lt;id&gt;/allocation</code> returns one derived profile allocation row when a software client wants current holder, waiting job, conflict, lease state, and recommended-action data without fetching the full profile collection.
 

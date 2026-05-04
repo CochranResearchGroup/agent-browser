@@ -79,7 +79,11 @@ agent-browser --runtime-profile google-login get title
 
 ## Named runtime profiles
 
-Use a named runtime profile when you want a dedicated persistent browser/account lane.
+Use a named runtime profile when the operator intentionally wants a dedicated
+persistent browser/account lane. Do not create one merely because another
+agent-browser job is active. For service-mode work, request the target site or
+login identity and let agent-browser select, queue, or reuse the managed
+profile.
 
 ```bash
 # Register the named runtime profile
@@ -107,7 +111,10 @@ agent-browser --runtime-profile work open https://app.example.com
 agent-browser --runtime-profile work runtime status
 ```
 
-Use this for ordinary authenticated sites, multi-account setups, and manual sign-in bootstrap flows.
+Use this for multi-account setups, manual sign-in bootstrap flows, and explicit
+identity lanes. For ordinary authenticated service work, prefer service
+requests with caller labels and target identity hints so agent-browser remains
+the profile broker.
 
 > <strong>Important:</strong> For Chrome password-manager features and Google sign-in, prefer <code>runtime login</code> first, close Chrome after sign-in, then automate against the same runtime profile.
 

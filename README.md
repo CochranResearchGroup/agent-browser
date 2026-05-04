@@ -709,7 +709,11 @@ because another job is already using the browser.
 
 ## Named runtime profiles
 
-Use a named runtime profile when you want one persistent browser/account lane per workflow:
+Use a named runtime profile when the operator intentionally wants a separate
+persistent browser/account lane. Do not create one merely because another
+agent-browser job is active; for service-mode work, request the target site or
+login identity and let agent-browser select, queue, or reuse the managed
+profile.
 
 ```bash
 # Create and register a dedicated runtime profile
@@ -1600,14 +1604,25 @@ when only one client contract needs validation.
 
 For read-side and service-configuration software clients, import
 `@agent-browser/client/service-observability`. It exposes typed helpers for
-`getServiceStatus`, `getServiceContracts`, collection reads for profiles, browsers, sessions, tabs,
-site policies, providers, and challenges, `postServiceReconcile`,
-upsert and delete helpers for profiles, sessions, site policies, and providers,
-`registerServiceLoginProfile` for the common login-identity profile recipe,
-operator remedy helpers for job cancel, browser retry, and incident handling,
-`getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
-`getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
+`getServiceStatus`, `getServiceContracts`, collection reads for profiles,
+browsers, sessions, tabs, site policies, providers, and challenges,
+`getServiceProfileAllocation`, `getServiceProfileReadiness`,
+`postServiceReconcile`, upsert and delete helpers for profiles, sessions, site
+policies, and providers, `registerServiceLoginProfile` for the common
+login-identity profile recipe, operator remedy helpers for job cancel, browser
+retry, and incident handling, `getServiceJobs`, `getServiceJob`,
+`getServiceEvents`, `getServiceIncidents`, `getServiceIncident`,
+`getServiceIncidentActivity`, and `getServiceTrace`.
 Declarations are generated from the matching service contract schemas.
+
+Software clients should treat agent-browser as the profile broker. A client
+such as CanvaCLI should request a tab with `serviceName: "CanvaCLI"` plus
+`loginId: "canva"` or `targetServiceId: "canva"` and should inspect
+`getServiceProfiles()` or `getServiceProfileReadiness({ id })` before
+registering a profile. Only call `registerServiceLoginProfile()` when
+agent-browser has no suitable managed profile, readiness reports
+`needs_manual_seeding`, the operator wants a separate account lane, or the
+client is explicitly bringing its own profile.
 
 See `examples/service-client/` for a copyable workflow that requests a service
 tab with `requestServiceTab`, reads the matching trace, and can demonstrate
