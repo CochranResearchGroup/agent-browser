@@ -81,6 +81,42 @@ requested identity, then profiles whose `targetServiceIds` match, then profiles
 shared with the calling service. Pass `profile` or `runtimeProfile` only when
 you intentionally want to override service-owned selection.
 
+## Managed Profile Broker Recipe
+
+Use `managed-profile-flow.mjs` when a software client needs the CanvaCLI-style
+profile-broker pattern:
+
+1. Inspect managed profiles with `getServiceProfiles()`.
+2. Inspect a candidate profile with `getServiceProfileReadiness({ id })`.
+3. Request the target identity with `requestServiceTab()`.
+4. Register a managed profile only when agent-browser has no suitable profile.
+5. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
+
+Dry-run the recipe without contacting a service:
+
+```bash
+pnpm --filter agent-browser-service-client-example managed-profile-dry-run
+```
+
+Run it against a live service when you have a stream port:
+
+```bash
+pnpm --filter agent-browser-service-client-example exec node managed-profile-flow.mjs \
+  --base-url http://127.0.0.1:<stream-port> \
+  --service-name CanvaCLI \
+  --agent-name canva-cli-agent \
+  --task-name openCanvaWorkspace \
+  --login-id canva \
+  --target-service-id canva \
+  --readiness-profile-id canva-default \
+  --url https://www.canva.com/
+```
+
+Only add `--register-profile-id canva-default` when the service has no suitable
+managed profile or the operator intentionally wants a new account lane. The
+script registers with `authenticated: false` by default so readiness can drive
+manual seeding instead of pretending a new profile is already signed in.
+
 Pass `--cancel-job-id <job-id>` when your software already knows a queued job
 that should be cancelled. The script calls `cancelServiceJob` and prints the
 cancellation result alongside the tab request and trace output. Use

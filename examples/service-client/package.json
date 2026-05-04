@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dry-run": "node service-request-trace.mjs --dry-run"
+    "dry-run": "node service-request-trace.mjs --dry-run",
+    "managed-profile-dry-run": "node managed-profile-flow.mjs --dry-run"
   },
   "dependencies": {
     "@agent-browser/client": "workspace:*"

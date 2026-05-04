@@ -11,6 +11,8 @@ import {
 } from '@agent-browser/client/service-request';
 import {
   cancelServiceJob,
+  getServiceProfileReadiness,
+  getServiceProfiles,
   getServiceStatus,
   getServiceTrace,
   registerServiceLoginProfile,
@@ -22,6 +24,8 @@ assert.equal(typeof createServiceTabRequest, 'function');
 assert.equal(typeof postServiceRequest, 'function');
 assert.equal(typeof requestServiceTab, 'function');
 assert.equal(typeof cancelServiceJob, 'function');
+assert.equal(typeof getServiceProfileReadiness, 'function');
+assert.equal(typeof getServiceProfiles, 'function');
 assert.equal(typeof getServiceStatus, 'function');
 assert.equal(typeof getServiceTrace, 'function');
 assert.equal(typeof registerServiceLoginProfile, 'function');
