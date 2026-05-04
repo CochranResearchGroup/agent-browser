@@ -125,6 +125,9 @@ manual seeding instead of pretending a new profile is already signed in.
 When a readiness row reports `needs_manual_seeding`, the script output includes
 `readinessSummary.needsManualSeeding: true` plus the target service IDs and
 recommended actions so the client can show operator instructions directly.
+The summary comes from `summarizeServiceProfileReadiness()` in
+`@agent-browser/client/service-observability`, so clients can reuse the same
+logic without copying this example.
 
 Pass `--cancel-job-id <job-id>` when your software already knows a queued job
 that should be cancelled. The script calls `cancelServiceJob` and prints the

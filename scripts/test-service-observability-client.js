@@ -9,6 +9,7 @@ import {
   getServiceStatus,
   getServiceTrace,
   registerServiceLoginProfile,
+  summarizeServiceProfileReadiness,
 } from '../packages/client/src/service-observability.js';
 
 function createFetchRecorder(payload) {
@@ -142,6 +143,19 @@ async function main() {
   assert.equal(readiness.calls[0].init.method, 'GET');
   assert.equal(readinessResult.profileId, 'work');
   assert.equal(readinessResult.targetReadiness[0].state, 'needs_manual_seeding');
+  const readinessSummary = summarizeServiceProfileReadiness(readinessResult);
+  assert.equal(readinessSummary.needsManualSeeding, true);
+  assert.equal(readinessSummary.manualSeedingRequired, true);
+  assert.deepEqual(readinessSummary.targetServiceIds, ['google']);
+  assert.deepEqual(readinessSummary.recommendedActions, [
+    'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+  ]);
+  assert.deepEqual(summarizeServiceProfileReadiness(null), {
+    needsManualSeeding: false,
+    manualSeedingRequired: false,
+    targetServiceIds: [],
+    recommendedActions: [],
+  });
 
   const trace = createFetchRecorder({
     success: true,

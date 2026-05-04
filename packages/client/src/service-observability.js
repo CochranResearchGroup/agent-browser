@@ -99,6 +99,23 @@ export function getServiceProfileReadiness({ id, ...options }) {
 }
 
 /**
+ * @param {ServiceProfileReadinessResponse | null | undefined} readiness
+ * @returns {import('./service-observability.generated.js').ServiceProfileReadinessSummary}
+ */
+export function summarizeServiceProfileReadiness(readiness) {
+  const rows = Array.isArray(readiness?.targetReadiness) ? readiness.targetReadiness : [];
+  const manualRows = rows.filter(
+    (row) => row?.state === 'needs_manual_seeding' || row?.manualSeedingRequired === true,
+  );
+  return {
+    needsManualSeeding: manualRows.some((row) => row?.state === 'needs_manual_seeding'),
+    manualSeedingRequired: manualRows.length > 0,
+    targetServiceIds: manualRows.map((row) => row.targetServiceId),
+    recommendedActions: [...new Set(manualRows.map((row) => row.recommendedAction).filter(Boolean))],
+  };
+}
+
+/**
  * @param {ServiceQueryOptions} options
  * @returns {Promise<ServiceBrowsersResponse>}
  */

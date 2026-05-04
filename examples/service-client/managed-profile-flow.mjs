@@ -6,6 +6,7 @@ import {
   getServiceProfileReadiness,
   getServiceProfiles,
   registerServiceLoginProfile,
+  summarizeServiceProfileReadiness,
 } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://www.canva.com/';
@@ -180,7 +181,7 @@ export async function runManagedProfileWorkflow({
     plan,
     selectedProfile: selectedProfile ? summarizeProfile(selectedProfile) : null,
     readiness,
-    readinessSummary: summarizeReadiness(readiness),
+    readinessSummary: summarizeServiceProfileReadiness(readiness),
     profileRegistration,
     tab,
   };
@@ -227,22 +228,6 @@ function summarizeProfile(profile) {
     authenticatedServiceIds: record.authenticatedServiceIds,
     targetServiceIds: record.targetServiceIds,
     sharedServiceIds: record.sharedServiceIds,
-  };
-}
-
-/**
- * @param {import('@agent-browser/client/service-observability').ServiceProfileReadinessResponse | null} readiness
- */
-function summarizeReadiness(readiness) {
-  const rows = Array.isArray(readiness?.targetReadiness) ? readiness.targetReadiness : [];
-  const manualRows = rows.filter(
-    (row) => row?.state === 'needs_manual_seeding' || row?.manualSeedingRequired === true,
-  );
-  return {
-    needsManualSeeding: manualRows.some((row) => row?.state === 'needs_manual_seeding'),
-    manualSeedingRequired: manualRows.length > 0,
-    targetServiceIds: manualRows.map((row) => row.targetServiceId),
-    recommendedActions: [...new Set(manualRows.map((row) => row.recommendedAction).filter(Boolean))],
   };
 }
 

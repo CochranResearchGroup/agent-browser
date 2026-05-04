@@ -1607,12 +1607,12 @@ For read-side and service-configuration software clients, import
 `getServiceStatus`, `getServiceContracts`, collection reads for profiles,
 browsers, sessions, tabs, site policies, providers, and challenges,
 `getServiceProfileAllocation`, `getServiceProfileReadiness`,
-`postServiceReconcile`, upsert and delete helpers for profiles, sessions, site
-policies, and providers, `registerServiceLoginProfile` for the common
-login-identity profile recipe, operator remedy helpers for job cancel, browser
-retry, and incident handling, `getServiceJobs`, `getServiceJob`,
-`getServiceEvents`, `getServiceIncidents`, `getServiceIncident`,
-`getServiceIncidentActivity`, and `getServiceTrace`.
+`summarizeServiceProfileReadiness`, `postServiceReconcile`, upsert and delete
+helpers for profiles, sessions, site policies, and providers,
+`registerServiceLoginProfile` for the common login-identity profile recipe,
+operator remedy helpers for job cancel, browser retry, and incident handling,
+`getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
+`getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
 Declarations are generated from the matching service contract schemas.
 
 Software clients should treat agent-browser as the profile broker. A client
