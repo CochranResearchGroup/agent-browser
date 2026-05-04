@@ -54,6 +54,9 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceSitePolicyDeleteResponse} ServiceSitePolicyDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceSitePolicyMutationOptions} ServiceSitePolicyMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceSitePolicyUpsertResponse} ServiceSitePolicyUpsertResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRecord} ServiceProfileRecord
+ * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityMatchOptions} ServiceProfileIdentityMatchOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityMatchResult} ServiceProfileIdentityMatchResult
  */
 
 /**
@@ -112,6 +115,67 @@ export function summarizeServiceProfileReadiness(readiness) {
     manualSeedingRequired: manualRows.length > 0,
     targetServiceIds: manualRows.map((row) => row.targetServiceId),
     recommendedActions: [...new Set(manualRows.map((row) => row.recommendedAction).filter(Boolean))],
+  };
+}
+
+/**
+ * @param {ServiceProfileRecord[] | undefined | null} profiles
+ * @param {ServiceProfileIdentityMatchOptions} options
+ * @returns {ServiceProfileIdentityMatchResult}
+ */
+export function findServiceProfileForIdentity(profiles, options) {
+  const candidates = Array.isArray(profiles) ? profiles : [];
+  const identities = uniqueStrings([
+    options?.loginId,
+    options?.siteId,
+    options?.targetServiceId,
+    ...(options?.loginIds ?? []),
+    ...(options?.siteIds ?? []),
+    ...(options?.targetServiceIds ?? []),
+  ]);
+  const identitySet = new Set(identities);
+  const serviceName = options?.serviceName;
+
+  const authenticatedProfile = candidates.find((profile) =>
+    profileMatchesAny(profile, identitySet, 'authenticatedServiceIds'),
+  );
+  if (authenticatedProfile) {
+    return {
+      profile: authenticatedProfile,
+      reason: 'authenticated_target',
+      matchedField: 'authenticatedServiceIds',
+      matchedIdentity: firstMatchingProfileValue(authenticatedProfile, identitySet, 'authenticatedServiceIds'),
+    };
+  }
+
+  const targetProfile = candidates.find((profile) => profileMatchesAny(profile, identitySet, 'targetServiceIds'));
+  if (targetProfile) {
+    return {
+      profile: targetProfile,
+      reason: 'target_match',
+      matchedField: 'targetServiceIds',
+      matchedIdentity: firstMatchingProfileValue(targetProfile, identitySet, 'targetServiceIds'),
+    };
+  }
+
+  const serviceProfile =
+    typeof serviceName === 'string' && serviceName.length > 0
+      ? candidates.find((profile) => profileMatchesAny(profile, new Set([serviceName]), 'sharedServiceIds'))
+      : null;
+  if (serviceProfile) {
+    return {
+      profile: serviceProfile,
+      reason: 'service_allow_list',
+      matchedField: 'sharedServiceIds',
+      matchedIdentity: serviceName,
+    };
+  }
+
+  return {
+    profile: null,
+    reason: null,
+    matchedField: null,
+    matchedIdentity: null,
   };
 }
 
@@ -515,6 +579,33 @@ function assertServiceId(id, helperName) {
   if (typeof id !== 'string' || id.length === 0) {
     throw new TypeError(`${helperName} requires an id string`);
   }
+}
+
+/**
+ * @param {unknown} profile
+ * @param {Set<string>} identities
+ * @param {string} field
+ */
+function profileMatchesAny(profile, identities, field) {
+  return firstMatchingProfileValue(profile, identities, field) !== null;
+}
+
+/**
+ * @param {unknown} profile
+ * @param {Set<string>} identities
+ * @param {string} field
+ * @returns {string | null}
+ */
+function firstMatchingProfileValue(profile, identities, field) {
+  if (!profile || typeof profile !== 'object') {
+    return null;
+  }
+  const value = /** @type {Record<string, unknown>} */ (profile)[field];
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const match = value.find((item) => typeof item === 'string' && identities.has(item));
+  return typeof match === 'string' ? match : null;
 }
 
 /**

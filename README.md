@@ -1607,8 +1607,9 @@ For read-side and service-configuration software clients, import
 `getServiceStatus`, `getServiceContracts`, collection reads for profiles,
 browsers, sessions, tabs, site policies, providers, and challenges,
 `getServiceProfileAllocation`, `getServiceProfileReadiness`,
-`summarizeServiceProfileReadiness`, `postServiceReconcile`, upsert and delete
-helpers for profiles, sessions, site policies, and providers,
+`summarizeServiceProfileReadiness`, `findServiceProfileForIdentity`,
+`postServiceReconcile`, upsert and delete helpers for profiles, sessions, site
+policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 operator remedy helpers for job cancel, browser retry, and incident handling,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
@@ -1634,7 +1635,10 @@ profile-broker recipe that inspects `getServiceProfiles()`, reads
 requests tabs by login identity, and registers a managed login profile only
 when agent-browser has no suitable one. Its output includes
 `readinessSummary.needsManualSeeding` plus target service IDs and recommended
-actions when readiness says an operator must seed the profile. Run
+actions when readiness says an operator must seed the profile. It uses
+`findServiceProfileForIdentity()` so software clients can reuse the same
+authenticated-target, target-match, then service-allow-list preference order.
+Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke
 that proves an existing managed profile is selected without registering a new
 one. Run `pnpm test:service-client-example-live` to validate the main trace

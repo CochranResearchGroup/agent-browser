@@ -560,6 +560,23 @@ export interface ServiceProfileReadinessSummary {
   recommendedActions: string[];
 }
 
+export interface ServiceProfileIdentityMatchOptions {
+  serviceName?: string;
+  loginId?: string;
+  siteId?: string;
+  targetServiceId?: string;
+  loginIds?: string[];
+  siteIds?: string[];
+  targetServiceIds?: string[];
+}
+
+export interface ServiceProfileIdentityMatchResult {
+  profile: ServiceProfileRecord | null;
+  reason: 'authenticated_target' | 'target_match' | 'service_allow_list' | null;
+  matchedField: 'authenticatedServiceIds' | 'targetServiceIds' | 'sharedServiceIds' | null;
+  matchedIdentity: string | null;
+}
+
 export interface ServiceSessionMutationOptions extends ServiceIdOptions {
   session: Record<string, unknown>;
 }
@@ -611,6 +628,7 @@ export declare function getServiceProfiles(options: ServiceQueryOptions): Promis
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
 export declare function summarizeServiceProfileReadiness(readiness?: ServiceProfileReadinessResponse | null): ServiceProfileReadinessSummary;
+export declare function findServiceProfileForIdentity(profiles: ServiceProfileRecord[] | undefined | null, options: ServiceProfileIdentityMatchOptions): ServiceProfileIdentityMatchResult;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;

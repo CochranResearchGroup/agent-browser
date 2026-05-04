@@ -3,6 +3,7 @@
 
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
+  findServiceProfileForIdentity,
   getServiceProfileReadiness,
   getServiceProfiles,
   registerServiceLoginProfile,
@@ -137,11 +138,12 @@ export async function runManagedProfileWorkflow({
   }
 
   const profiles = await getServiceProfiles({ baseUrl, fetch });
-  const selectedProfile = findProfileForIdentity(profiles.profiles, {
+  const selectedProfileMatch = findServiceProfileForIdentity(profiles.profiles, {
     serviceName,
     loginId,
     targetServiceId,
   });
+  const selectedProfile = selectedProfileMatch.profile;
   const readiness = readinessProfileId
     ? await getServiceProfileReadiness({ baseUrl, id: readinessProfileId, fetch })
     : selectedProfile
@@ -180,41 +182,12 @@ export async function runManagedProfileWorkflow({
     dryRun: false,
     plan,
     selectedProfile: selectedProfile ? summarizeProfile(selectedProfile) : null,
+    selectedProfileMatch,
     readiness,
     readinessSummary: summarizeServiceProfileReadiness(readiness),
     profileRegistration,
     tab,
   };
-}
-
-/**
- * @param {unknown} profiles
- * @param {{ serviceName: string, loginId?: string, targetServiceId?: string }} request
- */
-function findProfileForIdentity(profiles, { serviceName, loginId, targetServiceId }) {
-  if (!Array.isArray(profiles)) {
-    return null;
-  }
-  const identities = new Set([loginId, targetServiceId].filter(Boolean));
-  return (
-    profiles.find((profile) => profileMatches(profile, identities, 'authenticatedServiceIds')) ||
-    profiles.find((profile) => profileMatches(profile, identities, 'targetServiceIds')) ||
-    profiles.find((profile) => profileMatches(profile, new Set([serviceName]), 'sharedServiceIds')) ||
-    null
-  );
-}
-
-/**
- * @param {unknown} profile
- * @param {Set<string | undefined>} identities
- * @param {string} field
- */
-function profileMatches(profile, identities, field) {
-  if (!profile || typeof profile !== 'object') {
-    return false;
-  }
-  const value = /** @type {Record<string, unknown>} */ (profile)[field];
-  return Array.isArray(value) && value.some((item) => typeof item === 'string' && identities.has(item));
 }
 
 /**

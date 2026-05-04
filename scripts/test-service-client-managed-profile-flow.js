@@ -41,6 +41,8 @@ async function testExistingProfileSelection() {
 
   assert.equal(result.dryRun, false);
   assert.equal(result.selectedProfile?.id, 'canva-default');
+  assert.equal(result.selectedProfileMatch?.reason, 'authenticated_target');
+  assert.equal(result.selectedProfileMatch?.matchedField, 'authenticatedServiceIds');
   assert.equal(result.profileRegistration, null);
   assert.equal(result.readinessSummary?.needsManualSeeding, false);
   assert.equal(result.readinessSummary?.manualSeedingRequired, false);
@@ -79,6 +81,7 @@ async function testMissingProfileRegistration() {
 
   assert.equal(result.dryRun, false);
   assert.equal(result.selectedProfile, null);
+  assert.equal(result.selectedProfileMatch?.reason, null);
   assert.equal(result.profileRegistration?.upserted, true);
   assert.equal(result.profileRegistration?.profile?.id, 'canva-default');
   assert.deepEqual(result.profileRegistration?.profile?.targetServiceIds, ['canva']);

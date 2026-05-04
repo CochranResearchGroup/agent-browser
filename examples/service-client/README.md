@@ -80,6 +80,10 @@ The selector prefers profiles whose `authenticatedServiceIds` match the
 requested identity, then profiles whose `targetServiceIds` match, then profiles
 shared with the calling service. Pass `profile` or `runtimeProfile` only when
 you intentionally want to override service-owned selection.
+Use `findServiceProfileForIdentity()` from
+`@agent-browser/client/service-observability` when a client needs to inspect
+the profile collection itself; it returns the selected profile plus the matched
+field, identity, and selection reason.
 
 ## Managed Profile Broker Recipe
 

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  findServiceProfileForIdentity,
   getServiceContracts,
   getServiceProfileAllocation,
   getServiceProfileReadiness,
@@ -155,6 +156,65 @@ async function main() {
     manualSeedingRequired: false,
     targetServiceIds: [],
     recommendedActions: [],
+  });
+
+  const profileMatches = [
+    {
+      id: 'shared',
+      name: 'Shared',
+      userDataDir: null,
+      authenticatedServiceIds: [],
+      targetServiceIds: [],
+      sharedServiceIds: ['CanvaCLI'],
+      targetReadiness: [],
+    },
+    {
+      id: 'target',
+      name: 'Target',
+      userDataDir: null,
+      authenticatedServiceIds: [],
+      targetServiceIds: ['canva'],
+      sharedServiceIds: ['OtherService'],
+      targetReadiness: [],
+    },
+    {
+      id: 'authenticated',
+      name: 'Authenticated',
+      userDataDir: null,
+      authenticatedServiceIds: ['canva'],
+      targetServiceIds: ['canva'],
+      sharedServiceIds: ['CanvaCLI'],
+      targetReadiness: [],
+    },
+  ];
+  const authenticatedMatch = findServiceProfileForIdentity(profileMatches, {
+    serviceName: 'CanvaCLI',
+    loginId: 'canva',
+  });
+  assert.equal(authenticatedMatch.profile?.id, 'authenticated');
+  assert.equal(authenticatedMatch.reason, 'authenticated_target');
+  assert.equal(authenticatedMatch.matchedField, 'authenticatedServiceIds');
+  assert.equal(authenticatedMatch.matchedIdentity, 'canva');
+
+  const targetMatch = findServiceProfileForIdentity(profileMatches.slice(0, 2), {
+    serviceName: 'CanvaCLI',
+    targetServiceIds: ['canva'],
+  });
+  assert.equal(targetMatch.profile?.id, 'target');
+  assert.equal(targetMatch.reason, 'target_match');
+
+  const serviceMatch = findServiceProfileForIdentity(profileMatches.slice(0, 1), {
+    serviceName: 'CanvaCLI',
+    loginId: 'missing',
+  });
+  assert.equal(serviceMatch.profile?.id, 'shared');
+  assert.equal(serviceMatch.reason, 'service_allow_list');
+
+  assert.deepEqual(findServiceProfileForIdentity(null, { loginId: 'missing' }), {
+    profile: null,
+    reason: null,
+    matchedField: null,
+    matchedIdentity: null,
   });
 
   const trace = createFetchRecorder({
