@@ -98,6 +98,12 @@ Dry-run the recipe without contacting a service:
 pnpm --filter agent-browser-service-client-example managed-profile-dry-run
 ```
 
+Validate the existing-profile path without launching Chrome or a daemon:
+
+```bash
+pnpm test:service-client-managed-profile-flow
+```
+
 Run it against a live service when you have a stream port:
 
 ```bash

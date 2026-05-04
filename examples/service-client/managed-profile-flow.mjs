@@ -26,6 +26,7 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   registerProfileId?: string;
  *   profileUserDataDir?: string;
  *   registerAuthenticated?: boolean;
+ *   fetch?: typeof globalThis.fetch;
  *   dryRun?: boolean;
  * }} ManagedProfileOptions
  */
@@ -106,6 +107,7 @@ export async function runManagedProfileWorkflow({
   registerProfileId,
   profileUserDataDir,
   registerAuthenticated = false,
+  fetch = globalThis.fetch,
   dryRun = false,
 } = {}) {
   const plan = buildManagedProfilePlan({
@@ -133,22 +135,23 @@ export async function runManagedProfileWorkflow({
     throw new Error('Missing baseUrl. Pass --base-url http://127.0.0.1:<stream-port>.');
   }
 
-  const profiles = await getServiceProfiles({ baseUrl });
+  const profiles = await getServiceProfiles({ baseUrl, fetch });
   const selectedProfile = findProfileForIdentity(profiles.profiles, {
     serviceName,
     loginId,
     targetServiceId,
   });
   const readiness = readinessProfileId
-    ? await getServiceProfileReadiness({ baseUrl, id: readinessProfileId })
+    ? await getServiceProfileReadiness({ baseUrl, id: readinessProfileId, fetch })
     : selectedProfile
-      ? await getServiceProfileReadiness({ baseUrl, id: selectedProfile.id })
+      ? await getServiceProfileReadiness({ baseUrl, id: selectedProfile.id, fetch })
       : null;
 
   const profileRegistration =
     !selectedProfile && registerProfileId
       ? await registerServiceLoginProfile({
           baseUrl,
+          fetch,
           ...buildLoginProfileRegistration({
             id: registerProfileId,
             serviceName,
@@ -162,6 +165,7 @@ export async function runManagedProfileWorkflow({
 
   const tab = await requestServiceTab({
     baseUrl,
+    fetch,
     url,
     serviceName,
     agentName,
