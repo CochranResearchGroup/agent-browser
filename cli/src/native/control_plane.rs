@@ -504,6 +504,10 @@ fn persist_service_job_queued(request: &ControlRequest) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
+        site_id: service_job_optional_command_string(request, "siteId"),
+        login_id: service_job_optional_command_string(request, "loginId"),
+        target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
@@ -528,6 +532,10 @@ fn persist_service_job_waiting_profile_lease(
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
+        site_id: service_job_optional_command_string(request, "siteId"),
+        login_id: service_job_optional_command_string(request, "loginId"),
+        target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
@@ -660,6 +668,10 @@ fn persist_service_job_running(request: &ControlRequest) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
+        site_id: service_job_optional_command_string(request, "siteId"),
+        login_id: service_job_optional_command_string(request, "loginId"),
+        target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
@@ -693,6 +705,10 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
+        site_id: service_job_optional_command_string(request, "siteId"),
+        login_id: service_job_optional_command_string(request, "loginId"),
+        target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
@@ -724,6 +740,10 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
+        site_id: service_job_optional_command_string(request, "siteId"),
+        login_id: service_job_optional_command_string(request, "loginId"),
+        target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
@@ -750,6 +770,10 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
+        site_id: service_job_optional_command_string(request, "siteId"),
+        login_id: service_job_optional_command_string(request, "loginId"),
+        target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
@@ -776,6 +800,10 @@ fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) 
         service_name: request.service_name.clone(),
         agent_name: request.agent_name.clone(),
         task_name: request.task_name.clone(),
+        target_service_id: service_job_optional_command_string(request, "targetServiceId"),
+        site_id: service_job_optional_command_string(request, "siteId"),
+        login_id: service_job_optional_command_string(request, "loginId"),
+        target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
         target: JobTarget::Service,
@@ -807,6 +835,50 @@ fn service_job_priority(priority: ControlPriority) -> JobPriority {
     match priority {
         ControlPriority::Normal => JobPriority::Normal,
         ControlPriority::Lifecycle => JobPriority::Lifecycle,
+    }
+}
+
+fn service_job_optional_command_string(request: &ControlRequest, name: &str) -> Option<String> {
+    optional_command_string(&request.command, name)
+}
+
+fn service_job_target_service_ids(request: &ControlRequest) -> Vec<String> {
+    let mut values = Vec::new();
+    for key in [
+        "targetServiceId",
+        "targetService",
+        "siteId",
+        "loginId",
+        "target_service_id",
+        "site_id",
+        "login_id",
+    ] {
+        if let Some(value) = request.command.get(key).and_then(|value| value.as_str()) {
+            merge_service_job_target_service_id(&mut values, value);
+        }
+    }
+    for key in [
+        "targetServiceIds",
+        "targetServices",
+        "siteIds",
+        "loginIds",
+        "target_service_ids",
+        "site_ids",
+        "login_ids",
+    ] {
+        if let Some(raw_values) = request.command.get(key).and_then(|value| value.as_array()) {
+            for value in raw_values.iter().filter_map(|value| value.as_str()) {
+                merge_service_job_target_service_id(&mut values, value);
+            }
+        }
+    }
+    values
+}
+
+fn merge_service_job_target_service_id(values: &mut Vec<String>, value: &str) {
+    let trimmed = value.trim();
+    if !trimmed.is_empty() && !values.iter().any(|existing| existing == trimmed) {
+        values.push(trimmed.to_string());
     }
 }
 

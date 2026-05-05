@@ -164,6 +164,19 @@ function findJob(jobs, { prefix, taskName }) {
   );
 }
 
+function assertJobIdentityHints(job, expected, label) {
+  for (const [field, value] of Object.entries(expected)) {
+    if (field === 'targetServiceIds') {
+      assert(
+        JSON.stringify(job.targetServiceIds) === JSON.stringify(value),
+        `${label} ${field} mismatch: ${JSON.stringify(job)}`,
+      );
+    } else {
+      assert(job[field] === value, `${label} ${field} mismatch: ${JSON.stringify(job)}`);
+    }
+  }
+}
+
 try {
   seedServiceState();
 
@@ -329,6 +342,16 @@ try {
   assertServiceJobSchemaRecord(httpJob, jobRecordSchema, 'HTTP service request job');
   assert(httpJob.action === 'navigate', `HTTP service request job action mismatch: ${JSON.stringify(httpJob)}`);
   assert(httpJob.state === 'succeeded', `HTTP service request job did not succeed: ${JSON.stringify(httpJob)}`);
+  assertJobIdentityHints(
+    httpJob,
+    {
+      siteId: targetServiceId,
+      loginId: null,
+      targetServiceId: null,
+      targetServiceIds: fallbackTargetServiceIds,
+    },
+    'HTTP service request job',
+  );
 
   const tabJob = findJob(jobs, {
     prefix: 'http-service-request-tab_new-',
@@ -338,6 +361,16 @@ try {
   assertServiceJobSchemaRecord(tabJob, jobRecordSchema, 'client service tab request job');
   assert(tabJob.action === 'tab_new', `client service tab request action mismatch: ${JSON.stringify(tabJob)}`);
   assert(tabJob.state === 'succeeded', `client service tab request did not succeed: ${JSON.stringify(tabJob)}`);
+  assertJobIdentityHints(
+    tabJob,
+    {
+      siteId: targetServiceId,
+      loginId: targetServiceId,
+      targetServiceId: null,
+      targetServiceIds: fallbackTargetServiceIds,
+    },
+    'client service tab request job',
+  );
 
   const httpJobDetail = await getServiceJob({
     baseUrl: serviceBaseUrl,
@@ -359,6 +392,16 @@ try {
   assertServiceJobSchemaRecord(mcpJob, jobRecordSchema, 'MCP service_request job');
   assert(mcpJob.action === 'navigate', `MCP service_request job action mismatch: ${JSON.stringify(mcpJob)}`);
   assert(mcpJob.state === 'succeeded', `MCP service_request job did not succeed: ${JSON.stringify(mcpJob)}`);
+  assertJobIdentityHints(
+    mcpJob,
+    {
+      siteId: targetServiceId,
+      loginId: null,
+      targetServiceId: null,
+      targetServiceIds: fallbackTargetServiceIds,
+    },
+    'MCP service_request job',
+  );
 
   const eventsResponse = await getServiceEvents({
     baseUrl: serviceBaseUrl,
@@ -374,6 +417,16 @@ try {
   assert(
     traceResponse.jobs.some((job) => job.id === httpJob.id),
     `service trace client missing HTTP job: ${JSON.stringify(traceResponse.jobs)}`,
+  );
+  assertJobIdentityHints(
+    traceResponse.jobs.find((job) => job.id === httpJob.id),
+    {
+      siteId: targetServiceId,
+      loginId: null,
+      targetServiceId: null,
+      targetServiceIds: fallbackTargetServiceIds,
+    },
+    'service trace HTTP job',
   );
   assert(
     traceResponse.jobs.some((job) => job.id === mcpJob.id),

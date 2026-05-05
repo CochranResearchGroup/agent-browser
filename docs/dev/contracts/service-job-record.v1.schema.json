@@ -39,6 +39,25 @@
     "taskName": {
       "type": ["string", "null"]
     },
+    "targetServiceId": {
+      "type": ["string", "null"],
+      "description": "Singular target service or identity-provider hint supplied by the caller."
+    },
+    "siteId": {
+      "type": ["string", "null"],
+      "description": "Singular site hint supplied by the caller."
+    },
+    "loginId": {
+      "type": ["string", "null"],
+      "description": "Singular login identity hint supplied by the caller."
+    },
+    "targetServiceIds": {
+      "type": "array",
+      "description": "Normalized target-service, site, and login identity hints used for profile selection.",
+      "items": {
+        "type": "string"
+      }
+    },
     "namingWarnings": {
       "type": "array",
       "items": {

@@ -1018,6 +1018,10 @@ pub fn assert_service_job_record_contract(value: &serde_json::Value) {
             "serviceName",
             "agentName",
             "taskName",
+            "targetServiceId",
+            "siteId",
+            "loginId",
+            "targetServiceIds",
             "namingWarnings",
             "hasNamingWarning",
             "target",
@@ -1035,6 +1039,10 @@ pub fn assert_service_job_record_contract(value: &serde_json::Value) {
             "service_name",
             "agent_name",
             "task_name",
+            "target_service_id",
+            "site_id",
+            "login_id",
+            "target_service_ids",
             "naming_warnings",
             "has_naming_warning",
             "submitted_at",
@@ -2523,6 +2531,14 @@ pub struct ServiceJob {
     pub agent_name: Option<String>,
     /// Task-level caller label supplied by MCP, CLI, HTTP, or API clients.
     pub task_name: Option<String>,
+    /// Target service or identity-provider hint supplied by the caller.
+    pub target_service_id: Option<String>,
+    /// Site hint supplied by the caller. This is treated as a target-service alias.
+    pub site_id: Option<String>,
+    /// Login identity hint supplied by the caller. This is treated as a target-service alias.
+    pub login_id: Option<String>,
+    /// Normalized target-service, site, and login identity hints used for profile selection.
+    pub target_service_ids: Vec<String>,
     /// Non-blocking policy warnings for missing caller labels.
     ///
     /// Current warning values are the `SERVICE_JOB_NAMING_WARNING_VALUES`
@@ -2550,6 +2566,10 @@ impl Default for ServiceJob {
             service_name: None,
             agent_name: None,
             task_name: None,
+            target_service_id: None,
+            site_id: None,
+            login_id: None,
+            target_service_ids: Vec::new(),
             naming_warnings: Vec::new(),
             has_naming_warning: false,
             target: JobTarget::Service,
@@ -3069,6 +3089,10 @@ mod tests {
         assert_eq!(
             schema["properties"]["hasNamingWarning"]["description"],
             "True when namingWarnings is non-empty."
+        );
+        assert_eq!(
+            schema["properties"]["targetServiceIds"]["description"],
+            "Normalized target-service, site, and login identity hints used for profile selection."
         );
         for field in [
             "id",

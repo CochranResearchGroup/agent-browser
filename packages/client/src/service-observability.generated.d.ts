@@ -76,6 +76,10 @@ export interface ServiceJobRecord {
   serviceName: string | null;
   agentName: string | null;
   taskName: string | null;
+  targetServiceId: string | null;
+  siteId: string | null;
+  loginId: string | null;
+  targetServiceIds: string[];
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
   target: unknown;

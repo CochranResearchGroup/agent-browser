@@ -16,6 +16,13 @@ The schema is guarded by Rust tests for the model, HTTP, and MCP surfaces. Keep
 new contractual job fields in this schema before relying on them from external
 clients.
 
+Retained job records preserve the caller's target identity hints. Singular
+`targetServiceId`, `siteId`, and `loginId` fields keep the exact singular hints
+when present, while `targetServiceIds` contains the normalized target-service,
+site, and login identity set used by profile selection. This lets HTTP, MCP, and
+trace clients explain why a request targeted a particular profile without
+replaying the original command payload.
+
 `service-jobs-response.v1.schema.json` describes the response envelope returned
 by:
 
