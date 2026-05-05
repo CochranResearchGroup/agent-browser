@@ -119,7 +119,7 @@ Software clients should broker profiles through agent-browser before creating ne
 ```ts
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
-  lookupServiceProfile,
+  getServiceAccessPlan,
   registerServiceLoginProfile,
 } from '@agent-browser/client/service-observability';
 
@@ -127,7 +127,7 @@ const baseUrl = `http://127.0.0.1:${streamPort}`;
 const serviceName = 'CanvaCLI';
 const loginId = 'canva';
 
-const profileLookup = await lookupServiceProfile({
+const accessPlan = await getServiceAccessPlan({
   baseUrl,
   serviceName,
   agentName: 'canva-cli-agent',
@@ -136,7 +136,7 @@ const profileLookup = await lookupServiceProfile({
   targetServiceId: loginId,
 });
 
-if (!profileLookup.selectedProfile) {
+if (!accessPlan.selectedProfile) {
   await registerServiceLoginProfile({
     baseUrl,
     id: 'canva-default',
@@ -160,7 +160,7 @@ await requestServiceTab({
 
 If <code>profileLookup.readinessSummary.needsManualSeeding</code> is true, show the returned recommended actions to the operator and seed the managed profile before expecting authenticated automation to succeed.
 
-The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, can cancel a known queued job with <code>cancelServiceJob</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>. The same example package includes <code>managed-profile-flow.mjs</code>, a CanvaCLI-style profile-broker recipe that uses <code>lookupServiceProfile</code> to inspect managed profiles, select by identity, read readiness when a candidate profile is known, request tabs by login identity, and register a managed login profile only when agent-browser has no suitable one. Its output includes <code>readinessSummary.needsManualSeeding</code> plus target service IDs and recommended actions when readiness says an operator must seed the profile. Run <code>pnpm test:service-client-managed-profile-flow</code> for the no-launch mock smoke that proves the recipe selects an existing managed profile without registering a new one.
+The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, can cancel a known queued job with <code>cancelServiceJob</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>. The same example package includes <code>managed-profile-flow.mjs</code>, a CanvaCLI-style profile-broker recipe that uses <code>getServiceAccessPlan</code> to inspect the selected profile, readiness, site policy, providers, retained challenges, and service-owned decision before requesting a tab by login identity or registering a fallback managed profile. Its output includes <code>readinessSummary.needsManualSeeding</code> plus target service IDs and recommended actions when readiness says an operator must seed the profile. Run <code>pnpm test:service-client-managed-profile-flow</code> for the no-launch mock smoke that proves the recipe selects an existing managed profile without registering a new one.
 
 ## Operator request model
 

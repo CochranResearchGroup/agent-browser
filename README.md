@@ -1658,7 +1658,6 @@ client is explicitly bringing its own profile.
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
   getServiceAccessPlan,
-  lookupServiceProfile,
   registerServiceLoginProfile,
 } from '@agent-browser/client/service-observability';
 
@@ -1685,8 +1684,6 @@ if (!accessPlan.selectedProfile) {
   });
 }
 
-const profileLookup = await lookupServiceProfile({ baseUrl, serviceName, loginId });
-
 const tab = await requestServiceTab({
   baseUrl,
   serviceName,
@@ -1701,7 +1698,7 @@ const tab = await requestServiceTab({
 
 If `accessPlan.readinessSummary.needsManualSeeding` is true, show the returned
 recommended actions to the operator and seed the managed profile before
-expecting authenticated automation to succeed. Use `profileLookup` only when the
+expecting authenticated automation to succeed. Use `lookupServiceProfile()` only when the
 caller needs the narrower profile-only selector response.
 
 See `examples/service-client/` for a copyable workflow that requests a service
@@ -1710,9 +1707,9 @@ known queued-job cancellation with `cancelServiceJob`. Run
 `pnpm test:service-client-example` to validate the example in dry-run mode.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that uses the no-launch profile planning surfaces to
-inspect managed profiles, select by identity, read readiness when a candidate
-profile is known, request tabs by login identity, and register a managed login
-profile only when agent-browser has no suitable one. Its output includes
+ask agent-browser for an access plan, inspect readiness and the service-owned
+decision, request tabs by login identity, and register a managed login profile
+only when agent-browser has no suitable one. Its output includes
 `readinessSummary.needsManualSeeding` plus target service IDs and recommended
 actions when readiness says an operator must seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke

@@ -12,6 +12,7 @@ import {
 import {
   cancelServiceJob,
   findServiceProfileForIdentity,
+  getServiceAccessPlan,
   getServiceProfileForIdentity,
   getServiceProfileReadiness,
   getServiceProfiles,
@@ -29,6 +30,7 @@ assert.equal(typeof postServiceRequest, 'function');
 assert.equal(typeof requestServiceTab, 'function');
 assert.equal(typeof cancelServiceJob, 'function');
 assert.equal(typeof findServiceProfileForIdentity, 'function');
+assert.equal(typeof getServiceAccessPlan, 'function');
 assert.equal(typeof getServiceProfileForIdentity, 'function');
 assert.equal(typeof getServiceProfileReadiness, 'function');
 assert.equal(typeof getServiceProfiles, 'function');

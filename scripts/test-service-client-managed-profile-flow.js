@@ -46,6 +46,8 @@ async function testExistingProfileSelection() {
   assert.equal(result.profileRegistration, null);
   assert.equal(result.readinessSummary?.needsManualSeeding, false);
   assert.equal(result.readinessSummary?.manualSeedingRequired, false);
+  assert.equal(result.accessDecision?.recommendedAction, 'use_selected_profile');
+  assert.equal(result.accessPlan?.decision?.recommendedAction, 'use_selected_profile');
   assert.equal(result.tab?.success, true);
   assert.equal(result.tab?.data?.url, 'https://www.canva.com/');
 
@@ -56,7 +58,7 @@ async function testExistingProfileSelection() {
 
   assert.deepEqual(
     calls.map((call) => `${call.method} ${call.path}`),
-    ['GET /api/service/profiles/lookup', 'POST /api/service/request'],
+    ['GET /api/service/access-plan', 'POST /api/service/request'],
   );
 }
 
@@ -82,6 +84,10 @@ async function testMissingProfileRegistration() {
   assert.equal(result.dryRun, false);
   assert.equal(result.selectedProfile, null);
   assert.equal(result.selectedProfileMatch, null);
+  assert.equal(
+    result.accessDecision?.recommendedAction,
+    'register_managed_profile_or_request_throwaway_browser',
+  );
   assert.equal(result.profileRegistration?.upserted, true);
   assert.equal(result.profileRegistration?.profile?.id, 'canva-default');
   assert.deepEqual(result.profileRegistration?.profile?.targetServiceIds, ['canva']);
@@ -104,7 +110,7 @@ async function testMissingProfileRegistration() {
 
   assert.deepEqual(
     calls.map((call) => `${call.method} ${call.path}`),
-    ['GET /api/service/profiles/lookup', 'POST /api/service/profiles/canva-default', 'POST /api/service/request'],
+    ['GET /api/service/access-plan', 'POST /api/service/profiles/canva-default', 'POST /api/service/request'],
   );
 }
 
@@ -139,6 +145,10 @@ async function testManualSeedingReadinessSummary() {
   assert.deepEqual(result.readinessSummary?.recommendedActions, [
     'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
   ]);
+  assert.equal(
+    result.accessDecision?.recommendedAction,
+    'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+  );
   assert.equal(result.tab?.success, true);
 }
 
@@ -154,7 +164,7 @@ function createMockFetch({
     const method = init.method || 'GET';
     calls.push({ method, path: parsed.pathname, body: init.body });
 
-    if (method === 'GET' && parsed.pathname === '/api/service/profiles/lookup') {
+    if (method === 'GET' && parsed.pathname === '/api/service/access-plan') {
       const selectedProfile = profiles[0] ?? null;
       const targetReadiness = selectedProfile
         ? [
@@ -181,6 +191,8 @@ function createMockFetch({
         query: {
           serviceName: 'CanvaCLI',
           targetServiceIds: ['canva'],
+          sitePolicyId: null,
+          challengeId: null,
           readinessProfileId: parsed.searchParams.get('readinessProfileId'),
         },
         selectedProfile,
@@ -200,6 +212,26 @@ function createMockFetch({
           targetServiceIds: readinessState === 'needs_manual_seeding' && selectedProfile ? ['canva'] : [],
           recommendedActions:
             readinessState === 'needs_manual_seeding' && selectedProfile ? [readinessRecommendedAction] : [],
+        },
+        sitePolicy: null,
+        providers: [],
+        challenges: [],
+        decision: {
+          recommendedAction:
+            readinessState === 'needs_manual_seeding' && selectedProfile
+              ? readinessRecommendedAction
+              : selectedProfile
+                ? 'use_selected_profile'
+                : 'register_managed_profile_or_request_throwaway_browser',
+          browserHost: null,
+          interactionMode: null,
+          challengePolicy: null,
+          profileId: selectedProfile?.id ?? null,
+          manualActionRequired: readinessState === 'needs_manual_seeding' && Boolean(selectedProfile),
+          manualSeedingRequired: readinessState === 'needs_manual_seeding' && Boolean(selectedProfile),
+          providerIds: [],
+          challengeIds: [],
+          reasons: selectedProfile ? ['selected_profile_has_readiness_evidence'] : ['no_matching_profile'],
         },
       });
     }

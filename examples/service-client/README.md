@@ -89,15 +89,19 @@ one call: it calls HTTP `GET /api/service/profiles/lookup`, lets agent-browser
 apply the authoritative selector, and returns the selected profile, reason,
 readiness, and readiness summary. `getServiceProfileForIdentity()` remains as
 the older descriptive alias for the same route.
+Prefer `getServiceAccessPlan()` when the client is deciding whether to register
+or seed a managed profile. It calls HTTP `GET /api/service/access-plan` and adds
+the site policy, providers, retained challenges, and service-owned decision to
+the profile lookup and readiness fields.
 
 ```js
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
-  lookupServiceProfile,
+  getServiceAccessPlan,
   registerServiceLoginProfile,
 } from '@agent-browser/client/service-observability';
 
-const profileLookup = await lookupServiceProfile({
+const accessPlan = await getServiceAccessPlan({
   baseUrl: 'http://127.0.0.1:4849',
   serviceName: 'CanvaCLI',
   agentName: 'canva-cli-agent',
@@ -106,7 +110,7 @@ const profileLookup = await lookupServiceProfile({
   targetServiceId: 'canva',
 });
 
-if (!profileLookup.selectedProfile) {
+if (!accessPlan.selectedProfile) {
   await registerServiceLoginProfile({
     baseUrl: 'http://127.0.0.1:4849',
     id: 'canva-default',
@@ -132,7 +136,7 @@ await requestServiceTab({
 Use `managed-profile-flow.mjs` when a software client needs the CanvaCLI-style
 profile-broker pattern:
 
-1. Inspect managed profiles and readiness with `lookupServiceProfile()`.
+1. Ask agent-browser for a no-launch access plan with `getServiceAccessPlan()`.
 2. Request the target identity with `requestServiceTab()`.
 3. Register a managed profile only when agent-browser has no suitable profile.
 4. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.

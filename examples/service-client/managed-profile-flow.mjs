@@ -3,7 +3,7 @@
 
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
-  lookupServiceProfile,
+  getServiceAccessPlan,
   registerServiceLoginProfile,
 } from '@agent-browser/client/service-observability';
 
@@ -53,15 +53,22 @@ export function buildManagedProfilePlan({
     targetServiceId,
     url,
     decisionOrder: [
-      'inspect managed service profiles',
-      'inspect target readiness when a candidate profile is known',
+      'ask agent-browser for the no-launch access plan',
+      'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
       'request a tab by login or target identity',
       'register a managed profile only when agent-browser has no suitable one',
       'seed the profile manually when readiness reports needs_manual_seeding',
     ],
     profileInspection: {
-      helper: 'lookupServiceProfile',
-      matchFields: ['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds'],
+      helper: 'getServiceAccessPlan',
+      includes: [
+        'selectedProfile',
+        'readinessSummary',
+        'sitePolicy',
+        'providers',
+        'challenges',
+        'decision',
+      ],
     },
     readinessInspection: readinessProfileId
       ? {
@@ -134,7 +141,7 @@ export async function runManagedProfileWorkflow({
     throw new Error('Missing baseUrl. Pass --base-url http://127.0.0.1:<stream-port>.');
   }
 
-  const profileLookup = await lookupServiceProfile({
+  const accessPlan = await getServiceAccessPlan({
     baseUrl,
     fetch,
     serviceName,
@@ -142,10 +149,10 @@ export async function runManagedProfileWorkflow({
     targetServiceId,
     readinessProfileId,
   });
-  const selectedProfile = profileLookup.selectedProfile;
+  const selectedProfile = accessPlan.selectedProfile;
 
   const profileRegistration =
-    !selectedProfile && registerProfileId
+    !accessPlan.selectedProfile && registerProfileId
       ? await registerServiceLoginProfile({
           baseUrl,
           fetch,
@@ -175,10 +182,15 @@ export async function runManagedProfileWorkflow({
   return {
     dryRun: false,
     plan,
+    accessPlan,
     selectedProfile: selectedProfile ? summarizeProfile(selectedProfile) : null,
-    selectedProfileMatch: profileLookup.selectedProfileMatch,
-    readiness: profileLookup.readiness,
-    readinessSummary: profileLookup.readinessSummary,
+    selectedProfileMatch: accessPlan.selectedProfileMatch,
+    readiness: accessPlan.readiness,
+    readinessSummary: accessPlan.readinessSummary,
+    accessDecision: accessPlan.decision,
+    sitePolicy: accessPlan.sitePolicy,
+    providers: accessPlan.providers,
+    challenges: accessPlan.challenges,
     profileRegistration,
     tab,
   };
