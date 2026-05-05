@@ -136,6 +136,8 @@ const traceData = {
       {
         serviceName: 'SmallService',
         taskName: 'quickProbe',
+        targetIdentityCount: 0,
+        targetServiceIds: [],
         hasNamingWarning: true,
         namingWarnings: ['missing_agent_name'],
         eventCount: 1,
@@ -151,6 +153,8 @@ const traceData = {
         browserId: 'browser-1',
         profileId: 'profile-1',
         sessionId: 'session-1',
+        targetIdentityCount: 3,
+        targetServiceIds: ['acs', 'google', 'acs'],
         hasNamingWarning: false,
         namingWarnings: [],
         eventCount: 2,
@@ -204,8 +208,10 @@ assert.deepEqual(summaryCards[0].meta, [
   'profile profile-1',
   'session session-1',
 ]);
+assert.deepEqual(summaryCards[0].targetServiceIds, ['acs', 'google']);
 assert.deepEqual(summaryCards[0].counts, ['2 ev', '2 jobs', '0 inc', '2 act']);
 assert.equal(summaryCards[1].warning, 'Missing agent name');
+assert.deepEqual(summaryCards[1].targetServiceIds, []);
 assert.equal(traceSummaryCards(null).length, 0);
 
 const profileLeaseWaits = traceProfileLeaseWaits(traceData);

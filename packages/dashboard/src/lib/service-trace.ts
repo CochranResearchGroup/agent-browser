@@ -33,6 +33,10 @@ export type ServiceTraceJob = {
   serviceName?: string | null;
   agentName?: string | null;
   taskName?: string | null;
+  targetServiceId?: string | null;
+  siteId?: string | null;
+  loginId?: string | null;
+  targetServiceIds?: string[];
   namingWarnings?: string[];
   hasNamingWarning?: boolean;
 };
@@ -95,6 +99,8 @@ export type ServiceTraceData = {
       jobCount?: number;
       incidentCount?: number;
       activityCount?: number;
+      targetIdentityCount?: number;
+      targetServiceIds?: string[];
       latestTimestamp?: string | null;
       hasNamingWarning?: boolean;
       namingWarnings?: string[];
@@ -130,6 +136,7 @@ export type ServiceTraceSummaryCard = {
   total: number;
   warning: string | null;
   meta: string[];
+  targetServiceIds: string[];
   counts: string[];
 };
 
@@ -217,6 +224,7 @@ export function traceSummaryCards(trace: ServiceTraceData | null, limit = 4): Se
           context.profileId && `profile ${context.profileId}`,
           context.sessionId && `session ${context.sessionId}`,
         ].filter((value): value is string => typeof value === "string" && value.length > 0),
+        targetServiceIds: uniqueTraceTargets(context.targetServiceIds),
         counts: [
           `${context.eventCount ?? 0} ev`,
           `${context.jobCount ?? 0} jobs`,
@@ -225,6 +233,18 @@ export function traceSummaryCards(trace: ServiceTraceData | null, limit = 4): Se
         ],
       };
     });
+}
+
+export function uniqueTraceTargets(values?: string[] | null): string[] {
+  const seen = new Set<string>();
+  const targets: string[] = [];
+  for (const value of values ?? []) {
+    const target = value.trim();
+    if (!target || seen.has(target)) continue;
+    seen.add(target);
+    targets.push(target);
+  }
+  return targets;
 }
 
 export function traceProfileLeaseWaits(trace: ServiceTraceData | null): ServiceTraceProfileLeaseWait[] {

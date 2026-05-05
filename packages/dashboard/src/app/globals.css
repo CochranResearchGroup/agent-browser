@@ -725,6 +725,7 @@ body {
 }
 
 .service-trace-context-meta,
+.service-trace-targets,
 .service-trace-context-counts {
   display: flex;
   flex-wrap: wrap;
@@ -733,6 +734,7 @@ body {
 }
 
 .service-trace-context-meta span,
+.service-trace-targets span,
 .service-trace-context-counts span {
   border-radius: 999px;
   background: color-mix(in srgb, var(--foreground) 6%, transparent);
@@ -741,6 +743,18 @@ body {
   font-weight: 800;
   line-height: 1;
   padding: 0.25rem 0.4rem;
+}
+
+.service-trace-targets {
+  margin-top: 0.45rem;
+}
+
+.service-trace-targets span {
+  border: 1px solid color-mix(in srgb, var(--success) 24%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: color-mix(in srgb, var(--foreground) 84%, var(--success));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .service-trace-context-counts span {

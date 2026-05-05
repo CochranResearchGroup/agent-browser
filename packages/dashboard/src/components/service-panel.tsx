@@ -967,6 +967,13 @@ function TraceExplorer({
                       <span key={item}>{item}</span>
                     ))}
                   </div>
+                  {card.targetServiceIds.length > 0 && (
+                    <div className="service-trace-targets" aria-label={`${card.title} target identities`}>
+                      {card.targetServiceIds.map((target) => (
+                        <span key={target}>{target}</span>
+                      ))}
+                    </div>
+                  )}
                   <div className="service-trace-context-counts">
                     {card.counts.map((item) => (
                       <span key={item}>{item}</span>
