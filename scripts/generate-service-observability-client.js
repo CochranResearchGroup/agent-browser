@@ -605,19 +605,30 @@ export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabi
 }
 
 export interface ServiceProfileReadinessSummary {
+  /** True when at least one target explicitly needs detached manual profile seeding. */
   needsManualSeeding: boolean;
+  /** True when any readiness row requires manual seeding before authenticated automation. */
   manualSeedingRequired: boolean;
+  /** Target service or login IDs that need operator attention. */
   targetServiceIds: string[];
+  /** Operator-facing recommended action codes returned by the service. */
   recommendedActions: string[];
 }
 
 export interface ServiceProfileIdentityMatchOptions {
+  /** Calling service name, for example "JournalDownloader" or "CanvaCLI". */
   serviceName?: string;
+  /** Desired login identity or site login scope, for example "acs" or "canva". */
   loginId?: string;
+  /** Desired site identity alias. Treated like a target service ID for profile selection. */
   siteId?: string;
+  /** Desired target site or identity provider, for example "google", "microsoft", or "canva". */
   targetServiceId?: string;
+  /** Additional desired login identities. */
   loginIds?: string[];
+  /** Additional desired site identities. */
   siteIds?: string[];
+  /** Additional desired target site or identity-provider IDs. */
   targetServiceIds?: string[];
 }
 
@@ -629,6 +640,7 @@ export interface ServiceProfileIdentityMatchResult {
 }
 
 export interface ServiceProfileIdentityLookupOptions extends ServiceQueryOptions, ServiceProfileIdentityMatchOptions {
+  /** Optional explicit profile ID whose readiness rows should be included with the lookup response. */
   readinessProfileId?: string;
 }
 
@@ -647,10 +659,15 @@ export interface ServiceProfileLookupMatch {
 }
 
 export interface ServiceProfileLookupResponse {
+  /** Normalized lookup query after login, site, and target aliases have been folded together. */
   query: ServiceProfileLookupQuery;
+  /** Server-selected profile, or null when agent-browser has no suitable managed profile. */
   selectedProfile: ServiceProfileRecord | null;
+  /** Match metadata explaining the selected profile and selector reason. */
   selectedProfileMatch: ServiceProfileLookupMatch | null;
+  /** Optional no-launch readiness rows for the selected or requested readiness profile. */
   readiness: ServiceProfileReadinessResponse | null;
+  /** Compact manual-seeding summary suitable for operator UI or logs. */
   readinessSummary: ServiceProfileReadinessSummary;
   [key: string]: unknown;
 }
@@ -698,10 +715,13 @@ export declare function getServiceStatus(options: ServiceObservabilityHttpOption
 export declare function getServiceContracts(options: ServiceObservabilityHttpOptions): Promise<ServiceContractsResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
+/** Read one profile's no-launch target readiness rows. */
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
 export declare function summarizeServiceProfileReadiness(readiness?: ServiceProfileReadinessResponse | null): ServiceProfileReadinessSummary;
 export declare function findServiceProfileForIdentity(profiles: ServiceProfileRecord[] | undefined | null, options: ServiceProfileIdentityMatchOptions): ServiceProfileIdentityMatchResult;
+/** Older descriptive alias for lookupServiceProfile. */
 export declare function getServiceProfileForIdentity(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
+/** Ask agent-browser to select a managed profile by service plus login, site, or target identity. */
 export declare function lookupServiceProfile(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;

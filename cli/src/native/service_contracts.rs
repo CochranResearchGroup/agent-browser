@@ -131,6 +131,10 @@ pub fn service_contracts_metadata() -> Value {
                     "method": "GET",
                     "route": SERVICE_PROFILE_READINESS_HTTP_ROUTE,
                 },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["getServiceProfileReadiness", "summarizeServiceProfileReadiness"],
+                },
             },
             "serviceProfileLookupResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
@@ -139,6 +143,11 @@ pub fn service_contracts_metadata() -> Value {
                 "http": {
                     "method": "GET",
                     "route": SERVICE_PROFILE_LOOKUP_HTTP_ROUTE,
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["lookupServiceProfile", "getServiceProfileForIdentity"],
+                    "selectionOrder": ["authenticatedServiceIds", "targetServiceIds", "sharedServiceIds"],
                 },
             },
         },
@@ -198,12 +207,24 @@ mod tests {
             SERVICE_PROFILE_READINESS_HTTP_ROUTE
         );
         assert_eq!(
+            metadata["contracts"]["serviceProfileReadinessResponse"]["client"]["helpers"][0],
+            "getServiceProfileReadiness"
+        );
+        assert_eq!(
             metadata["contracts"]["serviceProfileLookupResponse"]["schemaId"],
             SERVICE_PROFILE_LOOKUP_RESPONSE_SCHEMA_ID
         );
         assert_eq!(
             metadata["contracts"]["serviceProfileLookupResponse"]["http"]["route"],
             SERVICE_PROFILE_LOOKUP_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileLookupResponse"]["client"]["helpers"][0],
+            "lookupServiceProfile"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileLookupResponse"]["client"]["selectionOrder"][0],
+            "authenticatedServiceIds"
         );
     }
 }

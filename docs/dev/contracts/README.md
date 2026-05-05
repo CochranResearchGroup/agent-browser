@@ -49,7 +49,16 @@ runtime compatibility metadata for these contract IDs, their shared `v1`
 version, route and tool names, and the supported service request action list.
 The HTTP contracts metadata also advertises the HTTP-only
 `serviceProfileAllocationResponse` contract for
-`GET /api/service/profiles/<id>/allocation`.
+`GET /api/service/profiles/<id>/allocation`, `serviceProfileReadinessResponse`
+for `GET /api/service/profiles/<id>/readiness`, and
+`serviceProfileLookupResponse` for `GET /api/service/profiles/lookup`.
+Readiness and lookup metadata also names the
+`@agent-browser/client/service-observability` helpers that consume those
+routes. Software clients should prefer `lookupServiceProfile()` when they want
+agent-browser to select by `serviceName` plus `loginId`, `siteId`, or
+`targetServiceId`; the selector advertises the same preference order used by
+service launches: authenticated target state, target scope, then shared caller
+service.
 
 `packages/client/src/service-request.generated.d.ts` and
 `packages/client/src/service-request.generated.js` are generated from these

@@ -146,6 +146,17 @@ try {
     `serviceProfileReadinessResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileReadinessResponse?.client?.package ===
+      '@agent-browser/client/service-observability',
+    `serviceProfileReadinessResponse client package mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileReadinessResponse?.client?.helpers?.includes(
+      'getServiceProfileReadiness',
+    ),
+    `serviceProfileReadinessResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileLookupResponse?.schemaId ===
       'https://agent-browser.local/contracts/service-profile-lookup-response.v1.schema.json',
     `serviceProfileLookupResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
@@ -163,6 +174,20 @@ try {
     contracts.data?.contracts?.serviceProfileLookupResponse?.http?.route ===
       '/api/service/profiles/lookup',
     `serviceProfileLookupResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileLookupResponse?.client?.package ===
+      '@agent-browser/client/service-observability',
+    `serviceProfileLookupResponse client package mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileLookupResponse?.client?.helpers?.includes('lookupServiceProfile'),
+    `serviceProfileLookupResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===
+      JSON.stringify(['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds']),
+    `serviceProfileLookupResponse selection order mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
   );
   assert(
     contracts.data?.http?.serviceProfileAllocationRoute === '/api/service/profiles/<id>/allocation',
