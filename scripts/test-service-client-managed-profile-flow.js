@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
-import { runManagedProfileWorkflow } from '../examples/service-client/managed-profile-flow.mjs';
+import {
+  buildManagedProfilePlan,
+  runManagedProfileWorkflow,
+} from '../examples/service-client/managed-profile-flow.mjs';
 
 const profile = {
   id: 'canva-default',
@@ -15,6 +19,7 @@ const profile = {
 await testExistingProfileSelection();
 await testMissingProfileRegistration();
 await testManualSeedingReadinessSummary();
+await testIdentityFirstGuidanceDrift();
 
 console.log('Managed profile flow no-launch smoke passed');
 
@@ -150,6 +155,70 @@ async function testManualSeedingReadinessSummary() {
     'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
   );
   assert.equal(result.tab?.success, true);
+}
+
+async function testIdentityFirstGuidanceDrift() {
+  const plan = buildManagedProfilePlan({
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    registerProfileId: 'canva-default',
+  });
+
+  assert.equal(plan.profileInspection.helper, 'getServiceAccessPlan');
+  assert.equal(plan.tabRequest.helper, 'requestServiceTab');
+  assert.deepEqual(plan.decisionOrder.slice(0, 4), [
+    'ask agent-browser for the no-launch access plan',
+    'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
+    'request a tab by login or target identity',
+    'register a managed profile only when agent-browser has no suitable one',
+  ]);
+
+  const [readme, serviceModeDocs, commandsDocs, skill] = await Promise.all([
+    readFile(new URL('../README.md', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/src/app/service-mode/page.mdx', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/src/app/commands/page.mdx', import.meta.url), 'utf8'),
+    readFile(new URL('../skills/agent-browser/SKILL.md', import.meta.url), 'utf8'),
+  ]);
+
+  assertContainsAll(readme, [
+    'The normal service request is identity-first',
+    'should call `getServiceAccessPlan()`',
+    'request the tab by the same identity through `requestServiceTab()`',
+    'Direct profile selection is an override',
+  ]);
+  assertContainsAll(serviceModeDocs, [
+    'The normal request model is identity-first',
+    '<code>getServiceAccessPlan()</code> for the target identity',
+    '<code>requestServiceTab</code> or <code>POST /api/service/request</code>',
+    'bring-your-own-profile workflows',
+  ]);
+  assertContainsAll(commandsDocs, [
+    'Service requests should be identity-first',
+    '`siteId`, `loginId`, or `targetServiceId`',
+    'known-login overrides or bring-your-own-profile workflows',
+  ]);
+  assertContainsAll(skill, [
+    '`getServiceAccessPlan()` with `serviceName`, `agentName`, `taskName`',
+    'request the tab by the same identity through `requestServiceTab()`',
+    'Register a new managed login profile only when agent-browser',
+  ]);
+}
+
+function assertContainsAll(text, needles) {
+  const normalizedText = normalizeWhitespace(text);
+  for (const needle of needles) {
+    assert(
+      normalizedText.includes(normalizeWhitespace(needle)),
+      `expected documentation guidance to include: ${needle}`,
+    );
+  }
+}
+
+function normalizeWhitespace(value) {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 function createMockFetch({
