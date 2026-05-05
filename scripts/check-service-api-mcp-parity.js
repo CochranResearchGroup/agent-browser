@@ -76,6 +76,8 @@ const browserSurface = [
 
 const files = {
   actions: read('cli/src/native/actions.rs'),
+  serviceContracts: read('cli/src/native/service_contracts.rs'),
+  serviceRequestSchema: read('docs/dev/contracts/service-request.v1.schema.json'),
   mcp: `${read('cli/src/mcp.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   http: `${read('cli/src/native/stream/http.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   readme: read('README.md'),
@@ -87,6 +89,11 @@ const files = {
 const failures = [];
 const nativeServiceActions = extractNativeServiceActions(files.actions);
 const noLaunchServiceActions = extractNoLaunchServiceActions(files.actions);
+const rustServiceRequestActions = extractRustStringArray(
+  files.serviceContracts,
+  'pub const SERVICE_REQUEST_ACTIONS',
+);
+const schemaServiceRequestActions = extractServiceRequestSchemaActions(files.serviceRequestSchema);
 const serviceSurface = [
   {
     tool: 'service_request',
@@ -199,6 +206,13 @@ expectIncludes(
   files.actions,
   'action.starts_with("service_")',
   'profile lease gate must exempt service control actions by prefix',
+);
+
+expectSameItems(
+  rustServiceRequestActions,
+  schemaServiceRequestActions,
+  'Rust SERVICE_REQUEST_ACTIONS',
+  'service-request schema action enum',
 );
 
 const serviceResourceSurface = [
@@ -381,7 +395,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service tools, ${serviceResourceSurface.length} service resources, ${serviceHttpOnlySurface.length} HTTP-only service routes, and ${nativeServiceActions.length} native service actions`,
+  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service tools, ${serviceResourceSurface.length} service resources, ${serviceHttpOnlySurface.length} HTTP-only service routes, ${nativeServiceActions.length} native service actions, and ${rustServiceRequestActions.length} service-request actions`,
 );
 
 function read(relativePath) {
@@ -418,6 +432,39 @@ function extractNoLaunchServiceActions(source) {
   );
 }
 
+function extractRustStringArray(source, signature) {
+  const start = source.indexOf(signature);
+  if (start < 0) {
+    failures.push(`Rust source missing ${signature}`);
+    return [];
+  }
+  const open = source.indexOf('[', start);
+  if (open < 0) {
+    failures.push(`Rust source missing array for ${signature}`);
+    return [];
+  }
+  const close = source.indexOf('];', open);
+  if (close < 0) {
+    failures.push(`Rust source has unterminated array for ${signature}`);
+    return [];
+  }
+  return sortedUnique(
+    [...source.slice(open, close).matchAll(/"(?<value>[a-z0-9_]+)"/g)].map(
+      (match) => match.groups.value,
+    ),
+  );
+}
+
+function extractServiceRequestSchemaActions(source) {
+  const schema = JSON.parse(source);
+  const actions = schema?.properties?.action?.enum;
+  if (!Array.isArray(actions)) {
+    failures.push('service-request schema missing properties.action.enum');
+    return [];
+  }
+  return sortedUnique(actions);
+}
+
 function extractRustFunctionBody(source, signature) {
   const start = source.indexOf(signature);
   if (start < 0) {
@@ -449,4 +496,15 @@ function extractRustFunctionBody(source, signature) {
 
 function sortedUnique(values) {
   return [...new Set(values)].sort();
+}
+
+function expectSameItems(left, right, leftLabel, rightLabel) {
+  const missingFromRight = left.filter((item) => !right.includes(item));
+  const missingFromLeft = right.filter((item) => !left.includes(item));
+  for (const item of missingFromRight) {
+    failures.push(`${rightLabel} missing ${item} from ${leftLabel}`);
+  }
+  for (const item of missingFromLeft) {
+    failures.push(`${leftLabel} missing ${item} from ${rightLabel}`);
+  }
 }
