@@ -583,11 +583,15 @@ read-only under the same launch defaults.
 Fast CI runs the no-launch service contract metadata smoke and the no-launch
 HTTP and MCP incident-summary smokes after the Rust suite, covering service
 contract metadata and grouped service incident remedies without starting
-Chrome. Run both incident-summary smokes before changing incident summary
-grouping or filters; together they guard HTTP `summary=true` and MCP
+Chrome. Service request action changes must keep `SERVICE_REQUEST_ACTIONS`,
+`docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
+HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
+aligned; the fast parity, client, and Rust gates include no-launch guards for
+that invariant. Run both incident-summary smokes before changing incident
+summary grouping or filters; together they guard HTTP `summary=true` and MCP
 `service_incidents` with `summary: true` across state, severity, escalation,
-handling-state, browser, profile, session,
-service, agent, task, and since filters.
+handling-state, browser, profile, session, service, agent, task, and since
+filters.
 Run `pnpm test:service-shutdown-faulted-live` to validate that a force-kill
 failure leaves the persisted service browser record `faulted` and escalates the
 incident as possible OS degradation.
@@ -1603,7 +1607,12 @@ command envelope with `success`, optional `data`, optional `error`, optional
 `docs/dev/contracts/service-request.v1.schema.json` gets a typed `data` shape
 through
 `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new`
-data. Service request helpers accept `profileLeasePolicy: "reject"` or
+data. When adding or removing service request actions, update the Rust
+`SERVICE_REQUEST_ACTIONS` list, the JSON schema enum, MCP `service_request`,
+HTTP `/api/service/request`, and generated client files together; run
+`pnpm test:service-api-mcp-parity`, `pnpm test:service-client-contract`, and
+the targeted MCP and HTTP Rust action-parity tests before handoff. Service
+request helpers accept `profileLeasePolicy: "reject"` or
 `"wait"` plus `profileLeaseWaitTimeoutMs` for callers that want agent-browser to
 keep a request queued for a profile lease rather than fail immediately. The
 service request client smoke also verifies that `requestServiceTab()` preserves
