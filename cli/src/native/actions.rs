@@ -10535,9 +10535,9 @@ mod tests {
     }
 
     #[test]
-    fn test_service_profile_lease_gate_allows_service_read_commands() {
+    fn test_service_profile_lease_gate_allows_service_control_commands() {
         let guard = EnvGuard::new(&["HOME"]);
-        let home = unique_socket_dir("profile-lease-read-home");
+        let home = unique_socket_dir("profile-lease-service-actions-home");
         fs::create_dir_all(&home).expect("test home should be created");
         guard.set("HOME", home.to_str().expect("test home should be utf-8"));
 
@@ -10565,17 +10565,71 @@ mod tests {
             })
             .expect("service state should be persisted");
 
-        let decision = service_profile_lease_gate(
+        for action in [
+            "service_status",
+            "service_reconcile",
+            "service_job_cancel",
+            "service_browser_retry",
+            "service_profile_upsert",
+            "service_profile_delete",
+            "service_session_upsert",
+            "service_session_delete",
+            "service_site_policy_upsert",
+            "service_site_policy_delete",
+            "service_provider_upsert",
+            "service_provider_delete",
+            "service_incident_acknowledge",
+            "service_incident_resolve",
+            "service_incident_activity",
+            "service_trace",
+            "service_profiles",
+            "service_sessions",
+            "service_browsers",
+            "service_tabs",
+            "service_site_policies",
+            "service_providers",
+            "service_challenges",
+            "service_jobs",
+            "service_incidents",
+            "service_events",
+        ] {
+            assert!(
+                action_skips_browser_launch(action),
+                "{action} must remain no-launch"
+            );
+            let decision = service_profile_lease_gate(
+                &json!({
+                    "action": action,
+                    "serviceName": "JournalDownloader",
+                    "targetServiceId": "acs",
+                    "profileLeasePolicy": "reject"
+                }),
+                "new-session",
+                Some(0),
+            )
+            .expect("lease gate should evaluate");
+
+            assert!(
+                matches!(decision, ServiceProfileLeaseGate::Ready),
+                "{action} should not be blocked by profile lease gates"
+            );
+        }
+
+        let browser_decision = service_profile_lease_gate(
             &json!({
-                "action": "service_jobs",
-                "serviceName": "JournalDownloader"
+                "action": "tab_list",
+                "serviceName": "JournalDownloader",
+                "targetServiceId": "acs",
+                "profileLeasePolicy": "reject"
             }),
             "new-session",
             Some(0),
         )
         .expect("lease gate should evaluate");
-
-        assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+        assert!(matches!(
+            browser_decision,
+            ServiceProfileLeaseGate::Reject { .. }
+        ));
 
         let _ = fs::remove_dir_all(&home);
     }
