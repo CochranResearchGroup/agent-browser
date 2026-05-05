@@ -1604,7 +1604,10 @@ through
 `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new`
 data. Service request helpers accept `profileLeasePolicy: "reject"` or
 `"wait"` plus `profileLeaseWaitTimeoutMs` for callers that want agent-browser to
-keep a request queued for a profile lease rather than fail immediately. Use `pnpm test:service-client-contract`,
+keep a request queued for a profile lease rather than fail immediately. The
+service request client smoke also verifies that `requestServiceTab()` preserves
+`loginId` and `targetServiceId` in the payload before any browser-launching
+request is sent. Use `pnpm test:service-client-contract`,
 `pnpm test:service-client-types`, `pnpm test:service-client-exports`,
 `pnpm test:service-request-client`, or `pnpm test:service-observability-client`
 when only one client contract needs validation.

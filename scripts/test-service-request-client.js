@@ -151,6 +151,7 @@ async function main() {
     agentName: 'article-probe-agent',
     taskName: 'probeACSwebsite',
     loginId: 'acs',
+    targetServiceId: 'acs',
     url: 'https://example.com/articles',
     params: {
       waitUntil: 'domcontentloaded',
@@ -162,6 +163,7 @@ async function main() {
     agentName: 'article-probe-agent',
     taskName: 'probeACSwebsite',
     loginId: 'acs',
+    targetServiceId: 'acs',
     action: 'tab_new',
     params: {
       waitUntil: 'domcontentloaded',
@@ -191,6 +193,8 @@ async function main() {
     agentName: 'article-probe-agent',
     taskName: 'probeACSwebsite',
     siteId: 'acs',
+    loginId: 'acs',
+    targetServiceId: 'acs',
     url: 'https://example.com/new',
   });
   assert.deepEqual(tabResponse, { success: true, data: { jobId: 'job-tab' } });
@@ -199,6 +203,8 @@ async function main() {
     agentName: 'article-probe-agent',
     taskName: 'probeACSwebsite',
     siteId: 'acs',
+    loginId: 'acs',
+    targetServiceId: 'acs',
     action: 'tab_new',
     params: {
       url: 'https://example.com/new',
