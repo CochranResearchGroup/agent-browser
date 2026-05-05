@@ -217,6 +217,30 @@ expectSameItems(
 
 const serviceResourceSurface = [
   { resource: 'agent-browser://contracts', route: '/api/service/contracts' },
+  {
+    resource: 'agent-browser://access-plan',
+    route: '/api/service/access-plan',
+    docsNeedles: [
+      '/api/service/access-plan',
+      'agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}',
+    ],
+    httpNeedles: [
+      'path == "/api/service/access-plan"',
+      'service_access_plan_response(query)',
+      'SERVICE_ACCESS_PLAN_HTTP_ROUTE',
+      'SERVICE_ACCESS_PLAN_RESPONSE_SCHEMA_ID',
+      '"serviceAccessPlanResponse"',
+    ],
+    clientNeedles: [
+      'getServiceAccessPlan',
+      '/api/service/access-plan',
+    ],
+    contractNeedles: [
+      'service-access-plan-response.v1.schema.json',
+      'GET /api/service/access-plan',
+      'agent-browser://access-plan',
+    ],
+  },
   { resource: 'agent-browser://profiles', route: '/api/service/profiles' },
   { resource: 'agent-browser://sessions', route: '/api/service/sessions' },
   { resource: 'agent-browser://browsers', route: '/api/service/browsers' },
@@ -362,6 +386,12 @@ for (const entry of serviceResourceSurface) {
   ]) {
     expectIncludes(source, entry.resource, `${label} mentions ${entry.resource}`);
     expectAnyIncludes(source, entry.docsNeedles ?? [entry.route], `${label} mentions ${entry.route}`);
+  }
+  for (const needle of entry.clientNeedles ?? []) {
+    expectIncludes(read('packages/client/src/service-observability.js'), needle, `service client exposes ${entry.route}`);
+  }
+  for (const needle of entry.contractNeedles ?? []) {
+    expectIncludes(read('docs/dev/contracts/README.md'), needle, `contract docs mention ${entry.route}`);
   }
 }
 

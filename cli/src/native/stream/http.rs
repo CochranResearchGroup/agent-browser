@@ -9,6 +9,9 @@ use tokio::sync::RwLock;
 use crate::connection::resolve_port;
 use crate::connection::{attach_daemon_auth_token, get_socket_dir};
 use crate::flags::parse_flags;
+use crate::native::service_access::{
+    parse_service_access_plan_query, service_access_plan_for_state,
+};
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
@@ -336,6 +339,26 @@ pub(super) async fn handle_http_request(
 
     if method == "GET" && path == "/api/service/profiles/lookup" {
         match service_profile_lookup_response(query) {
+            Ok(data) => {
+                write_json_value(
+                    &mut stream,
+                    "200 OK",
+                    json!({
+                        "success": true,
+                        "data": data,
+                    }),
+                )
+                .await;
+            }
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+            }
+        }
+        return;
+    }
+
+    if method == "GET" && path == "/api/service/access-plan" {
+        match service_access_plan_response(query) {
             Ok(data) => {
                 write_json_value(
                     &mut stream,
@@ -1209,6 +1232,19 @@ fn service_profile_lookup_response(query: Option<&str>) -> Result<Value, String>
     service_profile_lookup_response_for_state(query, &service_state)
 }
 
+fn service_access_plan_response(query: Option<&str>) -> Result<Value, String> {
+    let service_state = load_service_state();
+    service_access_plan_response_for_state(query, &service_state)
+}
+
+fn service_access_plan_response_for_state(
+    query: Option<&str>,
+    service_state: &ServiceState,
+) -> Result<Value, String> {
+    let request = parse_service_access_plan_query(query_params(query))?;
+    Ok(service_access_plan_for_state(service_state, request))
+}
+
 fn service_profile_lookup_response_for_state(
     query: Option<&str>,
     service_state: &ServiceState,
@@ -1980,7 +2016,8 @@ mod tests {
     use crate::native::service_model::{
         assert_service_event_record_contract, assert_service_incident_record_contract,
         assert_service_job_naming_warning_contract, service_job_naming_warning_values,
-        BrowserProfile, ProfileReadinessState, ProfileTargetReadiness,
+        BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState,
+        ProfileReadinessState, ProfileTargetReadiness, ProviderKind, ServiceProvider, SitePolicy,
     };
 
     #[test]
@@ -2135,6 +2172,79 @@ mod tests {
         assert_eq!(
             response["selectedProfileMatch"]["matchedIdentity"],
             "JournalDownloader"
+        );
+    }
+
+    #[test]
+    fn service_access_plan_response_combines_profile_policy_provider_and_challenge() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "work".to_string(),
+            BrowserProfile {
+                id: "work".to_string(),
+                name: "Work".to_string(),
+                target_service_ids: vec!["google".to_string()],
+                credential_provider_ids: vec!["manual".to_string()],
+                target_readiness: vec![ProfileTargetReadiness {
+                    target_service_id: "google".to_string(),
+                    state: ProfileReadinessState::NeedsManualSeeding,
+                    manual_seeding_required: true,
+                    evidence: "manual_seed_required_without_authenticated_hint".to_string(),
+                    recommended_action:
+                        "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+                            .to_string(),
+                    ..ProfileTargetReadiness::default()
+                }],
+                ..BrowserProfile::default()
+            },
+        );
+        service_state.site_policies.insert(
+            "google".to_string(),
+            SitePolicy {
+                id: "google".to_string(),
+                origin_pattern: "https://accounts.google.com".to_string(),
+                manual_login_preferred: true,
+                profile_required: true,
+                auth_providers: vec!["manual".to_string()],
+                challenge_policy: ChallengePolicy::ManualOnly,
+                ..SitePolicy::default()
+            },
+        );
+        service_state.providers.insert(
+            "manual".to_string(),
+            ServiceProvider {
+                id: "manual".to_string(),
+                kind: ProviderKind::ManualApproval,
+                display_name: "Manual approval".to_string(),
+                ..ServiceProvider::default()
+            },
+        );
+        service_state.challenges.insert(
+            "challenge-1".to_string(),
+            Challenge {
+                id: "challenge-1".to_string(),
+                kind: ChallengeKind::TwoFactor,
+                state: ChallengeState::WaitingForHuman,
+                provider_id: Some("manual".to_string()),
+                ..Challenge::default()
+            },
+        );
+
+        let response = service_access_plan_response_for_state(
+            Some("service-name=JournalDownloader&login-id=google&site-policy-id=google&challenge-id=challenge-1"),
+            &service_state,
+        )
+        .expect("access plan response should be built");
+
+        assert_eq!(response["query"]["serviceName"], "JournalDownloader");
+        assert_eq!(response["selectedProfile"]["id"], "work");
+        assert_eq!(response["sitePolicy"]["id"], "google");
+        assert_eq!(response["providers"][0]["id"], "manual");
+        assert_eq!(response["challenges"][0]["id"], "challenge-1");
+        assert_eq!(response["readinessSummary"]["manualSeedingRequired"], true);
+        assert_eq!(
+            response["decision"]["recommendedAction"],
+            "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
         );
     }
 

@@ -15,6 +15,7 @@ const schemas = {
   profileAllocationResponse: readSchema('service-profile-allocation-response.v1.schema.json'),
   profileReadinessResponse: readSchema('service-profile-readiness-response.v1.schema.json'),
   profileLookupResponse: readSchema('service-profile-lookup-response.v1.schema.json'),
+  accessPlanResponse: readSchema('service-access-plan-response.v1.schema.json'),
   browser: readSchema('service-browser-record.v1.schema.json'),
   browsersResponse: readSchema('service-browsers-response.v1.schema.json'),
   session: readSchema('service-session-record.v1.schema.json'),
@@ -621,6 +622,20 @@ export interface ServiceProfileReadinessSummary {
   recommendedActions: string[];
 }
 
+export interface ServiceAccessPlanDecision {
+  recommendedAction: string;
+  browserHost: string | null;
+  interactionMode: string | null;
+  challengePolicy: string | null;
+  profileId: string | null;
+  manualActionRequired: boolean;
+  manualSeedingRequired: boolean;
+  providerIds: string[];
+  challengeIds: string[];
+  reasons: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceProfileIdentityMatchOptions {
   /** Calling service name, for example "JournalDownloader" or "CanvaCLI". */
   serviceName?: string;
@@ -650,6 +665,13 @@ export interface ServiceProfileIdentityLookupOptions extends ServiceQueryOptions
   readinessProfileId?: string;
 }
 
+export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOptions {
+  /** Optional site-policy ID when the caller wants a specific policy recommendation. */
+  sitePolicyId?: string;
+  /** Optional challenge ID when planning around one retained challenge. */
+  challengeId?: string;
+}
+
 export interface ServiceProfileLookupQuery {
   serviceName: string | null;
   targetServiceIds: string[];
@@ -677,6 +699,33 @@ export interface ServiceProfileLookupResponse {
   readiness: ServiceProfileReadinessResponse | null;
   /** Compact manual-seeding summary suitable for operator UI or logs. */
   readinessSummary: ServiceProfileReadinessSummary;
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanQuery extends ServiceProfileLookupQuery {
+  sitePolicyId: string | null;
+  challengeId: string | null;
+}
+
+export interface ServiceAccessPlanResponse {
+  /** Normalized access-plan query after login, site, and target aliases have been folded together. */
+  query: ServiceAccessPlanQuery;
+  /** Server-selected profile, or null when agent-browser has no suitable managed profile. */
+  selectedProfile: ServiceProfileRecord | null;
+  /** Match metadata explaining the selected profile and selector reason. */
+  selectedProfileMatch: ServiceProfileLookupMatch | null;
+  /** Optional no-launch readiness rows for the selected or requested readiness profile. */
+  readiness: ServiceProfileReadinessResponse | null;
+  /** Compact manual-seeding summary suitable for operator UI or logs. */
+  readinessSummary: ServiceProfileReadinessSummary;
+  /** Site policy selected for this request, or null when none matches. */
+  sitePolicy: ServiceSitePolicyRecord | null;
+  /** Enabled providers relevant to the selected profile, site policy, or challenge. */
+  providers: ServiceProviderRecord[];
+  /** Retained non-resolved challenges or the explicit requested challenge. */
+  challenges: ServiceChallengeRecord[];
+  /** Service-owned recommendation before any browser launch or control request. */
+  decision: ServiceAccessPlanDecision;
   [key: string]: unknown;
 }
 
@@ -731,6 +780,8 @@ export declare function findServiceProfileForIdentity(profiles: ServiceProfileRe
 export declare function getServiceProfileForIdentity(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
 /** Ask agent-browser to select a managed profile by service plus login, site, or target identity. */
 export declare function lookupServiceProfile(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
+/** Ask agent-browser for the no-launch profile, policy, provider, challenge, and readiness recommendation. */
+export declare function getServiceAccessPlan(options: ServiceAccessPlanOptions): Promise<ServiceAccessPlanResponse>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;

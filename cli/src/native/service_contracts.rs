@@ -6,6 +6,8 @@ pub const SERVICE_REQUEST_HTTP_ROUTE: &str = "/api/service/request";
 pub const SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE: &str = "/api/service/profiles/<id>/allocation";
 pub const SERVICE_PROFILE_READINESS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/readiness";
 pub const SERVICE_PROFILE_LOOKUP_HTTP_ROUTE: &str = "/api/service/profiles/lookup";
+pub const SERVICE_ACCESS_PLAN_HTTP_ROUTE: &str = "/api/service/access-plan";
+pub const SERVICE_ACCESS_PLAN_MCP_RESOURCE: &str = "agent-browser://access-plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const SERVICE_REQUEST_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-request.v1.schema.json";
@@ -17,6 +19,8 @@ pub const SERVICE_PROFILE_READINESS_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-readiness-response.v1.schema.json";
 pub const SERVICE_PROFILE_LOOKUP_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-lookup-response.v1.schema.json";
+pub const SERVICE_ACCESS_PLAN_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-access-plan-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 
 pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
@@ -150,6 +154,22 @@ pub fn service_contracts_metadata() -> Value {
                     "selectionOrder": ["authenticatedServiceIds", "targetServiceIds", "sharedServiceIds"],
                 },
             },
+            "serviceAccessPlanResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_ACCESS_PLAN_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-access-plan-response.v1.schema.json",
+                "http": {
+                    "method": "GET",
+                    "route": SERVICE_ACCESS_PLAN_HTTP_ROUTE,
+                },
+                "mcp": {
+                    "resource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["getServiceAccessPlan"],
+                },
+            },
         },
         "http": {
             "contractsRoute": SERVICE_CONTRACTS_HTTP_ROUTE,
@@ -157,10 +177,12 @@ pub fn service_contracts_metadata() -> Value {
             "serviceProfileAllocationRoute": SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE,
             "serviceProfileReadinessRoute": SERVICE_PROFILE_READINESS_HTTP_ROUTE,
             "serviceProfileLookupRoute": SERVICE_PROFILE_LOOKUP_HTTP_ROUTE,
+            "serviceAccessPlanRoute": SERVICE_ACCESS_PLAN_HTTP_ROUTE,
         },
         "mcp": {
             "contractsResource": SERVICE_CONTRACTS_RESOURCE,
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
+            "serviceAccessPlanResource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
         },
     })
 }
@@ -225,6 +247,22 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceProfileLookupResponse"]["client"]["selectionOrder"][0],
             "authenticatedServiceIds"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["schemaId"],
+            SERVICE_ACCESS_PLAN_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["http"]["route"],
+            SERVICE_ACCESS_PLAN_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["mcp"]["resource"],
+            SERVICE_ACCESS_PLAN_MCP_RESOURCE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][0],
+            "getServiceAccessPlan"
         );
     }
 }

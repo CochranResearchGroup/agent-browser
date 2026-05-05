@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   findServiceProfileForIdentity,
+  getServiceAccessPlan,
   getServiceContracts,
   getServiceProfileAllocation,
   getServiceProfileForIdentity,
@@ -320,6 +321,81 @@ async function main() {
   });
   assert.equal(lookupAlias.calls.length, 1);
   assert.equal(lookupAliasResult.selectedProfile?.id, 'authenticated');
+
+  const accessPlan = createFetchRecorder((url) => {
+    assert.equal(
+      url,
+      'http://127.0.0.1:4849/api/service/access-plan?serviceName=CanvaCLI&loginId=canva&sitePolicyId=canva&challengeId=challenge-1',
+    );
+    return {
+      success: true,
+      data: {
+        query: {
+          serviceName: 'CanvaCLI',
+          targetServiceIds: ['canva'],
+          sitePolicyId: 'canva',
+          challengeId: 'challenge-1',
+          readinessProfileId: null,
+        },
+        selectedProfile: profileMatches[2],
+        selectedProfileMatch: {
+          profileId: 'authenticated',
+          profile: profileMatches[2],
+          reason: 'authenticated_target',
+          matchedField: 'authenticatedServiceIds',
+          matchedIdentity: 'canva',
+        },
+        readiness: null,
+        readinessSummary: {
+          needsManualSeeding: false,
+          manualSeedingRequired: false,
+          targetServiceIds: [],
+          recommendedActions: [],
+        },
+        sitePolicy: {
+          id: 'canva',
+          originPattern: 'https://www.canva.com',
+          browserHost: 'local_headed',
+          viewStream: null,
+          controlInput: null,
+          interactionMode: 'human_like_input',
+          rateLimit: {},
+          manualLoginPreferred: true,
+          profileRequired: true,
+          authProviders: ['browser'],
+          challengePolicy: 'avoid_first',
+          allowedChallengeProviders: [],
+          notes: null,
+        },
+        providers: [],
+        challenges: [],
+        decision: {
+          recommendedAction: 'use_selected_profile',
+          browserHost: 'local_headed',
+          interactionMode: 'human_like_input',
+          challengePolicy: 'avoid_first',
+          profileId: 'authenticated',
+          manualActionRequired: false,
+          manualSeedingRequired: false,
+          providerIds: [],
+          challengeIds: [],
+          reasons: ['site_policy_selected'],
+        },
+      },
+    };
+  });
+  const accessPlanResult = await getServiceAccessPlan({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: accessPlan.fetch,
+    serviceName: 'CanvaCLI',
+    loginId: 'canva',
+    sitePolicyId: 'canva',
+    challengeId: 'challenge-1',
+  });
+  assert.equal(accessPlan.calls.length, 1);
+  assert.equal(accessPlanResult.selectedProfile?.id, 'authenticated');
+  assert.equal(accessPlanResult.sitePolicy?.id, 'canva');
+  assert.equal(accessPlanResult.decision.recommendedAction, 'use_selected_profile');
 
   const emptyLookup = createFetchRecorder({
     success: true,

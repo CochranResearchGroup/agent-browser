@@ -58,14 +58,19 @@ The HTTP contracts metadata also advertises the HTTP-only
 `serviceProfileAllocationResponse` contract for
 `GET /api/service/profiles/<id>/allocation`, `serviceProfileReadinessResponse`
 for `GET /api/service/profiles/<id>/readiness`, and
-`serviceProfileLookupResponse` for `GET /api/service/profiles/lookup`.
-Readiness and lookup metadata also names the
+`serviceProfileLookupResponse` for `GET /api/service/profiles/lookup`, plus
+`serviceAccessPlanResponse` for `GET /api/service/access-plan` and MCP
+`agent-browser://access-plan`.
+Readiness, lookup, and access-plan metadata also names the
 `@agent-browser/client/service-observability` helpers that consume those
 routes. Software clients should prefer `lookupServiceProfile()` when they want
 agent-browser to select by `serviceName` plus `loginId`, `siteId`, or
 `targetServiceId`; the selector advertises the same preference order used by
 service launches: authenticated target state, target scope, then shared caller
-service.
+service. Software clients should prefer `getServiceAccessPlan()` when they need
+the broader no-launch recommendation that combines the selected profile,
+readiness summary, matching site policy, enabled providers, retained
+challenges, and the service-owned decision before requesting browser control.
 
 `packages/client/src/service-request.generated.d.ts` and
 `packages/client/src/service-request.generated.js` are generated from these
@@ -200,6 +205,15 @@ for a service name plus site or login identity without fetching the full
 profile collection. `selectedProfileMatch` includes `matchedField` and
 `matchedIdentity` so clients can explain whether the match came from
 `authenticatedServiceIds`, `targetServiceIds`, or `sharedServiceIds`.
+
+`service-access-plan-response.v1.schema.json` describes the response envelope
+returned by HTTP `GET /api/service/access-plan` and MCP
+`agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}`.
+It is a read-only, no-launch planning surface. The response includes the same
+profile selector metadata and readiness summary as profile lookup, then adds the
+selected site policy, enabled providers, retained challenges, and a `decision`
+object with `recommendedAction`, manual-action flags, selected profile ID,
+provider IDs, challenge IDs, and stable reason strings.
 
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

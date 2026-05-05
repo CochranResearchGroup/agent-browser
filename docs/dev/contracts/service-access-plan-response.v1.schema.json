@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-access-plan-response.v1.schema.json",
+  "title": "agent-browser service access plan response",
+  "description": "Stable API shape for the no-launch service-owned access recommendation returned by HTTP service APIs, MCP resources, and service observability clients.",
+  "type": "object",
+  "required": [
+    "query",
+    "selectedProfile",
+    "selectedProfileMatch",
+    "readiness",
+    "readinessSummary",
+    "sitePolicy",
+    "providers",
+    "challenges",
+    "decision"
+  ],
+  "properties": {
+    "query": {
+      "type": "object",
+      "required": [
+        "serviceName",
+        "targetServiceIds",
+        "sitePolicyId",
+        "challengeId",
+        "readinessProfileId"
+      ],
+      "properties": {
+        "serviceName": {
+          "type": ["string", "null"]
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sitePolicyId": {
+          "type": ["string", "null"]
+        },
+        "challengeId": {
+          "type": ["string", "null"]
+        },
+        "readinessProfileId": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "selectedProfile": {
+      "oneOf": [
+        {
+          "$ref": "service-profile-record.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "selectedProfileMatch": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["profileId", "profile", "reason", "matchedField", "matchedIdentity"],
+          "properties": {
+            "profileId": {
+              "type": "string"
+            },
+            "profile": {
+              "$ref": "service-profile-record.v1.schema.json"
+            },
+            "reason": {
+              "type": "string",
+              "enum": ["authenticated_target", "target_match", "service_allow_list"]
+            },
+            "matchedField": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": ["authenticatedServiceIds", "targetServiceIds", "sharedServiceIds"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "matchedIdentity": {
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "readiness": {
+      "oneOf": [
+        {
+          "$ref": "service-profile-readiness-response.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "readinessSummary": {
+      "type": "object",
+      "required": [
+        "needsManualSeeding",
+        "manualSeedingRequired",
+        "targetServiceIds",
+        "recommendedActions"
+      ],
+      "properties": {
+        "needsManualSeeding": {
+          "type": "boolean"
+        },
+        "manualSeedingRequired": {
+          "type": "boolean"
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendedActions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "sitePolicy": {
+      "oneOf": [
+        {
+          "$ref": "service-site-policy-record.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "$ref": "service-provider-record.v1.schema.json"
+      }
+    },
+    "challenges": {
+      "type": "array",
+      "items": {
+        "$ref": "service-challenge-record.v1.schema.json"
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "recommendedAction",
+        "browserHost",
+        "interactionMode",
+        "challengePolicy",
+        "profileId",
+        "manualActionRequired",
+        "manualSeedingRequired",
+        "providerIds",
+        "challengeIds",
+        "reasons"
+      ],
+      "properties": {
+        "recommendedAction": {
+          "type": "string"
+        },
+        "browserHost": {
+          "type": ["string", "null"]
+        },
+        "interactionMode": {
+          "type": ["string", "null"]
+        },
+        "challengePolicy": {
+          "type": ["string", "null"]
+        },
+        "profileId": {
+          "type": ["string", "null"]
+        },
+        "manualActionRequired": {
+          "type": "boolean"
+        },
+        "manualSeedingRequired": {
+          "type": "boolean"
+        },
+        "providerIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "challengeIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

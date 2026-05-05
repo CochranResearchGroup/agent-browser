@@ -59,6 +59,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityMatchResult} ServiceProfileIdentityMatchResult
  * @typedef {import('./service-observability.generated.js').ServiceProfileIdentityLookupOptions} ServiceProfileIdentityLookupOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileLookupResponse} ServiceProfileLookupResponse
+ * @typedef {import('./service-observability.generated.js').ServiceAccessPlanOptions} ServiceAccessPlanOptions
+ * @typedef {import('./service-observability.generated.js').ServiceAccessPlanResponse} ServiceAccessPlanResponse
  */
 
 /**
@@ -211,6 +213,35 @@ export async function getServiceProfileForIdentity({ readinessProfileId, ...opti
  */
 export function lookupServiceProfile(options) {
   return getServiceProfileForIdentity(options);
+}
+
+/**
+ * Ask agent-browser for a no-launch profile, policy, provider, challenge, and
+ * readiness recommendation before requesting browser control.
+ *
+ * @param {ServiceAccessPlanOptions} options
+ * @returns {Promise<ServiceAccessPlanResponse>}
+ */
+export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, challengeId, ...options }) {
+  return serviceGet(
+    {
+      ...options,
+      query: {
+        ...options.query,
+        serviceName: options.serviceName,
+        loginId: options.loginId,
+        siteId: options.siteId,
+        targetServiceId: options.targetServiceId,
+        loginIds: options.loginIds?.join(','),
+        siteIds: options.siteIds?.join(','),
+        targetServiceIds: options.targetServiceIds?.join(','),
+        readinessProfileId,
+        sitePolicyId,
+        challengeId,
+      },
+    },
+    '/api/service/access-plan',
+  );
 }
 
 /**

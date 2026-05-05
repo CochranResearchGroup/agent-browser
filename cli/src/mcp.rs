@@ -3,9 +3,13 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Value};
 
 use crate::connection::{send_command, Response};
+use crate::native::service_access::{
+    parse_service_access_plan_query, service_access_plan_for_state,
+};
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
-    service_contracts_metadata, SERVICE_CONTRACTS_RESOURCE, SERVICE_REQUEST_ACTIONS,
+    service_contracts_metadata, SERVICE_ACCESS_PLAN_MCP_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
+    SERVICE_REQUEST_ACTIONS,
 };
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
@@ -26,6 +30,7 @@ const CHALLENGES_RESOURCE: &str = "agent-browser://challenges";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
+const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
 
@@ -114,6 +119,12 @@ fn service_mcp_resources() -> Vec<Value> {
             "description": "Runtime compatibility metadata for service HTTP and MCP contracts"
         }),
         json!({
+            "uri": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+            "name": "Service access plan",
+            "mimeType": "application/json",
+            "description": "No-launch service-owned access recommendation combining profile readiness, site policy, providers, challenges, and target identity"
+        }),
+        json!({
             "uri": INCIDENTS_RESOURCE,
             "name": "Service incidents",
             "mimeType": "application/json",
@@ -177,12 +188,20 @@ fn service_mcp_resources() -> Vec<Value> {
 }
 
 fn service_mcp_resource_templates() -> Vec<Value> {
-    vec![json!({
-        "uriTemplate": "agent-browser://incidents/{incident_id}/activity",
-        "name": "Service incident activity",
-        "mimeType": "application/json",
-        "description": "Canonical service-owned chronological activity timeline for one incident"
-    })]
+    vec![
+        json!({
+            "uriTemplate": ACCESS_PLAN_TEMPLATE,
+            "name": "Service access plan",
+            "mimeType": "application/json",
+            "description": "No-launch service-owned access recommendation for one service, site, login, policy, or challenge selector"
+        }),
+        json!({
+            "uriTemplate": "agent-browser://incidents/{incident_id}/activity",
+            "name": "Service incident activity",
+            "mimeType": "application/json",
+            "description": "Canonical service-owned chronological activity timeline for one incident"
+        }),
+    ]
 }
 
 fn read_service_mcp_resource(uri: &str) -> Result<Value, String> {
@@ -195,6 +214,9 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
     state.refresh_profile_readiness();
     let contents = match uri {
         SERVICE_CONTRACTS_RESOURCE => service_contracts_metadata(),
+        SERVICE_ACCESS_PLAN_MCP_RESOURCE => {
+            service_access_plan_for_state(&state, Default::default())
+        }
         INCIDENTS_RESOURCE => json!({
             "incidents": state.incidents,
             "count": state.incidents.len(),
@@ -271,6 +293,9 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
         _ => {
             if let Some(incident_id) = incident_activity_resource_id(uri) {
                 service_incident_activity_response(&state, incident_id)?
+            } else if let Some(query) = access_plan_resource_query(uri) {
+                let request = parse_service_access_plan_query(query)?;
+                service_access_plan_for_state(&state, request)
             } else {
                 return Err(format!("Unknown MCP resource URI: {}", uri));
             }
@@ -7715,6 +7740,17 @@ fn incident_activity_resource_id(uri: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
+fn access_plan_resource_query(uri: &str) -> Option<Vec<(String, String)>> {
+    let query = uri
+        .strip_prefix(SERVICE_ACCESS_PLAN_MCP_RESOURCE)
+        .and_then(|rest| rest.strip_prefix('?'))?;
+    Some(
+        url::form_urlencoded::parse(query.as_bytes())
+            .into_owned()
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -7728,21 +7764,29 @@ mod tests {
             response["data"]["resources"][0]["uri"],
             SERVICE_CONTRACTS_RESOURCE
         );
-        assert_eq!(response["data"]["resources"][1]["uri"], INCIDENTS_RESOURCE);
-        assert_eq!(response["data"]["resources"][2]["uri"], PROFILES_RESOURCE);
-        assert_eq!(response["data"]["resources"][3]["uri"], SESSIONS_RESOURCE);
-        assert_eq!(response["data"]["resources"][4]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][5]["uri"], TABS_RESOURCE);
         assert_eq!(
-            response["data"]["resources"][6]["uri"],
+            response["data"]["resources"][1]["uri"],
+            SERVICE_ACCESS_PLAN_MCP_RESOURCE
+        );
+        assert_eq!(response["data"]["resources"][2]["uri"], INCIDENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][3]["uri"], PROFILES_RESOURCE);
+        assert_eq!(response["data"]["resources"][4]["uri"], SESSIONS_RESOURCE);
+        assert_eq!(response["data"]["resources"][5]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][6]["uri"], TABS_RESOURCE);
+        assert_eq!(
+            response["data"]["resources"][7]["uri"],
             SITE_POLICIES_RESOURCE
         );
-        assert_eq!(response["data"]["resources"][7]["uri"], PROVIDERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][8]["uri"], CHALLENGES_RESOURCE);
-        assert_eq!(response["data"]["resources"][9]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["data"]["resources"][10]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][8]["uri"], PROVIDERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][9]["uri"], CHALLENGES_RESOURCE);
+        assert_eq!(response["data"]["resources"][10]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["data"]["resources"][11]["uri"], EVENTS_RESOURCE);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
+            ACCESS_PLAN_TEMPLATE
+        );
+        assert_eq!(
+            response["data"]["resourceTemplates"][1]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
         );
     }
@@ -7792,26 +7836,30 @@ mod tests {
         );
         assert_eq!(
             response["result"]["resources"][1]["uri"],
+            SERVICE_ACCESS_PLAN_MCP_RESOURCE
+        );
+        assert_eq!(
+            response["result"]["resources"][2]["uri"],
             INCIDENTS_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][2]["uri"], PROFILES_RESOURCE);
-        assert_eq!(response["result"]["resources"][3]["uri"], SESSIONS_RESOURCE);
-        assert_eq!(response["result"]["resources"][4]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["result"]["resources"][5]["uri"], TABS_RESOURCE);
+        assert_eq!(response["result"]["resources"][3]["uri"], PROFILES_RESOURCE);
+        assert_eq!(response["result"]["resources"][4]["uri"], SESSIONS_RESOURCE);
+        assert_eq!(response["result"]["resources"][5]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["result"]["resources"][6]["uri"], TABS_RESOURCE);
         assert_eq!(
-            response["result"]["resources"][6]["uri"],
+            response["result"]["resources"][7]["uri"],
             SITE_POLICIES_RESOURCE
         );
         assert_eq!(
-            response["result"]["resources"][7]["uri"],
+            response["result"]["resources"][8]["uri"],
             PROVIDERS_RESOURCE
         );
         assert_eq!(
-            response["result"]["resources"][8]["uri"],
+            response["result"]["resources"][9]["uri"],
             CHALLENGES_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][9]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["result"]["resources"][10]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["result"]["resources"][10]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["result"]["resources"][11]["uri"], EVENTS_RESOURCE);
     }
 
     #[test]
@@ -7825,6 +7873,10 @@ mod tests {
         assert_eq!(response["id"], "t1");
         assert_eq!(
             response["result"]["resourceTemplates"][0]["uriTemplate"],
+            ACCESS_PLAN_TEMPLATE
+        );
+        assert_eq!(
+            response["result"]["resourceTemplates"][1]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
         );
     }
@@ -7846,6 +7898,10 @@ mod tests {
         assert_eq!(
             resource["contents"]["contracts"]["serviceRequest"]["mcp"]["tool"],
             "service_request"
+        );
+        assert_eq!(
+            resource["contents"]["contracts"]["serviceAccessPlanResponse"]["mcp"]["resource"],
+            SERVICE_ACCESS_PLAN_MCP_RESOURCE
         );
     }
 
@@ -11074,6 +11130,57 @@ mod tests {
             "profile-b"
         );
         assert_service_profile_allocation_contract(&resource["contents"]["profileAllocations"][1]);
+    }
+
+    #[test]
+    fn read_access_plan_resource_returns_service_owned_recommendation() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            BrowserProfile, ProfileReadinessState, ProfileTargetReadiness,
+        };
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "canva".to_string(),
+                BrowserProfile {
+                    id: "canva".to_string(),
+                    name: "Canva".to_string(),
+                    target_service_ids: vec!["canva".to_string()],
+                    authenticated_service_ids: vec!["canva".to_string()],
+                    shared_service_ids: vec!["CanvaCLI".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "canva".to_string(),
+                        state: ProfileReadinessState::Fresh,
+                        evidence: "authenticated_hint_present".to_string(),
+                        recommended_action: "use_profile".to_string(),
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(
+            "agent-browser://access-plan?serviceName=CanvaCLI&loginId=canva",
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(
+            resource["uri"],
+            "agent-browser://access-plan?serviceName=CanvaCLI&loginId=canva"
+        );
+        assert_eq!(resource["contents"]["selectedProfile"]["id"], "canva");
+        assert_eq!(
+            resource["contents"]["selectedProfileMatch"]["reason"],
+            "authenticated_target"
+        );
+        assert_eq!(
+            resource["contents"]["decision"]["recommendedAction"],
+            "use_selected_profile"
+        );
     }
 
     #[test]
