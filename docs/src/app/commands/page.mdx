@@ -471,7 +471,7 @@ Run <code>pnpm test:service-contracts-no-launch</code> to validate that HTTP <co
 
 Run <code>pnpm test:service-profile-lookup-no-launch</code> to validate that HTTP <code>/api/service/profiles/lookup</code> selects an authenticated target profile over a target-only profile from seeded temporary service state without launching a browser. The same smoke calls <code>lookupServiceProfile()</code> against the live stream server so the software-client helper is covered end to end.
 
-Use HTTP <code>GET /api/service/access-plan?service-name=&lt;name&gt;&amp;login-id=&lt;id&gt;</code> or MCP <code>agent-browser://access-plan?serviceName=&lt;name&gt;&amp;loginId=&lt;id&gt;</code> when a caller needs agent-browser to make the no-launch profile, policy, provider, challenge, readiness, and recommended-action decision before requesting a tab or browser action.
+Use HTTP <code>GET /api/service/access-plan?service-name=&lt;name&gt;&amp;login-id=&lt;id&gt;</code> or MCP <code>agent-browser://access-plan?serviceName=&lt;name&gt;&amp;loginId=&lt;id&gt;</code> when a caller needs agent-browser to make the no-launch profile, policy, provider, challenge, readiness, and recommended-action decision before requesting a tab or browser action. The readiness decision is scoped to the requested target identities, so an unrelated stale or unseeded login on the same profile does not block the requested site.
 
 Run <code>pnpm test:service-access-plan-no-launch</code> to validate that HTTP <code>/api/service/access-plan</code>, MCP <code>agent-browser://access-plan</code>, and <code>getServiceAccessPlan()</code> return the same recommendation from seeded temporary service state without creating browsers or browser-launching jobs.
 

@@ -107,7 +107,7 @@ pub(crate) fn service_access_plan_for_state(
             "count": count,
         })
     });
-    let readiness_summary = readiness_summary(readiness.as_ref());
+    let readiness_summary = readiness_summary(readiness.as_ref(), &request.target_service_ids);
     let site_policy =
         select_site_policy(service_state, &request, selected_profile.as_ref()).cloned();
     let challenges = select_challenges(service_state, request.challenge_id.as_deref());
@@ -123,6 +123,7 @@ pub(crate) fn service_access_plan_for_state(
         &challenges,
         &providers,
         readiness.as_ref(),
+        &request.target_service_ids,
         &readiness_summary,
     );
 
@@ -234,6 +235,7 @@ fn access_plan_decision(
     challenges: &[Challenge],
     providers: &[Value],
     readiness: Option<&Value>,
+    target_service_ids: &[String],
     readiness_summary: &Value,
 ) -> Value {
     let mut reasons = Vec::new();
@@ -259,7 +261,7 @@ fn access_plan_decision(
     let profile_required = site_policy.is_some_and(|site_policy| site_policy.profile_required);
 
     if let Some(profile) = selected_profile {
-        if readiness_profile_is_fresh_or_seeded(readiness, &profile.id) {
+        if readiness_profile_is_fresh_or_seeded(readiness, &profile.id, target_service_ids) {
             reasons.push("selected_profile_has_readiness_evidence");
         }
     } else {
@@ -304,7 +306,8 @@ fn access_plan_decision(
     let recommended_action = if policy_denies || denied_challenge {
         "deny_request_by_site_policy"
     } else if manual_seeding_required {
-        readiness_recommended_action(readiness).unwrap_or("seed_profile_before_authenticated_work")
+        readiness_recommended_action(readiness, target_service_ids)
+            .unwrap_or("seed_profile_before_authenticated_work")
     } else if waiting_for_human {
         "request_manual_challenge_approval"
     } else if waiting_for_provider {
@@ -315,7 +318,7 @@ fn access_plan_decision(
         "register_or_seed_managed_profile"
     } else if selected_profile.is_none() {
         "register_managed_profile_or_request_throwaway_browser"
-    } else if readiness_profile_needs_probe(readiness) {
+    } else if readiness_profile_needs_probe(readiness, target_service_ids) {
         "verify_or_seed_profile_before_authenticated_work"
     } else {
         "use_selected_profile"
@@ -393,11 +396,12 @@ fn non_empty(value: String) -> Option<String> {
     }
 }
 
-fn readiness_summary(readiness: Option<&Value>) -> Value {
+fn readiness_summary(readiness: Option<&Value>, target_service_ids: &[String]) -> Value {
     let manual_rows = readiness
         .and_then(|readiness| readiness["targetReadiness"].as_array())
         .map(|rows| {
             rows.iter()
+                .filter(|row| readiness_row_matches_target(row, target_service_ids))
                 .filter(|row| {
                     row["state"] == "needs_manual_seeding"
                         || row["manualSeedingRequired"].as_bool() == Some(true)
@@ -425,43 +429,70 @@ fn readiness_summary(readiness: Option<&Value>) -> Value {
     })
 }
 
-fn readiness_recommended_action(readiness: Option<&Value>) -> Option<&str> {
+fn readiness_recommended_action<'a>(
+    readiness: Option<&'a Value>,
+    target_service_ids: &[String],
+) -> Option<&'a str> {
     readiness
         .and_then(|readiness| readiness["targetReadiness"].as_array())
         .and_then(|rows| {
             rows.iter().find_map(|row| {
-                row["recommendedAction"]
-                    .as_str()
-                    .filter(|action| !action.is_empty())
+                readiness_row_matches_target(row, target_service_ids)
+                    .then(|| {
+                        row["recommendedAction"]
+                            .as_str()
+                            .filter(|action| !action.is_empty())
+                    })
+                    .flatten()
             })
         })
 }
 
-fn readiness_profile_is_fresh_or_seeded(readiness: Option<&Value>, profile_id: &str) -> bool {
+fn readiness_profile_is_fresh_or_seeded(
+    readiness: Option<&Value>,
+    profile_id: &str,
+    target_service_ids: &[String],
+) -> bool {
     readiness
         .filter(|readiness| readiness["profileId"].as_str() == Some(profile_id))
         .and_then(|readiness| readiness["targetReadiness"].as_array())
         .is_some_and(|rows| {
             rows.iter().any(|row| {
-                matches!(
-                    row["state"].as_str(),
-                    Some("fresh" | "seeded_unknown_freshness")
-                )
+                readiness_row_matches_target(row, target_service_ids)
+                    && matches!(
+                        row["state"].as_str(),
+                        Some("fresh" | "seeded_unknown_freshness")
+                    )
             })
         })
 }
 
-fn readiness_profile_needs_probe(readiness: Option<&Value>) -> bool {
+fn readiness_profile_needs_probe(readiness: Option<&Value>, target_service_ids: &[String]) -> bool {
     let Some(rows) = readiness.and_then(|readiness| readiness["targetReadiness"].as_array()) else {
         return true;
     };
-    rows.is_empty()
-        || rows.iter().any(|row| {
+    let matching_rows = rows
+        .iter()
+        .filter(|row| readiness_row_matches_target(row, target_service_ids))
+        .collect::<Vec<_>>();
+    matching_rows.is_empty()
+        || matching_rows.iter().any(|row| {
             matches!(
                 row["state"].as_str(),
                 Some("unknown" | "stale" | "blocked_by_attached_devtools")
             )
         })
+}
+
+fn readiness_row_matches_target(row: &Value, target_service_ids: &[String]) -> bool {
+    target_service_ids.is_empty()
+        || row["targetServiceId"]
+            .as_str()
+            .is_some_and(|target_service_id| {
+                target_service_ids
+                    .iter()
+                    .any(|requested| requested == target_service_id)
+            })
 }
 
 #[cfg(test)]
@@ -607,5 +638,65 @@ mod tests {
             "use_selected_profile"
         );
         assert_eq!(plan["decision"]["manualActionRequired"], false);
+    }
+
+    #[test]
+    fn service_access_plan_scopes_readiness_to_requested_target_identity() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "mixed".to_string(),
+                BrowserProfile {
+                    id: "mixed".to_string(),
+                    name: "Mixed target profile".to_string(),
+                    target_service_ids: vec!["acs".to_string(), "google".to_string()],
+                    authenticated_service_ids: vec!["acs".to_string()],
+                    target_readiness: vec![
+                        ProfileTargetReadiness {
+                            target_service_id: "google".to_string(),
+                            state: ProfileReadinessState::NeedsManualSeeding,
+                            manual_seeding_required: true,
+                            evidence: "manual_seed_required_without_authenticated_hint"
+                                .to_string(),
+                            recommended_action:
+                                "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+                                    .to_string(),
+                            ..ProfileTargetReadiness::default()
+                        },
+                        ProfileTargetReadiness {
+                            target_service_id: "acs".to_string(),
+                            state: ProfileReadinessState::Fresh,
+                            evidence: "authenticated_hint_present".to_string(),
+                            recommended_action: "use_profile".to_string(),
+                            ..ProfileTargetReadiness::default()
+                        },
+                    ],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                target_service_ids: vec!["acs".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["selectedProfile"]["id"], "mixed");
+        assert_eq!(plan["readinessSummary"]["manualSeedingRequired"], false);
+        assert_eq!(plan["readinessSummary"]["needsManualSeeding"], false);
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            "use_selected_profile"
+        );
+        assert_eq!(plan["decision"]["manualActionRequired"], false);
+        assert!(plan["decision"]["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "selected_profile_has_readiness_evidence"));
     }
 }

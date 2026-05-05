@@ -1643,8 +1643,10 @@ such as CanvaCLI should call `getServiceAccessPlan()` for
 `targetServiceId: "canva"` before registering a profile. That helper uses HTTP
 `GET /api/service/access-plan` to return the selected profile, readiness
 summary, matching site policy, relevant providers and challenges, and the
-service-owned recommended action before a browser launch. Then the client should
-request the tab by the same identity through `requestServiceTab()` or
+service-owned recommended action before a browser launch. Readiness summaries
+and decisions are scoped to the requested target identities, so an unrelated
+stale or unseeded login on the same profile does not block the requested site.
+Then the client should request the tab by the same identity through `requestServiceTab()` or
 `POST /api/service/request`. `lookupServiceProfile()` remains useful for the narrower profile-only decision and uses HTTP
 `GET /api/service/profiles/lookup` so agent-browser applies the same server-side
 selector used for service launches without returning the full profile
@@ -1700,8 +1702,9 @@ const tab = await requestServiceTab({
 
 If `accessPlan.readinessSummary.needsManualSeeding` is true, show the returned
 recommended actions to the operator and seed the managed profile before
-expecting authenticated automation to succeed. Use `lookupServiceProfile()` only when the
-caller needs the narrower profile-only selector response.
+expecting authenticated automation to succeed for the requested identity. Use
+`lookupServiceProfile()` only when the caller needs the narrower profile-only
+selector response.
 
 Direct profile selection is an override. Use it when an operator knows the
 desired login state lives in a specific managed runtime profile, or when a
