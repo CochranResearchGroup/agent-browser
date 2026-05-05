@@ -124,6 +124,17 @@ The e2e tests live in `cli/src/native/e2e_tests.rs` and cover: launch/close, nav
 
 Ordinary pushes to `main` run the fast CI gates only: Version Sync Check, Dashboard, Service Client, Rust Quality, and Rust. Service Client runs `pnpm test:service-client`, which checks generated service client files, JavaScript type coverage, service request helper contracts, and service observability helper contracts without launching Chrome. Rust Quality runs Linux format and clippy checks before the Rust unit-test job starts, so style or lint failures fail fast without spending time on the unit suite. The Rust job uses `scripts/ci/rust-tests.sh` with Cargo's default test profile to run parallel-safe tests first, then env-mutating test modules serially in the same job so coverage is preserved without duplicate CI compile work. Service request action changes must keep `cli/src/native/service_contracts.rs` `SERVICE_REQUEST_ACTIONS`, `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`, HTTP `/api/service/request`, and generated `@agent-browser/client` helpers aligned; the fast parity, client, and Rust gates include no-launch guards for that invariant. The Rust job also runs the no-launch service contract metadata smoke and the no-launch HTTP and MCP incident-summary smokes after the Rust suite, so the service contracts and grouped incident summary contracts stay covered without starting Chrome. Set `CARGO_TEST_PROFILE=ci` when intentionally validating the optimized CI profile locally. The slow gates run when the CI workflow is started manually or when the pushed head commit message contains `[full ci]`. Slow gates are cross-platform Rust, Native E2E Tests, Windows Integration Test, and Global Install.
 
+Before pushing, match local validation to every touched surface since the last
+green CI, not only the files in the final commit. If any Rust source under
+`cli/src/` changed in the current slice, run
+`cargo fmt --manifest-path cli/Cargo.toml -- --check` and
+`cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`. If a service
+schema, service model, output formatter, service contracts metadata, or
+generated client changed, also run the focused Rust or client contract tests
+for that surface. Recent CI failures were caused by skipping these gates after
+Rust and contract-shape changes, then pushing follow-up docs or client commits
+that could not fix the already-broken fast CI baseline.
+
 Do not babysit GitHub Actions as part of normal implementation closeout. CI
 evaluation is a separate task and should only include active waiting, log
 analysis, reruns, or further CI tuning when the maintainer explicitly asks for
