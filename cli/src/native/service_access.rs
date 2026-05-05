@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    BrowserProfile, Challenge, ChallengePolicy, ChallengeState, ProfileReadinessState,
-    ProfileSelectionReason, ProfileTargetReadiness, ServiceState, SitePolicy,
+    BrowserProfile, Challenge, ChallengePolicy, ChallengeState, ProfileSelectionReason,
+    ServiceState, SitePolicy,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -470,8 +470,9 @@ mod tests {
 
     use super::*;
     use crate::native::service_model::{
-        BrowserHost, BrowserProfile, Challenge, ChallengeKind, InteractionMode, ProviderCapability,
-        ProviderKind, ServiceProvider, SitePolicy,
+        BrowserHost, BrowserProfile, Challenge, ChallengeKind, InteractionMode,
+        ProfileReadinessState, ProfileTargetReadiness, ProviderCapability, ProviderKind,
+        ServiceProvider, SitePolicy,
     };
 
     #[test]
