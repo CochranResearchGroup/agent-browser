@@ -135,6 +135,11 @@ for that surface. Recent CI failures were caused by skipping these gates after
 Rust and contract-shape changes, then pushing follow-up docs or client commits
 that could not fix the already-broken fast CI baseline.
 
+Use `pnpm validation:select -- --base <ref>` to print recommended local checks
+from changed file paths before push. The default base is `HEAD`, which is useful
+for staged or uncommitted work. For a whole slice, pass the last known green
+commit or another explicit base ref.
+
 Do not babysit GitHub Actions as part of normal implementation closeout. CI
 evaluation is a separate task and should only include active waiting, log
 analysis, reruns, or further CI tuning when the maintainer explicitly asks for

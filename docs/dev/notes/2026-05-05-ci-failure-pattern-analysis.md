@@ -59,6 +59,16 @@ If the slice changes service schemas, service model records, output formatters,
 contract metadata, HTTP/MCP service resources, or generated client surfaces, add
 the focused Rust or pnpm contract tests for that surface before pushing.
 
+Use the selector helper before push when the touched surface is not obvious:
+
+```bash
+pnpm validation:select -- --base <last-green-ref>
+```
+
+The default base is `HEAD`, which is useful for staged or uncommitted changes.
+For a whole multi-commit slice, pass the last known green commit or another
+explicit base ref.
+
 ## Current Status
 
 The repeated clippy failure was fixed by commit `5e085b1`, which moved
