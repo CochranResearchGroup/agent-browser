@@ -22,10 +22,13 @@ context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
 
 const { agentHome, session, tempHome } = context;
 const serviceName = 'ProfileLookupSmoke';
+const targetMatchServiceName = 'ProfileLookupTargetOnlySmoke';
+const fallbackServiceName = 'ProfileLookupFallbackSmoke';
 const targetServiceId = 'acs';
 const authenticatedProfileId = `profile-lookup-authenticated-${process.pid}`;
 const targetOnlyProfileId = `profile-lookup-target-${process.pid}`;
 const otherServiceProfileId = `profile-lookup-other-service-${process.pid}`;
+const serviceSharedProfileId = `profile-lookup-service-shared-${process.pid}`;
 
 async function cleanup() {
   try {
@@ -53,7 +56,7 @@ function seedServiceState() {
             userDataDir: join(tempHome, 'target-profile-user-data'),
             targetServiceIds: [targetServiceId],
             authenticatedServiceIds: [],
-            sharedServiceIds: [serviceName],
+            sharedServiceIds: [serviceName, targetMatchServiceName],
             persistent: true,
           },
           [authenticatedProfileId]: {
@@ -72,6 +75,15 @@ function seedServiceState() {
             targetServiceIds: [targetServiceId],
             authenticatedServiceIds: [targetServiceId],
             sharedServiceIds: ['OtherService'],
+            persistent: true,
+          },
+          [serviceSharedProfileId]: {
+            id: serviceSharedProfileId,
+            name: 'Service-shared profile',
+            userDataDir: join(tempHome, 'service-shared-profile-user-data'),
+            targetServiceIds: [],
+            authenticatedServiceIds: [],
+            sharedServiceIds: [fallbackServiceName],
             persistent: true,
           },
         },
@@ -160,6 +172,54 @@ try {
   assert(
     lookup.data?.readinessSummary?.needsManualSeeding === false,
     `profile lookup readiness summary unexpectedly requires manual seeding: ${JSON.stringify(lookup.data)}`,
+  );
+
+  const targetMatchLookup = await httpJson(
+    port,
+    'GET',
+    `/api/service/profiles/lookup?service-name=${encodeURIComponent(
+      targetMatchServiceName,
+    )}&login-id=${encodeURIComponent(targetServiceId)}`,
+  );
+  assert(targetMatchLookup.success === true, `target profile lookup failed: ${JSON.stringify(targetMatchLookup)}`);
+  assert(
+    targetMatchLookup.data?.selectedProfile?.id === targetOnlyProfileId,
+    `target profile lookup did not select target-only profile: ${JSON.stringify(targetMatchLookup.data)}`,
+  );
+  assert(
+    targetMatchLookup.data?.selectedProfileMatch?.reason === 'target_match',
+    `target profile lookup did not report target_match: ${JSON.stringify(targetMatchLookup.data)}`,
+  );
+  assert(
+    targetMatchLookup.data?.selectedProfileMatch?.matchedField === 'targetServiceIds',
+    `target profile lookup did not report target matched field: ${JSON.stringify(targetMatchLookup.data)}`,
+  );
+  assert(
+    targetMatchLookup.data?.selectedProfileMatch?.matchedIdentity === targetServiceId,
+    `target profile lookup did not report target matched identity: ${JSON.stringify(targetMatchLookup.data)}`,
+  );
+
+  const fallbackLookup = await httpJson(
+    port,
+    'GET',
+    `/api/service/profiles/lookup?service-name=${encodeURIComponent(fallbackServiceName)}&login-id=unknown`,
+  );
+  assert(fallbackLookup.success === true, `fallback profile lookup failed: ${JSON.stringify(fallbackLookup)}`);
+  assert(
+    fallbackLookup.data?.selectedProfile?.id === serviceSharedProfileId,
+    `fallback profile lookup did not select service-shared profile: ${JSON.stringify(fallbackLookup.data)}`,
+  );
+  assert(
+    fallbackLookup.data?.selectedProfileMatch?.reason === 'service_allow_list',
+    `fallback profile lookup did not report service_allow_list: ${JSON.stringify(fallbackLookup.data)}`,
+  );
+  assert(
+    fallbackLookup.data?.selectedProfileMatch?.matchedField === 'sharedServiceIds',
+    `fallback profile lookup did not report service matched field: ${JSON.stringify(fallbackLookup.data)}`,
+  );
+  assert(
+    fallbackLookup.data?.selectedProfileMatch?.matchedIdentity === fallbackServiceName,
+    `fallback profile lookup did not report service matched identity: ${JSON.stringify(fallbackLookup.data)}`,
   );
 
   const clientLookup = await lookupServiceProfile({

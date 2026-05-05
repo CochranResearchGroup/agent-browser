@@ -2074,6 +2074,71 @@ mod tests {
     }
 
     #[test]
+    fn service_profile_lookup_response_reports_target_match_details() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "target-only".to_string(),
+            BrowserProfile {
+                id: "target-only".to_string(),
+                name: "Target-only Google profile".to_string(),
+                target_service_ids: vec!["google".to_string(), "acs".to_string()],
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let response = service_profile_lookup_response_for_state(
+            Some("service-name=JournalDownloader&login-id=acs&target-service-id=google"),
+            &service_state,
+        )
+        .expect("profile lookup response should be built");
+
+        assert_eq!(response["selectedProfile"]["id"], "target-only");
+        assert_eq!(response["selectedProfileMatch"]["reason"], "target_match");
+        assert_eq!(
+            response["selectedProfileMatch"]["matchedField"],
+            "targetServiceIds"
+        );
+        assert_eq!(response["selectedProfileMatch"]["matchedIdentity"], "acs");
+    }
+
+    #[test]
+    fn service_profile_lookup_response_reports_service_allow_list_details() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "service-shared".to_string(),
+            BrowserProfile {
+                id: "service-shared".to_string(),
+                name: "Journal Downloader shared profile".to_string(),
+                shared_service_ids: vec!["JournalDownloader".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let response = service_profile_lookup_response_for_state(
+            Some("service-name=JournalDownloader&login-id=unknown"),
+            &service_state,
+        )
+        .expect("profile lookup response should be built");
+
+        assert_eq!(response["selectedProfile"]["id"], "service-shared");
+        assert_eq!(
+            response["selectedProfileMatch"]["reason"],
+            "service_allow_list"
+        );
+        assert_eq!(
+            response["selectedProfileMatch"]["matchedField"],
+            "sharedServiceIds"
+        );
+        assert_eq!(
+            response["selectedProfileMatch"]["matchedIdentity"],
+            "JournalDownloader"
+        );
+    }
+
+    #[test]
     fn service_events_command_maps_query_filters() {
         let cmd = service_events_command(Some(
             "limit=7&kind=browser_health_changed&browser-id=browser-1&profile-id=work&session-id=session-1&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite&since=2026-04-22T00%3A00%3A00Z",
