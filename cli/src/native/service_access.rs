@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    BrowserProfile, Challenge, ChallengePolicy, ChallengeState, ProfileSelectionReason,
-    ServiceState, SitePolicy,
+    BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState,
+    ProfileSelectionReason, ProviderCapability, ServiceProvider, ServiceState, SitePolicy,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -204,7 +204,7 @@ fn select_providers(
     selected_profile: Option<&BrowserProfile>,
     site_policy: Option<&SitePolicy>,
     challenges: &[Challenge],
-) -> Vec<Value> {
+) -> Vec<ServiceProvider> {
     let mut provider_ids = Vec::new();
     if let Some(profile) = selected_profile {
         provider_ids.extend(profile.credential_provider_ids.iter().cloned());
@@ -225,7 +225,7 @@ fn select_providers(
         .into_iter()
         .filter_map(|provider_id| service_state.providers.get(&provider_id))
         .filter(|provider| provider.enabled)
-        .map(|provider| json!(provider))
+        .cloned()
         .collect()
 }
 
@@ -233,7 +233,7 @@ fn access_plan_decision(
     selected_profile: Option<&BrowserProfile>,
     site_policy: Option<&SitePolicy>,
     challenges: &[Challenge],
-    providers: &[Value],
+    providers: &[ServiceProvider],
     readiness: Option<&Value>,
     target_service_ids: &[String],
     readiness_summary: &Value,
@@ -259,6 +259,7 @@ fn access_plan_decision(
     let policy_denies = site_policy
         .is_some_and(|site_policy| matches!(site_policy.challenge_policy, ChallengePolicy::Deny));
     let profile_required = site_policy.is_some_and(|site_policy| site_policy.profile_required);
+    let provider_decision = provider_decision(selected_profile, site_policy, challenges, providers);
 
     if let Some(profile) = selected_profile {
         if readiness_profile_is_fresh_or_seeded(readiness, &profile.id, target_service_ids) {
@@ -332,10 +333,157 @@ fn access_plan_decision(
         "profileId": selected_profile.map(|profile| profile.id.clone()),
         "manualActionRequired": manual_seeding_required || waiting_for_human || failed_challenge,
         "manualSeedingRequired": manual_seeding_required,
-        "providerIds": providers.iter().filter_map(|provider| provider["id"].as_str()).collect::<Vec<_>>(),
+        "providerIds": providers.iter().map(|provider| provider.id.clone()).collect::<Vec<_>>(),
+        "authProviderIds": provider_decision.auth_provider_ids,
+        "challengeProviderIds": provider_decision.challenge_provider_ids,
+        "missingChallengeCapabilities": provider_decision.missing_challenge_capabilities,
+        "challengeStrategy": provider_decision.challenge_strategy,
         "challengeIds": challenges.iter().map(|challenge| challenge.id.clone()).collect::<Vec<_>>(),
         "reasons": reasons,
     })
+}
+
+#[derive(Debug, Default)]
+struct ProviderDecision {
+    auth_provider_ids: Vec<String>,
+    challenge_provider_ids: Vec<String>,
+    missing_challenge_capabilities: Vec<&'static str>,
+    challenge_strategy: &'static str,
+}
+
+fn provider_decision(
+    selected_profile: Option<&BrowserProfile>,
+    site_policy: Option<&SitePolicy>,
+    challenges: &[Challenge],
+    providers: &[ServiceProvider],
+) -> ProviderDecision {
+    let mut auth_provider_ids = providers
+        .iter()
+        .filter(|provider| {
+            selected_profile
+                .is_some_and(|profile| profile.credential_provider_ids.contains(&provider.id))
+                || site_policy.is_some_and(|policy| policy.auth_providers.contains(&provider.id))
+        })
+        .map(|provider| provider.id.clone())
+        .collect::<Vec<_>>();
+    let active_challenges = challenges
+        .iter()
+        .filter(|challenge| !matches!(challenge.state, ChallengeState::Resolved))
+        .collect::<Vec<_>>();
+    let required_capabilities = active_challenges
+        .iter()
+        .flat_map(|challenge| challenge_required_capabilities(challenge.kind))
+        .collect::<Vec<_>>();
+    let mut challenge_provider_ids = providers
+        .iter()
+        .filter(|provider| {
+            required_capabilities
+                .iter()
+                .any(|capability| provider.capabilities.contains(capability))
+        })
+        .filter(|provider| {
+            site_policy
+                .filter(|policy| !policy.allowed_challenge_providers.is_empty())
+                .is_none_or(|policy| policy.allowed_challenge_providers.contains(&provider.id))
+        })
+        .map(|provider| provider.id.clone())
+        .collect::<Vec<_>>();
+    let mut missing_challenge_capabilities = active_challenges
+        .iter()
+        .filter(|challenge| {
+            let capabilities = challenge_required_capabilities(challenge.kind);
+            !providers.iter().any(|provider| {
+                provider_allowed_for_challenge(provider, site_policy)
+                    && capabilities
+                        .iter()
+                        .any(|capability| provider.capabilities.contains(capability))
+            })
+        })
+        .flat_map(|challenge| {
+            challenge_required_capabilities(challenge.kind)
+                .into_iter()
+                .map(provider_capability_wire_name)
+        })
+        .collect::<Vec<_>>();
+
+    auth_provider_ids.sort();
+    auth_provider_ids.dedup();
+    challenge_provider_ids.sort();
+    challenge_provider_ids.dedup();
+    missing_challenge_capabilities.sort();
+    missing_challenge_capabilities.dedup();
+
+    let challenge_strategy = match site_policy.map(|policy| policy.challenge_policy) {
+        Some(ChallengePolicy::Deny) => "deny",
+        _ if active_challenges.is_empty() => "none",
+        Some(ChallengePolicy::ManualOnly) => "manual_only",
+        Some(ChallengePolicy::ProviderPreferred) if !challenge_provider_ids.is_empty() => {
+            "provider_preferred"
+        }
+        Some(ChallengePolicy::ProviderAllowed) if !challenge_provider_ids.is_empty() => {
+            "provider_allowed"
+        }
+        Some(ChallengePolicy::AvoidFirst) => "avoid_first",
+        _ if !missing_challenge_capabilities.is_empty() => "missing_provider",
+        _ => "manual_review",
+    };
+
+    ProviderDecision {
+        auth_provider_ids,
+        challenge_provider_ids,
+        missing_challenge_capabilities,
+        challenge_strategy,
+    }
+}
+
+fn provider_allowed_for_challenge(
+    provider: &ServiceProvider,
+    site_policy: Option<&SitePolicy>,
+) -> bool {
+    site_policy
+        .filter(|policy| !policy.allowed_challenge_providers.is_empty())
+        .is_none_or(|policy| policy.allowed_challenge_providers.contains(&provider.id))
+}
+
+fn challenge_required_capabilities(kind: ChallengeKind) -> Vec<ProviderCapability> {
+    match kind {
+        ChallengeKind::Captcha => vec![
+            ProviderCapability::CaptchaSolve,
+            ProviderCapability::VisualReasoning,
+            ProviderCapability::HumanApproval,
+        ],
+        ChallengeKind::TwoFactor => vec![
+            ProviderCapability::TotpCode,
+            ProviderCapability::SmsCode,
+            ProviderCapability::EmailCode,
+            ProviderCapability::HumanApproval,
+        ],
+        ChallengeKind::Passkey => {
+            vec![
+                ProviderCapability::Passkey,
+                ProviderCapability::HumanApproval,
+            ]
+        }
+        ChallengeKind::SuspiciousLogin | ChallengeKind::BlockedFlow | ChallengeKind::Unknown => {
+            vec![
+                ProviderCapability::VisualReasoning,
+                ProviderCapability::HumanApproval,
+            ]
+        }
+    }
+}
+
+fn provider_capability_wire_name(capability: ProviderCapability) -> &'static str {
+    match capability {
+        ProviderCapability::PasswordFill => "password_fill",
+        ProviderCapability::Passkey => "passkey",
+        ProviderCapability::TotpCode => "totp_code",
+        ProviderCapability::SmsCode => "sms_code",
+        ProviderCapability::EmailCode => "email_code",
+        ProviderCapability::VisualReasoning => "visual_reasoning",
+        ProviderCapability::CaptchaSolve => "captcha_solve",
+        ProviderCapability::HumanApproval => "human_approval",
+    }
 }
 
 fn service_profile_match_details(
@@ -505,6 +653,7 @@ mod tests {
         ProfileReadinessState, ProfileTargetReadiness, ProviderCapability, ProviderKind,
         ServiceProvider, SitePolicy,
     };
+    use serde_json::json;
 
     #[test]
     fn service_access_plan_recommends_google_manual_seeding_before_attachable_work() {
@@ -582,6 +731,16 @@ mod tests {
         assert_eq!(plan["providers"][0]["id"], "manual");
         assert_eq!(plan["challenges"][0]["id"], "challenge-1");
         assert_eq!(plan["readinessSummary"]["manualSeedingRequired"], true);
+        assert_eq!(plan["decision"]["authProviderIds"][0], "manual");
+        assert_eq!(plan["decision"]["challengeProviderIds"][0], "manual");
+        assert_eq!(plan["decision"]["challengeStrategy"], "manual_only");
+        assert_eq!(
+            plan["decision"]["missingChallengeCapabilities"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
         assert_eq!(plan["decision"]["manualActionRequired"], true);
         assert_eq!(plan["decision"]["manualSeedingRequired"], true);
         assert_eq!(
@@ -638,6 +797,120 @@ mod tests {
             "use_selected_profile"
         );
         assert_eq!(plan["decision"]["manualActionRequired"], false);
+    }
+
+    #[test]
+    fn service_access_plan_explains_challenge_provider_fit() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "canva".to_string(),
+                BrowserProfile {
+                    id: "canva".to_string(),
+                    name: "Canva".to_string(),
+                    target_service_ids: vec!["canva".to_string()],
+                    authenticated_service_ids: vec!["canva".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "canva".to_string(),
+                SitePolicy {
+                    id: "canva".to_string(),
+                    origin_pattern: "https://www.canva.com".to_string(),
+                    challenge_policy: ChallengePolicy::ProviderAllowed,
+                    allowed_challenge_providers: vec!["captcha".to_string()],
+                    ..SitePolicy::default()
+                },
+            )]),
+            providers: BTreeMap::from([(
+                "captcha".to_string(),
+                ServiceProvider {
+                    id: "captcha".to_string(),
+                    kind: ProviderKind::Captcha,
+                    display_name: "Captcha solver".to_string(),
+                    capabilities: vec![ProviderCapability::CaptchaSolve],
+                    ..ServiceProvider::default()
+                },
+            )]),
+            challenges: BTreeMap::from([(
+                "captcha-1".to_string(),
+                Challenge {
+                    id: "captcha-1".to_string(),
+                    kind: ChallengeKind::Captcha,
+                    state: ChallengeState::Detected,
+                    ..Challenge::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["canva".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["decision"]["challengeProviderIds"][0], "captcha");
+        assert_eq!(plan["decision"]["challengeStrategy"], "provider_allowed");
+        assert_eq!(plan["decision"]["missingChallengeCapabilities"], json!([]));
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            "wait_for_or_invoke_challenge_provider"
+        );
+    }
+
+    #[test]
+    fn service_access_plan_reports_missing_challenge_provider_capability() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "secure".to_string(),
+                BrowserProfile {
+                    id: "secure".to_string(),
+                    name: "Secure app".to_string(),
+                    target_service_ids: vec!["secure".to_string()],
+                    authenticated_service_ids: vec!["secure".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "secure".to_string(),
+                SitePolicy {
+                    id: "secure".to_string(),
+                    origin_pattern: "https://secure.example".to_string(),
+                    challenge_policy: ChallengePolicy::ProviderAllowed,
+                    allowed_challenge_providers: vec!["sms".to_string()],
+                    ..SitePolicy::default()
+                },
+            )]),
+            providers: BTreeMap::new(),
+            challenges: BTreeMap::from([(
+                "two-factor-1".to_string(),
+                Challenge {
+                    id: "two-factor-1".to_string(),
+                    kind: ChallengeKind::TwoFactor,
+                    state: ChallengeState::Detected,
+                    ..Challenge::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["secure".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["decision"]["challengeProviderIds"], json!([]));
+        assert_eq!(plan["decision"]["challengeStrategy"], "missing_provider");
+        assert_eq!(
+            plan["decision"]["missingChallengeCapabilities"],
+            json!(["email_code", "human_approval", "sms_code", "totp_code"])
+        );
     }
 
     #[test]

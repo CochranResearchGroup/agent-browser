@@ -168,6 +168,10 @@
         "manualActionRequired",
         "manualSeedingRequired",
         "providerIds",
+        "authProviderIds",
+        "challengeProviderIds",
+        "missingChallengeCapabilities",
+        "challengeStrategy",
         "challengeIds",
         "reasons"
       ],
@@ -198,6 +202,47 @@
           "items": {
             "type": "string"
           }
+        },
+        "authProviderIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "challengeProviderIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missingChallengeCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "password_fill",
+              "passkey",
+              "totp_code",
+              "sms_code",
+              "email_code",
+              "visual_reasoning",
+              "captcha_solve",
+              "human_approval"
+            ]
+          }
+        },
+        "challengeStrategy": {
+          "type": "string",
+          "enum": [
+            "deny",
+            "none",
+            "manual_only",
+            "provider_preferred",
+            "provider_allowed",
+            "avoid_first",
+            "missing_provider",
+            "manual_review"
+          ]
         },
         "challengeIds": {
           "type": "array",
