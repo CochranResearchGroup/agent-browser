@@ -2088,6 +2088,89 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn profile_lease_wait_cancel_records_cancelled_wait_end() {
+        let home = temp_home("control-plane-profile-lease-wait-cancel");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                sessions: std::collections::BTreeMap::from([(
+                    "active-session".to_string(),
+                    BrowserSession {
+                        id: "active-session".to_string(),
+                        profile_id: Some("acs-profile".to_string()),
+                        lease: LeaseState::Exclusive,
+                        ..BrowserSession::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let handle = ControlPlaneWorker::start(DaemonState::new());
+        let waiting_handle = handle.clone();
+        let waiting = tokio::spawn(async move {
+            waiting_handle
+                .submit(json!({
+                    "id": "lease-wait-cancel-job",
+                    "action": "state_list",
+                    "serviceName": "JournalDownloader",
+                    "agentName": "unit-test",
+                    "taskName": "profileLeaseWaitCancel",
+                    "runtimeProfile": "acs-profile",
+                    "profileLeasePolicy": "wait",
+                    "profileLeaseWaitTimeoutMs": 2_000
+                }))
+                .await
+        });
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let cancel_response = handle.cancel_job_response(
+            "cancel-lease-wait",
+            "lease-wait-cancel-job",
+            Some("operator cancelled waiting job"),
+        );
+        assert_eq!(cancel_response["success"], true);
+        assert_eq!(cancel_response["data"]["cancelled"], true);
+
+        let waiting_response = waiting.await.unwrap();
+        assert_eq!(waiting_response["success"], false);
+        assert_eq!(
+            waiting_response["error"],
+            "Service job was cancelled before dispatch"
+        );
+        handle.shutdown().await;
+
+        let persisted = store.load().unwrap();
+        let waiting_job = &persisted.jobs["lease-wait-cancel-job"];
+        assert_eq!(waiting_job.state, JobState::Cancelled);
+        assert_eq!(
+            waiting_job.error.as_deref(),
+            Some("operator cancelled waiting job")
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::ProfileLeaseWaitStarted
+                && event.profile_id.as_deref() == Some("acs-profile")
+                && event.task_name.as_deref() == Some("profileLeaseWaitCancel")
+                && event.details.as_ref().unwrap()["jobId"] == "lease-wait-cancel-job"
+        }));
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::ProfileLeaseWaitEnded
+                && event.profile_id.as_deref() == Some("acs-profile")
+                && event.task_name.as_deref() == Some("profileLeaseWaitCancel")
+                && event.details.as_ref().unwrap()["jobId"] == "lease-wait-cancel-job"
+                && event.details.as_ref().unwrap()["outcome"] == "cancelled"
+                && event.details.as_ref().unwrap()["error"]
+                    == "Service job was cancelled before dispatch"
+                && event.details.as_ref().unwrap()["waitedMs"]
+                    .as_u64()
+                    .is_some()
+        }));
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
     async fn service_job_timeout_marks_running_job_timed_out() {
         let home = temp_home("control-plane-job-timeout");
         let guard = EnvGuard::new(&["HOME"]);
