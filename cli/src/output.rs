@@ -4910,7 +4910,7 @@ mod tests {
         );
         assert!(rendered.contains("Profiles: 1"));
         assert!(rendered.contains(
-            "work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs user_data=/tmp/work-profile"
+            "work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs readiness=none user_data=/tmp/work-profile"
         ));
         assert!(rendered.contains("Sessions: 1"));
         assert!(rendered.contains(
@@ -5002,7 +5002,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs user_data=/tmp/work-profile\nProfile allocations: 1\n  work state=conflicted action=release_holder_or_redirect_waiting_jobs holders=runtime-session waiting=job-1 conflicts=runtime-session services=JournalDownloader agents=codex tasks=probeACSwebsite browsers=browser-1 tabs=tab-1"
+            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs readiness=none user_data=/tmp/work-profile\nProfile allocations: 1\n  work state=conflicted action=release_holder_or_redirect_waiting_jobs readiness=none holders=runtime-session waiting=job-1 conflicts=runtime-session services=JournalDownloader agents=codex tasks=probeACSwebsite browsers=browser-1 tabs=tab-1"
         );
     }
 
