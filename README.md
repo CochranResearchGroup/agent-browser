@@ -570,7 +570,8 @@ Run `pnpm test:service-status-no-launch` to validate that service status remains
 read-only when launch defaults such as `AGENT_BROWSER_ARGS` are configured.
 Run `pnpm test:service-contracts-no-launch` to validate that HTTP
 `/api/service/contracts` returns compatibility metadata without launching or
-recording a browser.
+recording a browser, and that `getServiceContracts()` exposes the profile
+lookup/readiness client-helper metadata to software clients.
 Run `pnpm test:service-profile-lookup-no-launch` to validate that HTTP
 `/api/service/profiles/lookup` selects an authenticated target profile over a
 target-only profile from seeded temporary service state without launching a

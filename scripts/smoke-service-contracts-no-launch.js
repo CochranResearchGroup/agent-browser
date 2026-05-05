@@ -3,6 +3,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { getServiceContracts } from '../packages/client/src/service-observability.js';
+
 import {
   assert,
   closeSession,
@@ -81,6 +83,9 @@ function assertNoBrowserLaunchState() {
 try {
   const port = await enableStream();
   const contracts = await httpJson(port, 'GET', '/api/service/contracts');
+  const clientContracts = await getServiceContracts({
+    baseUrl: `http://127.0.0.1:${port}`,
+  });
   const status = await httpJson(port, 'GET', '/api/service/status');
 
   assert(contracts.success === true, `HTTP service contracts failed: ${JSON.stringify(contracts)}`);
@@ -188,6 +193,23 @@ try {
     JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===
       JSON.stringify(['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds']),
     `serviceProfileLookupResponse selection order mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceProfileLookupResponse?.client?.helpers?.includes(
+      'lookupServiceProfile',
+    ),
+    `service client could not discover lookupServiceProfile helper: ${JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceProfileReadinessResponse?.client?.helpers?.includes(
+      'getServiceProfileReadiness',
+    ),
+    `service client could not discover getServiceProfileReadiness helper: ${JSON.stringify(clientContracts.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
+    JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===
+      JSON.stringify(['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds']),
+    `service client could not discover profile lookup selection order: ${JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse)}`,
   );
   assert(
     contracts.data?.http?.serviceProfileAllocationRoute === '/api/service/profiles/<id>/allocation',
