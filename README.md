@@ -1657,7 +1657,9 @@ explains whether the plan is headed, remote-view capable, or requires detached
 first-login seeding.
 When no local site policy exists, agent-browser applies shipped defaults for
 Google, Gmail, and Microsoft login identities. Local persisted or configured
-policies with the same IDs override those defaults.
+policies with the same IDs override those defaults. `sitePolicySource` reports
+whether the selected policy came from service state or a built-in default, how
+it matched the request, and whether it is overrideable.
 Then the client should request the tab by the same identity through `requestServiceTab()` or
 `POST /api/service/request`. `lookupServiceProfile()` remains useful for the narrower profile-only decision and uses HTTP
 `GET /api/service/profiles/lookup` so agent-browser applies the same server-side

@@ -83,7 +83,8 @@ pub(crate) fn service_access_plan_for_state(
     service_state: &ServiceState,
     request: ServiceAccessPlanRequest,
 ) -> Value {
-    let mut effective_state = service_state.clone();
+    let original_state = service_state;
+    let mut effective_state = original_state.clone();
     effective_state.refresh_profile_readiness();
     let service_state = &effective_state;
     let profile_request = request.profile_selection_request();
@@ -112,7 +113,15 @@ pub(crate) fn service_access_plan_for_state(
         })
     });
     let readiness_summary = readiness_summary(readiness.as_ref(), &request.target_service_ids);
-    let site_policy = select_site_policy(service_state, &request, selected_profile.as_ref());
+    let selected_site_policy =
+        select_site_policy(original_state, &request, selected_profile.as_ref());
+    let site_policy = selected_site_policy
+        .as_ref()
+        .map(|selected| selected.policy.clone());
+    let site_policy_source = selected_site_policy
+        .as_ref()
+        .map(|selected| selected.source_value())
+        .unwrap_or(Value::Null);
     let challenges = select_challenges(service_state, request.challenge_id.as_deref());
     let providers = select_providers(
         service_state,
@@ -155,41 +164,83 @@ pub(crate) fn service_access_plan_for_state(
         "readiness": readiness,
         "readinessSummary": readiness_summary,
         "sitePolicy": site_policy,
+        "sitePolicySource": site_policy_source,
         "providers": providers,
         "challenges": challenges,
         "decision": decision,
     })
 }
 
+#[derive(Debug, Clone)]
+struct SelectedSitePolicy {
+    policy: SitePolicy,
+    source: &'static str,
+    matched_by: &'static str,
+}
+
+impl SelectedSitePolicy {
+    fn source_value(&self) -> Value {
+        json!({
+            "id": self.policy.id.clone(),
+            "source": self.source,
+            "matchedBy": self.matched_by,
+            "overrideable": self.source == "builtin",
+            "precedence": ["service_state", "builtin"],
+        })
+    }
+}
+
 fn select_site_policy(
     service_state: &ServiceState,
     request: &ServiceAccessPlanRequest,
     selected_profile: Option<&BrowserProfile>,
-) -> Option<SitePolicy> {
+) -> Option<SelectedSitePolicy> {
     if let Some(site_policy_id) = request.site_policy_id.as_deref() {
-        return service_state
-            .site_policies
-            .get(site_policy_id)
-            .cloned()
-            .or_else(|| builtin_site_policy(site_policy_id));
+        if let Some(policy) = service_state.site_policies.get(site_policy_id) {
+            return Some(SelectedSitePolicy {
+                policy: policy.clone(),
+                source: "service_state",
+                matched_by: "explicit_site_policy_id",
+            });
+        }
+        return builtin_site_policy(site_policy_id).map(|policy| SelectedSitePolicy {
+            policy,
+            source: "builtin",
+            matched_by: "explicit_site_policy_id",
+        });
     }
 
     for target_service_id in &request.target_service_ids {
         if let Some(site_policy) = service_state.site_policies.get(target_service_id) {
-            return Some(site_policy.clone());
+            return Some(SelectedSitePolicy {
+                policy: site_policy.clone(),
+                source: "service_state",
+                matched_by: "target_service_id",
+            });
         }
         if let Some(site_policy) = builtin_site_policy(target_service_id) {
-            return Some(site_policy);
+            return Some(SelectedSitePolicy {
+                policy: site_policy,
+                source: "builtin",
+                matched_by: "target_service_id",
+            });
         }
     }
 
     selected_profile.and_then(|profile| {
         profile.site_policy_ids.iter().find_map(|site_policy_id| {
-            service_state
-                .site_policies
-                .get(site_policy_id)
-                .cloned()
-                .or_else(|| builtin_site_policy(site_policy_id))
+            if let Some(policy) = service_state.site_policies.get(site_policy_id) {
+                return Some(SelectedSitePolicy {
+                    policy: policy.clone(),
+                    source: "service_state",
+                    matched_by: "profile_site_policy_id",
+                });
+            }
+            builtin_site_policy(site_policy_id).map(|policy| SelectedSitePolicy {
+                policy,
+                source: "builtin",
+                matched_by: "profile_site_policy_id",
+            })
         })
     })
 }
@@ -1187,6 +1238,10 @@ mod tests {
         );
 
         assert_eq!(plan["sitePolicy"]["id"], "google");
+        assert_eq!(plan["sitePolicySource"]["id"], "google");
+        assert_eq!(plan["sitePolicySource"]["source"], "builtin");
+        assert_eq!(plan["sitePolicySource"]["matchedBy"], "target_service_id");
+        assert_eq!(plan["sitePolicySource"]["overrideable"], true);
         assert_eq!(
             plan["sitePolicy"]["originPattern"],
             "https://accounts.google.com"
@@ -1202,6 +1257,45 @@ mod tests {
             plan["decision"]["recommendedAction"],
             "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
         );
+    }
+
+    #[test]
+    fn service_access_plan_reports_local_policy_override_source() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-work".to_string(),
+                BrowserProfile {
+                    id: "google-work".to_string(),
+                    name: "Google Work".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "local-google".to_string(),
+                    browser_host: Some(BrowserHost::RemoteHeaded),
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["google".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["sitePolicy"]["originPattern"], "local-google");
+        assert_eq!(plan["sitePolicySource"]["source"], "service_state");
+        assert_eq!(plan["sitePolicySource"]["matchedBy"], "target_service_id");
+        assert_eq!(plan["sitePolicySource"]["overrideable"], false);
+        assert_eq!(plan["decision"]["browserHost"], "remote_headed");
     }
 
     #[test]

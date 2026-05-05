@@ -11,6 +11,7 @@
     "readiness",
     "readinessSummary",
     "sitePolicy",
+    "sitePolicySource",
     "providers",
     "challenges",
     "decision"
@@ -139,6 +140,45 @@
       "oneOf": [
         {
           "$ref": "service-site-policy-record.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sitePolicySource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["id", "source", "matchedBy", "overrideable", "precedence"],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "enum": ["service_state", "builtin"]
+            },
+            "matchedBy": {
+              "type": "string",
+              "enum": [
+                "explicit_site_policy_id",
+                "target_service_id",
+                "profile_site_policy_id"
+              ]
+            },
+            "overrideable": {
+              "type": "boolean"
+            },
+            "precedence": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["service_state", "builtin"]
+              }
+            }
+          },
+          "additionalProperties": true
         },
         {
           "type": "null"
