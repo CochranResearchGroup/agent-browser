@@ -45,7 +45,7 @@
       "oneOf": [
         {
           "type": "object",
-          "required": ["profileId", "profile", "reason"],
+          "required": ["profileId", "profile", "reason", "matchedField", "matchedIdentity"],
           "properties": {
             "profileId": {
               "type": "string"
@@ -56,6 +56,20 @@
             "reason": {
               "type": "string",
               "enum": ["authenticated_target", "target_match", "service_allow_list"]
+            },
+            "matchedField": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": ["authenticatedServiceIds", "targetServiceIds", "sharedServiceIds"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "matchedIdentity": {
+              "type": ["string", "null"]
             }
           },
           "additionalProperties": true

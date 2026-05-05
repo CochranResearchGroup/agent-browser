@@ -197,7 +197,9 @@ fetching allocation details or the full profile collection.
 envelope returned by HTTP `GET /api/service/profiles/lookup` when a software
 client wants agent-browser to apply the authoritative service profile selector
 for a service name plus site or login identity without fetching the full
-profile collection.
+profile collection. `selectedProfileMatch` includes `matchedField` and
+`matchedIdentity` so clients can explain whether the match came from
+`authenticatedServiceIds`, `targetServiceIds`, or `sharedServiceIds`.
 
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

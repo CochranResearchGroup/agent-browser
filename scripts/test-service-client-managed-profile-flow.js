@@ -189,6 +189,8 @@ function createMockFetch({
               profileId: selectedProfile.id,
               profile: selectedProfile,
               reason: 'authenticated_target',
+              matchedField: 'authenticatedServiceIds',
+              matchedIdentity: 'canva',
             }
           : null,
         readiness,

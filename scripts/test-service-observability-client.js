@@ -239,6 +239,8 @@ async function main() {
           profileId: 'authenticated',
           profile: profileMatches[2],
           reason: 'authenticated_target',
+          matchedField: 'authenticatedServiceIds',
+          matchedIdentity: 'canva',
         },
         readiness: {
           profileId: 'authenticated',
@@ -274,6 +276,8 @@ async function main() {
   assert.equal(profileLookup.calls.length, 1);
   assert.equal(lookupResult.selectedProfile?.id, 'authenticated');
   assert.equal(lookupResult.selectedProfileMatch.reason, 'authenticated_target');
+  assert.equal(lookupResult.selectedProfileMatch.matchedField, 'authenticatedServiceIds');
+  assert.equal(lookupResult.selectedProfileMatch.matchedIdentity, 'canva');
   assert.equal(lookupResult.readiness?.profileId, 'authenticated');
   assert.equal(lookupResult.readinessSummary.needsManualSeeding, false);
 
@@ -295,6 +299,8 @@ async function main() {
           profileId: 'authenticated',
           profile: profileMatches[2],
           reason: 'authenticated_target',
+          matchedField: 'authenticatedServiceIds',
+          matchedIdentity: 'canva',
         },
         readiness: null,
         readinessSummary: {

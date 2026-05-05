@@ -15,7 +15,9 @@ use crate::native::service_contracts::{
 use crate::native::service_lifecycle::{
     select_service_profile_for_request, ProfileSelectionRequest,
 };
-use crate::native::service_model::{service_profile_allocations, ServiceState};
+use crate::native::service_model::{
+    service_profile_allocations, BrowserProfile, ProfileSelectionReason, ServiceState,
+};
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
@@ -1280,16 +1282,63 @@ fn service_profile_lookup_response_for_state(
             "readinessProfileId": readiness_profile_id,
         },
         "selectedProfile": selected_profile.clone(),
-        "selectedProfileMatch": selection.map(|selection| {
+        "selectedProfileMatch": selection.as_ref().map(|selection| {
+            let (matched_field, matched_identity) = selected_profile
+                .as_ref()
+                .map(|profile| service_profile_match_details(profile, &request, selection.reason))
+                .unwrap_or((None, None));
             json!({
                 "profileId": selection.profile_id,
-                "profile": selected_profile,
+                "profile": selected_profile.clone(),
                 "reason": selection.reason,
+                "matchedField": matched_field,
+                "matchedIdentity": matched_identity,
             })
         }),
         "readiness": readiness,
         "readinessSummary": readiness_summary(readiness.as_ref()),
     }))
+}
+
+fn service_profile_match_details(
+    profile: &BrowserProfile,
+    request: &ProfileSelectionRequest,
+    reason: ProfileSelectionReason,
+) -> (Option<&'static str>, Option<String>) {
+    match reason {
+        ProfileSelectionReason::AuthenticatedTarget => (
+            Some("authenticatedServiceIds"),
+            first_matching_identity(
+                &request.target_service_ids,
+                &profile.authenticated_service_ids,
+            ),
+        ),
+        ProfileSelectionReason::TargetMatch => (
+            Some("targetServiceIds"),
+            first_matching_identity(&request.target_service_ids, &profile.target_service_ids),
+        ),
+        ProfileSelectionReason::ServiceAllowList => (
+            Some("sharedServiceIds"),
+            request
+                .service_name
+                .as_ref()
+                .filter(|service_name| {
+                    profile
+                        .shared_service_ids
+                        .iter()
+                        .any(|allowed| allowed == *service_name)
+                })
+                .cloned(),
+        ),
+        ProfileSelectionReason::ExplicitProfile => (None, None),
+    }
+}
+
+fn first_matching_identity(requested: &[String], candidates: &[String]) -> Option<String> {
+    requested
+        .iter()
+        .find(|requested| candidates.iter().any(|candidate| candidate == *requested))
+        .cloned()
 }
 
 fn append_identity_values(target_service_ids: &mut Vec<String>, value: &str) {
@@ -2009,6 +2058,11 @@ mod tests {
             response["selectedProfileMatch"]["reason"],
             "authenticated_target"
         );
+        assert_eq!(
+            response["selectedProfileMatch"]["matchedField"],
+            "authenticatedServiceIds"
+        );
+        assert_eq!(response["selectedProfileMatch"]["matchedIdentity"], "acs");
         assert_eq!(response["readiness"]["profileId"], "authenticated");
         assert_eq!(
             response["readiness"]["targetReadiness"][0]["state"],

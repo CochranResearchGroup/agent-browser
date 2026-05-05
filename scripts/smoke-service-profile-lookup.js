@@ -138,6 +138,14 @@ try {
     `profile lookup did not report authenticated_target: ${JSON.stringify(lookup.data)}`,
   );
   assert(
+    lookup.data?.selectedProfileMatch?.matchedField === 'authenticatedServiceIds',
+    `profile lookup did not report authenticated matched field: ${JSON.stringify(lookup.data)}`,
+  );
+  assert(
+    lookup.data?.selectedProfileMatch?.matchedIdentity === targetServiceId,
+    `profile lookup did not report authenticated matched identity: ${JSON.stringify(lookup.data)}`,
+  );
+  assert(
     lookup.data?.selectedProfile?.id !== targetOnlyProfileId,
     `profile lookup selected target-only profile over authenticated profile: ${JSON.stringify(lookup.data)}`,
   );
@@ -170,6 +178,14 @@ try {
   assert(
     clientLookup.selectedProfileMatch?.reason === 'authenticated_target',
     `client lookup did not report authenticated_target: ${JSON.stringify(clientLookup)}`,
+  );
+  assert(
+    clientLookup.selectedProfileMatch?.matchedField === 'authenticatedServiceIds',
+    `client lookup did not report authenticated matched field: ${JSON.stringify(clientLookup)}`,
+  );
+  assert(
+    clientLookup.selectedProfileMatch?.matchedIdentity === targetServiceId,
+    `client lookup did not report authenticated matched identity: ${JSON.stringify(clientLookup)}`,
   );
   assert(
     clientLookup.readiness?.profileId === authenticatedProfileId,

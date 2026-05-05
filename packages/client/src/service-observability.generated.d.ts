@@ -610,6 +610,8 @@ export interface ServiceProfileLookupMatch {
   profileId: string;
   profile: ServiceProfileRecord;
   reason: 'authenticated_target' | 'target_match' | 'service_allow_list';
+  matchedField: 'authenticatedServiceIds' | 'targetServiceIds' | 'sharedServiceIds' | null;
+  matchedIdentity: string | null;
   [key: string]: unknown;
 }
 

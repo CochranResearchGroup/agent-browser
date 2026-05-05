@@ -575,8 +575,9 @@ lookup/readiness client-helper metadata to software clients.
 Run `pnpm test:service-profile-lookup-no-launch` to validate that HTTP
 `/api/service/profiles/lookup` selects an authenticated target profile over a
 target-only profile from seeded temporary service state without launching a
-browser. The same smoke calls `lookupServiceProfile()` against the live stream
-server so the software-client helper is covered end to end.
+browser and reports the matched profile field and identity. The same smoke
+calls `lookupServiceProfile()` against the live stream server so the
+software-client helper is covered end to end.
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
 Fast CI runs the no-launch service contract metadata smoke and the no-launch
@@ -1632,8 +1633,10 @@ such as CanvaCLI should request a tab with `serviceName: "CanvaCLI"` plus
 `lookupServiceProfile()` before registering a profile. That helper uses HTTP
 `GET /api/service/profiles/lookup` so agent-browser applies the same server-side
 selector used for service launches without returning the full profile
-collection. `getServiceProfileForIdentity()` remains as the older descriptive
-alias for the same route. Only call `registerServiceLoginProfile()` when
+collection. Its `selectedProfileMatch` reports the selector reason, matched
+profile field, and matched identity. `getServiceProfileForIdentity()` remains
+as the older descriptive alias for the same route. Only call
+`registerServiceLoginProfile()` when
 agent-browser has no suitable managed profile, readiness reports
 `needs_manual_seeding`, the operator wants a separate account lane, or the
 client is explicitly bringing its own profile.
