@@ -75,6 +75,7 @@ const browserSurface = [
 ].map(([tool, method, route]) => ({ tool, method, route }));
 
 const files = {
+  actions: read('cli/src/native/actions.rs'),
   mcp: `${read('cli/src/mcp.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   http: `${read('cli/src/native/stream/http.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   readme: read('README.md'),
@@ -84,6 +85,8 @@ const files = {
 };
 
 const failures = [];
+const nativeServiceActions = extractNativeServiceActions(files.actions);
+const noLaunchServiceActions = extractNoLaunchServiceActions(files.actions);
 const serviceSurface = [
   {
     tool: 'service_request',
@@ -175,6 +178,28 @@ const serviceSurface = [
     httpNeedles: ['service_provider_id(path)', 'service_provider_delete_command(provider_id)'],
   },
 ];
+
+for (const action of nativeServiceActions) {
+  expectIncludes(
+    noLaunchServiceActions,
+    action,
+    `native service action ${action} must skip browser launch`,
+  );
+}
+
+for (const action of noLaunchServiceActions) {
+  expectIncludes(
+    nativeServiceActions,
+    action,
+    `no-launch service action ${action} must be handled by execute_command`,
+  );
+}
+
+expectIncludes(
+  files.actions,
+  'action.starts_with("service_")',
+  'profile lease gate must exempt service control actions by prefix',
+);
 
 const serviceResourceSurface = [
   { resource: 'agent-browser://contracts', route: '/api/service/contracts' },
@@ -356,7 +381,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service tools, ${serviceResourceSurface.length} service resources, and ${serviceHttpOnlySurface.length} HTTP-only service routes`,
+  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service tools, ${serviceResourceSurface.length} service resources, ${serviceHttpOnlySurface.length} HTTP-only service routes, and ${nativeServiceActions.length} native service actions`,
 );
 
 function read(relativePath) {
@@ -373,4 +398,55 @@ function expectAnyIncludes(source, needles, message) {
   if (!needles.some((needle) => source.includes(needle))) {
     failures.push(message);
   }
+}
+
+function extractNativeServiceActions(source) {
+  const body = extractRustFunctionBody(source, 'pub async fn execute_command');
+  return sortedUnique(
+    [...body.matchAll(/"(?<action>service_[a-z0-9_]+)"\s*=>/g)].map(
+      (match) => match.groups.action,
+    ),
+  );
+}
+
+function extractNoLaunchServiceActions(source) {
+  const body = extractRustFunctionBody(source, 'pub(crate) fn action_skips_browser_launch');
+  return sortedUnique(
+    [...body.matchAll(/"(?<action>service_[a-z0-9_]+)"/g)].map(
+      (match) => match.groups.action,
+    ),
+  );
+}
+
+function extractRustFunctionBody(source, signature) {
+  const start = source.indexOf(signature);
+  if (start < 0) {
+    failures.push(`Rust source missing ${signature}`);
+    return '';
+  }
+  const open = source.indexOf('{', start);
+  if (open < 0) {
+    failures.push(`Rust source missing body for ${signature}`);
+    return '';
+  }
+
+  let depth = 0;
+  for (let index = open; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(open + 1, index);
+      }
+    }
+  }
+
+  failures.push(`Rust source has unterminated body for ${signature}`);
+  return '';
+}
+
+function sortedUnique(values) {
+  return [...new Set(values)].sort();
 }
