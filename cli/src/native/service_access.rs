@@ -9,9 +9,9 @@ use serde_json::{json, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState,
-    InteractionMode, ProfileSelectionReason, ProviderCapability, ServiceProvider, ServiceState,
-    SitePolicy,
+    builtin_site_policy, BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy,
+    ChallengeState, InteractionMode, ProfileSelectionReason, ProviderCapability, ServiceProvider,
+    ServiceState, SitePolicy,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -83,6 +83,9 @@ pub(crate) fn service_access_plan_for_state(
     service_state: &ServiceState,
     request: ServiceAccessPlanRequest,
 ) -> Value {
+    let mut effective_state = service_state.clone();
+    effective_state.refresh_profile_readiness();
+    let service_state = &effective_state;
     let profile_request = request.profile_selection_request();
     let selection = select_service_profile_for_request(service_state, &profile_request);
     let selected_profile = selection
@@ -109,8 +112,7 @@ pub(crate) fn service_access_plan_for_state(
         })
     });
     let readiness_summary = readiness_summary(readiness.as_ref(), &request.target_service_ids);
-    let site_policy =
-        select_site_policy(service_state, &request, selected_profile.as_ref()).cloned();
+    let site_policy = select_site_policy(service_state, &request, selected_profile.as_ref());
     let challenges = select_challenges(service_state, request.challenge_id.as_deref());
     let providers = select_providers(
         service_state,
@@ -159,26 +161,36 @@ pub(crate) fn service_access_plan_for_state(
     })
 }
 
-fn select_site_policy<'a>(
-    service_state: &'a ServiceState,
+fn select_site_policy(
+    service_state: &ServiceState,
     request: &ServiceAccessPlanRequest,
     selected_profile: Option<&BrowserProfile>,
-) -> Option<&'a SitePolicy> {
+) -> Option<SitePolicy> {
     if let Some(site_policy_id) = request.site_policy_id.as_deref() {
-        return service_state.site_policies.get(site_policy_id);
+        return service_state
+            .site_policies
+            .get(site_policy_id)
+            .cloned()
+            .or_else(|| builtin_site_policy(site_policy_id));
     }
 
     for target_service_id in &request.target_service_ids {
         if let Some(site_policy) = service_state.site_policies.get(target_service_id) {
+            return Some(site_policy.clone());
+        }
+        if let Some(site_policy) = builtin_site_policy(target_service_id) {
             return Some(site_policy);
         }
     }
 
     selected_profile.and_then(|profile| {
-        profile
-            .site_policy_ids
-            .iter()
-            .find_map(|site_policy_id| service_state.site_policies.get(site_policy_id))
+        profile.site_policy_ids.iter().find_map(|site_policy_id| {
+            service_state
+                .site_policies
+                .get(site_policy_id)
+                .cloned()
+                .or_else(|| builtin_site_policy(site_policy_id))
+        })
     })
 }
 
@@ -1148,6 +1160,47 @@ mod tests {
         assert_eq!(
             plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
             false
+        );
+    }
+
+    #[test]
+    fn service_access_plan_uses_builtin_identity_provider_policy() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-work".to_string(),
+                BrowserProfile {
+                    id: "google-work".to_string(),
+                    name: "Google Work".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["google".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["sitePolicy"]["id"], "google");
+        assert_eq!(
+            plan["sitePolicy"]["originPattern"],
+            "https://accounts.google.com"
+        );
+        assert_eq!(plan["decision"]["browserHost"], "local_headed");
+        assert_eq!(plan["decision"]["interactionRisk"], "manual");
+        assert_eq!(plan["decision"]["pacing"]["singleSessionRecommended"], true);
+        assert_eq!(
+            plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
         );
     }
 

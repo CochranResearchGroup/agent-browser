@@ -1407,8 +1407,18 @@ impl ServiceState {
         self.providers.extend(configured.providers);
     }
 
+    /// Add shipped site-policy defaults without overriding local policy.
+    pub fn apply_builtin_site_policies(&mut self) {
+        for policy in builtin_site_policies() {
+            self.site_policies
+                .entry(policy.id.clone())
+                .or_insert(policy);
+        }
+    }
+
     /// Refresh profile target-readiness rows from retained service policy.
     pub fn refresh_profile_readiness(&mut self) {
+        self.apply_builtin_site_policies();
         let site_policies = self.site_policies.clone();
         for profile in self.profiles.values_mut() {
             profile.target_readiness = derive_profile_target_readiness(profile, &site_policies);
@@ -1677,6 +1687,88 @@ fn derive_profile_target_readiness(
             derive_target_readiness_for_profile(profile, site_policies, &target_service_id)
         })
         .collect()
+}
+
+pub(crate) fn builtin_site_policy(id: &str) -> Option<SitePolicy> {
+    builtin_site_policies()
+        .into_iter()
+        .find(|policy| policy.id == id)
+}
+
+fn builtin_site_policies() -> Vec<SitePolicy> {
+    vec![
+        SitePolicy {
+            id: "google".to_string(),
+            origin_pattern: "https://accounts.google.com".to_string(),
+            browser_host: Some(BrowserHost::LocalHeaded),
+            interaction_mode: InteractionMode::HumanLikeInput,
+            rate_limit: RateLimitPolicy {
+                min_action_delay_ms: Some(500),
+                jitter_ms: Some(400),
+                cooldown_ms: Some(2_000),
+                max_parallel_sessions: Some(1),
+                retry_budget: Some(1),
+            },
+            manual_login_preferred: true,
+            profile_required: true,
+            challenge_policy: ChallengePolicy::ManualOnly,
+            allowed_challenge_providers: vec!["manual".to_string()],
+            notes: Some(
+                "Google first sign-in should use detached headed Chrome before attachable automation."
+                    .to_string(),
+            ),
+            ..SitePolicy::default()
+        },
+        SitePolicy {
+            id: "gmail".to_string(),
+            origin_pattern: "https://mail.google.com".to_string(),
+            browser_host: Some(BrowserHost::LocalHeaded),
+            interaction_mode: InteractionMode::HumanLikeInput,
+            rate_limit: RateLimitPolicy {
+                min_action_delay_ms: Some(500),
+                jitter_ms: Some(400),
+                cooldown_ms: Some(2_000),
+                max_parallel_sessions: Some(1),
+                retry_budget: Some(1),
+            },
+            manual_login_preferred: true,
+            profile_required: true,
+            challenge_policy: ChallengePolicy::ManualOnly,
+            allowed_challenge_providers: vec!["manual".to_string()],
+            notes: Some(
+                "Gmail inherits Google sign-in seeding and should prefer a persistent headed profile."
+                    .to_string(),
+            ),
+            ..SitePolicy::default()
+        },
+        SitePolicy {
+            id: "microsoft".to_string(),
+            origin_pattern: "https://login.microsoftonline.com".to_string(),
+            browser_host: Some(BrowserHost::LocalHeaded),
+            interaction_mode: InteractionMode::HumanLikeInput,
+            rate_limit: RateLimitPolicy {
+                min_action_delay_ms: Some(450),
+                jitter_ms: Some(300),
+                cooldown_ms: Some(2_000),
+                max_parallel_sessions: Some(1),
+                retry_budget: Some(2),
+            },
+            manual_login_preferred: true,
+            profile_required: true,
+            challenge_policy: ChallengePolicy::ProviderAllowed,
+            allowed_challenge_providers: vec![
+                "manual".to_string(),
+                "totp".to_string(),
+                "sms".to_string(),
+                "email".to_string(),
+            ],
+            notes: Some(
+                "Microsoft sign-in should prefer persistent headed profiles with conservative pacing."
+                    .to_string(),
+            ),
+            ..SitePolicy::default()
+        },
+    ]
 }
 
 fn derive_target_readiness_for_profile(
@@ -4735,6 +4827,42 @@ mod tests {
         assert_eq!(
             persisted.providers["manual"].display_name,
             "Dashboard approval"
+        );
+    }
+
+    #[test]
+    fn builtin_site_policies_apply_without_overriding_local_policy() {
+        let mut state = ServiceState {
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "local-google".to_string(),
+                    browser_host: Some(BrowserHost::RemoteHeaded),
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        state.apply_builtin_site_policies();
+
+        assert_eq!(state.site_policies["google"].origin_pattern, "local-google");
+        assert_eq!(
+            state.site_policies["google"].browser_host,
+            Some(BrowserHost::RemoteHeaded)
+        );
+        assert_eq!(
+            state.site_policies["microsoft"].origin_pattern,
+            "https://login.microsoftonline.com"
+        );
+        assert_eq!(
+            state.site_policies["microsoft"].interaction_mode,
+            InteractionMode::HumanLikeInput
+        );
+        assert_eq!(
+            state.site_policies["gmail"].challenge_policy,
+            ChallengePolicy::ManualOnly
         );
     }
 
