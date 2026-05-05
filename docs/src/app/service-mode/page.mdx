@@ -4,6 +4,8 @@ Service mode turns agent-browser from a single CLI session helper into a persist
 
 The model is intentionally broader than the CLI. Agents usually interact through MCP, software projects usually interact through the HTTP API, and operators can inspect or intervene through the CLI and dashboard.
 
+The normal request model is identity-first. A caller asks for a tab or browser action plus `serviceName`, `agentName`, `taskName`, and the target site or login identity. agent-browser selects or reuses the managed profile, manages any profile lease, queues CDP work, and records the trace state. Direct profile selection is for known-login overrides and bring-your-own-profile workflows.
+
 ## What service mode provides
 
 - A queued worker path for browser-control actions so concurrent clients are dispatched in order instead of competing directly for CDP.
@@ -41,7 +43,6 @@ For software clients, prefer one explicit service request object when the caller
 
 ```ts
 import { createServiceRequest, postServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
-import { registerServiceLoginProfile } from '@agent-browser/client/service-observability';
 
 const request = createServiceRequest({
   serviceName: 'JournalDownloader',
@@ -114,7 +115,7 @@ With <code>profileLeasePolicy: "wait"</code>, the control-plane scheduler keeps 
 
 Read-side and service-configuration software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service contract metadata, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. <code>getServiceProfileAllocation</code> reads one profile's current allocation row, <code>getServiceProfileReadiness</code> reads one profile's no-launch target readiness, <code>summarizeServiceProfileReadiness</code> turns readiness rows into client-facing manual-seeding flags and recommended actions, <code>findServiceProfileForIdentity</code> applies the same authenticated-target, target-match, then service-allow-list profile preference order to a local profile array, and <code>lookupServiceProfile</code> calls HTTP <code>GET /api/service/profiles/lookup</code> so agent-browser applies the authoritative service selector and returns the selected profile, selector reason, matched profile field, matched identity, readiness, and readiness summary without returning the full profile collection. <code>getServiceAccessPlan</code> calls HTTP <code>GET /api/service/access-plan</code> and returns the no-launch service-owned recommendation that combines selected profile, readiness, site policy, enabled providers, retained challenges, and decision fields before a caller asks for browser control. <code>getServiceProfileForIdentity</code> remains as the older descriptive alias for the same route. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. <code>getServiceContracts</code> reads the compatibility metadata endpoint. <code>registerServiceLoginProfile</code> wraps the common software-client recipe for registering a profile by login identity. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
 
-Software clients should broker profiles through agent-browser before creating new runtime state:
+Software clients should ask agent-browser for an access plan before creating new runtime state:
 
 ```ts
 import { requestServiceTab } from '@agent-browser/client/service-request';
@@ -158,7 +159,7 @@ await requestServiceTab({
 });
 ```
 
-If <code>profileLookup.readinessSummary.needsManualSeeding</code> is true, show the returned recommended actions to the operator and seed the managed profile before expecting authenticated automation to succeed.
+If <code>accessPlan.readinessSummary.needsManualSeeding</code> is true, show the returned recommended actions to the operator and seed the managed profile before expecting authenticated automation to succeed.
 
 The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, can cancel a known queued job with <code>cancelServiceJob</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>. The same example package includes <code>managed-profile-flow.mjs</code>, a CanvaCLI-style profile-broker recipe that uses <code>getServiceAccessPlan</code> to inspect the selected profile, readiness, site policy, providers, retained challenges, and service-owned decision before requesting a tab by login identity or registering a fallback managed profile. Its output includes <code>readinessSummary.needsManualSeeding</code> plus target service IDs and recommended actions when readiness says an operator must seed the profile. Run <code>pnpm test:service-client-managed-profile-flow</code> for the no-launch mock smoke that proves the recipe selects an existing managed profile without registering a new one.
 
@@ -171,12 +172,15 @@ Use `serviceName`, `agentName`, `taskName`, and target-service hints such as `ta
 Operators can still request a particular managed runtime profile when they know the desired login state lives there. They can also bring their own profile with `--profile <path>` or equivalent API fields when they want more direct control over a browser identity. That is an override mode, not the default service model. The normal path is to let agent-browser perform deterministic profile selection, queue sharing, browser reuse, and collision avoidance so callers can spend their limited reasoning budget on the target workflow.
 
 Software clients should not create a runtime profile just because another task
-is active or because a site has a login. First inspect <code>getServiceProfiles()</code>
-or <code>getServiceProfileReadiness(&#123; id &#125;)</code>, then request the
-target identity with <code>requestServiceTab</code> or <code>POST /api/service/request</code>.
-Register a new managed login profile only when agent-browser has no suitable
-profile, readiness reports <code>needs_manual_seeding</code>, the operator wants
-a separate account lane, or the client is explicitly bringing its own profile.
+is active or because a site has a login. First call
+<code>getServiceAccessPlan()</code> for the target identity, then request the
+tab with <code>requestServiceTab</code> or <code>POST /api/service/request</code>.
+Use <code>getServiceProfiles()</code> or
+<code>getServiceProfileReadiness(&#123; id &#125;)</code> for narrower inspection
+when a caller already knows which profile it is evaluating. Register a new
+managed login profile only when agent-browser has no suitable profile, readiness
+reports <code>needs_manual_seeding</code>, the operator wants a separate account
+lane, or the client is explicitly bringing its own profile.
 
 ## Login Identity API Recipe
 

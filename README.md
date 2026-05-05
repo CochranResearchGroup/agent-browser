@@ -153,7 +153,7 @@ agent-browser chat "<instruction>"    # AI chat: natural language browser contro
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
 
-Service mode is the persistent control plane for long-lived automation. It keeps profile, session, browser, tab, job, incident, event, site-policy, provider, and challenge state aligned across CLI commands, the HTTP API, MCP resources/tools, and the dashboard. Agents should include `serviceName`, `agentName`, and `taskName` when available so multi-service work remains traceable. The normal service request is intent-based: ask for a tab, target site or login identity, and the owning service, agent, and task. agent-browser selects or reuses the managed profile and browser, serializes CDP work through the queue, and records the state needed for debugging. Service profile records and profile allocation rows include `targetReadiness`, a no-launch readiness view for target services. Google targets without authenticated evidence report `needs_manual_seeding` and recommend detached `runtime login` before attachable automation. Use an explicit managed runtime profile when you know where the needed login state lives; use `--profile <path>` only when bringing an external profile is part of the contract.
+Service mode is the persistent control plane for long-lived automation. It keeps profile, session, browser, tab, job, incident, event, site-policy, provider, and challenge state aligned across CLI commands, the HTTP API, MCP resources/tools, and the dashboard. Agents should include `serviceName`, `agentName`, and `taskName` when available so multi-service work remains traceable. The normal service request is identity-first: ask for a tab or browser action, target site or login identity, and the owning service, agent, and task. agent-browser selects or reuses the managed profile and browser, serializes CDP work through the queue, and records the state needed for debugging. Service profile records and profile allocation rows include `targetReadiness`, a no-launch readiness view for target services. Google targets without authenticated evidence report `needs_manual_seeding` and recommend detached `runtime login` before attachable automation. Use an explicit managed runtime profile when you know where the needed login state lives; use `--profile <path>` only when bringing an external profile is part of the contract.
 
 ### Get Info
 
@@ -1016,8 +1016,8 @@ Create an `agent-browser.json` file to set persistent defaults instead of repeat
 
 **Locations (lowest to highest priority):**
 
-1. `~/.agent-browser/config.json` -- user-level defaults
-2. `./agent-browser.json` -- project-level overrides (in working directory)
+1. `~/.agent-browser/config.json`: user-level defaults
+2. `./agent-browser.json`: project-level overrides (in working directory)
 3. `AGENT_BROWSER_*` environment variables override config file values
 4. CLI flags override everything
 
@@ -1638,12 +1638,14 @@ operator remedy helpers for job cancel, browser retry, and incident handling,
 Declarations are generated from the matching service contract schemas.
 
 Software clients should treat agent-browser as the profile broker. A client
-such as CanvaCLI should request a tab with `serviceName: "CanvaCLI"` plus
-`loginId: "canva"` or `targetServiceId: "canva"` and should call
-`getServiceAccessPlan()` before registering a profile. That helper uses HTTP
+such as CanvaCLI should call `getServiceAccessPlan()` for
+`serviceName: "CanvaCLI"` plus `loginId: "canva"` or
+`targetServiceId: "canva"` before registering a profile. That helper uses HTTP
 `GET /api/service/access-plan` to return the selected profile, readiness
 summary, matching site policy, relevant providers and challenges, and the
-service-owned recommended action before a browser launch. `lookupServiceProfile()` remains useful for the narrower profile-only decision and uses HTTP
+service-owned recommended action before a browser launch. Then the client should
+request the tab by the same identity through `requestServiceTab()` or
+`POST /api/service/request`. `lookupServiceProfile()` remains useful for the narrower profile-only decision and uses HTTP
 `GET /api/service/profiles/lookup` so agent-browser applies the same server-side
 selector used for service launches without returning the full profile
 collection. Its `selectedProfileMatch` reports the selector reason, matched
@@ -1700,6 +1702,12 @@ If `accessPlan.readinessSummary.needsManualSeeding` is true, show the returned
 recommended actions to the operator and seed the managed profile before
 expecting authenticated automation to succeed. Use `lookupServiceProfile()` only when the
 caller needs the narrower profile-only selector response.
+
+Direct profile selection is an override. Use it when an operator knows the
+desired login state lives in a specific managed runtime profile, or when a
+client explicitly brings its own profile directory and accepts responsibility
+for that browser identity. Otherwise, let agent-browser coordinate profile
+choice, profile lease waiting, browser reuse, and queued control requests.
 
 See `examples/service-client/` for a copyable workflow that requests a service
 tab with `requestServiceTab`, reads the matching trace, and can demonstrate
@@ -1865,7 +1873,7 @@ Persisted service browser-health reconciliation runs every 60000 ms while the da
 
 ### Just ask the agent
 
-The simplest approach -- just tell your agent to use it:
+The simplest approach is to tell your agent to use it:
 
 ```
 Use agent-browser to test the login flow. Run agent-browser --help to see available commands.
@@ -1881,7 +1889,7 @@ Add the skill to your AI coding assistant for richer context:
 npx skills add vercel-labs/agent-browser
 ```
 
-This works with Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Goose, OpenCode, and Windsurf. The skill is fetched from the repository, so it stays up to date automatically -- do not copy `SKILL.md` from `node_modules` as it will become stale.
+This works with Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Goose, OpenCode, and Windsurf. The skill is fetched from the repository, so it stays up to date automatically. Do not copy `SKILL.md` from `node_modules` as it will become stale.
 
 ### Claude Code
 

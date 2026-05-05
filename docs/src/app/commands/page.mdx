@@ -68,6 +68,12 @@ agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 ```
 
+Service requests should be identity-first. Pass `serviceName`, `agentName`,
+`taskName`, and the target `siteId`, `loginId`, or `targetServiceId`, then let
+agent-browser pick or reuse the managed profile and queue CDP control. Use a
+specific `profile`, `runtimeProfile`, or `--profile <path>` only for known-login
+overrides or bring-your-own-profile workflows.
+
 ## Get info
 
 ```bash
@@ -110,8 +116,8 @@ agent-browser find nth <n> <sel> <action> [value]
 
 Options:
 
-- `--name <name>` -- filter role by accessible name
-- `--exact` -- require exact text match
+- `--name <name>`: filter role by accessible name
+- `--exact`: require exact text match
 
 Examples:
 
@@ -574,13 +580,13 @@ agent-browser auth delete <name>         # Delete a saved profile
 
 Save options:
 
-- `--url <url>` -- login page URL (required)
-- `--username <user>` -- username (required)
-- `--password <pass>` -- password (required unless `--password-stdin`)
-- `--password-stdin` -- read password from stdin (recommended to avoid shell history exposure)
-- `--username-selector <sel>` -- custom CSS selector for username field
-- `--password-selector <sel>` -- custom CSS selector for password field
-- `--submit-selector <sel>` -- custom CSS selector for submit button
+- `--url <url>`: login page URL (required)
+- `--username <user>`: username (required)
+- `--password <pass>`: password (required unless `--password-stdin`)
+- `--password-stdin`: read password from stdin (recommended to avoid shell history exposure)
+- `--username-selector <sel>`: custom CSS selector for username field
+- `--password-selector <sel>`: custom CSS selector for password field
+- `--submit-selector <sel>`: custom CSS selector for submit button
 
 `auth login` navigates with `load` and then waits for the username/password/submit selectors to appear before interacting. This improves reliability on SPA login pages where fields render after initial page load.
 

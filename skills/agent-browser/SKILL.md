@@ -101,12 +101,15 @@ not waste effort avoiding another job's browser.
 Do not create a new runtime profile merely because another automation is using
 agent-browser or because a site has a login. First inspect the service profile
 set and ask for the desired target identity. For software clients, call
-`getServiceProfiles()` or `getServiceProfileReadiness({ id })`, then request a
-tab with `serviceName`, `agentName`, `taskName`, and `loginId` or
-`targetServiceId`. Register a new managed login profile only when agent-browser
-has no suitable profile, readiness reports `needs_manual_seeding`, the
-operator wants a separate account lane, or the client is explicitly bringing
-its own profile.
+`getServiceAccessPlan()` with `serviceName`, `agentName`, `taskName`, and
+`loginId`, `siteId`, or `targetServiceId` before registering a profile. Then
+request the tab by the same identity through `requestServiceTab()` or
+`POST /api/service/request`. Use `getServiceProfiles()` or
+`getServiceProfileReadiness({ id })` only for narrower inspection when you
+already know which profile you are evaluating. Register a new managed login
+profile only when agent-browser has no suitable profile, readiness reports
+`needs_manual_seeding`, the operator wants a separate account lane, or the
+client is explicitly bringing its own profile.
 
 When automating a site that requires login, choose the approach that fits:
 
@@ -119,7 +122,7 @@ agent-browser --auto-connect state save ./auth.json
 agent-browser --state ./auth.json open https://app.example.com/dashboard
 ```
 
-State files contain session tokens in plaintext -- add to `.gitignore` and delete when no longer needed. Set `AGENT_BROWSER_ENCRYPTION_KEY` for encryption at rest.
+State files contain session tokens in plaintext. Add them to `.gitignore` and delete them when no longer needed. Set `AGENT_BROWSER_ENCRYPTION_KEY` for encryption at rest.
 
 **Option 2: Runtime profile manual login (best default for recurring manual sign-in)**
 
@@ -1106,7 +1109,7 @@ agent-browser find testid "submit-btn" click
 
 ## JavaScript Evaluation (eval)
 
-Use `eval` to run JavaScript in the browser context. **Shell quoting can corrupt complex expressions** -- use `--stdin` or `-b` to avoid issues.
+Use `eval` to run JavaScript in the browser context. **Shell quoting can corrupt complex expressions**. Use `--stdin` or `-b` to avoid issues.
 
 ```bash
 # Simple expressions work with regular quoting
@@ -1196,8 +1199,8 @@ agent-browser --engine lightpanda --executable-path /path/to/lightpanda open exa
 ```
 
 Supported engines:
-- `chrome` (default) -- Chrome/Chromium via CDP
-- `lightpanda` -- Lightpanda headless browser via CDP (10x faster, 10x less memory than Chrome)
+- `chrome` (default): Chrome/Chromium via CDP
+- `lightpanda`: Lightpanda headless browser via CDP (10x faster, 10x less memory than Chrome)
 
 Lightpanda does not support `--extension`, `--profile`, `--state`, or `--allow-file-access`. Install Lightpanda from https://lightpanda.io/docs/open-source/installation.
 
