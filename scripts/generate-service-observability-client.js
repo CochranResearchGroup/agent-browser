@@ -546,6 +546,8 @@ export interface ServiceTraceSummaryContext {
   jobCount: number;
   incidentCount: number;
   activityCount: number;
+  targetIdentityCount: number;
+  targetServiceIds: string[];
   latestTimestamp: string | null;
   [key: string]: unknown;
 }

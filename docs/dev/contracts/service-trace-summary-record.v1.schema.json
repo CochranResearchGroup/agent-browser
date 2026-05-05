@@ -126,6 +126,8 @@
           "jobCount",
           "incidentCount",
           "activityCount",
+          "targetIdentityCount",
+          "targetServiceIds",
           "latestTimestamp"
         ],
         "properties": {
@@ -177,6 +179,19 @@
           "activityCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "targetIdentityCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of normalized target-service, site, and login identity hints represented by this trace context."
+          },
+          "targetServiceIds": {
+            "type": "array",
+            "description": "Normalized target-service, site, and login identity hints observed on retained jobs in this trace context.",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
           },
           "latestTimestamp": {
             "type": ["string", "null"],

@@ -696,6 +696,8 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
                 "jobCount",
                 "incidentCount",
                 "activityCount",
+                "targetIdentityCount",
+                "targetServiceIds",
                 "latestTimestamp",
             ],
             &[
@@ -711,6 +713,8 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
                 "job_count",
                 "incident_count",
                 "activity_count",
+                "target_identity_count",
+                "target_service_ids",
                 "latest_timestamp",
             ],
         );
@@ -725,6 +729,8 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
         assert!(context["jobCount"].is_u64());
         assert!(context["incidentCount"].is_u64());
         assert!(context["activityCount"].is_u64());
+        assert!(context["targetIdentityCount"].is_u64());
+        assert!(context["targetServiceIds"].is_array());
     }
 }
 
@@ -4151,6 +4157,8 @@ mod tests {
                 "jobCount": 1,
                 "incidentCount": 0,
                 "activityCount": 1,
+                "targetIdentityCount": 1,
+                "targetServiceIds": ["acs"],
                 "latestTimestamp": "2026-04-22T00:01:00Z",
             }],
         });

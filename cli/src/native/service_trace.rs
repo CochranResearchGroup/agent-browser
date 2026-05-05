@@ -182,6 +182,7 @@ struct TraceContextSummary {
     job_count: usize,
     incident_count: usize,
     activity_count: usize,
+    target_service_ids: Vec<String>,
     latest_timestamp: Option<String>,
 }
 
@@ -238,6 +239,7 @@ fn service_trace_summary(
         };
         let summary = contexts.entry(key).or_default();
         summary.job_count += 1;
+        merge_job_target_service_ids(&mut summary.target_service_ids, job);
         update_latest_timestamp(
             &mut summary.latest_timestamp,
             service_job_latest_timestamp(job),
@@ -309,6 +311,8 @@ fn service_trace_summary(
                 "jobCount": summary.job_count,
                 "incidentCount": summary.incident_count,
                 "activityCount": summary.activity_count,
+                "targetIdentityCount": summary.target_service_ids.len(),
+                "targetServiceIds": summary.target_service_ids,
                 "latestTimestamp": summary.latest_timestamp,
             })
         })
@@ -343,6 +347,24 @@ fn service_trace_summary(
         "profileLeaseWaits": service_trace_profile_lease_wait_summary(events),
         "contexts": contexts,
     })
+}
+
+fn merge_job_target_service_ids(target_service_ids: &mut Vec<String>, job: &ServiceJob) {
+    merge_optional_target_service_id(target_service_ids, job.target_service_id.as_deref());
+    merge_optional_target_service_id(target_service_ids, job.site_id.as_deref());
+    merge_optional_target_service_id(target_service_ids, job.login_id.as_deref());
+    for target_service_id in &job.target_service_ids {
+        merge_optional_target_service_id(target_service_ids, Some(target_service_id.as_str()));
+    }
+}
+
+fn merge_optional_target_service_id(target_service_ids: &mut Vec<String>, value: Option<&str>) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    if !target_service_ids.iter().any(|existing| existing == value) {
+        target_service_ids.push(value.to_string());
+    }
 }
 
 fn service_trace_profile_lease_wait_summary(events: &[ServiceEvent]) -> Value {

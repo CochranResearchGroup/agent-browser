@@ -131,6 +131,8 @@ export function assertServiceTraceSummarySchemaRecord(summary, schema, label) {
         'job_count',
         'incident_count',
         'activity_count',
+        'target_identity_count',
+        'target_service_ids',
         'latest_timestamp',
       ],
       contextLabel,
@@ -145,6 +147,12 @@ export function assertServiceTraceSummarySchemaRecord(summary, schema, label) {
     for (const field of ['eventCount', 'jobCount', 'incidentCount', 'activityCount']) {
       assert(Number.isInteger(context[field]), `${contextLabel} missing ${field} integer`);
     }
+    assert(Number.isInteger(context.targetIdentityCount), `${contextLabel} missing targetIdentityCount integer`);
+    assert(Array.isArray(context.targetServiceIds), `${contextLabel} missing targetServiceIds array`);
+    assert(
+      context.targetIdentityCount === context.targetServiceIds.length,
+      `${contextLabel} targetIdentityCount mismatch: ${JSON.stringify(context)}`,
+    );
     assert(typeof context.hasNamingWarning === 'boolean', `${contextLabel} missing hasNamingWarning boolean`);
   }
 }

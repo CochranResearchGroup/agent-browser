@@ -428,6 +428,17 @@ try {
     },
     'service trace HTTP job',
   );
+  const traceIdentityContext = traceResponse.summary?.contexts?.find(
+    (context) =>
+      context.serviceName === serviceName &&
+      context.agentName === agentName &&
+      context.taskName === httpTaskName &&
+      JSON.stringify(context.targetServiceIds) === JSON.stringify(fallbackTargetServiceIds),
+  );
+  assert(
+    traceIdentityContext?.targetIdentityCount === fallbackTargetServiceIds.length,
+    `service trace summary missing retained target identities: ${JSON.stringify(traceResponse.summary)}`,
+  );
   assert(
     traceResponse.jobs.some((job) => job.id === mcpJob.id),
     `service trace client missing MCP job: ${JSON.stringify(traceResponse.jobs)}`,

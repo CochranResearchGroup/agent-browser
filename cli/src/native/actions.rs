@@ -12699,6 +12699,8 @@ mod tests {
                         "serviceName": "JournalDownloader",
                         "agentName": "codex",
                         "taskName": "probeACSwebsite",
+                        "siteId": "acs",
+                        "targetServiceIds": ["acs", "google"],
                         "namingWarnings": service_job_naming_warning_values(),
                         "hasNamingWarning": true,
                         "submittedAt": "2026-04-22T00:02:00Z",
@@ -12803,6 +12805,8 @@ mod tests {
         assert_eq!(owned_context["eventCount"], 1);
         assert_eq!(owned_context["jobCount"], 1);
         assert_eq!(owned_context["activityCount"], 2);
+        assert_eq!(owned_context["targetIdentityCount"], 2);
+        assert_eq!(owned_context["targetServiceIds"], json!(["acs", "google"]));
         assert_eq!(owned_context["hasNamingWarning"], false);
         assert_eq!(owned_context["namingWarnings"].as_array().unwrap().len(), 0);
         assert_eq!(owned_context["latestTimestamp"], "2026-04-22T00:02:00Z");

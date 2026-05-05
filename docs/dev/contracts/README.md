@@ -265,6 +265,10 @@ returned by `agent-browser service trace`, HTTP `GET /api/service/trace`, and
 MCP `service_trace`. Its `profileLeaseWaits` object provides a per-job rollup
 of profile lease waits, including outcome, timing, conflict sessions, and trace
 labels, so clients do not need to reconstruct waits from raw event pairs.
+Summary context rows also include `targetIdentityCount` and `targetServiceIds`
+so dashboards and software clients can show the target profile-selection
+identity for each service, agent, task, browser, profile, or session context
+without scanning every retained job.
 
 `service-trace-activity-record.v1.schema.json` describes normalized `activity`
 items returned by:

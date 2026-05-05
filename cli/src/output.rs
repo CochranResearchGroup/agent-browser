@@ -489,6 +489,12 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
                     .and_then(|value| value.as_str())
                     .map(|value| format!(" session={value}"))
                     .unwrap_or_default();
+                let targets = value_string_list(context, "targetServiceIds");
+                let target_text = if targets == "none" {
+                    String::new()
+                } else {
+                    format!(" targets={targets}")
+                };
                 let events = context
                     .get("eventCount")
                     .and_then(|value| value.as_u64())
@@ -519,7 +525,7 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
                     })
                     .unwrap_or_default();
                 lines.push(format!(
-                    "  context{service}{agent}{task}{browser}{profile}{session}{warning} events={events} jobs={jobs} incidents={incidents} activity={activity}"
+                    "  context{service}{agent}{task}{browser}{profile}{session}{target_text}{warning} events={events} jobs={jobs} incidents={incidents} activity={activity}"
                 ));
             }
         }
@@ -5191,6 +5197,8 @@ mod tests {
                     "jobCount": 1,
                     "incidentCount": 1,
                     "activityCount": 1,
+                    "targetIdentityCount": 2,
+                    "targetServiceIds": ["acs", "google"],
                     "hasNamingWarning": false,
                     "namingWarnings": [],
                     "latestTimestamp": "2026-04-25T00:00:00Z"
@@ -5263,7 +5271,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 events=1 jobs=1 incidents=1 activity=1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google events=1 jobs=1 incidents=1 activity=1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 
