@@ -110,6 +110,52 @@ With <code>profileLeasePolicy: "wait"</code>, the control-plane scheduler keeps 
 
 Read-side and service-configuration software clients can import <code>@agent-browser/client/service-observability</code> for generated helpers around service status, service contract metadata, service collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and trace responses. Collection helpers cover profiles, browsers, sessions, tabs, site policies, providers, and challenges. <code>getServiceProfileAllocation</code> reads one profile's current allocation row, <code>getServiceProfileReadiness</code> reads one profile's no-launch target readiness, <code>summarizeServiceProfileReadiness</code> turns readiness rows into client-facing manual-seeding flags and recommended actions, <code>findServiceProfileForIdentity</code> applies the same authenticated-target, target-match, then service-allow-list profile preference order to a local profile array, and <code>lookupServiceProfile</code> calls HTTP <code>GET /api/service/profiles/lookup</code> so agent-browser applies the authoritative service selector and returns the selected profile, reason, readiness, and readiness summary without returning the full profile collection. <code>getServiceProfileForIdentity</code> remains as the older descriptive alias for the same route. Config mutation helpers upsert and delete profiles, sessions, site policies, and providers. <code>getServiceContracts</code> reads the compatibility metadata endpoint. <code>registerServiceLoginProfile</code> wraps the common software-client recipe for registering a profile by login identity. Operator remedy helpers cancel jobs, retry browsers, and acknowledge or resolve incidents.
 
+Software clients should broker profiles through agent-browser before creating new runtime state:
+
+```ts
+import { requestServiceTab } from '@agent-browser/client/service-request';
+import {
+  lookupServiceProfile,
+  registerServiceLoginProfile,
+} from '@agent-browser/client/service-observability';
+
+const baseUrl = `http://127.0.0.1:${streamPort}`;
+const serviceName = 'CanvaCLI';
+const loginId = 'canva';
+
+const profileLookup = await lookupServiceProfile({
+  baseUrl,
+  serviceName,
+  agentName: 'canva-cli-agent',
+  taskName: 'openCanvaWorkspace',
+  loginId,
+  targetServiceId: loginId,
+});
+
+if (!profileLookup.selectedProfile) {
+  await registerServiceLoginProfile({
+    baseUrl,
+    id: 'canva-default',
+    serviceName,
+    loginId,
+    authenticated: false,
+  });
+}
+
+await requestServiceTab({
+  baseUrl,
+  serviceName,
+  agentName: 'canva-cli-agent',
+  taskName: 'openCanvaWorkspace',
+  loginId,
+  targetServiceId: loginId,
+  url: 'https://www.canva.com/',
+  jobTimeoutMs: 30000,
+});
+```
+
+If <code>profileLookup.readinessSummary.needsManualSeeding</code> is true, show the returned recommended actions to the operator and seed the managed profile before expecting authenticated automation to succeed.
+
 The repo includes <code>examples/service-client/</code> as a copyable software-client workflow. It requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, can cancel a known queued job with <code>cancelServiceJob</code>, has a dry-run check through <code>pnpm test:service-client-example</code>, and has a live isolated daemon check through <code>pnpm test:service-client-example-live</code>. The same example package includes <code>managed-profile-flow.mjs</code>, a CanvaCLI-style profile-broker recipe that uses <code>lookupServiceProfile</code> to inspect managed profiles, select by identity, read readiness when a candidate profile is known, request tabs by login identity, and register a managed login profile only when agent-browser has no suitable one. Its output includes <code>readinessSummary.needsManualSeeding</code> plus target service IDs and recommended actions when readiness says an operator must seed the profile. Run <code>pnpm test:service-client-managed-profile-flow</code> for the no-launch mock smoke that proves the recipe selects an existing managed profile without registering a new one.
 
 ## Operator request model

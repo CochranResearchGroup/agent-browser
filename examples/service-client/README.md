@@ -90,6 +90,43 @@ apply the authoritative selector, and returns the selected profile, reason,
 readiness, and readiness summary. `getServiceProfileForIdentity()` remains as
 the older descriptive alias for the same route.
 
+```js
+import { requestServiceTab } from '@agent-browser/client/service-request';
+import {
+  lookupServiceProfile,
+  registerServiceLoginProfile,
+} from '@agent-browser/client/service-observability';
+
+const profileLookup = await lookupServiceProfile({
+  baseUrl: 'http://127.0.0.1:4849',
+  serviceName: 'CanvaCLI',
+  agentName: 'canva-cli-agent',
+  taskName: 'openCanvaWorkspace',
+  loginId: 'canva',
+  targetServiceId: 'canva',
+});
+
+if (!profileLookup.selectedProfile) {
+  await registerServiceLoginProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    id: 'canva-default',
+    serviceName: 'CanvaCLI',
+    loginId: 'canva',
+    authenticated: false,
+  });
+}
+
+await requestServiceTab({
+  baseUrl: 'http://127.0.0.1:4849',
+  serviceName: 'CanvaCLI',
+  agentName: 'canva-cli-agent',
+  taskName: 'openCanvaWorkspace',
+  loginId: 'canva',
+  targetServiceId: 'canva',
+  url: 'https://www.canva.com/',
+});
+```
+
 ## Managed Profile Broker Recipe
 
 Use `managed-profile-flow.mjs` when a software client needs the CanvaCLI-style

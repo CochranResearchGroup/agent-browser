@@ -1634,6 +1634,52 @@ agent-browser has no suitable managed profile, readiness reports
 `needs_manual_seeding`, the operator wants a separate account lane, or the
 client is explicitly bringing its own profile.
 
+```ts
+import { requestServiceTab } from '@agent-browser/client/service-request';
+import {
+  lookupServiceProfile,
+  registerServiceLoginProfile,
+} from '@agent-browser/client/service-observability';
+
+const baseUrl = `http://127.0.0.1:${streamPort}`;
+const serviceName = 'CanvaCLI';
+const loginId = 'canva';
+
+const profileLookup = await lookupServiceProfile({
+  baseUrl,
+  serviceName,
+  agentName: 'canva-cli-agent',
+  taskName: 'openCanvaWorkspace',
+  loginId,
+  targetServiceId: loginId,
+});
+
+if (!profileLookup.selectedProfile) {
+  await registerServiceLoginProfile({
+    baseUrl,
+    id: 'canva-default',
+    serviceName,
+    loginId,
+    authenticated: false,
+  });
+}
+
+const tab = await requestServiceTab({
+  baseUrl,
+  serviceName,
+  agentName: 'canva-cli-agent',
+  taskName: 'openCanvaWorkspace',
+  loginId,
+  targetServiceId: loginId,
+  url: 'https://www.canva.com/',
+  jobTimeoutMs: 30000,
+});
+```
+
+If `profileLookup.readinessSummary.needsManualSeeding` is true, show the
+returned recommended actions to the operator and seed the managed profile
+before expecting authenticated automation to succeed.
+
 See `examples/service-client/` for a copyable workflow that requests a service
 tab with `requestServiceTab`, reads the matching trace, and can demonstrate
 known queued-job cancellation with `cancelServiceJob`. Run
