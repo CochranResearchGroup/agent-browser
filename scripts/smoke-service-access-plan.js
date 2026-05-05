@@ -1,0 +1,250 @@
+#!/usr/bin/env node
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { getServiceAccessPlan } from '../packages/client/src/service-observability.js';
+
+import {
+  assert,
+  closeSession,
+  createSmokeContext,
+  httpJson,
+  parseJsonOutput,
+  readResourceContents,
+  runCli,
+} from './smoke-utils.js';
+
+const context = createSmokeContext({
+  prefix: 'ab-access-plan-',
+  sessionPrefix: 'access-plan',
+});
+context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
+
+const { agentHome, session, tempHome } = context;
+const serviceName = 'AccessPlanSmoke';
+const targetServiceId = 'google';
+const profileId = `access-plan-google-${process.pid}`;
+const sitePolicyId = 'google';
+const providerId = 'manual';
+const challengeId = `access-plan-challenge-${process.pid}`;
+
+async function cleanup() {
+  try {
+    await closeSession(context);
+  } finally {
+    if (process.env.AGENT_BROWSER_SMOKE_KEEP_HOME === '1') {
+      console.error(`Keeping smoke home: ${tempHome}`);
+    } else {
+      context.cleanupTempHome();
+    }
+  }
+}
+
+function seedServiceState() {
+  const serviceDir = join(agentHome, 'service');
+  mkdirSync(serviceDir, { recursive: true });
+  writeFileSync(
+    join(serviceDir, 'state.json'),
+    `${JSON.stringify(
+      {
+        profiles: {
+          [profileId]: {
+            id: profileId,
+            name: 'Access-plan Google profile',
+            userDataDir: join(tempHome, 'google-profile-user-data'),
+            sitePolicyIds: [sitePolicyId],
+            targetServiceIds: [targetServiceId],
+            authenticatedServiceIds: [],
+            sharedServiceIds: [serviceName],
+            credentialProviderIds: [providerId],
+            persistent: true,
+          },
+        },
+        sitePolicies: {
+          [sitePolicyId]: {
+            id: sitePolicyId,
+            originPattern: 'https://accounts.google.com',
+            browserHost: 'local_headed',
+            interactionMode: 'human_like_input',
+            manualLoginPreferred: true,
+            profileRequired: true,
+            authProviders: [providerId],
+            challengePolicy: 'manual_only',
+            allowedChallengeProviders: [providerId],
+          },
+        },
+        providers: {
+          [providerId]: {
+            id: providerId,
+            kind: 'manual_approval',
+            displayName: 'Manual approval',
+            enabled: true,
+            capabilities: ['human_approval'],
+          },
+        },
+        challenges: {
+          [challengeId]: {
+            id: challengeId,
+            kind: 'two_factor',
+            state: 'waiting_for_human',
+            providerId,
+            humanApproved: false,
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+async function enableStream() {
+  const streamStatusResult = await runCli(context, [
+    '--json',
+    '--session',
+    session,
+    'stream',
+    'status',
+  ]);
+  let stream = parseJsonOutput(streamStatusResult.stdout, 'stream status');
+  assert(
+    stream.success === true,
+    `stream status failed: ${streamStatusResult.stdout}${streamStatusResult.stderr}`,
+  );
+
+  if (!stream.data?.enabled) {
+    const streamResult = await runCli(context, [
+      '--json',
+      '--session',
+      session,
+      'stream',
+      'enable',
+    ]);
+    stream = parseJsonOutput(streamResult.stdout, 'stream enable');
+    assert(stream.success === true, `stream enable failed: ${streamResult.stdout}${streamResult.stderr}`);
+  }
+
+  const port = stream.data?.port;
+  assert(Number.isInteger(port) && port > 0, `stream enable did not return a port: ${JSON.stringify(stream)}`);
+  return port;
+}
+
+function assertAccessPlan(data, label) {
+  assert(data?.query?.serviceName === serviceName, `${label} serviceName mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.query?.targetServiceIds?.includes(targetServiceId),
+    `${label} targetServiceIds mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(data?.query?.sitePolicyId === sitePolicyId, `${label} sitePolicyId mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.challengeId === challengeId, `${label} challengeId mismatch: ${JSON.stringify(data)}`);
+  assert(data?.selectedProfile?.id === profileId, `${label} selected profile mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.selectedProfileMatch?.reason === 'target_match',
+    `${label} selected profile reason mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.selectedProfileMatch?.matchedField === 'targetServiceIds',
+    `${label} matched field mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readiness?.profileId === profileId,
+    `${label} readiness profile mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readiness?.targetReadiness?.[0]?.state === 'needs_manual_seeding',
+    `${label} readiness state mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readinessSummary?.manualSeedingRequired === true,
+    `${label} readiness summary mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(data?.sitePolicy?.id === sitePolicyId, `${label} site policy mismatch: ${JSON.stringify(data)}`);
+  assert(data?.providers?.[0]?.id === providerId, `${label} providers mismatch: ${JSON.stringify(data)}`);
+  assert(data?.challenges?.[0]?.id === challengeId, `${label} challenges mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.decision?.recommendedAction ===
+      'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+    `${label} recommended action mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.manualActionRequired === true,
+    `${label} manual action flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.manualSeedingRequired === true,
+    `${label} manual seeding flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.providerIds?.includes(providerId),
+    `${label} provider IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.challengeIds?.includes(challengeId),
+    `${label} challenge IDs mismatch: ${JSON.stringify(data)}`,
+  );
+}
+
+function assertNoBrowserLaunchState() {
+  const statePath = join(agentHome, 'service', 'state.json');
+  if (!existsSync(statePath)) {
+    return;
+  }
+
+  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  const jobs = Object.values(state.jobs ?? {});
+  assert(
+    jobs.every((job) => !['launch', 'navigate', 'tab_new'].includes(job.action)),
+    `access plan recorded browser-launching jobs: ${JSON.stringify(state.jobs)}`,
+  );
+  assert(
+    Object.keys(state.browsers ?? {}).length === 0,
+    `access plan persisted browsers: ${JSON.stringify(state.browsers)}`,
+  );
+}
+
+try {
+  seedServiceState();
+  const port = await enableStream();
+  const query =
+    `service-name=${encodeURIComponent(serviceName)}` +
+    `&login-id=${encodeURIComponent(targetServiceId)}` +
+    `&site-policy-id=${encodeURIComponent(sitePolicyId)}` +
+    `&challenge-id=${encodeURIComponent(challengeId)}`;
+
+  const httpPlan = await httpJson(port, 'GET', `/api/service/access-plan?${query}`);
+  assert(httpPlan.success === true, `HTTP access plan failed: ${JSON.stringify(httpPlan)}`);
+  assertAccessPlan(httpPlan.data, 'HTTP access plan');
+
+  const mcpResult = await runCli(context, [
+    '--json',
+    '--session',
+    session,
+    'mcp',
+    'read',
+    `agent-browser://access-plan?${query}`,
+  ]);
+  const mcpPlan = readResourceContents(
+    parseJsonOutput(mcpResult.stdout, 'mcp access plan resource'),
+    'access plan',
+  );
+  assertAccessPlan(mcpPlan, 'MCP access plan');
+
+  const clientPlan = await getServiceAccessPlan({
+    baseUrl: `http://127.0.0.1:${port}`,
+    serviceName,
+    loginId: targetServiceId,
+    sitePolicyId,
+    challengeId,
+  });
+  assertAccessPlan(clientPlan, 'client access plan');
+
+  assertNoBrowserLaunchState();
+
+  await cleanup();
+  console.log('Service access plan no-launch smoke passed');
+} catch (err) {
+  await cleanup();
+  console.error(err.stack || err.message);
+  process.exit(1);
+}

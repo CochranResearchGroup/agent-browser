@@ -467,6 +467,8 @@ Run <code>pnpm test:service-profile-lookup-no-launch</code> to validate that HTT
 
 Use HTTP <code>GET /api/service/access-plan?service-name=&lt;name&gt;&amp;login-id=&lt;id&gt;</code> or MCP <code>agent-browser://access-plan?serviceName=&lt;name&gt;&amp;loginId=&lt;id&gt;</code> when a caller needs agent-browser to make the no-launch profile, policy, provider, challenge, readiness, and recommended-action decision before requesting a tab or browser action.
 
+Run <code>pnpm test:service-access-plan-no-launch</code> to validate that HTTP <code>/api/service/access-plan</code>, MCP <code>agent-browser://access-plan</code>, and <code>getServiceAccessPlan()</code> return the same recommendation from seeded temporary service state without creating browsers or browser-launching jobs.
+
 Run <code>pnpm test:mcp-read-no-launch</code> to validate that MCP resource reads remain read-only under the same launch defaults.
 
 Use MCP <code>service_request</code> when a service wants to queue one intent-based browser action with caller context, site or login hints, <code>action</code>, <code>params</code>, and <code>jobTimeoutMs</code> in a single request object.
