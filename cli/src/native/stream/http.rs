@@ -2629,6 +2629,26 @@ mod tests {
     }
 
     #[test]
+    fn service_request_command_accepts_contract_actions() {
+        for action in SERVICE_REQUEST_ACTIONS {
+            let command = service_request_command(&format!(
+                r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite"}}"##,
+                action
+            ))
+            .unwrap_or_else(|err| panic!("service request should accept {action}: {err}"));
+
+            assert_eq!(command["action"], *action);
+            let expected_id_prefix = format!("http-service-request-{action}-");
+            assert!(command["id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with(&expected_id_prefix)));
+            assert_eq!(command["serviceName"], "JournalDownloader");
+            assert_eq!(command["agentName"], "codex");
+            assert_eq!(command["taskName"], "probeACSwebsite");
+        }
+    }
+
+    #[test]
     fn browser_api_command_maps_named_post_routes() {
         let navigate = browser_api_command(
             "POST",
