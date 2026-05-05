@@ -2329,21 +2329,16 @@ pub struct ProfileTargetReadiness {
 }
 
 /// Profile readiness state for one target service or login identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProfileReadinessState {
+    #[default]
     Unknown,
     NeedsManualSeeding,
     SeededUnknownFreshness,
     Fresh,
     Stale,
     BlockedByAttachedDevtools,
-}
-
-impl Default for ProfileReadinessState {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// A supervised or attached browser process known to the service.
