@@ -1651,7 +1651,10 @@ reports the challenge strategy, and lists any missing provider capabilities
 such as `captcha_solve`, `sms_code`, or `human_approval`. It also reports
 `interactionRisk` and a `pacing` block derived from the site policy rate limits
 so clients can explain headed, human-like, jittered, or single-session behavior
-before creating browser pressure.
+before creating browser pressure. The `launchPosture` block resolves the
+browser host from site policy, profile default, or the service default, and
+explains whether the plan is headed, remote-view capable, or requires detached
+first-login seeding.
 Then the client should request the tab by the same identity through `requestServiceTab()` or
 `POST /api/service/request`. `lookupServiceProfile()` remains useful for the narrower profile-only decision and uses HTTP
 `GET /api/service/profiles/lookup` so agent-browser applies the same server-side

@@ -9,8 +9,9 @@ use serde_json::{json, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState, InteractionMode,
-    ProfileSelectionReason, ProviderCapability, ServiceProvider, ServiceState, SitePolicy,
+    BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState,
+    InteractionMode, ProfileSelectionReason, ProviderCapability, ServiceProvider, ServiceState,
+    SitePolicy,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -261,6 +262,8 @@ fn access_plan_decision(
     let profile_required = site_policy.is_some_and(|site_policy| site_policy.profile_required);
     let provider_decision = provider_decision(selected_profile, site_policy, challenges, providers);
     let interaction_decision = interaction_decision(site_policy);
+    let launch_posture =
+        launch_posture_decision(selected_profile, site_policy, manual_seeding_required);
 
     if let Some(profile) = selected_profile {
         if readiness_profile_is_fresh_or_seeded(readiness, &profile.id, target_service_ids) {
@@ -328,7 +331,8 @@ fn access_plan_decision(
 
     json!({
         "recommendedAction": recommended_action,
-        "browserHost": site_policy.and_then(|policy| policy.browser_host),
+        "browserHost": launch_posture.browser_host,
+        "launchPosture": launch_posture.value,
         "interactionMode": site_policy.map(|policy| policy.interaction_mode),
         "interactionRisk": interaction_decision.interaction_risk,
         "pacing": interaction_decision.pacing,
@@ -344,6 +348,67 @@ fn access_plan_decision(
         "challengeIds": challenges.iter().map(|challenge| challenge.id.clone()).collect::<Vec<_>>(),
         "reasons": reasons,
     })
+}
+
+#[derive(Debug)]
+struct LaunchPostureDecision {
+    browser_host: BrowserHost,
+    value: Value,
+}
+
+fn launch_posture_decision(
+    selected_profile: Option<&BrowserProfile>,
+    site_policy: Option<&SitePolicy>,
+    manual_seeding_required: bool,
+) -> LaunchPostureDecision {
+    let (browser_host, source) =
+        if let Some(browser_host) = site_policy.and_then(|policy| policy.browser_host) {
+            (browser_host, "site_policy")
+        } else if let Some(browser_host) =
+            selected_profile.and_then(|profile| profile.default_browser_host)
+        {
+            (browser_host, "profile_default")
+        } else {
+            (BrowserHost::LocalHeaded, "service_default")
+        };
+    let headed = !matches!(browser_host, BrowserHost::LocalHeadless);
+    let remote_view_recommended = matches!(
+        browser_host,
+        BrowserHost::DockerHeaded | BrowserHost::RemoteHeaded | BrowserHost::CloudProvider
+    );
+    let attachable_after_seeding =
+        !manual_seeding_required || !matches!(browser_host, BrowserHost::AttachedExisting);
+    let mut rationale = Vec::new();
+
+    if headed {
+        rationale.push("headed_browser_host");
+    } else {
+        rationale.push("headless_browser_host");
+    }
+    if remote_view_recommended {
+        rationale.push("remote_view_capable_host");
+    }
+    if manual_seeding_required {
+        rationale.push("detached_first_login_required");
+    }
+    match source {
+        "site_policy" => rationale.push("browser_host_from_site_policy"),
+        "profile_default" => rationale.push("browser_host_from_profile_default"),
+        _ => rationale.push("browser_host_from_service_default"),
+    }
+
+    LaunchPostureDecision {
+        browser_host,
+        value: json!({
+            "browserHost": browser_host,
+            "source": source,
+            "headed": headed,
+            "remoteViewRecommended": remote_view_recommended,
+            "detachedFirstLoginRequired": manual_seeding_required,
+            "attachableAfterSeeding": attachable_after_seeding,
+            "rationale": rationale,
+        }),
+    }
 }
 
 #[derive(Debug, Default)]
@@ -798,6 +863,17 @@ mod tests {
         assert_eq!(plan["decision"]["authProviderIds"][0], "manual");
         assert_eq!(plan["decision"]["challengeProviderIds"][0], "manual");
         assert_eq!(plan["decision"]["challengeStrategy"], "manual_only");
+        assert_eq!(plan["decision"]["browserHost"], "local_headed");
+        assert_eq!(plan["decision"]["launchPosture"]["source"], "site_policy");
+        assert_eq!(plan["decision"]["launchPosture"]["headed"], true);
+        assert_eq!(
+            plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["attachableAfterSeeding"],
+            true
+        );
         assert_eq!(plan["decision"]["interactionRisk"], "manual");
         assert_eq!(plan["decision"]["pacing"]["rateLimited"], false);
         assert_eq!(
@@ -1028,6 +1104,51 @@ mod tests {
         assert_eq!(plan["decision"]["pacing"]["rateLimited"], true);
         assert_eq!(plan["decision"]["pacing"]["jittered"], true);
         assert_eq!(plan["decision"]["pacing"]["singleSessionRecommended"], true);
+    }
+
+    #[test]
+    fn service_access_plan_explains_profile_default_launch_posture() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "remote".to_string(),
+                BrowserProfile {
+                    id: "remote".to_string(),
+                    name: "Remote profile".to_string(),
+                    target_service_ids: vec!["remote-app".to_string()],
+                    authenticated_service_ids: vec!["remote-app".to_string()],
+                    default_browser_host: Some(BrowserHost::RemoteHeaded),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["remote-app".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["decision"]["browserHost"], "remote_headed");
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserHost"],
+            "remote_headed"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["source"],
+            "profile_default"
+        );
+        assert_eq!(plan["decision"]["launchPosture"]["headed"], true);
+        assert_eq!(
+            plan["decision"]["launchPosture"]["remoteViewRecommended"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
+            false
+        );
     }
 
     #[test]

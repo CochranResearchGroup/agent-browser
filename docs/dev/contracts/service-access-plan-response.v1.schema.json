@@ -162,6 +162,7 @@
       "required": [
         "recommendedAction",
         "browserHost",
+        "launchPosture",
         "interactionMode",
         "interactionRisk",
         "pacing",
@@ -182,7 +183,63 @@
           "type": "string"
         },
         "browserHost": {
-          "type": ["string", "null"]
+          "type": "string",
+          "enum": [
+            "local_headless",
+            "local_headed",
+            "docker_headed",
+            "remote_headed",
+            "cloud_provider",
+            "attached_existing"
+          ]
+        },
+        "launchPosture": {
+          "type": "object",
+          "required": [
+            "browserHost",
+            "source",
+            "headed",
+            "remoteViewRecommended",
+            "detachedFirstLoginRequired",
+            "attachableAfterSeeding",
+            "rationale"
+          ],
+          "properties": {
+            "browserHost": {
+              "type": "string",
+              "enum": [
+                "local_headless",
+                "local_headed",
+                "docker_headed",
+                "remote_headed",
+                "cloud_provider",
+                "attached_existing"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "enum": ["site_policy", "profile_default", "service_default"]
+            },
+            "headed": {
+              "type": "boolean"
+            },
+            "remoteViewRecommended": {
+              "type": "boolean"
+            },
+            "detachedFirstLoginRequired": {
+              "type": "boolean"
+            },
+            "attachableAfterSeeding": {
+              "type": "boolean"
+            },
+            "rationale": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
         },
         "interactionMode": {
           "type": ["string", "null"]
