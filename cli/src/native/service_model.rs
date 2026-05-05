@@ -73,6 +73,15 @@ impl ServiceEntitySource {
 pub struct ServiceEntitySources {
     pub site_policies: BTreeMap<String, ServiceEntitySource>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SitePolicySourceRecord {
+    pub id: String,
+    pub source: String,
+    pub overrideable: bool,
+    pub precedence: Vec<String>,
+}
 pub const SERVICE_PROFILE_ALLOCATION_VALUES: [&str; 5] = [
     "shared_service",
     "per_service",
@@ -1770,6 +1779,28 @@ pub(crate) fn builtin_site_policy(id: &str) -> Option<SitePolicy> {
     builtin_site_policies()
         .into_iter()
         .find(|policy| policy.id == id)
+}
+
+pub fn service_site_policy_sources(service_state: &ServiceState) -> Vec<SitePolicySourceRecord> {
+    service_state
+        .site_policies
+        .keys()
+        .map(|id| {
+            let source = service_state
+                .site_policy_source(id)
+                .unwrap_or(ServiceEntitySource::PersistedState);
+            SitePolicySourceRecord {
+                id: id.clone(),
+                source: source.as_str().to_string(),
+                overrideable: source.overrideable(),
+                precedence: vec![
+                    "config".to_string(),
+                    "persisted_state".to_string(),
+                    "builtin".to_string(),
+                ],
+            }
+        })
+        .collect()
 }
 
 fn builtin_site_policies() -> Vec<SitePolicy> {
@@ -4199,11 +4230,21 @@ mod tests {
         }));
 
         for (schema, field, label) in collection_schemas {
-            assert_schema_required_fields(&schema, &[field, "count"]);
+            if field == "sitePolicies" {
+                assert_schema_required_fields(&schema, &[field, "sitePolicySources", "count"]);
+            } else {
+                assert_schema_required_fields(&schema, &[field, "count"]);
+            }
             let response = if field == "profiles" {
                 json!({
                     field: [],
                     "profileAllocations": [],
+                    "count": 0,
+                })
+            } else if field == "sitePolicies" {
+                json!({
+                    field: [],
+                    "sitePolicySources": [],
                     "count": 0,
                 })
             } else {

@@ -6,11 +6,39 @@
   "type": "object",
   "required": [
     "sitePolicies",
+    "sitePolicySources",
     "count"
   ],
   "properties": {
     "sitePolicies": {
       "type": "array"
+    },
+    "sitePolicySources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "overrideable", "precedence"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["config", "persisted_state", "builtin"]
+          },
+          "overrideable": {
+            "type": "boolean"
+          },
+          "precedence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["config", "persisted_state", "builtin"]
+            }
+          }
+        },
+        "additionalProperties": true
+      }
     },
     "count": {
       "type": "integer",

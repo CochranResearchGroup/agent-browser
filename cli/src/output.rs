@@ -1068,7 +1068,10 @@ fn format_service_tabs_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
-fn format_service_site_policy_line(policy: &serde_json::Value) -> String {
+fn format_service_site_policy_line(
+    policy: &serde_json::Value,
+    source: Option<&serde_json::Value>,
+) -> String {
     let id = value_str(policy, "id", "unknown-policy");
     let origin = value_str(policy, "originPattern", "none");
     let host = value_str(policy, "browserHost", "default");
@@ -1076,23 +1079,42 @@ fn format_service_site_policy_line(policy: &serde_json::Value) -> String {
     let challenge = value_str(policy, "challengePolicy", "unknown");
     let manual_login = value_bool_label(policy, "manualLoginPreferred");
     let profile_required = value_bool_label(policy, "profileRequired");
+    let source_record = source;
+    let source = source_record
+        .and_then(|source| source.get("source"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let overrideable = source_record
+        .and_then(|source| source.get("overrideable"))
+        .and_then(|value| value.as_bool())
+        .map(|value| if value { "yes" } else { "no" })
+        .unwrap_or("unknown");
 
     format!(
-        "{id} origin={origin} host={host} interaction={interaction} challenge={challenge} manual_login={manual_login} profile_required={profile_required}"
+        "{id} origin={origin} source={source} overrideable={overrideable} host={host} interaction={interaction} challenge={challenge} manual_login={manual_login} profile_required={profile_required}"
     )
 }
 
 fn format_service_site_policies_text(data: &serde_json::Value) -> Option<String> {
     let site_policies = data.get("sitePolicies")?.as_array()?;
+    let site_policy_sources = data
+        .get("sitePolicySources")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
     let mut lines = vec![format!("Site policies: {}", site_policies.len())];
     if site_policies.is_empty() {
         lines.push("  none".to_string());
     } else {
-        lines.extend(
-            site_policies
-                .iter()
-                .map(|policy| format!("  {}", format_service_site_policy_line(policy))),
-        );
+        lines.extend(site_policies.iter().map(|policy| {
+            let id = policy.get("id").and_then(|value| value.as_str());
+            let source = id.and_then(|id| {
+                site_policy_sources
+                    .iter()
+                    .find(|source| source.get("id").and_then(|value| value.as_str()) == Some(id))
+            });
+            format!("  {}", format_service_site_policy_line(policy, source))
+        }));
     }
     Some(lines.join("\n"))
 }
@@ -3851,7 +3873,7 @@ Notes:
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
-  - Text service site-policies focuses origin, host, interaction, challenge, login, and profile-required policy fields.
+  - Text service site-policies focuses origin, source, overrideability, host, interaction, challenge, login, and profile-required policy fields.
   - Text service providers focuses provider identity, kind, enabled state, config reference, and capabilities.
   - Text service challenges focuses detected challenge kind, state, tab, provider, policy decision, human approval, and result.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
@@ -5072,6 +5094,12 @@ mod tests {
                 "challengePolicy": "avoid_first",
                 "manualLoginPreferred": true,
                 "profileRequired": true
+            }],
+            "sitePolicySources": [{
+                "id": "google",
+                "source": "config",
+                "overrideable": false,
+                "precedence": ["config", "persisted_state", "builtin"]
             }]
         });
 
@@ -5079,7 +5107,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Site policies: 1\n  google origin=https://accounts.google.com host=local_headed interaction=human_like_input challenge=avoid_first manual_login=yes profile_required=yes"
+            "Site policies: 1\n  google origin=https://accounts.google.com source=config overrideable=no host=local_headed interaction=human_like_input challenge=avoid_first manual_login=yes profile_required=yes"
         );
     }
 

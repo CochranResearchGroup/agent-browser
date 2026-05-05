@@ -380,6 +380,13 @@ try {
         item.originPattern === 'https://accounts.google.com' &&
         item.interactionMode === 'human_like_input' &&
         item.challengePolicy === 'avoid_first',
+      responsePredicate: (response) =>
+        response.sitePolicySources?.some(
+          (source) =>
+            source.id === 'google' &&
+            ['persisted_state', 'config', 'builtin'].includes(source.source) &&
+            Array.isArray(source.precedence),
+        ),
     },
     {
       command: 'providers',
@@ -411,19 +418,31 @@ try {
     const cliCollection = await serviceCliCollection(check.command, check.key);
     assertSchemaCollection(cliCollection, check.key, `CLI service ${check.command}`);
     assertContains(cliCollection, check.key, check.predicate, `CLI service ${check.command}`);
+    if (check.responsePredicate) {
+      assert(check.responsePredicate(cliCollection), `CLI service ${check.command} response predicate failed: ${JSON.stringify(cliCollection)}`);
+    }
 
     const httpCollection = await httpJson(port, 'GET', check.endpoint);
     assert(httpCollection.success === true, `HTTP ${check.endpoint} failed: ${JSON.stringify(httpCollection)}`);
     assertSchemaCollection(httpCollection.data, check.key, `HTTP ${check.endpoint}`);
     assertContains(httpCollection.data, check.key, check.predicate, `HTTP ${check.endpoint}`);
+    if (check.responsePredicate) {
+      assert(check.responsePredicate(httpCollection.data), `HTTP ${check.endpoint} response predicate failed: ${JSON.stringify(httpCollection.data)}`);
+    }
 
     const clientCollection = await check.clientRead();
     assertSchemaCollection(clientCollection, check.key, `client ${check.endpoint}`);
     assertContains(clientCollection, check.key, check.predicate, `client ${check.endpoint}`);
+    if (check.responsePredicate) {
+      assert(check.responsePredicate(clientCollection), `client ${check.endpoint} response predicate failed: ${JSON.stringify(clientCollection)}`);
+    }
 
     const mcpCollection = await serviceMcpCollection(check.mcpUri, check.key);
     assertSchemaCollection(mcpCollection, check.key, `MCP ${check.mcpUri}`);
     assertContains(mcpCollection, check.key, check.predicate, `MCP ${check.mcpUri}`);
+    if (check.responsePredicate) {
+      assert(check.responsePredicate(mcpCollection), `MCP ${check.mcpUri} response predicate failed: ${JSON.stringify(mcpCollection)}`);
+    }
   }
 
   seedServiceOwnershipHandoff(context, {

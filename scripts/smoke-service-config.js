@@ -304,6 +304,15 @@ try {
     ),
     `MCP site-policies resource did not include HTTP-upserted policy: ${JSON.stringify(mcpPolicies)}`,
   );
+  assert(
+    mcpPolicies.sitePolicySources?.some(
+      (source) =>
+        source.id === 'google' &&
+        source.source === 'persisted_state' &&
+        source.overrideable === false,
+    ),
+    `MCP site-policies resource did not include persisted source metadata: ${JSON.stringify(mcpPolicies)}`,
+  );
 
   const mcpProviderResult = await send('tools/call', {
     name: 'service_provider_upsert',

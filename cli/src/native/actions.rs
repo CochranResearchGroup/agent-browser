@@ -6674,6 +6674,11 @@ async fn handle_service_site_policies(cmd: &Value) -> Result<Value, String> {
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
+    let site_policy_sources = cmd.get("sitePolicySources").cloned().unwrap_or_else(|| {
+        json!(crate::native::service_model::service_site_policy_sources(
+            &service_state
+        ))
+    });
     let mut site_policies = service_state
         .site_policies
         .into_values()
@@ -6683,6 +6688,7 @@ async fn handle_service_site_policies(cmd: &Value) -> Result<Value, String> {
 
     Ok(json!({
         "sitePolicies": site_policies,
+        "sitePolicySources": site_policy_sources,
         "count": count,
     }))
 }
@@ -11781,6 +11787,11 @@ mod tests {
         assert_eq!(
             result["data"]["sitePolicies"][0]["originPattern"],
             "https://accounts.google.com"
+        );
+        assert_eq!(result["data"]["sitePolicySources"][0]["id"], "google");
+        assert_eq!(
+            result["data"]["sitePolicySources"][0]["source"],
+            "persisted_state"
         );
         assert!(state.browser.is_none());
     }

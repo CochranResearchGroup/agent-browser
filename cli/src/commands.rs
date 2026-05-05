@@ -1004,10 +1004,15 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         usage: "service site-policies",
                     });
                 }
+                let site_policy_sources =
+                    crate::native::service_model::service_site_policy_sources(
+                        &flags.service_state,
+                    );
                 Ok(json!({
                     "id": id,
                     "action": "service_site_policies",
                     "serviceState": flags.service_state.clone(),
+                    "sitePolicySources": site_policy_sources,
                 }))
             }
             Some("providers") => {
@@ -5168,6 +5173,7 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_site_policies");
         assert!(cmd["serviceState"].is_object());
+        assert!(cmd["sitePolicySources"].is_array());
     }
 
     #[test]

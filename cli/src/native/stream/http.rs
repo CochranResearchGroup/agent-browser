@@ -19,7 +19,8 @@ use crate::native::service_lifecycle::{
     select_service_profile_for_request, ProfileSelectionRequest,
 };
 use crate::native::service_model::{
-    service_profile_allocations, BrowserProfile, ProfileSelectionReason, ServiceState,
+    service_profile_allocations, service_site_policy_sources, BrowserProfile,
+    ProfileSelectionReason, ServiceState,
 };
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
@@ -1196,8 +1197,10 @@ fn service_collection_contents(path: &str) -> Option<Value> {
                 .values()
                 .cloned()
                 .collect::<Vec<_>>();
+            let site_policy_sources = service_site_policy_sources(&service_state);
             Some(json!({
                 "sitePolicies": site_policies,
+                "sitePolicySources": site_policy_sources,
                 "count": site_policies.len(),
             }))
         }

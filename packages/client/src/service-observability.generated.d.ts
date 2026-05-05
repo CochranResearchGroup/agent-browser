@@ -180,6 +180,14 @@ export interface ServiceSitePolicyRecord {
   [key: string]: unknown;
 }
 
+export interface ServiceSitePolicySourceRecord {
+  id: string;
+  source: 'config' | 'persisted_state' | 'builtin';
+  overrideable: boolean;
+  precedence: Array<'config' | 'persisted_state' | 'builtin'>;
+  [key: string]: unknown;
+}
+
 export interface ServiceProviderRecord {
   id: string;
   kind: string;
@@ -325,6 +333,7 @@ export interface ServiceTabsResponse extends ServiceListResponse<ServiceTabRecor
 
 export interface ServiceSitePoliciesResponse extends ServiceListResponse<ServiceSitePolicyRecord> {
   sitePolicies: ServiceSitePolicyRecord[];
+  sitePolicySources: ServiceSitePolicySourceRecord[];
 }
 
 export interface ServiceProvidersResponse extends ServiceListResponse<ServiceProviderRecord> {

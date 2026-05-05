@@ -14,7 +14,9 @@ use crate::native::service_contracts::{
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
 };
-use crate::native::service_model::{service_profile_allocations, ServiceState};
+use crate::native::service_model::{
+    service_profile_allocations, service_site_policy_sources, ServiceState,
+};
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
 
@@ -275,8 +277,10 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
         }
         SITE_POLICIES_RESOURCE => {
             let site_policies = state.site_policies.values().cloned().collect::<Vec<_>>();
+            let site_policy_sources = service_site_policy_sources(&state);
             json!({
                 "sitePolicies": site_policies,
+                "sitePolicySources": site_policy_sources,
                 "count": site_policies.len(),
             })
         }
