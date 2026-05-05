@@ -9571,6 +9571,35 @@ mod tests {
     }
 
     #[test]
+    fn service_request_schema_and_command_accept_contract_actions() {
+        let tools = service_mcp_tools();
+        let service_request = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_request")
+            .expect("service_request schema should be listed");
+
+        assert_eq!(
+            service_request["inputSchema"]["properties"]["action"]["enum"],
+            json!(SERVICE_REQUEST_ACTIONS)
+        );
+
+        for action in SERVICE_REQUEST_ACTIONS {
+            let (_, command) = service_request_command(&json!({
+                "action": action,
+                "serviceName": "JournalDownloader",
+                "agentName": "agent-a",
+                "taskName": "probeACSwebsite"
+            }))
+            .unwrap_or_else(|err| panic!("service_request should accept {action}: {err:?}"));
+
+            assert_eq!(command["action"], *action);
+            assert!(command["id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("mcp-service-request-")));
+        }
+    }
+
+    #[test]
     fn service_request_command_builds_intent_command() {
         let (trace, command) = service_request_command(&json!({
             "action": "navigate",
