@@ -1424,7 +1424,7 @@ The response includes worker state, browser health, queue depth, profile lease w
 
 With `profileLeasePolicy: "wait"`, the control-plane scheduler keeps the blocked request queued while it polls for profile release, so the worker can continue dispatching unrelated service requests.
 
-Run `pnpm test:service-collections-live` to validate that CLI, HTTP, and MCP expose matching service-owned profile, session, browser, tab, site-policy, provider, and challenge collections for one live runtime-profile session.
+Run `pnpm test:service-site-policy-sources-no-launch` to validate that HTTP `GET /api/service/site-policies`, MCP `agent-browser://site-policies`, and `getServiceSitePolicies()` report config, persisted-state, and built-in site-policy source metadata without launching Chrome. Run `pnpm test:service-collections-live` to validate that CLI, HTTP, and MCP expose matching service-owned profile, session, browser, tab, site-policy, provider, and challenge collections for one live runtime-profile session.
 
 The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError` so operators can confirm when browser-health probes last ran.
 

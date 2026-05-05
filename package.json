@@ -49,6 +49,7 @@
     "test:service-profile-http-live": "node scripts/smoke-service-profile-http.js",
     "test:service-profile-lookup-no-launch": "node scripts/smoke-service-profile-lookup.js",
     "test:service-access-plan-no-launch": "node scripts/smoke-service-access-plan.js",
+    "test:service-site-policy-sources-no-launch": "node scripts/smoke-service-site-policy-sources.js",
     "test:service-profile-lease-wait-live": "node scripts/smoke-service-profile-lease-wait.js",
     "test:service-request-lease-reject-no-launch": "node scripts/smoke-service-request-lease-reject.js",
     "test:service-request-live": "node scripts/smoke-service-request.js",
