@@ -1648,7 +1648,10 @@ and decisions are scoped to the requested target identities, so an unrelated
 stale or unseeded login on the same profile does not block the requested site.
 The decision also separates auth providers from challenge-capable providers,
 reports the challenge strategy, and lists any missing provider capabilities
-such as `captcha_solve`, `sms_code`, or `human_approval`.
+such as `captcha_solve`, `sms_code`, or `human_approval`. It also reports
+`interactionRisk` and a `pacing` block derived from the site policy rate limits
+so clients can explain headed, human-like, jittered, or single-session behavior
+before creating browser pressure.
 Then the client should request the tab by the same identity through `requestServiceTab()` or
 `POST /api/service/request`. `lookupServiceProfile()` remains useful for the narrower profile-only decision and uses HTTP
 `GET /api/service/profiles/lookup` so agent-browser applies the same server-side

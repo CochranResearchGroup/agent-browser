@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState,
+    BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState, InteractionMode,
     ProfileSelectionReason, ProviderCapability, ServiceProvider, ServiceState, SitePolicy,
 };
 
@@ -260,6 +260,7 @@ fn access_plan_decision(
         .is_some_and(|site_policy| matches!(site_policy.challenge_policy, ChallengePolicy::Deny));
     let profile_required = site_policy.is_some_and(|site_policy| site_policy.profile_required);
     let provider_decision = provider_decision(selected_profile, site_policy, challenges, providers);
+    let interaction_decision = interaction_decision(site_policy);
 
     if let Some(profile) = selected_profile {
         if readiness_profile_is_fresh_or_seeded(readiness, &profile.id, target_service_ids) {
@@ -329,6 +330,8 @@ fn access_plan_decision(
         "recommendedAction": recommended_action,
         "browserHost": site_policy.and_then(|policy| policy.browser_host),
         "interactionMode": site_policy.map(|policy| policy.interaction_mode),
+        "interactionRisk": interaction_decision.interaction_risk,
+        "pacing": interaction_decision.pacing,
         "challengePolicy": site_policy.map(|policy| policy.challenge_policy),
         "profileId": selected_profile.map(|profile| profile.id.clone()),
         "manualActionRequired": manual_seeding_required || waiting_for_human || failed_challenge,
@@ -341,6 +344,67 @@ fn access_plan_decision(
         "challengeIds": challenges.iter().map(|challenge| challenge.id.clone()).collect::<Vec<_>>(),
         "reasons": reasons,
     })
+}
+
+#[derive(Debug, Default)]
+struct InteractionDecision {
+    interaction_risk: &'static str,
+    pacing: Value,
+}
+
+fn interaction_decision(site_policy: Option<&SitePolicy>) -> InteractionDecision {
+    let Some(site_policy) = site_policy else {
+        return InteractionDecision {
+            interaction_risk: "standard",
+            pacing: json!({
+                "minActionDelayMs": 0,
+                "jitterMs": 0,
+                "cooldownMs": null,
+                "maxParallelSessions": null,
+                "retryBudget": null,
+                "rateLimited": false,
+                "jittered": false,
+                "singleSessionRecommended": false,
+            }),
+        };
+    };
+    let min_action_delay_ms = site_policy.rate_limit.min_action_delay_ms.unwrap_or(0);
+    let jitter_ms = site_policy.rate_limit.jitter_ms.unwrap_or(0);
+    let cooldown_ms = site_policy.rate_limit.cooldown_ms;
+    let max_parallel_sessions = site_policy.rate_limit.max_parallel_sessions;
+    let retry_budget = site_policy.rate_limit.retry_budget;
+    let rate_limited = min_action_delay_ms > 0 || cooldown_ms.unwrap_or(0) > 0;
+    let jittered = jitter_ms > 0;
+    let single_session_recommended = max_parallel_sessions == Some(1);
+    let interaction_risk = if site_policy.manual_login_preferred
+        || matches!(site_policy.interaction_mode, InteractionMode::Manual)
+    {
+        "manual"
+    } else if matches!(
+        site_policy.interaction_mode,
+        InteractionMode::HumanLikeInput
+    ) || rate_limited
+        || jittered
+        || single_session_recommended
+    {
+        "hardened"
+    } else {
+        "standard"
+    };
+
+    InteractionDecision {
+        interaction_risk,
+        pacing: json!({
+            "minActionDelayMs": min_action_delay_ms,
+            "jitterMs": jitter_ms,
+            "cooldownMs": cooldown_ms,
+            "maxParallelSessions": max_parallel_sessions,
+            "retryBudget": retry_budget,
+            "rateLimited": rate_limited,
+            "jittered": jittered,
+            "singleSessionRecommended": single_session_recommended,
+        }),
+    }
 }
 
 #[derive(Debug, Default)]
@@ -651,7 +715,7 @@ mod tests {
     use crate::native::service_model::{
         BrowserHost, BrowserProfile, Challenge, ChallengeKind, InteractionMode,
         ProfileReadinessState, ProfileTargetReadiness, ProviderCapability, ProviderKind,
-        ServiceProvider, SitePolicy,
+        RateLimitPolicy, ServiceProvider, SitePolicy,
     };
     use serde_json::json;
 
@@ -734,6 +798,8 @@ mod tests {
         assert_eq!(plan["decision"]["authProviderIds"][0], "manual");
         assert_eq!(plan["decision"]["challengeProviderIds"][0], "manual");
         assert_eq!(plan["decision"]["challengeStrategy"], "manual_only");
+        assert_eq!(plan["decision"]["interactionRisk"], "manual");
+        assert_eq!(plan["decision"]["pacing"]["rateLimited"], false);
         assert_eq!(
             plan["decision"]["missingChallengeCapabilities"]
                 .as_array()
@@ -911,6 +977,57 @@ mod tests {
             plan["decision"]["missingChallengeCapabilities"],
             json!(["email_code", "human_approval", "sms_code", "totp_code"])
         );
+    }
+
+    #[test]
+    fn service_access_plan_explains_pacing_and_interaction_risk() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "microsoft".to_string(),
+                BrowserProfile {
+                    id: "microsoft".to_string(),
+                    name: "Microsoft".to_string(),
+                    target_service_ids: vec!["microsoft".to_string()],
+                    authenticated_service_ids: vec!["microsoft".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "microsoft".to_string(),
+                SitePolicy {
+                    id: "microsoft".to_string(),
+                    origin_pattern: "https://login.microsoftonline.com".to_string(),
+                    interaction_mode: InteractionMode::HumanLikeInput,
+                    rate_limit: RateLimitPolicy {
+                        min_action_delay_ms: Some(450),
+                        jitter_ms: Some(250),
+                        cooldown_ms: Some(2_000),
+                        max_parallel_sessions: Some(1),
+                        retry_budget: Some(2),
+                    },
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["microsoft".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["decision"]["interactionRisk"], "hardened");
+        assert_eq!(plan["decision"]["pacing"]["minActionDelayMs"], 450);
+        assert_eq!(plan["decision"]["pacing"]["jitterMs"], 250);
+        assert_eq!(plan["decision"]["pacing"]["cooldownMs"], 2_000);
+        assert_eq!(plan["decision"]["pacing"]["maxParallelSessions"], 1);
+        assert_eq!(plan["decision"]["pacing"]["retryBudget"], 2);
+        assert_eq!(plan["decision"]["pacing"]["rateLimited"], true);
+        assert_eq!(plan["decision"]["pacing"]["jittered"], true);
+        assert_eq!(plan["decision"]["pacing"]["singleSessionRecommended"], true);
     }
 
     #[test]

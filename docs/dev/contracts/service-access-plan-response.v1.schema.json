@@ -163,6 +163,8 @@
         "recommendedAction",
         "browserHost",
         "interactionMode",
+        "interactionRisk",
+        "pacing",
         "challengePolicy",
         "profileId",
         "manualActionRequired",
@@ -184,6 +186,55 @@
         },
         "interactionMode": {
           "type": ["string", "null"]
+        },
+        "interactionRisk": {
+          "type": "string",
+          "enum": ["standard", "hardened", "manual"]
+        },
+        "pacing": {
+          "type": "object",
+          "required": [
+            "minActionDelayMs",
+            "jitterMs",
+            "cooldownMs",
+            "maxParallelSessions",
+            "retryBudget",
+            "rateLimited",
+            "jittered",
+            "singleSessionRecommended"
+          ],
+          "properties": {
+            "minActionDelayMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "jitterMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cooldownMs": {
+              "type": ["integer", "null"],
+              "minimum": 0
+            },
+            "maxParallelSessions": {
+              "type": ["integer", "null"],
+              "minimum": 1
+            },
+            "retryBudget": {
+              "type": ["integer", "null"],
+              "minimum": 0
+            },
+            "rateLimited": {
+              "type": "boolean"
+            },
+            "jittered": {
+              "type": "boolean"
+            },
+            "singleSessionRecommended": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
         },
         "challengePolicy": {
           "type": ["string", "null"]
