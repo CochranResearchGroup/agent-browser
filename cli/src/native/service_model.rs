@@ -45,6 +45,34 @@ pub const SERVICE_BROWSER_HOST_VALUES: [&str; 6] = [
     "cloud_provider",
     "attached_existing",
 ];
+
+/// In-memory provenance for service entities after persisted state, config, and
+/// shipped defaults are layered. This is intentionally not serialized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceEntitySource {
+    PersistedState,
+    Config,
+    Builtin,
+}
+
+impl ServiceEntitySource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PersistedState => "persisted_state",
+            Self::Config => "config",
+            Self::Builtin => "builtin",
+        }
+    }
+
+    pub fn overrideable(self) -> bool {
+        self == Self::Builtin
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ServiceEntitySources {
+    pub site_policies: BTreeMap<String, ServiceEntitySource>,
+}
 pub const SERVICE_PROFILE_ALLOCATION_VALUES: [&str; 5] = [
     "shared_service",
     "per_service",
@@ -1397,22 +1425,71 @@ pub struct ServiceState {
     pub site_policies: BTreeMap<String, SitePolicy>,
     pub providers: BTreeMap<String, ServiceProvider>,
     pub challenges: BTreeMap<String, Challenge>,
+    #[serde(skip)]
+    pub entity_sources: ServiceEntitySources,
 }
 
 impl ServiceState {
+    pub fn mark_persisted_entity_sources(&mut self) {
+        for id in self.site_policies.keys() {
+            self.entity_sources
+                .site_policies
+                .entry(id.clone())
+                .or_insert(ServiceEntitySource::PersistedState);
+        }
+    }
+
+    pub fn mark_config_entity_sources(&mut self) {
+        for id in self.site_policies.keys() {
+            self.entity_sources
+                .site_policies
+                .insert(id.clone(), ServiceEntitySource::Config);
+        }
+    }
+
+    pub fn site_policy_source(&self, id: &str) -> Option<ServiceEntitySource> {
+        self.entity_sources.site_policies.get(id).copied()
+    }
+
+    pub fn remove_builtin_entity_defaults_for_persistence(&mut self) {
+        let builtin_ids = self
+            .entity_sources
+            .site_policies
+            .iter()
+            .filter(|(_id, source)| **source == ServiceEntitySource::Builtin)
+            .map(|(id, _source)| id.clone())
+            .collect::<Vec<_>>();
+        for id in builtin_ids {
+            self.site_policies.remove(&id);
+            self.entity_sources.site_policies.remove(&id);
+        }
+    }
+
     pub fn overlay_configured_entities(&mut self, configured: ServiceState) {
+        let mut configured = configured;
+        configured.mark_config_entity_sources();
         self.profiles.extend(configured.profiles);
         self.sessions.extend(configured.sessions);
-        self.site_policies.extend(configured.site_policies);
+        for (id, policy) in configured.site_policies {
+            self.site_policies.insert(id.clone(), policy);
+            self.entity_sources
+                .site_policies
+                .insert(id, ServiceEntitySource::Config);
+        }
         self.providers.extend(configured.providers);
     }
 
     /// Add shipped site-policy defaults without overriding local policy.
     pub fn apply_builtin_site_policies(&mut self) {
         for policy in builtin_site_policies() {
-            self.site_policies
-                .entry(policy.id.clone())
-                .or_insert(policy);
+            let id = policy.id.clone();
+            if self.site_policies.contains_key(&id) {
+                continue;
+            }
+            self.site_policies.insert(id.clone(), policy);
+            self.entity_sources
+                .site_policies
+                .insert(id, ServiceEntitySource::Builtin);
         }
     }
 

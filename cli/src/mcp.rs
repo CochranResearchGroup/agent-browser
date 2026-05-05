@@ -38,9 +38,19 @@ const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
 ///
 /// `mcp serve` is a stdio JSON-RPC transport for MCP clients. The other
 /// subcommands are shell inspection helpers over the same read-only resources.
-pub fn run_mcp_command(args: &[String], json_output: bool, session: &str) -> i32 {
+pub fn run_mcp_command(
+    args: &[String],
+    json_output: bool,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> i32 {
     if args.get(1).map(|value| value.as_str()) == Some("serve") {
-        return match run_stdio_server(io::stdin().lock(), io::stdout().lock(), session) {
+        return match run_stdio_server(
+            io::stdin().lock(),
+            io::stdout().lock(),
+            session,
+            configured_service_state.clone(),
+        ) {
             Ok(()) => 0,
             Err(err) => {
                 eprintln!("{}", err);
@@ -49,7 +59,7 @@ pub fn run_mcp_command(args: &[String], json_output: bool, session: &str) -> i32
         };
     }
 
-    match mcp_command_response(args) {
+    match mcp_command_response_with_config(args, configured_service_state) {
         Ok(value) => {
             if json_output {
                 println!("{}", serde_json::to_string(&value).unwrap_or_default());
@@ -79,7 +89,15 @@ pub fn run_mcp_command(args: &[String], json_output: bool, session: &str) -> i32
     }
 }
 
+#[cfg(test)]
 fn mcp_command_response(args: &[String]) -> Result<Value, String> {
+    mcp_command_response_with_config(args, &ServiceState::default())
+}
+
+fn mcp_command_response_with_config(
+    args: &[String],
+    configured_service_state: &ServiceState,
+) -> Result<Value, String> {
     match args.get(1).map(|value| value.as_str()) {
         Some("resources") | Some("list") => Ok(json!({
             "success": true,
@@ -97,7 +115,7 @@ fn mcp_command_response(args: &[String]) -> Result<Value, String> {
             }
             Ok(json!({
                 "success": true,
-                "data": read_service_mcp_resource(uri)?,
+                "data": read_service_mcp_resource(uri, configured_service_state)?,
             }))
         }
         Some(subcommand) => Err(format!(
@@ -204,8 +222,12 @@ fn service_mcp_resource_templates() -> Vec<Value> {
     ]
 }
 
-fn read_service_mcp_resource(uri: &str) -> Result<Value, String> {
-    let state = load_default_service_state_snapshot()?;
+fn read_service_mcp_resource(
+    uri: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, String> {
+    let mut state = load_default_service_state_snapshot()?;
+    state.overlay_configured_entities(configured_service_state.clone());
     read_service_mcp_resource_from_state(uri, &state)
 }
 
@@ -309,8 +331,11 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
     }))
 }
 
-fn read_service_mcp_resource_contents(uri: &str) -> Result<Value, String> {
-    let resource = read_service_mcp_resource(uri)?;
+fn read_service_mcp_resource_contents_with_config(
+    uri: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, String> {
+    let resource = read_service_mcp_resource(uri, configured_service_state)?;
     let contents = resource
         .get("contents")
         .cloned()
@@ -328,7 +353,12 @@ fn read_service_mcp_resource_contents(uri: &str) -> Result<Value, String> {
     }))
 }
 
-fn run_stdio_server<R, W>(reader: R, mut writer: W, session: &str) -> Result<(), String>
+fn run_stdio_server<R, W>(
+    reader: R,
+    mut writer: W,
+    session: &str,
+    configured_service_state: ServiceState,
+) -> Result<(), String>
 where
     R: BufRead,
     W: Write,
@@ -339,7 +369,9 @@ where
             continue;
         }
 
-        if let Some(response) = handle_jsonrpc_line(&line, session) {
+        if let Some(response) =
+            handle_jsonrpc_line_with_config(&line, session, &configured_service_state)
+        {
             writeln!(
                 writer,
                 "{}",
@@ -355,9 +387,18 @@ where
     Ok(())
 }
 
+#[cfg(test)]
 fn handle_jsonrpc_line(line: &str, session: &str) -> Option<Value> {
+    handle_jsonrpc_line_with_config(line, session, &ServiceState::default())
+}
+
+fn handle_jsonrpc_line_with_config(
+    line: &str,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Option<Value> {
     match serde_json::from_str::<Value>(line) {
-        Ok(message) => handle_jsonrpc_message(&message, session),
+        Ok(message) => handle_jsonrpc_message(&message, session, configured_service_state),
         Err(err) => Some(jsonrpc_error(
             Value::Null,
             -32700,
@@ -367,7 +408,11 @@ fn handle_jsonrpc_line(line: &str, session: &str) -> Option<Value> {
     }
 }
 
-fn handle_jsonrpc_message(message: &Value, session: &str) -> Option<Value> {
+fn handle_jsonrpc_message(
+    message: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Option<Value> {
     let Some(object) = message.as_object() else {
         return Some(jsonrpc_error(
             Value::Null,
@@ -394,7 +439,12 @@ fn handle_jsonrpc_message(message: &Value, session: &str) -> Option<Value> {
         return handle_jsonrpc_notification(method);
     };
 
-    match handle_jsonrpc_request(method, object.get("params"), session) {
+    match handle_jsonrpc_request(
+        method,
+        object.get("params"),
+        session,
+        configured_service_state,
+    ) {
         Ok(result) => Some(json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -415,6 +465,7 @@ fn handle_jsonrpc_request(
     method: &str,
     params: Option<&Value>,
     session: &str,
+    configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
     match method {
         "initialize" => Ok(initialize_result(params)),
@@ -432,7 +483,8 @@ fn handle_jsonrpc_request(
                 .ok_or_else(|| {
                     JsonRpcError::invalid_params("resources/read requires params.uri")
                 })?;
-            read_service_mcp_resource_contents(uri).map_err(|err| resource_read_error(uri, err))
+            read_service_mcp_resource_contents_with_config(uri, configured_service_state)
+                .map_err(|err| resource_read_error(uri, err))
         }
         "tools/list" => Ok(json!({ "tools": service_mcp_tools() })),
         "tools/call" => call_service_mcp_tool(params, session),
@@ -11054,7 +11106,13 @@ mod tests {
         );
         let mut output = Vec::new();
 
-        run_stdio_server(input.as_bytes(), &mut output, "default").unwrap();
+        run_stdio_server(
+            input.as_bytes(),
+            &mut output,
+            "default",
+            ServiceState::default(),
+        )
+        .unwrap();
         let lines = String::from_utf8(output).unwrap();
         let responses = lines.lines().collect::<Vec<_>>();
 

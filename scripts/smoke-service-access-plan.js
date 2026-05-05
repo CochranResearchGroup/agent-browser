@@ -160,6 +160,14 @@ function assertAccessPlan(data, label) {
     `${label} readiness summary mismatch: ${JSON.stringify(data)}`,
   );
   assert(data?.sitePolicy?.id === sitePolicyId, `${label} site policy mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.sitePolicySource?.source === 'persisted_state',
+    `${label} site policy source mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.sitePolicySource?.matchedBy === 'explicit_site_policy_id',
+    `${label} site policy match source mismatch: ${JSON.stringify(data)}`,
+  );
   assert(data?.providers?.[0]?.id === providerId, `${label} providers mismatch: ${JSON.stringify(data)}`);
   assert(data?.challenges?.[0]?.id === challengeId, `${label} challenges mismatch: ${JSON.stringify(data)}`);
   assert(

@@ -6,8 +6,8 @@
 use serde_json::Value;
 
 use super::service_model::{
-    BrowserProfile, BrowserSession, ProfileAllocationPolicy, ServiceActor, ServiceProvider,
-    ServiceState, SitePolicy,
+    BrowserProfile, BrowserSession, ProfileAllocationPolicy, ServiceActor, ServiceEntitySource,
+    ServiceProvider, ServiceState, SitePolicy,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -131,6 +131,10 @@ pub fn upsert_site_policy(
     let policy = serde_json::from_value::<SitePolicy>(body)
         .map_err(|err| format!("Invalid site policy: {err}"))?;
     state.site_policies.insert(id.to_string(), policy.clone());
+    state
+        .entity_sources
+        .site_policies
+        .insert(id.to_string(), ServiceEntitySource::PersistedState);
     Ok(policy)
 }
 
@@ -140,6 +144,7 @@ pub fn delete_site_policy(
     id: &str,
 ) -> Result<Option<SitePolicy>, String> {
     validate_entity_id(id, "site policy")?;
+    state.entity_sources.site_policies.remove(id);
     Ok(state.site_policies.remove(id))
 }
 

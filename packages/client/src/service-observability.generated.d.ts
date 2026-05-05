@@ -655,6 +655,15 @@ export interface ServiceAccessPlanQuery extends ServiceProfileLookupQuery {
   challengeId: string | null;
 }
 
+export interface ServiceSitePolicySource {
+  id: string;
+  source: 'config' | 'persisted_state' | 'builtin';
+  matchedBy: 'explicit_site_policy_id' | 'target_service_id' | 'profile_site_policy_id';
+  overrideable: boolean;
+  precedence: Array<'config' | 'persisted_state' | 'builtin'>;
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanResponse {
   /** Normalized access-plan query after login, site, and target aliases have been folded together. */
   query: ServiceAccessPlanQuery;
@@ -668,6 +677,8 @@ export interface ServiceAccessPlanResponse {
   readinessSummary: ServiceProfileReadinessSummary;
   /** Site policy selected for this request, or null when none matches. */
   sitePolicy: ServiceSitePolicyRecord | null;
+  /** Provenance for the selected site policy after config, persisted state, and built-ins are layered. */
+  sitePolicySource: ServiceSitePolicySource | null;
   /** Enabled providers relevant to the selected profile, site policy, or challenge. */
   providers: ServiceProviderRecord[];
   /** Retained non-resolved challenges or the explicit requested challenge. */

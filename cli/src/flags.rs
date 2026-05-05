@@ -261,13 +261,15 @@ impl Config {
             return ServiceState::default();
         };
 
-        ServiceState {
+        let mut state = ServiceState {
             profiles: service.profiles.clone().unwrap_or_default(),
             sessions: service.sessions.clone().unwrap_or_default(),
             site_policies: service.site_policies.clone().unwrap_or_default(),
             providers: service.providers.clone().unwrap_or_default(),
             ..ServiceState::default()
-        }
+        };
+        state.mark_config_entity_sources();
+        state
     }
 
     fn merge(self, other: Config) -> Config {
@@ -887,6 +889,7 @@ pub struct Flags {
     pub default_runtime_profile: Option<String>,
     pub configured_runtime_profiles: HashMap<String, Option<String>>,
     pub manual_login_preferred_services: Vec<String>,
+    pub configured_service_state: ServiceState,
     pub service_state: ServiceState,
     pub service_reconcile_interval_ms: Option<u64>,
     pub service_job_timeout_ms: Option<u64>,
@@ -970,7 +973,8 @@ pub fn parse_flags(args: &[String]) -> Flags {
         })
         .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
-    let service_state = service_state_from_store(config.service_state_snapshot());
+    let configured_service_state = config.service_state_snapshot();
+    let service_state = service_state_from_store(configured_service_state.clone());
     let service_reconcile_interval_ms = service_reconcile_interval_from_sources(&config);
     let service_job_timeout_ms = service_job_timeout_from_sources(&config);
     let recovery_defaults = BrowserRecoveryPolicyConfig::default();
@@ -1030,6 +1034,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         default_runtime_profile,
         configured_runtime_profiles,
         manual_login_preferred_services,
+        configured_service_state,
         service_state,
         service_reconcile_interval_ms,
         service_job_timeout_ms,

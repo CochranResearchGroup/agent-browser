@@ -88,6 +88,7 @@ impl ServiceStateStore for JsonServiceStateStore {
                 err
             )
         })?;
+        state.mark_persisted_entity_sources();
         state.refresh_derived_views();
         Ok(state)
     }
@@ -95,6 +96,7 @@ impl ServiceStateStore for JsonServiceStateStore {
     fn save(&self, state: &ServiceState) -> Result<(), String> {
         let mut normalized = state.clone();
         normalized.refresh_derived_views();
+        normalized.remove_builtin_entity_defaults_for_persistence();
         let serialized = serde_json::to_string_pretty(&normalized)
             .map_err(|err| format!("Failed to serialize service state: {}", err))?;
         let payload = format!("{}\n", serialized);
@@ -264,7 +266,19 @@ mod tests {
         store.save(&state).expect("state should save");
         let loaded = store.load().expect("state should load");
 
-        assert_eq!(loaded, state);
+        assert_eq!(loaded.browsers, state.browsers);
+        assert_eq!(
+            loaded.site_policies["google"].origin_pattern,
+            "https://accounts.google.com"
+        );
+        assert_eq!(
+            loaded.site_policy_source("google"),
+            Some(super::super::service_model::ServiceEntitySource::PersistedState)
+        );
+        assert_eq!(
+            loaded.site_policy_source("microsoft"),
+            Some(super::super::service_model::ServiceEntitySource::Builtin)
+        );
         assert_eq!(store.path(), path.as_path());
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }

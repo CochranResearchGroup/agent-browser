@@ -10,8 +10,8 @@ use serde_json::{json, Value};
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
     builtin_site_policy, BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy,
-    ChallengeState, InteractionMode, ProfileSelectionReason, ProviderCapability, ServiceProvider,
-    ServiceState, SitePolicy,
+    ChallengeState, InteractionMode, ProfileSelectionReason, ProviderCapability,
+    ServiceEntitySource, ServiceProvider, ServiceState, SitePolicy,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -174,7 +174,7 @@ pub(crate) fn service_access_plan_for_state(
 #[derive(Debug, Clone)]
 struct SelectedSitePolicy {
     policy: SitePolicy,
-    source: &'static str,
+    source: ServiceEntitySource,
     matched_by: &'static str,
 }
 
@@ -182,11 +182,26 @@ impl SelectedSitePolicy {
     fn source_value(&self) -> Value {
         json!({
             "id": self.policy.id.clone(),
-            "source": self.source,
+            "source": self.source.as_str(),
             "matchedBy": self.matched_by,
-            "overrideable": self.source == "builtin",
-            "precedence": ["service_state", "builtin"],
+            "overrideable": self.source.overrideable(),
+            "precedence": ["config", "persisted_state", "builtin"],
         })
+    }
+}
+
+fn selected_source_for_state_policy(
+    service_state: &ServiceState,
+    policy: SitePolicy,
+    matched_by: &'static str,
+) -> SelectedSitePolicy {
+    let source = service_state
+        .site_policy_source(&policy.id)
+        .unwrap_or(ServiceEntitySource::PersistedState);
+    SelectedSitePolicy {
+        policy,
+        source,
+        matched_by,
     }
 }
 
@@ -197,31 +212,31 @@ fn select_site_policy(
 ) -> Option<SelectedSitePolicy> {
     if let Some(site_policy_id) = request.site_policy_id.as_deref() {
         if let Some(policy) = service_state.site_policies.get(site_policy_id) {
-            return Some(SelectedSitePolicy {
-                policy: policy.clone(),
-                source: "service_state",
-                matched_by: "explicit_site_policy_id",
-            });
+            return Some(selected_source_for_state_policy(
+                service_state,
+                policy.clone(),
+                "explicit_site_policy_id",
+            ));
         }
         return builtin_site_policy(site_policy_id).map(|policy| SelectedSitePolicy {
             policy,
-            source: "builtin",
+            source: ServiceEntitySource::Builtin,
             matched_by: "explicit_site_policy_id",
         });
     }
 
     for target_service_id in &request.target_service_ids {
         if let Some(site_policy) = service_state.site_policies.get(target_service_id) {
-            return Some(SelectedSitePolicy {
-                policy: site_policy.clone(),
-                source: "service_state",
-                matched_by: "target_service_id",
-            });
+            return Some(selected_source_for_state_policy(
+                service_state,
+                site_policy.clone(),
+                "target_service_id",
+            ));
         }
         if let Some(site_policy) = builtin_site_policy(target_service_id) {
             return Some(SelectedSitePolicy {
                 policy: site_policy,
-                source: "builtin",
+                source: ServiceEntitySource::Builtin,
                 matched_by: "target_service_id",
             });
         }
@@ -230,15 +245,15 @@ fn select_site_policy(
     selected_profile.and_then(|profile| {
         profile.site_policy_ids.iter().find_map(|site_policy_id| {
             if let Some(policy) = service_state.site_policies.get(site_policy_id) {
-                return Some(SelectedSitePolicy {
-                    policy: policy.clone(),
-                    source: "service_state",
-                    matched_by: "profile_site_policy_id",
-                });
+                return Some(selected_source_for_state_policy(
+                    service_state,
+                    policy.clone(),
+                    "profile_site_policy_id",
+                ));
             }
             builtin_site_policy(site_policy_id).map(|policy| SelectedSitePolicy {
                 policy,
-                source: "builtin",
+                source: ServiceEntitySource::Builtin,
                 matched_by: "profile_site_policy_id",
             })
         })
@@ -1292,10 +1307,41 @@ mod tests {
         );
 
         assert_eq!(plan["sitePolicy"]["originPattern"], "local-google");
-        assert_eq!(plan["sitePolicySource"]["source"], "service_state");
+        assert_eq!(plan["sitePolicySource"]["source"], "persisted_state");
         assert_eq!(plan["sitePolicySource"]["matchedBy"], "target_service_id");
         assert_eq!(plan["sitePolicySource"]["overrideable"], false);
         assert_eq!(plan["decision"]["browserHost"], "remote_headed");
+    }
+
+    #[test]
+    fn service_access_plan_reports_config_policy_override_source() {
+        let mut state = ServiceState {
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "configured-google".to_string(),
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        state.mark_config_entity_sources();
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["google".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["sitePolicy"]["originPattern"], "configured-google");
+        assert_eq!(plan["sitePolicySource"]["source"], "config");
+        assert_eq!(
+            plan["sitePolicySource"]["precedence"],
+            json!(["config", "persisted_state", "builtin"])
+        );
     }
 
     #[test]
