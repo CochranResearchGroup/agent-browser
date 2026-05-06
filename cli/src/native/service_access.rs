@@ -1161,6 +1161,58 @@ mod tests {
     }
 
     #[test]
+    fn service_access_plan_uses_explicit_freshness_evidence() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-fresh".to_string(),
+                BrowserProfile {
+                    id: "google-fresh".to_string(),
+                    name: "Google Fresh".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    authenticated_service_ids: vec!["google".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "google".to_string(),
+                        state: ProfileReadinessState::Fresh,
+                        evidence: "auth_probe_cookie_present".to_string(),
+                        recommended_action: "use_profile".to_string(),
+                        last_verified_at: Some("2026-05-06T12:00:00Z".to_string()),
+                        freshness_expires_at: Some("2026-05-06T13:00:00Z".to_string()),
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("probeGoogleLogin".to_string()),
+                target_service_ids: vec!["google".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["readiness"]["targetReadiness"][0]["state"], "fresh");
+        assert_eq!(
+            plan["readiness"]["targetReadiness"][0]["evidence"],
+            "auth_probe_cookie_present"
+        );
+        assert_eq!(
+            plan["readiness"]["targetReadiness"][0]["lastVerifiedAt"],
+            "2026-05-06T12:00:00Z"
+        );
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            "use_selected_profile"
+        );
+        assert_eq!(plan["decision"]["manualActionRequired"], false);
+    }
+
+    #[test]
     fn service_access_plan_explains_challenge_provider_fit() {
         let state = ServiceState {
             profiles: BTreeMap::from([(

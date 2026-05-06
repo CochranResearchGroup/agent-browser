@@ -169,7 +169,11 @@ targets without authenticated evidence report `needs_manual_seeding` and
 recommend detached `runtime login` before attachable automation. Once a managed
 profile lists the target in `authenticatedServiceIds`, readiness changes to
 `seeded_unknown_freshness` and access-plan no longer treats first-login seeding
-as a required manual action. They are guarded by Rust model tests and MCP
+as a required manual action. Explicit `fresh`, `stale`, and
+`blocked_by_attached_devtools` rows, plus rows with `lastVerifiedAt` or
+`freshnessExpiresAt`, are preserved through derived readiness refreshes so
+software clients can record bounded-probe freshness without losing it on the
+next profile update. They are guarded by Rust model tests and MCP
 resource tests so software clients can consume the same camelCase record fields
 from HTTP and MCP without inferring Rust internals.
 
@@ -248,6 +252,8 @@ Profile records separate caller ownership from target login scope.
 or login state should live in the profile, and `authenticatedServiceIds` names
 targets currently believed to have usable authenticated state. `targetReadiness`
 is the no-launch readiness view derived from those hints and site policy.
+Explicit freshness rows are preserved when they report `fresh`, `stale`,
+`blocked_by_attached_devtools`, `lastVerifiedAt`, or `freshnessExpiresAt`.
 Session records include `profileSelectionReason` so clients can distinguish
 `authenticated_target`, `target_match`, `service_allow_list`, and
 `explicit_profile` profile choices without reconstructing selector behavior

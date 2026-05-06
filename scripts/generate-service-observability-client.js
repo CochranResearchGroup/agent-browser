@@ -620,6 +620,12 @@ export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabi
   targetServiceIds?: string[];
   authenticatedServiceIds?: string[];
   sharedServiceIds?: string[];
+  targetReadiness?: ServiceProfileTargetReadiness[];
+  readinessState?: ServiceProfileTargetReadiness['state'];
+  readinessEvidence?: string;
+  readinessRecommendedAction?: string;
+  lastVerifiedAt?: string | null;
+  freshnessExpiresAt?: string | null;
   name?: string;
   allocation?: string;
   keyring?: string;

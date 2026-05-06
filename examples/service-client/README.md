@@ -65,6 +65,12 @@ await registerServiceLoginProfile({
 });
 ```
 
+When a bounded auth probe has just confirmed usable login state, pass
+`readinessState: 'fresh'`, `readinessEvidence`, `lastVerifiedAt`, and
+`freshnessExpiresAt` to `registerServiceLoginProfile()`. The helper writes
+matching `targetReadiness` rows, and explicit `targetReadiness` rows override
+generated rows for the same target identity.
+
 ```js
 await requestServiceTab({
   baseUrl: 'http://127.0.0.1:4849',

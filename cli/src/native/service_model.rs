@@ -1819,10 +1819,18 @@ fn derive_profile_target_readiness(
     profile: &BrowserProfile,
     site_policies: &BTreeMap<String, SitePolicy>,
 ) -> Vec<ProfileTargetReadiness> {
+    let explicit_readiness = profile
+        .target_readiness
+        .iter()
+        .filter(|row| !row.target_service_id.is_empty())
+        .filter(|row| row_has_explicit_freshness_evidence(row))
+        .map(|row| (row.target_service_id.clone(), row.clone()))
+        .collect::<BTreeMap<_, _>>();
     let mut target_service_ids = profile
         .target_service_ids
         .iter()
         .chain(profile.authenticated_service_ids.iter())
+        .chain(explicit_readiness.keys())
         .filter(|target| !target.is_empty())
         .cloned()
         .collect::<BTreeSet<_>>();
@@ -1838,9 +1846,75 @@ fn derive_profile_target_readiness(
     target_service_ids
         .into_iter()
         .map(|target_service_id| {
-            derive_target_readiness_for_profile(profile, site_policies, &target_service_id)
+            let derived =
+                derive_target_readiness_for_profile(profile, site_policies, &target_service_id);
+            if let Some(explicit) = explicit_readiness.get(&target_service_id) {
+                normalize_explicit_target_readiness(explicit, derived)
+            } else {
+                derived
+            }
         })
         .collect()
+}
+
+fn row_has_explicit_freshness_evidence(row: &ProfileTargetReadiness) -> bool {
+    matches!(
+        row.state,
+        ProfileReadinessState::Fresh
+            | ProfileReadinessState::Stale
+            | ProfileReadinessState::BlockedByAttachedDevtools
+    ) || row.last_verified_at.is_some()
+        || row.freshness_expires_at.is_some()
+}
+
+fn normalize_explicit_target_readiness(
+    explicit: &ProfileTargetReadiness,
+    derived: ProfileTargetReadiness,
+) -> ProfileTargetReadiness {
+    let recommended_action = if explicit.recommended_action.is_empty() {
+        match explicit.state {
+            ProfileReadinessState::Fresh => "use_profile",
+            ProfileReadinessState::Stale => "probe_target_auth_or_reseed_if_needed",
+            ProfileReadinessState::BlockedByAttachedDevtools => {
+                "close_attached_devtools_then_verify_profile"
+            }
+            ProfileReadinessState::NeedsManualSeeding => {
+                "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+            }
+            ProfileReadinessState::SeededUnknownFreshness => {
+                "probe_target_auth_or_reuse_if_acceptable"
+            }
+            ProfileReadinessState::Unknown => "verify_or_seed_profile_before_authenticated_work",
+        }
+        .to_string()
+    } else {
+        explicit.recommended_action.clone()
+    };
+
+    ProfileTargetReadiness {
+        target_service_id: explicit.target_service_id.clone(),
+        login_id: explicit.login_id.clone().or(derived.login_id),
+        state: explicit.state,
+        manual_seeding_required: matches!(
+            explicit.state,
+            ProfileReadinessState::NeedsManualSeeding
+        ) || (explicit.manual_seeding_required
+            && !matches!(explicit.state, ProfileReadinessState::Fresh)),
+        evidence: if explicit.evidence.is_empty() {
+            derived.evidence
+        } else {
+            explicit.evidence.clone()
+        },
+        recommended_action,
+        last_verified_at: explicit
+            .last_verified_at
+            .clone()
+            .or(derived.last_verified_at),
+        freshness_expires_at: explicit
+            .freshness_expires_at
+            .clone()
+            .or(derived.freshness_expires_at),
+    }
 }
 
 pub(crate) fn builtin_site_policy(id: &str) -> Option<SitePolicy> {
@@ -5113,6 +5187,49 @@ mod tests {
         assert_eq!(
             seeded_google.recommended_action,
             "probe_target_auth_or_reuse_if_acceptable"
+        );
+    }
+
+    #[test]
+    fn refresh_profile_readiness_preserves_explicit_freshness_evidence() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-fresh".to_string(),
+                BrowserProfile {
+                    id: "google-fresh".to_string(),
+                    name: "Google Fresh".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    authenticated_service_ids: vec!["google".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "google".to_string(),
+                        state: ProfileReadinessState::Fresh,
+                        evidence: "auth_probe_cookie_present".to_string(),
+                        recommended_action: "use_profile".to_string(),
+                        last_verified_at: Some("2026-05-06T12:00:00Z".to_string()),
+                        freshness_expires_at: Some("2026-05-06T13:00:00Z".to_string()),
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_profile_readiness();
+
+        let readiness = &state.profiles["google-fresh"].target_readiness[0];
+        assert_eq!(readiness.target_service_id, "google");
+        assert_eq!(readiness.state, ProfileReadinessState::Fresh);
+        assert!(!readiness.manual_seeding_required);
+        assert_eq!(readiness.evidence, "auth_probe_cookie_present");
+        assert_eq!(readiness.recommended_action, "use_profile");
+        assert_eq!(
+            readiness.last_verified_at.as_deref(),
+            Some("2026-05-06T12:00:00Z")
+        );
+        assert_eq!(
+            readiness.freshness_expires_at.as_deref(),
+            Some("2026-05-06T13:00:00Z")
         );
     }
 

@@ -628,6 +628,13 @@ await registerServiceLoginProfile({
 });
 ```
 
+When a client has explicit auth evidence from a bounded probe, it can attach
+freshness metadata to the same registration call. `readinessState`,
+`readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt` generate
+`targetReadiness` rows, and explicit `targetReadiness` rows win for matching
+targets. The service preserves explicit `fresh`, `stale`, and
+`blocked_by_attached_devtools` rows through derived readiness refreshes.
+
 Then request the tab by `loginId`:
 
 ```ts
@@ -1637,6 +1644,8 @@ browsers, sessions, tabs, site policies, providers, and challenges,
 `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`,
 `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
+including optional freshness fields such as `readinessState`,
+`readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`,
 operator remedy helpers for job cancel, browser retry, and incident handling,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
 `getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
@@ -1679,6 +1688,12 @@ as the older descriptive alias for the same route. Only call
 agent-browser has no suitable managed profile, readiness reports
 `needs_manual_seeding`, the operator wants a separate account lane, or the
 client is explicitly bringing its own profile.
+When a software client has just completed a bounded auth probe, it can pass
+`readinessState: "fresh"`, `readinessEvidence`, `lastVerifiedAt`, and
+`freshnessExpiresAt` to the same helper so agent-browser records target
+freshness without forcing the caller to hand-build a full profile record.
+Explicit `targetReadiness` rows may also be supplied and override generated
+rows for matching target identities.
 
 ```ts
 import { requestServiceTab } from '@agent-browser/client/service-request';

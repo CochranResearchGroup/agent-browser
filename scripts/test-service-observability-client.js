@@ -601,6 +601,65 @@ async function main() {
   });
   assert.deepEqual(unauthenticated.calls[0].body.authenticatedServiceIds, ['google']);
 
+  const freshness = createFetchRecorder();
+  await registerServiceLoginProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: freshness.fetch,
+    id: 'journal-google',
+    serviceName: 'JournalDownloader',
+    loginId: 'google',
+    readinessState: 'fresh',
+    readinessEvidence: 'auth_probe_cookie_present',
+    lastVerifiedAt: '2026-05-06T12:00:00Z',
+    freshnessExpiresAt: '2026-05-06T13:00:00Z',
+  });
+  assert.deepEqual(freshness.calls[0].body.targetReadiness, [
+    {
+      targetServiceId: 'google',
+      loginId: 'google',
+      state: 'fresh',
+      manualSeedingRequired: false,
+      evidence: 'auth_probe_cookie_present',
+      recommendedAction: 'use_profile',
+      lastVerifiedAt: '2026-05-06T12:00:00Z',
+      freshnessExpiresAt: '2026-05-06T13:00:00Z',
+    },
+  ]);
+
+  const explicitReadiness = createFetchRecorder();
+  await registerServiceLoginProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: explicitReadiness.fetch,
+    id: 'journal-google',
+    serviceName: 'JournalDownloader',
+    loginId: 'google',
+    readinessState: 'fresh',
+    targetReadiness: [
+      {
+        targetServiceId: 'google',
+        loginId: 'google',
+        state: 'stale',
+        manualSeedingRequired: false,
+        evidence: 'operator_reported_timeout',
+        recommendedAction: 'probe_target_auth_or_reseed_if_needed',
+        lastVerifiedAt: '2026-05-06T12:30:00Z',
+        freshnessExpiresAt: null,
+      },
+    ],
+  });
+  assert.deepEqual(explicitReadiness.calls[0].body.targetReadiness, [
+    {
+      targetServiceId: 'google',
+      loginId: 'google',
+      state: 'stale',
+      manualSeedingRequired: false,
+      evidence: 'operator_reported_timeout',
+      recommendedAction: 'probe_target_auth_or_reseed_if_needed',
+      lastVerifiedAt: '2026-05-06T12:30:00Z',
+      freshnessExpiresAt: null,
+    },
+  ]);
+
   console.log('Service observability client helper tests passed');
 }
 

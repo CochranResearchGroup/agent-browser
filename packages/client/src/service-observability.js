@@ -323,6 +323,12 @@ export function registerServiceLoginProfile({
   targetServiceIds = [],
   authenticatedServiceIds = [],
   sharedServiceIds = [],
+  targetReadiness = [],
+  readinessState,
+  readinessEvidence,
+  readinessRecommendedAction,
+  lastVerifiedAt,
+  freshnessExpiresAt,
   name,
   allocation = 'per_service',
   keyring = 'basic_password_store',
@@ -348,7 +354,19 @@ export function registerServiceLoginProfile({
     ? uniqueStrings([...authenticatedServiceIds, ...targets])
     : uniqueStrings(authenticatedServiceIds);
   const sharedServices = uniqueStrings([...sharedServiceIds, serviceName]);
+  const readinessRows = serviceLoginProfileTargetReadiness({
+    targets,
+    loginId: targetId,
+    authenticated,
+    targetReadiness,
+    readinessState,
+    readinessEvidence,
+    readinessRecommendedAction,
+    lastVerifiedAt,
+    freshnessExpiresAt,
+  });
   const userDataDirRecord = userDataDir === undefined ? {} : { userDataDir };
+  const targetReadinessRecord = readinessRows.length === 0 ? {} : { targetReadiness: readinessRows };
 
   return upsertServiceProfile({
     ...options,
@@ -360,11 +378,74 @@ export function registerServiceLoginProfile({
       persistent,
       targetServiceIds: targets,
       authenticatedServiceIds: authenticatedTargets,
+      ...targetReadinessRecord,
       sharedServiceIds: sharedServices,
       ...userDataDirRecord,
       ...profile,
     },
   });
+}
+
+function serviceLoginProfileTargetReadiness({
+  targets,
+  loginId,
+  authenticated,
+  targetReadiness,
+  readinessState,
+  readinessEvidence,
+  readinessRecommendedAction,
+  lastVerifiedAt,
+  freshnessExpiresAt,
+}) {
+  const explicitRows = Array.isArray(targetReadiness) ? targetReadiness : [];
+  const shouldGenerate =
+    readinessState !== undefined ||
+    readinessEvidence !== undefined ||
+    readinessRecommendedAction !== undefined ||
+    lastVerifiedAt !== undefined ||
+    freshnessExpiresAt !== undefined;
+  if (!shouldGenerate) {
+    return explicitRows;
+  }
+
+  const state = readinessState ?? (authenticated ? 'fresh' : 'stale');
+  const generatedRows = targets.map((targetServiceId) => ({
+    targetServiceId,
+    loginId: loginId ?? null,
+    state,
+    manualSeedingRequired: state === 'needs_manual_seeding',
+    evidence: readinessEvidence ?? (state === 'fresh' ? 'client_reported_authenticated' : 'client_reported_stale'),
+    recommendedAction: readinessRecommendedAction ?? serviceLoginProfileReadinessAction(state),
+    lastVerifiedAt: lastVerifiedAt ?? null,
+    freshnessExpiresAt: freshnessExpiresAt ?? null,
+  }));
+  const rowsByTarget = new Map();
+  for (const row of generatedRows) {
+    rowsByTarget.set(row.targetServiceId, row);
+  }
+  for (const row of explicitRows) {
+    if (typeof row?.targetServiceId === 'string' && row.targetServiceId.length > 0) {
+      rowsByTarget.set(row.targetServiceId, row);
+    }
+  }
+  return [...rowsByTarget.values()];
+}
+
+function serviceLoginProfileReadinessAction(state) {
+  switch (state) {
+    case 'fresh':
+      return 'use_profile';
+    case 'stale':
+      return 'probe_target_auth_or_reseed_if_needed';
+    case 'needs_manual_seeding':
+      return 'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable';
+    case 'seeded_unknown_freshness':
+      return 'probe_target_auth_or_reuse_if_acceptable';
+    case 'blocked_by_attached_devtools':
+      return 'close_attached_devtools_then_verify_profile';
+    default:
+      return 'verify_or_seed_profile_before_authenticated_work';
+  }
 }
 
 /**
