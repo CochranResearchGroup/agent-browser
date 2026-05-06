@@ -650,6 +650,8 @@ export interface ServiceAccessPlanDecision {
   manualSeedingRequired: boolean;
   providerIds: string[];
   challengeIds: string[];
+  namingWarnings: ServiceNamingWarning[];
+  hasNamingWarning: boolean;
   reasons: string[];
   [key: string]: unknown;
 }
@@ -684,6 +686,10 @@ export interface ServiceProfileIdentityLookupOptions extends ServiceQueryOptions
 }
 
 export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOptions {
+  /** Calling agent name for multi-agent traceability. */
+  agentName?: string;
+  /** Caller task name for queue and trace debugging. */
+  taskName?: string;
   /** Optional site-policy ID when the caller wants a specific policy recommendation. */
   sitePolicyId?: string;
   /** Optional challenge ID when planning around one retained challenge. */
@@ -723,8 +729,12 @@ export interface ServiceProfileLookupResponse {
 }
 
 export interface ServiceAccessPlanQuery extends ServiceProfileLookupQuery {
+  agentName: string | null;
+  taskName: string | null;
   sitePolicyId: string | null;
   challengeId: string | null;
+  namingWarnings: ServiceNamingWarning[];
+  hasNamingWarning: boolean;
 }
 
 export interface ServiceSitePolicySource {

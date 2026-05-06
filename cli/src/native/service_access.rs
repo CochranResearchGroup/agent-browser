@@ -12,12 +12,16 @@ use super::service_model::{
     builtin_site_policy, BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy,
     ChallengeState, InteractionMode, ProfileSelectionReason, ProviderCapability,
     ServiceEntitySource, ServiceProvider, ServiceState, SitePolicy,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) service_name: Option<String>,
+    pub(crate) agent_name: Option<String>,
+    pub(crate) task_name: Option<String>,
     pub(crate) target_service_ids: Vec<String>,
     pub(crate) site_policy_id: Option<String>,
     pub(crate) challenge_id: Option<String>,
@@ -44,6 +48,8 @@ pub(crate) fn parse_service_access_plan_query(
             "serviceName" | "service_name" | "service-name" => {
                 request.service_name = non_empty(value)
             }
+            "agentName" | "agent_name" | "agent-name" => request.agent_name = non_empty(value),
+            "taskName" | "task_name" | "task-name" => request.task_name = non_empty(value),
             "targetServiceId" | "target_service_id" | "target-service-id" | "targetService"
             | "target_service" | "target-service" | "siteId" | "site_id" | "site-id"
             | "loginId" | "login_id" | "login-id" => {
@@ -129,6 +135,8 @@ pub(crate) fn service_access_plan_for_state(
         site_policy.as_ref(),
         &challenges,
     );
+    let naming_warnings = access_plan_naming_warnings(&request);
+    let has_naming_warning = !naming_warnings.is_empty();
     let decision = access_plan_decision(
         selected_profile.as_ref(),
         site_policy.as_ref(),
@@ -137,15 +145,20 @@ pub(crate) fn service_access_plan_for_state(
         readiness.as_ref(),
         &request.target_service_ids,
         &readiness_summary,
+        &naming_warnings,
     );
 
     json!({
         "query": {
             "serviceName": request.service_name,
+            "agentName": request.agent_name,
+            "taskName": request.task_name,
             "targetServiceIds": request.target_service_ids,
             "sitePolicyId": request.site_policy_id,
             "challengeId": request.challenge_id,
             "readinessProfileId": request.readiness_profile_id,
+            "namingWarnings": naming_warnings,
+            "hasNamingWarning": has_naming_warning,
         },
         "selectedProfile": selected_profile.clone(),
         "selectedProfileSource": selection.as_ref().map(|selection| {
@@ -172,6 +185,26 @@ pub(crate) fn service_access_plan_for_state(
         "challenges": challenges,
         "decision": decision,
     })
+}
+
+fn access_plan_naming_warnings(request: &ServiceAccessPlanRequest) -> Vec<&'static str> {
+    [
+        (
+            request.service_name.is_none(),
+            SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+        ),
+        (
+            request.agent_name.is_none(),
+            SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+        ),
+        (
+            request.task_name.is_none(),
+            SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(missing, warning)| missing.then_some(warning))
+    .collect()
 }
 
 fn profile_source_value(service_state: &ServiceState, profile_id: &str) -> Value {
@@ -331,6 +364,7 @@ fn access_plan_decision(
     readiness: Option<&Value>,
     target_service_ids: &[String],
     readiness_summary: &Value,
+    naming_warnings: &[&'static str],
 ) -> Value {
     let mut reasons = Vec::new();
     let manual_seeding_required =
@@ -439,6 +473,8 @@ fn access_plan_decision(
         "missingChallengeCapabilities": provider_decision.missing_challenge_capabilities,
         "challengeStrategy": provider_decision.challenge_strategy,
         "challengeIds": challenges.iter().map(|challenge| challenge.id.clone()).collect::<Vec<_>>(),
+        "namingWarnings": naming_warnings,
+        "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
     })
 }
@@ -943,11 +979,18 @@ mod tests {
             &state,
             ServiceAccessPlanRequest {
                 service_name: Some("JournalDownloader".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("probeGoogleLogin".to_string()),
                 target_service_ids: vec!["google".to_string()],
                 ..ServiceAccessPlanRequest::default()
             },
         );
 
+        assert_eq!(plan["query"]["serviceName"], "JournalDownloader");
+        assert_eq!(plan["query"]["agentName"], "codex");
+        assert_eq!(plan["query"]["taskName"], "probeGoogleLogin");
+        assert_eq!(plan["query"]["namingWarnings"], json!([]));
+        assert_eq!(plan["decision"]["hasNamingWarning"], false);
         assert_eq!(plan["selectedProfile"]["id"], "google-work");
         assert_eq!(plan["sitePolicy"]["id"], "google");
         assert_eq!(plan["providers"][0]["id"], "manual");
@@ -987,6 +1030,51 @@ mod tests {
             .unwrap()
             .iter()
             .any(|reason| reason == "site_policy_manual_login_preferred"));
+    }
+
+    #[test]
+    fn service_access_plan_reports_missing_caller_labels() {
+        let plan = service_access_plan_for_state(
+            &ServiceState::default(),
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["acs".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["query"]["serviceName"], Value::Null);
+        assert_eq!(plan["query"]["agentName"], Value::Null);
+        assert_eq!(plan["query"]["taskName"], Value::Null);
+        assert_eq!(
+            plan["query"]["namingWarnings"],
+            json!([
+                "missing_service_name",
+                "missing_agent_name",
+                "missing_task_name"
+            ])
+        );
+        assert_eq!(plan["query"]["hasNamingWarning"], true);
+        assert_eq!(
+            plan["decision"]["namingWarnings"],
+            plan["query"]["namingWarnings"]
+        );
+        assert_eq!(plan["decision"]["hasNamingWarning"], true);
+    }
+
+    #[test]
+    fn parse_service_access_plan_query_accepts_caller_labels() {
+        let request = parse_service_access_plan_query(vec![
+            ("service-name".to_string(), "JournalDownloader".to_string()),
+            ("agentName".to_string(), "codex".to_string()),
+            ("task_name".to_string(), "probeACSwebsite".to_string()),
+            ("login-id".to_string(), "acs".to_string()),
+        ])
+        .unwrap();
+
+        assert_eq!(request.service_name.as_deref(), Some("JournalDownloader"));
+        assert_eq!(request.agent_name.as_deref(), Some("codex"));
+        assert_eq!(request.task_name.as_deref(), Some("probeACSwebsite"));
+        assert_eq!(request.target_service_ids, vec!["acs".to_string()]);
     }
 
     #[test]

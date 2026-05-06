@@ -3961,6 +3961,7 @@ Notes:
   - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks.
   - HTTP GET /api/service/profiles/lookup applies the authoritative service profile selector for serviceName plus targetServiceId, siteId, loginId, or their array aliases and returns the selected profile, reason, readiness, and readiness summary.
   - HTTP GET /api/service/profiles/<id>/readiness returns one profile's no-launch targetReadiness rows for software clients that do not need allocation details.
+  - HTTP GET /api/service/access-plan accepts serviceName, agentName, taskName, targetServiceId, siteId, loginId, or their array aliases, then returns the no-launch service-owned profile, policy, provider, challenge, readiness, caller-label warning, and recommendation payload.
   - browser_navigate, browser_back, browser_forward, browser_reload, browser_tab_*, browser_set_content, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_*, browser_storage_*, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_*, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, and browser_clipboard provide typed schemas for common navigation, tab, page-content, request-inspection, session-shaping, observability, artifact, file-transfer, HAR, routing, cookie, and storage workflows.
   - browser_command queues remaining HTTP-parity actions with params copied into the queued daemon command when a typed browser_* tool is not yet available.
   - Example browser_command arguments: {"action":"navigate","params":{"url":"https://example.com","waitUntil":"load","targetServiceId":"acs"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}.
@@ -3977,7 +3978,7 @@ Notes:
   - Session mutations infer owner from agentName, then serviceName, when owner is omitted; profileId must reference a persisted profile, and profile sharedServiceIds allow-lists are enforced.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
   - Service jobs persist serviceName, agentName, and taskName when commands provide them.
-  - Service job namingWarnings values are missing_service_name, missing_agent_name, and missing_task_name. hasNamingWarning is true when namingWarnings is non-empty.
+  - Service job and access-plan namingWarnings values are missing_service_name, missing_agent_name, and missing_task_name. hasNamingWarning is true when namingWarnings is non-empty.
   - HTTP /api/service/jobs, HTTP /api/service/jobs/<id>, and MCP agent-browser://jobs job records follow docs/dev/contracts/service-job-record.v1.schema.json.
   - CLI and HTTP service_jobs response envelopes follow docs/dev/contracts/service-jobs-response.v1.schema.json.
   - HTTP /api/service/incidents, HTTP /api/service/incidents/<id>, MCP agent-browser://incidents, and MCP service_incidents incident records follow docs/dev/contracts/service-incident-record.v1.schema.json.

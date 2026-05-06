@@ -23,6 +23,8 @@ context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
 
 const { agentHome, session, tempHome } = context;
 const serviceName = 'AccessPlanSmoke';
+const agentName = 'codex';
+const taskName = 'planGoogleAccess';
 const targetServiceId = 'google';
 const profileId = `access-plan-google-${process.pid}`;
 const sitePolicyId = 'google';
@@ -132,6 +134,13 @@ async function enableStream() {
 
 function assertAccessPlan(data, label) {
   assert(data?.query?.serviceName === serviceName, `${label} serviceName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.agentName === agentName, `${label} agentName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.taskName === taskName, `${label} taskName mismatch: ${JSON.stringify(data)}`);
+  assert(
+    Array.isArray(data?.query?.namingWarnings) && data.query.namingWarnings.length === 0,
+    `${label} naming warnings mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(data?.query?.hasNamingWarning === false, `${label} naming warning flag mismatch: ${JSON.stringify(data)}`);
   assert(
     data?.query?.targetServiceIds?.includes(targetServiceId),
     `${label} targetServiceIds mismatch: ${JSON.stringify(data)}`,
@@ -191,6 +200,32 @@ function assertAccessPlan(data, label) {
     data?.decision?.challengeIds?.includes(challengeId),
     `${label} challenge IDs mismatch: ${JSON.stringify(data)}`,
   );
+  assert(
+    Array.isArray(data?.decision?.namingWarnings) && data.decision.namingWarnings.length === 0,
+    `${label} decision naming warnings mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.hasNamingWarning === false,
+    `${label} decision naming warning flag mismatch: ${JSON.stringify(data)}`,
+  );
+}
+
+function assertAnonymousAccessPlan(data, label) {
+  assert(data?.query?.serviceName === null, `${label} anonymous serviceName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.agentName === null, `${label} anonymous agentName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.taskName === null, `${label} anonymous taskName mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.query?.namingWarnings?.includes('missing_service_name') &&
+      data.query.namingWarnings.includes('missing_agent_name') &&
+      data.query.namingWarnings.includes('missing_task_name'),
+    `${label} anonymous naming warnings mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(data?.query?.hasNamingWarning === true, `${label} anonymous naming warning flag mismatch: ${JSON.stringify(data)}`);
+  assert(
+    JSON.stringify(data?.decision?.namingWarnings) === JSON.stringify(data?.query?.namingWarnings),
+    `${label} anonymous decision naming warnings mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(data?.decision?.hasNamingWarning === true, `${label} anonymous decision naming flag mismatch: ${JSON.stringify(data)}`);
 }
 
 function assertNoBrowserLaunchState() {
@@ -216,6 +251,8 @@ try {
   const port = await enableStream();
   const query =
     `service-name=${encodeURIComponent(serviceName)}` +
+    `&agent-name=${encodeURIComponent(agentName)}` +
+    `&task-name=${encodeURIComponent(taskName)}` +
     `&login-id=${encodeURIComponent(targetServiceId)}` +
     `&site-policy-id=${encodeURIComponent(sitePolicyId)}` +
     `&challenge-id=${encodeURIComponent(challengeId)}`;
@@ -241,11 +278,17 @@ try {
   const clientPlan = await getServiceAccessPlan({
     baseUrl: `http://127.0.0.1:${port}`,
     serviceName,
+    agentName,
+    taskName,
     loginId: targetServiceId,
     sitePolicyId,
     challengeId,
   });
   assertAccessPlan(clientPlan, 'client access plan');
+
+  const anonymousPlan = await httpJson(port, 'GET', `/api/service/access-plan?login-id=${targetServiceId}`);
+  assert(anonymousPlan.success === true, `anonymous HTTP access plan failed: ${JSON.stringify(anonymousPlan)}`);
+  assertAnonymousAccessPlan(anonymousPlan.data, 'anonymous HTTP access plan');
 
   assertNoBrowserLaunchState();
 

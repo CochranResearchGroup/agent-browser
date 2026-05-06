@@ -22,13 +22,23 @@
       "type": "object",
       "required": [
         "serviceName",
+        "agentName",
+        "taskName",
         "targetServiceIds",
         "sitePolicyId",
         "challengeId",
-        "readinessProfileId"
+        "readinessProfileId",
+        "namingWarnings",
+        "hasNamingWarning"
       ],
       "properties": {
         "serviceName": {
+          "type": ["string", "null"]
+        },
+        "agentName": {
+          "type": ["string", "null"]
+        },
+        "taskName": {
           "type": ["string", "null"]
         },
         "targetServiceIds": {
@@ -45,6 +55,16 @@
         },
         "readinessProfileId": {
           "type": ["string", "null"]
+        },
+        "namingWarnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["missing_service_name", "missing_agent_name", "missing_task_name"]
+          }
+        },
+        "hasNamingWarning": {
+          "type": "boolean"
         }
       },
       "additionalProperties": true
@@ -227,6 +247,8 @@
         "missingChallengeCapabilities",
         "challengeStrategy",
         "challengeIds",
+        "namingWarnings",
+        "hasNamingWarning",
         "reasons"
       ],
       "properties": {
@@ -408,6 +430,16 @@
           "items": {
             "type": "string"
           }
+        },
+        "namingWarnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["missing_service_name", "missing_agent_name", "missing_task_name"]
+          }
+        },
+        "hasNamingWarning": {
+          "type": "boolean"
         },
         "reasons": {
           "type": "array",

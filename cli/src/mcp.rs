@@ -32,7 +32,7 @@ const CHALLENGES_RESOURCE: &str = "agent-browser://challenges";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
-const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}";
+const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
 
@@ -11232,15 +11232,21 @@ mod tests {
         };
 
         let resource = read_service_mcp_resource_from_state(
-            "agent-browser://access-plan?serviceName=CanvaCLI&loginId=canva",
+            "agent-browser://access-plan?serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&loginId=canva",
             &state,
         )
         .unwrap();
 
         assert_eq!(
             resource["uri"],
-            "agent-browser://access-plan?serviceName=CanvaCLI&loginId=canva"
+            "agent-browser://access-plan?serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&loginId=canva"
         );
+        assert_eq!(resource["contents"]["query"]["agentName"], "codex");
+        assert_eq!(
+            resource["contents"]["query"]["taskName"],
+            "openCanvaWorkspace"
+        );
+        assert_eq!(resource["contents"]["query"]["hasNamingWarning"], false);
         assert_eq!(resource["contents"]["selectedProfile"]["id"], "canva");
         assert_eq!(
             resource["contents"]["selectedProfileMatch"]["reason"],

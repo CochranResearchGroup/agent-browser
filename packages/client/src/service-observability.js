@@ -229,6 +229,8 @@ export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, c
       query: {
         ...options.query,
         serviceName: options.serviceName,
+        agentName: options.agentName,
+        taskName: options.taskName,
         loginId: options.loginId,
         siteId: options.siteId,
         targetServiceId: options.targetServiceId,
