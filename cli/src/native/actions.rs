@@ -13324,7 +13324,15 @@ mod tests {
         assert_eq!(delete_policy["success"], true);
         assert_service_site_policy_delete_response_contract(&delete_policy["data"]);
         assert_eq!(delete_policy["data"]["deleted"], true);
-        assert!(!store.load().unwrap().site_policies.contains_key("google"));
+        let loaded_after_policy_delete = store.load().unwrap();
+        assert_eq!(
+            loaded_after_policy_delete.site_policy_source("google"),
+            Some(crate::native::service_model::ServiceEntitySource::Builtin)
+        );
+        assert_eq!(
+            loaded_after_policy_delete.site_policies["google"].origin_pattern,
+            "https://accounts.google.com"
+        );
 
         let _ = fs::remove_dir_all(&home);
     }
