@@ -42,8 +42,8 @@ use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
 use super::service_config::{
     delete_persisted_profile, delete_persisted_provider, delete_persisted_session,
-    delete_persisted_site_policy, upsert_persisted_profile, upsert_persisted_provider,
-    upsert_persisted_session, upsert_persisted_site_policy,
+    delete_persisted_site_policy, update_persisted_profile_freshness, upsert_persisted_profile,
+    upsert_persisted_provider, upsert_persisted_session, upsert_persisted_site_policy,
 };
 use super::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
@@ -206,6 +206,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_job_cancel"
             | "service_browser_retry"
             | "service_profile_upsert"
+            | "service_profile_freshness_update"
             | "service_profile_delete"
             | "service_session_upsert"
             | "service_session_delete"
@@ -2445,6 +2446,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_browser_retry" => handle_service_browser_retry(cmd).await,
         "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
+        "service_profile_freshness_update" => handle_service_profile_freshness_update(cmd).await,
         "service_profile_delete" => handle_service_profile_delete(cmd).await,
         "service_session_upsert" => handle_service_session_upsert(cmd).await,
         "service_session_delete" => handle_service_session_delete(cmd).await,
@@ -6782,6 +6784,18 @@ async fn handle_service_profile_upsert(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_profile_freshness_update(cmd: &Value) -> Result<Value, String> {
+    let profile_id = required_service_config_id(cmd, "profileId")?;
+    let body = cmd.get("freshness").cloned().ok_or("Missing freshness")?;
+    let profile = update_persisted_profile_freshness(profile_id, body)?;
+
+    Ok(json!({
+        "id": profile_id,
+        "profile": profile,
+        "upserted": true,
+    }))
+}
+
 async fn handle_service_profile_delete(cmd: &Value) -> Result<Value, String> {
     let profile_id = required_service_config_id(cmd, "profileId")?;
     let removed = delete_persisted_profile(profile_id)?;
@@ -10579,6 +10593,7 @@ mod tests {
             "service_job_cancel",
             "service_browser_retry",
             "service_profile_upsert",
+            "service_profile_freshness_update",
             "service_profile_delete",
             "service_session_upsert",
             "service_session_delete",
@@ -13190,6 +13205,33 @@ mod tests {
         assert_eq!(
             upsert_profile["data"]["profile"]["id"],
             "journal-downloader"
+        );
+
+        let freshness = execute_command(
+            &json!({
+                "action": "service_profile_freshness_update",
+                "id": "svc-profile-freshness-1",
+                "profileId": "journal-downloader",
+                "freshness": {
+                    "loginId": "google",
+                    "readinessState": "fresh",
+                    "readinessEvidence": "auth_probe_cookie_present",
+                    "lastVerifiedAt": "2026-05-06T12:00:00Z",
+                    "freshnessExpiresAt": "2026-05-06T13:00:00Z"
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(freshness["success"], true);
+        assert_service_profile_upsert_response_contract(&freshness["data"]);
+        assert_eq!(
+            freshness["data"]["profile"]["targetReadiness"][0]["state"],
+            "fresh"
+        );
+        assert_eq!(
+            freshness["data"]["profile"]["authenticatedServiceIds"][0],
+            "google"
         );
 
         let upsert_session = execute_command(

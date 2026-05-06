@@ -114,6 +114,7 @@ curl -X POST "http://127.0.0.1:9223/api/browser/clear" -H "content-type: applica
 curl "http://127.0.0.1:9223/api/service/status"
 curl "http://127.0.0.1:9223/api/service/profiles"
 curl "http://127.0.0.1:9223/api/service/profiles/journal-downloader/allocation"
+curl -X POST "http://127.0.0.1:9223/api/service/profiles/journal-downloader/freshness" -H "content-type: application/json" -d '{"loginId":"google","readinessState":"fresh"}'
 curl "http://127.0.0.1:9223/api/service/sessions"
 curl "http://127.0.0.1:9223/api/service/browsers"
 curl "http://127.0.0.1:9223/api/service/tabs"

@@ -388,14 +388,13 @@ export function registerServiceLoginProfile({
 }
 
 /**
- * Merge bounded-probe freshness evidence into an existing managed profile.
+ * Ask the service to merge bounded-probe freshness evidence into a profile.
  *
  * @param {ServiceProfileFreshnessUpdateOptions} options
  * @returns {Promise<ServiceProfileUpsertResponse>}
  */
 export async function updateServiceProfileFreshness({
   id,
-  profile,
   loginId,
   siteId,
   targetServiceId,
@@ -409,7 +408,6 @@ export async function updateServiceProfileFreshness({
   ...options
 }) {
   assertServiceId(id, 'updateServiceProfileFreshness');
-  const profileRecord = profile ?? (await fetchServiceProfileRecord({ id, ...options }));
   const targetId = loginId ?? siteId ?? targetServiceId;
   const targets = uniqueStrings([...targetServiceIds, targetId]);
   if (targets.length === 0) {
@@ -417,43 +415,17 @@ export async function updateServiceProfileFreshness({
       'updateServiceProfileFreshness requires loginId, siteId, targetServiceId, or targetServiceIds',
     );
   }
-
-  const readinessRows = serviceLoginProfileTargetReadiness({
-    targets,
-    loginId: targetId,
-    authenticated: readinessState === 'fresh',
-    targetReadiness: [],
+  return servicePost(options, `/api/service/profiles/${encodeURIComponent(id)}/freshness`, {
+    loginId,
+    siteId,
+    targetServiceId,
+    targetServiceIds: targets,
     readinessState,
     readinessEvidence,
     readinessRecommendedAction,
-    lastVerifiedAt: lastVerifiedAt ?? new Date().toISOString(),
+    lastVerifiedAt,
     freshnessExpiresAt,
-  });
-  const existingReadiness = Array.isArray(profileRecord.targetReadiness) ? profileRecord.targetReadiness : [];
-  const targetReadiness = mergeServiceProfileTargetReadiness(existingReadiness, readinessRows);
-  /** @type {Record<string, unknown>} */
-  const profilePatch = {
-    ...profileRecord,
-    targetServiceIds: uniqueStrings([...stringArray(profileRecord.targetServiceIds), ...targets]),
-    targetReadiness,
-  };
-
-  if (updateAuthenticatedServiceIds) {
-    const authenticatedTargets = new Set(uniqueStrings(stringArray(profileRecord.authenticatedServiceIds)));
-    for (const target of targets) {
-      if (readinessState === 'fresh' || readinessState === 'seeded_unknown_freshness') {
-        authenticatedTargets.add(target);
-      } else {
-        authenticatedTargets.delete(target);
-      }
-    }
-    profilePatch.authenticatedServiceIds = [...authenticatedTargets];
-  }
-
-  return upsertServiceProfile({
-    ...options,
-    id,
-    profile: profilePatch,
+    updateAuthenticatedServiceIds,
   });
 }
 
@@ -502,25 +474,6 @@ function serviceLoginProfileTargetReadiness({
   return [...rowsByTarget.values()];
 }
 
-function mergeServiceProfileTargetReadiness(existingRows, updateRows) {
-  const rowsByTarget = new Map();
-  for (const row of existingRows) {
-    if (typeof row?.targetServiceId === 'string' && row.targetServiceId.length > 0) {
-      rowsByTarget.set(row.targetServiceId, row);
-    }
-  }
-  for (const row of updateRows) {
-    if (typeof row?.targetServiceId === 'string' && row.targetServiceId.length > 0) {
-      rowsByTarget.set(row.targetServiceId, row);
-    }
-  }
-  return [...rowsByTarget.values()];
-}
-
-function stringArray(value) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
-}
-
 function serviceLoginProfileReadinessAction(state) {
   switch (state) {
     case 'fresh':
@@ -536,21 +489,6 @@ function serviceLoginProfileReadinessAction(state) {
     default:
       return 'verify_or_seed_profile_before_authenticated_work';
   }
-}
-
-/**
- * @param {ServiceIdOptions} options
- * @returns {Promise<ServiceProfileRecord>}
- */
-async function fetchServiceProfileRecord({ id, ...options }) {
-  const profiles = await getServiceProfiles(options);
-  const profile = Array.isArray(profiles?.profiles)
-    ? profiles.profiles.find((candidate) => candidate?.id === id)
-    : null;
-  if (!profile) {
-    throw new Error(`updateServiceProfileFreshness could not find profile ${id}`);
-  }
-  return profile;
 }
 
 /**

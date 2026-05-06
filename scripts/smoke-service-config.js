@@ -9,6 +9,7 @@ import {
   getServiceProviders,
   getServiceSessions,
   getServiceSitePolicies,
+  updateServiceProfileFreshness,
   upsertServiceProfile,
   upsertServiceProvider,
   upsertServiceSession,
@@ -122,6 +123,14 @@ function assertCollectionMissing(collection, key, id, label) {
   assert(!collection[key].some((item) => item.id === id), `${label} unexpectedly retained ${id}`);
 }
 
+function assertSource(collection, key, id, expectedSource, label) {
+  assert(Array.isArray(collection?.[key]), `${label} missing ${key} array: ${JSON.stringify(collection)}`);
+  assert(
+    collection[key].some((source) => source.id === id && source.source === expectedSource),
+    `${label} did not report ${id} as ${expectedSource}: ${JSON.stringify(collection)}`,
+  );
+}
+
 try {
   const port = await enableStream();
   const serviceBaseUrl = `http://127.0.0.1:${port}`;
@@ -166,6 +175,28 @@ try {
     'client extra profile upsert response',
   );
   assert(clientProfile.profile?.id === 'client-profile', `client profile id mismatch: ${JSON.stringify(clientProfile)}`);
+  const freshnessProfile = await updateServiceProfileFreshness({
+    baseUrl: serviceBaseUrl,
+    id: 'client-profile',
+    loginId: 'client-target',
+    readinessState: 'fresh',
+    readinessEvidence: 'auth_probe_cookie_present',
+    lastVerifiedAt: '2026-05-06T12:00:00Z',
+    freshnessExpiresAt: '2026-05-06T13:00:00Z',
+  });
+  assertServiceProfileUpsertResponseSchemaRecord(
+    freshnessProfile,
+    profileUpsertResponseSchema,
+    'client freshness profile update response',
+  );
+  assert(
+    freshnessProfile.profile?.targetReadiness?.[0]?.state === 'fresh',
+    `client profile freshness state mismatch: ${JSON.stringify(freshnessProfile)}`,
+  );
+  assert(
+    freshnessProfile.profile?.authenticatedServiceIds?.includes('client-target'),
+    `client profile freshness auth targets mismatch: ${JSON.stringify(freshnessProfile)}`,
+  );
 
   const httpPolicy = await upsertServiceSitePolicy({
     baseUrl: serviceBaseUrl,
@@ -230,6 +261,32 @@ try {
         profile.sharedServiceIds?.includes(serviceName),
     ),
     `MCP profiles resource did not include HTTP-upserted profile: ${JSON.stringify(mcpProfiles)}`,
+  );
+
+  const mcpFreshnessResult = await send('tools/call', {
+    name: 'service_profile_freshness_update',
+    arguments: {
+      id: 'journal-downloader',
+      loginId: 'acs',
+      readinessState: 'stale',
+      readinessEvidence: 'auth_probe_cookie_missing',
+      lastVerifiedAt: '2026-05-06T14:00:00Z',
+      ...traceFields,
+    },
+  });
+  const mcpFreshness = parseMcpToolPayload(
+    mcpFreshnessResult,
+    'MCP service_profile_freshness_update',
+  );
+  assert(mcpFreshness.success === true, `MCP profile freshness update failed: ${JSON.stringify(mcpFreshness)}`);
+  assertServiceProfileUpsertResponseSchemaRecord(
+    mcpFreshness.data,
+    profileUpsertResponseSchema,
+    'MCP profile freshness update response',
+  );
+  assert(
+    mcpFreshness.data?.profile?.targetReadiness?.[0]?.state === 'stale',
+    `MCP profile freshness state mismatch: ${JSON.stringify(mcpFreshness)}`,
   );
 
   const mcpSessionResult = await send('tools/call', {
@@ -389,7 +446,7 @@ try {
   );
 
   const httpPoliciesAfterDelete = await getServiceSitePolicies({ baseUrl: serviceBaseUrl });
-  assertCollectionMissing(httpPoliciesAfterDelete, 'sitePolicies', 'google', 'HTTP site-policies');
+  assertSource(httpPoliciesAfterDelete, 'sitePolicySources', 'google', 'builtin', 'HTTP site-policy sources');
   assertCollectionMissing(httpPoliciesAfterDelete, 'sitePolicies', 'client-google', 'HTTP site-policies');
 
   const httpDeleteSession = await deleteServiceSession({

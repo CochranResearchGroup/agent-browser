@@ -71,9 +71,10 @@ When a bounded auth probe has just confirmed usable login state, pass
 matching `targetReadiness` rows, and explicit `targetReadiness` rows override
 generated rows for the same target identity.
 For an existing profile, prefer `updateServiceProfileFreshness()` so the helper
-reads the current profile, merges the new readiness row, preserves unrelated
-fields, and updates `authenticatedServiceIds` for fresh, stale, or blocked
-targets.
+posts to the service-side freshness mutation endpoint. The service merges the
+new readiness row under the serialized service-state mutator, preserves
+unrelated fields, and updates `authenticatedServiceIds` for fresh, stale, or
+blocked targets.
 
 ```js
 await requestServiceTab({

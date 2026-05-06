@@ -206,6 +206,10 @@ envelope returned by HTTP `GET /api/service/profiles/<id>/readiness` when a
 software client needs one profile's no-launch target-readiness rows without
 fetching allocation details or the full profile collection.
 
+`POST /api/service/profiles/<id>/freshness` and MCP
+`service_profile_freshness_update` reuse the profile upsert response envelope
+after merging bounded-probe freshness evidence into one persisted profile.
+
 `service-profile-lookup-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/lookup` when a software
 client wants agent-browser to apply the authoritative service profile selector

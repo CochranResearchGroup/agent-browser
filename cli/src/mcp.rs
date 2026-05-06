@@ -823,6 +823,76 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_profile_freshness_update",
+            "title": "Update service profile freshness",
+            "description": "Merge bounded-probe target readiness evidence into an existing service profile through the queued service config path.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Profile id to update."
+                    },
+                    "loginId": {
+                        "type": "string",
+                        "description": "Login identity whose freshness was probed."
+                    },
+                    "siteId": {
+                        "type": "string",
+                        "description": "Site identity whose freshness was probed."
+                    },
+                    "targetServiceId": {
+                        "type": "string",
+                        "description": "Target service or identity provider whose freshness was probed."
+                    },
+                    "targetServiceIds": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Additional target identities to update."
+                    },
+                    "readinessState": {
+                        "type": "string",
+                        "enum": ["unknown", "needs_manual_seeding", "seeded_unknown_freshness", "fresh", "stale", "blocked_by_attached_devtools"],
+                        "description": "New readiness state for the target identities. Defaults to fresh."
+                    },
+                    "readinessEvidence": {
+                        "type": "string",
+                        "description": "Evidence code from the bounded probe."
+                    },
+                    "readinessRecommendedAction": {
+                        "type": "string",
+                        "description": "Optional recommended action override."
+                    },
+                    "lastVerifiedAt": {
+                        "type": "string",
+                        "description": "Optional RFC 3339 probe timestamp. Defaults to server time."
+                    },
+                    "freshnessExpiresAt": {
+                        "type": "string",
+                        "description": "Optional RFC 3339 freshness expiry timestamp."
+                    },
+                    "updateAuthenticatedServiceIds": {
+                        "type": "boolean",
+                        "description": "Whether to add fresh targets to authenticatedServiceIds and remove stale or blocked targets. Defaults to true."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id"]
+            }
+        }),
+        json!({
             "name": "service_session_upsert",
             "title": "Upsert service session",
             "description": "Persist one service session record into service state. The id argument is authoritative and must match session.id when the nested object includes an id.",
@@ -3620,6 +3690,9 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_incidents" => call_service_incidents(arguments, session),
         "service_trace" => call_service_trace(arguments, session),
         "service_profile_upsert" => call_service_profile_upsert(arguments, session),
+        "service_profile_freshness_update" => {
+            call_service_profile_freshness_update(arguments, session)
+        }
         "service_profile_delete" => call_service_profile_delete(arguments, session),
         "service_session_upsert" => call_service_session_upsert(arguments, session),
         "service_session_delete" => call_service_session_delete(arguments, session),
@@ -3927,6 +4000,22 @@ fn call_service_profile_upsert(arguments: &Value, session: &str) -> Result<Value
     let command = service_profile_upsert_command(id, &profile, service_name, agent_name, task_name);
 
     send_queued_tool_command("service_profile_upsert", session, trace, command)
+}
+
+fn call_service_profile_freshness_update(
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let freshness = service_profile_freshness_arguments(arguments);
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command =
+        service_profile_freshness_command(id, &freshness, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_profile_freshness_update", session, trace, command)
 }
 
 fn call_service_profile_delete(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -5467,6 +5556,44 @@ fn service_profile_upsert_command(
         "action": "service_profile_upsert",
         "profileId": profile_id,
         "profile": profile,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_profile_freshness_arguments(arguments: &Value) -> Value {
+    let mut freshness = serde_json::Map::new();
+    for key in [
+        "loginId",
+        "siteId",
+        "targetServiceId",
+        "targetServiceIds",
+        "readinessState",
+        "readinessEvidence",
+        "readinessRecommendedAction",
+        "lastVerifiedAt",
+        "freshnessExpiresAt",
+        "updateAuthenticatedServiceIds",
+    ] {
+        if let Some(value) = arguments.get(key) {
+            freshness.insert(key.to_string(), value.clone());
+        }
+    }
+    Value::Object(freshness)
+}
+
+fn service_profile_freshness_command(
+    profile_id: &str,
+    freshness: &Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-profile-freshness-{}", uuid::Uuid::new_v4()),
+        "action": "service_profile_freshness_update",
+        "profileId": profile_id,
+        "freshness": freshness,
     });
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
@@ -8042,6 +8169,15 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(|tool| tool["name"] == "service_profile_freshness_update"
+                && tool["inputSchema"]["properties"]["readinessState"]["enum"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("stale"))));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "service_session_upsert"));
         assert!(response["result"]["tools"]
             .as_array()
@@ -9748,6 +9884,33 @@ mod tests {
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["profileLeasePolicy"], "wait");
         assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
+    }
+
+    #[test]
+    fn service_profile_freshness_command_builds_mutation_command() {
+        let freshness = service_profile_freshness_arguments(&json!({
+            "id": "journal-google",
+            "loginId": "google",
+            "readinessState": "stale",
+            "readinessEvidence": "auth_probe_cookie_missing",
+            "serviceName": "JournalDownloader"
+        }));
+        let command = service_profile_freshness_command(
+            "journal-google",
+            &freshness,
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("probeGoogleLogin"),
+        );
+
+        assert_eq!(command["action"], "service_profile_freshness_update");
+        assert_eq!(command["profileId"], "journal-google");
+        assert_eq!(command["freshness"]["loginId"], "google");
+        assert_eq!(command["freshness"]["readinessState"], "stale");
+        assert!(command["freshness"].get("serviceName").is_none());
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "probeGoogleLogin");
     }
 
     #[test]

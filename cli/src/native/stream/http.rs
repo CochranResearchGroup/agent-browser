@@ -236,6 +236,19 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(profile_id) = service_profile_freshness_id(path) {
+            let cmd = match service_profile_freshness_command(profile_id, body_str) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(service_session_id) = service_session_id(path) {
             let cmd = match service_session_upsert_command(service_session_id, body_str) {
                 Ok(cmd) => cmd,
@@ -1468,6 +1481,12 @@ fn service_profile_readiness_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
+fn service_profile_freshness_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/profiles/")
+        .and_then(|suffix| suffix.strip_suffix("/freshness"))
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
 fn service_session_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/sessions/")
         .filter(|id| !id.is_empty() && !id.contains('/'))
@@ -1516,6 +1535,16 @@ fn service_profile_upsert_command(profile_id: &str, body: &str) -> Result<Value,
         "action": "service_profile_upsert",
         "profileId": profile_id,
         "profile": profile,
+    }))
+}
+
+fn service_profile_freshness_command(profile_id: &str, body: &str) -> Result<Value, String> {
+    let freshness = parse_service_config_body(body, "profile freshness")?;
+    Ok(json!({
+        "id": format!("http-service-profile-freshness-{}", uuid::Uuid::new_v4()),
+        "action": "service_profile_freshness_update",
+        "profileId": profile_id,
+        "freshness": freshness,
     }))
 }
 
@@ -2652,6 +2681,10 @@ mod tests {
             Some("journal-downloader")
         );
         assert_eq!(
+            service_profile_freshness_id("/api/service/profiles/journal-downloader/freshness"),
+            Some("journal-downloader")
+        );
+        assert_eq!(
             service_session_id("/api/service/sessions/journal-run"),
             Some("journal-run")
         );
@@ -2678,6 +2711,10 @@ mod tests {
         );
         assert_eq!(
             service_profile_readiness_id("/api/service/profiles/journal-downloader"),
+            None
+        );
+        assert_eq!(
+            service_profile_freshness_id("/api/service/profiles/journal-downloader"),
             None
         );
         assert_eq!(

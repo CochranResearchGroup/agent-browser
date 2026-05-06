@@ -134,6 +134,19 @@ const serviceSurface = [
     httpNeedles: ['service_profile_id(path)', 'service_profile_upsert_command(profile_id, body_str)'],
   },
   {
+    tool: 'service_profile_freshness_update',
+    method: 'POST',
+    route: '/api/service/profiles/<id>/freshness',
+    httpNeedles: [
+      'service_profile_freshness_id(path)',
+      'service_profile_freshness_command(profile_id, body_str)',
+    ],
+    clientNeedles: [
+      'updateServiceProfileFreshness',
+      '/api/service/profiles/${encodeURIComponent(id)}/freshness',
+    ],
+  },
+  {
     tool: 'service_profile_delete',
     method: 'DELETE',
     route: '/api/service/profiles/<id>',
@@ -369,6 +382,9 @@ for (const entry of serviceSurface) {
   ]) {
     expectIncludes(source, entry.tool, `${label} mentions ${entry.tool}`);
     expectAnyIncludes(source, entry.docsNeedles ?? [entry.route], `${label} mentions ${entry.route}`);
+  }
+  for (const needle of entry.clientNeedles ?? []) {
+    expectIncludes(read('packages/client/src/service-observability.js'), needle, `service client exposes ${entry.route}`);
   }
 }
 

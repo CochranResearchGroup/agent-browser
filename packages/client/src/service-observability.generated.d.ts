@@ -585,7 +585,6 @@ export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabi
 
 export interface ServiceProfileFreshnessUpdateOptions extends ServiceObservabilityHttpOptions {
   id: string;
-  profile?: ServiceProfileRecord;
   loginId?: string;
   siteId?: string;
   targetServiceId?: string;
@@ -809,7 +808,7 @@ export declare function getServiceChallenges(options: ServiceQueryOptions): Prom
 export declare function postServiceReconcile(options: ServiceObservabilityHttpOptions): Promise<ServiceReconcileResponse>;
 export declare function upsertServiceProfile(options: ServiceProfileMutationOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function registerServiceLoginProfile(options: ServiceLoginProfileRegistrationOptions): Promise<ServiceProfileUpsertResponse>;
-/** Merge bounded-probe freshness evidence into an existing managed profile. */
+/** Ask the service to merge bounded-probe freshness evidence into a profile. */
 export declare function updateServiceProfileFreshness(options: ServiceProfileFreshnessUpdateOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;
 export declare function upsertServiceSession(options: ServiceSessionMutationOptions): Promise<ServiceSessionUpsertResponse>;

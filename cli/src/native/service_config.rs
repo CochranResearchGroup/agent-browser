@@ -3,11 +3,13 @@
 //! These helpers keep HTTP and MCP mutation surfaces aligned while preserving
 //! the JSON-backed service state as the current durable store.
 
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::service_model::{
-    BrowserProfile, BrowserSession, ProfileAllocationPolicy, ServiceActor, ServiceEntitySource,
-    ServiceProvider, ServiceState, SitePolicy,
+    BrowserProfile, BrowserSession, ProfileAllocationPolicy, ProfileReadinessState,
+    ProfileTargetReadiness, ServiceActor, ServiceEntitySource, ServiceProvider, ServiceState,
+    SitePolicy,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -67,6 +69,93 @@ fn validate_profile_policy(profile: &BrowserProfile) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ProfileFreshnessUpdate {
+    pub login_id: Option<String>,
+    pub site_id: Option<String>,
+    pub target_service_id: Option<String>,
+    pub target_service_ids: Vec<String>,
+    #[serde(default = "default_freshness_readiness_state")]
+    pub readiness_state: ProfileReadinessState,
+    pub readiness_evidence: Option<String>,
+    pub readiness_recommended_action: Option<String>,
+    pub last_verified_at: Option<String>,
+    pub freshness_expires_at: Option<String>,
+    pub update_authenticated_service_ids: Option<bool>,
+}
+
+fn default_freshness_readiness_state() -> ProfileReadinessState {
+    ProfileReadinessState::Fresh
+}
+
+impl ProfileFreshnessUpdate {
+    fn target_ids(&self) -> Vec<String> {
+        let mut targets = self.target_service_ids.clone();
+        if let Some(target) = self
+            .login_id
+            .as_deref()
+            .or(self.site_id.as_deref())
+            .or(self.target_service_id.as_deref())
+        {
+            targets.push(target.to_string());
+        }
+        unique_non_empty_strings(targets)
+    }
+
+    fn login_id_for_row(&self) -> Option<String> {
+        self.login_id
+            .clone()
+            .or_else(|| self.site_id.clone())
+            .or_else(|| self.target_service_id.clone())
+    }
+
+    fn should_update_authenticated_service_ids(&self) -> bool {
+        self.update_authenticated_service_ids.unwrap_or(true)
+    }
+}
+
+fn unique_non_empty_strings(values: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for value in values {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() && !out.iter().any(|existing| existing == trimmed) {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
+}
+
+fn readiness_recommended_action(state: ProfileReadinessState) -> &'static str {
+    match state {
+        ProfileReadinessState::Fresh => "use_profile",
+        ProfileReadinessState::Stale => "probe_target_auth_or_reseed_if_needed",
+        ProfileReadinessState::BlockedByAttachedDevtools => {
+            "close_attached_devtools_then_verify_profile"
+        }
+        ProfileReadinessState::NeedsManualSeeding => {
+            "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+        }
+        ProfileReadinessState::SeededUnknownFreshness => "probe_target_auth_or_reuse_if_acceptable",
+        ProfileReadinessState::Unknown => "verify_or_seed_profile_before_authenticated_work",
+    }
+}
+
+fn readiness_evidence(state: ProfileReadinessState) -> &'static str {
+    match state {
+        ProfileReadinessState::Fresh => "client_reported_authenticated",
+        ProfileReadinessState::Stale => "client_reported_stale",
+        ProfileReadinessState::BlockedByAttachedDevtools => "client_reported_attached_devtools",
+        ProfileReadinessState::NeedsManualSeeding => "client_reported_manual_seeding_needed",
+        ProfileReadinessState::SeededUnknownFreshness => "client_reported_seeded_unknown_freshness",
+        ProfileReadinessState::Unknown => "client_reported_unknown",
+    }
+}
+
+fn now_rfc3339() -> String {
+    chrono::Utc::now().to_rfc3339()
 }
 
 fn normalize_session_owner(session: &mut BrowserSession) {
@@ -166,6 +255,91 @@ pub fn upsert_profile(
     Ok(profile)
 }
 
+/// Merge target-readiness freshness evidence into one persisted profile record.
+pub fn update_profile_freshness(
+    state: &mut ServiceState,
+    id: &str,
+    update: ProfileFreshnessUpdate,
+) -> Result<BrowserProfile, String> {
+    validate_entity_id(id, "profile")?;
+    let targets = update.target_ids();
+    if targets.is_empty() {
+        return Err(
+            "profile freshness update requires loginId, siteId, targetServiceId, or targetServiceIds"
+                .to_string(),
+        );
+    }
+    let Some(profile) = state.profiles.get_mut(id) else {
+        return Err(format!("profile '{id}' does not exist"));
+    };
+
+    let login_id = update.login_id_for_row();
+    let last_verified_at = update.last_verified_at.clone().unwrap_or_else(now_rfc3339);
+    for target in &targets {
+        if !profile
+            .target_service_ids
+            .iter()
+            .any(|existing| existing == target)
+        {
+            profile.target_service_ids.push(target.clone());
+        }
+        let row =
+            ProfileTargetReadiness {
+                target_service_id: target.clone(),
+                login_id: login_id.clone(),
+                state: update.readiness_state,
+                manual_seeding_required: update.readiness_state
+                    == ProfileReadinessState::NeedsManualSeeding,
+                evidence: update
+                    .readiness_evidence
+                    .clone()
+                    .unwrap_or_else(|| readiness_evidence(update.readiness_state).to_string()),
+                recommended_action: update.readiness_recommended_action.clone().unwrap_or_else(
+                    || readiness_recommended_action(update.readiness_state).to_string(),
+                ),
+                last_verified_at: Some(last_verified_at.clone()),
+                freshness_expires_at: update.freshness_expires_at.clone(),
+            };
+        if let Some(existing) = profile
+            .target_readiness
+            .iter_mut()
+            .find(|row| row.target_service_id == *target)
+        {
+            *existing = row;
+        } else {
+            profile.target_readiness.push(row);
+        }
+    }
+
+    if update.should_update_authenticated_service_ids() {
+        for target in &targets {
+            if matches!(
+                update.readiness_state,
+                ProfileReadinessState::Fresh | ProfileReadinessState::SeededUnknownFreshness
+            ) {
+                if !profile
+                    .authenticated_service_ids
+                    .iter()
+                    .any(|existing| existing == target)
+                {
+                    profile.authenticated_service_ids.push(target.clone());
+                }
+            } else {
+                profile
+                    .authenticated_service_ids
+                    .retain(|existing| existing != target);
+            }
+        }
+    }
+
+    validate_profile_policy(profile)?;
+    state
+        .entity_sources
+        .profiles
+        .insert(id.to_string(), ServiceEntitySource::PersistedState);
+    Ok(profile.clone())
+}
+
 /// Delete one service profile record from persisted service state.
 pub fn delete_profile(
     state: &mut ServiceState,
@@ -228,6 +402,14 @@ pub fn upsert_persisted_profile(id: &str, body: Value) -> Result<BrowserProfile,
     upsert_profile_in_repository(&repository, id, body)
 }
 
+/// Update one persisted profile's freshness rows under the serialized state mutator.
+pub fn update_persisted_profile_freshness(id: &str, body: Value) -> Result<BrowserProfile, String> {
+    let update = serde_json::from_value::<ProfileFreshnessUpdate>(body)
+        .map_err(|err| format!("Invalid profile freshness update: {err}"))?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    update_profile_freshness_in_repository(&repository, id, update)
+}
+
 /// Delete one persisted profile record under the serialized state mutator.
 pub fn delete_persisted_profile(id: &str) -> Result<Option<BrowserProfile>, String> {
     let repository = LockedServiceStateRepository::default_json()?;
@@ -276,6 +458,14 @@ pub fn upsert_profile_in_repository(
     body: Value,
 ) -> Result<BrowserProfile, String> {
     repository.mutate(|state| upsert_profile(state, id, body))
+}
+
+pub fn update_profile_freshness_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+    update: ProfileFreshnessUpdate,
+) -> Result<BrowserProfile, String> {
+    repository.mutate(|state| update_profile_freshness(state, id, update))
 }
 
 pub fn delete_profile_in_repository(
@@ -407,6 +597,63 @@ mod tests {
         .unwrap_err();
 
         assert!(err.contains("requires userDataDir"));
+    }
+
+    #[test]
+    fn update_profile_freshness_merges_readiness_and_auth_targets() {
+        let mut state = ServiceState::default();
+        upsert_profile(
+            &mut state,
+            "journal-google",
+            json!({
+                "name": "Journal Google",
+                "allocation": "per_service",
+                "keyring": "basic_password_store",
+                "persistent": true,
+                "targetServiceIds": ["google"],
+                "authenticatedServiceIds": ["google"],
+                "sharedServiceIds": ["JournalDownloader"],
+                "targetReadiness": [{
+                    "targetServiceId": "google",
+                    "loginId": "google",
+                    "state": "fresh",
+                    "manualSeedingRequired": false,
+                    "evidence": "auth_probe_cookie_present",
+                    "recommendedAction": "use_profile",
+                    "lastVerifiedAt": "2026-05-06T12:00:00Z",
+                    "freshnessExpiresAt": "2026-05-06T13:00:00Z"
+                }]
+            }),
+        )
+        .unwrap();
+
+        let profile = update_profile_freshness(
+            &mut state,
+            "journal-google",
+            serde_json::from_value(json!({
+                "loginId": "google",
+                "readinessState": "stale",
+                "readinessEvidence": "auth_probe_cookie_missing",
+                "lastVerifiedAt": "2026-05-06T14:00:00Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(profile.authenticated_service_ids, Vec::<String>::new());
+        assert_eq!(profile.target_readiness.len(), 1);
+        assert_eq!(
+            profile.target_readiness[0].state,
+            ProfileReadinessState::Stale
+        );
+        assert_eq!(
+            profile.target_readiness[0].evidence,
+            "auth_probe_cookie_missing"
+        );
+        assert_eq!(
+            profile.target_readiness[0].last_verified_at.as_deref(),
+            Some("2026-05-06T14:00:00Z")
+        );
     }
 
     #[test]
