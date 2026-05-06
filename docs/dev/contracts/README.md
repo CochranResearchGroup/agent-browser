@@ -183,10 +183,12 @@ returned by CLI, HTTP, and MCP resources:
 - `service-challenges-response.v1.schema.json`
 
 These schemas guard the collection array field and `count` field. The profiles
-response also includes the same derived `profileAllocations` view returned by
-service status and the MCP profiles resource. Profile allocation rows include
-the same `targetReadiness` rows as the profile record so detail clients do not
-have to join back to the full profile collection.
+response also includes `profileSources` so clients can distinguish config,
+runtime-observed, and persisted profile provenance. It also includes the same
+derived `profileAllocations` view returned by service status and the MCP
+profiles resource. Profile allocation rows include the same `targetReadiness`
+rows as the profile record so detail clients do not have to join back to the
+full profile collection.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a

@@ -116,6 +116,7 @@ pub(crate) fn upsert_service_profile_and_session(
         if let Some(service_name) = metadata.service_name.as_ref() {
             merge_unique(&mut profile.shared_service_ids, service_name.clone());
         }
+        service_state.mark_runtime_observed_profile_source(profile_id);
     }
 
     let selected_profile_id = profile_id.clone().or_else(|| {

@@ -103,6 +103,14 @@ export interface ServiceProfileRecord {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileSourceRecord {
+  id: string;
+  source: 'config' | 'runtime_observed' | 'persisted_state';
+  overrideable: boolean;
+  precedence: Array<'config' | 'runtime_observed' | 'persisted_state'>;
+  [key: string]: unknown;
+}
+
 export interface ServiceProfileTargetReadiness {
   targetServiceId: string;
   loginId: string | null;
@@ -304,6 +312,7 @@ export interface ServiceContractsResponse {
 
 export interface ServiceProfilesResponse extends ServiceListResponse<ServiceProfileRecord> {
   profiles: ServiceProfileRecord[];
+  profileSources: ServiceProfileSourceRecord[];
   profileAllocations: ServiceProfileAllocation[];
 }
 
@@ -650,6 +659,8 @@ export interface ServiceProfileLookupResponse {
   query: ServiceProfileLookupQuery;
   /** Server-selected profile, or null when agent-browser has no suitable managed profile. */
   selectedProfile: ServiceProfileRecord | null;
+  /** Provenance for the selected profile after config, runtime observation, and persisted state are layered. */
+  selectedProfileSource: ServiceProfileSourceRecord | null;
   /** Match metadata explaining the selected profile and selector reason. */
   selectedProfileMatch: ServiceProfileLookupMatch | null;
   /** Optional no-launch readiness rows for the selected or requested readiness profile. */
@@ -678,6 +689,8 @@ export interface ServiceAccessPlanResponse {
   query: ServiceAccessPlanQuery;
   /** Server-selected profile, or null when agent-browser has no suitable managed profile. */
   selectedProfile: ServiceProfileRecord | null;
+  /** Provenance for the selected profile after config, runtime observation, and persisted state are layered. */
+  selectedProfileSource: ServiceProfileSourceRecord | null;
   /** Match metadata explaining the selected profile and selector reason. */
   selectedProfileMatch: ServiceProfileLookupMatch | null;
   /** Optional no-launch readiness rows for the selected or requested readiness profile. */

@@ -15,7 +15,7 @@ use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
 };
 use crate::native::service_model::{
-    service_profile_allocations, service_site_policy_sources, ServiceState,
+    service_profile_allocations, service_profile_sources, service_site_policy_sources, ServiceState,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
@@ -247,9 +247,11 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
         }),
         PROFILES_RESOURCE => {
             let profile_allocations = service_profile_allocations(&state);
+            let profile_sources = service_profile_sources(&state);
             let profiles = state.profiles.values().cloned().collect::<Vec<_>>();
             json!({
                 "profiles": profiles,
+                "profileSources": profile_sources,
                 "profileAllocations": profile_allocations,
                 "count": profiles.len(),
             })
@@ -11183,6 +11185,11 @@ mod tests {
             "basic_password_store"
         );
         assert_service_profile_record_contract(&resource["contents"]["profiles"][1]);
+        assert_eq!(resource["contents"]["profileSources"][0]["id"], "profile-a");
+        assert_eq!(
+            resource["contents"]["profileSources"][0]["source"],
+            "persisted_state"
+        );
         assert_eq!(
             resource["contents"]["profileAllocations"][0]["profileId"],
             "profile-a"

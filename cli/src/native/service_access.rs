@@ -148,6 +148,9 @@ pub(crate) fn service_access_plan_for_state(
             "readinessProfileId": request.readiness_profile_id,
         },
         "selectedProfile": selected_profile.clone(),
+        "selectedProfileSource": selection.as_ref().map(|selection| {
+            profile_source_value(service_state, &selection.profile_id)
+        }),
         "selectedProfileMatch": selection.as_ref().map(|selection| {
             let (matched_field, matched_identity) = selected_profile
                 .as_ref()
@@ -168,6 +171,18 @@ pub(crate) fn service_access_plan_for_state(
         "providers": providers,
         "challenges": challenges,
         "decision": decision,
+    })
+}
+
+fn profile_source_value(service_state: &ServiceState, profile_id: &str) -> Value {
+    let source = service_state
+        .profile_source(profile_id)
+        .unwrap_or(ServiceEntitySource::PersistedState);
+    json!({
+        "id": profile_id,
+        "source": source.as_str(),
+        "overrideable": source.overrideable(),
+        "precedence": ["config", "runtime_observed", "persisted_state"],
     })
 }
 

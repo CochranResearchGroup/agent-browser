@@ -53,6 +53,7 @@ pub enum ServiceEntitySource {
     PersistedState,
     Config,
     Builtin,
+    RuntimeObserved,
 }
 
 impl ServiceEntitySource {
@@ -61,6 +62,7 @@ impl ServiceEntitySource {
             Self::PersistedState => "persisted_state",
             Self::Config => "config",
             Self::Builtin => "builtin",
+            Self::RuntimeObserved => "runtime_observed",
         }
     }
 
@@ -71,12 +73,22 @@ impl ServiceEntitySource {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServiceEntitySources {
+    pub profiles: BTreeMap<String, ServiceEntitySource>,
     pub site_policies: BTreeMap<String, ServiceEntitySource>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SitePolicySourceRecord {
+    pub id: String,
+    pub source: String,
+    pub overrideable: bool,
+    pub precedence: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileSourceRecord {
     pub id: String,
     pub source: String,
     pub overrideable: bool,
@@ -1391,6 +1403,13 @@ pub fn assert_service_collection_response_contract(
     label: &str,
 ) {
     assert_record_fields(label, value, &[field, "count"], &[]);
+    if field == "profiles" {
+        assert!(value["profileSources"].is_array());
+        assert!(value["profileAllocations"].is_array());
+    }
+    if field == "sitePolicies" {
+        assert!(value["sitePolicySources"].is_array());
+    }
     let records = value[field].as_array().unwrap_or_else(|| {
         panic!("{label} missing {field} array");
     });
@@ -1440,6 +1459,12 @@ pub struct ServiceState {
 
 impl ServiceState {
     pub fn mark_persisted_entity_sources(&mut self) {
+        for id in self.profiles.keys() {
+            self.entity_sources
+                .profiles
+                .entry(id.clone())
+                .or_insert(ServiceEntitySource::PersistedState);
+        }
         for id in self.site_policies.keys() {
             self.entity_sources
                 .site_policies
@@ -1449,11 +1474,27 @@ impl ServiceState {
     }
 
     pub fn mark_config_entity_sources(&mut self) {
+        for id in self.profiles.keys() {
+            self.entity_sources
+                .profiles
+                .insert(id.clone(), ServiceEntitySource::Config);
+        }
         for id in self.site_policies.keys() {
             self.entity_sources
                 .site_policies
                 .insert(id.clone(), ServiceEntitySource::Config);
         }
+    }
+
+    pub fn profile_source(&self, id: &str) -> Option<ServiceEntitySource> {
+        self.entity_sources.profiles.get(id).copied()
+    }
+
+    pub fn mark_runtime_observed_profile_source(&mut self, id: &str) {
+        self.entity_sources
+            .profiles
+            .entry(id.to_string())
+            .or_insert(ServiceEntitySource::RuntimeObserved);
     }
 
     pub fn site_policy_source(&self, id: &str) -> Option<ServiceEntitySource> {
@@ -1477,7 +1518,12 @@ impl ServiceState {
     pub fn overlay_configured_entities(&mut self, configured: ServiceState) {
         let mut configured = configured;
         configured.mark_config_entity_sources();
-        self.profiles.extend(configured.profiles);
+        for (id, profile) in configured.profiles {
+            self.profiles.insert(id.clone(), profile);
+            self.entity_sources
+                .profiles
+                .insert(id, ServiceEntitySource::Config);
+        }
         self.sessions.extend(configured.sessions);
         for (id, policy) in configured.site_policies {
             self.site_policies.insert(id.clone(), policy);
@@ -1745,6 +1791,28 @@ fn service_profile_allocation(
         browser_ids: browser_ids.into_iter().collect(),
         tab_ids: tab_ids.into_iter().collect(),
     }
+}
+
+pub fn service_profile_sources(service_state: &ServiceState) -> Vec<ProfileSourceRecord> {
+    service_state
+        .profiles
+        .keys()
+        .map(|id| {
+            let source = service_state
+                .profile_source(id)
+                .unwrap_or(ServiceEntitySource::PersistedState);
+            ProfileSourceRecord {
+                id: id.clone(),
+                source: source.as_str().to_string(),
+                overrideable: source.overrideable(),
+                precedence: vec![
+                    "config".to_string(),
+                    "runtime_observed".to_string(),
+                    "persisted_state".to_string(),
+                ],
+            }
+        })
+        .collect()
 }
 
 fn derive_profile_target_readiness(
@@ -4230,7 +4298,12 @@ mod tests {
         }));
 
         for (schema, field, label) in collection_schemas {
-            if field == "sitePolicies" {
+            if field == "profiles" {
+                assert_schema_required_fields(
+                    &schema,
+                    &[field, "profileSources", "profileAllocations", "count"],
+                );
+            } else if field == "sitePolicies" {
                 assert_schema_required_fields(&schema, &[field, "sitePolicySources", "count"]);
             } else {
                 assert_schema_required_fields(&schema, &[field, "count"]);
@@ -4238,6 +4311,7 @@ mod tests {
             let response = if field == "profiles" {
                 json!({
                     field: [],
+                    "profileSources": [],
                     "profileAllocations": [],
                     "count": 0,
                 })

@@ -6,12 +6,20 @@
   "type": "object",
   "required": [
     "profiles",
+    "profileSources",
     "profileAllocations",
     "count"
   ],
   "properties": {
     "profiles": {
       "type": "array"
+    },
+    "profileSources": {
+      "description": "Source metadata for each effective profile row after config, runtime observation, and persisted state have been layered.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profileSource"
+      }
     },
     "profileAllocations": {
       "description": "Derived service-owned profile allocation view for session holders and waiting profile-lease jobs.",
@@ -26,6 +34,35 @@
     }
   },
   "$defs": {
+    "profileSource": {
+      "type": "object",
+      "required": [
+        "id",
+        "source",
+        "overrideable",
+        "precedence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "enum": ["config", "runtime_observed", "persisted_state"]
+        },
+        "overrideable": {
+          "type": "boolean"
+        },
+        "precedence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["config", "runtime_observed", "persisted_state"]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
     "profileAllocation": {
       "type": "object",
       "required": [

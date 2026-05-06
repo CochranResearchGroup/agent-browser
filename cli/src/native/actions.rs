@@ -63,7 +63,7 @@ use super::service_lifecycle::{
     ProfileSelectionRequest, ServiceLaunchMetadata,
 };
 use super::service_model::{
-    service_profile_allocations, BrowserHealth as ServiceBrowserHealth,
+    service_profile_allocations, service_profile_sources, BrowserHealth as ServiceBrowserHealth,
     BrowserHost as ServiceBrowserHost, JobState as ServiceJobState, ProfileKeyringPolicy,
     ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
     SessionCleanupPolicy,
@@ -6597,12 +6597,14 @@ async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
         .unwrap_or_default();
     service_state.refresh_profile_readiness();
     let profile_allocations = service_profile_allocations(&service_state);
+    let profile_sources = service_profile_sources(&service_state);
     let mut profiles = service_state.profiles.into_values().collect::<Vec<_>>();
     profiles.sort_by(|left, right| left.id.cmp(&right.id));
     let count = profiles.len();
 
     Ok(json!({
         "profiles": profiles,
+        "profileSources": profile_sources,
         "profileAllocations": profile_allocations,
         "count": count,
     }))
@@ -11647,6 +11649,11 @@ mod tests {
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["profiles"][0]["id"], "work");
         assert_eq!(result["data"]["profiles"][0]["name"], "Work");
+        assert_eq!(result["data"]["profileSources"][0]["id"], "work");
+        assert_eq!(
+            result["data"]["profileSources"][0]["source"],
+            "persisted_state"
+        );
         assert_eq!(
             result["data"]["profiles"][0]["targetReadiness"][0]["state"],
             "needs_manual_seeding"

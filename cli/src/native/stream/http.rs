@@ -19,8 +19,8 @@ use crate::native::service_lifecycle::{
     select_service_profile_for_request, ProfileSelectionRequest,
 };
 use crate::native::service_model::{
-    service_profile_allocations, service_site_policy_sources, BrowserProfile,
-    ProfileSelectionReason, ServiceState,
+    service_profile_allocations, service_profile_sources, service_site_policy_sources,
+    BrowserProfile, ProfileSelectionReason, ServiceEntitySource, ServiceState,
 };
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
@@ -1163,9 +1163,11 @@ fn service_collection_contents(path: &str) -> Option<Value> {
     match path {
         "/api/service/profiles" => {
             let profile_allocations = service_profile_allocations(&service_state);
+            let profile_sources = service_profile_sources(&service_state);
             let profiles = service_state.profiles.values().cloned().collect::<Vec<_>>();
             Some(json!({
                 "profiles": profiles,
+                "profileSources": profile_sources,
                 "profileAllocations": profile_allocations,
                 "count": profiles.len(),
             }))
@@ -1321,6 +1323,9 @@ fn service_profile_lookup_response_for_state(
             "readinessProfileId": readiness_profile_id,
         },
         "selectedProfile": selected_profile.clone(),
+        "selectedProfileSource": selection.as_ref().map(|selection| {
+            profile_source_value(service_state, &selection.profile_id)
+        }),
         "selectedProfileMatch": selection.as_ref().map(|selection| {
             let (matched_field, matched_identity) = selected_profile
                 .as_ref()
@@ -1337,6 +1342,18 @@ fn service_profile_lookup_response_for_state(
         "readiness": readiness,
         "readinessSummary": readiness_summary(readiness.as_ref()),
     }))
+}
+
+fn profile_source_value(service_state: &ServiceState, profile_id: &str) -> Value {
+    let source = service_state
+        .profile_source(profile_id)
+        .unwrap_or(ServiceEntitySource::PersistedState);
+    json!({
+        "id": profile_id,
+        "source": source.as_str(),
+        "overrideable": source.overrideable(),
+        "precedence": ["config", "runtime_observed", "persisted_state"],
+    })
 }
 
 fn service_profile_match_details(
@@ -2609,6 +2626,7 @@ mod tests {
         let challenges = service_collection_contents("/api/service/challenges").unwrap();
 
         assert!(profiles["profiles"].is_array());
+        assert!(profiles["profileSources"].is_array());
         assert!(profiles["profileAllocations"].is_array());
         assert!(sessions["sessions"].is_array());
         assert!(browsers["browsers"].is_array());

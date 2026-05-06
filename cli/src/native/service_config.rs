@@ -159,6 +159,10 @@ pub fn upsert_profile(
         .map_err(|err| format!("Invalid profile: {err}"))?;
     validate_profile_policy(&profile)?;
     state.profiles.insert(id.to_string(), profile.clone());
+    state
+        .entity_sources
+        .profiles
+        .insert(id.to_string(), ServiceEntitySource::PersistedState);
     Ok(profile)
 }
 
@@ -168,6 +172,7 @@ pub fn delete_profile(
     id: &str,
 ) -> Result<Option<BrowserProfile>, String> {
     validate_entity_id(id, "profile")?;
+    state.entity_sources.profiles.remove(id);
     Ok(state.profiles.remove(id))
 }
 
