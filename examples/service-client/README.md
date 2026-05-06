@@ -70,6 +70,10 @@ When a bounded auth probe has just confirmed usable login state, pass
 `freshnessExpiresAt` to `registerServiceLoginProfile()`. The helper writes
 matching `targetReadiness` rows, and explicit `targetReadiness` rows override
 generated rows for the same target identity.
+For an existing profile, prefer `updateServiceProfileFreshness()` so the helper
+reads the current profile, merges the new readiness row, preserves unrelated
+fields, and updates `authenticatedServiceIds` for fresh, stale, or blocked
+targets.
 
 ```js
 await requestServiceTab({

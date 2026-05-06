@@ -14,6 +14,7 @@ import {
   lookupServiceProfile,
   registerServiceLoginProfile,
   summarizeServiceProfileReadiness,
+  updateServiceProfileFreshness,
 } from '../packages/client/src/service-observability.js';
 
 function createFetchRecorder(payload) {
@@ -656,6 +657,77 @@ async function main() {
       evidence: 'operator_reported_timeout',
       recommendedAction: 'probe_target_auth_or_reseed_if_needed',
       lastVerifiedAt: '2026-05-06T12:30:00Z',
+      freshnessExpiresAt: null,
+    },
+  ]);
+
+  const freshnessUpdate = createFetchRecorder((url, _init, calls) => {
+    if (url.endsWith('/api/service/profiles')) {
+      return {
+        success: true,
+        data: {
+          profiles: [
+            {
+              id: 'journal-google',
+              name: 'Journal Google',
+              allocation: 'per_service',
+              keyring: 'basic_password_store',
+              persistent: true,
+              targetServiceIds: ['google'],
+              authenticatedServiceIds: ['google'],
+              targetReadiness: [
+                {
+                  targetServiceId: 'google',
+                  loginId: 'google',
+                  state: 'fresh',
+                  manualSeedingRequired: false,
+                  evidence: 'auth_probe_cookie_present',
+                  recommendedAction: 'use_profile',
+                  lastVerifiedAt: '2026-05-06T12:00:00Z',
+                  freshnessExpiresAt: '2026-05-06T13:00:00Z',
+                },
+              ],
+              sharedServiceIds: ['JournalDownloader'],
+            },
+          ],
+        },
+      };
+    }
+    return {
+      success: true,
+      data: {
+        id: 'journal-google',
+        upserted: true,
+        profile: calls.at(-1)?.body,
+      },
+    };
+  });
+  await updateServiceProfileFreshness({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: freshnessUpdate.fetch,
+    id: 'journal-google',
+    loginId: 'google',
+    readinessState: 'stale',
+    readinessEvidence: 'auth_probe_cookie_missing',
+    lastVerifiedAt: '2026-05-06T14:00:00Z',
+  });
+  assert.equal(freshnessUpdate.calls[0].url, 'http://127.0.0.1:4849/api/service/profiles');
+  assert.equal(freshnessUpdate.calls[0].init.method, 'GET');
+  assert.equal(
+    freshnessUpdate.calls[1].url,
+    'http://127.0.0.1:4849/api/service/profiles/journal-google',
+  );
+  assert.equal(freshnessUpdate.calls[1].init.method, 'POST');
+  assert.deepEqual(freshnessUpdate.calls[1].body.authenticatedServiceIds, []);
+  assert.deepEqual(freshnessUpdate.calls[1].body.targetReadiness, [
+    {
+      targetServiceId: 'google',
+      loginId: 'google',
+      state: 'stale',
+      manualSeedingRequired: false,
+      evidence: 'auth_probe_cookie_missing',
+      recommendedAction: 'probe_target_auth_or_reseed_if_needed',
+      lastVerifiedAt: '2026-05-06T14:00:00Z',
       freshnessExpiresAt: null,
     },
   ]);

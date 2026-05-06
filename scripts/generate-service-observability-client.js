@@ -635,6 +635,21 @@ export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabi
   profile?: Record<string, unknown>;
 }
 
+export interface ServiceProfileFreshnessUpdateOptions extends ServiceObservabilityHttpOptions {
+  id: string;
+  profile?: ServiceProfileRecord;
+  loginId?: string;
+  siteId?: string;
+  targetServiceId?: string;
+  targetServiceIds?: string[];
+  readinessState?: ServiceProfileTargetReadiness['state'];
+  readinessEvidence?: string;
+  readinessRecommendedAction?: string;
+  lastVerifiedAt?: string | null;
+  freshnessExpiresAt?: string | null;
+  updateAuthenticatedServiceIds?: boolean;
+}
+
 export interface ServiceProfileReadinessSummary {
   /** True when at least one target explicitly needs detached manual profile seeding. */
   needsManualSeeding: boolean;
@@ -840,6 +855,8 @@ export declare function getServiceChallenges(options: ServiceQueryOptions): Prom
 export declare function postServiceReconcile(options: ServiceObservabilityHttpOptions): Promise<ServiceReconcileResponse>;
 export declare function upsertServiceProfile(options: ServiceProfileMutationOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function registerServiceLoginProfile(options: ServiceLoginProfileRegistrationOptions): Promise<ServiceProfileUpsertResponse>;
+/** Merge bounded-probe freshness evidence into an existing managed profile. */
+export declare function updateServiceProfileFreshness(options: ServiceProfileFreshnessUpdateOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;
 export declare function upsertServiceSession(options: ServiceSessionMutationOptions): Promise<ServiceSessionUpsertResponse>;
 export declare function deleteServiceSession(options: ServiceIdOptions): Promise<ServiceSessionDeleteResponse>;

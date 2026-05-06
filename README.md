@@ -1646,6 +1646,7 @@ browsers, sessions, tabs, site policies, providers, and challenges,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 including optional freshness fields such as `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`,
+`updateServiceProfileFreshness` for read-modify-write bounded probe updates,
 operator remedy helpers for job cancel, browser retry, and incident handling,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
 `getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
@@ -1694,6 +1695,10 @@ When a software client has just completed a bounded auth probe, it can pass
 freshness without forcing the caller to hand-build a full profile record.
 Explicit `targetReadiness` rows may also be supplied and override generated
 rows for matching target identities.
+For an already registered profile, use `updateServiceProfileFreshness()` instead:
+it reads the current profile when a caller does not provide one, merges the new
+readiness row, preserves unrelated profile fields, and updates
+`authenticatedServiceIds` so stale or blocked targets stop looking fresh.
 
 ```ts
 import { requestServiceTab } from '@agent-browser/client/service-request';

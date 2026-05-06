@@ -21,6 +21,7 @@ import {
   lookupServiceProfile,
   registerServiceLoginProfile,
   summarizeServiceProfileReadiness,
+  updateServiceProfileFreshness,
 } from '@agent-browser/client/service-observability';
 
 assert.equal(typeof createServiceRequest, 'function');
@@ -39,5 +40,6 @@ assert.equal(typeof getServiceTrace, 'function');
 assert.equal(typeof lookupServiceProfile, 'function');
 assert.equal(typeof registerServiceLoginProfile, 'function');
 assert.equal(typeof summarizeServiceProfileReadiness, 'function');
+assert.equal(typeof updateServiceProfileFreshness, 'function');
 
 console.log('Service client package exports resolved');
