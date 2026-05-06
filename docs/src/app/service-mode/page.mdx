@@ -360,7 +360,7 @@ cd docs && pnpm build
 git diff --check
 ```
 
-Ordinary fast CI runs the no-launch service contract metadata smoke, the no-launch site-policy source smoke, and the HTTP and MCP incident-summary smokes after the Rust suite, so service compatibility metadata, effective site-policy provenance, and grouped service incident remedies stay covered without starting Chrome. Service request action changes are guarded by the static API/MCP parity check, generated client contract check, and targeted Rust MCP and HTTP action-parity tests. Run both incident-summary smokes before changing incident summary grouping or filters; together they guard HTTP `summary=true` and MCP `service_incidents` with `summary: true` across state, severity, escalation, handling-state, browser, profile, session, service, agent, task, and since filters.
+Ordinary fast CI runs the no-launch service contract metadata smoke, the no-launch profile-source smoke, the no-launch site-policy source smoke, and the HTTP and MCP incident-summary smokes after the Rust suite, so service compatibility metadata, effective profile and site-policy provenance, and grouped service incident remedies stay covered without starting Chrome. Service request action changes are guarded by the static API/MCP parity check, generated client contract check, and targeted Rust MCP and HTTP action-parity tests. Run both incident-summary smokes before changing incident summary grouping or filters; together they guard HTTP `summary=true` and MCP `service_incidents` with `summary: true` across state, severity, escalation, handling-state, browser, profile, session, service, agent, task, and since filters.
 
 Run the broader service health smoke when Chrome-backed live validation is required:
 

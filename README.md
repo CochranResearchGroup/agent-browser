@@ -585,10 +585,10 @@ without launching a browser.
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain
 read-only under the same launch defaults.
 Fast CI runs the no-launch service contract metadata smoke, the no-launch
-site-policy source smoke, and the no-launch HTTP and MCP incident-summary
-smokes after the Rust suite, covering service contract metadata, effective
-site-policy provenance, and grouped service incident remedies without starting
-Chrome. Service request action changes must keep `SERVICE_REQUEST_ACTIONS`,
+profile-source smoke, the no-launch site-policy source smoke, and the
+no-launch HTTP and MCP incident-summary smokes after the Rust suite, covering
+service contract metadata, effective profile and site-policy provenance, and
+grouped service incident remedies without starting Chrome. Service request action changes must keep `SERVICE_REQUEST_ACTIONS`,
 `docs/dev/contracts/service-request.v1.schema.json`, MCP `service_request`,
 HTTP `/api/service/request`, and generated `@agent-browser/client` helpers
 aligned; the fast parity, client, and Rust gates include no-launch guards for
