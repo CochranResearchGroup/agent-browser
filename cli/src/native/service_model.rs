@@ -1956,8 +1956,8 @@ fn derive_target_readiness_for_profile(
         .authenticated_service_ids
         .iter()
         .any(|id| id == target_service_id);
-    let manual_seeding_required =
-        target_requires_detached_manual_seeding(profile, site_policies, target_service_id);
+    let manual_seeding_required = !authenticated
+        && target_requires_detached_manual_seeding(profile, site_policies, target_service_id);
     let (state, evidence, recommended_action) = if authenticated {
         (
             ProfileReadinessState::SeededUnknownFreshness,
@@ -5109,7 +5109,11 @@ mod tests {
             seeded_google.state,
             ProfileReadinessState::SeededUnknownFreshness
         );
-        assert!(seeded_google.manual_seeding_required);
+        assert!(!seeded_google.manual_seeding_required);
+        assert_eq!(
+            seeded_google.recommended_action,
+            "probe_target_auth_or_reuse_if_acceptable"
+        );
     }
 
     #[test]

@@ -166,10 +166,12 @@ These schemas cover `profiles`, `browsers`, `sessions`, `tabs`,
 `sitePolicies`, `providers`, and `challenges` records. Profile records include
 derived `targetReadiness` rows for no-launch target-service readiness. Google
 targets without authenticated evidence report `needs_manual_seeding` and
-recommend detached `runtime login` before attachable automation. They are
-guarded by Rust model tests and MCP resource tests so software clients can
-consume the same camelCase record fields from HTTP and MCP without inferring
-Rust internals.
+recommend detached `runtime login` before attachable automation. Once a managed
+profile lists the target in `authenticatedServiceIds`, readiness changes to
+`seeded_unknown_freshness` and access-plan no longer treats first-login seeding
+as a required manual action. They are guarded by Rust model tests and MCP
+resource tests so software clients can consume the same camelCase record fields
+from HTTP and MCP without inferring Rust internals.
 
 The matching collection response schemas cover the compact collection envelopes
 returned by CLI, HTTP, and MCP resources:

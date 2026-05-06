@@ -1123,6 +1123,44 @@ mod tests {
     }
 
     #[test]
+    fn service_access_plan_does_not_require_manual_seeding_for_authenticated_google_profile() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-seeded".to_string(),
+                BrowserProfile {
+                    id: "google-seeded".to_string(),
+                    name: "Google Seeded".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    authenticated_service_ids: vec!["google".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("probeGoogleLogin".to_string()),
+                target_service_ids: vec!["google".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["selectedProfile"]["id"], "google-seeded");
+        assert_eq!(plan["readinessSummary"]["manualSeedingRequired"], false);
+        assert_eq!(plan["readinessSummary"]["needsManualSeeding"], false);
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            "use_selected_profile"
+        );
+        assert_eq!(plan["decision"]["manualActionRequired"], false);
+        assert_eq!(plan["decision"]["manualSeedingRequired"], false);
+    }
+
+    #[test]
     fn service_access_plan_explains_challenge_provider_fit() {
         let state = ServiceState {
             profiles: BTreeMap::from([(

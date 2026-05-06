@@ -465,6 +465,8 @@ The HTTP API loads the same persisted and configured service state as the CLI be
 
 Run <code>pnpm test:service-profile-target-mcp-live</code> to validate that typed MCP <code>browser_navigate</code> target hints select the authenticated target service profile.
 
+Once a managed profile lists a target in <code>authenticatedServiceIds</code>, readiness changes to <code>seeded_unknown_freshness</code> and access-plan no longer treats detached first-login seeding as a required manual action.
+
 Run <code>pnpm test:service-status-no-launch</code> to validate that service status remains read-only when launch defaults such as <code>AGENT_BROWSER_ARGS</code> are configured.
 
 Run <code>pnpm test:service-contracts-no-launch</code> to validate that HTTP <code>/api/service/contracts</code> returns compatibility metadata without launching or recording a browser, and that <code>getServiceContracts()</code> exposes the profile lookup/readiness client-helper metadata to software clients.
