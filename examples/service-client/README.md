@@ -189,6 +189,24 @@ The summary comes from `summarizeServiceProfileReadiness()` in
 `@agent-browser/client/service-observability`, so clients can reuse the same
 logic without copying this example.
 
+When a client has just completed a bounded auth probe for an existing managed
+profile, pass the probe result back to agent-browser instead of editing profile
+JSON locally:
+
+```bash
+pnpm --filter agent-browser-service-client-example exec node managed-profile-flow.mjs \
+  --base-url http://127.0.0.1:<stream-port> \
+  --login-id canva \
+  --target-service-id canva \
+  --freshness-profile-id canva-default \
+  --freshness-state fresh \
+  --freshness-evidence auth_probe_cookie_present
+```
+
+The script calls `updateServiceProfileFreshness()`, which posts to
+`POST /api/service/profiles/<id>/freshness` so the service serializes the merge
+and updates `authenticatedServiceIds` consistently.
+
 Pass `--cancel-job-id <job-id>` when your software already knows a queued job
 that should be cancelled. The script calls `cancelServiceJob` and prints the
 cancellation result alongside the tab request and trace output. Use

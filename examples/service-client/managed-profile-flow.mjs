@@ -5,12 +5,17 @@ import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
   getServiceAccessPlan,
   registerServiceLoginProfile,
+  updateServiceProfileFreshness,
 } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://www.canva.com/';
 const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | undefined>, exit(code?: number): never }} */ (
   /** @type {any} */ (globalThis).process
 );
+
+/**
+ * @typedef {import('@agent-browser/client/service-observability').ServiceProfileTargetReadiness['state']} ServiceProfileReadinessState
+ */
 
 /**
  * @typedef {{
@@ -25,6 +30,12 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   registerProfileId?: string;
  *   profileUserDataDir?: string;
  *   registerAuthenticated?: boolean;
+ *   freshnessProfileId?: string;
+ *   freshnessReadinessState?: ServiceProfileReadinessState;
+ *   freshnessEvidence?: string;
+ *   freshnessLastVerifiedAt?: string;
+ *   freshnessExpiresAt?: string;
+ *   freshnessUpdateAuthenticatedServiceIds?: boolean;
  *   fetch?: typeof globalThis.fetch;
  *   dryRun?: boolean;
  * }} ManagedProfileOptions
@@ -44,6 +55,12 @@ export function buildManagedProfilePlan({
   registerProfileId,
   profileUserDataDir,
   registerAuthenticated = false,
+  freshnessProfileId,
+  freshnessReadinessState = 'fresh',
+  freshnessEvidence,
+  freshnessLastVerifiedAt,
+  freshnessExpiresAt,
+  freshnessUpdateAuthenticatedServiceIds = true,
 } = {}) {
   return {
     serviceName,
@@ -95,6 +112,18 @@ export function buildManagedProfilePlan({
           authenticated: registerAuthenticated,
         })
       : null,
+    optionalFreshnessUpdate: freshnessProfileId
+      ? buildProfileFreshnessUpdate({
+          id: freshnessProfileId,
+          loginId,
+          targetServiceId,
+          readinessState: freshnessReadinessState,
+          readinessEvidence: freshnessEvidence,
+          lastVerifiedAt: freshnessLastVerifiedAt,
+          freshnessExpiresAt,
+          updateAuthenticatedServiceIds: freshnessUpdateAuthenticatedServiceIds,
+        })
+      : null,
   };
 }
 
@@ -113,6 +142,12 @@ export async function runManagedProfileWorkflow({
   registerProfileId,
   profileUserDataDir,
   registerAuthenticated = false,
+  freshnessProfileId,
+  freshnessReadinessState = 'fresh',
+  freshnessEvidence,
+  freshnessLastVerifiedAt,
+  freshnessExpiresAt,
+  freshnessUpdateAuthenticatedServiceIds = true,
   fetch = globalThis.fetch,
   dryRun = false,
 } = {}) {
@@ -127,6 +162,12 @@ export async function runManagedProfileWorkflow({
     registerProfileId,
     profileUserDataDir,
     registerAuthenticated,
+    freshnessProfileId,
+    freshnessReadinessState,
+    freshnessEvidence,
+    freshnessLastVerifiedAt,
+    freshnessExpiresAt,
+    freshnessUpdateAuthenticatedServiceIds,
   });
 
   if (dryRun) {
@@ -167,6 +208,23 @@ export async function runManagedProfileWorkflow({
         })
       : null;
 
+  const profileFreshnessUpdate = freshnessProfileId
+    ? await updateServiceProfileFreshness({
+        baseUrl,
+        fetch,
+        ...buildProfileFreshnessUpdate({
+          id: freshnessProfileId,
+          loginId,
+          targetServiceId,
+          readinessState: freshnessReadinessState,
+          readinessEvidence: freshnessEvidence,
+          lastVerifiedAt: freshnessLastVerifiedAt,
+          freshnessExpiresAt,
+          updateAuthenticatedServiceIds: freshnessUpdateAuthenticatedServiceIds,
+        }),
+      })
+    : null;
+
   const tab = await requestServiceTab({
     baseUrl,
     fetch,
@@ -192,6 +250,7 @@ export async function runManagedProfileWorkflow({
     providers: accessPlan.providers,
     challenges: accessPlan.challenges,
     profileRegistration,
+    profileFreshnessUpdate,
     tab,
   };
 }
@@ -240,6 +299,41 @@ function buildLoginProfileRegistration({
   };
 }
 
+/**
+ * @param {{
+ *   id: string,
+ *   loginId?: string,
+ *   targetServiceId?: string,
+ *   readinessState?: ServiceProfileReadinessState,
+ *   readinessEvidence?: string,
+ *   lastVerifiedAt?: string,
+ *   freshnessExpiresAt?: string,
+ *   updateAuthenticatedServiceIds?: boolean,
+ * }} options
+ */
+function buildProfileFreshnessUpdate({
+  id,
+  loginId,
+  targetServiceId,
+  readinessState,
+  readinessEvidence,
+  lastVerifiedAt,
+  freshnessExpiresAt,
+  updateAuthenticatedServiceIds,
+}) {
+  const identity = loginId || targetServiceId;
+  return {
+    id,
+    loginId: identity,
+    targetServiceId,
+    readinessState,
+    readinessEvidence,
+    lastVerifiedAt,
+    freshnessExpiresAt,
+    updateAuthenticatedServiceIds,
+  };
+}
+
 if (import.meta.url === `file://${nodeProcess.argv[1]}`) {
   runManagedProfileWorkflow(parseArgs(nodeProcess.argv.slice(2)))
     .then((result) => {
@@ -269,6 +363,13 @@ function parseArgs(args) {
     registerProfileId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_PROFILE_ID,
     profileUserDataDir: nodeProcess.env.AGENT_BROWSER_EXAMPLE_PROFILE_USER_DATA_DIR,
     registerAuthenticated: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_AUTHENTICATED === '1',
+    freshnessProfileId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_PROFILE_ID,
+    freshnessReadinessState: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_STATE || 'fresh',
+    freshnessEvidence: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_EVIDENCE,
+    freshnessLastVerifiedAt: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_LAST_VERIFIED_AT,
+    freshnessExpiresAt: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_EXPIRES_AT,
+    freshnessUpdateAuthenticatedServiceIds:
+      nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_UPDATE_AUTH_IDS !== '0',
     dryRun: false,
   };
 
@@ -298,6 +399,20 @@ function parseArgs(args) {
       parsed.profileUserDataDir = requiredValue(args, ++index, arg);
     } else if (arg === '--register-authenticated') {
       parsed.registerAuthenticated = true;
+    } else if (arg === '--freshness-profile-id') {
+      parsed.freshnessProfileId = requiredValue(args, ++index, arg);
+    } else if (arg === '--freshness-state') {
+      parsed.freshnessReadinessState = /** @type {ServiceProfileReadinessState} */ (
+        requiredValue(args, ++index, arg)
+      );
+    } else if (arg === '--freshness-evidence') {
+      parsed.freshnessEvidence = requiredValue(args, ++index, arg);
+    } else if (arg === '--freshness-last-verified-at') {
+      parsed.freshnessLastVerifiedAt = requiredValue(args, ++index, arg);
+    } else if (arg === '--freshness-expires-at') {
+      parsed.freshnessExpiresAt = requiredValue(args, ++index, arg);
+    } else if (arg === '--skip-authenticated-service-id-update') {
+      parsed.freshnessUpdateAuthenticatedServiceIds = false;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }

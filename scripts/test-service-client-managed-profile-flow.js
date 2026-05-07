@@ -17,6 +17,7 @@ const profile = {
 };
 
 await testExistingProfileSelection();
+await testExistingProfileFreshnessUpdate();
 await testMissingProfileRegistration();
 await testManualSeedingReadinessSummary();
 await testIdentityFirstGuidanceDrift();
@@ -64,6 +65,65 @@ async function testExistingProfileSelection() {
   assert.deepEqual(
     calls.map((call) => `${call.method} ${call.path}`),
     ['GET /api/service/access-plan', 'POST /api/service/request'],
+  );
+}
+
+async function testExistingProfileFreshnessUpdate() {
+  const calls = [];
+  const fetch = createMockFetch({
+    profiles: [profile],
+    calls,
+    rejectRegistration: true,
+  });
+
+  const result = await runManagedProfileWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    readinessProfileId: 'canva-default',
+    registerProfileId: 'canva-default',
+    freshnessProfileId: 'canva-default',
+    freshnessReadinessState: 'fresh',
+    freshnessEvidence: 'auth_probe_cookie_present',
+    freshnessLastVerifiedAt: '2026-05-06T15:00:00Z',
+    freshnessExpiresAt: '2026-05-06T16:00:00Z',
+    url: 'https://www.canva.com/',
+  });
+
+  assert.equal(result.selectedProfile?.id, 'canva-default');
+  assert.equal(result.profileRegistration, null);
+  assert.equal(result.profileFreshnessUpdate?.upserted, true);
+  assert.equal(result.profileFreshnessUpdate?.profile?.id, 'canva-default');
+  assert.deepEqual(result.profileFreshnessUpdate?.profile?.authenticatedServiceIds, ['canva']);
+  assert.equal(result.profileFreshnessUpdate?.profile?.targetReadiness?.[0]?.state, 'fresh');
+  assert.equal(result.profileFreshnessUpdate?.profile?.targetReadiness?.[0]?.evidence, 'auth_probe_cookie_present');
+  assert.equal(result.tab?.success, true);
+
+  const freshnessCall = calls.find(
+    (call) => call.method === 'POST' && call.path === '/api/service/profiles/canva-default/freshness',
+  );
+  assert(freshnessCall, 'existing-profile path did not post freshness evidence');
+  const freshnessBody = JSON.parse(String(freshnessCall.body));
+  assert.equal(freshnessBody.loginId, 'canva');
+  assert.equal(freshnessBody.targetServiceId, 'canva');
+  assert.deepEqual(freshnessBody.targetServiceIds, ['canva']);
+  assert.equal(freshnessBody.readinessState, 'fresh');
+  assert.equal(freshnessBody.readinessEvidence, 'auth_probe_cookie_present');
+  assert.equal(freshnessBody.lastVerifiedAt, '2026-05-06T15:00:00Z');
+  assert.equal(freshnessBody.freshnessExpiresAt, '2026-05-06T16:00:00Z');
+  assert.equal(freshnessBody.updateAuthenticatedServiceIds, true);
+
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    [
+      'GET /api/service/access-plan',
+      'POST /api/service/profiles/canva-default/freshness',
+      'POST /api/service/request',
+    ],
   );
 }
 
@@ -188,22 +248,26 @@ async function testIdentityFirstGuidanceDrift() {
     'should call `getServiceAccessPlan()`',
     'request the tab by the same identity through `requestServiceTab()`',
     'Direct profile selection is an override',
+    'updateServiceProfileFreshness()',
   ]);
   assertContainsAll(serviceModeDocs, [
     'The normal request model is identity-first',
     '<code>getServiceAccessPlan()</code> for the target identity',
     '<code>requestServiceTab</code> or <code>POST /api/service/request</code>',
     'bring-your-own-profile workflows',
+    '<code>updateServiceProfileFreshness()</code>',
   ]);
   assertContainsAll(commandsDocs, [
     'Service requests should be identity-first',
     '`siteId`, `loginId`, or `targetServiceId`',
     'known-login overrides or bring-your-own-profile workflows',
+    'POST /api/service/profiles/<id>/freshness',
   ]);
   assertContainsAll(skill, [
     '`getServiceAccessPlan()` with `serviceName`, `agentName`, `taskName`',
     'request the tab by the same identity through `requestServiceTab()`',
     'Register a new managed login profile only when agent-browser',
+    'MCP `service_profile_freshness_update`',
   ]);
 }
 
@@ -315,6 +379,28 @@ function createMockFetch({
         profile: {
           id: 'canva-default',
           ...requestedProfile,
+        },
+      });
+    }
+
+    if (method === 'POST' && parsed.pathname === '/api/service/profiles/canva-default/freshness') {
+      const requestedFreshness = JSON.parse(String(init.body));
+      return serviceResponse({
+        upserted: true,
+        profile: {
+          ...profile,
+          targetReadiness: [
+            {
+              targetServiceId: requestedFreshness.targetServiceId,
+              loginId: requestedFreshness.loginId,
+              state: requestedFreshness.readinessState,
+              manualSeedingRequired: requestedFreshness.readinessState === 'needs_manual_seeding',
+              evidence: requestedFreshness.readinessEvidence,
+              recommendedAction: 'use_profile',
+              lastVerifiedAt: requestedFreshness.lastVerifiedAt,
+              freshnessExpiresAt: requestedFreshness.freshnessExpiresAt,
+            },
+          ],
         },
       });
     }
