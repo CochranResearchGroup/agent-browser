@@ -56,6 +56,7 @@
             "browser_recovery",
             "browser_degraded",
             "job_attention",
+            "monitor_attention",
             "service_triage",
             "os_degraded_possible",
             null
@@ -141,7 +142,8 @@
               "count",
               "latestTimestamp",
               "recommendedAction",
-              "incidentIds"
+              "incidentIds",
+              "monitorIds"
             ],
             "properties": {
               "escalation": {
@@ -168,6 +170,13 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "monitorIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Monitor ids represented in this group when incidents came from failed monitor probes."
               }
             },
             "additionalProperties": true

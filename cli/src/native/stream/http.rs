@@ -1869,6 +1869,7 @@ fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
                 | "browser_degraded"
                 | "browser_recovery"
                 | "job_attention"
+                | "monitor_attention"
                 | "service_triage"
                 | "os_degraded_possible" => {
                     cmd["escalation"] = json!(value);

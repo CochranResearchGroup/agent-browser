@@ -297,6 +297,9 @@ export interface ServiceEventRecord {
 export interface ServiceIncidentRecord {
   id: string;
   browserId: string | null;
+  monitorId: string | null;
+  monitorTarget: Record<string, string> | null;
+  monitorResult: string | null;
   label: string;
   state: ServiceIncidentState;
   severity: ServiceIncidentSeverity;
@@ -536,6 +539,7 @@ export interface ServiceIncidentSummaryGroup {
   latestTimestamp: string;
   recommendedAction: string;
   incidentIds: string[];
+  monitorIds: string[];
   [key: string]: unknown;
 }
 

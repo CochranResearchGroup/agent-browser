@@ -221,6 +221,16 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
             .and_then(|value| value.as_str())
             .map(|value| format!("browser={value}\n"))
             .unwrap_or_default();
+        let monitor = incident
+            .get("monitorId")
+            .and_then(|value| value.as_str())
+            .map(|value| format!("monitor={value}\n"))
+            .unwrap_or_default();
+        let monitor_result = incident
+            .get("monitorResult")
+            .and_then(|value| value.as_str())
+            .map(|value| format!("monitor_result={value}\n"))
+            .unwrap_or_default();
         let message = incident
             .get("latestMessage")
             .and_then(|value| value.as_str())
@@ -256,7 +266,7 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
             .and_then(|value| value.as_str())
             .unwrap_or("never");
         return Some(format!(
-            "{timestamp} {state} severity={severity} escalation={escalation} kind={kind} id={id}\n{browser}message={message}\nrecommended_action={recommended_action}\nacknowledged_by={acknowledged_by} acknowledged_at={acknowledged_at}\nresolved_by={resolved_by} resolved_at={resolved_at}\nrelated_events={events} related_jobs={jobs}"
+            "{timestamp} {state} severity={severity} escalation={escalation} kind={kind} id={id}\n{browser}{monitor}{monitor_result}message={message}\nrecommended_action={recommended_action}\nacknowledged_by={acknowledged_by} acknowledged_at={acknowledged_at}\nresolved_by={resolved_by} resolved_at={resolved_at}\nrelated_events={events} related_jobs={jobs}"
         ));
     }
     let incidents = data.get("incidents").and_then(|value| value.as_array())?;
@@ -296,12 +306,17 @@ fn format_service_incidents_text(data: &serde_json::Value) -> Option<String> {
                 .and_then(|value| value.as_str())
                 .map(|value| format!(" browser={value}"))
                 .unwrap_or_default();
+            let monitor = incident
+                .get("monitorId")
+                .and_then(|value| value.as_str())
+                .map(|value| format!(" monitor={value}"))
+                .unwrap_or_default();
             let message = incident
                 .get("latestMessage")
                 .and_then(|value| value.as_str())
                 .unwrap_or("");
             format!(
-                "{timestamp} {state} severity={severity} escalation={escalation} kind={kind} id={id}{browser} {message}"
+                "{timestamp} {state} severity={severity} escalation={escalation} kind={kind} id={id}{browser}{monitor} {message}"
             )
         })
         .collect::<Vec<_>>();
@@ -352,8 +367,20 @@ fn format_service_incident_summary_text(summary: &serde_json::Value) -> Option<S
             })
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "none".to_string());
+        let monitors = group
+            .get("monitorIds")
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "none".to_string());
         format!(
-            "{severity} escalation={escalation} state={state} count={count} latest={latest} incidents={ids}\n  next={action}"
+            "{severity} escalation={escalation} state={state} count={count} latest={latest} incidents={ids} monitors={monitors}\n  next={action}"
         )
     }));
     Some(lines.join("\n"))
@@ -3908,8 +3935,9 @@ Notes:
   - Acknowledgement and resolution append incident_acknowledged and incident_resolved service events.
   - Cancel marks queued or lease-waiting jobs before dispatch and requests cooperative cancellation for running jobs.
   - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
-  - Incidents include severity, escalation, and recommendedAction so clients share one operator priority contract.
+  - Incidents include severity, escalation, recommendedAction, and monitor metadata when a failed service monitor created the incident.
   - service incidents --summary groups the current filtered incident set by escalation, severity, and state with recommended next actions.
+  - Failed service monitors use monitor_attention escalation and include monitorIds in summary groups.
   - service incidents --remedies and service remedies show active browser_degraded and os_degraded_possible groups for compact operator triage.
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
@@ -5272,7 +5300,8 @@ mod tests {
                     "count": 2,
                     "latestTimestamp": "2026-05-01T00:00:00Z",
                     "recommendedAction": "Inspect the host OS.",
-                    "incidentIds": ["browser-1", "browser-2"]
+                    "incidentIds": ["browser-1", "browser-2"],
+                    "monitorIds": []
                 }]
             },
             "incidents": []
@@ -5282,7 +5311,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Incident groups: 1\ncritical escalation=os_degraded_possible state=active count=2 latest=2026-05-01T00:00:00Z incidents=browser-1,browser-2\n  next=Inspect the host OS."
+            "Incident groups: 1\ncritical escalation=os_degraded_possible state=active count=2 latest=2026-05-01T00:00:00Z incidents=browser-1,browser-2 monitors=none\n  next=Inspect the host OS."
         );
     }
 

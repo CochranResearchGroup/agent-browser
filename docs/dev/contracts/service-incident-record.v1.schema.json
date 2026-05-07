@@ -7,6 +7,9 @@
   "required": [
     "id",
     "browserId",
+    "monitorId",
+    "monitorTarget",
+    "monitorResult",
     "label",
     "state",
     "severity",
@@ -31,6 +34,18 @@
     },
     "browserId": {
       "type": ["string", "null"]
+    },
+    "monitorId": {
+      "type": ["string", "null"],
+      "description": "Monitor id when this incident was derived from a failed service monitor probe."
+    },
+    "monitorTarget": {
+      "type": ["object", "null"],
+      "description": "Serialized monitor target that failed when available."
+    },
+    "monitorResult": {
+      "type": ["string", "null"],
+      "description": "Latest monitor probe result when available."
     },
     "label": {
       "type": "string"
@@ -59,6 +74,7 @@
         "browser_degraded",
         "browser_recovery",
         "job_attention",
+        "monitor_attention",
         "service_triage",
         "os_degraded_possible"
       ]

@@ -7332,6 +7332,7 @@ fn service_incident_escalation_name(
         super::service_model::ServiceIncidentEscalation::BrowserDegraded => "browser_degraded",
         super::service_model::ServiceIncidentEscalation::BrowserRecovery => "browser_recovery",
         super::service_model::ServiceIncidentEscalation::JobAttention => "job_attention",
+        super::service_model::ServiceIncidentEscalation::MonitorAttention => "monitor_attention",
         super::service_model::ServiceIncidentEscalation::ServiceTriage => "service_triage",
         super::service_model::ServiceIncidentEscalation::OsDegradedPossible => {
             "os_degraded_possible"

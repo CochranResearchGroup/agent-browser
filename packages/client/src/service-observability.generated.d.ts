@@ -36,6 +36,7 @@ export type ServiceIncidentEscalation =
   | "browser_degraded"
   | "browser_recovery"
   | "job_attention"
+  | "monitor_attention"
   | "service_triage"
   | "os_degraded_possible";
 
@@ -243,6 +244,9 @@ export interface ServiceEventRecord {
 export interface ServiceIncidentRecord {
   id: string;
   browserId: string | null;
+  monitorId: string | null;
+  monitorTarget: Record<string, string> | null;
+  monitorResult: string | null;
   label: string;
   state: ServiceIncidentState;
   severity: ServiceIncidentSeverity;
@@ -482,6 +486,7 @@ export interface ServiceIncidentSummaryGroup {
   latestTimestamp: string;
   recommendedAction: string;
   incidentIds: string[];
+  monitorIds: string[];
   [key: string]: unknown;
 }
 

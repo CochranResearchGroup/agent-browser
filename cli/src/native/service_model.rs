@@ -17,11 +17,12 @@ pub const SERVICE_JOB_NAMING_WARNING_VALUES: [&str; 3] = [
 ];
 pub const SERVICE_INCIDENT_STATE_VALUES: [&str; 3] = ["active", "recovered", "service"];
 pub const SERVICE_INCIDENT_SEVERITY_VALUES: [&str; 4] = ["info", "warning", "error", "critical"];
-pub const SERVICE_INCIDENT_ESCALATION_VALUES: [&str; 6] = [
+pub const SERVICE_INCIDENT_ESCALATION_VALUES: [&str; 7] = [
     "none",
     "browser_degraded",
     "browser_recovery",
     "job_attention",
+    "monitor_attention",
     "service_triage",
     "os_degraded_possible",
 ];
@@ -288,6 +289,9 @@ pub fn assert_service_incident_record_contract(value: &serde_json::Value) {
         &[
             "id",
             "browserId",
+            "monitorId",
+            "monitorTarget",
+            "monitorResult",
             "label",
             "state",
             "severity",
@@ -308,6 +312,9 @@ pub fn assert_service_incident_record_contract(value: &serde_json::Value) {
         ],
         &[
             "browser_id",
+            "monitor_id",
+            "monitor_target",
+            "monitor_result",
             "recommended_action",
             "acknowledged_at",
             "acknowledged_by",
@@ -979,10 +986,12 @@ pub fn assert_service_incidents_response_contract(value: &serde_json::Value) {
                     "latestTimestamp",
                     "recommendedAction",
                     "incidentIds",
+                    "monitorIds",
                 ],
                 &[],
             );
             assert!(group["incidentIds"].is_array());
+            assert!(group["monitorIds"].is_array());
         }
     }
     if let Some(events) = value.get("events").and_then(|events| events.as_array()) {
@@ -2242,6 +2251,9 @@ pub struct ServiceEvent {
 pub struct ServiceIncident {
     pub id: String,
     pub browser_id: Option<String>,
+    pub monitor_id: Option<String>,
+    pub monitor_target: Option<serde_json::Value>,
+    pub monitor_result: Option<String>,
     pub label: String,
     pub state: ServiceIncidentState,
     pub severity: ServiceIncidentSeverity,
@@ -2291,6 +2303,7 @@ pub enum ServiceIncidentEscalation {
     BrowserDegraded,
     BrowserRecovery,
     JobAttention,
+    MonitorAttention,
     ServiceTriage,
     OsDegradedPossible,
 }
@@ -2321,6 +2334,7 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
         .filter(|event| service_event_is_incident(event))
     {
         let browser_id = event.browser_id.clone();
+        let monitor_id = service_event_monitor_id(event);
         let key = service_event_incident_id(event)
             .or(browser_id.clone())
             .unwrap_or_else(|| "service".to_string());
@@ -2329,11 +2343,13 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
             .or_insert_with(|| ServiceIncident {
                 id: key.clone(),
                 browser_id: browser_id.clone(),
-                label: browser_id
-                    .clone()
-                    .unwrap_or_else(|| "Service incidents".to_string()),
+                monitor_id: monitor_id.clone(),
+                monitor_target: service_event_monitor_target(event),
+                monitor_result: service_event_monitor_result(event),
+                label: incident_label(state, browser_id.as_deref(), monitor_id.as_deref()),
                 state: classify_incident_state(
                     browser_id.is_some(),
+                    monitor_id.is_some(),
                     event.current_health,
                     event.kind,
                 ),
@@ -2351,8 +2367,14 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
             incident.latest_message = event.message.clone();
             incident.latest_kind = service_event_kind_name(event.kind).to_string();
             incident.current_health = event.current_health.or(incident.current_health);
+            incident.monitor_id = monitor_id.clone().or(incident.monitor_id.clone());
+            incident.monitor_target =
+                service_event_monitor_target(event).or_else(|| incident.monitor_target.clone());
+            incident.monitor_result =
+                service_event_monitor_result(event).or_else(|| incident.monitor_result.clone());
             incident.state = classify_incident_state(
                 incident.browser_id.is_some(),
+                incident.monitor_id.is_some(),
                 incident.current_health,
                 event.kind,
             );
@@ -2427,10 +2449,11 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
                 .then_with(|| left.cmp(right))
         });
         if incident.label.is_empty() {
-            incident.label = incident
-                .browser_id
-                .clone()
-                .unwrap_or_else(|| "Service incidents".to_string());
+            incident.label = incident_label(
+                state,
+                incident.browser_id.as_deref(),
+                incident.monitor_id.as_deref(),
+            );
         }
         if incident.current_health.is_none() {
             incident.current_health = incident
@@ -2520,6 +2543,11 @@ fn classify_incident_escalation(
             ServiceIncidentEscalation::JobAttention,
             "Confirm the cancellation was intentional before resubmitting the task.",
         ),
+        _ if incident.monitor_id.is_some() => (
+            ServiceIncidentSeverity::Warning,
+            ServiceIncidentEscalation::MonitorAttention,
+            "Inspect the failed monitor target and last result; fix the target, refresh login state, or pause the monitor before rerunning.",
+        ),
         _ if incident.state == ServiceIncidentState::Service => (
             ServiceIncidentSeverity::Error,
             ServiceIncidentEscalation::ServiceTriage,
@@ -2577,6 +2605,58 @@ fn service_event_incident_id(event: &ServiceEvent) -> Option<String> {
         .and_then(|value| value.as_str())
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
+}
+
+fn service_event_monitor_id(event: &ServiceEvent) -> Option<String> {
+    event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("monitorId"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn service_event_monitor_target(event: &ServiceEvent) -> Option<serde_json::Value> {
+    event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("target"))
+        .cloned()
+}
+
+fn service_event_monitor_result(event: &ServiceEvent) -> Option<String> {
+    event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("result"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn incident_label(
+    state: &ServiceState,
+    browser_id: Option<&str>,
+    monitor_id: Option<&str>,
+) -> String {
+    if let Some(browser_id) = browser_id {
+        return browser_id.to_string();
+    }
+    if let Some(monitor_id) = monitor_id {
+        return state
+            .monitors
+            .get(monitor_id)
+            .map(|monitor| {
+                if monitor.name.trim().is_empty() {
+                    format!("Monitor {}", monitor_id)
+                } else {
+                    format!("Monitor {}", monitor.name)
+                }
+            })
+            .unwrap_or_else(|| format!("Monitor {}", monitor_id));
+    }
+    "Service incidents".to_string()
 }
 
 fn browser_health_is_bad(value: Option<BrowserHealth>) -> bool {
@@ -2662,10 +2742,11 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
 
 fn classify_incident_state(
     has_browser: bool,
+    has_monitor: bool,
     current_health: Option<BrowserHealth>,
     kind: ServiceEventKind,
 ) -> ServiceIncidentState {
-    if !has_browser {
+    if !has_browser || has_monitor {
         return ServiceIncidentState::Service;
     }
     if kind == ServiceEventKind::BrowserHealthChanged && !browser_health_is_bad(current_health) {
@@ -3949,6 +4030,9 @@ mod tests {
         let incident = json!({
             "id": "browser-1",
             "browserId": "browser-1",
+            "monitorId": null,
+            "monitorTarget": null,
+            "monitorResult": null,
             "label": "browser-1",
             "state": "active",
             "severity": "critical",

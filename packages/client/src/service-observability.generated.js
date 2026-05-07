@@ -41,6 +41,7 @@ export const SERVICE_INCIDENT_ESCALATIONS = [
   "browser_degraded",
   "browser_recovery",
   "job_attention",
+  "monitor_attention",
   "service_triage",
   "os_degraded_possible"
 ];

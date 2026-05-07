@@ -240,6 +240,7 @@ fn apply_monitor_result(state: &mut ServiceState, result: MonitorProbeResult) {
         kind: result.event_kind,
         message: result.message,
         details: Some(json!({
+            "incidentId": format!("monitor:{}", result.monitor_id),
             "monitorId": result.monitor_id,
             "target": result.target,
             "success": result.success,
@@ -411,5 +412,23 @@ mod tests {
         assert_eq!(monitor.state, MonitorState::Faulted);
         assert_eq!(monitor.last_result.as_deref(), Some("site_policy_missing"));
         assert_eq!(state.events[0].kind, ServiceEventKind::ReconciliationError);
+        assert_eq!(
+            state.events[0].details.as_ref().unwrap()["incidentId"],
+            "monitor:policy-heartbeat"
+        );
+        assert_eq!(state.incidents.len(), 1);
+        assert_eq!(state.incidents[0].id, "monitor:policy-heartbeat");
+        assert_eq!(
+            state.incidents[0].monitor_id.as_deref(),
+            Some("policy-heartbeat")
+        );
+        assert_eq!(
+            state.incidents[0].monitor_result.as_deref(),
+            Some("site_policy_missing")
+        );
+        assert_eq!(
+            state.incidents[0].escalation,
+            super::super::service_model::ServiceIncidentEscalation::MonitorAttention
+        );
     }
 }

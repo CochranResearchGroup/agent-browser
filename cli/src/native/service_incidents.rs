@@ -168,6 +168,17 @@ pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
                 .iter()
                 .filter_map(|incident| incident.get("id").and_then(|value| value.as_str()))
                 .collect::<Vec<_>>();
+            let mut monitor_ids = incidents
+                .iter()
+                .filter_map(|incident| {
+                    incident
+                        .get("monitorId")
+                        .and_then(|value| value.as_str())
+                        .filter(|value| !value.is_empty())
+                })
+                .collect::<Vec<_>>();
+            monitor_ids.sort();
+            monitor_ids.dedup();
             let newest = incidents
                 .iter()
                 .filter_map(|incident| {
@@ -185,6 +196,7 @@ pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
                 "latestTimestamp": newest,
                 "recommendedAction": recommended_action,
                 "incidentIds": ids,
+                "monitorIds": monitor_ids,
             })
         })
         .collect::<Vec<_>>();
@@ -352,6 +364,7 @@ pub(crate) fn service_incident_escalation_name(
         ServiceIncidentEscalation::BrowserDegraded => "browser_degraded",
         ServiceIncidentEscalation::BrowserRecovery => "browser_recovery",
         ServiceIncidentEscalation::JobAttention => "job_attention",
+        ServiceIncidentEscalation::MonitorAttention => "monitor_attention",
         ServiceIncidentEscalation::ServiceTriage => "service_triage",
         ServiceIncidentEscalation::OsDegradedPossible => "os_degraded_possible",
     }

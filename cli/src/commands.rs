@@ -1588,6 +1588,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 | "browser_degraded"
                                 | "browser_recovery"
                                 | "job_attention"
+                                | "monitor_attention"
                                 | "service_triage"
                                 | "os_degraded_possible" => {
                                     cmd["escalation"] = json!(raw);

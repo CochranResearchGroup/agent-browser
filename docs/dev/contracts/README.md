@@ -122,6 +122,11 @@ same grouped remedy contract across state, severity, escalation,
 handling-state, browser, profile, session, service, agent, task, and since
 filters.
 
+Failed service monitors derive incidents with `monitor_attention` escalation.
+Those incident records include `monitorId`, `monitorTarget`, and `monitorResult`,
+and summary groups include `monitorIds` so operator and dashboard surfaces can
+show the failed probe without expanding raw events.
+
 ## Service Event Record v1
 
 `service-event-record.v1.schema.json` describes retained service event records
