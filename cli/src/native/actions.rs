@@ -69,6 +69,7 @@ use super::service_model::{
     ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
     SessionCleanupPolicy,
 };
+use super::service_monitors::run_due_persisted_monitors;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
 use super::snapshot::{self, SnapshotOptions};
@@ -215,6 +216,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_site_policy_delete"
             | "service_monitor_upsert"
             | "service_monitor_delete"
+            | "service_monitors_run_due"
             | "service_provider_upsert"
             | "service_provider_delete"
             | "service_incident_acknowledge"
@@ -2458,6 +2460,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_site_policy_delete" => handle_service_site_policy_delete(cmd).await,
         "service_monitor_upsert" => handle_service_monitor_upsert(cmd).await,
         "service_monitor_delete" => handle_service_monitor_delete(cmd).await,
+        "service_monitors_run_due" => handle_service_monitors_run_due(cmd).await,
         "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
         "service_provider_delete" => handle_service_provider_delete(cmd).await,
         "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
@@ -6902,6 +6905,17 @@ async fn handle_service_monitor_delete(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_monitors_run_due(_cmd: &Value) -> Result<Value, String> {
+    let summary = run_due_persisted_monitors().await?;
+
+    Ok(json!({
+        "checked": summary.checked,
+        "succeeded": summary.succeeded,
+        "failed": summary.failed,
+        "monitorIds": summary.monitor_ids,
+    }))
+}
+
 async fn handle_service_provider_upsert(cmd: &Value) -> Result<Value, String> {
     let provider_id = required_service_config_id(cmd, "providerId")?;
     let body = cmd.get("provider").cloned().ok_or("Missing provider")?;
@@ -10652,6 +10666,7 @@ mod tests {
             "service_site_policy_delete",
             "service_monitor_upsert",
             "service_monitor_delete",
+            "service_monitors_run_due",
             "service_provider_upsert",
             "service_provider_delete",
             "service_incident_acknowledge",

@@ -299,6 +299,7 @@ pub struct DaemonOptions<'a> {
     pub idle_timeout: Option<&'a str>,
     pub service_reconcile_interval_ms: Option<u64>,
     pub service_job_timeout_ms: Option<u64>,
+    pub service_monitor_interval_ms: Option<u64>,
     pub service_recovery_retry_budget: u64,
     pub service_recovery_base_backoff_ms: u64,
     pub service_recovery_max_backoff_ms: u64,
@@ -407,6 +408,9 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     }
     if let Some(ms) = opts.service_job_timeout_ms {
         cmd.env("AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS", ms.to_string());
+    }
+    if let Some(ms) = opts.service_monitor_interval_ms {
+        cmd.env("AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS", ms.to_string());
     }
     cmd.env(
         "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
@@ -1033,6 +1037,7 @@ mod tests {
             idle_timeout: None,
             service_reconcile_interval_ms: Some(1234),
             service_job_timeout_ms: Some(5678),
+            service_monitor_interval_ms: Some(9012),
             service_recovery_retry_budget: 9,
             service_recovery_base_backoff_ms: 250,
             service_recovery_max_backoff_ms: 10_000,
@@ -1067,6 +1072,9 @@ mod tests {
         }));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS" && v.as_deref() == Some("5678")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS" && v.as_deref() == Some("9012")
         }));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET" && v.as_deref() == Some("9")

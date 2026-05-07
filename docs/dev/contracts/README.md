@@ -203,7 +203,8 @@ full profile collection.
 
 Monitor collection consumers can read the same retained monitor records through
 CLI `agent-browser service monitors`, HTTP `GET /api/service/monitors`, MCP
-`agent-browser://monitors`, or the `getServiceMonitors()` client helper.
+`agent-browser://monitors`, or the `getServiceMonitors()` client helper. Active
+monitors are checked by the daemon scheduler when due.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a
@@ -253,11 +254,11 @@ by HTTP service APIs and matching MCP tools:
 - `service-provider-delete-response.v1.schema.json`
 
 These schemas cover the authoritative path ID, mutation flag, and returned or
-removed record payload for persisted profile, session, site policy, and
-monitor, and provider writes. Monitor mutation paths are HTTP
+removed record payload for persisted profile, session, site policy, monitor,
+and provider writes. Monitor mutation paths are HTTP
 `POST /api/service/monitors/<id>` and `DELETE /api/service/monitors/<id>` plus
 MCP `service_monitor_upsert` and `service_monitor_delete`; they persist monitor
-definitions only and do not start a recurring scheduler.
+definitions for the scheduler.
 
 Profile mutation inputs are policy checked before persistence. The
 `caller_supplied` allocation requires `userDataDir`, and `per_service` profiles

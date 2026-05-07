@@ -51,6 +51,8 @@ pub mod service_lifecycle;
 #[allow(dead_code)]
 pub mod service_model;
 #[allow(dead_code)]
+pub mod service_monitors;
+#[allow(dead_code)]
 pub mod service_store;
 #[allow(dead_code)]
 pub mod service_trace;

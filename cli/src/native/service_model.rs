@@ -1366,8 +1366,11 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
         assert_record_fields(
             "service status control plane",
             control_plane,
-            &["waiting_profile_lease_job_count"],
-            &["waitingProfileLeaseJobCount"],
+            &[
+                "waiting_profile_lease_job_count",
+                "service_monitor_interval_ms",
+            ],
+            &["waitingProfileLeaseJobCount", "serviceMonitorIntervalMs"],
         );
         assert!(control_plane["waiting_profile_lease_job_count"].is_u64());
     }
@@ -1576,6 +1579,22 @@ impl ServiceState {
                 .insert(id, ServiceEntitySource::Config);
         }
         self.sessions.extend(configured.sessions);
+        for (id, monitor) in configured.monitors {
+            let mut monitor = monitor;
+            if let Some(existing) = self.monitors.get(&id) {
+                if monitor.last_checked_at.is_none() {
+                    monitor.last_checked_at = existing.last_checked_at.clone();
+                }
+                if monitor.last_result.is_none() {
+                    monitor.last_result = existing.last_result.clone();
+                }
+                if monitor.state == MonitorState::Active && existing.state == MonitorState::Faulted
+                {
+                    monitor.state = MonitorState::Faulted;
+                }
+            }
+            self.monitors.insert(id, monitor);
+        }
         for (id, policy) in configured.site_policies {
             self.site_policies.insert(id.clone(), policy);
             self.entity_sources
@@ -2684,6 +2703,7 @@ pub struct ControlPlaneSnapshot {
     /// Number of retained jobs currently delayed by profile lease contention.
     pub waiting_profile_lease_job_count: usize,
     pub service_job_timeout_ms: Option<u64>,
+    pub service_monitor_interval_ms: Option<u64>,
     pub updated_at: Option<String>,
 }
 
@@ -4473,9 +4493,13 @@ mod tests {
         assert!(status_schema["properties"]["control_plane"]["properties"]
             .get("waiting_profile_lease_job_count")
             .is_some());
+        assert!(status_schema["properties"]["control_plane"]["properties"]
+            .get("service_monitor_interval_ms")
+            .is_some());
         assert_service_status_response_contract(&json!({
             "control_plane": {
-                "waiting_profile_lease_job_count": 0
+                "waiting_profile_lease_job_count": 0,
+                "service_monitor_interval_ms": 60000
             },
             "service_state": {},
             "profileAllocations": [],
@@ -4733,6 +4757,7 @@ mod tests {
                 queue_capacity: 256,
                 waiting_profile_lease_job_count: 1,
                 service_job_timeout_ms: Some(5000),
+                service_monitor_interval_ms: Some(60000),
                 updated_at: Some("2026-04-22T00:00:00Z".to_string()),
             }),
             reconciliation: Some(ServiceReconciliationSnapshot {

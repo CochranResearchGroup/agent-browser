@@ -282,6 +282,7 @@ export interface ServiceControlPlaneStatus {
   queue_capacity?: number;
   waiting_profile_lease_job_count?: number;
   service_job_timeout_ms?: number | null;
+  service_monitor_interval_ms?: number | null;
   [key: string]: unknown;
 }
 

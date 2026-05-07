@@ -34,6 +34,11 @@
         "service_job_timeout_ms": {
           "type": ["integer", "null"],
           "minimum": 0
+        },
+        "service_monitor_interval_ms": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Background interval in milliseconds for enqueuing due active service monitor checks. Null means disabled."
         }
       },
       "additionalProperties": true

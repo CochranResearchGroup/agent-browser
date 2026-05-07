@@ -3,7 +3,7 @@ use crate::native::service_health::{
     BrowserRecoveryPolicyConfig, BrowserRecoveryPolicyValueSource,
 };
 use crate::native::service_model::{
-    BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SitePolicy,
+    BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SiteMonitor, SitePolicy,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use serde::Deserialize;
@@ -18,6 +18,8 @@ const CONFIG_FILENAME: &str = "config.json";
 const PROJECT_CONFIG_FILENAME: &str = "agent-browser.json";
 /// Default daemon background interval for persisted service browser-health probes.
 const DEFAULT_SERVICE_RECONCILE_INTERVAL_MS: u64 = 60_000;
+/// Default daemon background interval for due service monitor checks.
+const DEFAULT_SERVICE_MONITOR_INTERVAL_MS: u64 = 60_000;
 
 /// Parse idle timeout from user-friendly format.
 /// Supports: "10s" (seconds), "3m" (minutes), "1h" (hours), or raw milliseconds.
@@ -111,6 +113,33 @@ fn service_job_timeout_from_sources(config: &Config) -> Option<u64> {
         .filter(|ms| *ms > 0)
 }
 
+fn service_monitor_interval_from_sources(config: &Config) -> Option<u64> {
+    if let Ok(raw) = env::var("AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS") {
+        return match raw.parse::<u64>() {
+            Ok(0) => None,
+            Ok(ms) => Some(ms),
+            Err(_) => {
+                eprintln!(
+                    "{} invalid service monitor interval from AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS: expected milliseconds, got {}",
+                    color::warning_indicator(),
+                    raw
+                );
+                Some(DEFAULT_SERVICE_MONITOR_INTERVAL_MS)
+            }
+        };
+    }
+
+    if let Some(ms) = config
+        .service
+        .as_ref()
+        .and_then(|service| service.monitor_interval_ms)
+    {
+        return (ms > 0).then_some(ms);
+    }
+
+    Some(DEFAULT_SERVICE_MONITOR_INTERVAL_MS)
+}
+
 fn service_recovery_value_from_sources(
     env_name: &str,
     config_value: Option<u64>,
@@ -198,10 +227,12 @@ pub struct RuntimeProfileConfig {
 pub struct ServiceConfig {
     pub profiles: Option<BTreeMap<String, BrowserProfile>>,
     pub sessions: Option<BTreeMap<String, BrowserSession>>,
+    pub monitors: Option<BTreeMap<String, SiteMonitor>>,
     pub site_policies: Option<BTreeMap<String, SitePolicy>>,
     pub providers: Option<BTreeMap<String, ServiceProvider>>,
     pub reconcile_interval_ms: Option<u64>,
     pub job_timeout_ms: Option<u64>,
+    pub monitor_interval_ms: Option<u64>,
     pub recovery_retry_budget: Option<u64>,
     pub recovery_base_backoff_ms: Option<u64>,
     pub recovery_max_backoff_ms: Option<u64>,
@@ -264,6 +295,7 @@ impl Config {
         let mut state = ServiceState {
             profiles: service.profiles.clone().unwrap_or_default(),
             sessions: service.sessions.clone().unwrap_or_default(),
+            monitors: service.monitors.clone().unwrap_or_default(),
             site_policies: service.site_policies.clone().unwrap_or_default(),
             providers: service.providers.clone().unwrap_or_default(),
             ..ServiceState::default()
@@ -417,10 +449,12 @@ fn merge_service_configs(
         (Some(base), Some(overlay)) => Some(ServiceConfig {
             profiles: merge_service_model_maps(base.profiles, overlay.profiles),
             sessions: merge_service_model_maps(base.sessions, overlay.sessions),
+            monitors: merge_service_model_maps(base.monitors, overlay.monitors),
             site_policies: merge_service_model_maps(base.site_policies, overlay.site_policies),
             providers: merge_service_model_maps(base.providers, overlay.providers),
             reconcile_interval_ms: overlay.reconcile_interval_ms.or(base.reconcile_interval_ms),
             job_timeout_ms: overlay.job_timeout_ms.or(base.job_timeout_ms),
+            monitor_interval_ms: overlay.monitor_interval_ms.or(base.monitor_interval_ms),
             recovery_retry_budget: overlay.recovery_retry_budget.or(base.recovery_retry_budget),
             recovery_base_backoff_ms: overlay
                 .recovery_base_backoff_ms
@@ -893,6 +927,7 @@ pub struct Flags {
     pub service_state: ServiceState,
     pub service_reconcile_interval_ms: Option<u64>,
     pub service_job_timeout_ms: Option<u64>,
+    pub service_monitor_interval_ms: Option<u64>,
     pub service_recovery_retry_budget: u64,
     pub service_recovery_base_backoff_ms: u64,
     pub service_recovery_max_backoff_ms: u64,
@@ -977,6 +1012,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
     let service_state = service_state_from_store(configured_service_state.clone());
     let service_reconcile_interval_ms = service_reconcile_interval_from_sources(&config);
     let service_job_timeout_ms = service_job_timeout_from_sources(&config);
+    let service_monitor_interval_ms = service_monitor_interval_from_sources(&config);
     let recovery_defaults = BrowserRecoveryPolicyConfig::default();
     let (service_recovery_retry_budget, service_recovery_retry_budget_source) =
         service_recovery_value_from_sources(
@@ -1038,6 +1074,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         service_state,
         service_reconcile_interval_ms,
         service_job_timeout_ms,
+        service_monitor_interval_ms,
         service_recovery_retry_budget,
         service_recovery_base_backoff_ms,
         service_recovery_max_backoff_ms,
@@ -1236,6 +1273,20 @@ pub fn parse_flags(args: &[String]) -> Flags {
                         Ok(ms) => flags.service_job_timeout_ms = Some(ms),
                         Err(_) => eprintln!(
                             "{} Invalid --service-job-timeout: expected milliseconds, got {}",
+                            color::warning_indicator(),
+                            s
+                        ),
+                    }
+                    i += 1;
+                }
+            }
+            "--service-monitor-interval" => {
+                if let Some(s) = args.get(i + 1) {
+                    match s.parse::<u64>() {
+                        Ok(0) => flags.service_monitor_interval_ms = None,
+                        Ok(ms) => flags.service_monitor_interval_ms = Some(ms),
+                        Err(_) => eprintln!(
+                            "{} Invalid --service-monitor-interval: expected milliseconds, got {}",
                             color::warning_indicator(),
                             s
                         ),
@@ -2047,6 +2098,14 @@ mod tests {
             service: Some(ServiceConfig {
                 profiles: None,
                 sessions: None,
+                monitors: Some(BTreeMap::from([(
+                    "google-login-freshness".to_string(),
+                    SiteMonitor {
+                        id: "google-login-freshness".to_string(),
+                        name: "Google login freshness".to_string(),
+                        ..SiteMonitor::default()
+                    },
+                )])),
                 site_policies: Some(BTreeMap::from([(
                     "google".to_string(),
                     SitePolicy {
@@ -2066,6 +2125,7 @@ mod tests {
                 )])),
                 reconcile_interval_ms: Some(60_000),
                 job_timeout_ms: Some(120_000),
+                monitor_interval_ms: Some(60_000),
                 recovery_retry_budget: Some(3),
                 recovery_base_backoff_ms: Some(1_000),
                 recovery_max_backoff_ms: Some(30_000),
@@ -2089,6 +2149,14 @@ mod tests {
             service: Some(ServiceConfig {
                 profiles: None,
                 sessions: None,
+                monitors: Some(BTreeMap::from([(
+                    "github-heartbeat".to_string(),
+                    SiteMonitor {
+                        id: "github-heartbeat".to_string(),
+                        name: "GitHub heartbeat".to_string(),
+                        ..SiteMonitor::default()
+                    },
+                )])),
                 site_policies: Some(BTreeMap::from([
                     (
                         "google".to_string(),
@@ -2111,6 +2179,7 @@ mod tests {
                 providers: None,
                 reconcile_interval_ms: Some(30_000),
                 job_timeout_ms: Some(90_000),
+                monitor_interval_ms: Some(45_000),
                 recovery_retry_budget: Some(5),
                 recovery_base_backoff_ms: Some(500),
                 recovery_max_backoff_ms: Some(10_000),
@@ -2133,6 +2202,9 @@ mod tests {
             Some("http://runtime-proxy:9090")
         );
         let service = merged.service.as_ref().unwrap();
+        let monitors = service.monitors.as_ref().unwrap();
+        assert_eq!(monitors.len(), 2);
+        assert_eq!(monitors["github-heartbeat"].name, "GitHub heartbeat");
         let site_policies = service.site_policies.as_ref().unwrap();
         assert_eq!(site_policies.len(), 2);
         assert!(site_policies["google"].manual_login_preferred);
@@ -2147,6 +2219,7 @@ mod tests {
         );
         assert_eq!(service.reconcile_interval_ms, Some(30_000));
         assert_eq!(service.job_timeout_ms, Some(90_000));
+        assert_eq!(service.monitor_interval_ms, Some(45_000));
         assert_eq!(service.recovery_retry_budget, Some(5));
         assert_eq!(service.recovery_base_backoff_ms, Some(500));
         assert_eq!(service.recovery_max_backoff_ms, Some(10_000));
@@ -2428,6 +2501,18 @@ mod tests {
                         ..BrowserSession::default()
                     },
                 )])),
+                monitors: Some(BTreeMap::from([(
+                    "google-login-freshness".to_string(),
+                    SiteMonitor {
+                        id: "google-login-freshness".to_string(),
+                        name: "Google login freshness".to_string(),
+                        target: crate::native::service_model::MonitorTarget::SitePolicy(
+                            "google".to_string(),
+                        ),
+                        state: crate::native::service_model::MonitorState::Active,
+                        ..SiteMonitor::default()
+                    },
+                )])),
                 site_policies: Some(BTreeMap::from([(
                     "google".to_string(),
                     SitePolicy {
@@ -2447,6 +2532,7 @@ mod tests {
                 )])),
                 reconcile_interval_ms: Some(45_000),
                 job_timeout_ms: Some(120_000),
+                monitor_interval_ms: Some(60_000),
                 recovery_retry_budget: None,
                 recovery_base_backoff_ms: None,
                 recovery_max_backoff_ms: None,
@@ -2458,6 +2544,7 @@ mod tests {
 
         assert_eq!(state.profiles.len(), 1);
         assert_eq!(state.sessions.len(), 1);
+        assert_eq!(state.monitors.len(), 1);
         assert_eq!(state.site_policies.len(), 1);
         assert_eq!(state.providers.len(), 1);
         assert_eq!(
@@ -2469,6 +2556,10 @@ mod tests {
             Some("work")
         );
         assert!(state.site_policies["google"].manual_login_preferred);
+        assert_eq!(
+            state.monitors["google-login-freshness"].name,
+            "Google login freshness"
+        );
         assert_eq!(state.providers["manual"].display_name, "Dashboard approval");
         assert!(state.browsers.is_empty());
     }
@@ -2575,6 +2666,41 @@ mod tests {
         let flags = parse_flags(&args("--service-reconcile-interval 0 service status"));
 
         assert_eq!(flags.service_reconcile_interval_ms, None);
+    }
+
+    #[test]
+    fn test_parse_flags_loads_service_monitor_interval_from_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-monitor-interval-config-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS"]);
+        guard.remove("AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS");
+        let config_path = dir.join("agent-browser.json");
+        fs::write(&config_path, r#"{"service":{"monitorIntervalMs":5000}}"#).unwrap();
+
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
+
+        assert_eq!(flags.service_monitor_interval_ms, Some(5000));
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_service_monitor_interval_flag_zero_disables_default() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS"]);
+        guard.remove("AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS");
+
+        let flags = parse_flags(&args("--service-monitor-interval 0 service status"));
+
+        assert_eq!(flags.service_monitor_interval_ms, None);
     }
 
     #[test]

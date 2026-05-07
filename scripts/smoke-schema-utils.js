@@ -94,6 +94,13 @@ export function assertServiceStatusResponseSchemaRecord(response, schema, label)
       Number.isInteger(response.control_plane.waiting_profile_lease_job_count),
       `${label} missing waiting_profile_lease_job_count integer`,
     );
+    if (Object.hasOwn(response.control_plane, 'service_monitor_interval_ms')) {
+      assert(
+        response.control_plane.service_monitor_interval_ms === null ||
+          Number.isInteger(response.control_plane.service_monitor_interval_ms),
+        `${label} invalid service_monitor_interval_ms`,
+      );
+    }
   }
 }
 

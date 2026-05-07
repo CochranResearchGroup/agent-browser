@@ -163,6 +163,10 @@ pub async fn run_daemon(session: &str) {
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .filter(|&ms| ms > 0);
+    let service_monitor_interval_ms = env::var("AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|&ms| ms > 0);
 
     let result = run_socket_server(
         &socket_path,
@@ -173,6 +177,7 @@ pub async fn run_daemon(session: &str) {
         idle_timeout_ms,
         service_reconcile_interval_ms,
         service_job_timeout_ms,
+        service_monitor_interval_ms,
     )
     .await;
 
@@ -208,6 +213,7 @@ async fn run_socket_server(
     idle_timeout_ms: Option<u64>,
     service_reconcile_interval_ms: Option<u64>,
     service_job_timeout_ms: Option<u64>,
+    service_monitor_interval_ms: Option<u64>,
 ) -> Result<(), String> {
     use tokio::net::UnixListener;
 
@@ -226,6 +232,7 @@ async fn run_socket_server(
         DaemonState::new_with_stream(stream_client, stream_server),
         service_reconcile_interval_ms,
         service_job_timeout_ms,
+        service_monitor_interval_ms,
     );
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
@@ -299,6 +306,7 @@ async fn run_socket_server(
     idle_timeout_ms: Option<u64>,
     service_reconcile_interval_ms: Option<u64>,
     service_job_timeout_ms: Option<u64>,
+    service_monitor_interval_ms: Option<u64>,
 ) -> Result<(), String> {
     use tokio::net::TcpListener;
 
@@ -331,6 +339,7 @@ async fn run_socket_server(
         DaemonState::new_with_stream(stream_client, stream_server),
         service_reconcile_interval_ms,
         service_job_timeout_ms,
+        service_monitor_interval_ms,
     );
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);

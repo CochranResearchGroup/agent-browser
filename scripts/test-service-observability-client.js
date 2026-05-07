@@ -74,6 +74,7 @@ async function main() {
     data: {
       control_plane: {
         waiting_profile_lease_job_count: 0,
+        service_monitor_interval_ms: 60000,
       },
       service_state: {},
       profileAllocations: [],
@@ -85,6 +86,7 @@ async function main() {
   });
   assert.equal(status.calls[0].url, 'http://127.0.0.1:4849/api/service/status');
   assert.equal(status.calls[0].init.method, 'GET');
+  assert.equal(statusResult.control_plane.service_monitor_interval_ms, 60000);
   assert.deepEqual(statusResult.profileAllocations, []);
 
   const monitors = createFetchRecorder({

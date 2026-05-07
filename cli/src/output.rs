@@ -3940,6 +3940,7 @@ Notes:
   - POST /api/service/profiles/<id>, POST /api/service/profiles/<id>/freshness, POST /api/service/sessions/<id>, POST /api/service/site-policies/<id>, POST /api/service/monitors/<id>, and POST /api/service/providers/<id> persist service config records through the service worker queue. DELETE on the same entity paths removes persisted records through the same queue.
   - Service config mutation uses the path ID as authoritative and rejects a request body whose nested id conflicts with the path.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
+  - Due active service monitors are enqueued through the same service worker every 60000 ms by default; set --service-monitor-interval 0 or service.monitorIntervalMs: 0 to disable it.
   - Browser launch, close, and command-time stale-browser detection update the active session's persisted browser health record before relaunch.
   - Close first attempts polite browser shutdown, then force kill for owned browser processes. Polite shutdown failure records degraded browser health; force-kill failure records faulted health with an OS-degraded warning.
   - pnpm test:service-shutdown-health-live validates the polite-shutdown failure remedy against live service state.
@@ -4041,7 +4042,7 @@ Notes:
   - HTTP and MCP profile, browser, session, tab, monitor, site policy, provider, and challenge records follow the matching docs/dev/contracts/service-*-record.v1.schema.json files.
   - service_status responses follow docs/dev/contracts/service-status-response.v1.schema.json.
   - Service collection response envelopes follow the matching docs/dev/contracts/service-*-response.v1.schema.json files for profiles, browsers, sessions, tabs, monitors, site policies, providers, and challenges.
-  - Service profile, session, site-policy, and provider mutation responses follow the matching docs/dev/contracts/service-*-upsert-response.v1.schema.json and docs/dev/contracts/service-*-delete-response.v1.schema.json files.
+  - Service profile, session, site-policy, monitor, and provider mutation responses follow the matching docs/dev/contracts/service-*-upsert-response.v1.schema.json and docs/dev/contracts/service-*-delete-response.v1.schema.json files.
   - Service job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching docs/dev/contracts/service-*-response.v1.schema.json files.
   - service_reconcile responses follow docs/dev/contracts/service-reconcile-response.v1.schema.json.
   - service_trace responses follow docs/dev/contracts/service-trace-response.v1.schema.json, with summary and activity records covered by the matching service-trace-summary and service-trace-activity schemas.
@@ -4551,6 +4552,7 @@ Options:
   --confirm-interactive      Interactive confirmation prompts; auto-denies if stdin is not a TTY (or AGENT_BROWSER_CONFIRM_INTERACTIVE)
   --engine <name>            Browser engine: chrome (default), lightpanda (or AGENT_BROWSER_ENGINE)
   --service-reconcile-interval <ms> Background service browser-health reconciliation interval (default: 60000); 0 disables it
+  --service-monitor-interval <ms> Background active service-monitor scheduling interval (default: 60000); 0 disables it
   --service-job-timeout <ms> Timeout for dispatched service control jobs; 0 disables it
   --service-recovery-retry-budget <n> Browser recovery attempts before faulting (default: 3)
   --service-recovery-base-backoff <ms> Browser recovery backoff base delay (default: 1000)
@@ -4634,6 +4636,8 @@ Configuration:
   to resize the browser content area after launch and before the command runs.
   Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`
   to run persisted browser-health reconciliation in the daemon background.
+  Set `service.monitorIntervalMs` or pass `--service-monitor-interval` to
+  enqueue due active service monitors through the daemon worker.
   Set `service.jobTimeoutMs` or pass `--service-job-timeout` to mark
   long-running service control jobs as timed_out.
   Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and
@@ -4676,6 +4680,7 @@ Environment:
   AGENT_BROWSER_STREAM_PORT      Override WebSocket streaming port (default: OS-assigned)
   AGENT_BROWSER_IDLE_TIMEOUT_MS  Auto-shutdown daemon after N ms of inactivity (disabled by default)
   AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS Background service browser-health reconciliation interval in ms (default: 60000; 0 disables it)
+  AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS Background active service-monitor scheduling interval in ms (default: 60000; 0 disables it)
   AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS Timeout for dispatched service control jobs in ms (disabled by default; 0 disables it)
   AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET Browser recovery attempts before faulting (default: 3)
   AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS Browser recovery backoff base delay in ms (default: 1000)

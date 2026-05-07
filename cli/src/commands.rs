@@ -3417,6 +3417,7 @@ mod tests {
             service_state: crate::native::service_model::ServiceState::default(),
             service_reconcile_interval_ms: None,
             service_job_timeout_ms: None,
+            service_monitor_interval_ms: None,
             service_recovery_retry_budget: 3,
             service_recovery_base_backoff_ms: 1_000,
             service_recovery_max_backoff_ms: 30_000,

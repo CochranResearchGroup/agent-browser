@@ -25,6 +25,9 @@ use super::service_model::{
     SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
     SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
+use super::service_monitors::{
+    persisted_due_monitor_work_pending, SERVICE_MONITORS_RUN_DUE_ACTION,
+};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 const DEFAULT_QUEUE_CAPACITY: usize = 256;
@@ -35,6 +38,7 @@ pub struct ControlPlaneHandle {
     tx: mpsc::Sender<WorkerMessage>,
     status: Arc<ControlPlaneStatus>,
     service_job_timeout_ms: Option<u64>,
+    service_monitor_interval_ms: Option<u64>,
     running_cancellations: Arc<Mutex<HashMap<String, RunningJobCancel>>>,
 }
 
@@ -42,6 +46,13 @@ pub struct ControlPlaneStatus {
     state: AtomicUsize,
     browser_health: AtomicUsize,
     queue_depth: AtomicUsize,
+}
+
+struct WorkerRuntimeOptions {
+    service_reconcile_interval_ms: Option<u64>,
+    service_job_timeout_ms: Option<u64>,
+    service_monitor_interval_ms: Option<u64>,
+    running_cancellations: Arc<Mutex<HashMap<String, RunningJobCancel>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,31 +114,33 @@ pub struct ControlPlaneWorker;
 
 impl ControlPlaneWorker {
     pub fn start(state: DaemonState) -> ControlPlaneHandle {
-        Self::start_with_capacity_and_options(state, DEFAULT_QUEUE_CAPACITY, None, None)
+        Self::start_with_capacity_and_options(state, DEFAULT_QUEUE_CAPACITY, None, None, None)
     }
 
     pub fn start_with_service_reconcile_interval(
         state: DaemonState,
         service_reconcile_interval_ms: Option<u64>,
     ) -> ControlPlaneHandle {
-        Self::start_with_options(state, service_reconcile_interval_ms, None)
+        Self::start_with_options(state, service_reconcile_interval_ms, None, None)
     }
 
     pub fn start_with_options(
         state: DaemonState,
         service_reconcile_interval_ms: Option<u64>,
         service_job_timeout_ms: Option<u64>,
+        service_monitor_interval_ms: Option<u64>,
     ) -> ControlPlaneHandle {
         Self::start_with_capacity_and_options(
             state,
             DEFAULT_QUEUE_CAPACITY,
             service_reconcile_interval_ms,
             service_job_timeout_ms,
+            service_monitor_interval_ms,
         )
     }
 
     fn start_with_capacity(state: DaemonState, capacity: usize) -> ControlPlaneHandle {
-        Self::start_with_capacity_and_options(state, capacity, None, None)
+        Self::start_with_capacity_and_options(state, capacity, None, None, None)
     }
 
     fn start_with_capacity_and_options(
@@ -135,23 +148,29 @@ impl ControlPlaneWorker {
         capacity: usize,
         service_reconcile_interval_ms: Option<u64>,
         service_job_timeout_ms: Option<u64>,
+        service_monitor_interval_ms: Option<u64>,
     ) -> ControlPlaneHandle {
         let (tx, rx) = mpsc::channel(capacity);
         let status = Arc::new(ControlPlaneStatus::new());
         let running_cancellations = Arc::new(Mutex::new(HashMap::new()));
+        let runtime_options = WorkerRuntimeOptions {
+            service_reconcile_interval_ms,
+            service_job_timeout_ms,
+            service_monitor_interval_ms,
+            running_cancellations: running_cancellations.clone(),
+        };
         tokio::spawn(run_worker(
             state,
             tx.clone(),
             rx,
             status.clone(),
-            service_reconcile_interval_ms,
-            service_job_timeout_ms,
-            running_cancellations.clone(),
+            runtime_options,
         ));
         ControlPlaneHandle {
             tx,
             status,
             service_job_timeout_ms,
+            service_monitor_interval_ms,
             running_cancellations,
         }
     }
@@ -196,6 +215,7 @@ impl ControlPlaneHandle {
             queue_capacity: self.tx.max_capacity(),
             waiting_profile_lease_job_count,
             service_job_timeout_ms: self.service_job_timeout_ms,
+            service_monitor_interval_ms: self.service_monitor_interval_ms,
             updated_at: Some(current_timestamp()),
         }
     }
@@ -208,6 +228,7 @@ impl ControlPlaneHandle {
             "queue_capacity": self.tx.max_capacity(),
             "waiting_profile_lease_job_count": waiting_profile_lease_job_count,
             "service_job_timeout_ms": self.service_job_timeout_ms,
+            "service_monitor_interval_ms": self.service_monitor_interval_ms,
         })
     }
 
@@ -822,6 +843,59 @@ fn service_job_cancelled(job_id: &str) -> bool {
     load_service_job(job_id).is_some_and(|job| job.state == JobState::Cancelled)
 }
 
+fn enqueue_due_monitor_run(
+    tx: &mpsc::Sender<WorkerMessage>,
+    status: &Arc<ControlPlaneStatus>,
+    service_job_timeout_ms: Option<u64>,
+) {
+    if !persisted_due_monitor_work_pending() {
+        return;
+    }
+    let (response_tx, _response_rx) = oneshot::channel();
+    let id = format!("service-monitor-run-{}", uuid::Uuid::new_v4());
+    let request = ControlRequest {
+        id: id.clone(),
+        job_id: id.clone(),
+        action: SERVICE_MONITORS_RUN_DUE_ACTION.to_string(),
+        service_name: Some("agent-browser".to_string()),
+        agent_name: Some("service-monitor-scheduler".to_string()),
+        task_name: Some("run-due-monitors".to_string()),
+        naming_warnings: Vec::new(),
+        command: json!({
+            "id": id,
+            "action": SERVICE_MONITORS_RUN_DUE_ACTION,
+        }),
+        priority: ControlPriority::Lifecycle,
+        timeout_ms: service_job_timeout_ms,
+        cancellation: RunningJobCancel::new(),
+        submitted_at_wall: current_timestamp(),
+        profile_lease_wait_started_at: None,
+        profile_lease_wait_profile_id: None,
+        profile_lease_wait_conflict_session_ids: Vec::new(),
+        profile_lease_wait_retry_after_ms: None,
+        response_tx,
+    };
+    status.queue_depth.fetch_add(1, Ordering::Relaxed);
+    persist_service_job_queued(&request);
+    match tx.try_send(WorkerMessage::Request(Box::new(request))) {
+        Ok(()) => {}
+        Err(mpsc::error::TrySendError::Full(WorkerMessage::Request(request))) => {
+            let request = *request;
+            status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+            persist_service_job_failed_to_enqueue(&request, "Control queue is full");
+        }
+        Err(mpsc::error::TrySendError::Closed(WorkerMessage::Request(request))) => {
+            let request = *request;
+            status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+            persist_service_job_failed_to_enqueue(&request, "Control plane worker is stopped");
+        }
+        Err(mpsc::error::TrySendError::Full(WorkerMessage::Shutdown(_)))
+        | Err(mpsc::error::TrySendError::Closed(WorkerMessage::Shutdown(_))) => {
+            status.queue_depth.fetch_sub(1, Ordering::Relaxed);
+        }
+    }
+}
+
 fn load_service_job(id: &str) -> Option<ServiceJob> {
     let repository = LockedServiceStateRepository::default_json().ok()?;
     load_service_job_in_repository(&repository, id)
@@ -999,17 +1073,22 @@ async fn run_worker(
     tx: mpsc::Sender<WorkerMessage>,
     mut rx: mpsc::Receiver<WorkerMessage>,
     status: Arc<ControlPlaneStatus>,
-    service_reconcile_interval_ms: Option<u64>,
-    service_job_timeout_ms: Option<u64>,
-    running_cancellations: Arc<Mutex<HashMap<String, RunningJobCancel>>>,
+    runtime_options: WorkerRuntimeOptions,
 ) {
     let mut drain_interval = tokio::time::interval(Duration::from_millis(100));
     drain_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let mut service_reconcile_interval = service_reconcile_interval_ms.map(|ms| {
+    let mut service_reconcile_interval = runtime_options.service_reconcile_interval_ms.map(|ms| {
         let mut interval = tokio::time::interval(Duration::from_millis(ms));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         interval
     });
+    let mut service_monitor_interval = runtime_options.service_monitor_interval_ms.map(|ms| {
+        let mut interval = tokio::time::interval(Duration::from_millis(ms));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval
+    });
+    let service_job_timeout_ms = runtime_options.service_job_timeout_ms;
+    let running_cancellations = runtime_options.running_cancellations;
     status.set_state(WorkerState::Ready);
 
     loop {
@@ -1233,6 +1312,14 @@ async fn run_worker(
             }, if service_reconcile_interval.is_some() => {
                 let _ = reconcile_persisted_service_state().await;
             }
+            _ = async {
+                match service_monitor_interval.as_mut() {
+                    Some(interval) => interval.tick().await,
+                    None => std::future::pending::<tokio::time::Instant>().await,
+                }
+            }, if service_monitor_interval.is_some() => {
+                enqueue_due_monitor_run(&tx, &status, service_job_timeout_ms);
+            }
         }
     }
 
@@ -1281,7 +1368,9 @@ mod tests {
     use super::super::service_jobs::{
         cancel_service_job_in_repository, mutate_service_jobs_in_repository, MAX_SERVICE_JOBS,
     };
-    use super::super::service_model::{BrowserSession, LeaseState};
+    use super::super::service_model::{
+        BrowserSession, LeaseState, MonitorState, MonitorTarget, SiteMonitor, SitePolicy,
+    };
     use super::super::service_store::{JsonServiceStateStore, ServiceStateStore};
     use super::*;
     use crate::test_utils::EnvGuard;
@@ -1893,6 +1982,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn service_monitor_interval_enqueues_due_monitor_run() {
+        let home = temp_home("control-plane-monitor-loop");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                monitors: std::collections::BTreeMap::from([(
+                    "policy-heartbeat".to_string(),
+                    SiteMonitor {
+                        id: "policy-heartbeat".to_string(),
+                        name: "Policy heartbeat".to_string(),
+                        target: MonitorTarget::SitePolicy("google".to_string()),
+                        state: MonitorState::Active,
+                        last_checked_at: None,
+                        ..SiteMonitor::default()
+                    },
+                )]),
+                site_policies: std::collections::BTreeMap::from([(
+                    "google".to_string(),
+                    SitePolicy {
+                        id: "google".to_string(),
+                        ..SitePolicy::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let handle =
+            ControlPlaneWorker::start_with_options(DaemonState::new(), None, Some(1_000), Some(25));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        handle.shutdown().await;
+
+        let persisted = store.load().unwrap();
+        let monitor = &persisted.monitors["policy-heartbeat"];
+        assert_eq!(
+            monitor.last_result.as_deref(),
+            Some("site_policy_available")
+        );
+        assert!(monitor.last_checked_at.is_some());
+        assert!(persisted.jobs.values().any(|job| {
+            job.action == SERVICE_MONITORS_RUN_DUE_ACTION && job.state == JobState::Succeeded
+        }));
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
     async fn parallel_submits_leave_queue_depth_at_zero() {
         let home = temp_home("control-plane-parallel");
         let guard = EnvGuard::new(&["HOME"]);
@@ -2175,7 +2312,8 @@ mod tests {
         let home = temp_home("control-plane-job-timeout");
         let guard = EnvGuard::new(&["HOME"]);
         guard.set("HOME", home.to_str().unwrap());
-        let handle = ControlPlaneWorker::start_with_options(DaemonState::new(), None, Some(10));
+        let handle =
+            ControlPlaneWorker::start_with_options(DaemonState::new(), None, Some(10), None);
         let response = handle
             .submit(json!({
                 "id": "test-timeout",
