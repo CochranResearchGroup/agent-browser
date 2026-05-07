@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-monitor-record.v1.schema.json",
+  "title": "agent-browser service monitor record",
+  "description": "Stable API shape for service-owned recurring heartbeat and freshness monitor records returned by HTTP service collection APIs and MCP resources.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "target",
+    "intervalMs",
+    "state",
+    "lastCheckedAt",
+    "lastResult"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "target": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "intervalMs": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "state": {
+      "type": "string",
+      "enum": ["active", "paused", "faulted"]
+    },
+    "lastCheckedAt": {
+      "type": ["string", "null"]
+    },
+    "lastResult": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

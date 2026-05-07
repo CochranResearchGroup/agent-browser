@@ -1189,6 +1189,49 @@ fn format_service_challenges_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_monitor_target(target: &serde_json::Value) -> String {
+    for key in ["url", "tab", "site_policy"] {
+        if let Some(value) = target.get(key).and_then(|value| value.as_str()) {
+            return format!("{key}:{value}");
+        }
+    }
+    "unknown".to_string()
+}
+
+fn format_service_monitor_line(monitor: &serde_json::Value) -> String {
+    let id = value_str(monitor, "id", "unknown-monitor");
+    let name = value_str(monitor, "name", id);
+    let state = value_str(monitor, "state", "unknown");
+    let interval = monitor
+        .get("intervalMs")
+        .and_then(|value| value.as_u64())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let target = monitor
+        .get("target")
+        .map(format_service_monitor_target)
+        .unwrap_or_else(|| "unknown".to_string());
+    let last_checked = value_str(monitor, "lastCheckedAt", "never");
+    let last_result = value_str(monitor, "lastResult", "none");
+
+    format!("{id} name={name} state={state} target={target} interval_ms={interval} last_checked={last_checked} last_result={last_result}")
+}
+
+fn format_service_monitors_text(data: &serde_json::Value) -> Option<String> {
+    let monitors = data.get("monitors")?.as_array()?;
+    let mut lines = vec![format!("Monitors: {}", monitors.len())];
+    if monitors.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        lines.extend(
+            monitors
+                .iter()
+                .map(|monitor| format!("  {}", format_service_monitor_line(monitor))),
+        );
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
     let service_state = data.get("service_state")?;
     let control_plane = service_state.get("controlPlane");
@@ -1407,6 +1450,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_tabs") {
             if let Some(output) = format_service_tabs_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_monitors") {
+            if let Some(output) = format_service_monitors_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -3811,6 +3860,7 @@ Usage:
   agent-browser service sessions
   agent-browser service browsers
   agent-browser service tabs
+  agent-browser service monitors
   agent-browser service site-policies
   agent-browser service providers
   agent-browser service challenges
@@ -3833,6 +3883,7 @@ Commands:
   sessions              Show retained service session records
   browsers              Show retained service browser records and latest health evidence
   tabs                  Show retained service tab records
+  monitors             Show retained service monitor records
   site-policies         Show configured service site-policy records
   providers             Show configured service provider records
   challenges            Show retained auth, 2FA, captcha, passkey, and blocked-flow challenge records
@@ -3873,6 +3924,7 @@ Notes:
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
+  - Text service monitors focuses monitor identity, target, interval, state, and last check result.
   - Text service site-policies focuses origin, source, overrideability, host, interaction, challenge, login, and profile-required policy fields.
   - Text service providers focuses provider identity, kind, enabled state, config reference, and capabilities.
   - Text service challenges focuses detected challenge kind, state, tab, provider, policy decision, human approval, and result.
@@ -3883,7 +3935,7 @@ Notes:
   - The bounded events log records reconciliation summaries, browser launch metadata including profileSelectionReason and profileLeaseDisposition when known, browser health transitions, browser recovery starts, profile lease wait transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes named browser control endpoints at /api/browser/url, /api/browser/title, /api/browser/tabs, /api/browser/navigate, /api/browser/back, /api/browser/forward, /api/browser/reload, /api/browser/new-tab, /api/browser/switch-tab, /api/browser/close-tab, /api/browser/viewport, /api/browser/user-agent, /api/browser/media, /api/browser/timezone, /api/browser/locale, /api/browser/geolocation, /api/browser/permissions, /api/browser/cookies/get, /api/browser/cookies/set, /api/browser/cookies/clear, /api/browser/storage/get, /api/browser/storage/set, /api/browser/storage/clear, /api/browser/console, /api/browser/errors, /api/browser/set-content, /api/browser/headers, /api/browser/offline, /api/browser/dialog, /api/browser/clipboard, /api/browser/upload, /api/browser/download, /api/browser/wait-for-download, /api/browser/pdf, /api/browser/response-body, /api/browser/har/start, /api/browser/har/stop, /api/browser/route, /api/browser/unroute, /api/browser/requests, /api/browser/request-detail, /api/browser/snapshot, /api/browser/screenshot, /api/browser/click, /api/browser/fill, /api/browser/wait, /api/browser/type, /api/browser/press, /api/browser/hover, /api/browser/select, /api/browser/get-text, /api/browser/get-value, /api/browser/is-visible, /api/browser/get-attribute, /api/browser/get-html, /api/browser/get-styles, /api/browser/count, /api/browser/get-box, /api/browser/is-enabled, /api/browser/is-checked, /api/browser/check, /api/browser/uncheck, /api/browser/scroll, /api/browser/scroll-into-view, /api/browser/focus, and /api/browser/clear.
-  - The stream server exposes the service surface at /api/service/status, /api/service/request, /api/service/profiles, /api/service/profiles/lookup, /api/service/profiles/<id>/allocation, /api/service/profiles/<id>/readiness, /api/service/profiles/<id>, /api/service/profiles/<id>/freshness, /api/service/sessions, /api/service/sessions/<id>, /api/service/browsers, /api/service/tabs, /api/service/site-policies, /api/service/site-policies/<id>, /api/service/providers, /api/service/providers/<id>, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
+  - The stream server exposes the service surface at /api/service/status, /api/service/request, /api/service/profiles, /api/service/profiles/lookup, /api/service/profiles/<id>/allocation, /api/service/profiles/<id>/readiness, /api/service/profiles/<id>, /api/service/profiles/<id>/freshness, /api/service/sessions, /api/service/sessions/<id>, /api/service/browsers, /api/service/tabs, /api/service/monitors, /api/service/site-policies, /api/service/site-policies/<id>, /api/service/providers, /api/service/providers/<id>, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile.
   - POST /api/service/request accepts one intent object with serviceName, agentName, taskName, siteId/loginId, targetServiceId, profile or runtimeProfile hints, profileLeasePolicy, profileLeaseWaitTimeoutMs, action, params, and jobTimeoutMs, then queues the browser command through the same service-owned control path.
   - POST /api/service/profiles/<id>, POST /api/service/profiles/<id>/freshness, POST /api/service/sessions/<id>, POST /api/service/site-policies/<id>, and POST /api/service/providers/<id> persist service config records through the service worker queue. DELETE on the same entity paths removes persisted records through the same queue.
   - Service config mutation uses the path ID as authoritative and rejects a request body whose nested id conflicts with the path.
@@ -3909,6 +3961,7 @@ Examples:
   agent-browser service sessions
   agent-browser service browsers
   agent-browser service tabs
+  agent-browser service monitors
   agent-browser service site-policies
   agent-browser service providers
   agent-browser service challenges
@@ -3985,16 +4038,16 @@ Notes:
   - CLI, HTTP, and MCP service_incidents response envelopes follow docs/dev/contracts/service-incidents-response.v1.schema.json.
   - HTTP /api/service/events and MCP agent-browser://events event records follow docs/dev/contracts/service-event-record.v1.schema.json.
   - CLI and HTTP service_events response envelopes follow docs/dev/contracts/service-events-response.v1.schema.json.
-  - HTTP and MCP profile, browser, session, tab, site policy, provider, and challenge records follow the matching docs/dev/contracts/service-*-record.v1.schema.json files.
+  - HTTP and MCP profile, browser, session, tab, monitor, site policy, provider, and challenge records follow the matching docs/dev/contracts/service-*-record.v1.schema.json files.
   - service_status responses follow docs/dev/contracts/service-status-response.v1.schema.json.
-  - Service collection response envelopes follow the matching docs/dev/contracts/service-*-response.v1.schema.json files for profiles, browsers, sessions, tabs, site policies, providers, and challenges.
+  - Service collection response envelopes follow the matching docs/dev/contracts/service-*-response.v1.schema.json files for profiles, browsers, sessions, tabs, monitors, site policies, providers, and challenges.
   - Service profile, session, site-policy, and provider mutation responses follow the matching docs/dev/contracts/service-*-upsert-response.v1.schema.json and docs/dev/contracts/service-*-delete-response.v1.schema.json files.
   - Service job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching docs/dev/contracts/service-*-response.v1.schema.json files.
   - service_reconcile responses follow docs/dev/contracts/service-reconcile-response.v1.schema.json.
   - service_trace responses follow docs/dev/contracts/service-trace-response.v1.schema.json, with summary and activity records covered by the matching service-trace-summary and service-trace-activity schemas.
   - Incident activity responses follow docs/dev/contracts/service-incident-activity-response.v1.schema.json.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
-  - Implemented resources are agent-browser://contracts, agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
+  - Implemented resources are agent-browser://contracts, agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://monitors, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
 
 Global Options:
@@ -4383,6 +4436,7 @@ Service:
   service sessions           Show retained service session records
   service browsers           Show retained browser health records
   service tabs               Show retained service tab records
+  service monitors           Show retained service monitor records
   service site-policies      Show configured service site-policy records
   service providers          Show configured service provider records
   service challenges         Show retained service challenge records
@@ -4677,6 +4731,7 @@ Examples:
   agent-browser service sessions         # Inspect retained service session records
   agent-browser service browsers         # Inspect retained browser health records
   agent-browser service tabs             # Inspect retained service tab records
+  agent-browser service monitors         # Inspect retained service monitor records
   agent-browser service site-policies    # Inspect configured service site-policy records
   agent-browser service providers        # Inspect configured service provider records
   agent-browser service challenges       # Inspect retained service challenge records
@@ -4806,8 +4861,8 @@ pub fn print_version() {
 mod tests {
     use super::{
         format_service_browsers_text, format_service_challenges_text, format_service_events_text,
-        format_service_incidents_text, format_service_jobs_text, format_service_profiles_text,
-        format_service_providers_text, format_service_sessions_text,
+        format_service_incidents_text, format_service_jobs_text, format_service_monitors_text,
+        format_service_profiles_text, format_service_providers_text, format_service_sessions_text,
         format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
         format_service_trace_text, format_storage_text,
     };
@@ -5081,6 +5136,30 @@ mod tests {
         assert_eq!(
             rendered,
             "Tabs: 1\n  tab-1 browser=browser-1 session=cdp-session-1 owner=runtime-session lifecycle=ready target=target-1 title=Example url=https://example.com/"
+        );
+    }
+
+    #[test]
+    fn test_format_service_monitors_text_includes_monitor_fields() {
+        let data = json!({
+            "monitors": [{
+                "id": "login-freshness",
+                "name": "Login freshness",
+                "target": {
+                    "site_policy": "google"
+                },
+                "intervalMs": 60000,
+                "state": "paused",
+                "lastCheckedAt": "2026-05-07T00:00:00Z",
+                "lastResult": "fresh"
+            }]
+        });
+
+        let rendered = format_service_monitors_text(&data).unwrap();
+
+        assert_eq!(
+            rendered,
+            "Monitors: 1\n  login-freshness name=Login freshness state=paused target=site_policy:google interval_ms=60000 last_checked=2026-05-07T00:00:00Z last_result=fresh"
         );
     }
 

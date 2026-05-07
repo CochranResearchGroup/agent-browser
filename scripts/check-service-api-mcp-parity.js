@@ -258,6 +258,17 @@ const serviceResourceSurface = [
   { resource: 'agent-browser://sessions', route: '/api/service/sessions' },
   { resource: 'agent-browser://browsers', route: '/api/service/browsers' },
   { resource: 'agent-browser://tabs', route: '/api/service/tabs' },
+  {
+    resource: 'agent-browser://monitors',
+    route: '/api/service/monitors',
+    clientNeedles: ['getServiceMonitors', '/api/service/monitors'],
+    contractNeedles: [
+      'service-monitor-record.v1.schema.json',
+      'service-monitors-response.v1.schema.json',
+      'GET /api/service/monitors',
+      'agent-browser://monitors',
+    ],
+  },
   { resource: 'agent-browser://site-policies', route: '/api/service/site-policies' },
   { resource: 'agent-browser://providers', route: '/api/service/providers' },
   { resource: 'agent-browser://challenges', route: '/api/service/challenges' },

@@ -21,6 +21,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceJobsResponse} ServiceJobsResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowsersResponse} ServiceBrowsersResponse
  * @typedef {import('./service-observability.generated.js').ServiceChallengesResponse} ServiceChallengesResponse
+ * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
  * @typedef {import('./service-observability.generated.js').ServiceObservabilityHttpOptions} ServiceObservabilityHttpOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
  * @typedef {import('./service-observability.generated.js').ServiceProvidersResponse} ServiceProvidersResponse
@@ -269,6 +270,14 @@ export function getServiceSessions(options) {
  */
 export function getServiceTabs(options) {
   return serviceGet(options, '/api/service/tabs');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceMonitorsResponse>}
+ */
+export function getServiceMonitors(options) {
+  return serviceGet(options, '/api/service/monitors');
 }
 
 /**

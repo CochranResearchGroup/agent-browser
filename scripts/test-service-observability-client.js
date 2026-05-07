@@ -6,6 +6,7 @@ import {
   findServiceProfileForIdentity,
   getServiceAccessPlan,
   getServiceContracts,
+  getServiceMonitors,
   getServiceProfileAllocation,
   getServiceProfileForIdentity,
   getServiceProfileReadiness,
@@ -83,6 +84,33 @@ async function main() {
   assert.equal(status.calls[0].url, 'http://127.0.0.1:4849/api/service/status');
   assert.equal(status.calls[0].init.method, 'GET');
   assert.deepEqual(statusResult.profileAllocations, []);
+
+  const monitors = createFetchRecorder({
+    success: true,
+    data: {
+      monitors: [
+        {
+          id: 'google-login-freshness',
+          name: 'Google login freshness',
+          target: {
+            site_policy: 'google',
+          },
+          intervalMs: 60000,
+          state: 'paused',
+          lastCheckedAt: null,
+          lastResult: null,
+        },
+      ],
+      count: 1,
+    },
+  });
+  const monitorsResult = await getServiceMonitors({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: monitors.fetch,
+  });
+  assert.equal(monitors.calls[0].url, 'http://127.0.0.1:4849/api/service/monitors');
+  assert.equal(monitors.calls[0].init.method, 'GET');
+  assert.equal(monitorsResult.monitors[0].target.site_policy, 'google');
 
   const allocation = createFetchRecorder({
     success: true,

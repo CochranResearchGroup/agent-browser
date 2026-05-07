@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
   getServiceBrowsers,
   getServiceChallenges,
+  getServiceMonitors,
   getServiceProfiles,
   getServiceProviders,
   getServiceSessions,
@@ -56,6 +57,7 @@ const collectionSchemas = {
   browsers: loadServiceRecordSchema('../docs/dev/contracts/service-browser-record.v1.schema.json'),
   sessions: loadServiceRecordSchema('../docs/dev/contracts/service-session-record.v1.schema.json'),
   tabs: loadServiceRecordSchema('../docs/dev/contracts/service-tab-record.v1.schema.json'),
+  monitors: loadServiceRecordSchema('../docs/dev/contracts/service-monitor-record.v1.schema.json'),
   sitePolicies: loadServiceRecordSchema('../docs/dev/contracts/service-site-policy-record.v1.schema.json'),
   providers: loadServiceRecordSchema('../docs/dev/contracts/service-provider-record.v1.schema.json'),
   challenges: loadServiceRecordSchema('../docs/dev/contracts/service-challenge-record.v1.schema.json'),
@@ -65,6 +67,7 @@ const collectionResponseSchemas = {
   browsers: loadServiceRecordSchema('../docs/dev/contracts/service-browsers-response.v1.schema.json'),
   sessions: loadServiceRecordSchema('../docs/dev/contracts/service-sessions-response.v1.schema.json'),
   tabs: loadServiceRecordSchema('../docs/dev/contracts/service-tabs-response.v1.schema.json'),
+  monitors: loadServiceRecordSchema('../docs/dev/contracts/service-monitors-response.v1.schema.json'),
   sitePolicies: loadServiceRecordSchema('../docs/dev/contracts/service-site-policies-response.v1.schema.json'),
   providers: loadServiceRecordSchema('../docs/dev/contracts/service-providers-response.v1.schema.json'),
   challenges: loadServiceRecordSchema('../docs/dev/contracts/service-challenges-response.v1.schema.json'),
@@ -124,6 +127,12 @@ const collectionSchemaOptions = {
       'latest_screenshot_id',
       'challenge_id',
     ],
+  },
+  monitors: {
+    objectFields: ['target'],
+    enumFields: ['state'],
+    nullableStringFields: ['lastCheckedAt', 'lastResult'],
+    snakeCaseFields: ['interval_ms', 'last_checked_at', 'last_result'],
   },
   sitePolicies: {
     arrayFields: ['authProviders', 'allowedChallengeProviders'],
@@ -249,6 +258,20 @@ function seedConfigCollections(context, expectedTabId) {
       result: 'pending',
     },
   };
+  state.monitors = {
+    ...(state.monitors || {}),
+    'google-login-freshness': {
+      id: 'google-login-freshness',
+      name: 'Google login freshness',
+      target: {
+        site_policy: 'google',
+      },
+      intervalMs: 60000,
+      state: 'paused',
+      lastCheckedAt: null,
+      lastResult: null,
+    },
+  };
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
@@ -368,6 +391,18 @@ try {
         item.browserId === expectedBrowserId &&
         item.lifecycle === 'ready' &&
         item.title === expectedTab.title,
+    },
+    {
+      command: 'monitors',
+      endpoint: '/api/service/monitors',
+      key: 'monitors',
+      mcpUri: 'agent-browser://monitors',
+      clientRead: () => getServiceMonitors({ baseUrl: serviceBaseUrl }),
+      predicate: (item) =>
+        item.id === 'google-login-freshness' &&
+        item.name === 'Google login freshness' &&
+        item.state === 'paused' &&
+        item.target?.site_policy === 'google',
     },
     {
       command: 'site-policies',

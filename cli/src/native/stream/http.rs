@@ -1206,6 +1206,13 @@ fn service_collection_contents(path: &str) -> Option<Value> {
                 "count": tabs.len(),
             }))
         }
+        "/api/service/monitors" => {
+            let monitors = service_state.monitors.values().cloned().collect::<Vec<_>>();
+            Some(json!({
+                "monitors": monitors,
+                "count": monitors.len(),
+            }))
+        }
         "/api/service/site-policies" => {
             let site_policies = service_state
                 .site_policies
@@ -2650,6 +2657,7 @@ mod tests {
         let sessions = service_collection_contents("/api/service/sessions").unwrap();
         let browsers = service_collection_contents("/api/service/browsers").unwrap();
         let tabs = service_collection_contents("/api/service/tabs").unwrap();
+        let monitors = service_collection_contents("/api/service/monitors").unwrap();
         let site_policies = service_collection_contents("/api/service/site-policies").unwrap();
         let providers = service_collection_contents("/api/service/providers").unwrap();
         let challenges = service_collection_contents("/api/service/challenges").unwrap();
@@ -2660,6 +2668,7 @@ mod tests {
         assert!(sessions["sessions"].is_array());
         assert!(browsers["browsers"].is_array());
         assert!(tabs["tabs"].is_array());
+        assert!(monitors["monitors"].is_array());
         assert!(site_policies["sitePolicies"].is_array());
         assert!(providers["providers"].is_array());
         assert!(challenges["challenges"].is_array());

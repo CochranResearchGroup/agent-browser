@@ -135,6 +135,7 @@ pub const SERVICE_PROFILE_READINESS_VALUES: [&str; 6] = [
 pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
     "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
 ];
+pub const SERVICE_MONITOR_STATE_VALUES: [&str; 3] = ["active", "paused", "faulted"];
 pub const SERVICE_VIEW_STREAM_PROVIDER_VALUES: [&str; 5] = [
     "cdp_screencast",
     "chrome_tab_webrtc",
@@ -560,6 +561,26 @@ pub fn assert_service_tab_record_contract(value: &serde_json::Value) {
         ],
     );
     assert!(SERVICE_TAB_LIFECYCLE_VALUES.contains(&value["lifecycle"].as_str().unwrap()));
+}
+
+#[cfg(test)]
+pub fn assert_service_monitor_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "monitor",
+        value,
+        &[
+            "id",
+            "name",
+            "target",
+            "intervalMs",
+            "state",
+            "lastCheckedAt",
+            "lastResult",
+        ],
+        &["interval_ms", "last_checked_at", "last_result"],
+    );
+    assert!(value["target"].is_object());
+    assert!(SERVICE_MONITOR_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
 }
 
 #[cfg(test)]
@@ -3623,6 +3644,10 @@ mod tests {
             "../../../docs/dev/contracts/service-tab-record.v1.schema.json"
         ))
         .unwrap();
+        let monitor_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-monitor-record.v1.schema.json"
+        ))
+        .unwrap();
         let site_policy_schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/service-site-policy-record.v1.schema.json"
         ))
@@ -3675,6 +3700,10 @@ mod tests {
         assert_eq!(
             tab_schema["properties"]["lifecycle"]["enum"],
             json!(SERVICE_TAB_LIFECYCLE_VALUES.to_vec())
+        );
+        assert_eq!(
+            monitor_schema["properties"]["state"]["enum"],
+            json!(SERVICE_MONITOR_STATE_VALUES.to_vec())
         );
         assert_eq!(
             site_policy_schema["properties"]["browserHost"]["oneOf"][0]["enum"],
@@ -3744,6 +3773,10 @@ mod tests {
         );
         assert_schema_required_fields(&tab_schema, &["id", "browserId", "sessionId", "lifecycle"]);
         assert_schema_required_fields(
+            &monitor_schema,
+            &["id", "name", "target", "intervalMs", "state"],
+        );
+        assert_schema_required_fields(
             &site_policy_schema,
             &["id", "originPattern", "interactionMode", "challengePolicy"],
         );
@@ -3788,6 +3821,15 @@ mod tests {
             lifecycle: TabLifecycle::Ready,
             ..BrowserTab::default()
         };
+        let monitor = SiteMonitor {
+            id: "monitor-1".to_string(),
+            name: "ACS heartbeat".to_string(),
+            target: MonitorTarget::Url("https://example.com/health".to_string()),
+            interval_ms: 60_000,
+            state: MonitorState::Active,
+            last_checked_at: Some("2026-05-07T00:00:00Z".to_string()),
+            last_result: Some("ok".to_string()),
+        };
         let site_policy = SitePolicy {
             id: "google".to_string(),
             origin_pattern: "https://accounts.google.com".to_string(),
@@ -3818,6 +3860,7 @@ mod tests {
         assert_service_browser_record_contract(&serde_json::to_value(browser).unwrap());
         assert_service_session_record_contract(&serde_json::to_value(session).unwrap());
         assert_service_tab_record_contract(&serde_json::to_value(tab).unwrap());
+        assert_service_monitor_record_contract(&serde_json::to_value(monitor).unwrap());
         assert_service_site_policy_record_contract(&serde_json::to_value(site_policy).unwrap());
         assert_service_provider_record_contract(&serde_json::to_value(provider).unwrap());
         assert_service_challenge_record_contract(&serde_json::to_value(challenge).unwrap());
@@ -4332,6 +4375,14 @@ mod tests {
                 .unwrap(),
                 "tabs",
                 "tabs response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-monitors-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "monitors",
+                "monitors response",
             ),
             (
                 serde_json::from_str::<serde_json::Value>(include_str!(

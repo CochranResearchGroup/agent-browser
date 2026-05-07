@@ -28,6 +28,7 @@ const PROVIDERS_RESOURCE: &str = "agent-browser://providers";
 const SESSIONS_RESOURCE: &str = "agent-browser://sessions";
 const SITE_POLICIES_RESOURCE: &str = "agent-browser://site-policies";
 const TABS_RESOURCE: &str = "agent-browser://tabs";
+const MONITORS_RESOURCE: &str = "agent-browser://monitors";
 const CHALLENGES_RESOURCE: &str = "agent-browser://challenges";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
@@ -175,6 +176,12 @@ fn service_mcp_resources() -> Vec<Value> {
             "description": "Service-owned browser tab records sorted by tab id"
         }),
         json!({
+            "uri": MONITORS_RESOURCE,
+            "name": "Service monitors",
+            "mimeType": "application/json",
+            "description": "Service-owned recurring heartbeat and freshness monitor records sorted by monitor id"
+        }),
+        json!({
             "uri": SITE_POLICIES_RESOURCE,
             "name": "Service site policies",
             "mimeType": "application/json",
@@ -275,6 +282,13 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             json!({
                 "tabs": tabs,
                 "count": tabs.len(),
+            })
+        }
+        MONITORS_RESOURCE => {
+            let monitors = state.monitors.values().cloned().collect::<Vec<_>>();
+            json!({
+                "monitors": monitors,
+                "count": monitors.len(),
             })
         }
         SITE_POLICIES_RESOURCE => {
@@ -11292,6 +11306,7 @@ mod tests {
         assert!(responses[1].contains("agent-browser://sessions"));
         assert!(responses[1].contains("agent-browser://browsers"));
         assert!(responses[1].contains("agent-browser://tabs"));
+        assert!(responses[1].contains("agent-browser://monitors"));
         assert!(responses[1].contains("agent-browser://site-policies"));
         assert!(responses[1].contains("agent-browser://providers"));
         assert!(responses[1].contains("agent-browser://challenges"));
@@ -11548,6 +11563,52 @@ mod tests {
         assert_eq!(resource["contents"]["tabs"][0]["id"], "tab-a");
         assert_eq!(resource["contents"]["tabs"][1]["id"], "tab-b");
         assert_service_tab_record_contract(&resource["contents"]["tabs"][1]);
+    }
+
+    #[test]
+    fn read_monitors_resource_returns_monitors_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            assert_service_monitor_record_contract, MonitorState, MonitorTarget, SiteMonitor,
+        };
+
+        let state = ServiceState {
+            monitors: BTreeMap::from([
+                (
+                    "monitor-b".to_string(),
+                    SiteMonitor {
+                        id: "monitor-b".to_string(),
+                        name: "Monitor B".to_string(),
+                        target: MonitorTarget::SitePolicy("google".to_string()),
+                        state: MonitorState::Paused,
+                        ..SiteMonitor::default()
+                    },
+                ),
+                (
+                    "monitor-a".to_string(),
+                    SiteMonitor {
+                        id: "monitor-a".to_string(),
+                        name: "Monitor A".to_string(),
+                        target: MonitorTarget::Url("https://example.com/".to_string()),
+                        state: MonitorState::Active,
+                        ..SiteMonitor::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(MONITORS_RESOURCE, &state).unwrap();
+
+        assert_eq!(resource["contents"]["count"], 2);
+        assert_eq!(resource["contents"]["monitors"][0]["id"], "monitor-a");
+        assert_eq!(resource["contents"]["monitors"][1]["id"], "monitor-b");
+        assert_eq!(
+            resource["contents"]["monitors"][1]["target"]["site_policy"],
+            "google"
+        );
+        assert_service_monitor_record_contract(&resource["contents"]["monitors"][1]);
     }
 
     #[test]

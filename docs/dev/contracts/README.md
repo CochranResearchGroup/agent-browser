@@ -84,7 +84,8 @@ against those declarations.
 service job, event, incident, incident activity, and trace schemas. The
 `@agent-browser/client/service-observability` helper reads those HTTP endpoints
 and returns the generated response types, including `getServiceContracts` for
-the runtime compatibility metadata endpoint.
+the runtime compatibility metadata endpoint and `getServiceMonitors` for the
+retained monitor collection.
 
 ## Service Incident Record v1
 
@@ -158,13 +159,16 @@ collection APIs and the matching MCP resources:
 - `service-browser-record.v1.schema.json`
 - `service-session-record.v1.schema.json`
 - `service-tab-record.v1.schema.json`
+- `service-monitor-record.v1.schema.json`
 - `service-site-policy-record.v1.schema.json`
 - `service-provider-record.v1.schema.json`
 - `service-challenge-record.v1.schema.json`
 
-These schemas cover `profiles`, `browsers`, `sessions`, `tabs`,
-`sitePolicies`, `providers`, and `challenges` records. Profile records include
-derived `targetReadiness` rows for no-launch target-service readiness. Google
+These schemas cover `profiles`, `browsers`, `sessions`, `tabs`, `monitors`,
+`sitePolicies`, `providers`, and `challenges` records. Monitor records are
+currently service-owned state for recurring heartbeat, site-policy, tab, and
+login freshness probes; scheduling and mutation workflows are separate service
+roadmap slices. Profile records include derived `targetReadiness` rows for no-launch target-service readiness. Google
 targets without authenticated evidence report `needs_manual_seeding` and
 recommend detached `runtime login` before attachable automation. Once a managed
 profile lists the target in `authenticatedServiceIds`, readiness changes to
@@ -184,6 +188,7 @@ returned by CLI, HTTP, and MCP resources:
 - `service-browsers-response.v1.schema.json`
 - `service-sessions-response.v1.schema.json`
 - `service-tabs-response.v1.schema.json`
+- `service-monitors-response.v1.schema.json`
 - `service-site-policies-response.v1.schema.json`
 - `service-providers-response.v1.schema.json`
 - `service-challenges-response.v1.schema.json`
@@ -195,6 +200,10 @@ derived `profileAllocations` view returned by service status and the MCP
 profiles resource. Profile allocation rows include the same `targetReadiness`
 rows as the profile record so detail clients do not have to join back to the
 full profile collection.
+
+Monitor collection consumers can read the same retained monitor records through
+CLI `agent-browser service monitors`, HTTP `GET /api/service/monitors`, MCP
+`agent-browser://monitors`, or the `getServiceMonitors()` client helper.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a

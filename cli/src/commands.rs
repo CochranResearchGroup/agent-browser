@@ -997,6 +997,19 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "serviceState": flags.service_state.clone(),
                 }))
             }
+            Some("monitors") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service monitors: {}", rest[1]),
+                        usage: "service monitors",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_monitors",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
             Some("site-policies") => {
                 if rest.len() > 1 {
                     return Err(ParseError::InvalidValue {
@@ -5152,6 +5165,14 @@ mod tests {
     }
 
     #[test]
+    fn test_service_monitors() {
+        let cmd = parse_command(&args("service monitors"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_monitors");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
     fn test_service_profiles() {
         let cmd = parse_command(&args("service profiles"), &default_flags()).unwrap();
 
@@ -5202,6 +5223,13 @@ mod tests {
     #[test]
     fn test_service_tabs_rejects_extra_argument() {
         let err = parse_command(&args("service tabs extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_monitors_rejects_extra_argument() {
+        let err = parse_command(&args("service monitors extra"), &default_flags()).unwrap_err();
 
         assert!(matches!(err, ParseError::InvalidValue { .. }));
     }

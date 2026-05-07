@@ -182,6 +182,17 @@ export interface ServiceTabRecord {
   [key: string]: unknown;
 }
 
+export interface ServiceMonitorRecord {
+  id: string;
+  name: string;
+  target: Record<string, string>;
+  intervalMs: number;
+  state: 'active' | 'paused' | 'faulted' | string;
+  lastCheckedAt: string | null;
+  lastResult: string | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceSitePolicyRecord {
   id: string;
   originPattern: string | null;
@@ -338,6 +349,10 @@ export interface ServiceSessionsResponse extends ServiceListResponse<ServiceSess
 
 export interface ServiceTabsResponse extends ServiceListResponse<ServiceTabRecord> {
   tabs: ServiceTabRecord[];
+}
+
+export interface ServiceMonitorsResponse extends ServiceListResponse<ServiceMonitorRecord> {
+  monitors: ServiceMonitorRecord[];
 }
 
 export interface ServiceSitePoliciesResponse extends ServiceListResponse<ServiceSitePolicyRecord> {
@@ -831,6 +846,7 @@ export declare function getServiceAccessPlan(options: ServiceAccessPlanOptions):
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;
+export declare function getServiceMonitors(options: ServiceQueryOptions): Promise<ServiceMonitorsResponse>;
 export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;

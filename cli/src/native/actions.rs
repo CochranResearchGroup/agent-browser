@@ -222,6 +222,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_sessions"
             | "service_browsers"
             | "service_tabs"
+            | "service_monitors"
             | "service_site_policies"
             | "service_providers"
             | "service_challenges"
@@ -2462,6 +2463,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_sessions" => handle_service_sessions(cmd).await,
         "service_browsers" => handle_service_browsers(cmd).await,
         "service_tabs" => handle_service_tabs(cmd).await,
+        "service_monitors" => handle_service_monitors(cmd).await,
         "service_site_policies" => handle_service_site_policies(cmd).await,
         "service_providers" => handle_service_providers(cmd).await,
         "service_challenges" => handle_service_challenges(cmd).await,
@@ -6669,6 +6671,25 @@ async fn handle_service_tabs(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+/// Return the service-owned monitor collection without the full status payload.
+async fn handle_service_monitors(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    let mut monitors = service_state.monitors.into_values().collect::<Vec<_>>();
+    monitors.sort_by(|left, right| left.id.cmp(&right.id));
+    let count = monitors.len();
+
+    Ok(json!({
+        "monitors": monitors,
+        "count": count,
+    }))
+}
+
 /// Return the service-owned site-policy collection without the full status payload.
 async fn handle_service_site_policies(cmd: &Value) -> Result<Value, String> {
     let service_state = cmd
@@ -10609,6 +10630,7 @@ mod tests {
             "service_sessions",
             "service_browsers",
             "service_tabs",
+            "service_monitors",
             "service_site_policies",
             "service_providers",
             "service_challenges",
@@ -11774,6 +11796,42 @@ mod tests {
         assert_eq!(result["data"]["tabs"][0]["id"], "tab-1");
         assert_eq!(result["data"]["tabs"][0]["lifecycle"], "ready");
         assert_eq!(result["data"]["tabs"][0]["browserId"], "browser-1");
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_monitors_via_actions_returns_monitor_collection() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_monitors",
+            "id": "svc-monitors-1",
+            "serviceState": {
+                "monitors": {
+                    "login-freshness": {
+                        "id": "login-freshness",
+                        "name": "Login freshness",
+                        "target": {
+                            "site_policy": "google"
+                        },
+                        "intervalMs": 60000,
+                        "state": "paused",
+                        "lastCheckedAt": null,
+                        "lastResult": null
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_service_collection_response_contract(
+            &result["data"],
+            "monitors",
+            "monitors response",
+        );
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["monitors"][0]["id"], "login-freshness");
+        assert_eq!(result["data"]["monitors"][0]["state"], "paused");
         assert!(state.browser.is_none());
     }
 
