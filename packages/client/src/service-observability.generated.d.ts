@@ -190,7 +190,10 @@ export interface ServiceMonitorRecord {
   intervalMs: number;
   state: 'active' | 'paused' | 'faulted' | string;
   lastCheckedAt: string | null;
+  lastSucceededAt: string | null;
+  lastFailedAt: string | null;
   lastResult: string | null;
+  consecutiveFailures: number;
   [key: string]: unknown;
 }
 

@@ -582,9 +582,19 @@ pub fn assert_service_monitor_record_contract(value: &serde_json::Value) {
             "intervalMs",
             "state",
             "lastCheckedAt",
+            "lastSucceededAt",
+            "lastFailedAt",
             "lastResult",
+            "consecutiveFailures",
         ],
-        &["interval_ms", "last_checked_at", "last_result"],
+        &[
+            "interval_ms",
+            "last_checked_at",
+            "last_succeeded_at",
+            "last_failed_at",
+            "last_result",
+            "consecutive_failures",
+        ],
     );
     assert!(value["target"].is_object());
     assert!(SERVICE_MONITOR_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
@@ -1594,8 +1604,17 @@ impl ServiceState {
                 if monitor.last_checked_at.is_none() {
                     monitor.last_checked_at = existing.last_checked_at.clone();
                 }
+                if monitor.last_succeeded_at.is_none() {
+                    monitor.last_succeeded_at = existing.last_succeeded_at.clone();
+                }
+                if monitor.last_failed_at.is_none() {
+                    monitor.last_failed_at = existing.last_failed_at.clone();
+                }
                 if monitor.last_result.is_none() {
                     monitor.last_result = existing.last_result.clone();
+                }
+                if monitor.consecutive_failures == 0 && existing.consecutive_failures > 0 {
+                    monitor.consecutive_failures = existing.consecutive_failures;
                 }
                 if monitor.state == MonitorState::Active && existing.state == MonitorState::Faulted
                 {
@@ -3096,7 +3115,10 @@ pub struct SiteMonitor {
     pub interval_ms: u64,
     pub state: MonitorState,
     pub last_checked_at: Option<String>,
+    pub last_succeeded_at: Option<String>,
+    pub last_failed_at: Option<String>,
     pub last_result: Option<String>,
+    pub consecutive_failures: u64,
 }
 
 impl Default for SiteMonitor {
@@ -3108,7 +3130,10 @@ impl Default for SiteMonitor {
             interval_ms: 60_000,
             state: MonitorState::Paused,
             last_checked_at: None,
+            last_succeeded_at: None,
+            last_failed_at: None,
             last_result: None,
+            consecutive_failures: 0,
         }
     }
 }
@@ -3905,7 +3930,18 @@ mod tests {
         assert_schema_required_fields(&tab_schema, &["id", "browserId", "sessionId", "lifecycle"]);
         assert_schema_required_fields(
             &monitor_schema,
-            &["id", "name", "target", "intervalMs", "state"],
+            &[
+                "id",
+                "name",
+                "target",
+                "intervalMs",
+                "state",
+                "lastCheckedAt",
+                "lastSucceededAt",
+                "lastFailedAt",
+                "lastResult",
+                "consecutiveFailures",
+            ],
         );
         assert_schema_required_fields(
             &site_policy_schema,
@@ -3959,7 +3995,10 @@ mod tests {
             interval_ms: 60_000,
             state: MonitorState::Active,
             last_checked_at: Some("2026-05-07T00:00:00Z".to_string()),
+            last_succeeded_at: Some("2026-05-07T00:00:00Z".to_string()),
+            last_failed_at: None,
             last_result: Some("ok".to_string()),
+            consecutive_failures: 0,
         };
         let site_policy = SitePolicy {
             id: "google".to_string(),
@@ -4305,7 +4344,10 @@ mod tests {
             "intervalMs": 60000,
             "state": "paused",
             "lastCheckedAt": null,
+            "lastSucceededAt": null,
+            "lastFailedAt": null,
             "lastResult": null,
+            "consecutiveFailures": 0,
         });
 
         assert_service_profile_upsert_response_contract(&json!({

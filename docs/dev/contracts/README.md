@@ -209,7 +209,10 @@ full profile collection.
 Monitor collection consumers can read the same retained monitor records through
 CLI `agent-browser service monitors`, HTTP `GET /api/service/monitors`, MCP
 `agent-browser://monitors`, or the `getServiceMonitors()` client helper. Active
-monitors are checked by the daemon scheduler when due.
+monitors are checked by the daemon scheduler when due. Monitor records retain
+`lastCheckedAt`, `lastSucceededAt`, `lastFailedAt`, `lastResult`, and
+`consecutiveFailures` so operators and clients can distinguish a recovered
+heartbeat from a repeated failure without scanning the event log.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a

@@ -11864,7 +11864,10 @@ mod tests {
                         "intervalMs": 60000,
                         "state": "paused",
                         "lastCheckedAt": null,
-                        "lastResult": null
+                        "lastSucceededAt": null,
+                        "lastFailedAt": null,
+                        "lastResult": null,
+                        "consecutiveFailures": 0
                     }
                 }
             }

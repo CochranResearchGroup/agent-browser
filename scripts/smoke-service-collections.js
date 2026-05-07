@@ -131,8 +131,16 @@ const collectionSchemaOptions = {
   monitors: {
     objectFields: ['target'],
     enumFields: ['state'],
-    nullableStringFields: ['lastCheckedAt', 'lastResult'],
-    snakeCaseFields: ['interval_ms', 'last_checked_at', 'last_result'],
+    nullableStringFields: ['lastCheckedAt', 'lastSucceededAt', 'lastFailedAt', 'lastResult'],
+    numericFields: ['consecutiveFailures'],
+    snakeCaseFields: [
+      'interval_ms',
+      'last_checked_at',
+      'last_succeeded_at',
+      'last_failed_at',
+      'last_result',
+      'consecutive_failures',
+    ],
   },
   sitePolicies: {
     arrayFields: ['authProviders', 'allowedChallengeProviders'],
@@ -269,7 +277,10 @@ function seedConfigCollections(context, expectedTabId) {
       intervalMs: 60000,
       state: 'paused',
       lastCheckedAt: null,
+      lastSucceededAt: null,
+      lastFailedAt: null,
       lastResult: null,
+      consecutiveFailures: 0,
     },
   };
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);

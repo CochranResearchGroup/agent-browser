@@ -11,7 +11,10 @@
     "intervalMs",
     "state",
     "lastCheckedAt",
-    "lastResult"
+    "lastSucceededAt",
+    "lastFailedAt",
+    "lastResult",
+    "consecutiveFailures"
   ],
   "properties": {
     "id": {
@@ -38,8 +41,21 @@
     "lastCheckedAt": {
       "type": ["string", "null"]
     },
+    "lastSucceededAt": {
+      "type": ["string", "null"],
+      "description": "Timestamp of the latest successful monitor probe, if any."
+    },
+    "lastFailedAt": {
+      "type": ["string", "null"],
+      "description": "Timestamp of the latest failed monitor probe, if any."
+    },
     "lastResult": {
       "type": ["string", "null"]
+    },
+    "consecutiveFailures": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of failed probes since the latest successful probe."
     }
   },
   "additionalProperties": true

@@ -230,8 +230,12 @@ fn apply_monitor_result(state: &mut ServiceState, result: MonitorProbeResult) {
     monitor.last_checked_at = Some(result.checked_at.clone());
     monitor.last_result = Some(result.result.clone());
     monitor.state = if result.success {
+        monitor.last_succeeded_at = Some(result.checked_at.clone());
+        monitor.consecutive_failures = 0;
         MonitorState::Active
     } else {
+        monitor.last_failed_at = Some(result.checked_at.clone());
+        monitor.consecutive_failures = monitor.consecutive_failures.saturating_add(1);
         MonitorState::Faulted
     };
     state.events.push(ServiceEvent {
@@ -371,6 +375,9 @@ mod tests {
         assert_eq!(monitor.state, MonitorState::Active);
         assert_eq!(monitor.last_result.as_deref(), Some("tab_ready"));
         assert!(monitor.last_checked_at.is_some());
+        assert_eq!(monitor.last_succeeded_at, monitor.last_checked_at);
+        assert_eq!(monitor.last_failed_at, None);
+        assert_eq!(monitor.consecutive_failures, 0);
         assert_eq!(state.events.len(), 1);
         assert_eq!(state.events[0].kind, ServiceEventKind::Reconciliation);
     }
@@ -411,6 +418,9 @@ mod tests {
         let monitor = &state.monitors["policy-heartbeat"];
         assert_eq!(monitor.state, MonitorState::Faulted);
         assert_eq!(monitor.last_result.as_deref(), Some("site_policy_missing"));
+        assert_eq!(monitor.last_failed_at, monitor.last_checked_at);
+        assert_eq!(monitor.last_succeeded_at, None);
+        assert_eq!(monitor.consecutive_failures, 1);
         assert_eq!(state.events[0].kind, ServiceEventKind::ReconciliationError);
         assert_eq!(
             state.events[0].details.as_ref().unwrap()["incidentId"],
