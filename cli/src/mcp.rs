@@ -8096,7 +8096,10 @@ mod tests {
             SITE_POLICIES_RESOURCE
         );
         assert_eq!(response["data"]["resources"][9]["uri"], PROVIDERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][10]["uri"], CHALLENGES_RESOURCE);
+        assert_eq!(
+            response["data"]["resources"][10]["uri"],
+            CHALLENGES_RESOURCE
+        );
         assert_eq!(response["data"]["resources"][11]["uri"], JOBS_RESOURCE);
         assert_eq!(response["data"]["resources"][12]["uri"], EVENTS_RESOURCE);
         assert_eq!(
