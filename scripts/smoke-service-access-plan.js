@@ -201,6 +201,38 @@ function assertAccessPlan(data, label) {
     `${label} challenge IDs mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.decision?.freshnessUpdate?.available === true,
+    `${label} freshness update availability mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.freshnessUpdate?.recommendedAfterProbe === true,
+    `${label} freshness update recommendation mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.freshnessUpdate?.profileId === profileId,
+    `${label} freshness update profile mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.freshnessUpdate?.targetServiceIds?.includes(targetServiceId),
+    `${label} freshness update target mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.freshnessUpdate?.http?.route === `/api/service/profiles/${profileId}/freshness`,
+    `${label} freshness update HTTP route mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.freshnessUpdate?.http?.routeTemplate === '/api/service/profiles/<id>/freshness',
+    `${label} freshness update HTTP route template mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.freshnessUpdate?.mcp?.tool === 'service_profile_freshness_update',
+    `${label} freshness update MCP tool mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.freshnessUpdate?.client?.helper === 'updateServiceProfileFreshness',
+    `${label} freshness update client helper mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     Array.isArray(data?.decision?.namingWarnings) && data.decision.namingWarnings.length === 0,
     `${label} decision naming warnings mismatch: ${JSON.stringify(data)}`,
   );

@@ -401,6 +401,11 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     let interaction_decision = interaction_decision(site_policy);
     let launch_posture =
         launch_posture_decision(selected_profile, site_policy, manual_seeding_required);
+    let freshness_update = freshness_update_decision(
+        selected_profile,
+        target_service_ids,
+        manual_seeding_required || readiness_profile_needs_probe(readiness, target_service_ids),
+    );
 
     if let Some(profile) = selected_profile {
         if readiness_profile_is_fresh_or_seeded(readiness, &profile.id, target_service_ids) {
@@ -483,9 +488,50 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "missingChallengeCapabilities": provider_decision.missing_challenge_capabilities,
         "challengeStrategy": provider_decision.challenge_strategy,
         "challengeIds": challenges.iter().map(|challenge| challenge.id.clone()).collect::<Vec<_>>(),
+        "freshnessUpdate": freshness_update,
         "namingWarnings": naming_warnings,
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
+    })
+}
+
+/// Describe the serialized service-owned write path for bounded auth probes.
+fn freshness_update_decision(
+    selected_profile: Option<&BrowserProfile>,
+    target_service_ids: &[String],
+    recommended_after_probe: bool,
+) -> Value {
+    let profile_id = selected_profile.map(|profile| profile.id.clone());
+    let http_route = profile_id
+        .as_ref()
+        .map(|profile_id| format!("/api/service/profiles/{}/freshness", profile_id));
+
+    json!({
+        "available": profile_id.is_some(),
+        "recommendedAfterProbe": recommended_after_probe && profile_id.is_some(),
+        "profileId": profile_id,
+        "targetServiceIds": target_service_ids,
+        "http": {
+            "method": "POST",
+            "route": http_route,
+            "routeTemplate": "/api/service/profiles/<id>/freshness",
+        },
+        "mcp": {
+            "tool": "service_profile_freshness_update",
+        },
+        "client": {
+            "package": "@agent-browser/client/service-observability",
+            "helper": "updateServiceProfileFreshness",
+        },
+        "requestFields": [
+            "loginId",
+            "targetServiceId",
+            "targetServiceIds",
+            "readinessState",
+            "readinessEvidence",
+            "lastVerifiedAt",
+            "freshnessExpiresAt",
+        ],
     })
 }
 
@@ -1032,6 +1078,26 @@ mod tests {
         assert_eq!(plan["decision"]["manualActionRequired"], true);
         assert_eq!(plan["decision"]["manualSeedingRequired"], true);
         assert_eq!(
+            plan["decision"]["freshnessUpdate"]["profileId"],
+            "google-work"
+        );
+        assert_eq!(
+            plan["decision"]["freshnessUpdate"]["recommendedAfterProbe"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["freshnessUpdate"]["http"]["route"],
+            "/api/service/profiles/google-work/freshness"
+        );
+        assert_eq!(
+            plan["decision"]["freshnessUpdate"]["mcp"]["tool"],
+            "service_profile_freshness_update"
+        );
+        assert_eq!(
+            plan["decision"]["freshnessUpdate"]["client"]["helper"],
+            "updateServiceProfileFreshness"
+        );
+        assert_eq!(
             plan["decision"]["recommendedAction"],
             "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
         );
@@ -1130,6 +1196,11 @@ mod tests {
             "use_selected_profile"
         );
         assert_eq!(plan["decision"]["manualActionRequired"], false);
+        assert_eq!(plan["decision"]["freshnessUpdate"]["profileId"], "acs");
+        assert_eq!(
+            plan["decision"]["freshnessUpdate"]["recommendedAfterProbe"],
+            false
+        );
     }
 
     #[test]

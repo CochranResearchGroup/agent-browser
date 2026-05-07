@@ -1663,6 +1663,9 @@ summary, matching site policy, relevant providers and challenges, and the
 service-owned recommended action before a browser launch. Readiness summaries
 and decisions are scoped to the requested target identities, so an unrelated
 stale or unseeded login on the same profile does not block the requested site.
+The decision includes `freshnessUpdate`, which names the selected profile,
+target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
+client helper to use after a bounded auth probe reports current login state.
 Access-plan responses echo `agentName` and `taskName` in `query` and report
 `namingWarnings` plus `hasNamingWarning` in both `query` and `decision` when
 the caller omits `serviceName`, `agentName`, or `taskName`.

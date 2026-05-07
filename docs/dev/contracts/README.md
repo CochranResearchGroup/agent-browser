@@ -225,7 +225,9 @@ It is a read-only, no-launch planning surface. The response includes the same
 profile selector metadata and readiness summary as profile lookup, then adds the
 selected site policy, enabled providers, retained challenges, and a `decision`
 object with `recommendedAction`, manual-action flags, selected profile ID,
-provider IDs, challenge IDs, and stable reason strings.
+provider IDs, challenge IDs, stable reason strings, and `freshnessUpdate`
+instructions that identify the serialized profile freshness write path for
+bounded auth probes.
 
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

@@ -247,6 +247,7 @@
         "missingChallengeCapabilities",
         "challengeStrategy",
         "challengeIds",
+        "freshnessUpdate",
         "namingWarnings",
         "hasNamingWarning",
         "reasons"
@@ -430,6 +431,87 @@
           "items": {
             "type": "string"
           }
+        },
+        "freshnessUpdate": {
+          "type": "object",
+          "required": [
+            "available",
+            "recommendedAfterProbe",
+            "profileId",
+            "targetServiceIds",
+            "http",
+            "mcp",
+            "client",
+            "requestFields"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "recommendedAfterProbe": {
+              "type": "boolean"
+            },
+            "profileId": {
+              "type": ["string", "null"]
+            },
+            "targetServiceIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "http": {
+              "type": "object",
+              "required": ["method", "route", "routeTemplate"],
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "enum": ["POST"]
+                },
+                "route": {
+                  "type": ["string", "null"]
+                },
+                "routeTemplate": {
+                  "type": "string",
+                  "enum": ["/api/service/profiles/<id>/freshness"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "mcp": {
+              "type": "object",
+              "required": ["tool"],
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "enum": ["service_profile_freshness_update"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "client": {
+              "type": "object",
+              "required": ["package", "helper"],
+              "properties": {
+                "package": {
+                  "type": "string",
+                  "enum": ["@agent-browser/client/service-observability"]
+                },
+                "helper": {
+                  "type": "string",
+                  "enum": ["updateServiceProfileFreshness"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "requestFields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
         },
         "namingWarnings": {
           "type": "array",

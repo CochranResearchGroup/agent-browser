@@ -608,6 +608,34 @@ export interface ServiceProfileReadinessSummary {
   recommendedActions: string[];
 }
 
+export interface ServiceAccessPlanFreshnessUpdate {
+  /** True when the plan selected a managed profile that can accept freshness evidence. */
+  available: boolean;
+  /** True when the caller should report bounded-probe evidence before authenticated work proceeds. */
+  recommendedAfterProbe: boolean;
+  /** Selected managed profile ID to update, or null when no profile was selected. */
+  profileId: string | null;
+  /** Target identities the freshness evidence should describe. */
+  targetServiceIds: string[];
+  http: {
+    method: 'POST';
+    route: string | null;
+    routeTemplate: '/api/service/profiles/<id>/freshness';
+    [key: string]: unknown;
+  };
+  mcp: {
+    tool: 'service_profile_freshness_update';
+    [key: string]: unknown;
+  };
+  client: {
+    package: '@agent-browser/client/service-observability';
+    helper: 'updateServiceProfileFreshness';
+    [key: string]: unknown;
+  };
+  requestFields: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanDecision {
   recommendedAction: string;
   browserHost: string | null;
@@ -618,6 +646,7 @@ export interface ServiceAccessPlanDecision {
   manualSeedingRequired: boolean;
   providerIds: string[];
   challengeIds: string[];
+  freshnessUpdate: ServiceAccessPlanFreshnessUpdate;
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
   reasons: string[];
