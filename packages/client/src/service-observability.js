@@ -22,6 +22,9 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceBrowsersResponse} ServiceBrowsersResponse
  * @typedef {import('./service-observability.generated.js').ServiceChallengesResponse} ServiceChallengesResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
+ * @typedef {import('./service-observability.generated.js').ServiceMonitorDeleteResponse} ServiceMonitorDeleteResponse
+ * @typedef {import('./service-observability.generated.js').ServiceMonitorMutationOptions} ServiceMonitorMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceMonitorUpsertResponse} ServiceMonitorUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceObservabilityHttpOptions} ServiceObservabilityHttpOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
  * @typedef {import('./service-observability.generated.js').ServiceProvidersResponse} ServiceProvidersResponse
@@ -538,6 +541,22 @@ export function upsertServiceSitePolicy({ id, sitePolicy, ...options }) {
  */
 export function deleteServiceSitePolicy({ id, ...options }) {
   return serviceDelete(options, `/api/service/site-policies/${encodeURIComponent(id)}`);
+}
+
+/**
+ * @param {ServiceMonitorMutationOptions} options
+ * @returns {Promise<ServiceMonitorUpsertResponse>}
+ */
+export function upsertServiceMonitor({ id, monitor, ...options }) {
+  return servicePost(options, `/api/service/monitors/${encodeURIComponent(id)}`, monitor);
+}
+
+/**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceMonitorDeleteResponse>}
+ */
+export function deleteServiceMonitor({ id, ...options }) {
+  return serviceDelete(options, `/api/service/monitors/${encodeURIComponent(id)}`);
 }
 
 /**

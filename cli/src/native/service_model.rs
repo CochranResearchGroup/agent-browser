@@ -1254,6 +1254,36 @@ pub fn assert_service_provider_delete_response_contract(value: &serde_json::Valu
 }
 
 #[cfg(test)]
+pub fn assert_service_monitor_upsert_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "monitor upsert response",
+        value,
+        &["id", "monitor", "upserted"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert_eq!(value["upserted"], true);
+    assert_service_monitor_record_contract(&value["monitor"]);
+}
+
+#[cfg(test)]
+pub fn assert_service_monitor_delete_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "monitor delete response",
+        value,
+        &["id", "deleted", "monitor"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert!(value["deleted"].is_boolean());
+    if value["monitor"].is_object() {
+        assert_service_monitor_record_contract(&value["monitor"]);
+    } else {
+        assert!(value["monitor"].is_null());
+    }
+}
+
+#[cfg(test)]
 pub fn assert_service_job_cancel_response_contract(value: &serde_json::Value) {
     assert_record_fields("job cancel response", value, &["cancelled", "job"], &[]);
     assert!(value["cancelled"].is_boolean());
@@ -4076,6 +4106,14 @@ mod tests {
             "../../../docs/dev/contracts/service-site-policy-delete-response.v1.schema.json"
         ))
         .unwrap();
+        let monitor_upsert_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-monitor-upsert-response.v1.schema.json"
+        ))
+        .unwrap();
+        let monitor_delete_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-monitor-delete-response.v1.schema.json"
+        ))
+        .unwrap();
         let provider_upsert_schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/service-provider-upsert-response.v1.schema.json"
         ))
@@ -4094,6 +4132,8 @@ mod tests {
             &["id", "sitePolicy", "upserted"],
         );
         assert_schema_required_fields(&site_policy_delete_schema, &["id", "deleted", "sitePolicy"]);
+        assert_schema_required_fields(&monitor_upsert_schema, &["id", "monitor", "upserted"]);
+        assert_schema_required_fields(&monitor_delete_schema, &["id", "deleted", "monitor"]);
         assert_schema_required_fields(&provider_upsert_schema, &["id", "provider", "upserted"]);
         assert_schema_required_fields(&provider_delete_schema, &["id", "deleted", "provider"]);
 
@@ -4154,6 +4194,15 @@ mod tests {
             "configRef": null,
             "capabilities": ["human_approval"],
         });
+        let monitor = json!({
+            "id": "google-login-freshness",
+            "name": "Google login freshness",
+            "target": {"site_policy": "google"},
+            "intervalMs": 60000,
+            "state": "paused",
+            "lastCheckedAt": null,
+            "lastResult": null,
+        });
 
         assert_service_profile_upsert_response_contract(&json!({
             "id": "journal-downloader",
@@ -4184,6 +4233,16 @@ mod tests {
             "id": "google",
             "deleted": true,
             "sitePolicy": site_policy,
+        }));
+        assert_service_monitor_upsert_response_contract(&json!({
+            "id": "google-login-freshness",
+            "monitor": monitor.clone(),
+            "upserted": true,
+        }));
+        assert_service_monitor_delete_response_contract(&json!({
+            "id": "google-login-freshness",
+            "deleted": true,
+            "monitor": monitor,
         }));
         assert_service_provider_upsert_response_contract(&json!({
             "id": "manual",

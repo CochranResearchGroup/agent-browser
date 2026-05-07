@@ -275,6 +275,19 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(monitor_id) = service_monitor_id(path) {
+            let cmd = match service_monitor_upsert_command(monitor_id, body_str) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(provider_id) = service_provider_id(path) {
             let cmd = match service_provider_upsert_command(provider_id, body_str) {
                 Ok(cmd) => cmd,
@@ -319,6 +332,14 @@ pub(super) async fn handle_http_request(
                 service_site_policy_delete_command(site_policy_id),
             )
             .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
+        if let Some(monitor_id) = service_monitor_id(path) {
+            let result =
+                relay_service_command(session_name, service_monitor_delete_command(monitor_id))
+                    .await;
             write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
@@ -1504,6 +1525,11 @@ fn service_provider_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
+fn service_monitor_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/monitors/")
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
 fn service_job_cancel_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/jobs/")
         .and_then(|rest| rest.strip_suffix("/cancel"))
@@ -1607,6 +1633,24 @@ fn service_provider_upsert_command(provider_id: &str, body: &str) -> Result<Valu
         "providerId": provider_id,
         "provider": provider,
     }))
+}
+
+fn service_monitor_upsert_command(monitor_id: &str, body: &str) -> Result<Value, String> {
+    let monitor = parse_service_config_body(body, "monitor")?;
+    Ok(json!({
+        "id": format!("http-service-monitor-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_monitor_upsert",
+        "monitorId": monitor_id,
+        "monitor": monitor,
+    }))
+}
+
+fn service_monitor_delete_command(monitor_id: &str) -> Value {
+    json!({
+        "id": format!("http-service-monitor-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_monitor_delete",
+        "monitorId": monitor_id,
+    })
 }
 
 fn service_provider_delete_command(provider_id: &str) -> Value {
@@ -2705,6 +2749,10 @@ mod tests {
             service_provider_id("/api/service/providers/manual"),
             Some("manual")
         );
+        assert_eq!(
+            service_monitor_id("/api/service/monitors/google-login-freshness"),
+            Some("google-login-freshness")
+        );
         assert_eq!(service_profile_id("/api/service/profiles/"), None);
         assert_eq!(
             service_profile_allocation_id("/api/service/profiles/journal/extra/allocation"),
@@ -2743,6 +2791,11 @@ mod tests {
         assert_eq!(service_provider_id("/api/service/providers/"), None);
         assert_eq!(
             service_provider_id("/api/service/providers/manual/extra"),
+            None
+        );
+        assert_eq!(service_monitor_id("/api/service/monitors/"), None);
+        assert_eq!(
+            service_monitor_id("/api/service/monitors/google/extra"),
             None
         );
     }

@@ -1029,6 +1029,67 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_monitor_upsert",
+            "title": "Upsert service monitor",
+            "description": "Persist one service monitor record into service state. The id argument is authoritative and must match monitor.id when the nested object includes an id. This stores monitor definitions only; probe scheduling is a later service loop.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Monitor id, for example google-login-freshness."
+                    },
+                    "monitor": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Full monitor object using ServiceState camelCase field names."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id", "monitor"]
+            }
+        }),
+        json!({
+            "name": "service_monitor_delete",
+            "title": "Delete service monitor",
+            "description": "Delete one persisted service monitor record by id.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Monitor id to delete."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id"]
+            }
+        }),
+        json!({
             "name": "service_provider_upsert",
             "title": "Upsert service provider",
             "description": "Persist one service provider record into service state. The id argument is authoritative and must match provider.id when the nested object includes an id.",
@@ -3712,6 +3773,8 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_session_delete" => call_service_session_delete(arguments, session),
         "service_site_policy_upsert" => call_service_site_policy_upsert(arguments, session),
         "service_site_policy_delete" => call_service_site_policy_delete(arguments, session),
+        "service_monitor_upsert" => call_service_monitor_upsert(arguments, session),
+        "service_monitor_delete" => call_service_monitor_delete(arguments, session),
         "service_provider_upsert" => call_service_provider_upsert(arguments, session),
         "service_provider_delete" => call_service_provider_delete(arguments, session),
         "service_request" => call_service_request(arguments, session),
@@ -4002,6 +4065,29 @@ fn call_service_site_policy_delete(
     let command = service_site_policy_delete_command(id, service_name, agent_name, task_name);
 
     send_queued_tool_command("service_site_policy_delete", session, trace, command)
+}
+
+fn call_service_monitor_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let monitor = required_object_argument(arguments, "monitor")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_monitor_upsert_command(id, &monitor, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_monitor_upsert", session, trace, command)
+}
+
+fn call_service_monitor_delete(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_monitor_delete_command(id, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_monitor_delete", session, trace, command)
 }
 
 fn call_service_profile_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -5670,6 +5756,38 @@ fn service_site_policy_delete_command(
         "id": format!("mcp-service-site-policy-delete-{}", uuid::Uuid::new_v4()),
         "action": "service_site_policy_delete",
         "sitePolicyId": site_policy_id,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_monitor_upsert_command(
+    monitor_id: &str,
+    monitor: &Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-monitor-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_monitor_upsert",
+        "monitorId": monitor_id,
+        "monitor": monitor,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_monitor_delete_command(
+    monitor_id: &str,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-monitor-delete-{}", uuid::Uuid::new_v4()),
+        "action": "service_monitor_delete",
+        "monitorId": monitor_id,
     });
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
@@ -8045,20 +8163,21 @@ mod tests {
         assert_eq!(response["result"]["resources"][4]["uri"], SESSIONS_RESOURCE);
         assert_eq!(response["result"]["resources"][5]["uri"], BROWSERS_RESOURCE);
         assert_eq!(response["result"]["resources"][6]["uri"], TABS_RESOURCE);
+        assert_eq!(response["result"]["resources"][7]["uri"], MONITORS_RESOURCE);
         assert_eq!(
-            response["result"]["resources"][7]["uri"],
+            response["result"]["resources"][8]["uri"],
             SITE_POLICIES_RESOURCE
         );
         assert_eq!(
-            response["result"]["resources"][8]["uri"],
+            response["result"]["resources"][9]["uri"],
             PROVIDERS_RESOURCE
         );
         assert_eq!(
-            response["result"]["resources"][9]["uri"],
+            response["result"]["resources"][10]["uri"],
             CHALLENGES_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][10]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["result"]["resources"][11]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["result"]["resources"][11]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["result"]["resources"][12]["uri"], EVENTS_RESOURCE);
     }
 
     #[test]
@@ -8198,6 +8317,12 @@ mod tests {
             .unwrap()
             .iter()
             .any(|tool| tool["name"] == "service_site_policy_upsert"));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "service_monitor_upsert"
+                && tool["inputSchema"]["properties"]["monitor"].is_object()));
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()
@@ -8990,6 +9115,14 @@ mod tests {
         .unwrap();
         assert_eq!(missing_policy["id"], "policy");
         assert_eq!(missing_policy["error"]["code"], -32602);
+
+        let missing_monitor = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":"monitor","method":"tools/call","params":{"name":"service_monitor_upsert","arguments":{"id":"google-login-freshness"}}}"#,
+            "default",
+        )
+        .unwrap();
+        assert_eq!(missing_monitor["id"], "monitor");
+        assert_eq!(missing_monitor["error"]["code"], -32602);
 
         let missing_provider = handle_jsonrpc_line(
             r#"{"jsonrpc":"2.0","id":"provider","method":"tools/call","params":{"name":"service_provider_upsert","arguments":{"id":"manual"}}}"#,

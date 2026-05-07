@@ -342,6 +342,23 @@ export function assertServiceSitePolicyDeleteResponseSchemaRecord(response, sche
   );
 }
 
+export function assertServiceMonitorUpsertResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(response.upserted === true, `${label} upserted should be true: ${JSON.stringify(response)}`);
+  assert(response.monitor && typeof response.monitor === 'object', `${label} missing monitor object`);
+}
+
+export function assertServiceMonitorDeleteResponseSchemaRecord(response, schema, label) {
+  assertRequiredFields(response, schema, label);
+  assert(typeof response.id === 'string', `${label} missing id string`);
+  assert(typeof response.deleted === 'boolean', `${label} missing deleted boolean`);
+  assert(
+    response.monitor === null || (response.monitor && typeof response.monitor === 'object'),
+    `${label} monitor should be object or null`,
+  );
+}
+
 export function assertServiceProfileUpsertResponseSchemaRecord(response, schema, label) {
   assertRequiredFields(response, schema, label);
   assert(typeof response.id === 'string', `${label} missing id string`);

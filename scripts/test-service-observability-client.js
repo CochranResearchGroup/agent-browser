@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   findServiceProfileForIdentity,
+  deleteServiceMonitor,
   getServiceAccessPlan,
   getServiceContracts,
   getServiceMonitors,
@@ -16,6 +17,7 @@ import {
   registerServiceLoginProfile,
   summarizeServiceProfileReadiness,
   updateServiceProfileFreshness,
+  upsertServiceMonitor,
 } from '../packages/client/src/service-observability.js';
 
 function createFetchRecorder(payload) {
@@ -111,6 +113,47 @@ async function main() {
   assert.equal(monitors.calls[0].url, 'http://127.0.0.1:4849/api/service/monitors');
   assert.equal(monitors.calls[0].init.method, 'GET');
   assert.equal(monitorsResult.monitors[0].target.site_policy, 'google');
+
+  const monitorUpsert = createFetchRecorder({
+    success: true,
+    data: {
+      id: 'google-login-freshness',
+      upserted: true,
+      monitor: monitorsResult.monitors[0],
+    },
+  });
+  const monitorUpsertResult = await upsertServiceMonitor({
+    id: 'google-login-freshness',
+    monitor: monitorsResult.monitors[0],
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: monitorUpsert.fetch,
+  });
+  assert.equal(
+    monitorUpsert.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors/google-login-freshness',
+  );
+  assert.equal(monitorUpsert.calls[0].init.method, 'POST');
+  assert.equal(monitorUpsertResult.monitor.id, 'google-login-freshness');
+
+  const monitorDelete = createFetchRecorder({
+    success: true,
+    data: {
+      id: 'google-login-freshness',
+      deleted: true,
+      monitor: monitorsResult.monitors[0],
+    },
+  });
+  const monitorDeleteResult = await deleteServiceMonitor({
+    id: 'google-login-freshness',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: monitorDelete.fetch,
+  });
+  assert.equal(
+    monitorDelete.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors/google-login-freshness',
+  );
+  assert.equal(monitorDelete.calls[0].init.method, 'DELETE');
+  assert.equal(monitorDeleteResult.deleted, true);
 
   const allocation = createFetchRecorder({
     success: true,

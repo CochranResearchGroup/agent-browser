@@ -484,6 +484,20 @@ export interface ServiceProviderDeleteResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceMonitorUpsertResponse {
+  id: string;
+  upserted: boolean;
+  monitor: ServiceMonitorRecord;
+  [key: string]: unknown;
+}
+
+export interface ServiceMonitorDeleteResponse {
+  id: string;
+  deleted: boolean;
+  monitor: ServiceMonitorRecord | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceJobCancelResponse {
   cancelled: boolean;
   job: ServiceJobRecord;
@@ -850,6 +864,10 @@ export interface ServiceProviderMutationOptions extends ServiceIdOptions {
   provider: Record<string, unknown>;
 }
 
+export interface ServiceMonitorMutationOptions extends ServiceIdOptions {
+  monitor: Record<string, unknown>;
+}
+
 export interface ServiceJobCancelOptions extends ServiceObservabilityHttpOptions {
   jobId: string;
 }
@@ -908,6 +926,8 @@ export declare function upsertServiceSession(options: ServiceSessionMutationOpti
 export declare function deleteServiceSession(options: ServiceIdOptions): Promise<ServiceSessionDeleteResponse>;
 export declare function upsertServiceSitePolicy(options: ServiceSitePolicyMutationOptions): Promise<ServiceSitePolicyUpsertResponse>;
 export declare function deleteServiceSitePolicy(options: ServiceIdOptions): Promise<ServiceSitePolicyDeleteResponse>;
+export declare function upsertServiceMonitor(options: ServiceMonitorMutationOptions): Promise<ServiceMonitorUpsertResponse>;
+export declare function deleteServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorDeleteResponse>;
 export declare function upsertServiceProvider(options: ServiceProviderMutationOptions): Promise<ServiceProviderUpsertResponse>;
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
 export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;

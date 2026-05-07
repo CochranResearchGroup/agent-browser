@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 
 import {
+  deleteServiceMonitor,
   deleteServiceProfile,
   deleteServiceProvider,
   deleteServiceSession,
   deleteServiceSitePolicy,
+  getServiceMonitors,
   getServiceProfiles,
   getServiceProviders,
   getServiceSessions,
   getServiceSitePolicies,
   updateServiceProfileFreshness,
+  upsertServiceMonitor,
   upsertServiceProfile,
   upsertServiceProvider,
   upsertServiceSession,
@@ -26,6 +29,8 @@ import {
   runCli,
 } from './smoke-utils.js';
 import {
+  assertServiceMonitorDeleteResponseSchemaRecord,
+  assertServiceMonitorUpsertResponseSchemaRecord,
   assertServiceProfileDeleteResponseSchemaRecord,
   assertServiceProfileUpsertResponseSchemaRecord,
   assertServiceProviderDeleteResponseSchemaRecord,
@@ -61,6 +66,12 @@ const sitePolicyUpsertResponseSchema = loadServiceRecordSchema(
 );
 const sitePolicyDeleteResponseSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-site-policy-delete-response.v1.schema.json',
+);
+const monitorUpsertResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-monitor-upsert-response.v1.schema.json',
+);
+const monitorDeleteResponseSchema = loadServiceRecordSchema(
+  '../docs/dev/contracts/service-monitor-delete-response.v1.schema.json',
 );
 const providerUpsertResponseSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-provider-upsert-response.v1.schema.json',
@@ -371,6 +382,54 @@ try {
     `MCP site-policies resource did not include persisted source metadata: ${JSON.stringify(mcpPolicies)}`,
   );
 
+  const mcpMonitorResult = await send('tools/call', {
+    name: 'service_monitor_upsert',
+    arguments: {
+      id: 'google-login-freshness',
+      monitor: {
+        name: 'Google login freshness',
+        target: { site_policy: 'google' },
+        intervalMs: 60000,
+        state: 'paused',
+      },
+      ...traceFields,
+    },
+  });
+  const mcpMonitor = parseMcpToolPayload(mcpMonitorResult, 'MCP service_monitor_upsert');
+  assert(mcpMonitor.success === true, `MCP monitor upsert failed: ${JSON.stringify(mcpMonitor)}`);
+  assertServiceMonitorUpsertResponseSchemaRecord(
+    mcpMonitor.data,
+    monitorUpsertResponseSchema,
+    'MCP monitor upsert response',
+  );
+
+  const clientMonitor = await upsertServiceMonitor({
+    baseUrl: serviceBaseUrl,
+    id: 'client-google-login-freshness',
+    monitor: {
+      name: 'Client Google login freshness',
+      target: { site_policy: 'client-google' },
+      intervalMs: 120000,
+      state: 'paused',
+    },
+  });
+  assertServiceMonitorUpsertResponseSchemaRecord(
+    clientMonitor,
+    monitorUpsertResponseSchema,
+    'client monitor upsert response',
+  );
+
+  const httpMonitors = await getServiceMonitors({ baseUrl: serviceBaseUrl });
+  assert(
+    httpMonitors.monitors?.some(
+      (monitor) =>
+        monitor.id === 'google-login-freshness' &&
+        monitor.name === 'Google login freshness' &&
+        monitor.target?.site_policy === 'google',
+    ),
+    `HTTP monitors did not include MCP-upserted monitor: ${JSON.stringify(httpMonitors)}`,
+  );
+
   const mcpProviderResult = await send('tools/call', {
     name: 'service_provider_upsert',
     arguments: {
@@ -419,6 +478,32 @@ try {
     ),
     `HTTP providers did not include MCP-upserted provider: ${JSON.stringify(httpProviders)}`,
   );
+
+  const mcpDeleteMonitorResult = await send('tools/call', {
+    name: 'service_monitor_delete',
+    arguments: { id: 'google-login-freshness', ...traceFields },
+  });
+  const mcpDeleteMonitor = parseMcpToolPayload(mcpDeleteMonitorResult, 'MCP service_monitor_delete');
+  assert(mcpDeleteMonitor.success === true, `MCP monitor delete failed: ${JSON.stringify(mcpDeleteMonitor)}`);
+  assertServiceMonitorDeleteResponseSchemaRecord(
+    mcpDeleteMonitor.data,
+    monitorDeleteResponseSchema,
+    'MCP monitor delete response',
+  );
+
+  const clientDeleteMonitor = await deleteServiceMonitor({
+    baseUrl: serviceBaseUrl,
+    id: 'client-google-login-freshness',
+  });
+  assertServiceMonitorDeleteResponseSchemaRecord(
+    clientDeleteMonitor,
+    monitorDeleteResponseSchema,
+    'client monitor delete response',
+  );
+
+  const httpMonitorsAfterDelete = await getServiceMonitors({ baseUrl: serviceBaseUrl });
+  assertCollectionMissing(httpMonitorsAfterDelete, 'monitors', 'google-login-freshness', 'HTTP monitors');
+  assertCollectionMissing(httpMonitorsAfterDelete, 'monitors', 'client-google-login-freshness', 'HTTP monitors');
 
   const mcpDeletePolicyResult = await send('tools/call', {
     name: 'service_site_policy_delete',

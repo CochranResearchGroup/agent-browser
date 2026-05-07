@@ -41,9 +41,10 @@ use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
 use super::service_config::{
-    delete_persisted_profile, delete_persisted_provider, delete_persisted_session,
-    delete_persisted_site_policy, update_persisted_profile_freshness, upsert_persisted_profile,
-    upsert_persisted_provider, upsert_persisted_session, upsert_persisted_site_policy,
+    delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
+    delete_persisted_session, delete_persisted_site_policy, update_persisted_profile_freshness,
+    upsert_persisted_monitor, upsert_persisted_profile, upsert_persisted_provider,
+    upsert_persisted_session, upsert_persisted_site_policy,
 };
 use super::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
@@ -212,6 +213,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_session_delete"
             | "service_site_policy_upsert"
             | "service_site_policy_delete"
+            | "service_monitor_upsert"
+            | "service_monitor_delete"
             | "service_provider_upsert"
             | "service_provider_delete"
             | "service_incident_acknowledge"
@@ -2453,6 +2456,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_session_delete" => handle_service_session_delete(cmd).await,
         "service_site_policy_upsert" => handle_service_site_policy_upsert(cmd).await,
         "service_site_policy_delete" => handle_service_site_policy_delete(cmd).await,
+        "service_monitor_upsert" => handle_service_monitor_upsert(cmd).await,
+        "service_monitor_delete" => handle_service_monitor_delete(cmd).await,
         "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
         "service_provider_delete" => handle_service_provider_delete(cmd).await,
         "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
@@ -6874,6 +6879,29 @@ async fn handle_service_site_policy_delete(cmd: &Value) -> Result<Value, String>
     }))
 }
 
+async fn handle_service_monitor_upsert(cmd: &Value) -> Result<Value, String> {
+    let monitor_id = required_service_config_id(cmd, "monitorId")?;
+    let body = cmd.get("monitor").cloned().ok_or("Missing monitor")?;
+    let monitor = upsert_persisted_monitor(monitor_id, body)?;
+
+    Ok(json!({
+        "id": monitor_id,
+        "monitor": monitor,
+        "upserted": true,
+    }))
+}
+
+async fn handle_service_monitor_delete(cmd: &Value) -> Result<Value, String> {
+    let monitor_id = required_service_config_id(cmd, "monitorId")?;
+    let removed = delete_persisted_monitor(monitor_id)?;
+
+    Ok(json!({
+        "id": monitor_id,
+        "deleted": removed.is_some(),
+        "monitor": removed,
+    }))
+}
+
 async fn handle_service_provider_upsert(cmd: &Value) -> Result<Value, String> {
     let provider_id = required_service_config_id(cmd, "providerId")?;
     let body = cmd.get("provider").cloned().ok_or("Missing provider")?;
@@ -10283,6 +10311,8 @@ mod tests {
         assert_service_incident_record_contract, assert_service_incident_resolve_response_contract,
         assert_service_incidents_response_contract, assert_service_job_cancel_response_contract,
         assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
+        assert_service_monitor_delete_response_contract,
+        assert_service_monitor_upsert_response_contract,
         assert_service_profile_delete_response_contract,
         assert_service_profile_upsert_response_contract,
         assert_service_provider_delete_response_contract,
@@ -10620,6 +10650,8 @@ mod tests {
             "service_session_delete",
             "service_site_policy_upsert",
             "service_site_policy_delete",
+            "service_monitor_upsert",
+            "service_monitor_delete",
             "service_provider_upsert",
             "service_provider_delete",
             "service_incident_acknowledge",
@@ -13348,6 +13380,28 @@ mod tests {
         assert_service_provider_upsert_response_contract(&upsert_provider["data"]);
         assert_eq!(upsert_provider["data"]["provider"]["id"], "manual");
 
+        let upsert_monitor = execute_command(
+            &json!({
+                "action": "service_monitor_upsert",
+                "id": "svc-monitor-upsert-1",
+                "monitorId": "google-login-freshness",
+                "monitor": {
+                    "name": "Google login freshness",
+                    "target": {"site_policy": "google"},
+                    "intervalMs": 60000,
+                    "state": "paused"
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(upsert_monitor["success"], true);
+        assert_service_monitor_upsert_response_contract(&upsert_monitor["data"]);
+        assert_eq!(
+            upsert_monitor["data"]["monitor"]["id"],
+            "google-login-freshness"
+        );
+
         let persisted = store.load().unwrap();
         assert_eq!(
             persisted.profiles["journal-downloader"].shared_service_ids,
@@ -13364,6 +13418,10 @@ mod tests {
         assert_eq!(
             persisted.providers["manual"].display_name,
             "Dashboard approval"
+        );
+        assert_eq!(
+            persisted.monitors["google-login-freshness"].name,
+            "Google login freshness"
         );
 
         let delete_session = execute_command(
@@ -13411,6 +13469,24 @@ mod tests {
         assert_service_provider_delete_response_contract(&delete_provider["data"]);
         assert_eq!(delete_provider["data"]["deleted"], true);
         assert!(!store.load().unwrap().providers.contains_key("manual"));
+
+        let delete_monitor = execute_command(
+            &json!({
+                "action": "service_monitor_delete",
+                "id": "svc-monitor-delete-1",
+                "monitorId": "google-login-freshness"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(delete_monitor["success"], true);
+        assert_service_monitor_delete_response_contract(&delete_monitor["data"]);
+        assert_eq!(delete_monitor["data"]["deleted"], true);
+        assert!(!store
+            .load()
+            .unwrap()
+            .monitors
+            .contains_key("google-login-freshness"));
 
         let delete_policy = execute_command(
             &json!({

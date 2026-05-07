@@ -186,6 +186,20 @@ const serviceSurface = [
     ],
   },
   {
+    tool: 'service_monitor_upsert',
+    method: 'POST',
+    route: '/api/service/monitors/<id>',
+    httpNeedles: ['service_monitor_id(path)', 'service_monitor_upsert_command(monitor_id, body_str)'],
+    clientNeedles: ['upsertServiceMonitor', '/api/service/monitors/${encodeURIComponent(id)}'],
+  },
+  {
+    tool: 'service_monitor_delete',
+    method: 'DELETE',
+    route: '/api/service/monitors/<id>',
+    httpNeedles: ['service_monitor_id(path)', 'service_monitor_delete_command(monitor_id)'],
+    clientNeedles: ['deleteServiceMonitor', '/api/service/monitors/${encodeURIComponent(id)}'],
+  },
+  {
     tool: 'service_provider_upsert',
     method: 'POST',
     route: '/api/service/providers/<id>',
