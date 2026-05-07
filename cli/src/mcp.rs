@@ -8090,14 +8090,15 @@ mod tests {
         assert_eq!(response["data"]["resources"][4]["uri"], SESSIONS_RESOURCE);
         assert_eq!(response["data"]["resources"][5]["uri"], BROWSERS_RESOURCE);
         assert_eq!(response["data"]["resources"][6]["uri"], TABS_RESOURCE);
+        assert_eq!(response["data"]["resources"][7]["uri"], MONITORS_RESOURCE);
         assert_eq!(
-            response["data"]["resources"][7]["uri"],
+            response["data"]["resources"][8]["uri"],
             SITE_POLICIES_RESOURCE
         );
-        assert_eq!(response["data"]["resources"][8]["uri"], PROVIDERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][9]["uri"], CHALLENGES_RESOURCE);
-        assert_eq!(response["data"]["resources"][10]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["data"]["resources"][11]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][9]["uri"], PROVIDERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][10]["uri"], CHALLENGES_RESOURCE);
+        assert_eq!(response["data"]["resources"][11]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["data"]["resources"][12]["uri"], EVENTS_RESOURCE);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
             ACCESS_PLAN_TEMPLATE

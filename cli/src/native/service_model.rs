@@ -4425,6 +4425,9 @@ mod tests {
         let incident = json!({
             "id": "session:retry-session",
             "browserId": "session:retry-session",
+            "monitorId": null,
+            "monitorTarget": null,
+            "monitorResult": null,
             "label": "Browser session:retry-session",
             "state": "active",
             "severity": "error",
@@ -4767,6 +4770,9 @@ mod tests {
         let incident = json!({
             "id": "browser-1",
             "browserId": "browser-1",
+            "monitorId": null,
+            "monitorTarget": null,
+            "monitorResult": null,
             "label": "browser-1",
             "state": "active",
             "severity": "error",
