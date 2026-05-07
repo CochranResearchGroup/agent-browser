@@ -137,16 +137,16 @@ pub(crate) fn service_access_plan_for_state(
     );
     let naming_warnings = access_plan_naming_warnings(&request);
     let has_naming_warning = !naming_warnings.is_empty();
-    let decision = access_plan_decision(
-        selected_profile.as_ref(),
-        site_policy.as_ref(),
-        &challenges,
-        &providers,
-        readiness.as_ref(),
-        &request.target_service_ids,
-        &readiness_summary,
-        &naming_warnings,
-    );
+    let decision = access_plan_decision(AccessPlanDecisionInput {
+        selected_profile: selected_profile.as_ref(),
+        site_policy: site_policy.as_ref(),
+        challenges: &challenges,
+        providers: &providers,
+        readiness: readiness.as_ref(),
+        target_service_ids: &request.target_service_ids,
+        readiness_summary: &readiness_summary,
+        naming_warnings: &naming_warnings,
+    });
 
     json!({
         "query": {
@@ -356,16 +356,26 @@ fn select_providers(
         .collect()
 }
 
-fn access_plan_decision(
-    selected_profile: Option<&BrowserProfile>,
-    site_policy: Option<&SitePolicy>,
-    challenges: &[Challenge],
-    providers: &[ServiceProvider],
-    readiness: Option<&Value>,
-    target_service_ids: &[String],
-    readiness_summary: &Value,
-    naming_warnings: &[&'static str],
-) -> Value {
+struct AccessPlanDecisionInput<'a> {
+    selected_profile: Option<&'a BrowserProfile>,
+    site_policy: Option<&'a SitePolicy>,
+    challenges: &'a [Challenge],
+    providers: &'a [ServiceProvider],
+    readiness: Option<&'a Value>,
+    target_service_ids: &'a [String],
+    readiness_summary: &'a Value,
+    naming_warnings: &'a [&'static str],
+}
+
+fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
+    let selected_profile = input.selected_profile;
+    let site_policy = input.site_policy;
+    let challenges = input.challenges;
+    let providers = input.providers;
+    let readiness = input.readiness;
+    let target_service_ids = input.target_service_ids;
+    let readiness_summary = input.readiness_summary;
+    let naming_warnings = input.naming_warnings;
     let mut reasons = Vec::new();
     let manual_seeding_required =
         readiness_summary["manualSeedingRequired"].as_bool() == Some(true);
