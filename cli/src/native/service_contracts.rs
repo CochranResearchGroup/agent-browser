@@ -7,8 +7,10 @@ pub const SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE: &str = "/api/service/profiles/<
 pub const SERVICE_PROFILE_READINESS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/readiness";
 pub const SERVICE_PROFILE_LOOKUP_HTTP_ROUTE: &str = "/api/service/profiles/lookup";
 pub const SERVICE_ACCESS_PLAN_HTTP_ROUTE: &str = "/api/service/access-plan";
+pub const SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE: &str = "/api/service/monitors/run-due";
 pub const SERVICE_ACCESS_PLAN_MCP_RESOURCE: &str = "agent-browser://access-plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
+pub const SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME: &str = "service_monitors_run_due";
 pub const SERVICE_REQUEST_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-request.v1.schema.json";
 pub const SERVICE_REQUEST_MCP_TOOL_CALL_SCHEMA_ID: &str =
@@ -21,6 +23,8 @@ pub const SERVICE_PROFILE_LOOKUP_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-lookup-response.v1.schema.json";
 pub const SERVICE_ACCESS_PLAN_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-access-plan-response.v1.schema.json";
+pub const SERVICE_MONITOR_RUN_DUE_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-monitor-run-due-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 
 pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
@@ -170,6 +174,22 @@ pub fn service_contracts_metadata() -> Value {
                     "helpers": ["getServiceAccessPlan"],
                 },
             },
+            "serviceMonitorRunDueResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_MONITOR_RUN_DUE_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-monitor-run-due-response.v1.schema.json",
+                "http": {
+                    "method": "POST",
+                    "route": SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE,
+                },
+                "mcp": {
+                    "tool": SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME,
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["runDueServiceMonitors"],
+                },
+            },
         },
         "http": {
             "contractsRoute": SERVICE_CONTRACTS_HTTP_ROUTE,
@@ -178,11 +198,13 @@ pub fn service_contracts_metadata() -> Value {
             "serviceProfileReadinessRoute": SERVICE_PROFILE_READINESS_HTTP_ROUTE,
             "serviceProfileLookupRoute": SERVICE_PROFILE_LOOKUP_HTTP_ROUTE,
             "serviceAccessPlanRoute": SERVICE_ACCESS_PLAN_HTTP_ROUTE,
+            "serviceMonitorsRunDueRoute": SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE,
         },
         "mcp": {
             "contractsResource": SERVICE_CONTRACTS_RESOURCE,
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
             "serviceAccessPlanResource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+            "serviceMonitorsRunDueTool": SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME,
         },
     })
 }
@@ -263,6 +285,22 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][0],
             "getServiceAccessPlan"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceMonitorRunDueResponse"]["schemaId"],
+            SERVICE_MONITOR_RUN_DUE_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceMonitorRunDueResponse"]["http"]["route"],
+            SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceMonitorRunDueResponse"]["mcp"]["tool"],
+            SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceMonitorRunDueResponse"]["client"]["helpers"][0],
+            "runDueServiceMonitors"
         );
     }
 }

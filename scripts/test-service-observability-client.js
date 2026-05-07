@@ -15,6 +15,7 @@ import {
   getServiceTrace,
   lookupServiceProfile,
   registerServiceLoginProfile,
+  runDueServiceMonitors,
   summarizeServiceProfileReadiness,
   updateServiceProfileFreshness,
   upsertServiceMonitor,
@@ -186,6 +187,26 @@ async function main() {
   );
   assert.equal(monitorDelete.calls[0].init.method, 'DELETE');
   assert.equal(monitorDeleteResult.deleted, true);
+
+  const monitorRunDue = createFetchRecorder({
+    success: true,
+    data: {
+      checked: 1,
+      succeeded: 0,
+      failed: 1,
+      monitorIds: ['google-login-freshness'],
+    },
+  });
+  const monitorRunDueResult = await runDueServiceMonitors({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: monitorRunDue.fetch,
+  });
+  assert.equal(
+    monitorRunDue.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors/run-due',
+  );
+  assert.equal(monitorRunDue.calls[0].init.method, 'POST');
+  assert.equal(monitorRunDueResult.failed, 1);
 
   const allocation = createFetchRecorder({
     success: true,

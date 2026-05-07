@@ -200,6 +200,13 @@ const serviceSurface = [
     clientNeedles: ['deleteServiceMonitor', '/api/service/monitors/${encodeURIComponent(id)}'],
   },
   {
+    tool: 'service_monitors_run_due',
+    method: 'POST',
+    route: '/api/service/monitors/run-due',
+    httpNeedles: ['"/api/service/monitors/run-due"', 'service_monitors_run_due_command()'],
+    clientNeedles: ['runDueServiceMonitors', '/api/service/monitors/run-due'],
+  },
+  {
     tool: 'service_provider_upsert',
     method: 'POST',
     route: '/api/service/providers/<id>',

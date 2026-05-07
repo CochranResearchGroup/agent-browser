@@ -24,6 +24,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorDeleteResponse} ServiceMonitorDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorMutationOptions} ServiceMonitorMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceMonitorRunDueResponse} ServiceMonitorRunDueResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorUpsertResponse} ServiceMonitorUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceObservabilityHttpOptions} ServiceObservabilityHttpOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
@@ -292,6 +293,16 @@ export function getServiceMonitors(options) {
     },
     '/api/service/monitors',
   );
+}
+
+/**
+ * Ask the service to run due active monitor checks immediately.
+ *
+ * @param {ServiceObservabilityHttpOptions} options
+ * @returns {Promise<ServiceMonitorRunDueResponse>}
+ */
+export function runDueServiceMonitors(options) {
+  return servicePost(options, '/api/service/monitors/run-due');
 }
 
 /**

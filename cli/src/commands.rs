@@ -998,6 +998,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }))
             }
             Some("monitors") => {
+                if rest.get(1).copied() == Some("run-due") {
+                    if rest.len() > 2 {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Unknown argument for service monitors run-due: {}", rest[2]),
+                            usage: "service monitors run-due",
+                        });
+                    }
+                    return Ok(json!({
+                        "id": id,
+                        "action": "service_monitors_run_due",
+                    }));
+                }
                 let usage = "service monitors [--summary] [--failed] [--state <active|paused|faulted>]";
                 let mut cmd = json!({
                     "id": id,
@@ -5223,6 +5235,14 @@ mod tests {
     }
 
     #[test]
+    fn test_service_monitors_run_due() {
+        let cmd = parse_command(&args("service monitors run-due"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_monitors_run_due");
+        assert!(cmd.get("serviceState").is_none());
+    }
+
+    #[test]
     fn test_service_profiles() {
         let cmd = parse_command(&args("service profiles"), &default_flags()).unwrap();
 
@@ -5280,6 +5300,14 @@ mod tests {
     #[test]
     fn test_service_monitors_rejects_extra_argument() {
         let err = parse_command(&args("service monitors extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_monitors_run_due_rejects_extra_argument() {
+        let err =
+            parse_command(&args("service monitors run-due extra"), &default_flags()).unwrap_err();
 
         assert!(matches!(err, ParseError::InvalidValue { .. }));
     }

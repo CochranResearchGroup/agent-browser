@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-monitor-run-due-response.v1.schema.json",
+  "title": "agent-browser service monitor run-due response",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["checked", "succeeded", "failed", "monitorIds"],
+  "properties": {
+    "checked": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "succeeded": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "monitorIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

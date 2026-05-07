@@ -1303,6 +1303,21 @@ pub fn assert_service_monitor_delete_response_contract(value: &serde_json::Value
 }
 
 #[cfg(test)]
+pub fn assert_service_monitor_run_due_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "monitor run-due response",
+        value,
+        &["checked", "succeeded", "failed", "monitorIds"],
+        &[],
+    );
+    assert!(value["checked"].is_u64());
+    assert!(value["succeeded"].is_u64());
+    assert!(value["failed"].is_u64());
+    let monitor_ids = value["monitorIds"].as_array().unwrap();
+    assert!(monitor_ids.iter().all(|id| id.is_string()));
+}
+
+#[cfg(test)]
 pub fn assert_service_job_cancel_response_contract(value: &serde_json::Value) {
     assert_record_fields("job cancel response", value, &["cancelled", "job"], &[]);
     assert!(value["cancelled"].is_boolean());
@@ -4257,6 +4272,10 @@ mod tests {
             "../../../docs/dev/contracts/service-monitor-delete-response.v1.schema.json"
         ))
         .unwrap();
+        let monitor_run_due_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-monitor-run-due-response.v1.schema.json"
+        ))
+        .unwrap();
         let provider_upsert_schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/service-provider-upsert-response.v1.schema.json"
         ))
@@ -4277,6 +4296,10 @@ mod tests {
         assert_schema_required_fields(&site_policy_delete_schema, &["id", "deleted", "sitePolicy"]);
         assert_schema_required_fields(&monitor_upsert_schema, &["id", "monitor", "upserted"]);
         assert_schema_required_fields(&monitor_delete_schema, &["id", "deleted", "monitor"]);
+        assert_schema_required_fields(
+            &monitor_run_due_schema,
+            &["checked", "succeeded", "failed", "monitorIds"],
+        );
         assert_schema_required_fields(&provider_upsert_schema, &["id", "provider", "upserted"]);
         assert_schema_required_fields(&provider_delete_schema, &["id", "deleted", "provider"]);
 
@@ -4389,6 +4412,12 @@ mod tests {
             "id": "google-login-freshness",
             "deleted": true,
             "monitor": monitor,
+        }));
+        assert_service_monitor_run_due_response_contract(&json!({
+            "checked": 1,
+            "succeeded": 0,
+            "failed": 1,
+            "monitorIds": ["google-login-freshness"],
         }));
         assert_service_provider_upsert_response_contract(&json!({
             "id": "manual",

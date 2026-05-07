@@ -278,6 +278,13 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if path == "/api/service/monitors/run-due" {
+            let result =
+                relay_service_command(session_name, service_monitors_run_due_command()).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(monitor_id) = service_monitor_id(path) {
             let cmd = match service_monitor_upsert_command(monitor_id, body_str) {
                 Ok(cmd) => cmd,
@@ -1546,7 +1553,7 @@ fn service_provider_id(path: &str) -> Option<&str> {
 
 fn service_monitor_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/monitors/")
-        .filter(|id| !id.is_empty() && !id.contains('/'))
+        .filter(|id| !id.is_empty() && !id.contains('/') && *id != "run-due")
 }
 
 fn service_job_cancel_id(path: &str) -> Option<&str> {
@@ -1669,6 +1676,13 @@ fn service_monitor_delete_command(monitor_id: &str) -> Value {
         "id": format!("http-service-monitor-delete-{}", uuid::Uuid::new_v4()),
         "action": "service_monitor_delete",
         "monitorId": monitor_id,
+    })
+}
+
+fn service_monitors_run_due_command() -> Value {
+    json!({
+        "id": format!("http-service-monitors-run-due-{}", uuid::Uuid::new_v4()),
+        "action": "service_monitors_run_due",
     })
 }
 
@@ -2815,6 +2829,11 @@ mod tests {
         assert_eq!(
             service_monitor_id("/api/service/monitors/google-login-freshness"),
             Some("google-login-freshness")
+        );
+        assert_eq!(service_monitor_id("/api/service/monitors/run-due"), None);
+        assert_eq!(
+            service_monitors_run_due_command()["action"],
+            "service_monitors_run_due"
         );
         assert_eq!(service_profile_id("/api/service/profiles/"), None);
         assert_eq!(

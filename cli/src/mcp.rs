@@ -1090,6 +1090,29 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_monitors_run_due",
+            "title": "Run due service monitors",
+            "description": "Run due active service monitors immediately through the service worker.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                }
+            }
+        }),
+        json!({
             "name": "service_provider_upsert",
             "title": "Upsert service provider",
             "description": "Persist one service provider record into service state. The id argument is authoritative and must match provider.id when the nested object includes an id.",
@@ -3775,6 +3798,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_site_policy_delete" => call_service_site_policy_delete(arguments, session),
         "service_monitor_upsert" => call_service_monitor_upsert(arguments, session),
         "service_monitor_delete" => call_service_monitor_delete(arguments, session),
+        "service_monitors_run_due" => call_service_monitors_run_due(arguments, session),
         "service_provider_upsert" => call_service_provider_upsert(arguments, session),
         "service_provider_delete" => call_service_provider_delete(arguments, session),
         "service_request" => call_service_request(arguments, session),
@@ -4088,6 +4112,16 @@ fn call_service_monitor_delete(arguments: &Value, session: &str) -> Result<Value
     let command = service_monitor_delete_command(id, service_name, agent_name, task_name);
 
     send_queued_tool_command("service_monitor_delete", session, trace, command)
+}
+
+fn call_service_monitors_run_due(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_monitors_run_due_command(service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_monitors_run_due", session, trace, command)
 }
 
 fn call_service_profile_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -5788,6 +5822,19 @@ fn service_monitor_delete_command(
         "id": format!("mcp-service-monitor-delete-{}", uuid::Uuid::new_v4()),
         "action": "service_monitor_delete",
         "monitorId": monitor_id,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_monitors_run_due_command(
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-monitors-run-due-{}", uuid::Uuid::new_v4()),
+        "action": "service_monitors_run_due",
     });
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
@@ -8327,6 +8374,11 @@ mod tests {
             .iter()
             .any(|tool| tool["name"] == "service_monitor_upsert"
                 && tool["inputSchema"]["properties"]["monitor"].is_object()));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "service_monitors_run_due"));
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()

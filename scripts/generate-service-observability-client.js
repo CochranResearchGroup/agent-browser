@@ -529,6 +529,14 @@ export interface ServiceMonitorDeleteResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceMonitorRunDueResponse {
+  checked: number;
+  succeeded: number;
+  failed: number;
+  monitorIds: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceJobCancelResponse {
   cancelled: boolean;
   job: ServiceJobRecord;
@@ -951,6 +959,8 @@ export declare function getServiceBrowsers(options: ServiceQueryOptions): Promis
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;
 export declare function getServiceMonitors(options: ServiceMonitorQueryOptions): Promise<ServiceMonitorsResponse>;
+/** Ask the service to run due active monitor checks immediately. */
+export declare function runDueServiceMonitors(options: ServiceObservabilityHttpOptions): Promise<ServiceMonitorRunDueResponse>;
 export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;

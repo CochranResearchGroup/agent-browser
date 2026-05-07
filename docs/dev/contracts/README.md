@@ -215,6 +215,10 @@ monitors are checked by the daemon scheduler when due. Monitor records retain
 heartbeat from a repeated failure without scanning the event log. CLI and HTTP
 monitor collections support `state`, failed-only, and summary filters; MCP
 `agent-browser://monitors` remains the full unfiltered retained resource.
+`service-monitor-run-due-response.v1.schema.json` describes the immediate
+run summary returned by CLI `agent-browser service monitors run-due`, HTTP
+`POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, and
+`runDueServiceMonitors()`.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a
@@ -260,6 +264,7 @@ by HTTP service APIs and matching MCP tools:
 - `service-site-policy-delete-response.v1.schema.json`
 - `service-monitor-upsert-response.v1.schema.json`
 - `service-monitor-delete-response.v1.schema.json`
+- `service-monitor-run-due-response.v1.schema.json`
 - `service-provider-upsert-response.v1.schema.json`
 - `service-provider-delete-response.v1.schema.json`
 
@@ -269,6 +274,8 @@ and provider writes. Monitor mutation paths are HTTP
 `POST /api/service/monitors/<id>` and `DELETE /api/service/monitors/<id>` plus
 MCP `service_monitor_upsert` and `service_monitor_delete`; they persist monitor
 definitions for the scheduler.
+`service-monitor-run-due-response.v1.schema.json` covers the immediate due
+monitor run summary returned by CLI, HTTP, MCP, and the service client helper.
 
 Profile mutation inputs are policy checked before persistence. The
 `caller_supplied` allocation requires `userDataDir`, and `per_service` profiles
