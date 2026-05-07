@@ -85,3 +85,35 @@ cargo test --manifest-path cli/Cargo.toml service_access -- --test-threads=1
 
 The pushed `CI` run passed, including Version Sync Check, Dashboard, Service
 Client, Rust Quality, Rust tests, and no-launch service smokes.
+
+## 2026-05-07 Update
+
+The same validation gap recurred after service-profile freshness work. Commits
+`b709336` and `a4b6cb2` failed ordinary `CI` in the `Rust Quality` job even
+though the local targeted service-client and service smoke checks passed.
+
+The failing diagnostic was:
+
+```text
+this function has too many arguments (8/7)
+src/native/service_access.rs:359
+```
+
+The root cause was Rust 1.95 clippy enforcing `too_many_arguments` on
+`access_plan_decision`. The fix was commit `8e32564`, which grouped the
+function inputs into an `AccessPlanDecisionInput` struct instead of suppressing
+the lint.
+
+The practical closeout rule is now strict: if any Rust source under `cli/src/`
+changed anywhere in the current work slice, run both Rust Quality commands
+before pushing, even when the final commit only changes docs, examples, or
+client code:
+
+```bash
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+```
+
+The confirming GitHub run was `25470986944`, which passed Version Sync Check,
+Dashboard, Service Client, Rust Quality, Rust tests, and no-launch service
+smokes.
