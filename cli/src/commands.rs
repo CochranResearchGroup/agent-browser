@@ -998,17 +998,51 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }))
             }
             Some("monitors") => {
-                if rest.len() > 1 {
-                    return Err(ParseError::InvalidValue {
-                        message: format!("Unknown argument for service monitors: {}", rest[1]),
-                        usage: "service monitors",
-                    });
-                }
-                Ok(json!({
+                let usage = "service monitors [--summary] [--failed] [--state <active|paused|faulted>]";
+                let mut cmd = json!({
                     "id": id,
                     "action": "service_monitors",
                     "serviceState": flags.service_state.clone(),
-                }))
+                });
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--summary" => {
+                            cmd["summary"] = json!(true);
+                        }
+                        "--failed" => {
+                            cmd["failedOnly"] = json!(true);
+                        }
+                        "--state" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "Missing value for --state".to_string(),
+                                    usage,
+                                });
+                            };
+                            match *raw {
+                                "active" | "paused" | "faulted" => {
+                                    cmd["monitorState"] = json!(raw);
+                                }
+                                _ => {
+                                    return Err(ParseError::InvalidValue {
+                                        message: format!("Invalid --state value: {}", raw),
+                                        usage,
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+                        other => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown argument for service monitors: {other}"),
+                                usage,
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(cmd)
             }
             Some("site-policies") => {
                 if rest.len() > 1 {
@@ -5175,6 +5209,20 @@ mod tests {
     }
 
     #[test]
+    fn test_service_monitors_filters() {
+        let cmd = parse_command(
+            &args("service monitors --summary --failed --state faulted"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_monitors");
+        assert_eq!(cmd["summary"], true);
+        assert_eq!(cmd["failedOnly"], true);
+        assert_eq!(cmd["monitorState"], "faulted");
+    }
+
+    #[test]
     fn test_service_profiles() {
         let cmd = parse_command(&args("service profiles"), &default_flags()).unwrap();
 
@@ -5232,6 +5280,14 @@ mod tests {
     #[test]
     fn test_service_monitors_rejects_extra_argument() {
         let err = parse_command(&args("service monitors extra"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_monitors_rejects_invalid_state() {
+        let err =
+            parse_command(&args("service monitors --state unknown"), &default_flags()).unwrap_err();
 
         assert!(matches!(err, ParseError::InvalidValue { .. }));
     }

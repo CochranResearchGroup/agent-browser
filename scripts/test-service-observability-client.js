@@ -100,24 +100,51 @@ async function main() {
             site_policy: 'google',
           },
           intervalMs: 60000,
-          state: 'paused',
+          state: 'faulted',
           lastCheckedAt: null,
           lastSucceededAt: null,
           lastFailedAt: null,
           lastResult: null,
-          consecutiveFailures: 0,
+          consecutiveFailures: 1,
         },
       ],
       count: 1,
+      matched: 1,
+      total: 2,
+      filters: {
+        state: 'faulted',
+        failedOnly: true,
+        summary: true,
+      },
+      summary: {
+        total: 1,
+        active: 0,
+        paused: 0,
+        faulted: 1,
+        failing: 1,
+        repeatedFailures: 0,
+        neverChecked: 0,
+        failingMonitorIds: ['google-login-freshness'],
+        repeatedFailureMonitorIds: [],
+        neverCheckedMonitorIds: [],
+        lastFailedAt: null,
+      },
     },
   });
   const monitorsResult = await getServiceMonitors({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: monitors.fetch,
+    state: 'faulted',
+    failedOnly: true,
+    summary: true,
   });
-  assert.equal(monitors.calls[0].url, 'http://127.0.0.1:4849/api/service/monitors');
+  assert.equal(
+    monitors.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors?state=faulted&failed=true&summary=true',
+  );
   assert.equal(monitors.calls[0].init.method, 'GET');
   assert.equal(monitorsResult.monitors[0].target.site_policy, 'google');
+  assert.equal(monitorsResult.summary.failing, 1);
 
   const monitorUpsert = createFetchRecorder({
     success: true,

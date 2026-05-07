@@ -250,6 +250,28 @@ export interface ServiceMonitorRecord {
   [key: string]: unknown;
 }
 
+export interface ServiceMonitorSummary {
+  total: number;
+  active: number;
+  paused: number;
+  faulted: number;
+  failing: number;
+  repeatedFailures: number;
+  neverChecked: number;
+  failingMonitorIds: string[];
+  repeatedFailureMonitorIds: string[];
+  neverCheckedMonitorIds: string[];
+  lastFailedAt: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceMonitorFilters {
+  state: 'active' | 'paused' | 'faulted' | null;
+  failedOnly: boolean;
+  summary: boolean;
+  [key: string]: unknown;
+}
+
 export interface ServiceSitePolicyRecord {
   id: string;
   originPattern: string | null;
@@ -414,6 +436,8 @@ export interface ServiceTabsResponse extends ServiceListResponse<ServiceTabRecor
 
 export interface ServiceMonitorsResponse extends ServiceListResponse<ServiceMonitorRecord> {
   monitors: ServiceMonitorRecord[];
+  filters?: ServiceMonitorFilters;
+  summary?: ServiceMonitorSummary;
 }
 
 export interface ServiceSitePoliciesResponse extends ServiceListResponse<ServiceSitePolicyRecord> {
@@ -640,6 +664,12 @@ export interface ServiceObservabilityHttpOptions {
 
 export interface ServiceQueryOptions extends ServiceObservabilityHttpOptions {
   query?: Record<string, string | number | boolean | null | undefined>;
+}
+
+export interface ServiceMonitorQueryOptions extends ServiceQueryOptions {
+  state?: 'active' | 'paused' | 'faulted';
+  failedOnly?: boolean;
+  summary?: boolean;
 }
 
 export interface ServiceIdOptions extends ServiceObservabilityHttpOptions {
@@ -920,7 +950,7 @@ export declare function getServiceAccessPlan(options: ServiceAccessPlanOptions):
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;
-export declare function getServiceMonitors(options: ServiceQueryOptions): Promise<ServiceMonitorsResponse>;
+export declare function getServiceMonitors(options: ServiceMonitorQueryOptions): Promise<ServiceMonitorsResponse>;
 export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;

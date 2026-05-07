@@ -276,11 +276,22 @@ export function getServiceTabs(options) {
 }
 
 /**
- * @param {ServiceQueryOptions} options
+ * @param {import('./service-observability.generated.js').ServiceMonitorQueryOptions} options
  * @returns {Promise<ServiceMonitorsResponse>}
  */
 export function getServiceMonitors(options) {
-  return serviceGet(options, '/api/service/monitors');
+  return serviceGet(
+    {
+      ...options,
+      query: {
+        ...options.query,
+        state: options.state,
+        failed: options.failedOnly,
+        summary: options.summary,
+      },
+    },
+    '/api/service/monitors',
+  );
 }
 
 /**

@@ -22,6 +22,9 @@ use crate::native::service_model::{
     service_profile_allocations, service_profile_sources, service_site_policy_sources,
     BrowserProfile, ProfileSelectionReason, ServiceEntitySource, ServiceState,
 };
+use crate::native::service_monitors::{
+    parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
+};
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
@@ -490,7 +493,7 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" {
-        if let Some(contents) = service_collection_contents(path) {
+        if let Some(contents) = service_collection_contents(path, query) {
             write_json_value(
                 &mut stream,
                 "200 OK",
@@ -1192,7 +1195,7 @@ fn parse_positive_query_u64(name: &str, value: &str) -> Result<u64, String> {
     Ok(parsed)
 }
 
-fn service_collection_contents(path: &str) -> Option<Value> {
+fn service_collection_contents(path: &str, query: Option<&str>) -> Option<Value> {
     let service_state = load_service_state();
     match path {
         "/api/service/profiles" => {
@@ -1227,13 +1230,10 @@ fn service_collection_contents(path: &str) -> Option<Value> {
                 "count": tabs.len(),
             }))
         }
-        "/api/service/monitors" => {
-            let monitors = service_state.monitors.values().cloned().collect::<Vec<_>>();
-            Some(json!({
-                "monitors": monitors,
-                "count": monitors.len(),
-            }))
-        }
+        "/api/service/monitors" => Some(service_monitors_response(
+            &service_state,
+            parse_monitor_collection_filters(query),
+        )),
         "/api/service/site-policies" => {
             let site_policies = service_state
                 .site_policies
@@ -1281,6 +1281,25 @@ fn service_profile_lookup_response(query: Option<&str>) -> Result<Value, String>
 fn service_access_plan_response(query: Option<&str>) -> Result<Value, String> {
     let service_state = load_service_state();
     service_access_plan_response_for_state(query, &service_state)
+}
+
+fn parse_monitor_collection_filters(query: Option<&str>) -> MonitorCollectionFilters {
+    let mut filters = MonitorCollectionFilters::default();
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "state" => {
+                filters.state = parse_monitor_state(value.trim());
+            }
+            "failed" | "failedOnly" | "failed-only" => {
+                filters.failed_only = matches!(value.as_str(), "1" | "true" | "yes");
+            }
+            "summary" => {
+                filters.summary = matches!(value.as_str(), "1" | "true" | "yes");
+            }
+            _ => {}
+        }
+    }
+    filters
 }
 
 fn service_access_plan_response_for_state(
@@ -2117,8 +2136,9 @@ mod tests {
     use crate::native::service_model::{
         assert_service_event_record_contract, assert_service_incident_record_contract,
         assert_service_job_naming_warning_contract, service_job_naming_warning_values,
-        BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState,
-        ProfileReadinessState, ProfileTargetReadiness, ProviderKind, ServiceProvider, SitePolicy,
+        BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState, MonitorState,
+        MonitorTarget, ProfileReadinessState, ProfileTargetReadiness, ProviderKind,
+        ServiceProvider, SiteMonitor, SitePolicy,
     };
 
     #[test]
@@ -2698,14 +2718,15 @@ mod tests {
 
     #[test]
     fn service_collection_contents_maps_known_resource_routes() {
-        let profiles = service_collection_contents("/api/service/profiles").unwrap();
-        let sessions = service_collection_contents("/api/service/sessions").unwrap();
-        let browsers = service_collection_contents("/api/service/browsers").unwrap();
-        let tabs = service_collection_contents("/api/service/tabs").unwrap();
-        let monitors = service_collection_contents("/api/service/monitors").unwrap();
-        let site_policies = service_collection_contents("/api/service/site-policies").unwrap();
-        let providers = service_collection_contents("/api/service/providers").unwrap();
-        let challenges = service_collection_contents("/api/service/challenges").unwrap();
+        let profiles = service_collection_contents("/api/service/profiles", None).unwrap();
+        let sessions = service_collection_contents("/api/service/sessions", None).unwrap();
+        let browsers = service_collection_contents("/api/service/browsers", None).unwrap();
+        let tabs = service_collection_contents("/api/service/tabs", None).unwrap();
+        let monitors = service_collection_contents("/api/service/monitors", None).unwrap();
+        let site_policies =
+            service_collection_contents("/api/service/site-policies", None).unwrap();
+        let providers = service_collection_contents("/api/service/providers", None).unwrap();
+        let challenges = service_collection_contents("/api/service/challenges", None).unwrap();
 
         assert!(profiles["profiles"].is_array());
         assert!(profiles["profileSources"].is_array());
@@ -2717,7 +2738,48 @@ mod tests {
         assert!(site_policies["sitePolicies"].is_array());
         assert!(providers["providers"].is_array());
         assert!(challenges["challenges"].is_array());
-        assert_eq!(service_collection_contents("/api/service/unknown"), None);
+        assert_eq!(
+            service_collection_contents("/api/service/unknown", None),
+            None
+        );
+    }
+
+    #[test]
+    fn service_collection_contents_filters_monitor_failures() {
+        let mut service_state = ServiceState::default();
+        service_state.monitors.insert(
+            "healthy".to_string(),
+            SiteMonitor {
+                id: "healthy".to_string(),
+                state: MonitorState::Active,
+                target: MonitorTarget::SitePolicy("google".to_string()),
+                last_checked_at: Some("2026-05-07T00:00:00Z".to_string()),
+                last_succeeded_at: Some("2026-05-07T00:00:00Z".to_string()),
+                ..SiteMonitor::default()
+            },
+        );
+        service_state.monitors.insert(
+            "faulted".to_string(),
+            SiteMonitor {
+                id: "faulted".to_string(),
+                state: MonitorState::Faulted,
+                target: MonitorTarget::SitePolicy("google".to_string()),
+                last_checked_at: Some("2026-05-07T00:01:00Z".to_string()),
+                last_failed_at: Some("2026-05-07T00:01:00Z".to_string()),
+                consecutive_failures: 2,
+                ..SiteMonitor::default()
+            },
+        );
+        let response = service_monitors_response(
+            &service_state,
+            parse_monitor_collection_filters(Some("failed=true&summary=true&state=faulted")),
+        );
+
+        assert_eq!(response["count"], 1);
+        assert_eq!(response["total"], 2);
+        assert_eq!(response["monitors"][0]["id"], "faulted");
+        assert_eq!(response["summary"]["failing"], 1);
+        assert_eq!(response["summary"]["repeatedFailures"], 1);
     }
 
     #[test]

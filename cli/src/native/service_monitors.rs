@@ -26,6 +26,13 @@ pub struct MonitorRunSummary {
     pub monitor_ids: Vec<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MonitorCollectionFilters {
+    pub state: Option<MonitorState>,
+    pub failed_only: bool,
+    pub summary: bool,
+}
+
 #[derive(Debug, Clone)]
 struct MonitorProbeResult {
     monitor: SiteMonitor,
@@ -59,6 +66,51 @@ where
 {
     let snapshot = repository.load_snapshot()?;
     run_due_monitors_with_snapshot(repository, snapshot).await
+}
+
+pub fn service_monitors_response(
+    state: &ServiceState,
+    filters: MonitorCollectionFilters,
+) -> serde_json::Value {
+    let total = state.monitors.len();
+    let mut monitors = state
+        .monitors
+        .values()
+        .filter(|monitor| monitor_matches_filters(monitor, &filters))
+        .cloned()
+        .collect::<Vec<_>>();
+    monitors.sort_by(|left, right| left.id.cmp(&right.id));
+    let matched = monitors.len();
+
+    let mut response = json!({
+        "monitors": monitors,
+        "count": matched,
+        "matched": matched,
+        "total": total,
+        "filters": {
+            "state": filters.state,
+            "failedOnly": filters.failed_only,
+            "summary": filters.summary,
+        },
+    });
+    if filters.summary {
+        response["summary"] = monitor_collection_summary(
+            response["monitors"]
+                .as_array()
+                .map(Vec::as_slice)
+                .unwrap_or(&[]),
+        );
+    }
+    response
+}
+
+pub fn parse_monitor_state(value: &str) -> Option<MonitorState> {
+    match value {
+        "active" => Some(MonitorState::Active),
+        "paused" => Some(MonitorState::Paused),
+        "faulted" => Some(MonitorState::Faulted),
+        _ => None,
+    }
 }
 
 async fn run_due_monitors_with_snapshot<S>(
@@ -220,6 +272,88 @@ fn summarize_results(results: &[MonitorProbeResult]) -> MonitorRunSummary {
             .map(|result| result.monitor_id.clone())
             .collect(),
     }
+}
+
+fn monitor_matches_filters(monitor: &SiteMonitor, filters: &MonitorCollectionFilters) -> bool {
+    if let Some(state) = filters.state {
+        if monitor.state != state {
+            return false;
+        }
+    }
+    if filters.failed_only && !monitor_is_failing(monitor) {
+        return false;
+    }
+    true
+}
+
+fn monitor_is_failing(monitor: &SiteMonitor) -> bool {
+    monitor.state == MonitorState::Faulted || monitor.consecutive_failures > 0
+}
+
+fn monitor_collection_summary(monitors: &[serde_json::Value]) -> serde_json::Value {
+    let mut active = 0_u64;
+    let mut paused = 0_u64;
+    let mut faulted = 0_u64;
+    let mut failing = Vec::new();
+    let mut repeated_failures = Vec::new();
+    let mut never_checked = Vec::new();
+    let mut last_failed_at: Option<String> = None;
+
+    for monitor in monitors {
+        match monitor.get("state").and_then(|value| value.as_str()) {
+            Some("active") => active += 1,
+            Some("paused") => paused += 1,
+            Some("faulted") => faulted += 1,
+            _ => {}
+        }
+        let id = monitor
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown-monitor")
+            .to_string();
+        let consecutive_failures = monitor
+            .get("consecutiveFailures")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        if monitor.get("state").and_then(|value| value.as_str()) == Some("faulted")
+            || consecutive_failures > 0
+        {
+            failing.push(id.clone());
+        }
+        if consecutive_failures > 1 {
+            repeated_failures.push(id.clone());
+        }
+        if monitor
+            .get("lastCheckedAt")
+            .and_then(|value| value.as_str())
+            .is_none()
+        {
+            never_checked.push(id);
+        }
+        if let Some(failed_at) = monitor.get("lastFailedAt").and_then(|value| value.as_str()) {
+            if last_failed_at
+                .as_deref()
+                .map(|current| failed_at > current)
+                .unwrap_or(true)
+            {
+                last_failed_at = Some(failed_at.to_string());
+            }
+        }
+    }
+
+    json!({
+        "total": monitors.len(),
+        "active": active,
+        "paused": paused,
+        "faulted": faulted,
+        "failing": failing.len(),
+        "repeatedFailures": repeated_failures.len(),
+        "neverChecked": never_checked.len(),
+        "failingMonitorIds": failing,
+        "repeatedFailureMonitorIds": repeated_failures,
+        "neverCheckedMonitorIds": never_checked,
+        "lastFailedAt": last_failed_at,
+    })
 }
 
 fn apply_monitor_result(state: &mut ServiceState, result: MonitorProbeResult) {

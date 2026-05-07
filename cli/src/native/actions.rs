@@ -69,7 +69,10 @@ use super::service_model::{
     ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
     SessionCleanupPolicy,
 };
-use super::service_monitors::run_due_persisted_monitors;
+use super::service_monitors::{
+    parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
+    MonitorCollectionFilters,
+};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
 use super::snapshot::{self, SnapshotOptions};
@@ -6688,14 +6691,24 @@ async fn handle_service_monitors(cmd: &Value) -> Result<Value, String> {
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
-    let mut monitors = service_state.monitors.into_values().collect::<Vec<_>>();
-    monitors.sort_by(|left, right| left.id.cmp(&right.id));
-    let count = monitors.len();
+    let state = optional_command_string(cmd, "monitorState")
+        .map(|state| {
+            parse_monitor_state(&state).ok_or_else(|| format!("Invalid monitor state: {state}"))
+        })
+        .transpose()?;
+    let filters = MonitorCollectionFilters {
+        state,
+        failed_only: cmd
+            .get("failedOnly")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false),
+        summary: cmd
+            .get("summary")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false),
+    };
 
-    Ok(json!({
-        "monitors": monitors,
-        "count": count,
-    }))
+    Ok(service_monitors_response(&service_state, filters))
 }
 
 /// Return the service-owned site-policy collection without the full status payload.
@@ -11884,6 +11897,56 @@ mod tests {
         assert_eq!(result["data"]["monitors"][0]["id"], "login-freshness");
         assert_eq!(result["data"]["monitors"][0]["state"], "paused");
         assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_monitors_via_actions_filters_and_summarizes_failures() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_monitors",
+            "id": "svc-monitors-filtered",
+            "monitorState": "faulted",
+            "failedOnly": true,
+            "summary": true,
+            "serviceState": {
+                "monitors": {
+                    "healthy": {
+                        "id": "healthy",
+                        "name": "Healthy",
+                        "target": {"site_policy": "google"},
+                        "intervalMs": 60000,
+                        "state": "active",
+                        "lastCheckedAt": "2026-05-07T00:00:00Z",
+                        "lastSucceededAt": "2026-05-07T00:00:00Z",
+                        "lastFailedAt": null,
+                        "lastResult": "site_policy_available",
+                        "consecutiveFailures": 0
+                    },
+                    "login-freshness": {
+                        "id": "login-freshness",
+                        "name": "Login freshness",
+                        "target": {"site_policy": "google"},
+                        "intervalMs": 60000,
+                        "state": "faulted",
+                        "lastCheckedAt": "2026-05-07T00:01:00Z",
+                        "lastSucceededAt": null,
+                        "lastFailedAt": "2026-05-07T00:01:00Z",
+                        "lastResult": "site_policy_missing",
+                        "consecutiveFailures": 2
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["matched"], 1);
+        assert_eq!(result["data"]["total"], 2);
+        assert_eq!(result["data"]["monitors"][0]["id"], "login-freshness");
+        assert_eq!(result["data"]["summary"]["faulted"], 1);
+        assert_eq!(result["data"]["summary"]["failing"], 1);
+        assert_eq!(result["data"]["summary"]["repeatedFailures"], 1);
     }
 
     #[tokio::test]

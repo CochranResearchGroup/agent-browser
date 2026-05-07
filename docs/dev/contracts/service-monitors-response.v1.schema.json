@@ -15,6 +15,85 @@
     "count": {
       "type": "integer",
       "minimum": 0
+    },
+    "matched": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "filters": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": ["string", "null"],
+          "enum": ["active", "paused", "faulted", null]
+        },
+        "failedOnly": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "active": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "paused": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "faulted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failing": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "repeatedFailures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "neverChecked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failingMonitorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "repeatedFailureMonitorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "neverCheckedMonitorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lastFailedAt": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true

@@ -212,7 +212,9 @@ CLI `agent-browser service monitors`, HTTP `GET /api/service/monitors`, MCP
 monitors are checked by the daemon scheduler when due. Monitor records retain
 `lastCheckedAt`, `lastSucceededAt`, `lastFailedAt`, `lastResult`, and
 `consecutiveFailures` so operators and clients can distinguish a recovered
-heartbeat from a repeated failure without scanning the event log.
+heartbeat from a repeated failure without scanning the event log. CLI and HTTP
+monitor collections support `state`, failed-only, and summary filters; MCP
+`agent-browser://monitors` remains the full unfiltered retained resource.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a
