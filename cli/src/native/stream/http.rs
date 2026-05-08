@@ -305,6 +305,16 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(monitor_id) = service_monitor_action_id(path, "/reset-failures") {
+            let result = relay_service_command(
+                session_name,
+                service_monitor_state_command(monitor_id, "service_monitor_reset_failures"),
+            )
+            .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(monitor_id) = service_monitor_id(path) {
             let cmd = match service_monitor_upsert_command(monitor_id, body_str) {
                 Ok(cmd) => cmd,
@@ -2884,9 +2894,23 @@ mod tests {
             Some("google-login-freshness")
         );
         assert_eq!(
+            service_monitor_action_id(
+                "/api/service/monitors/google-login-freshness/reset-failures",
+                "/reset-failures"
+            ),
+            Some("google-login-freshness")
+        );
+        assert_eq!(
             service_monitor_state_command("google-login-freshness", "service_monitor_pause")
                 ["action"],
             "service_monitor_pause"
+        );
+        assert_eq!(
+            service_monitor_state_command(
+                "google-login-freshness",
+                "service_monitor_reset_failures"
+            )["action"],
+            "service_monitor_reset_failures"
         );
         assert_eq!(service_profile_id("/api/service/profiles/"), None);
         assert_eq!(

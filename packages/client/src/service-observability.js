@@ -601,6 +601,15 @@ export function resumeServiceMonitor({ id, ...options }) {
 }
 
 /**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceMonitorStateResponse>}
+ */
+export function resetServiceMonitorFailures({ id, ...options }) {
+  assertServiceId(id, 'resetServiceMonitorFailures');
+  return servicePost(options, `/api/service/monitors/${encodeURIComponent(id)}/reset-failures`);
+}
+
+/**
  * @param {ServiceProviderMutationOptions} options
  * @returns {Promise<ServiceProviderUpsertResponse>}
  */

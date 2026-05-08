@@ -42,9 +42,10 @@ use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
 use super::service_config::{
     delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
-    delete_persisted_session, delete_persisted_site_policy, update_persisted_monitor_state,
-    update_persisted_profile_freshness, upsert_persisted_monitor, upsert_persisted_profile,
-    upsert_persisted_provider, upsert_persisted_session, upsert_persisted_site_policy,
+    delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
+    update_persisted_monitor_state, update_persisted_profile_freshness, upsert_persisted_monitor,
+    upsert_persisted_profile, upsert_persisted_provider, upsert_persisted_session,
+    upsert_persisted_site_policy,
 };
 use super::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
@@ -220,6 +221,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_monitor_upsert"
             | "service_monitor_delete"
             | "service_monitor_pause"
+            | "service_monitor_reset_failures"
             | "service_monitor_resume"
             | "service_monitors_run_due"
             | "service_provider_upsert"
@@ -2468,6 +2470,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_monitor_pause" => {
             handle_service_monitor_state_update(cmd, MonitorState::Paused).await
         }
+        "service_monitor_reset_failures" => handle_service_monitor_reset_failures(cmd).await,
         "service_monitor_resume" => {
             handle_service_monitor_state_update(cmd, MonitorState::Active).await
         }
@@ -6938,6 +6941,20 @@ async fn handle_service_monitor_state_update(
         "monitor": monitor,
         "state": monitor_state,
         "updated": true,
+    }))
+}
+
+async fn handle_service_monitor_reset_failures(cmd: &Value) -> Result<Value, String> {
+    let monitor_id = required_service_config_id(cmd, "monitorId")?;
+    let monitor = reset_persisted_monitor_failures(monitor_id)?;
+    let state = monitor.state;
+
+    Ok(json!({
+        "id": monitor_id,
+        "monitor": monitor,
+        "state": state,
+        "updated": true,
+        "resetFailures": true,
     }))
 }
 
@@ -13559,6 +13576,20 @@ mod tests {
         assert_eq!(pause_monitor["success"], true);
         assert_service_monitor_state_response_contract(&pause_monitor["data"]);
         assert_eq!(pause_monitor["data"]["state"], "paused");
+
+        let reset_monitor = execute_command(
+            &json!({
+                "action": "service_monitor_reset_failures",
+                "id": "svc-monitor-reset-1",
+                "monitorId": "google-login-freshness"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(reset_monitor["success"], true);
+        assert_service_monitor_state_response_contract(&reset_monitor["data"]);
+        assert_eq!(reset_monitor["data"]["resetFailures"], true);
+        assert_eq!(reset_monitor["data"]["monitor"]["consecutiveFailures"], 0);
 
         let delete_session = execute_command(
             &json!({

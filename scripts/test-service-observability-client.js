@@ -17,6 +17,7 @@ import {
   pauseServiceMonitor,
   registerServiceLoginProfile,
   resumeServiceMonitor,
+  resetServiceMonitorFailures,
   runDueServiceMonitors,
   summarizeServiceProfileReadiness,
   updateServiceProfileFreshness,
@@ -234,6 +235,32 @@ async function main() {
   );
   assert.equal(monitorResume.calls[0].init.method, 'POST');
   assert.equal(monitorResumeResult.state, 'active');
+
+  const monitorReset = createFetchRecorder({
+    success: true,
+    data: {
+      id: 'google-login-freshness',
+      monitor: {
+        ...monitorsResult.monitors[0],
+        consecutiveFailures: 0,
+        state: 'active',
+      },
+      state: 'active',
+      updated: true,
+      resetFailures: true,
+    },
+  });
+  const monitorResetResult = await resetServiceMonitorFailures({
+    id: 'google-login-freshness',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: monitorReset.fetch,
+  });
+  assert.equal(
+    monitorReset.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors/google-login-freshness/reset-failures',
+  );
+  assert.equal(monitorReset.calls[0].init.method, 'POST');
+  assert.equal(monitorResetResult.resetFailures, true);
 
   const monitorRunDue = createFetchRecorder({
     success: true,

@@ -1563,7 +1563,11 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if matches!(
             action,
-            Some("service_monitor_pause" | "service_monitor_resume")
+            Some(
+                "service_monitor_pause"
+                    | "service_monitor_resume"
+                    | "service_monitor_reset_failures"
+            )
         ) {
             if let Some(output) = format_service_monitor_state_text(data) {
                 println!("{}", output);
@@ -3974,6 +3978,7 @@ Usage:
   agent-browser service monitors run-due
   agent-browser service monitors pause <monitor-id>
   agent-browser service monitors resume <monitor-id>
+  agent-browser service monitors reset <monitor-id>
   agent-browser service site-policies
   agent-browser service providers
   agent-browser service challenges
@@ -4000,6 +4005,7 @@ Commands:
   monitors run-due     Run due active service monitors now through the service worker
   monitors pause       Pause one noisy service monitor
   monitors resume      Resume one paused or faulted service monitor
+  monitors reset       Clear one reviewed monitor failure count
   site-policies         Show configured service site-policy records
   providers             Show configured service provider records
   challenges            Show retained auth, 2FA, captcha, passkey, and blocked-flow challenge records
@@ -4023,6 +4029,7 @@ Notes:
   - Incident operator metadata includes acknowledgement and resolution timestamps, actor names, and notes.
   - Acknowledgement and resolution append incident_acknowledged and incident_resolved service events.
   - Cancel marks queued or lease-waiting jobs before dispatch and requests cooperative cancellation for running jobs.
+  - Monitor reset clears the reviewed failure count while preserving last failure evidence.
   - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - Incidents include severity, escalation, recommendedAction, and monitor metadata when a failed service monitor created the incident.
   - service incidents --summary groups the current filtered incident set by escalation, severity, and state with recommended next actions.
@@ -4561,6 +4568,7 @@ Service:
   service monitors run-due   Run due active service monitors now
   service monitors pause     Pause one noisy service monitor
   service monitors resume    Resume one paused or faulted service monitor
+  service monitors reset     Clear one reviewed monitor failure count
   service site-policies      Show configured service site-policy records
   service providers          Show configured service provider records
   service challenges         Show retained service challenge records
@@ -4863,6 +4871,7 @@ Examples:
   agent-browser service monitors run-due # Run due active service monitors now
   agent-browser service monitors pause google-login-freshness # Quiet a noisy monitor
   agent-browser service monitors resume google-login-freshness # Resume monitor checks
+  agent-browser service monitors reset google-login-freshness # Clear reviewed failures
   agent-browser service site-policies    # Inspect configured service site-policy records
   agent-browser service providers        # Inspect configured service provider records
   agent-browser service challenges       # Inspect retained service challenge records

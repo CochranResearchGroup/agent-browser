@@ -1010,12 +1010,12 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         "action": "service_monitors_run_due",
                     }));
                 }
-                if matches!(rest.get(1).copied(), Some("pause" | "resume")) {
+                if matches!(rest.get(1).copied(), Some("pause" | "resume" | "reset")) {
                     let action_name = rest[1];
                     let Some(monitor_id) = rest.get(2) else {
                         return Err(ParseError::InvalidValue {
                             message: format!("Missing monitor id for service monitors {action_name}"),
-                            usage: "service monitors pause <monitor-id>\n  service monitors resume <monitor-id>",
+                            usage: "service monitors pause <monitor-id>\n  service monitors resume <monitor-id>\n  service monitors reset <monitor-id>",
                         });
                     };
                     if rest.len() > 3 {
@@ -1024,13 +1024,14 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 "Unknown argument for service monitors {action_name}: {}",
                                 rest[3]
                             ),
-                            usage: "service monitors pause <monitor-id>\n  service monitors resume <monitor-id>",
+                            usage: "service monitors pause <monitor-id>\n  service monitors resume <monitor-id>\n  service monitors reset <monitor-id>",
                         });
                     }
-                    let action = if action_name == "pause" {
-                        "service_monitor_pause"
-                    } else {
-                        "service_monitor_resume"
+                    let action = match action_name {
+                        "pause" => "service_monitor_pause",
+                        "resume" => "service_monitor_resume",
+                        "reset" => "service_monitor_reset_failures",
+                        _ => unreachable!("validated monitor action"),
                     };
                     return Ok(json!({
                         "id": id,
@@ -5271,7 +5272,7 @@ mod tests {
     }
 
     #[test]
-    fn test_service_monitors_pause_and_resume() {
+    fn test_service_monitors_pause_resume_and_reset() {
         let pause = parse_command(
             &args("service monitors pause google-login-freshness"),
             &default_flags(),
@@ -5282,11 +5283,18 @@ mod tests {
             &default_flags(),
         )
         .unwrap();
+        let reset = parse_command(
+            &args("service monitors reset google-login-freshness"),
+            &default_flags(),
+        )
+        .unwrap();
 
         assert_eq!(pause["action"], "service_monitor_pause");
         assert_eq!(pause["monitorId"], "google-login-freshness");
         assert_eq!(resume["action"], "service_monitor_resume");
         assert_eq!(resume["monitorId"], "google-login-freshness");
+        assert_eq!(reset["action"], "service_monitor_reset_failures");
+        assert_eq!(reset["monitorId"], "google-login-freshness");
     }
 
     #[test]

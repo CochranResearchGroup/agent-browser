@@ -221,9 +221,11 @@ run summary returned by CLI `agent-browser service monitors run-due`, HTTP
 `runDueServiceMonitors()`.
 `service-monitor-state-response.v1.schema.json` describes the state update
 response returned by CLI `service monitors pause <id>` and
-`service monitors resume <id>`, HTTP monitor pause/resume routes, MCP
-`service_monitor_pause` and `service_monitor_resume`, and the matching client
-helpers.
+`service monitors resume <id>`, plus the reviewed-failure reset returned by
+CLI `service monitors reset <id>`. The same contract covers HTTP monitor
+pause/resume/reset routes, MCP `service_monitor_pause`,
+`service_monitor_resume`, `service_monitor_reset_failures`, and the matching
+client helpers.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a

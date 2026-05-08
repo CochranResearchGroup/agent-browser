@@ -421,6 +421,20 @@ pub fn update_monitor_state(
     Ok(monitor.clone())
 }
 
+/// Clear reviewed monitor failure counts while preserving last failure evidence.
+pub fn reset_monitor_failures(state: &mut ServiceState, id: &str) -> Result<SiteMonitor, String> {
+    validate_entity_id(id, "monitor")?;
+    let monitor = state
+        .monitors
+        .get_mut(id)
+        .ok_or_else(|| format!("Unknown monitor id: {id}"))?;
+    monitor.consecutive_failures = 0;
+    if monitor.state == MonitorState::Faulted {
+        monitor.state = MonitorState::Active;
+    }
+    Ok(monitor.clone())
+}
+
 /// Delete one service provider record from persisted service state.
 pub fn delete_provider(
     state: &mut ServiceState,
@@ -505,6 +519,12 @@ pub fn update_persisted_monitor_state(
 ) -> Result<SiteMonitor, String> {
     let repository = LockedServiceStateRepository::default_json()?;
     update_monitor_state_in_repository(&repository, id, monitor_state)
+}
+
+/// Clear one persisted monitor's reviewed failure count under the serialized mutator.
+pub fn reset_persisted_monitor_failures(id: &str) -> Result<SiteMonitor, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    reset_monitor_failures_in_repository(&repository, id)
 }
 
 pub fn upsert_profile_in_repository(
@@ -596,6 +616,13 @@ pub fn update_monitor_state_in_repository(
     monitor_state: MonitorState,
 ) -> Result<SiteMonitor, String> {
     repository.mutate(|state| update_monitor_state(state, id, monitor_state))
+}
+
+pub fn reset_monitor_failures_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+) -> Result<SiteMonitor, String> {
+    repository.mutate(|state| reset_monitor_failures(state, id))
 }
 
 #[cfg(test)]
@@ -943,6 +970,35 @@ mod tests {
     }
 
     #[test]
+    fn reset_monitor_failures_clears_counter_and_preserves_evidence() {
+        let mut state = ServiceState::default();
+        upsert_monitor(
+            &mut state,
+            "google-login-freshness",
+            json!({
+                "name": "Google login freshness",
+                "target": {"site_policy": "google"},
+                "intervalMs": 60000,
+                "state": "faulted",
+                "lastFailedAt": "2026-05-07T00:00:00Z",
+                "lastResult": "login_stale",
+                "consecutiveFailures": 3
+            }),
+        )
+        .unwrap();
+
+        let monitor = reset_monitor_failures(&mut state, "google-login-freshness").unwrap();
+
+        assert_eq!(monitor.state, MonitorState::Active);
+        assert_eq!(monitor.consecutive_failures, 0);
+        assert_eq!(
+            monitor.last_failed_at.as_deref(),
+            Some("2026-05-07T00:00:00Z")
+        );
+        assert_eq!(monitor.last_result.as_deref(), Some("login_stale"));
+    }
+
+    #[test]
     fn repository_helpers_mutate_explicit_repository() {
         let path = unique_state_path("service-config-repository");
         let store = JsonServiceStateStore::new(&path);
@@ -1007,6 +1063,8 @@ mod tests {
             MonitorState::Active,
         )
         .unwrap();
+        let reset_monitor =
+            reset_monitor_failures_in_repository(&repository, "google-login-freshness").unwrap();
         let removed_session = delete_session_in_repository(&repository, "journal-run").unwrap();
         let removed = delete_provider_in_repository(&repository, "manual").unwrap();
         let removed_monitor =
@@ -1019,6 +1077,7 @@ mod tests {
         assert_eq!(provider.id, "manual");
         assert_eq!(monitor.id, "google-login-freshness");
         assert_eq!(resumed_monitor.state, MonitorState::Active);
+        assert_eq!(reset_monitor.consecutive_failures, 0);
         assert!(removed_session.is_some());
         assert!(persisted.profiles.contains_key("journal-downloader"));
         assert!(!persisted.sessions.contains_key("journal-run"));

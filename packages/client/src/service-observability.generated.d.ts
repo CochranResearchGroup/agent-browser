@@ -939,6 +939,7 @@ export declare function upsertServiceMonitor(options: ServiceMonitorMutationOpti
 export declare function deleteServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorDeleteResponse>;
 export declare function pauseServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorStateResponse>;
 export declare function resumeServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorStateResponse>;
+export declare function resetServiceMonitorFailures(options: ServiceIdOptions): Promise<ServiceMonitorStateResponse>;
 export declare function upsertServiceProvider(options: ServiceProviderMutationOptions): Promise<ServiceProviderUpsertResponse>;
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
 export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;

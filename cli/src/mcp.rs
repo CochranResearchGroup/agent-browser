@@ -1169,6 +1169,34 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_monitor_reset_failures",
+            "title": "Reset service monitor failures",
+            "description": "Clear one reviewed monitor failure count while preserving retained failure evidence.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Monitor id to reset."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id"]
+            }
+        }),
+        json!({
             "name": "service_provider_upsert",
             "title": "Upsert service provider",
             "description": "Persist one service provider record into service state. The id argument is authoritative and must match provider.id when the nested object includes an id.",
@@ -3860,6 +3888,9 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         }
         "service_monitor_resume" => {
             call_service_monitor_state(arguments, session, "service_monitor_resume")
+        }
+        "service_monitor_reset_failures" => {
+            call_service_monitor_state(arguments, session, "service_monitor_reset_failures")
         }
         "service_provider_upsert" => call_service_provider_upsert(arguments, session),
         "service_provider_delete" => call_service_provider_delete(arguments, session),
@@ -8486,6 +8517,11 @@ mod tests {
             .unwrap()
             .iter()
             .any(|tool| tool["name"] == "service_monitor_resume"));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "service_monitor_reset_failures"));
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()
