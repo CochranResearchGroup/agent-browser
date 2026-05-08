@@ -125,6 +125,9 @@ Run `pnpm test:service-remedies-cli-no-launch` when changing CLI remedy text
 rendering. It seeds persisted incidents, runs `agent-browser service remedies`,
 and verifies the operator ladder includes affected browser IDs and batch apply
 commands without launching Chrome.
+Run `pnpm test:service-remedies-json-no-launch` when changing JSON remedy
+output. It verifies `agent-browser --json service remedies` preserves grouped
+browser IDs, incident IDs, and remedy apply commands without launching Chrome.
 
 Failed service monitors derive incidents with `monitor_attention` escalation.
 Those incident records include `monitorId`, `monitorTarget`, and `monitorResult`,

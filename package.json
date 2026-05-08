@@ -57,6 +57,7 @@
     "test:service-status-no-launch": "node scripts/smoke-service-status-no-launch.js",
     "test:service-contracts-no-launch": "node scripts/smoke-service-contracts-no-launch.js",
     "test:service-remedies-cli-no-launch": "node scripts/smoke-service-remedies-cli-no-launch.js",
+    "test:service-remedies-json-no-launch": "node scripts/smoke-service-remedies-json-no-launch.js",
     "test:service-recovery-http-live": "node scripts/smoke-service-recovery-http.js",
     "test:service-recovery-mcp-live": "node scripts/smoke-service-recovery-mcp.js",
     "test:service-recovery-override-http-live": "node scripts/smoke-service-recovery-override-http.js",
