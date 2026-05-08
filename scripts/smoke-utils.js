@@ -115,12 +115,16 @@ export async function seedIncidentSummarySmokeState(context, {
   seedIncidentSummarySmokeEvents(context, { serviceName, agentName, taskName });
 }
 
-export function seedDegradedRemedySmokeBrowser(context) {
+export function seedRemedyApplySmokeBrowser(context, {
+  browserId,
+  health,
+  lastError,
+}) {
   const serviceDir = join(context.agentHome, 'service');
   const statePath = join(serviceDir, 'state.json');
   const state = JSON.parse(readFileSync(statePath, 'utf8'));
-  state.browsers['browser-summary-degraded'] = {
-    id: 'browser-summary-degraded',
+  state.browsers[browserId] = {
+    id: browserId,
     pid: null,
     cdpPort: null,
     cdpUrl: null,
@@ -129,13 +133,34 @@ export function seedDegradedRemedySmokeBrowser(context) {
     sessionId: context.session,
     activeSessionIds: [context.session],
     tabIds: [],
-    health: 'degraded',
-    lastError: 'Polite browser close failed; force kill was required',
+    health,
+    lastError,
     lastHealthObservation: null,
     launchedAt: null,
     updatedAt: '2026-05-01T10:02:00Z',
   };
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+}
+
+export function seedDegradedRemedySmokeBrowser(context) {
+  seedRemedyApplySmokeBrowser(context, {
+    browserId: 'browser-summary-degraded',
+    health: 'degraded',
+    lastError: 'Polite browser close failed; force kill was required',
+  });
+}
+
+export function seedOsDegradedRemedySmokeBrowsers(context) {
+  seedRemedyApplySmokeBrowser(context, {
+    browserId: 'browser-summary-faulted-1',
+    health: 'faulted',
+    lastError: 'Force kill failed; host OS may be degraded',
+  });
+  seedRemedyApplySmokeBrowser(context, {
+    browserId: 'browser-summary-faulted-2',
+    health: 'faulted',
+    lastError: 'Force kill failed; host OS may be degraded',
+  });
 }
 
 export function seedIncidentSummarySmokeEvents(context, {
@@ -489,33 +514,54 @@ export function assertServiceRemediesTextOutput(output, label) {
   }
 }
 
-export function assertBrowserDegradedRemediesApplyJsonResponse(data, label) {
+export function assertBrowserRemediesApplyJsonResponse(data, {
+  browserIds,
+  escalation,
+  label,
+}) {
   assert(data?.applied === true, `${label} missing applied=true: ${JSON.stringify(data)}`);
-  assert(data.escalation === 'browser_degraded', `${label} escalation mismatch: ${JSON.stringify(data)}`);
-  assert(data.count === 1, `${label} count mismatch: ${JSON.stringify(data)}`);
+  assert(data.escalation === escalation, `${label} escalation mismatch: ${JSON.stringify(data)}`);
+  assert(data.count === browserIds.length, `${label} count mismatch: ${JSON.stringify(data)}`);
   assert(Array.isArray(data.monitorIds), `${label} missing monitorIds array: ${JSON.stringify(data)}`);
   assert(data.monitorIds.length === 0, `${label} monitorIds should be empty: ${JSON.stringify(data)}`);
   assert(Array.isArray(data.monitorResults), `${label} missing monitorResults array: ${JSON.stringify(data)}`);
   assert(data.monitorResults.length === 0, `${label} monitorResults should be empty: ${JSON.stringify(data)}`);
   assert(Array.isArray(data.browserIds), `${label} missing browserIds array: ${JSON.stringify(data)}`);
-  assert(
-    data.browserIds.includes('browser-summary-degraded'),
-    `${label} missing degraded browser ID: ${JSON.stringify(data)}`,
-  );
+  for (const browserId of browserIds) {
+    assert(data.browserIds.includes(browserId), `${label} missing browser ID ${browserId}: ${JSON.stringify(data)}`);
+  }
   assert(Array.isArray(data.browserResults), `${label} missing browserResults array: ${JSON.stringify(data)}`);
-  assert(data.browserResults.length === 1, `${label} browserResults length mismatch: ${JSON.stringify(data)}`);
+  assert(data.browserResults.length === browserIds.length, `${label} browserResults length mismatch: ${JSON.stringify(data)}`);
 
-  const result = data.browserResults[0];
-  assert(result.id === 'browser-summary-degraded', `${label} browser result ID mismatch: ${JSON.stringify(result)}`);
-  assert(result.retryEnabled === true, `${label} browser retryEnabled mismatch: ${JSON.stringify(result)}`);
-  assert(result.browser?.id === 'browser-summary-degraded', `${label} browser record ID mismatch: ${JSON.stringify(result)}`);
-  assert(result.browser?.health === 'process_exited', `${label} browser health mismatch: ${JSON.stringify(result)}`);
-  assert(
-    result.browser?.lastHealthObservation?.failureClass === 'browser_process_exited',
-    `${label} missing retry health observation: ${JSON.stringify(result)}`,
-  );
-  assert(result.incident?.browserId === 'browser-summary-degraded', `${label} incident browser mismatch: ${JSON.stringify(result)}`);
-  assert(result.incident?.escalation === 'browser_recovery', `${label} incident escalation mismatch: ${JSON.stringify(result)}`);
+  for (const browserId of browserIds) {
+    const result = data.browserResults.find((entry) => entry.id === browserId);
+    assert(result, `${label} missing browser result ${browserId}: ${JSON.stringify(data)}`);
+    assert(result.retryEnabled === true, `${label} browser retryEnabled mismatch: ${JSON.stringify(result)}`);
+    assert(result.browser?.id === browserId, `${label} browser record ID mismatch: ${JSON.stringify(result)}`);
+    assert(result.browser?.health === 'process_exited', `${label} browser health mismatch: ${JSON.stringify(result)}`);
+    assert(
+      result.browser?.lastHealthObservation?.failureClass === 'browser_process_exited',
+      `${label} missing retry health observation: ${JSON.stringify(result)}`,
+    );
+    assert(result.incident?.browserId === browserId, `${label} incident browser mismatch: ${JSON.stringify(result)}`);
+    assert(result.incident?.escalation === 'browser_recovery', `${label} incident escalation mismatch: ${JSON.stringify(result)}`);
+  }
+}
+
+export function assertBrowserDegradedRemediesApplyJsonResponse(data, label) {
+  assertBrowserRemediesApplyJsonResponse(data, {
+    browserIds: ['browser-summary-degraded'],
+    escalation: 'browser_degraded',
+    label,
+  });
+}
+
+export function assertOsDegradedRemediesApplyJsonResponse(data, label) {
+  assertBrowserRemediesApplyJsonResponse(data, {
+    browserIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+    escalation: 'os_degraded_possible',
+    label,
+  });
 }
 
 export function httpJson(port, method, path, body) {

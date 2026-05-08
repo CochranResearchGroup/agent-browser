@@ -2,6 +2,7 @@
 
 import {
   assertBrowserDegradedRemediesApplyJsonResponse,
+  assertOsDegradedRemediesApplyJsonResponse,
   assertServiceStatusDidNotLaunch,
   closeSession,
   createSmokeContext,
@@ -9,6 +10,7 @@ import {
   runCli,
   seedDegradedRemedySmokeBrowser,
   seedIncidentSummarySmokeState,
+  seedOsDegradedRemedySmokeBrowsers,
 } from './smoke-utils.js';
 
 const context = createSmokeContext({
@@ -20,7 +22,7 @@ context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
 const { session } = context;
 const serviceName = 'RemediesApplyJsonSmoke';
 const agentName = 'smoke-agent';
-const taskName = 'applyBrowserDegradedRemedy';
+const taskName = 'applyBrowserRemedies';
 
 async function cleanup() {
   try {
@@ -33,8 +35,9 @@ async function cleanup() {
 try {
   await seedIncidentSummarySmokeState(context, { serviceName, agentName, taskName });
   seedDegradedRemedySmokeBrowser(context);
+  seedOsDegradedRemedySmokeBrowsers(context);
 
-  const result = await runCli(context, [
+  const degradedResult = await runCli(context, [
     '--json',
     '--session',
     session,
@@ -48,12 +51,39 @@ try {
     '--note',
     'reviewed',
   ]);
-  const apply = parseJsonOutput(result.stdout, 'service remedies apply');
+  const degradedApply = parseJsonOutput(degradedResult.stdout, 'service remedies apply browser_degraded');
 
-  if (apply.success !== true) {
-    throw new Error(`service remedies apply JSON failed: ${result.stdout}${result.stderr}`);
+  if (degradedApply.success !== true) {
+    throw new Error(`service remedies apply browser_degraded JSON failed: ${degradedResult.stdout}${degradedResult.stderr}`);
   }
-  assertBrowserDegradedRemediesApplyJsonResponse(apply.data, 'service remedies apply JSON output');
+  assertBrowserDegradedRemediesApplyJsonResponse(
+    degradedApply.data,
+    'service remedies apply browser_degraded JSON output',
+  );
+
+  const osResult = await runCli(context, [
+    '--json',
+    '--session',
+    session,
+    'service',
+    'remedies',
+    'apply',
+    '--escalation',
+    'os_degraded_possible',
+    '--by',
+    'operator',
+    '--note',
+    'host inspected',
+  ]);
+  const osApply = parseJsonOutput(osResult.stdout, 'service remedies apply os_degraded_possible');
+
+  if (osApply.success !== true) {
+    throw new Error(`service remedies apply os_degraded_possible JSON failed: ${osResult.stdout}${osResult.stderr}`);
+  }
+  assertOsDegradedRemediesApplyJsonResponse(
+    osApply.data,
+    'service remedies apply os_degraded_possible JSON output',
+  );
 
   const statusResult = await runCli(context, ['--json', '--session', session, 'service', 'status']);
   const status = parseJsonOutput(statusResult.stdout, 'service status after remedies apply');
@@ -73,11 +103,30 @@ try {
           id: 'browser-summary-degraded',
           retryEnabled: true,
           browser,
-          incident: apply.data.browserResults[0].incident,
+          incident: degradedApply.data.browserResults[0].incident,
         },
       ],
     },
     'persisted service remedies apply browser state',
+  );
+
+  const browsers = status.data?.service_state?.browsers ?? {};
+  assertOsDegradedRemediesApplyJsonResponse(
+    {
+      applied: true,
+      escalation: 'os_degraded_possible',
+      count: 2,
+      monitorIds: [],
+      monitorResults: [],
+      browserIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+      browserResults: osApply.data.browserResults.map((result) => ({
+        id: result.id,
+        retryEnabled: true,
+        browser: browsers[result.id],
+        incident: result.incident,
+      })),
+    },
+    'persisted service remedies apply OS-degraded browser state',
   );
 
   await cleanup();
