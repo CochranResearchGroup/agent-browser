@@ -14664,6 +14664,85 @@ mod tests {
         let _ = fs::remove_dir_all(&home);
     }
 
+    #[tokio::test]
+    async fn test_service_remedies_apply_retries_degraded_browsers() {
+        let home = unique_socket_dir("service-remedies-apply-browser-degraded-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let browser_id = "session:degraded-session";
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        profile_id: Some("work".to_string()),
+                        health: ServiceBrowserHealth::Degraded,
+                        active_session_ids: vec!["degraded-session".to_string()],
+                        last_error: Some(
+                            "Polite browser close failed; force kill was required".to_string(),
+                        ),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                events: vec![ServiceEvent {
+                    id: "event-polite-close-failed".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Polite close failed; force kill succeeded".to_string(),
+                    browser_id: Some(browser_id.to_string()),
+                    current_health: Some(ServiceBrowserHealth::Degraded),
+                    ..ServiceEvent::default()
+                }],
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut daemon_state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "id": "remedy-browser-degraded-1",
+                "action": "service_remedies_apply",
+                "escalation": "browser_degraded",
+                "by": "operator",
+                "note": "force kill succeeded",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite"
+            }),
+            &mut daemon_state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_remedies_apply_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["browserIds"], json!([browser_id]));
+        assert_eq!(
+            result["data"]["browserResults"][0]["browser"]["health"],
+            "process_exited"
+        );
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers[browser_id].health,
+            ServiceBrowserHealth::ProcessExited
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryOverride
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.previous_health == Some(ServiceBrowserHealth::Degraded)
+                && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+                && event.service_name.as_deref() == Some("JournalDownloader")
+                && event.agent_name.as_deref() == Some("codex")
+                && event.task_name.as_deref() == Some("probeACSwebsite")
+        }));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
     #[test]
     fn test_retry_service_browser_in_repository_marks_faulted_browser_retryable() {
         let home = unique_socket_dir("service-browser-retry-repository-home");

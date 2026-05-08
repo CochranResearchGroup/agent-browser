@@ -273,7 +273,7 @@ pub fn service_contracts_metadata() -> Value {
                 "client": {
                     "package": "@agent-browser/client/service-observability",
                     "helpers": ["applyServiceRemedies"],
-                    "supportedEscalations": ["monitor_attention", "os_degraded_possible"],
+                    "supportedEscalations": ["browser_degraded", "monitor_attention", "os_degraded_possible"],
                 },
             },
         },
@@ -452,7 +452,11 @@ mod tests {
         );
         assert_eq!(
             metadata["contracts"]["serviceRemediesApplyResponse"]["client"]["supportedEscalations"],
-            serde_json::json!(["monitor_attention", "os_degraded_possible"])
+            serde_json::json!([
+                "browser_degraded",
+                "monitor_attention",
+                "os_degraded_possible"
+            ])
         );
     }
 }

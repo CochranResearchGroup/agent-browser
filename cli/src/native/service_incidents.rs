@@ -2,7 +2,9 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
 
 use super::service_config::reset_monitor_failures;
-use super::service_health::retry_service_browser_in_state;
+use super::service_health::{
+    retry_degraded_service_browser_in_state, retry_service_browser_in_state,
+};
 use super::service_model::{
     BrowserProcess, JobTarget, ServiceEvent, ServiceEventKind, ServiceIncident,
     ServiceIncidentEscalation, ServiceIncidentSeverity, ServiceIncidentState, ServiceJob,
@@ -324,7 +326,10 @@ pub(crate) fn apply_service_remedies_in_repository(
     agent_name: Option<&str>,
     task_name: Option<&str>,
 ) -> Result<Value, String> {
-    if !matches!(escalation, "monitor_attention" | "os_degraded_possible") {
+    if !matches!(
+        escalation,
+        "browser_degraded" | "monitor_attention" | "os_degraded_possible"
+    ) {
         return Err(format!(
             "Unsupported automated service remedy escalation: {escalation}"
         ));
@@ -342,6 +347,20 @@ pub(crate) fn apply_service_remedies_in_repository(
                 monitor_ids = active_monitor_attention_ids(state);
                 monitor_results =
                     apply_monitor_attention_remedies(state, &monitor_ids, timestamp, actor, note)?;
+            }
+
+            if escalation == "browser_degraded" {
+                browser_ids = active_browser_degraded_browser_ids(state);
+                browser_results = apply_degraded_browser_remedies(
+                    state,
+                    &browser_ids,
+                    timestamp,
+                    actor,
+                    note,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )?;
             }
 
             if escalation == "os_degraded_possible" {
@@ -395,12 +414,22 @@ fn active_monitor_attention_ids(state: &ServiceState) -> Vec<String> {
 }
 
 fn active_os_degraded_browser_ids(state: &ServiceState) -> Vec<String> {
+    active_browser_ids_for_escalation(state, ServiceIncidentEscalation::OsDegradedPossible)
+}
+
+fn active_browser_degraded_browser_ids(state: &ServiceState) -> Vec<String> {
+    active_browser_ids_for_escalation(state, ServiceIncidentEscalation::BrowserDegraded)
+}
+
+fn active_browser_ids_for_escalation(
+    state: &ServiceState,
+    escalation: ServiceIncidentEscalation,
+) -> Vec<String> {
     let mut browser_ids = state
         .incidents
         .iter()
         .filter(|incident| {
-            incident.state == ServiceIncidentState::Active
-                && incident.escalation == ServiceIncidentEscalation::OsDegradedPossible
+            incident.state == ServiceIncidentState::Active && incident.escalation == escalation
         })
         .filter_map(|incident| incident.browser_id.clone())
         .collect::<Vec<_>>();
@@ -433,6 +462,35 @@ fn apply_monitor_attention_remedies(
     }
 
     Ok(monitor_results)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_degraded_browser_remedies(
+    state: &mut ServiceState,
+    browser_ids: &[String],
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Result<Vec<Value>, String> {
+    let mut browser_results = Vec::with_capacity(browser_ids.len());
+    for browser_id in browser_ids {
+        let (browser, incident) = retry_degraded_service_browser_in_state(
+            state,
+            browser_id,
+            timestamp,
+            actor,
+            note,
+            service_name,
+            agent_name,
+            task_name,
+        )?;
+        browser_results.push(browser_retry_result(browser_id, browser, incident));
+    }
+
+    Ok(browser_results)
 }
 
 #[allow(clippy::too_many_arguments)]

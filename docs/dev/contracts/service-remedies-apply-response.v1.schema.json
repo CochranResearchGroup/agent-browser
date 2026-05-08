@@ -20,7 +20,7 @@
     },
     "escalation": {
       "type": "string",
-      "enum": ["monitor_attention", "os_degraded_possible"]
+      "enum": ["browser_degraded", "monitor_attention", "os_degraded_possible"]
     },
     "count": {
       "type": "integer",

@@ -2062,7 +2062,9 @@ fn service_remedies_apply_command(query: Option<&str>) -> Result<Value, String> 
     for (key, value) in query_params(query) {
         match key.as_str() {
             "escalation" => match value.as_str() {
-                "monitor_attention" | "os_degraded_possible" => cmd["escalation"] = json!(value),
+                "browser_degraded" | "monitor_attention" | "os_degraded_possible" => {
+                    cmd["escalation"] = json!(value)
+                }
                 _ => return Err(format!("Invalid escalation value: {}", value)),
             },
             "by" => cmd["by"] = json!(value),
@@ -2672,6 +2674,16 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_remedies_apply");
         assert_eq!(cmd["escalation"], "os_degraded_possible");
+        assert_eq!(cmd["by"], "operator");
+    }
+
+    #[test]
+    fn service_remedies_apply_command_accepts_browser_degraded() {
+        let cmd = service_remedies_apply_command(Some("escalation=browser_degraded&by=operator"))
+            .unwrap();
+
+        assert_eq!(cmd["action"], "service_remedies_apply");
+        assert_eq!(cmd["escalation"], "browser_degraded");
         assert_eq!(cmd["by"], "operator");
     }
 

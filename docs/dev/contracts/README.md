@@ -137,9 +137,11 @@ apply response returned by CLI `service remedies apply --escalation
 monitor_attention`, HTTP `POST /api/service/remedies/apply`, MCP
 `service_remedies_apply`, and `applyServiceRemedies()`. It supports
 `monitor_attention` by applying the same monitor triage operation to each active
-failed monitor through the service worker. It also supports
-`os_degraded_possible` after host inspection by batching the existing
-faulted-browser retry remedy for active OS-degraded-possible incidents.
+failed monitor through the service worker. It supports `browser_degraded` after
+operator review by batching retry enablement for active degraded-browser
+incidents. It also supports `os_degraded_possible` after host inspection by
+batching the existing faulted-browser retry remedy for active
+OS-degraded-possible incidents.
 
 ## Service Event Record v1
 

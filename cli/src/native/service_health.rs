@@ -759,15 +759,65 @@ pub(crate) fn retry_service_browser_in_state(
     agent_name: Option<&str>,
     task_name: Option<&str>,
 ) -> Result<(BrowserProcess, Option<ServiceIncident>), String> {
+    enable_service_browser_retry_in_state(
+        state,
+        browser_id,
+        timestamp,
+        actor,
+        note,
+        service_name,
+        agent_name,
+        task_name,
+        BrowserHealth::Faulted,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn retry_degraded_service_browser_in_state(
+    state: &mut ServiceState,
+    browser_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Result<(BrowserProcess, Option<ServiceIncident>), String> {
+    enable_service_browser_retry_in_state(
+        state,
+        browser_id,
+        timestamp,
+        actor,
+        note,
+        service_name,
+        agent_name,
+        task_name,
+        BrowserHealth::Degraded,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn enable_service_browser_retry_in_state(
+    state: &mut ServiceState,
+    browser_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+    expected_health: BrowserHealth,
+) -> Result<(BrowserProcess, Option<ServiceIncident>), String> {
     let previous = state
         .browsers
         .get(browser_id)
         .cloned()
         .ok_or_else(|| format!("Service browser not found: {}", browser_id))?;
-    if previous.health != BrowserHealth::Faulted {
+    if previous.health != expected_health {
         return Err(format!(
-            "Service browser {} is not faulted; current health is {}",
+            "Service browser {} is not {}; current health is {}",
             browser_id,
+            service_browser_health_name(expected_health),
             service_browser_health_name(previous.health)
         ));
     }
@@ -775,12 +825,13 @@ pub(crate) fn retry_service_browser_in_state(
     let mut retryable = previous.clone();
     retryable.health = BrowserHealth::ProcessExited;
     retryable.last_error = Some(format!(
-        "Browser retry requested by {}; previous fault: {}",
+        "Browser retry requested by {}; previous {} state: {}",
         actor,
+        service_browser_health_name(previous.health),
         previous
             .last_error
             .as_deref()
-            .unwrap_or("no fault detail recorded")
+            .unwrap_or("no prior detail recorded")
     ));
     let observation_details = browser_health_observation_details(&retryable, None);
     apply_browser_health_observation(&mut retryable, Some(&observation_details));
@@ -792,6 +843,7 @@ pub(crate) fn retry_service_browser_in_state(
         state,
         service_browser_recovery_override_event(
             &retryable,
+            previous.health,
             timestamp,
             actor,
             note,
@@ -1251,8 +1303,10 @@ fn service_browser_health_name(health: BrowserHealth) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn service_browser_recovery_override_event(
     browser: &BrowserProcess,
+    previous_health: BrowserHealth,
     timestamp: &str,
     actor: &str,
     note: Option<&str>,
@@ -1264,7 +1318,7 @@ fn service_browser_recovery_override_event(
         "incidentId": browser.id,
         "actor": actor,
         "action": "retry_enabled",
-        "previousHealth": "faulted",
+        "previousHealth": service_browser_health_name(previous_health),
         "currentHealth": service_browser_health_name(browser.health),
     });
     if let Some(note) = note {
@@ -1281,7 +1335,7 @@ fn service_browser_recovery_override_event(
         service_name: service_name.map(str::to_string),
         agent_name: agent_name.map(str::to_string),
         task_name: task_name.map(str::to_string),
-        previous_health: Some(BrowserHealth::Faulted),
+        previous_health: Some(previous_health),
         current_health: Some(browser.health),
         details: Some(details),
     }

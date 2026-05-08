@@ -1361,7 +1361,7 @@ pub fn assert_service_remedies_apply_response_contract(value: &serde_json::Value
     assert_eq!(value["applied"], true);
     assert!(matches!(
         value["escalation"].as_str(),
-        Some("monitor_attention" | "os_degraded_possible")
+        Some("browser_degraded" | "monitor_attention" | "os_degraded_possible")
     ));
     assert!(value["count"].is_u64());
     assert!(value["monitorIds"].is_array());

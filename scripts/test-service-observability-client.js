@@ -345,6 +345,39 @@ async function main() {
   assert.equal(remediesApply.calls[0].init.method, 'POST');
   assert.equal(remediesApplyResult.count, 1);
 
+  const degradedRemediesApply = createFetchRecorder({
+    success: true,
+    data: {
+      applied: true,
+      escalation: 'browser_degraded',
+      count: 1,
+      monitorIds: [],
+      monitorResults: [],
+      browserIds: ['browser-degraded'],
+      browserResults: [
+        {
+          id: 'browser-degraded',
+          retryEnabled: true,
+          browser: { id: 'browser-degraded', health: 'process_exited' },
+          incident: null,
+        },
+      ],
+    },
+  });
+  const degradedRemediesApplyResult = await applyServiceRemedies({
+    escalation: 'browser_degraded',
+    by: 'operator',
+    note: 'reviewed',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: degradedRemediesApply.fetch,
+  });
+  assert.equal(
+    degradedRemediesApply.calls[0].url,
+    'http://127.0.0.1:4849/api/service/remedies/apply?escalation=browser_degraded&by=operator&note=reviewed',
+  );
+  assert.equal(degradedRemediesApply.calls[0].init.method, 'POST');
+  assert.equal(degradedRemediesApplyResult.browserIds[0], 'browser-degraded');
+
   const osRemediesApply = createFetchRecorder({
     success: true,
     data: {

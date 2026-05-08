@@ -500,7 +500,7 @@ export interface ServiceMonitorTriageResponse extends ServiceMonitorStateRespons
 
 export interface ServiceRemediesApplyResponse {
   applied: boolean;
-  escalation: 'monitor_attention' | 'os_degraded_possible';
+  escalation: 'browser_degraded' | 'monitor_attention' | 'os_degraded_possible';
   count: number;
   monitorIds: string[];
   monitorResults: ServiceMonitorTriageResponse[];
@@ -895,7 +895,7 @@ export interface ServiceMonitorTriageOptions extends ServiceIdOptions {
 }
 
 export interface ServiceRemediesApplyOptions extends ServiceObservabilityHttpOptions {
-  escalation?: 'monitor_attention' | 'os_degraded_possible';
+  escalation?: 'browser_degraded' | 'monitor_attention' | 'os_degraded_possible';
   by?: string;
   note?: string;
   serviceName?: string;

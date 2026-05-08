@@ -778,14 +778,14 @@ fn service_mcp_tools() -> Vec<Value> {
         json!({
             "name": "service_remedies_apply",
             "title": "Apply service remedies",
-            "description": "Apply a supported active service remedy through the service worker. monitor_attention triages active monitor attention incidents; os_degraded_possible enables retry for active faulted-browser incidents after operator inspection.",
+            "description": "Apply a supported active service remedy through the service worker. browser_degraded enables retry for active degraded-browser incidents after operator review; monitor_attention triages active monitor attention incidents; os_degraded_possible enables retry for active faulted-browser incidents after operator inspection.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
                     "escalation": {
                         "type": "string",
-                        "enum": ["monitor_attention", "os_degraded_possible"],
+                        "enum": ["browser_degraded", "monitor_attention", "os_degraded_possible"],
                         "description": "Remedy escalation to apply."
                     },
                     "by": {
@@ -4233,7 +4233,11 @@ fn call_service_remedies_apply(arguments: &Value, session: &str) -> Result<Value
     let escalation = optional_enum_string_argument(
         arguments,
         "escalation",
-        &["monitor_attention", "os_degraded_possible"],
+        &[
+            "browser_degraded",
+            "monitor_attention",
+            "os_degraded_possible",
+        ],
     )?
     .unwrap_or("monitor_attention");
     let by = optional_string_argument(arguments, "by")?;
@@ -8605,6 +8609,12 @@ mod tests {
             service_incidents["inputSchema"]["properties"]["escalation"]["enum"]
                 .as_array()
                 .unwrap()
+                .contains(&json!("browser_degraded"))
+        );
+        assert!(
+            service_incidents["inputSchema"]["properties"]["escalation"]["enum"]
+                .as_array()
+                .unwrap()
                 .contains(&json!("monitor_attention"))
         );
         assert!(
@@ -8619,6 +8629,10 @@ mod tests {
             .unwrap()
             .iter()
             .any(|tool| tool["name"] == "service_remedies_apply"
+                && tool["inputSchema"]["properties"]["escalation"]["enum"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("browser_degraded"))
                 && tool["inputSchema"]["properties"]["escalation"]["enum"]
                     .as_array()
                     .unwrap()
