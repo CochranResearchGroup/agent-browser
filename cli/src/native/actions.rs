@@ -12505,6 +12505,18 @@ mod tests {
                         "latestTimestamp": "2026-05-01T00:02:00Z",
                         "latestMessage": "Browser exited",
                         "latestKind": "browser_health_changed"
+                    },
+                    {
+                        "id": "monitor-login",
+                        "monitorId": "google-login-freshness",
+                        "label": "Monitor Google login freshness",
+                        "state": "active",
+                        "severity": "warning",
+                        "escalation": "monitor_attention",
+                        "recommendedAction": "Inspect the failed monitor target.",
+                        "latestTimestamp": "2026-05-01T00:03:00Z",
+                        "latestMessage": "Login freshness failed",
+                        "latestKind": "service_monitor_failed"
                     }
                 ]
             }
@@ -12514,17 +12526,29 @@ mod tests {
 
         assert_eq!(result["success"], true);
         assert_service_incidents_response_contract(&result["data"]);
-        assert_eq!(result["data"]["count"], 2);
-        assert_eq!(result["data"]["matched"], 2);
+        assert_eq!(result["data"]["count"], 3);
+        assert_eq!(result["data"]["matched"], 3);
         assert_eq!(result["data"]["filters"]["remediesOnly"], true);
         let summary_groups = result["data"]["summary"]["groups"].as_array().unwrap();
-        assert_eq!(summary_groups.len(), 2);
+        assert_eq!(summary_groups.len(), 3);
         assert!(summary_groups
             .iter()
             .any(|group| group["escalation"] == "browser_degraded"));
         assert!(summary_groups
             .iter()
             .any(|group| group["escalation"] == "os_degraded_possible"));
+        let monitor_group = summary_groups
+            .iter()
+            .find(|group| group["escalation"] == "monitor_attention")
+            .expect("monitor attention group should be included in remedies");
+        assert_eq!(
+            monitor_group["monitorIds"],
+            json!(["google-login-freshness"])
+        );
+        assert_eq!(
+            monitor_group["monitorResetCommands"],
+            json!(["agent-browser service monitors reset google-login-freshness"])
+        );
         assert!(state.browser.is_none());
     }
 

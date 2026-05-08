@@ -2594,7 +2594,7 @@ fn classify_incident_escalation(
         _ if incident.monitor_id.is_some() => (
             ServiceIncidentSeverity::Warning,
             ServiceIncidentEscalation::MonitorAttention,
-            "Inspect the failed monitor target and last result; fix the target, refresh login state, or pause the monitor before rerunning.",
+            "Inspect the failed monitor target and last result; fix the target, refresh login state, pause the monitor, or reset reviewed failures before rerunning.",
         ),
         _ if incident.state == ServiceIncidentState::Service => (
             ServiceIncidentSeverity::Error,

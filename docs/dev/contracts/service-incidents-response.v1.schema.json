@@ -98,7 +98,7 @@
         },
         "remediesOnly": {
           "type": "boolean",
-          "description": "True when the response is narrowed to browser_degraded and os_degraded_possible operator remedy groups."
+          "description": "True when the response is narrowed to active browser_degraded, monitor_attention, and os_degraded_possible operator remedy groups."
         },
         "limit": {
           "type": "integer",
@@ -177,6 +177,13 @@
                   "type": "string"
                 },
                 "description": "Monitor ids represented in this group when incidents came from failed monitor probes."
+              },
+              "monitorResetCommands": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "CLI reset commands for monitor ids in this group, suitable after a reviewed failure has been triaged."
               }
             },
             "additionalProperties": true

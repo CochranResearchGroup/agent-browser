@@ -92,6 +92,7 @@ pub(crate) fn service_incidents_response(
                     || matches!(
                         incident.escalation,
                         ServiceIncidentEscalation::BrowserDegraded
+                            | ServiceIncidentEscalation::MonitorAttention
                             | ServiceIncidentEscalation::OsDegradedPossible
                     ))
                 && service_incident_matches_trace_filters(incident, service_state, &filters)
@@ -179,6 +180,10 @@ pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
                 .collect::<Vec<_>>();
             monitor_ids.sort();
             monitor_ids.dedup();
+            let monitor_reset_commands = monitor_ids
+                .iter()
+                .map(|monitor_id| format!("agent-browser service monitors reset {monitor_id}"))
+                .collect::<Vec<_>>();
             let newest = incidents
                 .iter()
                 .filter_map(|incident| {
@@ -197,6 +202,7 @@ pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
                 "recommendedAction": recommended_action,
                 "incidentIds": ids,
                 "monitorIds": monitor_ids,
+                "monitorResetCommands": monitor_reset_commands,
             })
         })
         .collect::<Vec<_>>();
