@@ -70,6 +70,7 @@ jobs:
           node scripts/smoke-service-contracts-no-launch.js
           node scripts/smoke-service-profile-sources.js
           node scripts/smoke-service-site-policy-sources.js
+          node scripts/smoke-service-remedies-cli-no-launch.js
           node scripts/smoke-service-incident-summary-http.js
           node scripts/smoke-service-incident-summary-mcp.js
 
