@@ -20,6 +20,7 @@ import {
   resetServiceMonitorFailures,
   runDueServiceMonitors,
   summarizeServiceProfileReadiness,
+  triageServiceMonitor,
   updateServiceProfileFreshness,
   upsertServiceMonitor,
 } from '../packages/client/src/service-observability.js';
@@ -261,6 +262,40 @@ async function main() {
   );
   assert.equal(monitorReset.calls[0].init.method, 'POST');
   assert.equal(monitorResetResult.resetFailures, true);
+
+  const monitorTriage = createFetchRecorder({
+    success: true,
+    data: {
+      id: 'google-login-freshness',
+      monitor: {
+        ...monitorsResult.monitors[0],
+        consecutiveFailures: 0,
+        state: 'active',
+      },
+      state: 'active',
+      updated: true,
+      resetFailures: true,
+      acknowledged: true,
+      incident: {
+        id: 'monitor:google-login-freshness',
+        monitorId: 'google-login-freshness',
+      },
+    },
+  });
+  const monitorTriageResult = await triageServiceMonitor({
+    id: 'google-login-freshness',
+    by: 'operator',
+    note: 'reviewed',
+    serviceName: 'JournalDownloader',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: monitorTriage.fetch,
+  });
+  assert.equal(
+    monitorTriage.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors/google-login-freshness/triage?by=operator&note=reviewed&service-name=JournalDownloader',
+  );
+  assert.equal(monitorTriage.calls[0].init.method, 'POST');
+  assert.equal(monitorTriageResult.acknowledged, true);
 
   const monitorRunDue = createFetchRecorder({
     success: true,

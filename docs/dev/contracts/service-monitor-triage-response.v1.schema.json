@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-monitor-triage-response.v1.schema.json",
+  "title": "agent-browser service monitor triage response",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "id",
+    "monitor",
+    "state",
+    "updated",
+    "resetFailures",
+    "acknowledged",
+    "incident"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "monitor": {
+      "$ref": "service-monitor-record.v1.schema.json"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["active", "paused", "faulted"]
+    },
+    "updated": {
+      "type": "boolean",
+      "const": true
+    },
+    "resetFailures": {
+      "type": "boolean",
+      "const": true
+    },
+    "acknowledged": {
+      "type": "boolean"
+    },
+    "incident": {
+      "oneOf": [
+        {
+          "$ref": "service-incident-record.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

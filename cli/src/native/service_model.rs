@@ -1317,6 +1317,32 @@ pub fn assert_service_monitor_state_response_contract(value: &serde_json::Value)
 }
 
 #[cfg(test)]
+pub fn assert_service_monitor_triage_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "monitor triage response",
+        value,
+        &[
+            "id",
+            "monitor",
+            "state",
+            "updated",
+            "resetFailures",
+            "acknowledged",
+            "incident",
+        ],
+        &[],
+    );
+    assert_service_monitor_state_response_contract(value);
+    assert_eq!(value["resetFailures"], true);
+    assert!(value["acknowledged"].is_boolean());
+    if value["incident"].is_object() {
+        assert_service_incident_record_contract(&value["incident"]);
+    } else {
+        assert!(value["incident"].is_null());
+    }
+}
+
+#[cfg(test)]
 pub fn assert_service_monitor_run_due_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "monitor run-due response",
@@ -2510,7 +2536,9 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
                 .and_then(|browser_id| state.browsers.get(browser_id))
                 .map(|browser| browser.health);
         }
-        if let Some(browser_id) = incident.browser_id.as_ref() {
+        if incident.monitor_id.is_some() {
+            incident.state = ServiceIncidentState::Active;
+        } else if let Some(browser_id) = incident.browser_id.as_ref() {
             if browser_health_is_bad(incident.current_health) {
                 incident.state = ServiceIncidentState::Active;
             } else if incident.latest_kind == "browser_health_changed"
@@ -2794,7 +2822,10 @@ fn classify_incident_state(
     current_health: Option<BrowserHealth>,
     kind: ServiceEventKind,
 ) -> ServiceIncidentState {
-    if !has_browser || has_monitor {
+    if has_monitor {
+        return ServiceIncidentState::Active;
+    }
+    if !has_browser {
         return ServiceIncidentState::Service;
     }
     if kind == ServiceEventKind::BrowserHealthChanged && !browser_health_is_bad(current_health) {
@@ -4477,6 +4508,10 @@ mod tests {
             "../../../docs/dev/contracts/service-incident-resolve-response.v1.schema.json"
         ))
         .unwrap();
+        let monitor_triage_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-monitor-triage-response.v1.schema.json"
+        ))
+        .unwrap();
 
         assert_schema_required_fields(&job_cancel_schema, &["cancelled", "job"]);
         assert_schema_required_fields(
@@ -4485,6 +4520,18 @@ mod tests {
         );
         assert_schema_required_fields(&incident_acknowledge_schema, &["acknowledged", "incident"]);
         assert_schema_required_fields(&incident_resolve_schema, &["resolved", "incident"]);
+        assert_schema_required_fields(
+            &monitor_triage_schema,
+            &[
+                "id",
+                "monitor",
+                "state",
+                "updated",
+                "resetFailures",
+                "acknowledged",
+                "incident",
+            ],
+        );
 
         let job = json!({
             "id": "job-queued",
@@ -4562,6 +4609,49 @@ mod tests {
         assert_service_incident_resolve_response_contract(&json!({
             "resolved": true,
             "incident": incident,
+        }));
+        assert_service_monitor_triage_response_contract(&json!({
+            "id": "google-login-freshness",
+            "monitor": {
+                "id": "google-login-freshness",
+                "name": "Google login freshness",
+                "target": {"site_policy": "google"},
+                "intervalMs": 60000,
+                "state": "active",
+                "lastCheckedAt": null,
+                "lastSucceededAt": null,
+                "lastFailedAt": null,
+                "lastResult": null,
+                "consecutiveFailures": 0,
+            },
+            "state": "active",
+            "updated": true,
+            "resetFailures": true,
+            "acknowledged": true,
+            "incident": {
+                "id": "monitor:google-login-freshness",
+                "browserId": null,
+                "monitorId": "google-login-freshness",
+                "monitorTarget": {"site_policy": "google"},
+                "monitorResult": "site_policy_missing",
+                "label": "Monitor google-login-freshness",
+                "state": "active",
+                "severity": "warning",
+                "escalation": "monitor_attention",
+                "recommendedAction": "Inspect the failed monitor target and last result; fix the target, refresh login state, pause the monitor, or reset reviewed failures before rerunning.",
+                "acknowledgedAt": "2026-04-22T00:00:01Z",
+                "acknowledgedBy": "operator",
+                "acknowledgementNote": "reviewed",
+                "resolvedAt": null,
+                "resolvedBy": null,
+                "resolutionNote": null,
+                "latestTimestamp": "2026-04-22T00:00:00Z",
+                "latestMessage": "Monitor failed",
+                "latestKind": "reconciliation_error",
+                "currentHealth": null,
+                "eventIds": ["event-monitor-failed"],
+                "jobIds": [],
+            },
         }));
     }
 

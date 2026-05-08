@@ -231,6 +231,14 @@ const serviceSurface = [
     clientNeedles: ['resetServiceMonitorFailures', '/api/service/monitors/${encodeURIComponent(id)}/reset-failures'],
   },
   {
+    tool: 'service_monitor_triage',
+    method: 'POST',
+    route: '/api/service/monitors/<id>/triage',
+    docsNeedles: ['/api/service/monitors/<id>/triage', '/api/service/monitors/&lt;id&gt;/triage'],
+    httpNeedles: ['service_monitor_action_id(path, "/triage")', 'service_monitor_triage_command(monitor_id, query)'],
+    clientNeedles: ['triageServiceMonitor', '/api/service/monitors/${encodeURIComponent(id)}/triage'],
+  },
+  {
     tool: 'service_provider_upsert',
     method: 'POST',
     route: '/api/service/providers/<id>',

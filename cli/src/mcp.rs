@@ -1197,6 +1197,42 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_monitor_triage",
+            "title": "Triage service monitor",
+            "description": "Acknowledge the related monitor incident and reset reviewed monitor failures in one queued service operation.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Monitor id to triage."
+                    },
+                    "by": {
+                        "type": "string",
+                        "description": "Operator or service name recording the triage."
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Optional triage note."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id"]
+            }
+        }),
+        json!({
             "name": "service_provider_upsert",
             "title": "Upsert service provider",
             "description": "Persist one service provider record into service state. The id argument is authoritative and must match provider.id when the nested object includes an id.",
@@ -3892,6 +3928,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_monitor_reset_failures" => {
             call_service_monitor_state(arguments, session, "service_monitor_reset_failures")
         }
+        "service_monitor_triage" => call_service_monitor_triage(arguments, session),
         "service_provider_upsert" => call_service_provider_upsert(arguments, session),
         "service_provider_delete" => call_service_provider_delete(arguments, session),
         "service_request" => call_service_request(arguments, session),
@@ -4230,6 +4267,19 @@ fn call_service_monitor_state(
     let command = service_monitor_state_command(id, action, service_name, agent_name, task_name);
 
     send_queued_tool_command(action, session, trace, command)
+}
+
+fn call_service_monitor_triage(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let by = optional_string_argument(arguments, "by")?;
+    let note = optional_string_argument(arguments, "note")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_monitor_triage_command(id, by, note, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_monitor_triage", session, trace, command)
 }
 
 fn call_service_profile_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -5960,6 +6010,29 @@ fn service_monitor_state_command(
         "action": action,
         "monitorId": monitor_id,
     });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_monitor_triage_command(
+    monitor_id: &str,
+    by: Option<&str>,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-monitor-triage-{}", uuid::Uuid::new_v4()),
+        "action": "service_monitor_triage",
+        "monitorId": monitor_id,
+    });
+    if let Some(by) = by {
+        command["by"] = json!(by);
+    }
+    if let Some(note) = note {
+        command["note"] = json!(note);
+    }
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
 }
@@ -8522,6 +8595,12 @@ mod tests {
             .unwrap()
             .iter()
             .any(|tool| tool["name"] == "service_monitor_reset_failures"));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "service_monitor_triage"
+                && tool["inputSchema"]["properties"]["note"].is_object()));
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()

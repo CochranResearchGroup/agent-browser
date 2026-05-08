@@ -545,6 +545,12 @@ export interface ServiceMonitorStateResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceMonitorTriageResponse extends ServiceMonitorStateResponse {
+  resetFailures: boolean;
+  acknowledged: boolean;
+  incident: ServiceIncidentRecord | null;
+}
+
 export interface ServiceJobCancelResponse {
   cancelled: boolean;
   job: ServiceJobRecord;
@@ -922,6 +928,14 @@ export interface ServiceMonitorMutationOptions extends ServiceIdOptions {
   monitor: Record<string, unknown>;
 }
 
+export interface ServiceMonitorTriageOptions extends ServiceIdOptions {
+  by?: string;
+  note?: string;
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+}
+
 export interface ServiceJobCancelOptions extends ServiceObservabilityHttpOptions {
   jobId: string;
 }
@@ -987,6 +1001,7 @@ export declare function deleteServiceMonitor(options: ServiceIdOptions): Promise
 export declare function pauseServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorStateResponse>;
 export declare function resumeServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorStateResponse>;
 export declare function resetServiceMonitorFailures(options: ServiceIdOptions): Promise<ServiceMonitorStateResponse>;
+export declare function triageServiceMonitor(options: ServiceMonitorTriageOptions): Promise<ServiceMonitorTriageResponse>;
 export declare function upsertServiceProvider(options: ServiceProviderMutationOptions): Promise<ServiceProviderUpsertResponse>;
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
 export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;

@@ -1,9 +1,10 @@
 use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
 
+use super::service_config::reset_monitor_failures;
 use super::service_model::{
     JobTarget, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceIncidentEscalation,
-    ServiceIncidentSeverity, ServiceIncidentState, ServiceJob, ServiceState,
+    ServiceIncidentSeverity, ServiceIncidentState, ServiceJob, ServiceState, SiteMonitor,
 };
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
@@ -254,6 +255,79 @@ pub(crate) fn acknowledge_service_incident_in_repository(
             );
         },
     )
+}
+
+pub(crate) fn triage_persisted_service_monitor(
+    monitor_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<(SiteMonitor, Option<ServiceIncident>), String> {
+    let repository = default_incident_repository()?;
+    triage_service_monitor_in_repository(&repository, monitor_id, timestamp, actor, note)
+}
+
+pub(crate) fn triage_service_monitor_in_repository(
+    repository: &impl ServiceStateRepository,
+    monitor_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<(SiteMonitor, Option<ServiceIncident>), String> {
+    let note = note.map(str::to_string);
+    repository
+        .mutate(|state| {
+            state.refresh_derived_views();
+            let incident_index = state
+                .incidents
+                .iter()
+                .enumerate()
+                .filter(|(_, incident)| incident.monitor_id.as_deref() == Some(monitor_id))
+                .max_by(|(_, left), (_, right)| left.latest_timestamp.cmp(&right.latest_timestamp))
+                .map(|(index, _)| index);
+
+            let incident_id = if let Some(incident_index) = incident_index {
+                let incident = &mut state.incidents[incident_index];
+                if incident.acknowledged_at.is_none() {
+                    incident.acknowledged_at = Some(timestamp.to_string());
+                }
+                incident.acknowledged_by = Some(actor.to_string());
+                incident.acknowledgement_note = note.clone();
+                let incident = incident.clone();
+                let incident_id = incident.id.clone();
+                push_service_event_bounded(
+                    state,
+                    service_incident_handling_event(
+                        &incident,
+                        ServiceEventKind::IncidentAcknowledged,
+                        timestamp,
+                        actor,
+                        note.as_deref(),
+                    ),
+                );
+                Some(incident_id)
+            } else {
+                None
+            };
+
+            let monitor = reset_monitor_failures(state, monitor_id)?;
+            state.refresh_derived_views();
+            let incident = incident_id.and_then(|incident_id| {
+                state
+                    .incidents
+                    .iter()
+                    .find(|incident| incident.id == incident_id)
+                    .cloned()
+            });
+            Ok((monitor, incident))
+        })
+        .map_err(|err| {
+            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+                format!("Unable to load service state: {}", err)
+            } else {
+                err
+            }
+        })
 }
 
 pub(crate) fn resolve_persisted_service_incident(

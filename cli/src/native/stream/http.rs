@@ -315,6 +315,16 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(monitor_id) = service_monitor_action_id(path, "/triage") {
+            let result = relay_service_command(
+                session_name,
+                service_monitor_triage_command(monitor_id, query),
+            )
+            .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(monitor_id) = service_monitor_id(path) {
             let cmd = match service_monitor_upsert_command(monitor_id, body_str) {
                 Ok(cmd) => cmd,
@@ -1730,6 +1740,34 @@ fn service_monitor_state_command(monitor_id: &str, action: &str) -> Value {
     })
 }
 
+fn service_monitor_triage_command(monitor_id: &str, query: Option<&str>) -> Value {
+    let mut cmd = json!({
+        "id": format!("http-service-monitor-triage-{}", uuid::Uuid::new_v4()),
+        "action": "service_monitor_triage",
+        "monitorId": monitor_id,
+    });
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "by" => cmd["by"] = json!(value),
+            "note" => cmd["note"] = json!(value),
+            "serviceName" | "service_name" | "service-name" => {
+                cmd["serviceName"] = json!(value);
+            }
+            "agentName" | "agent_name" | "agent-name" => {
+                cmd["agentName"] = json!(value);
+            }
+            "taskName" | "task_name" | "task-name" => {
+                cmd["taskName"] = json!(value);
+            }
+            "" => {}
+            _ => {}
+        }
+    }
+
+    cmd
+}
+
 fn service_provider_delete_command(provider_id: &str) -> Value {
     json!({
         "id": format!("http-service-provider-delete-{}", uuid::Uuid::new_v4()),
@@ -2901,6 +2939,13 @@ mod tests {
             Some("google-login-freshness")
         );
         assert_eq!(
+            service_monitor_action_id(
+                "/api/service/monitors/google-login-freshness/triage",
+                "/triage"
+            ),
+            Some("google-login-freshness")
+        );
+        assert_eq!(
             service_monitor_state_command("google-login-freshness", "service_monitor_pause")
                 ["action"],
             "service_monitor_pause"
@@ -2912,6 +2957,15 @@ mod tests {
             )["action"],
             "service_monitor_reset_failures"
         );
+        let triage = service_monitor_triage_command(
+            "google-login-freshness",
+            Some("by=operator&note=reviewed&service-name=JournalDownloader"),
+        );
+        assert_eq!(triage["action"], "service_monitor_triage");
+        assert_eq!(triage["monitorId"], "google-login-freshness");
+        assert_eq!(triage["by"], "operator");
+        assert_eq!(triage["note"], "reviewed");
+        assert_eq!(triage["serviceName"], "JournalDownloader");
         assert_eq!(service_profile_id("/api/service/profiles/"), None);
         assert_eq!(
             service_profile_allocation_id("/api/service/profiles/journal/extra/allocation"),

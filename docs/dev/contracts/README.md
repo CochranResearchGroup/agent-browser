@@ -127,6 +127,11 @@ Those incident records include `monitorId`, `monitorTarget`, and `monitorResult`
 and summary groups include `monitorIds` plus `monitorResetCommands` so operator
 and dashboard surfaces can show the failed probe and reviewed-failure cleanup
 path without expanding raw events.
+`service-monitor-triage-response.v1.schema.json` describes the serialized
+monitor triage response returned by CLI `service monitors triage <id>`, HTTP
+`POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, and
+`triageServiceMonitor()`. It acknowledges the related monitor incident and
+resets reviewed failure counts in one service-owned operation.
 
 ## Service Event Record v1
 

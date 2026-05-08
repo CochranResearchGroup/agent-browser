@@ -57,7 +57,8 @@ use super::service_health::{
 };
 use super::service_incidents::{
     acknowledge_persisted_service_incident, resolve_persisted_service_incident,
-    service_incident_summary, service_incidents_response, ServiceIncidentFilters,
+    service_incident_summary, service_incidents_response, triage_persisted_service_monitor,
+    ServiceIncidentFilters,
 };
 use super::service_jobs::cancel_persisted_service_job;
 use super::service_lifecycle::{
@@ -223,6 +224,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_monitor_pause"
             | "service_monitor_reset_failures"
             | "service_monitor_resume"
+            | "service_monitor_triage"
             | "service_monitors_run_due"
             | "service_provider_upsert"
             | "service_provider_delete"
@@ -2474,6 +2476,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_monitor_resume" => {
             handle_service_monitor_state_update(cmd, MonitorState::Active).await
         }
+        "service_monitor_triage" => handle_service_monitor_triage(cmd).await,
         "service_monitors_run_due" => handle_service_monitors_run_due(cmd).await,
         "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
         "service_provider_delete" => handle_service_provider_delete(cmd).await,
@@ -6958,6 +6961,28 @@ async fn handle_service_monitor_reset_failures(cmd: &Value) -> Result<Value, Str
     }))
 }
 
+async fn handle_service_monitor_triage(cmd: &Value) -> Result<Value, String> {
+    let monitor_id = required_service_config_id(cmd, "monitorId")?;
+    let by = cmd.get("by").and_then(|value| value.as_str());
+    let note = cmd.get("note").and_then(|value| value.as_str());
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+    let (monitor, incident) =
+        triage_persisted_service_monitor(monitor_id, &timestamp, &actor, note.as_deref())?;
+    let state = monitor.state;
+
+    Ok(json!({
+        "id": monitor_id,
+        "monitor": monitor,
+        "state": state,
+        "updated": true,
+        "resetFailures": true,
+        "acknowledged": incident.is_some(),
+        "incident": incident,
+    }))
+}
+
 async fn handle_service_monitors_run_due(_cmd: &Value) -> Result<Value, String> {
     let summary = run_due_persisted_monitors().await?;
 
@@ -10381,6 +10406,7 @@ mod tests {
         assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
         assert_service_monitor_delete_response_contract,
         assert_service_monitor_state_response_contract,
+        assert_service_monitor_triage_response_contract,
         assert_service_monitor_upsert_response_contract,
         assert_service_profile_delete_response_contract,
         assert_service_profile_upsert_response_contract,
@@ -13614,6 +13640,54 @@ mod tests {
         assert_service_monitor_state_response_contract(&reset_monitor["data"]);
         assert_eq!(reset_monitor["data"]["resetFailures"], true);
         assert_eq!(reset_monitor["data"]["monitor"]["consecutiveFailures"], 0);
+
+        let mut persisted = store.load().unwrap();
+        let monitor = persisted
+            .monitors
+            .get_mut("google-login-freshness")
+            .expect("monitor should exist");
+        monitor.state = MonitorState::Faulted;
+        monitor.consecutive_failures = 2;
+        monitor.last_result = Some("site_policy_missing".to_string());
+        persisted.events.push(ServiceEvent {
+            id: "event-google-login-freshness-failed".to_string(),
+            timestamp: "2026-04-22T00:00:00Z".to_string(),
+            kind: ServiceEventKind::ReconciliationError,
+            message: "Service monitor google-login-freshness failed".to_string(),
+            details: Some(json!({
+                "incidentId": "monitor:google-login-freshness",
+                "monitorId": "google-login-freshness",
+                "monitorResult": "site_policy_missing",
+                "monitorTarget": {"site_policy": "google"}
+            })),
+            ..ServiceEvent::default()
+        });
+        persisted.refresh_derived_views();
+        store.save(&persisted).unwrap();
+
+        let triage_monitor = execute_command(
+            &json!({
+                "action": "service_monitor_triage",
+                "id": "svc-monitor-triage-1",
+                "monitorId": "google-login-freshness",
+                "by": "operator",
+                "note": "reviewed"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(triage_monitor["success"], true);
+        assert_service_monitor_triage_response_contract(&triage_monitor["data"]);
+        assert_eq!(triage_monitor["data"]["acknowledged"], true);
+        assert_eq!(
+            triage_monitor["data"]["incident"]["monitorId"],
+            "google-login-freshness"
+        );
+        assert_eq!(
+            triage_monitor["data"]["incident"]["acknowledgedBy"],
+            "operator"
+        );
+        assert_eq!(triage_monitor["data"]["monitor"]["consecutiveFailures"], 0);
 
         let delete_session = execute_command(
             &json!({

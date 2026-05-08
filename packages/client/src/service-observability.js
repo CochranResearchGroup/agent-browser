@@ -26,6 +26,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceMonitorMutationOptions} ServiceMonitorMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceMonitorRunDueResponse} ServiceMonitorRunDueResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorStateResponse} ServiceMonitorStateResponse
+ * @typedef {import('./service-observability.generated.js').ServiceMonitorTriageOptions} ServiceMonitorTriageOptions
+ * @typedef {import('./service-observability.generated.js').ServiceMonitorTriageResponse} ServiceMonitorTriageResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorUpsertResponse} ServiceMonitorUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceObservabilityHttpOptions} ServiceObservabilityHttpOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
@@ -607,6 +609,21 @@ export function resumeServiceMonitor({ id, ...options }) {
 export function resetServiceMonitorFailures({ id, ...options }) {
   assertServiceId(id, 'resetServiceMonitorFailures');
   return servicePost(options, `/api/service/monitors/${encodeURIComponent(id)}/reset-failures`);
+}
+
+/**
+ * @param {ServiceMonitorTriageOptions} options
+ * @returns {Promise<ServiceMonitorTriageResponse>}
+ */
+export function triageServiceMonitor({ id, by, note, serviceName, agentName, taskName, ...options }) {
+  assertServiceId(id, 'triageServiceMonitor');
+  return servicePost(options, `/api/service/monitors/${encodeURIComponent(id)}/triage`, undefined, {
+    by,
+    note,
+    'service-name': serviceName,
+    'agent-name': agentName,
+    'task-name': taskName,
+  });
 }
 
 /**

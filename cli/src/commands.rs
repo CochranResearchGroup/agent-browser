@@ -1010,34 +1010,74 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         "action": "service_monitors_run_due",
                     }));
                 }
-                if matches!(rest.get(1).copied(), Some("pause" | "resume" | "reset")) {
+                if matches!(
+                    rest.get(1).copied(),
+                    Some("pause" | "resume" | "reset" | "triage")
+                ) {
                     let action_name = rest[1];
                     let Some(monitor_id) = rest.get(2) else {
                         return Err(ParseError::InvalidValue {
                             message: format!("Missing monitor id for service monitors {action_name}"),
-                            usage: "service monitors pause <monitor-id>\n  service monitors resume <monitor-id>\n  service monitors reset <monitor-id>",
+                            usage: "service monitors pause <monitor-id>\n  service monitors resume <monitor-id>\n  service monitors reset <monitor-id>\n  service monitors triage <monitor-id> [--by <text>] [--note <text>]",
                         });
                     };
-                    if rest.len() > 3 {
-                        return Err(ParseError::InvalidValue {
-                            message: format!(
-                                "Unknown argument for service monitors {action_name}: {}",
-                                rest[3]
-                            ),
-                            usage: "service monitors pause <monitor-id>\n  service monitors resume <monitor-id>\n  service monitors reset <monitor-id>",
-                        });
-                    }
                     let action = match action_name {
                         "pause" => "service_monitor_pause",
                         "resume" => "service_monitor_resume",
                         "reset" => "service_monitor_reset_failures",
+                        "triage" => "service_monitor_triage",
                         _ => unreachable!("validated monitor action"),
                     };
-                    return Ok(json!({
+                    let mut cmd = json!({
                         "id": id,
                         "action": action,
                         "monitorId": monitor_id,
-                    }));
+                    });
+                    let usage = "service monitors pause <monitor-id>\n  service monitors resume <monitor-id>\n  service monitors reset <monitor-id>\n  service monitors triage <monitor-id> [--by <text>] [--note <text>]";
+                    let mut i = 3;
+                    while i < rest.len() {
+                        if action_name != "triage" {
+                            return Err(ParseError::InvalidValue {
+                                message: format!(
+                                    "Unknown argument for service monitors {action_name}: {}",
+                                    rest[i]
+                                ),
+                                usage,
+                            });
+                        }
+                        match rest[i] {
+                            "--by" => {
+                                let Some(raw) = rest.get(i + 1) else {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "Missing value for --by".to_string(),
+                                        usage,
+                                    });
+                                };
+                                cmd["by"] = json!(raw);
+                                i += 1;
+                            }
+                            "--note" => {
+                                let Some(raw) = rest.get(i + 1) else {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "Missing value for --note".to_string(),
+                                        usage,
+                                    });
+                                };
+                                cmd["note"] = json!(raw);
+                                i += 1;
+                            }
+                            other => {
+                                return Err(ParseError::InvalidValue {
+                                    message: format!(
+                                        "Unknown argument for service monitors triage: {other}"
+                                    ),
+                                    usage,
+                                });
+                            }
+                        }
+                        i += 1;
+                    }
+                    return Ok(cmd);
                 }
                 let usage = "service monitors [--summary] [--failed] [--state <active|paused|faulted>]";
                 let mut cmd = json!({
@@ -5272,7 +5312,7 @@ mod tests {
     }
 
     #[test]
-    fn test_service_monitors_pause_resume_and_reset() {
+    fn test_service_monitors_pause_resume_reset_and_triage() {
         let pause = parse_command(
             &args("service monitors pause google-login-freshness"),
             &default_flags(),
@@ -5288,6 +5328,11 @@ mod tests {
             &default_flags(),
         )
         .unwrap();
+        let triage = parse_command(
+            &args("service monitors triage google-login-freshness --by operator --note reviewed"),
+            &default_flags(),
+        )
+        .unwrap();
 
         assert_eq!(pause["action"], "service_monitor_pause");
         assert_eq!(pause["monitorId"], "google-login-freshness");
@@ -5295,6 +5340,10 @@ mod tests {
         assert_eq!(resume["monitorId"], "google-login-freshness");
         assert_eq!(reset["action"], "service_monitor_reset_failures");
         assert_eq!(reset["monitorId"], "google-login-freshness");
+        assert_eq!(triage["action"], "service_monitor_triage");
+        assert_eq!(triage["monitorId"], "google-login-freshness");
+        assert_eq!(triage["by"], "operator");
+        assert_eq!(triage["note"], "reviewed");
     }
 
     #[test]
