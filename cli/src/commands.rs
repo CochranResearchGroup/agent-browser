@@ -1602,7 +1602,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 let remedies_shortcut = rest[0] == "remedies";
                 if remedies_shortcut && rest.get(1).copied() == Some("apply") {
                     let usage =
-                        "service remedies apply --escalation monitor_attention [--by <text>] [--note <text>]";
+                        "service remedies apply --escalation <monitor_attention|os_degraded_possible> [--by <text>] [--note <text>]";
                     let mut cmd = json!({
                         "id": id,
                         "action": "service_remedies_apply",
@@ -1619,7 +1619,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                     });
                                 };
                                 match *raw {
-                                    "monitor_attention" => {
+                                    "monitor_attention" | "os_degraded_possible" => {
                                         cmd["escalation"] = json!(raw);
                                     }
                                     _ => {
@@ -5592,6 +5592,19 @@ mod tests {
         assert_eq!(cmd["escalation"], "monitor_attention");
         assert_eq!(cmd["by"], "operator");
         assert_eq!(cmd["note"], "reviewed");
+    }
+
+    #[test]
+    fn test_service_remedies_apply_os_degraded_possible() {
+        let cmd = parse_command(
+            &args("service remedies apply --escalation os_degraded_possible --by operator"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_remedies_apply");
+        assert_eq!(cmd["escalation"], "os_degraded_possible");
+        assert_eq!(cmd["by"], "operator");
     }
 
     #[test]

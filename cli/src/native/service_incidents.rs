@@ -2,9 +2,11 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
 
 use super::service_config::reset_monitor_failures;
+use super::service_health::retry_service_browser_in_state;
 use super::service_model::{
-    JobTarget, ServiceEvent, ServiceEventKind, ServiceIncident, ServiceIncidentEscalation,
-    ServiceIncidentSeverity, ServiceIncidentState, ServiceJob, ServiceState, SiteMonitor,
+    BrowserProcess, JobTarget, ServiceEvent, ServiceEventKind, ServiceIncident,
+    ServiceIncidentEscalation, ServiceIncidentSeverity, ServiceIncidentState, ServiceJob,
+    ServiceState, SiteMonitor,
 };
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
@@ -294,19 +296,35 @@ pub(crate) fn apply_persisted_service_remedies(
     timestamp: &str,
     actor: &str,
     note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
 ) -> Result<Value, String> {
     let repository = default_incident_repository()?;
-    apply_service_remedies_in_repository(&repository, escalation, timestamp, actor, note)
+    apply_service_remedies_in_repository(
+        &repository,
+        escalation,
+        timestamp,
+        actor,
+        note,
+        service_name,
+        agent_name,
+        task_name,
+    )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_service_remedies_in_repository(
     repository: &impl ServiceStateRepository,
     escalation: &str,
     timestamp: &str,
     actor: &str,
     note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
 ) -> Result<Value, String> {
-    if escalation != "monitor_attention" {
+    if !matches!(escalation, "monitor_attention" | "os_degraded_possible") {
         return Err(format!(
             "Unsupported automated service remedy escalation: {escalation}"
         ));
@@ -315,40 +333,41 @@ pub(crate) fn apply_service_remedies_in_repository(
     repository
         .mutate(|state| {
             state.refresh_derived_views();
-            let mut monitor_ids = state
-                .incidents
-                .iter()
-                .filter(|incident| {
-                    incident.state == ServiceIncidentState::Active
-                        && incident.escalation == ServiceIncidentEscalation::MonitorAttention
-                })
-                .filter_map(|incident| incident.monitor_id.clone())
-                .collect::<Vec<_>>();
-            monitor_ids.sort();
-            monitor_ids.dedup();
+            let mut monitor_ids = Vec::new();
+            let mut monitor_results = Vec::new();
+            let mut browser_ids = Vec::new();
+            let mut browser_results = Vec::new();
 
-            let mut monitor_results = Vec::with_capacity(monitor_ids.len());
-            for monitor_id in &monitor_ids {
-                let (monitor, incident) =
-                    triage_service_monitor_in_state(state, monitor_id, timestamp, actor, note)?;
-                let monitor_state = monitor.state;
-                monitor_results.push(json!({
-                    "id": monitor_id,
-                    "monitor": monitor,
-                    "state": monitor_state,
-                    "updated": true,
-                    "resetFailures": true,
-                    "acknowledged": incident.is_some(),
-                    "incident": incident,
-                }));
+            if escalation == "monitor_attention" {
+                monitor_ids = active_monitor_attention_ids(state);
+                monitor_results =
+                    apply_monitor_attention_remedies(state, &monitor_ids, timestamp, actor, note)?;
             }
+
+            if escalation == "os_degraded_possible" {
+                browser_ids = active_os_degraded_browser_ids(state);
+                browser_results = apply_os_degraded_browser_remedies(
+                    state,
+                    &browser_ids,
+                    timestamp,
+                    actor,
+                    note,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )?;
+            }
+
+            let count = monitor_results.len() + browser_results.len();
 
             Ok(json!({
                 "applied": true,
                 "escalation": escalation,
-                "count": monitor_results.len(),
+                "count": count,
                 "monitorIds": monitor_ids,
                 "monitorResults": monitor_results,
+                "browserIds": browser_ids,
+                "browserResults": browser_results,
             }))
         })
         .map_err(|err| {
@@ -358,6 +377,104 @@ pub(crate) fn apply_service_remedies_in_repository(
                 err
             }
         })
+}
+
+fn active_monitor_attention_ids(state: &ServiceState) -> Vec<String> {
+    let mut monitor_ids = state
+        .incidents
+        .iter()
+        .filter(|incident| {
+            incident.state == ServiceIncidentState::Active
+                && incident.escalation == ServiceIncidentEscalation::MonitorAttention
+        })
+        .filter_map(|incident| incident.monitor_id.clone())
+        .collect::<Vec<_>>();
+    monitor_ids.sort();
+    monitor_ids.dedup();
+    monitor_ids
+}
+
+fn active_os_degraded_browser_ids(state: &ServiceState) -> Vec<String> {
+    let mut browser_ids = state
+        .incidents
+        .iter()
+        .filter(|incident| {
+            incident.state == ServiceIncidentState::Active
+                && incident.escalation == ServiceIncidentEscalation::OsDegradedPossible
+        })
+        .filter_map(|incident| incident.browser_id.clone())
+        .collect::<Vec<_>>();
+    browser_ids.sort();
+    browser_ids.dedup();
+    browser_ids
+}
+
+fn apply_monitor_attention_remedies(
+    state: &mut ServiceState,
+    monitor_ids: &[String],
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<Vec<Value>, String> {
+    let mut monitor_results = Vec::with_capacity(monitor_ids.len());
+    for monitor_id in monitor_ids {
+        let (monitor, incident) =
+            triage_service_monitor_in_state(state, monitor_id, timestamp, actor, note)?;
+        let monitor_state = monitor.state;
+        monitor_results.push(json!({
+            "id": monitor_id,
+            "monitor": monitor,
+            "state": monitor_state,
+            "updated": true,
+            "resetFailures": true,
+            "acknowledged": incident.is_some(),
+            "incident": incident,
+        }));
+    }
+
+    Ok(monitor_results)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_os_degraded_browser_remedies(
+    state: &mut ServiceState,
+    browser_ids: &[String],
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Result<Vec<Value>, String> {
+    let mut browser_results = Vec::with_capacity(browser_ids.len());
+    for browser_id in browser_ids {
+        let (browser, incident) = retry_service_browser_in_state(
+            state,
+            browser_id,
+            timestamp,
+            actor,
+            note,
+            service_name,
+            agent_name,
+            task_name,
+        )?;
+        browser_results.push(browser_retry_result(browser_id, browser, incident));
+    }
+
+    Ok(browser_results)
+}
+
+fn browser_retry_result(
+    browser_id: &str,
+    browser: BrowserProcess,
+    incident: Option<ServiceIncident>,
+) -> Value {
+    json!({
+        "id": browser_id,
+        "retryEnabled": true,
+        "browser": browser,
+        "incident": incident,
+    })
 }
 
 pub(crate) fn resolve_persisted_service_incident(

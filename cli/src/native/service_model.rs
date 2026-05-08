@@ -1353,15 +1353,36 @@ pub fn assert_service_remedies_apply_response_contract(value: &serde_json::Value
             "count",
             "monitorIds",
             "monitorResults",
+            "browserIds",
+            "browserResults",
         ],
         &[],
     );
     assert_eq!(value["applied"], true);
-    assert_eq!(value["escalation"], "monitor_attention");
+    assert!(matches!(
+        value["escalation"].as_str(),
+        Some("monitor_attention" | "os_degraded_possible")
+    ));
     assert!(value["count"].is_u64());
     assert!(value["monitorIds"].is_array());
     for result in value["monitorResults"].as_array().unwrap() {
         assert_service_monitor_triage_response_contract(result);
+    }
+    assert!(value["browserIds"].is_array());
+    for result in value["browserResults"].as_array().unwrap() {
+        assert_record_fields(
+            "service remedies apply browser result",
+            result,
+            &["id", "retryEnabled", "browser", "incident"],
+            &[],
+        );
+        assert_eq!(result["retryEnabled"], true);
+        assert_service_browser_record_contract(&result["browser"]);
+        if result["incident"].is_object() {
+            assert_service_incident_record_contract(&result["incident"]);
+        } else {
+            assert!(result["incident"].is_null());
+        }
     }
 }
 
@@ -4567,6 +4588,8 @@ mod tests {
                 "count",
                 "monitorIds",
                 "monitorResults",
+                "browserIds",
+                "browserResults",
             ],
         );
 
@@ -4737,6 +4760,33 @@ mod tests {
                     "eventIds": ["event-monitor-failed"],
                     "jobIds": [],
                 },
+            }],
+            "browserIds": [],
+            "browserResults": [],
+        }));
+        assert_service_remedies_apply_response_contract(&json!({
+            "applied": true,
+            "escalation": "os_degraded_possible",
+            "count": 1,
+            "monitorIds": [],
+            "monitorResults": [],
+            "browserIds": ["browser-1"],
+            "browserResults": [{
+                "id": "browser-1",
+                "retryEnabled": true,
+                "browser": {
+                    "id": "browser-1",
+                    "profileId": "work",
+                    "host": "attached_existing",
+                    "health": "process_exited",
+                    "pid": null,
+                    "cdpEndpoint": null,
+                    "viewStreams": [],
+                    "activeSessionIds": ["session-1"],
+                    "lastError": "Browser retry requested by operator",
+                    "lastHealthObservation": null,
+                },
+                "incident": null,
             }],
         }));
     }

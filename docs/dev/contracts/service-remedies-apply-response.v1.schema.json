@@ -9,7 +9,9 @@
     "escalation",
     "count",
     "monitorIds",
-    "monitorResults"
+    "monitorResults",
+    "browserIds",
+    "browserResults"
   ],
   "properties": {
     "applied": {
@@ -18,7 +20,7 @@
     },
     "escalation": {
       "type": "string",
-      "enum": ["monitor_attention"]
+      "enum": ["monitor_attention", "os_degraded_possible"]
     },
     "count": {
       "type": "integer",
@@ -34,6 +36,35 @@
       "type": "array",
       "items": {
         "$ref": "service-monitor-triage-response.v1.schema.json"
+      }
+    },
+    "browserIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "browserResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "retryEnabled", "browser", "incident"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "retryEnabled": {
+            "type": "boolean",
+            "const": true
+          },
+          "browser": {
+            "type": "object"
+          },
+          "incident": {
+            "type": ["object", "null"]
+          }
+        }
       }
     }
   }

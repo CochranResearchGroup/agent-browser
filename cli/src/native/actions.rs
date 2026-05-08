@@ -7073,11 +7073,22 @@ async fn handle_service_remedies_apply(cmd: &Value) -> Result<Value, String> {
         .unwrap_or("monitor_attention");
     let by = cmd.get("by").and_then(|value| value.as_str());
     let note = cmd.get("note").and_then(|value| value.as_str());
+    let service_name = optional_command_string(cmd, "serviceName");
+    let agent_name = optional_command_string(cmd, "agentName");
+    let task_name = optional_command_string(cmd, "taskName");
     let actor = normalized_operator(by);
     let note = normalized_note(note);
     let timestamp = service_now_timestamp();
 
-    apply_persisted_service_remedies(escalation, &timestamp, &actor, note.as_deref())
+    apply_persisted_service_remedies(
+        escalation,
+        &timestamp,
+        &actor,
+        note.as_deref(),
+        service_name.as_deref(),
+        agent_name.as_deref(),
+        task_name.as_deref(),
+    )
 }
 
 async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, String> {
@@ -14573,6 +14584,81 @@ mod tests {
                     .as_ref()
                     .and_then(|details| details.get("actor"))
                     == Some(&json!("operator"))
+        }));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_remedies_apply_retries_os_degraded_browsers() {
+        let home = unique_socket_dir("service-remedies-apply-os-degraded-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let browser_id = "session:os-degraded-session";
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        profile_id: Some("work".to_string()),
+                        health: ServiceBrowserHealth::Faulted,
+                        active_session_ids: vec!["os-degraded-session".to_string()],
+                        last_error: Some("Runtime browser PID survived force kill".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                events: vec![ServiceEvent {
+                    id: "event-force-kill-failed".to_string(),
+                    timestamp: "2026-04-22T00:00:00Z".to_string(),
+                    kind: ServiceEventKind::BrowserHealthChanged,
+                    message: "Force kill failed".to_string(),
+                    browser_id: Some(browser_id.to_string()),
+                    current_health: Some(ServiceBrowserHealth::Faulted),
+                    ..ServiceEvent::default()
+                }],
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut daemon_state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "id": "remedy-os-degraded-1",
+                "action": "service_remedies_apply",
+                "escalation": "os_degraded_possible",
+                "by": "operator",
+                "note": "host inspected",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite"
+            }),
+            &mut daemon_state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_service_remedies_apply_response_contract(&result["data"]);
+        assert_eq!(result["data"]["count"], 1);
+        assert_eq!(result["data"]["browserIds"], json!([browser_id]));
+        assert_eq!(
+            result["data"]["browserResults"][0]["browser"]["health"],
+            "process_exited"
+        );
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers[browser_id].health,
+            ServiceBrowserHealth::ProcessExited
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryOverride
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.service_name.as_deref() == Some("JournalDownloader")
+                && event.agent_name.as_deref() == Some("codex")
+                && event.task_name.as_deref() == Some("probeACSwebsite")
         }));
 
         let _ = fs::remove_dir_all(&home);

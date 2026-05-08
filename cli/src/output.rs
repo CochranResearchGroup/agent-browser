@@ -1361,9 +1361,24 @@ fn format_service_remedies_apply_text(data: &serde_json::Value) -> Option<String
     } else {
         monitor_ids.join(",")
     };
+    let browser_ids = data
+        .get("browserIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let browser_ids = if browser_ids.is_empty() {
+        "none".to_string()
+    } else {
+        browser_ids.join(",")
+    };
 
     Some(format!(
-        "Applied service remedies: escalation={escalation} count={count}\nMonitor IDs: {ids}"
+        "Applied service remedies: escalation={escalation} count={count}\nMonitor IDs: {ids}\nBrowser IDs: {browser_ids}"
     ))
 }
 
@@ -4039,7 +4054,7 @@ Usage:
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service incidents [--summary] [--remedies] [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service remedies [--limit <n>] [--handling-state <state>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
-  agent-browser service remedies apply --escalation monitor_attention [--by <text>] [--note <text>]
+  agent-browser service remedies apply --escalation <monitor_attention|os_degraded_possible> [--by <text>] [--note <text>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
 
 Commands:
@@ -4092,6 +4107,7 @@ Notes:
   - service monitors triage <id> acknowledges the related monitor incident and resets reviewed failure counts in one service-owned operation.
   - service incidents --remedies and service remedies show active browser_degraded, monitor_attention, and os_degraded_possible groups for compact operator triage.
   - service remedies apply --escalation monitor_attention acknowledges related monitor incidents and resets reviewed monitor failures for all active monitor_attention remedies.
+  - service remedies apply --escalation os_degraded_possible batches the existing faulted-browser retry remedy for active OS-degraded-possible incidents after host inspection.
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
@@ -4161,6 +4177,7 @@ Examples:
   agent-browser service incidents --remedies
   agent-browser service remedies
   agent-browser service remedies apply --escalation monitor_attention --by operator --note reviewed
+  agent-browser service remedies apply --escalation os_degraded_possible --by operator --note host-inspected
   agent-browser service incidents --id browser-1
   agent-browser service incidents --handling-state unacknowledged
   agent-browser service incidents --severity critical --escalation os_degraded_possible
@@ -4205,7 +4222,7 @@ Notes:
   - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
   - service_trace reads persisted service state and returns related events, jobs, incidents, activity, profile lease wait summaries, ownership summary contexts, and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP.
-  - service_remedies_apply applies supported active remedy groups such as monitor_attention through the same service worker as HTTP POST /api/service/remedies/apply.
+  - service_remedies_apply applies supported active remedy groups such as monitor_attention and os_degraded_possible through the same service worker as HTTP POST /api/service/remedies/apply.
   - service_profile_upsert, service_profile_freshness_update, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_monitor_upsert, service_monitor_delete, service_monitor_pause, service_monitor_resume, service_monitor_reset_failures, service_monitor_triage, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP. service_monitors_run_due runs due active monitors through the same service worker.
   - Service profile records distinguish caller service sharing from target-service login scope: sharedServiceIds lists allowed caller services, targetServiceIds lists intended login targets, and authenticatedServiceIds lists targets currently believed authenticated.
   - Service profile records and profile allocation rows include targetReadiness, a no-launch readiness view for target services. Google targets without authenticated evidence report needs_manual_seeding and recommend detached runtime login before attachable automation. Once a managed profile lists the target in authenticatedServiceIds, readiness changes to seeded_unknown_freshness and access-plan no longer treats first-login seeding as a required manual action. Explicit fresh, stale, and blocked_by_attached_devtools rows, plus rows with lastVerifiedAt or freshnessExpiresAt, are preserved through derived readiness refreshes. Software clients can use updateServiceProfileFreshness for service-side bounded probe updates that preserve unrelated profile fields.
@@ -4942,6 +4959,7 @@ Examples:
   agent-browser service incidents --summary # Inspect grouped operator remedies
   agent-browser service remedies         # Inspect degraded-browser, monitor, and OS-degraded remedies
   agent-browser service remedies apply --escalation monitor_attention # Apply monitor remedies
+  agent-browser service remedies apply --escalation os_degraded_possible # Retry faulted browsers after host inspection
   agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile

@@ -135,9 +135,11 @@ resets reviewed failure counts in one service-owned operation.
 `service-remedies-apply-response.v1.schema.json` describes the grouped remedy
 apply response returned by CLI `service remedies apply --escalation
 monitor_attention`, HTTP `POST /api/service/remedies/apply`, MCP
-`service_remedies_apply`, and `applyServiceRemedies()`. It currently supports
-the `monitor_attention` escalation and applies the same monitor triage operation
-to each active failed monitor through the service worker.
+`service_remedies_apply`, and `applyServiceRemedies()`. It supports
+`monitor_attention` by applying the same monitor triage operation to each active
+failed monitor through the service worker. It also supports
+`os_degraded_possible` after host inspection by batching the existing
+faulted-browser retry remedy for active OS-degraded-possible incidents.
 
 ## Service Event Record v1
 

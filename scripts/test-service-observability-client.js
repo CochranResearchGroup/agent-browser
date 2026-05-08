@@ -326,6 +326,8 @@ async function main() {
       count: 1,
       monitorIds: ['google-login-freshness'],
       monitorResults: [monitorTriageResult],
+      browserIds: [],
+      browserResults: [],
     },
   });
   const remediesApplyResult = await applyServiceRemedies({
@@ -342,6 +344,39 @@ async function main() {
   );
   assert.equal(remediesApply.calls[0].init.method, 'POST');
   assert.equal(remediesApplyResult.count, 1);
+
+  const osRemediesApply = createFetchRecorder({
+    success: true,
+    data: {
+      applied: true,
+      escalation: 'os_degraded_possible',
+      count: 1,
+      monitorIds: [],
+      monitorResults: [],
+      browserIds: ['browser-1'],
+      browserResults: [
+        {
+          id: 'browser-1',
+          retryEnabled: true,
+          browser: { id: 'browser-1', health: 'process_exited' },
+          incident: null,
+        },
+      ],
+    },
+  });
+  const osRemediesApplyResult = await applyServiceRemedies({
+    escalation: 'os_degraded_possible',
+    by: 'operator',
+    note: 'host inspected',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: osRemediesApply.fetch,
+  });
+  assert.equal(
+    osRemediesApply.calls[0].url,
+    'http://127.0.0.1:4849/api/service/remedies/apply?escalation=os_degraded_possible&by=operator&note=host+inspected',
+  );
+  assert.equal(osRemediesApply.calls[0].init.method, 'POST');
+  assert.equal(osRemediesApplyResult.browserIds[0], 'browser-1');
 
   const allocation = createFetchRecorder({
     success: true,

@@ -728,54 +728,16 @@ pub(crate) fn retry_persisted_service_browser_in_repository(
 ) -> Result<(BrowserProcess, Option<ServiceIncident>), String> {
     repository
         .mutate(|state| {
-            let previous = state
-                .browsers
-                .get(browser_id)
-                .cloned()
-                .ok_or_else(|| format!("Service browser not found: {}", browser_id))?;
-            if previous.health != BrowserHealth::Faulted {
-                return Err(format!(
-                    "Service browser {} is not faulted; current health is {}",
-                    browser_id,
-                    service_browser_health_name(previous.health)
-                ));
-            }
-
-            let mut retryable = previous.clone();
-            retryable.health = BrowserHealth::ProcessExited;
-            retryable.last_error = Some(format!(
-                "Browser retry requested by {}; previous fault: {}",
-                actor,
-                previous
-                    .last_error
-                    .as_deref()
-                    .unwrap_or("no fault detail recorded")
-            ));
-            let observation_details = browser_health_observation_details(&retryable, None);
-            apply_browser_health_observation(&mut retryable, Some(&observation_details));
-            record_browser_health_changed_event(state, browser_id, Some(&previous), &retryable);
-            state
-                .browsers
-                .insert(browser_id.to_string(), retryable.clone());
-            push_service_event(
+            retry_service_browser_in_state(
                 state,
-                service_browser_recovery_override_event(
-                    &retryable,
-                    timestamp,
-                    actor,
-                    note,
-                    service_name,
-                    agent_name,
-                    task_name,
-                ),
-            );
-            state.refresh_derived_views();
-            let incident = state
-                .incidents
-                .iter()
-                .find(|incident| incident.id == browser_id)
-                .cloned();
-            Ok((retryable, incident))
+                browser_id,
+                timestamp,
+                actor,
+                note,
+                service_name,
+                agent_name,
+                task_name,
+            )
         })
         .map_err(|err| {
             if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
@@ -784,6 +746,67 @@ pub(crate) fn retry_persisted_service_browser_in_repository(
                 err
             }
         })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn retry_service_browser_in_state(
+    state: &mut ServiceState,
+    browser_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Result<(BrowserProcess, Option<ServiceIncident>), String> {
+    let previous = state
+        .browsers
+        .get(browser_id)
+        .cloned()
+        .ok_or_else(|| format!("Service browser not found: {}", browser_id))?;
+    if previous.health != BrowserHealth::Faulted {
+        return Err(format!(
+            "Service browser {} is not faulted; current health is {}",
+            browser_id,
+            service_browser_health_name(previous.health)
+        ));
+    }
+
+    let mut retryable = previous.clone();
+    retryable.health = BrowserHealth::ProcessExited;
+    retryable.last_error = Some(format!(
+        "Browser retry requested by {}; previous fault: {}",
+        actor,
+        previous
+            .last_error
+            .as_deref()
+            .unwrap_or("no fault detail recorded")
+    ));
+    let observation_details = browser_health_observation_details(&retryable, None);
+    apply_browser_health_observation(&mut retryable, Some(&observation_details));
+    record_browser_health_changed_event(state, browser_id, Some(&previous), &retryable);
+    state
+        .browsers
+        .insert(browser_id.to_string(), retryable.clone());
+    push_service_event(
+        state,
+        service_browser_recovery_override_event(
+            &retryable,
+            timestamp,
+            actor,
+            note,
+            service_name,
+            agent_name,
+            task_name,
+        ),
+    );
+    state.refresh_derived_views();
+    let incident = state
+        .incidents
+        .iter()
+        .find(|incident| incident.id == browser_id)
+        .cloned();
+    Ok((retryable, incident))
 }
 
 /// Merge async reconciliation results without clobbering newer state mutations.

@@ -778,15 +778,15 @@ fn service_mcp_tools() -> Vec<Value> {
         json!({
             "name": "service_remedies_apply",
             "title": "Apply service remedies",
-            "description": "Apply a supported active service remedy through the service worker. The first supported escalation is monitor_attention, which triages all active monitor attention incidents.",
+            "description": "Apply a supported active service remedy through the service worker. monitor_attention triages active monitor attention incidents; os_degraded_possible enables retry for active faulted-browser incidents after operator inspection.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
                     "escalation": {
                         "type": "string",
-                        "enum": ["monitor_attention"],
-                        "description": "Remedy escalation to apply. Currently only monitor_attention is automated."
+                        "enum": ["monitor_attention", "os_degraded_possible"],
+                        "description": "Remedy escalation to apply."
                     },
                     "by": {
                         "type": "string",
@@ -4230,9 +4230,12 @@ fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, Jso
 }
 
 fn call_service_remedies_apply(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
-    let escalation =
-        optional_enum_string_argument(arguments, "escalation", &["monitor_attention"])?
-            .unwrap_or("monitor_attention");
+    let escalation = optional_enum_string_argument(
+        arguments,
+        "escalation",
+        &["monitor_attention", "os_degraded_possible"],
+    )?
+    .unwrap_or("monitor_attention");
     let by = optional_string_argument(arguments, "by")?;
     let note = optional_string_argument(arguments, "note")?;
     let service_name = optional_string_argument(arguments, "serviceName")?;
@@ -8619,7 +8622,11 @@ mod tests {
                 && tool["inputSchema"]["properties"]["escalation"]["enum"]
                     .as_array()
                     .unwrap()
-                    .contains(&json!("monitor_attention"))));
+                    .contains(&json!("monitor_attention"))
+                && tool["inputSchema"]["properties"]["escalation"]["enum"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("os_degraded_possible"))));
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()
