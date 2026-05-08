@@ -956,3 +956,110 @@ fn session_id_for_browser<'a>(
                 .then_some(session_id.as_str())
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn summary_group<'a>(summary: &'a Value, escalation: &str, state: &str) -> &'a Value {
+        summary["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|group| group["escalation"] == escalation && group["state"] == state)
+            .unwrap_or_else(|| panic!("missing summary group {escalation}/{state}: {summary}"))
+    }
+
+    #[test]
+    fn service_incident_summary_remedy_apply_command_only_for_active_supported_remedies() {
+        let summary = service_incident_summary(&[
+            json!({
+                "id": "browser-degraded",
+                "browserId": "browser-degraded",
+                "escalation": "browser_degraded",
+                "severity": "warning",
+                "state": "active",
+                "recommendedAction": "Inspect browser health.",
+                "latestTimestamp": "2026-05-08T00:00:00Z"
+            }),
+            json!({
+                "id": "monitor-login",
+                "monitorId": "login-freshness",
+                "escalation": "monitor_attention",
+                "severity": "warning",
+                "state": "active",
+                "recommendedAction": "Inspect monitor.",
+                "latestTimestamp": "2026-05-08T00:01:00Z"
+            }),
+            json!({
+                "id": "browser-faulted",
+                "browserId": "browser-faulted",
+                "escalation": "os_degraded_possible",
+                "severity": "critical",
+                "state": "active",
+                "recommendedAction": "Inspect host OS.",
+                "latestTimestamp": "2026-05-08T00:02:00Z"
+            }),
+            json!({
+                "id": "browser-recovered",
+                "browserId": "browser-recovered",
+                "escalation": "browser_degraded",
+                "severity": "info",
+                "state": "recovered",
+                "recommendedAction": "No action required.",
+                "latestTimestamp": "2026-05-08T00:03:00Z"
+            }),
+            json!({
+                "id": "job-attention",
+                "browserId": "job-attention",
+                "escalation": "job_attention",
+                "severity": "error",
+                "state": "active",
+                "recommendedAction": "Inspect job.",
+                "latestTimestamp": "2026-05-08T00:04:00Z"
+            }),
+            json!({
+                "id": "service-triage",
+                "escalation": "service_triage",
+                "severity": "error",
+                "state": "service",
+                "recommendedAction": "Inspect service.",
+                "latestTimestamp": "2026-05-08T00:05:00Z"
+            }),
+        ]);
+
+        assert_eq!(
+            summary_group(&summary, "browser_degraded", "active")["remedyApplyCommand"],
+            "agent-browser service remedies apply --escalation browser_degraded"
+        );
+        assert_eq!(
+            summary_group(&summary, "monitor_attention", "active")["remedyApplyCommand"],
+            "agent-browser service remedies apply --escalation monitor_attention"
+        );
+        assert_eq!(
+            summary_group(&summary, "os_degraded_possible", "active")["remedyApplyCommand"],
+            "agent-browser service remedies apply --escalation os_degraded_possible"
+        );
+        assert_eq!(
+            summary_group(&summary, "browser_degraded", "recovered")["remedyApplyCommand"],
+            Value::Null
+        );
+        assert_eq!(
+            summary_group(&summary, "job_attention", "active")["remedyApplyCommand"],
+            Value::Null
+        );
+        assert_eq!(
+            summary_group(&summary, "service_triage", "service")["remedyApplyCommand"],
+            Value::Null
+        );
+
+        assert_eq!(
+            summary_group(&summary, "browser_degraded", "active")["browserIds"],
+            json!(["browser-degraded"])
+        );
+        assert_eq!(
+            summary_group(&summary, "monitor_attention", "active")["monitorIds"],
+            json!(["login-freshness"])
+        );
+    }
+}
