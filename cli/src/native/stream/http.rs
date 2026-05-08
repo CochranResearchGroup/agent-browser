@@ -285,6 +285,26 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(monitor_id) = service_monitor_action_id(path, "/pause") {
+            let result = relay_service_command(
+                session_name,
+                service_monitor_state_command(monitor_id, "service_monitor_pause"),
+            )
+            .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
+        if let Some(monitor_id) = service_monitor_action_id(path, "/resume") {
+            let result = relay_service_command(
+                session_name,
+                service_monitor_state_command(monitor_id, "service_monitor_resume"),
+            )
+            .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(monitor_id) = service_monitor_id(path) {
             let cmd = match service_monitor_upsert_command(monitor_id, body_str) {
                 Ok(cmd) => cmd,
@@ -1556,6 +1576,12 @@ fn service_monitor_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/') && *id != "run-due")
 }
 
+fn service_monitor_action_id<'a>(path: &'a str, suffix: &str) -> Option<&'a str> {
+    path.strip_prefix("/api/service/monitors/")
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
 fn service_job_cancel_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/jobs/")
         .and_then(|rest| rest.strip_suffix("/cancel"))
@@ -1683,6 +1709,14 @@ fn service_monitors_run_due_command() -> Value {
     json!({
         "id": format!("http-service-monitors-run-due-{}", uuid::Uuid::new_v4()),
         "action": "service_monitors_run_due",
+    })
+}
+
+fn service_monitor_state_command(monitor_id: &str, action: &str) -> Value {
+    json!({
+        "id": format!("http-{action}-{}", uuid::Uuid::new_v4()),
+        "action": action,
+        "monitorId": monitor_id,
     })
 }
 
@@ -2834,6 +2868,25 @@ mod tests {
         assert_eq!(
             service_monitors_run_due_command()["action"],
             "service_monitors_run_due"
+        );
+        assert_eq!(
+            service_monitor_action_id(
+                "/api/service/monitors/google-login-freshness/pause",
+                "/pause"
+            ),
+            Some("google-login-freshness")
+        );
+        assert_eq!(
+            service_monitor_action_id(
+                "/api/service/monitors/google-login-freshness/resume",
+                "/resume"
+            ),
+            Some("google-login-freshness")
+        );
+        assert_eq!(
+            service_monitor_state_command("google-login-freshness", "service_monitor_pause")
+                ["action"],
+            "service_monitor_pause"
         );
         assert_eq!(service_profile_id("/api/service/profiles/"), None);
         assert_eq!(

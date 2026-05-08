@@ -42,9 +42,9 @@ use super::screenshot::{self, ScreenshotOptions};
 use super::service_activity::service_incident_activity_response;
 use super::service_config::{
     delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
-    delete_persisted_session, delete_persisted_site_policy, update_persisted_profile_freshness,
-    upsert_persisted_monitor, upsert_persisted_profile, upsert_persisted_provider,
-    upsert_persisted_session, upsert_persisted_site_policy,
+    delete_persisted_session, delete_persisted_site_policy, update_persisted_monitor_state,
+    update_persisted_profile_freshness, upsert_persisted_monitor, upsert_persisted_profile,
+    upsert_persisted_provider, upsert_persisted_session, upsert_persisted_site_policy,
 };
 use super::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
@@ -65,9 +65,9 @@ use super::service_lifecycle::{
 };
 use super::service_model::{
     service_profile_allocations, service_profile_sources, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, JobState as ServiceJobState, ProfileKeyringPolicy,
-    ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
-    SessionCleanupPolicy,
+    BrowserHost as ServiceBrowserHost, JobState as ServiceJobState, MonitorState,
+    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent,
+    ServiceEventKind, ServiceState, SessionCleanupPolicy,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -219,6 +219,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_site_policy_delete"
             | "service_monitor_upsert"
             | "service_monitor_delete"
+            | "service_monitor_pause"
+            | "service_monitor_resume"
             | "service_monitors_run_due"
             | "service_provider_upsert"
             | "service_provider_delete"
@@ -2463,6 +2465,12 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_site_policy_delete" => handle_service_site_policy_delete(cmd).await,
         "service_monitor_upsert" => handle_service_monitor_upsert(cmd).await,
         "service_monitor_delete" => handle_service_monitor_delete(cmd).await,
+        "service_monitor_pause" => {
+            handle_service_monitor_state_update(cmd, MonitorState::Paused).await
+        }
+        "service_monitor_resume" => {
+            handle_service_monitor_state_update(cmd, MonitorState::Active).await
+        }
         "service_monitors_run_due" => handle_service_monitors_run_due(cmd).await,
         "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
         "service_provider_delete" => handle_service_provider_delete(cmd).await,
@@ -6918,6 +6926,21 @@ async fn handle_service_monitor_delete(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_monitor_state_update(
+    cmd: &Value,
+    monitor_state: MonitorState,
+) -> Result<Value, String> {
+    let monitor_id = required_service_config_id(cmd, "monitorId")?;
+    let monitor = update_persisted_monitor_state(monitor_id, monitor_state)?;
+
+    Ok(json!({
+        "id": monitor_id,
+        "monitor": monitor,
+        "state": monitor_state,
+        "updated": true,
+    }))
+}
+
 async fn handle_service_monitors_run_due(_cmd: &Value) -> Result<Value, String> {
     let summary = run_due_persisted_monitors().await?;
 
@@ -10340,6 +10363,7 @@ mod tests {
         assert_service_incidents_response_contract, assert_service_job_cancel_response_contract,
         assert_service_job_naming_warning_contract, assert_service_jobs_response_contract,
         assert_service_monitor_delete_response_contract,
+        assert_service_monitor_state_response_contract,
         assert_service_monitor_upsert_response_contract,
         assert_service_profile_delete_response_contract,
         assert_service_profile_upsert_response_contract,
@@ -13505,6 +13529,36 @@ mod tests {
             persisted.monitors["google-login-freshness"].name,
             "Google login freshness"
         );
+
+        let resume_monitor = execute_command(
+            &json!({
+                "action": "service_monitor_resume",
+                "id": "svc-monitor-resume-1",
+                "monitorId": "google-login-freshness"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(resume_monitor["success"], true);
+        assert_service_monitor_state_response_contract(&resume_monitor["data"]);
+        assert_eq!(resume_monitor["data"]["state"], "active");
+        assert_eq!(
+            store.load().unwrap().monitors["google-login-freshness"].state,
+            MonitorState::Active
+        );
+
+        let pause_monitor = execute_command(
+            &json!({
+                "action": "service_monitor_pause",
+                "id": "svc-monitor-pause-1",
+                "monitorId": "google-login-freshness"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(pause_monitor["success"], true);
+        assert_service_monitor_state_response_contract(&pause_monitor["data"]);
+        assert_eq!(pause_monitor["data"]["state"], "paused");
 
         let delete_session = execute_command(
             &json!({

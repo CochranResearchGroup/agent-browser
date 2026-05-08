@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::service_model::{
-    BrowserProfile, BrowserSession, ProfileAllocationPolicy, ProfileReadinessState,
+    BrowserProfile, BrowserSession, MonitorState, ProfileAllocationPolicy, ProfileReadinessState,
     ProfileTargetReadiness, ServiceActor, ServiceEntitySource, ServiceProvider, ServiceState,
     SiteMonitor, SitePolicy,
 };
@@ -406,6 +406,21 @@ pub fn delete_monitor(state: &mut ServiceState, id: &str) -> Result<Option<SiteM
     Ok(state.monitors.remove(id))
 }
 
+/// Update one service monitor's execution state while retaining health history.
+pub fn update_monitor_state(
+    state: &mut ServiceState,
+    id: &str,
+    monitor_state: MonitorState,
+) -> Result<SiteMonitor, String> {
+    validate_entity_id(id, "monitor")?;
+    let monitor = state
+        .monitors
+        .get_mut(id)
+        .ok_or_else(|| format!("Unknown monitor id: {id}"))?;
+    monitor.state = monitor_state;
+    Ok(monitor.clone())
+}
+
 /// Delete one service provider record from persisted service state.
 pub fn delete_provider(
     state: &mut ServiceState,
@@ -481,6 +496,15 @@ pub fn upsert_persisted_monitor(id: &str, body: Value) -> Result<SiteMonitor, St
 pub fn delete_persisted_monitor(id: &str) -> Result<Option<SiteMonitor>, String> {
     let repository = LockedServiceStateRepository::default_json()?;
     delete_monitor_in_repository(&repository, id)
+}
+
+/// Update one persisted monitor's execution state under the serialized mutator.
+pub fn update_persisted_monitor_state(
+    id: &str,
+    monitor_state: MonitorState,
+) -> Result<SiteMonitor, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    update_monitor_state_in_repository(&repository, id, monitor_state)
 }
 
 pub fn upsert_profile_in_repository(
@@ -564,6 +588,14 @@ pub fn delete_monitor_in_repository(
     id: &str,
 ) -> Result<Option<SiteMonitor>, String> {
     repository.mutate(|state| delete_monitor(state, id))
+}
+
+pub fn update_monitor_state_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+    monitor_state: MonitorState,
+) -> Result<SiteMonitor, String> {
+    repository.mutate(|state| update_monitor_state(state, id, monitor_state))
 }
 
 #[cfg(test)]
@@ -872,6 +904,45 @@ mod tests {
     }
 
     #[test]
+    fn update_monitor_state_preserves_health_history() {
+        let mut state = ServiceState::default();
+        upsert_monitor(
+            &mut state,
+            "google-login-freshness",
+            json!({
+                "name": "Google login freshness",
+                "target": {"site_policy": "google"},
+                "intervalMs": 60000,
+                "state": "faulted",
+                "lastFailedAt": "2026-05-07T00:00:00Z",
+                "lastResult": "login_stale",
+                "consecutiveFailures": 3
+            }),
+        )
+        .unwrap();
+
+        let monitor =
+            update_monitor_state(&mut state, "google-login-freshness", MonitorState::Paused)
+                .unwrap();
+
+        assert_eq!(monitor.state, MonitorState::Paused);
+        assert_eq!(
+            monitor.last_failed_at.as_deref(),
+            Some("2026-05-07T00:00:00Z")
+        );
+        assert_eq!(monitor.consecutive_failures, 3);
+    }
+
+    #[test]
+    fn update_monitor_state_rejects_unknown_monitor() {
+        let mut state = ServiceState::default();
+
+        let err = update_monitor_state(&mut state, "missing", MonitorState::Active).unwrap_err();
+
+        assert!(err.contains("Unknown monitor id"));
+    }
+
+    #[test]
     fn repository_helpers_mutate_explicit_repository() {
         let path = unique_state_path("service-config-repository");
         let store = JsonServiceStateStore::new(&path);
@@ -930,6 +1001,12 @@ mod tests {
             }),
         )
         .unwrap();
+        let resumed_monitor = update_monitor_state_in_repository(
+            &repository,
+            "google-login-freshness",
+            MonitorState::Active,
+        )
+        .unwrap();
         let removed_session = delete_session_in_repository(&repository, "journal-run").unwrap();
         let removed = delete_provider_in_repository(&repository, "manual").unwrap();
         let removed_monitor =
@@ -941,6 +1018,7 @@ mod tests {
         assert_eq!(policy.id, "google");
         assert_eq!(provider.id, "manual");
         assert_eq!(monitor.id, "google-login-freshness");
+        assert_eq!(resumed_monitor.state, MonitorState::Active);
         assert!(removed_session.is_some());
         assert!(persisted.profiles.contains_key("journal-downloader"));
         assert!(!persisted.sessions.contains_key("journal-run"));

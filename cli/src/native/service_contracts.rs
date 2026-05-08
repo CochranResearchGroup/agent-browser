@@ -8,9 +8,13 @@ pub const SERVICE_PROFILE_READINESS_HTTP_ROUTE: &str = "/api/service/profiles/<i
 pub const SERVICE_PROFILE_LOOKUP_HTTP_ROUTE: &str = "/api/service/profiles/lookup";
 pub const SERVICE_ACCESS_PLAN_HTTP_ROUTE: &str = "/api/service/access-plan";
 pub const SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE: &str = "/api/service/monitors/run-due";
+pub const SERVICE_MONITOR_PAUSE_HTTP_ROUTE: &str = "/api/service/monitors/<id>/pause";
+pub const SERVICE_MONITOR_RESUME_HTTP_ROUTE: &str = "/api/service/monitors/<id>/resume";
 pub const SERVICE_ACCESS_PLAN_MCP_RESOURCE: &str = "agent-browser://access-plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME: &str = "service_monitors_run_due";
+pub const SERVICE_MONITOR_PAUSE_MCP_TOOL_NAME: &str = "service_monitor_pause";
+pub const SERVICE_MONITOR_RESUME_MCP_TOOL_NAME: &str = "service_monitor_resume";
 pub const SERVICE_REQUEST_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-request.v1.schema.json";
 pub const SERVICE_REQUEST_MCP_TOOL_CALL_SCHEMA_ID: &str =
@@ -25,6 +29,8 @@ pub const SERVICE_ACCESS_PLAN_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-access-plan-response.v1.schema.json";
 pub const SERVICE_MONITOR_RUN_DUE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-monitor-run-due-response.v1.schema.json";
+pub const SERVICE_MONITOR_STATE_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-monitor-state-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 
 pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
@@ -190,6 +196,33 @@ pub fn service_contracts_metadata() -> Value {
                     "helpers": ["runDueServiceMonitors"],
                 },
             },
+            "serviceMonitorStateResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_MONITOR_STATE_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-monitor-state-response.v1.schema.json",
+                "http": {
+                    "routes": [
+                        {
+                            "method": "POST",
+                            "route": SERVICE_MONITOR_PAUSE_HTTP_ROUTE,
+                        },
+                        {
+                            "method": "POST",
+                            "route": SERVICE_MONITOR_RESUME_HTTP_ROUTE,
+                        },
+                    ],
+                },
+                "mcp": {
+                    "tools": [
+                        SERVICE_MONITOR_PAUSE_MCP_TOOL_NAME,
+                        SERVICE_MONITOR_RESUME_MCP_TOOL_NAME,
+                    ],
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["pauseServiceMonitor", "resumeServiceMonitor"],
+                },
+            },
         },
         "http": {
             "contractsRoute": SERVICE_CONTRACTS_HTTP_ROUTE,
@@ -199,12 +232,16 @@ pub fn service_contracts_metadata() -> Value {
             "serviceProfileLookupRoute": SERVICE_PROFILE_LOOKUP_HTTP_ROUTE,
             "serviceAccessPlanRoute": SERVICE_ACCESS_PLAN_HTTP_ROUTE,
             "serviceMonitorsRunDueRoute": SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE,
+            "serviceMonitorPauseRoute": SERVICE_MONITOR_PAUSE_HTTP_ROUTE,
+            "serviceMonitorResumeRoute": SERVICE_MONITOR_RESUME_HTTP_ROUTE,
         },
         "mcp": {
             "contractsResource": SERVICE_CONTRACTS_RESOURCE,
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
             "serviceAccessPlanResource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
             "serviceMonitorsRunDueTool": SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME,
+            "serviceMonitorPauseTool": SERVICE_MONITOR_PAUSE_MCP_TOOL_NAME,
+            "serviceMonitorResumeTool": SERVICE_MONITOR_RESUME_MCP_TOOL_NAME,
         },
     })
 }
@@ -301,6 +338,22 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceMonitorRunDueResponse"]["client"]["helpers"][0],
             "runDueServiceMonitors"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceMonitorStateResponse"]["schemaId"],
+            SERVICE_MONITOR_STATE_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceMonitorStateResponse"]["http"]["routes"][0]["route"],
+            SERVICE_MONITOR_PAUSE_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceMonitorStateResponse"]["mcp"]["tools"][1],
+            SERVICE_MONITOR_RESUME_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceMonitorStateResponse"]["client"]["helpers"][0],
+            "pauseServiceMonitor"
         );
     }
 }

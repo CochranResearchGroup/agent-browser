@@ -207,6 +207,20 @@ const serviceSurface = [
     clientNeedles: ['runDueServiceMonitors', '/api/service/monitors/run-due'],
   },
   {
+    tool: 'service_monitor_pause',
+    method: 'POST',
+    route: '/api/service/monitors/<id>/pause',
+    httpNeedles: ['service_monitor_action_id(path, "/pause")', 'service_monitor_state_command(monitor_id, "service_monitor_pause")'],
+    clientNeedles: ['pauseServiceMonitor', '/api/service/monitors/${encodeURIComponent(id)}/pause'],
+  },
+  {
+    tool: 'service_monitor_resume',
+    method: 'POST',
+    route: '/api/service/monitors/<id>/resume',
+    httpNeedles: ['service_monitor_action_id(path, "/resume")', 'service_monitor_state_command(monitor_id, "service_monitor_resume")'],
+    clientNeedles: ['resumeServiceMonitor', '/api/service/monitors/${encodeURIComponent(id)}/resume'],
+  },
+  {
     tool: 'service_provider_upsert',
     method: 'POST',
     route: '/api/service/providers/<id>',

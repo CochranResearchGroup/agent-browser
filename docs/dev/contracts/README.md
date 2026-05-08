@@ -219,6 +219,11 @@ monitor collections support `state`, failed-only, and summary filters; MCP
 run summary returned by CLI `agent-browser service monitors run-due`, HTTP
 `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, and
 `runDueServiceMonitors()`.
+`service-monitor-state-response.v1.schema.json` describes the state update
+response returned by CLI `service monitors pause <id>` and
+`service monitors resume <id>`, HTTP monitor pause/resume routes, MCP
+`service_monitor_pause` and `service_monitor_resume`, and the matching client
+helpers.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a
@@ -265,6 +270,7 @@ by HTTP service APIs and matching MCP tools:
 - `service-monitor-upsert-response.v1.schema.json`
 - `service-monitor-delete-response.v1.schema.json`
 - `service-monitor-run-due-response.v1.schema.json`
+- `service-monitor-state-response.v1.schema.json`
 - `service-provider-upsert-response.v1.schema.json`
 - `service-provider-delete-response.v1.schema.json`
 
@@ -276,6 +282,8 @@ MCP `service_monitor_upsert` and `service_monitor_delete`; they persist monitor
 definitions for the scheduler.
 `service-monitor-run-due-response.v1.schema.json` covers the immediate due
 monitor run summary returned by CLI, HTTP, MCP, and the service client helper.
+`service-monitor-state-response.v1.schema.json` covers pause/resume state
+updates that preserve retained health history.
 
 Profile mutation inputs are policy checked before persistence. The
 `caller_supplied` allocation requires `userDataDir`, and `per_service` profiles

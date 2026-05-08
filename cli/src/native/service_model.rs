@@ -1303,6 +1303,20 @@ pub fn assert_service_monitor_delete_response_contract(value: &serde_json::Value
 }
 
 #[cfg(test)]
+pub fn assert_service_monitor_state_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "monitor state response",
+        value,
+        &["id", "monitor", "state", "updated"],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert!(SERVICE_MONITOR_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
+    assert_eq!(value["updated"], true);
+    assert_service_monitor_record_contract(&value["monitor"]);
+}
+
+#[cfg(test)]
 pub fn assert_service_monitor_run_due_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "monitor run-due response",
@@ -4272,6 +4286,10 @@ mod tests {
             "../../../docs/dev/contracts/service-monitor-delete-response.v1.schema.json"
         ))
         .unwrap();
+        let monitor_state_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-monitor-state-response.v1.schema.json"
+        ))
+        .unwrap();
         let monitor_run_due_schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/service-monitor-run-due-response.v1.schema.json"
         ))
@@ -4296,6 +4314,10 @@ mod tests {
         assert_schema_required_fields(&site_policy_delete_schema, &["id", "deleted", "sitePolicy"]);
         assert_schema_required_fields(&monitor_upsert_schema, &["id", "monitor", "upserted"]);
         assert_schema_required_fields(&monitor_delete_schema, &["id", "deleted", "monitor"]);
+        assert_schema_required_fields(
+            &monitor_state_schema,
+            &["id", "monitor", "state", "updated"],
+        );
         assert_schema_required_fields(
             &monitor_run_due_schema,
             &["checked", "succeeded", "failed", "monitorIds"],
@@ -4411,7 +4433,13 @@ mod tests {
         assert_service_monitor_delete_response_contract(&json!({
             "id": "google-login-freshness",
             "deleted": true,
-            "monitor": monitor,
+            "monitor": monitor.clone(),
+        }));
+        assert_service_monitor_state_response_contract(&json!({
+            "id": "google-login-freshness",
+            "monitor": monitor.clone(),
+            "state": "paused",
+            "updated": true,
         }));
         assert_service_monitor_run_due_response_contract(&json!({
             "checked": 1,

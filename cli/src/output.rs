@@ -1318,6 +1318,15 @@ fn format_service_monitors_run_due_text(data: &serde_json::Value) -> Option<Stri
     ))
 }
 
+fn format_service_monitor_state_text(data: &serde_json::Value) -> Option<String> {
+    let id = value_str(data, "id", "unknown-monitor");
+    let state = value_str(data, "state", "unknown");
+    let monitor = data.get("monitor")?;
+    let line = format_service_monitor_line(monitor);
+
+    Some(format!("Monitor {id}: state={state}\n  {line}"))
+}
+
 fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
     let service_state = data.get("service_state")?;
     let control_plane = service_state.get("controlPlane");
@@ -1548,6 +1557,15 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_monitors_run_due") {
             if let Some(output) = format_service_monitors_run_due_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if matches!(
+            action,
+            Some("service_monitor_pause" | "service_monitor_resume")
+        ) {
+            if let Some(output) = format_service_monitor_state_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -3954,6 +3972,8 @@ Usage:
   agent-browser service tabs
   agent-browser service monitors --summary --failed
   agent-browser service monitors run-due
+  agent-browser service monitors pause <monitor-id>
+  agent-browser service monitors resume <monitor-id>
   agent-browser service site-policies
   agent-browser service providers
   agent-browser service challenges
@@ -3978,6 +3998,8 @@ Commands:
   tabs                  Show retained service tab records
   monitors             Show retained service monitor records, filters, and summary
   monitors run-due     Run due active service monitors now through the service worker
+  monitors pause       Pause one noisy service monitor
+  monitors resume      Resume one paused or faulted service monitor
   site-policies         Show configured service site-policy records
   providers             Show configured service provider records
   challenges            Show retained auth, 2FA, captcha, passkey, and blocked-flow challenge records
@@ -4007,6 +4029,7 @@ Notes:
   - Failed service monitors use monitor_attention escalation and include monitorIds in summary groups.
   - Monitor filters match --state and --failed before rendering; --summary adds state, failure, repeated-failure, never-checked, and latest-failure totals.
   - service monitors run-due checks due active monitors immediately and updates retained health fields plus monitor incidents through the same runner as the scheduler.
+  - service monitors pause and service monitors resume update only the retained monitor state, preserving health history for later triage.
   - service incidents --remedies and service remedies show active browser_degraded and os_degraded_possible groups for compact operator triage.
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
@@ -4032,9 +4055,9 @@ Notes:
   - The bounded events log records reconciliation summaries, browser launch metadata including profileSelectionReason and profileLeaseDisposition when known, browser health transitions, browser recovery starts, profile lease wait transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes named browser control endpoints at /api/browser/url, /api/browser/title, /api/browser/tabs, /api/browser/navigate, /api/browser/back, /api/browser/forward, /api/browser/reload, /api/browser/new-tab, /api/browser/switch-tab, /api/browser/close-tab, /api/browser/viewport, /api/browser/user-agent, /api/browser/media, /api/browser/timezone, /api/browser/locale, /api/browser/geolocation, /api/browser/permissions, /api/browser/cookies/get, /api/browser/cookies/set, /api/browser/cookies/clear, /api/browser/storage/get, /api/browser/storage/set, /api/browser/storage/clear, /api/browser/console, /api/browser/errors, /api/browser/set-content, /api/browser/headers, /api/browser/offline, /api/browser/dialog, /api/browser/clipboard, /api/browser/upload, /api/browser/download, /api/browser/wait-for-download, /api/browser/pdf, /api/browser/response-body, /api/browser/har/start, /api/browser/har/stop, /api/browser/route, /api/browser/unroute, /api/browser/requests, /api/browser/request-detail, /api/browser/snapshot, /api/browser/screenshot, /api/browser/click, /api/browser/fill, /api/browser/wait, /api/browser/type, /api/browser/press, /api/browser/hover, /api/browser/select, /api/browser/get-text, /api/browser/get-value, /api/browser/is-visible, /api/browser/get-attribute, /api/browser/get-html, /api/browser/get-styles, /api/browser/count, /api/browser/get-box, /api/browser/is-enabled, /api/browser/is-checked, /api/browser/check, /api/browser/uncheck, /api/browser/scroll, /api/browser/scroll-into-view, /api/browser/focus, and /api/browser/clear.
-  - The stream server exposes the service surface at /api/service/status, /api/service/request, /api/service/profiles, /api/service/profiles/lookup, /api/service/profiles/<id>/allocation, /api/service/profiles/<id>/readiness, /api/service/profiles/<id>, /api/service/profiles/<id>/freshness, /api/service/sessions, /api/service/sessions/<id>, /api/service/browsers, /api/service/tabs, /api/service/monitors, /api/service/monitors/run-due, /api/service/site-policies, /api/service/site-policies/<id>, /api/service/providers, /api/service/providers/<id>, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile. GET /api/service/monitors accepts state, failed, and summary query parameters.
+  - The stream server exposes the service surface at /api/service/status, /api/service/request, /api/service/profiles, /api/service/profiles/lookup, /api/service/profiles/<id>/allocation, /api/service/profiles/<id>/readiness, /api/service/profiles/<id>, /api/service/profiles/<id>/freshness, /api/service/sessions, /api/service/sessions/<id>, /api/service/browsers, /api/service/tabs, /api/service/monitors, /api/service/monitors/run-due, /api/service/monitors/<id>/pause, /api/service/monitors/<id>/resume, /api/service/site-policies, /api/service/site-policies/<id>, /api/service/providers, /api/service/providers/<id>, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile. GET /api/service/monitors accepts state, failed, and summary query parameters.
   - POST /api/service/request accepts one intent object with serviceName, agentName, taskName, siteId/loginId, targetServiceId, profile or runtimeProfile hints, profileLeasePolicy, profileLeaseWaitTimeoutMs, action, params, and jobTimeoutMs, then queues the browser command through the same service-owned control path.
-  - POST /api/service/profiles/<id>, POST /api/service/profiles/<id>/freshness, POST /api/service/sessions/<id>, POST /api/service/site-policies/<id>, POST /api/service/monitors/<id>, and POST /api/service/providers/<id> persist service config records through the service worker queue. POST /api/service/monitors/run-due runs due active monitors now. DELETE on the same entity paths removes persisted records through the same queue.
+  - POST /api/service/profiles/<id>, POST /api/service/profiles/<id>/freshness, POST /api/service/sessions/<id>, POST /api/service/site-policies/<id>, POST /api/service/monitors/<id>, and POST /api/service/providers/<id> persist service config records through the service worker queue. POST /api/service/monitors/run-due runs due active monitors now. POST /api/service/monitors/<id>/pause and POST /api/service/monitors/<id>/resume update retained monitor state. DELETE on the same entity paths removes persisted records through the same queue.
   - Service config mutation uses the path ID as authoritative and rejects a request body whose nested id conflicts with the path.
   - Daemon background reconciliation runs every 60000 ms by default; set --service-reconcile-interval 0 or service.reconcileIntervalMs: 0 to disable it.
   - Due active service monitors are enqueued through the same service worker every 60000 ms by default; set --service-monitor-interval 0 or service.monitorIntervalMs: 0 to disable it.
@@ -4536,6 +4559,8 @@ Service:
   service tabs               Show retained service tab records
   service monitors           Show retained service monitor records (--summary, --failed, --state)
   service monitors run-due   Run due active service monitors now
+  service monitors pause     Pause one noisy service monitor
+  service monitors resume    Resume one paused or faulted service monitor
   service site-policies      Show configured service site-policy records
   service providers          Show configured service provider records
   service challenges         Show retained service challenge records
@@ -4836,6 +4861,8 @@ Examples:
   agent-browser service tabs             # Inspect retained service tab records
   agent-browser service monitors --summary --failed # Inspect retained failing monitor records
   agent-browser service monitors run-due # Run due active service monitors now
+  agent-browser service monitors pause google-login-freshness # Quiet a noisy monitor
+  agent-browser service monitors resume google-login-freshness # Resume monitor checks
   agent-browser service site-policies    # Inspect configured service site-policy records
   agent-browser service providers        # Inspect configured service provider records
   agent-browser service challenges       # Inspect retained service challenge records
@@ -4965,7 +4992,7 @@ pub fn print_version() {
 mod tests {
     use super::{
         format_service_browsers_text, format_service_challenges_text, format_service_events_text,
-        format_service_incidents_text, format_service_jobs_text,
+        format_service_incidents_text, format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
         format_service_profiles_text, format_service_providers_text, format_service_sessions_text,
         format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
@@ -5286,6 +5313,34 @@ mod tests {
             rendered,
             "Monitor run: checked=2 succeeded=1 failed=1\nMonitor IDs: google-login,github-heartbeat"
         );
+    }
+
+    #[test]
+    fn test_format_service_monitor_state_text_includes_monitor() {
+        let data = json!({
+            "id": "login-freshness",
+            "state": "paused",
+            "updated": true,
+            "monitor": {
+                "id": "login-freshness",
+                "name": "Login freshness",
+                "target": {
+                    "site_policy": "google"
+                },
+                "intervalMs": 60000,
+                "state": "paused",
+                "lastCheckedAt": null,
+                "lastSucceededAt": null,
+                "lastFailedAt": "2026-05-07T00:00:00Z",
+                "lastResult": "login_stale",
+                "consecutiveFailures": 3
+            }
+        });
+
+        let rendered = format_service_monitor_state_text(&data).unwrap();
+
+        assert!(rendered.contains("Monitor login-freshness: state=paused"));
+        assert!(rendered.contains("consecutive_failures=3"));
     }
 
     #[test]

@@ -537,6 +537,14 @@ export interface ServiceMonitorRunDueResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceMonitorStateResponse {
+  id: string;
+  monitor: ServiceMonitorRecord;
+  state: 'active' | 'paused' | 'faulted' | string;
+  updated: boolean;
+  [key: string]: unknown;
+}
+
 export interface ServiceJobCancelResponse {
   cancelled: boolean;
   job: ServiceJobRecord;
@@ -976,6 +984,8 @@ export declare function upsertServiceSitePolicy(options: ServiceSitePolicyMutati
 export declare function deleteServiceSitePolicy(options: ServiceIdOptions): Promise<ServiceSitePolicyDeleteResponse>;
 export declare function upsertServiceMonitor(options: ServiceMonitorMutationOptions): Promise<ServiceMonitorUpsertResponse>;
 export declare function deleteServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorDeleteResponse>;
+export declare function pauseServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorStateResponse>;
+export declare function resumeServiceMonitor(options: ServiceIdOptions): Promise<ServiceMonitorStateResponse>;
 export declare function upsertServiceProvider(options: ServiceProviderMutationOptions): Promise<ServiceProviderUpsertResponse>;
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
 export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;

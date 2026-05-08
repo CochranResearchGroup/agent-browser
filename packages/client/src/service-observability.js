@@ -25,6 +25,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceMonitorDeleteResponse} ServiceMonitorDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorMutationOptions} ServiceMonitorMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceMonitorRunDueResponse} ServiceMonitorRunDueResponse
+ * @typedef {import('./service-observability.generated.js').ServiceMonitorStateResponse} ServiceMonitorStateResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorUpsertResponse} ServiceMonitorUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceObservabilityHttpOptions} ServiceObservabilityHttpOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
@@ -579,6 +580,24 @@ export function upsertServiceMonitor({ id, monitor, ...options }) {
  */
 export function deleteServiceMonitor({ id, ...options }) {
   return serviceDelete(options, `/api/service/monitors/${encodeURIComponent(id)}`);
+}
+
+/**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceMonitorStateResponse>}
+ */
+export function pauseServiceMonitor({ id, ...options }) {
+  assertServiceId(id, 'pauseServiceMonitor');
+  return servicePost(options, `/api/service/monitors/${encodeURIComponent(id)}/pause`);
+}
+
+/**
+ * @param {ServiceIdOptions} options
+ * @returns {Promise<ServiceMonitorStateResponse>}
+ */
+export function resumeServiceMonitor({ id, ...options }) {
+  assertServiceId(id, 'resumeServiceMonitor');
+  return servicePost(options, `/api/service/monitors/${encodeURIComponent(id)}/resume`);
 }
 
 /**

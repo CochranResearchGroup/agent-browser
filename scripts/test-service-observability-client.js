@@ -14,7 +14,9 @@ import {
   getServiceStatus,
   getServiceTrace,
   lookupServiceProfile,
+  pauseServiceMonitor,
   registerServiceLoginProfile,
+  resumeServiceMonitor,
   runDueServiceMonitors,
   summarizeServiceProfileReadiness,
   updateServiceProfileFreshness,
@@ -187,6 +189,51 @@ async function main() {
   );
   assert.equal(monitorDelete.calls[0].init.method, 'DELETE');
   assert.equal(monitorDeleteResult.deleted, true);
+
+  const monitorPause = createFetchRecorder({
+    success: true,
+    data: {
+      id: 'google-login-freshness',
+      monitor: {
+        ...monitorsResult.monitors[0],
+        state: 'paused',
+      },
+      state: 'paused',
+      updated: true,
+    },
+  });
+  const monitorPauseResult = await pauseServiceMonitor({
+    id: 'google-login-freshness',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: monitorPause.fetch,
+  });
+  assert.equal(
+    monitorPause.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors/google-login-freshness/pause',
+  );
+  assert.equal(monitorPause.calls[0].init.method, 'POST');
+  assert.equal(monitorPauseResult.state, 'paused');
+
+  const monitorResume = createFetchRecorder({
+    success: true,
+    data: {
+      id: 'google-login-freshness',
+      monitor: monitorsResult.monitors[0],
+      state: 'active',
+      updated: true,
+    },
+  });
+  const monitorResumeResult = await resumeServiceMonitor({
+    id: 'google-login-freshness',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: monitorResume.fetch,
+  });
+  assert.equal(
+    monitorResume.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors/google-login-freshness/resume',
+  );
+  assert.equal(monitorResume.calls[0].init.method, 'POST');
+  assert.equal(monitorResumeResult.state, 'active');
 
   const monitorRunDue = createFetchRecorder({
     success: true,
