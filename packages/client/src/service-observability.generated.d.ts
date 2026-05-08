@@ -498,6 +498,15 @@ export interface ServiceMonitorTriageResponse extends ServiceMonitorStateRespons
   incident: ServiceIncidentRecord | null;
 }
 
+export interface ServiceRemediesApplyResponse {
+  applied: boolean;
+  escalation: 'monitor_attention';
+  count: number;
+  monitorIds: string[];
+  monitorResults: ServiceMonitorTriageResponse[];
+  [key: string]: unknown;
+}
+
 export interface ServiceJobCancelResponse {
   cancelled: boolean;
   job: ServiceJobRecord;
@@ -883,6 +892,15 @@ export interface ServiceMonitorTriageOptions extends ServiceIdOptions {
   taskName?: string;
 }
 
+export interface ServiceRemediesApplyOptions extends ServiceObservabilityHttpOptions {
+  escalation?: 'monitor_attention';
+  by?: string;
+  note?: string;
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+}
+
 export interface ServiceJobCancelOptions extends ServiceObservabilityHttpOptions {
   jobId: string;
 }
@@ -959,6 +977,7 @@ export declare function upsertServiceProvider(options: ServiceProviderMutationOp
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
 export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;
 export declare function retryServiceBrowser(options: ServiceBrowserRetryOptions): Promise<ServiceBrowserRetryResponse>;
+export declare function applyServiceRemedies(options: ServiceRemediesApplyOptions): Promise<ServiceRemediesApplyResponse>;
 export declare function acknowledgeServiceIncident(options: ServiceIncidentMutationOptions): Promise<ServiceIncidentAcknowledgeResponse>;
 export declare function resolveServiceIncident(options: ServiceIncidentMutationOptions): Promise<ServiceIncidentResolveResponse>;
 export declare function getServiceJobs(options: ServiceQueryOptions): Promise<ServiceJobsResponse>;

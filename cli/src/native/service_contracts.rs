@@ -7,6 +7,7 @@ pub const SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE: &str = "/api/service/profiles/<
 pub const SERVICE_PROFILE_READINESS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/readiness";
 pub const SERVICE_PROFILE_LOOKUP_HTTP_ROUTE: &str = "/api/service/profiles/lookup";
 pub const SERVICE_ACCESS_PLAN_HTTP_ROUTE: &str = "/api/service/access-plan";
+pub const SERVICE_REMEDIES_APPLY_HTTP_ROUTE: &str = "/api/service/remedies/apply";
 pub const SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE: &str = "/api/service/monitors/run-due";
 pub const SERVICE_MONITOR_PAUSE_HTTP_ROUTE: &str = "/api/service/monitors/<id>/pause";
 pub const SERVICE_MONITOR_RESUME_HTTP_ROUTE: &str = "/api/service/monitors/<id>/resume";
@@ -15,6 +16,7 @@ pub const SERVICE_MONITOR_RESET_FAILURES_HTTP_ROUTE: &str =
 pub const SERVICE_MONITOR_TRIAGE_HTTP_ROUTE: &str = "/api/service/monitors/<id>/triage";
 pub const SERVICE_ACCESS_PLAN_MCP_RESOURCE: &str = "agent-browser://access-plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
+pub const SERVICE_REMEDIES_APPLY_MCP_TOOL_NAME: &str = "service_remedies_apply";
 pub const SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME: &str = "service_monitors_run_due";
 pub const SERVICE_MONITOR_PAUSE_MCP_TOOL_NAME: &str = "service_monitor_pause";
 pub const SERVICE_MONITOR_RESUME_MCP_TOOL_NAME: &str = "service_monitor_resume";
@@ -38,6 +40,8 @@ pub const SERVICE_MONITOR_STATE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-monitor-state-response.v1.schema.json";
 pub const SERVICE_MONITOR_TRIAGE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-monitor-triage-response.v1.schema.json";
+pub const SERVICE_REMEDIES_APPLY_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-remedies-apply-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 
 pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
@@ -255,6 +259,23 @@ pub fn service_contracts_metadata() -> Value {
                     "helpers": ["triageServiceMonitor"],
                 },
             },
+            "serviceRemediesApplyResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_REMEDIES_APPLY_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-remedies-apply-response.v1.schema.json",
+                "http": {
+                    "method": "POST",
+                    "route": SERVICE_REMEDIES_APPLY_HTTP_ROUTE,
+                },
+                "mcp": {
+                    "tool": SERVICE_REMEDIES_APPLY_MCP_TOOL_NAME,
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["applyServiceRemedies"],
+                    "supportedEscalations": ["monitor_attention"],
+                },
+            },
         },
         "http": {
             "contractsRoute": SERVICE_CONTRACTS_HTTP_ROUTE,
@@ -263,6 +284,7 @@ pub fn service_contracts_metadata() -> Value {
             "serviceProfileReadinessRoute": SERVICE_PROFILE_READINESS_HTTP_ROUTE,
             "serviceProfileLookupRoute": SERVICE_PROFILE_LOOKUP_HTTP_ROUTE,
             "serviceAccessPlanRoute": SERVICE_ACCESS_PLAN_HTTP_ROUTE,
+            "serviceRemediesApplyRoute": SERVICE_REMEDIES_APPLY_HTTP_ROUTE,
             "serviceMonitorsRunDueRoute": SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE,
             "serviceMonitorPauseRoute": SERVICE_MONITOR_PAUSE_HTTP_ROUTE,
             "serviceMonitorResumeRoute": SERVICE_MONITOR_RESUME_HTTP_ROUTE,
@@ -273,6 +295,7 @@ pub fn service_contracts_metadata() -> Value {
             "contractsResource": SERVICE_CONTRACTS_RESOURCE,
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
             "serviceAccessPlanResource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+            "serviceRemediesApplyTool": SERVICE_REMEDIES_APPLY_MCP_TOOL_NAME,
             "serviceMonitorsRunDueTool": SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME,
             "serviceMonitorPauseTool": SERVICE_MONITOR_PAUSE_MCP_TOOL_NAME,
             "serviceMonitorResumeTool": SERVICE_MONITOR_RESUME_MCP_TOOL_NAME,
@@ -410,6 +433,22 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceMonitorTriageResponse"]["client"]["helpers"][0],
             "triageServiceMonitor"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRemediesApplyResponse"]["schemaId"],
+            SERVICE_REMEDIES_APPLY_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRemediesApplyResponse"]["http"]["route"],
+            SERVICE_REMEDIES_APPLY_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRemediesApplyResponse"]["mcp"]["tool"],
+            SERVICE_REMEDIES_APPLY_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRemediesApplyResponse"]["client"]["helpers"][0],
+            "applyServiceRemedies"
         );
     }
 }

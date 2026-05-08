@@ -132,6 +132,12 @@ monitor triage response returned by CLI `service monitors triage <id>`, HTTP
 `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, and
 `triageServiceMonitor()`. It acknowledges the related monitor incident and
 resets reviewed failure counts in one service-owned operation.
+`service-remedies-apply-response.v1.schema.json` describes the grouped remedy
+apply response returned by CLI `service remedies apply --escalation
+monitor_attention`, HTTP `POST /api/service/remedies/apply`, MCP
+`service_remedies_apply`, and `applyServiceRemedies()`. It currently supports
+the `monitor_attention` escalation and applies the same monitor triage operation
+to each active failed monitor through the service worker.
 
 ## Service Event Record v1
 

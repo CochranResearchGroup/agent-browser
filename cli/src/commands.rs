@@ -1600,6 +1600,73 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }
             Some("incidents") | Some("remedies") => {
                 let remedies_shortcut = rest[0] == "remedies";
+                if remedies_shortcut && rest.get(1).copied() == Some("apply") {
+                    let usage =
+                        "service remedies apply --escalation monitor_attention [--by <text>] [--note <text>]";
+                    let mut cmd = json!({
+                        "id": id,
+                        "action": "service_remedies_apply",
+                        "escalation": "monitor_attention",
+                    });
+                    let mut i = 2;
+                    while i < rest.len() {
+                        match rest[i] {
+                            "--escalation" => {
+                                let Some(raw) = rest.get(i + 1) else {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "Missing value for --escalation".to_string(),
+                                        usage,
+                                    });
+                                };
+                                match *raw {
+                                    "monitor_attention" => {
+                                        cmd["escalation"] = json!(raw);
+                                    }
+                                    _ => {
+                                        return Err(ParseError::InvalidValue {
+                                            message: format!(
+                                                "Invalid --escalation value for service remedies apply: {}",
+                                                raw
+                                            ),
+                                            usage,
+                                        });
+                                    }
+                                }
+                                i += 1;
+                            }
+                            "--by" => {
+                                let Some(raw) = rest.get(i + 1) else {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "Missing value for --by".to_string(),
+                                        usage,
+                                    });
+                                };
+                                cmd["by"] = json!(raw);
+                                i += 1;
+                            }
+                            "--note" => {
+                                let Some(raw) = rest.get(i + 1) else {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "Missing value for --note".to_string(),
+                                        usage,
+                                    });
+                                };
+                                cmd["note"] = json!(raw);
+                                i += 1;
+                            }
+                            other => {
+                                return Err(ParseError::InvalidValue {
+                                    message: format!(
+                                        "Unknown argument for service remedies apply: {other}"
+                                    ),
+                                    usage,
+                                });
+                            }
+                        }
+                        i += 1;
+                    }
+                    return Ok(cmd);
+                }
                 let usage = if remedies_shortcut {
                     "service remedies [--limit <n>] [--handling-state <state>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]"
                 } else {
@@ -5509,6 +5576,22 @@ mod tests {
         assert_eq!(cmd["state"], "active");
         assert_eq!(cmd["limit"], 5);
         assert_eq!(cmd["serviceName"], "JournalDownloader");
+    }
+
+    #[test]
+    fn test_service_remedies_apply_monitor_attention() {
+        let cmd = parse_command(
+            &args(
+                "service remedies apply --escalation monitor_attention --by operator --note reviewed",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_remedies_apply");
+        assert_eq!(cmd["escalation"], "monitor_attention");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "reviewed");
     }
 
     #[test]

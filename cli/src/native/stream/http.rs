@@ -193,6 +193,19 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if path == "/api/service/remedies/apply" {
+            let cmd = match service_remedies_apply_command(query) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(incident_id) = service_incident_action_id(path, "/acknowledge") {
             let incident_id = match decode_path_segment(incident_id, "service incident id") {
                 Ok(incident_id) => incident_id,
@@ -2040,6 +2053,42 @@ fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
     Ok(cmd)
 }
 
+fn service_remedies_apply_command(query: Option<&str>) -> Result<Value, String> {
+    let mut cmd = json!({
+        "action": "service_remedies_apply",
+        "escalation": "monitor_attention",
+    });
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "escalation" => match value.as_str() {
+                "monitor_attention" => cmd["escalation"] = json!(value),
+                _ => return Err(format!("Invalid escalation value: {}", value)),
+            },
+            "by" => cmd["by"] = json!(value),
+            "note" => cmd["note"] = json!(value),
+            "serviceName" | "service_name" | "service-name" => {
+                cmd["serviceName"] = json!(value);
+            }
+            "agentName" | "agent_name" | "agent-name" => {
+                cmd["agentName"] = json!(value);
+            }
+            "taskName" | "task_name" | "task-name" => {
+                cmd["taskName"] = json!(value);
+            }
+            "" => {}
+            _ => {
+                return Err(format!(
+                    "Unknown service remedies apply query parameter: {}",
+                    key
+                ))
+            }
+        }
+    }
+
+    Ok(cmd)
+}
+
 fn service_jobs_command(query: Option<&str>) -> Result<Value, String> {
     let mut cmd = json!({
         "action": "service_jobs",
@@ -2599,6 +2648,20 @@ mod tests {
                 Some("since=2026-04-22T00%3A00%3A00Z")
             )
         );
+    }
+
+    #[test]
+    fn service_remedies_apply_command_maps_query() {
+        let cmd = service_remedies_apply_command(Some(
+            "escalation=monitor_attention&by=operator&note=reviewed&service-name=JournalDownloader",
+        ))
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_remedies_apply");
+        assert_eq!(cmd["escalation"], "monitor_attention");
+        assert_eq!(cmd["by"], "operator");
+        assert_eq!(cmd["note"], "reviewed");
+        assert_eq!(cmd["serviceName"], "JournalDownloader");
     }
 
     #[test]

@@ -278,48 +278,78 @@ pub(crate) fn triage_service_monitor_in_repository(
     repository
         .mutate(|state| {
             state.refresh_derived_views();
-            let incident_index = state
+            triage_service_monitor_in_state(state, monitor_id, timestamp, actor, note.as_deref())
+        })
+        .map_err(|err| {
+            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+                format!("Unable to load service state: {}", err)
+            } else {
+                err
+            }
+        })
+}
+
+pub(crate) fn apply_persisted_service_remedies(
+    escalation: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<Value, String> {
+    let repository = default_incident_repository()?;
+    apply_service_remedies_in_repository(&repository, escalation, timestamp, actor, note)
+}
+
+pub(crate) fn apply_service_remedies_in_repository(
+    repository: &impl ServiceStateRepository,
+    escalation: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<Value, String> {
+    if escalation != "monitor_attention" {
+        return Err(format!(
+            "Unsupported automated service remedy escalation: {escalation}"
+        ));
+    }
+
+    repository
+        .mutate(|state| {
+            state.refresh_derived_views();
+            let mut monitor_ids = state
                 .incidents
                 .iter()
-                .enumerate()
-                .filter(|(_, incident)| incident.monitor_id.as_deref() == Some(monitor_id))
-                .max_by(|(_, left), (_, right)| left.latest_timestamp.cmp(&right.latest_timestamp))
-                .map(|(index, _)| index);
+                .filter(|incident| {
+                    incident.state == ServiceIncidentState::Active
+                        && incident.escalation == ServiceIncidentEscalation::MonitorAttention
+                })
+                .filter_map(|incident| incident.monitor_id.clone())
+                .collect::<Vec<_>>();
+            monitor_ids.sort();
+            monitor_ids.dedup();
 
-            let incident_id = if let Some(incident_index) = incident_index {
-                let incident = &mut state.incidents[incident_index];
-                if incident.acknowledged_at.is_none() {
-                    incident.acknowledged_at = Some(timestamp.to_string());
-                }
-                incident.acknowledged_by = Some(actor.to_string());
-                incident.acknowledgement_note = note.clone();
-                let incident = incident.clone();
-                let incident_id = incident.id.clone();
-                push_service_event_bounded(
-                    state,
-                    service_incident_handling_event(
-                        &incident,
-                        ServiceEventKind::IncidentAcknowledged,
-                        timestamp,
-                        actor,
-                        note.as_deref(),
-                    ),
-                );
-                Some(incident_id)
-            } else {
-                None
-            };
+            let mut monitor_results = Vec::with_capacity(monitor_ids.len());
+            for monitor_id in &monitor_ids {
+                let (monitor, incident) =
+                    triage_service_monitor_in_state(state, monitor_id, timestamp, actor, note)?;
+                let monitor_state = monitor.state;
+                monitor_results.push(json!({
+                    "id": monitor_id,
+                    "monitor": monitor,
+                    "state": monitor_state,
+                    "updated": true,
+                    "resetFailures": true,
+                    "acknowledged": incident.is_some(),
+                    "incident": incident,
+                }));
+            }
 
-            let monitor = reset_monitor_failures(state, monitor_id)?;
-            state.refresh_derived_views();
-            let incident = incident_id.and_then(|incident_id| {
-                state
-                    .incidents
-                    .iter()
-                    .find(|incident| incident.id == incident_id)
-                    .cloned()
-            });
-            Ok((monitor, incident))
+            Ok(json!({
+                "applied": true,
+                "escalation": escalation,
+                "count": monitor_results.len(),
+                "monitorIds": monitor_ids,
+                "monitorResults": monitor_results,
+            }))
         })
         .map_err(|err| {
             if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
@@ -478,6 +508,57 @@ fn service_incident_handling_event(
         details: Some(details),
         ..ServiceEvent::default()
     }
+}
+
+fn triage_service_monitor_in_state(
+    state: &mut ServiceState,
+    monitor_id: &str,
+    timestamp: &str,
+    actor: &str,
+    note: Option<&str>,
+) -> Result<(SiteMonitor, Option<ServiceIncident>), String> {
+    let incident_index = state
+        .incidents
+        .iter()
+        .enumerate()
+        .filter(|(_, incident)| incident.monitor_id.as_deref() == Some(monitor_id))
+        .max_by(|(_, left), (_, right)| left.latest_timestamp.cmp(&right.latest_timestamp))
+        .map(|(index, _)| index);
+
+    let incident_id = if let Some(incident_index) = incident_index {
+        let incident = &mut state.incidents[incident_index];
+        if incident.acknowledged_at.is_none() {
+            incident.acknowledged_at = Some(timestamp.to_string());
+        }
+        incident.acknowledged_by = Some(actor.to_string());
+        incident.acknowledgement_note = note.map(str::to_string);
+        let incident = incident.clone();
+        let incident_id = incident.id.clone();
+        push_service_event_bounded(
+            state,
+            service_incident_handling_event(
+                &incident,
+                ServiceEventKind::IncidentAcknowledged,
+                timestamp,
+                actor,
+                note,
+            ),
+        );
+        Some(incident_id)
+    } else {
+        None
+    };
+
+    let monitor = reset_monitor_failures(state, monitor_id)?;
+    state.refresh_derived_views();
+    let incident = incident_id.and_then(|incident_id| {
+        state
+            .incidents
+            .iter()
+            .find(|incident| incident.id == incident_id)
+            .cloned()
+    });
+    Ok((monitor, incident))
 }
 
 fn push_service_event_bounded(state: &mut ServiceState, event: ServiceEvent) {

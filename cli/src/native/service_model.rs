@@ -1343,6 +1343,29 @@ pub fn assert_service_monitor_triage_response_contract(value: &serde_json::Value
 }
 
 #[cfg(test)]
+pub fn assert_service_remedies_apply_response_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "service remedies apply response",
+        value,
+        &[
+            "applied",
+            "escalation",
+            "count",
+            "monitorIds",
+            "monitorResults",
+        ],
+        &[],
+    );
+    assert_eq!(value["applied"], true);
+    assert_eq!(value["escalation"], "monitor_attention");
+    assert!(value["count"].is_u64());
+    assert!(value["monitorIds"].is_array());
+    for result in value["monitorResults"].as_array().unwrap() {
+        assert_service_monitor_triage_response_contract(result);
+    }
+}
+
+#[cfg(test)]
 pub fn assert_service_monitor_run_due_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "monitor run-due response",
@@ -4512,6 +4535,10 @@ mod tests {
             "../../../docs/dev/contracts/service-monitor-triage-response.v1.schema.json"
         ))
         .unwrap();
+        let remedies_apply_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-remedies-apply-response.v1.schema.json"
+        ))
+        .unwrap();
 
         assert_schema_required_fields(&job_cancel_schema, &["cancelled", "job"]);
         assert_schema_required_fields(
@@ -4530,6 +4557,16 @@ mod tests {
                 "resetFailures",
                 "acknowledged",
                 "incident",
+            ],
+        );
+        assert_schema_required_fields(
+            &remedies_apply_schema,
+            &[
+                "applied",
+                "escalation",
+                "count",
+                "monitorIds",
+                "monitorResults",
             ],
         );
 
@@ -4652,6 +4689,55 @@ mod tests {
                 "eventIds": ["event-monitor-failed"],
                 "jobIds": [],
             },
+        }));
+        assert_service_remedies_apply_response_contract(&json!({
+            "applied": true,
+            "escalation": "monitor_attention",
+            "count": 1,
+            "monitorIds": ["google-login-freshness"],
+            "monitorResults": [{
+                "id": "google-login-freshness",
+                "monitor": {
+                    "id": "google-login-freshness",
+                    "name": "Google login freshness",
+                    "target": {"site_policy": "google"},
+                    "intervalMs": 60000,
+                    "state": "active",
+                    "lastCheckedAt": null,
+                    "lastSucceededAt": null,
+                    "lastFailedAt": null,
+                    "lastResult": null,
+                    "consecutiveFailures": 0,
+                },
+                "state": "active",
+                "updated": true,
+                "resetFailures": true,
+                "acknowledged": true,
+                "incident": {
+                    "id": "monitor:google-login-freshness",
+                    "browserId": null,
+                    "monitorId": "google-login-freshness",
+                    "monitorTarget": {"site_policy": "google"},
+                    "monitorResult": "site_policy_missing",
+                    "label": "Monitor google-login-freshness",
+                    "state": "active",
+                    "severity": "warning",
+                    "escalation": "monitor_attention",
+                    "recommendedAction": "Inspect the failed monitor target and last result; fix the target, refresh login state, pause the monitor, or reset reviewed failures before rerunning.",
+                    "acknowledgedAt": "2026-04-22T00:00:01Z",
+                    "acknowledgedBy": "operator",
+                    "acknowledgementNote": "reviewed",
+                    "resolvedAt": null,
+                    "resolvedBy": null,
+                    "resolutionNote": null,
+                    "latestTimestamp": "2026-04-22T00:00:00Z",
+                    "latestMessage": "Monitor failed",
+                    "latestKind": "reconciliation_error",
+                    "currentHealth": null,
+                    "eventIds": ["event-monitor-failed"],
+                    "jobIds": [],
+                },
+            }],
         }));
     }
 

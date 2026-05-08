@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-remedies-apply-response.v1.schema.json",
+  "title": "agent-browser service remedies apply response",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "applied",
+    "escalation",
+    "count",
+    "monitorIds",
+    "monitorResults"
+  ],
+  "properties": {
+    "applied": {
+      "type": "boolean",
+      "const": true
+    },
+    "escalation": {
+      "type": "string",
+      "enum": ["monitor_attention"]
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "monitorIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "monitorResults": {
+      "type": "array",
+      "items": {
+        "$ref": "service-monitor-triage-response.v1.schema.json"
+      }
+    }
+  }
+}

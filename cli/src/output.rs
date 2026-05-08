@@ -1340,6 +1340,33 @@ fn format_service_monitor_state_text(data: &serde_json::Value) -> Option<String>
     Some(format!("Monitor {id}: state={state}\n  {line}"))
 }
 
+fn format_service_remedies_apply_text(data: &serde_json::Value) -> Option<String> {
+    let escalation = value_str(data, "escalation", "unknown");
+    let count = data
+        .get("count")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let monitor_ids = data
+        .get("monitorIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let ids = if monitor_ids.is_empty() {
+        "none".to_string()
+    } else {
+        monitor_ids.join(",")
+    };
+
+    Some(format!(
+        "Applied service remedies: escalation={escalation} count={count}\nMonitor IDs: {ids}"
+    ))
+}
+
 fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
     let service_state = data.get("service_state")?;
     let control_plane = service_state.get("controlPlane");
@@ -1584,6 +1611,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
             )
         ) {
             if let Some(output) = format_service_monitor_state_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_remedies_apply") {
+            if let Some(output) = format_service_remedies_apply_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -4006,6 +4039,7 @@ Usage:
   agent-browser service jobs [--id <job-id>] [--limit <n>] [--state <state>] [--action <action>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service incidents [--summary] [--remedies] [--id <incident-id>] [--limit <n>] [--state <state>] [--severity <severity>] [--escalation <escalation>] [--handling-state <state>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service remedies [--limit <n>] [--handling-state <state>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service remedies apply --escalation monitor_attention [--by <text>] [--note <text>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
 
 Commands:
@@ -4034,6 +4068,7 @@ Commands:
   jobs                  Show recent service control-plane jobs
   incidents             Show grouped retained service incidents, summary groups, or remedy groups with --remedies
   remedies              Show active browser_degraded, monitor_attention, and os_degraded_possible remedy groups
+  remedies apply        Apply supported active remedy groups through the service worker
   events                Show recent service reconciliation, launch, browser health, recovery, profile lease wait, and tab lifecycle events
 
 Notes:
@@ -4056,6 +4091,7 @@ Notes:
   - service monitors pause and service monitors resume update only the retained monitor state, preserving health history for later triage.
   - service monitors triage <id> acknowledges the related monitor incident and resets reviewed failure counts in one service-owned operation.
   - service incidents --remedies and service remedies show active browser_degraded, monitor_attention, and os_degraded_possible groups for compact operator triage.
+  - service remedies apply --escalation monitor_attention acknowledges related monitor incidents and resets reviewed monitor failures for all active monitor_attention remedies.
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
@@ -4124,6 +4160,7 @@ Examples:
   agent-browser service incidents --summary --state active --handling-state unacknowledged
   agent-browser service incidents --remedies
   agent-browser service remedies
+  agent-browser service remedies apply --escalation monitor_attention --by operator --note reviewed
   agent-browser service incidents --id browser-1
   agent-browser service incidents --handling-state unacknowledged
   agent-browser service incidents --severity critical --escalation os_degraded_possible
@@ -4155,7 +4192,7 @@ Commands:
 
 Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
-  - MCP tools include service_request, service_job_cancel, service_incidents, service_trace, service_profile_upsert, service_profile_freshness_update, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_monitor_upsert, service_monitor_delete, service_monitors_run_due, service_monitor_pause, service_monitor_resume, service_monitor_reset_failures, service_monitor_triage, service_provider_upsert, service_provider_delete, browser_navigate, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_get, browser_cookies_set, browser_cookies_clear, browser_storage_get, browser_storage_set, browser_storage_clear, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_start, browser_har_stop, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, browser_clipboard, browser_back, browser_forward, browser_reload, browser_tab_new, browser_tab_switch, browser_tab_close, browser_set_content, browser_command, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, browser_fill, browser_wait, browser_type, browser_press, browser_hover, browser_select, browser_get_text, browser_get_value, browser_get_attribute, browser_get_html, browser_get_styles, browser_count, browser_get_box, browser_is_visible, browser_is_enabled, browser_check, browser_is_checked, browser_uncheck, browser_scroll, browser_scroll_into_view, browser_focus, and browser_clear.
+  - MCP tools include service_request, service_job_cancel, service_incidents, service_remedies_apply, service_trace, service_profile_upsert, service_profile_freshness_update, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_monitor_upsert, service_monitor_delete, service_monitors_run_due, service_monitor_pause, service_monitor_resume, service_monitor_reset_failures, service_monitor_triage, service_provider_upsert, service_provider_delete, browser_navigate, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_get, browser_cookies_set, browser_cookies_clear, browser_storage_get, browser_storage_set, browser_storage_clear, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_start, browser_har_stop, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, browser_clipboard, browser_back, browser_forward, browser_reload, browser_tab_new, browser_tab_switch, browser_tab_close, browser_set_content, browser_command, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, browser_fill, browser_wait, browser_type, browser_press, browser_hover, browser_select, browser_get_text, browser_get_value, browser_get_attribute, browser_get_html, browser_get_styles, browser_count, browser_get_box, browser_is_visible, browser_is_enabled, browser_check, browser_is_checked, browser_uncheck, browser_scroll, browser_scroll_into_view, browser_focus, and browser_clear.
   - service_request accepts one intent object with serviceName, agentName, taskName, siteId/loginId, targetServiceId, profile or runtimeProfile hints, profileLeasePolicy, profileLeaseWaitTimeoutMs, action, params, and jobTimeoutMs, then queues the browser command through the same service-owned control path.
   - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks.
   - HTTP GET /api/service/profiles/lookup applies the authoritative service profile selector for serviceName plus targetServiceId, siteId, loginId, or their array aliases and returns the selected profile, reason, readiness, and readiness summary.
@@ -4168,6 +4205,7 @@ Notes:
   - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
   - service_trace reads persisted service state and returns related events, jobs, incidents, activity, profile lease wait summaries, ownership summary contexts, and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP.
+  - service_remedies_apply applies supported active remedy groups such as monitor_attention through the same service worker as HTTP POST /api/service/remedies/apply.
   - service_profile_upsert, service_profile_freshness_update, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_monitor_upsert, service_monitor_delete, service_monitor_pause, service_monitor_resume, service_monitor_reset_failures, service_monitor_triage, service_provider_upsert, and service_provider_delete mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP. service_monitors_run_due runs due active monitors through the same service worker.
   - Service profile records distinguish caller service sharing from target-service login scope: sharedServiceIds lists allowed caller services, targetServiceIds lists intended login targets, and authenticatedServiceIds lists targets currently believed authenticated.
   - Service profile records and profile allocation rows include targetReadiness, a no-launch readiness view for target services. Google targets without authenticated evidence report needs_manual_seeding and recommend detached runtime login before attachable automation. Once a managed profile lists the target in authenticatedServiceIds, readiness changes to seeded_unknown_freshness and access-plan no longer treats first-login seeding as a required manual action. Explicit fresh, stale, and blocked_by_attached_devtools rows, plus rows with lastVerifiedAt or freshnessExpiresAt, are preserved through derived readiness refreshes. Software clients can use updateServiceProfileFreshness for service-side bounded probe updates that preserve unrelated profile fields.
@@ -4598,6 +4636,7 @@ Service:
   service jobs               Show recent service control-plane jobs
   service incidents          Show grouped retained service incidents; add --summary for operator remedy groups
   service remedies           Show active degraded-browser, monitor, and possible OS-degraded remedy groups
+  service remedies apply     Apply supported active remedy groups through the service worker
   service events             Show recent service events
 
 MCP:
@@ -4902,6 +4941,7 @@ Examples:
   agent-browser service incidents        # Inspect grouped retained service incidents
   agent-browser service incidents --summary # Inspect grouped operator remedies
   agent-browser service remedies         # Inspect degraded-browser, monitor, and OS-degraded remedies
+  agent-browser service remedies apply --escalation monitor_attention # Apply monitor remedies
   agent-browser service events           # Inspect recent service events
   agent-browser --color-scheme dark open example.com  # Dark mode
   agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile

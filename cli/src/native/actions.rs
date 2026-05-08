@@ -56,9 +56,9 @@ use super::service_health::{
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use super::service_incidents::{
-    acknowledge_persisted_service_incident, resolve_persisted_service_incident,
-    service_incident_summary, service_incidents_response, triage_persisted_service_monitor,
-    ServiceIncidentFilters,
+    acknowledge_persisted_service_incident, apply_persisted_service_remedies,
+    resolve_persisted_service_incident, service_incident_summary, service_incidents_response,
+    triage_persisted_service_monitor, ServiceIncidentFilters,
 };
 use super::service_jobs::cancel_persisted_service_job;
 use super::service_lifecycle::{
@@ -212,6 +212,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_reconcile"
             | "service_job_cancel"
             | "service_browser_retry"
+            | "service_remedies_apply"
             | "service_profile_upsert"
             | "service_profile_freshness_update"
             | "service_profile_delete"
@@ -2460,6 +2461,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_reconcile" => handle_service_reconcile(cmd).await,
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_browser_retry" => handle_service_browser_retry(cmd).await,
+        "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
         "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
         "service_profile_freshness_update" => handle_service_profile_freshness_update(cmd).await,
         "service_profile_delete" => handle_service_profile_delete(cmd).await,
@@ -7064,6 +7066,20 @@ async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_remedies_apply(cmd: &Value) -> Result<Value, String> {
+    let escalation = cmd
+        .get("escalation")
+        .and_then(|value| value.as_str())
+        .unwrap_or("monitor_attention");
+    let by = cmd.get("by").and_then(|value| value.as_str());
+    let note = cmd.get("note").and_then(|value| value.as_str());
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+
+    apply_persisted_service_remedies(escalation, &timestamp, &actor, note.as_deref())
+}
+
 async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, String> {
     let incident_id = cmd
         .get("incidentId")
@@ -10413,6 +10429,7 @@ mod tests {
         assert_service_provider_delete_response_contract,
         assert_service_provider_upsert_response_contract,
         assert_service_reconcile_response_contract,
+        assert_service_remedies_apply_response_contract,
         assert_service_session_delete_response_contract,
         assert_service_session_upsert_response_contract,
         assert_service_site_policy_delete_response_contract,
@@ -13688,6 +13705,49 @@ mod tests {
             "operator"
         );
         assert_eq!(triage_monitor["data"]["monitor"]["consecutiveFailures"], 0);
+
+        let mut persisted = store.load().unwrap();
+        let monitor = persisted
+            .monitors
+            .get_mut("google-login-freshness")
+            .expect("monitor should exist");
+        monitor.state = MonitorState::Faulted;
+        monitor.consecutive_failures = 3;
+        monitor.last_result = Some("site_policy_missing".to_string());
+        persisted.events.push(ServiceEvent {
+            id: "event-google-login-freshness-failed-again".to_string(),
+            timestamp: "2026-04-22T00:05:00Z".to_string(),
+            kind: ServiceEventKind::ReconciliationError,
+            message: "Service monitor google-login-freshness failed again".to_string(),
+            details: Some(json!({
+                "incidentId": "monitor:google-login-freshness",
+                "monitorId": "google-login-freshness",
+                "monitorResult": "site_policy_missing",
+                "monitorTarget": {"site_policy": "google"}
+            })),
+            ..ServiceEvent::default()
+        });
+        persisted.refresh_derived_views();
+        store.save(&persisted).unwrap();
+
+        let apply_remedies = execute_command(
+            &json!({
+                "action": "service_remedies_apply",
+                "id": "svc-remedies-apply-1",
+                "escalation": "monitor_attention",
+                "by": "operator",
+                "note": "reviewed group"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(apply_remedies["success"], true);
+        assert_service_remedies_apply_response_contract(&apply_remedies["data"]);
+        assert_eq!(apply_remedies["data"]["count"], 1);
+        assert_eq!(
+            apply_remedies["data"]["monitorIds"],
+            json!(["google-login-freshness"])
+        );
 
         let delete_session = execute_command(
             &json!({

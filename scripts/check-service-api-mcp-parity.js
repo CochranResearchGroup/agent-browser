@@ -128,6 +128,14 @@ const serviceSurface = [
     httpNeedles: ['path == "/api/service/trace"', 'service_trace_command(query)'],
   },
   {
+    tool: 'service_remedies_apply',
+    method: 'POST',
+    route: '/api/service/remedies/apply',
+    docsNeedles: ['/api/service/remedies/apply'],
+    httpNeedles: ['path == "/api/service/remedies/apply"', 'service_remedies_apply_command(query)'],
+    clientNeedles: ['applyServiceRemedies', '/api/service/remedies/apply'],
+  },
+  {
     tool: 'service_profile_upsert',
     method: 'POST',
     route: '/api/service/profiles/<id>',

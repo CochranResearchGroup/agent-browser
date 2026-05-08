@@ -70,6 +70,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanOptions} ServiceAccessPlanOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanResponse} ServiceAccessPlanResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileFreshnessUpdateOptions} ServiceProfileFreshnessUpdateOptions
+ * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyOptions} ServiceRemediesApplyOptions
+ * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyResponse} ServiceRemediesApplyResponse
  */
 
 /**
@@ -656,6 +658,21 @@ export function cancelServiceJob({ jobId, ...options }) {
  */
 export function retryServiceBrowser({ browserId, by, note, serviceName, agentName, taskName, ...options }) {
   return servicePost(options, `/api/service/browsers/${browserId}/retry`, undefined, {
+    by,
+    note,
+    'service-name': serviceName,
+    'agent-name': agentName,
+    'task-name': taskName,
+  });
+}
+
+/**
+ * @param {ServiceRemediesApplyOptions} options
+ * @returns {Promise<ServiceRemediesApplyResponse>}
+ */
+export function applyServiceRemedies({ escalation = 'monitor_attention', by, note, serviceName, agentName, taskName, ...options }) {
+  return servicePost(options, '/api/service/remedies/apply', undefined, {
+    escalation,
     by,
     note,
     'service-name': serviceName,

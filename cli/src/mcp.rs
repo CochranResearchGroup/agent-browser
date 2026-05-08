@@ -716,7 +716,7 @@ fn service_mcp_tools() -> Vec<Value> {
                     },
                     "remediesOnly": {
                         "type": "boolean",
-                        "description": "When true, return only active browser_degraded and os_degraded_possible remedy groups for operator triage."
+                        "description": "When true, return only active browser_degraded, monitor_attention, and os_degraded_possible remedy groups for operator triage."
                     },
                     "state": {
                         "type": "string",
@@ -730,7 +730,7 @@ fn service_mcp_tools() -> Vec<Value> {
                     },
                     "escalation": {
                         "type": "string",
-                        "enum": ["none", "browser_degraded", "browser_recovery", "job_attention", "service_triage", "os_degraded_possible"],
+                        "enum": ["none", "browser_degraded", "browser_recovery", "job_attention", "monitor_attention", "service_triage", "os_degraded_possible"],
                         "description": "Filter by service-derived escalation bucket."
                     },
                     "handlingState": {
@@ -773,6 +773,42 @@ fn service_mcp_tools() -> Vec<Value> {
                     }
                 },
                 "required": []
+            }
+        }),
+        json!({
+            "name": "service_remedies_apply",
+            "title": "Apply service remedies",
+            "description": "Apply a supported active service remedy through the service worker. The first supported escalation is monitor_attention, which triages all active monitor attention incidents.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "escalation": {
+                        "type": "string",
+                        "enum": ["monitor_attention"],
+                        "description": "Remedy escalation to apply. Currently only monitor_attention is automated."
+                    },
+                    "by": {
+                        "type": "string",
+                        "description": "Operator or service name recording the remedy application."
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Optional remedy note."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                }
             }
         }),
         json!({
@@ -3905,6 +3941,7 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
     match name {
         "service_job_cancel" => call_service_job_cancel(arguments, session),
         "service_browser_retry" => call_service_browser_retry(arguments, session),
+        "service_remedies_apply" => call_service_remedies_apply(arguments, session),
         "service_incidents" => call_service_incidents(arguments, session),
         "service_trace" => call_service_trace(arguments, session),
         "service_profile_upsert" => call_service_profile_upsert(arguments, session),
@@ -4139,6 +4176,7 @@ fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, Jso
                     "browser_degraded",
                     "browser_recovery",
                     "job_attention",
+                    "monitor_attention",
                     "service_triage",
                     "os_degraded_possible",
                 ],
@@ -4189,6 +4227,32 @@ fn call_service_incidents(arguments: &Value, session: &str) -> Result<Value, Jso
         data,
         false,
     ))
+}
+
+fn call_service_remedies_apply(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let escalation =
+        optional_enum_string_argument(arguments, "escalation", &["monitor_attention"])?
+            .unwrap_or("monitor_attention");
+    let by = optional_string_argument(arguments, "by")?;
+    let note = optional_string_argument(arguments, "note")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let mut command = json!({
+        "id": format!("mcp-service-remedies-apply-{}", uuid::Uuid::new_v4()),
+        "action": "service_remedies_apply",
+        "escalation": escalation,
+    });
+    if let Some(by) = by {
+        command["by"] = json!(by);
+    }
+    if let Some(note) = note {
+        command["note"] = json!(note);
+    }
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+
+    send_queued_tool_command("service_remedies_apply", session, trace, command)
 }
 
 fn call_service_site_policy_upsert(
@@ -8538,9 +8602,24 @@ mod tests {
             service_incidents["inputSchema"]["properties"]["escalation"]["enum"]
                 .as_array()
                 .unwrap()
+                .contains(&json!("monitor_attention"))
+        );
+        assert!(
+            service_incidents["inputSchema"]["properties"]["escalation"]["enum"]
+                .as_array()
+                .unwrap()
                 .contains(&json!("os_degraded_possible"))
         );
         assert!(service_incidents["inputSchema"]["properties"]["summary"].is_object());
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "service_remedies_apply"
+                && tool["inputSchema"]["properties"]["escalation"]["enum"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("monitor_attention"))));
         assert!(response["result"]["tools"]
             .as_array()
             .unwrap()

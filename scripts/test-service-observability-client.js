@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  applyServiceRemedies,
   findServiceProfileForIdentity,
   deleteServiceMonitor,
   getServiceAccessPlan,
@@ -316,6 +317,31 @@ async function main() {
   );
   assert.equal(monitorRunDue.calls[0].init.method, 'POST');
   assert.equal(monitorRunDueResult.failed, 1);
+
+  const remediesApply = createFetchRecorder({
+    success: true,
+    data: {
+      applied: true,
+      escalation: 'monitor_attention',
+      count: 1,
+      monitorIds: ['google-login-freshness'],
+      monitorResults: [monitorTriageResult],
+    },
+  });
+  const remediesApplyResult = await applyServiceRemedies({
+    escalation: 'monitor_attention',
+    by: 'operator',
+    note: 'reviewed',
+    serviceName: 'JournalDownloader',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: remediesApply.fetch,
+  });
+  assert.equal(
+    remediesApply.calls[0].url,
+    'http://127.0.0.1:4849/api/service/remedies/apply?escalation=monitor_attention&by=operator&note=reviewed&service-name=JournalDownloader',
+  );
+  assert.equal(remediesApply.calls[0].init.method, 'POST');
+  assert.equal(remediesApplyResult.count, 1);
 
   const allocation = createFetchRecorder({
     success: true,
