@@ -95,6 +95,26 @@ export function parseJsonOutput(output, label) {
   }
 }
 
+export function assertServiceStatusDidNotLaunch(status, label) {
+  assert(
+    status.data?.control_plane?.browser_health === 'NotStarted',
+    `${label} launched browser: ${JSON.stringify(status.data?.control_plane)}`,
+  );
+}
+
+export async function seedIncidentSummarySmokeState(context, {
+  agentName,
+  launchLabel = 'service status',
+  serviceName,
+  taskName,
+}) {
+  const result = await runCli(context, ['--json', '--session', context.session, 'service', 'status']);
+  const status = parseJsonOutput(result.stdout, launchLabel);
+  assert(status.success === true, `${launchLabel} failed before seed: ${result.stdout}${result.stderr}`);
+  assertServiceStatusDidNotLaunch(status, `${launchLabel} before incident seed`);
+  seedIncidentSummarySmokeEvents(context, { serviceName, agentName, taskName });
+}
+
 export function seedIncidentSummarySmokeEvents(context, {
   agentName,
   serviceName,
@@ -163,6 +183,38 @@ function findIncidentSummaryGroup(summary, escalation, severity, state) {
   );
 }
 
+export const remedySmokeExpectedGroups = [
+  {
+    escalation: 'os_degraded_possible',
+    severity: 'critical',
+    state: 'active',
+    count: 2,
+    incidentIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+    browserIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+    remedyApplyCommand: 'agent-browser service remedies apply --escalation os_degraded_possible',
+    recommendedActionIncludes: 'host OS',
+  },
+  {
+    escalation: 'browser_degraded',
+    severity: 'warning',
+    state: 'active',
+    count: 1,
+    incidentIds: ['browser-summary-degraded'],
+    browserIds: ['browser-summary-degraded'],
+    remedyApplyCommand: 'agent-browser service remedies apply --escalation browser_degraded',
+    recommendedActionIncludes: 'browser health',
+  },
+];
+
+export function expectedRemedySmokeResponse({ groupCount = 2 } = {}) {
+  return {
+    count: 3,
+    matched: 3,
+    groupCount,
+    groups: remedySmokeExpectedGroups,
+  };
+}
+
 export function incidentSummarySmokeFilterCases({
   agentName,
   serviceName,
@@ -184,31 +236,7 @@ export function incidentSummarySmokeFilterCases({
         taskName,
       },
       expected: {
-        count: 3,
-        matched: 3,
-        groupCount: 2,
-        groups: [
-          {
-            escalation: 'os_degraded_possible',
-            severity: 'critical',
-            state: 'active',
-            count: 2,
-            incidentIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
-            browserIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
-            remedyApplyCommand: 'agent-browser service remedies apply --escalation os_degraded_possible',
-            recommendedActionIncludes: 'host OS',
-          },
-          {
-            escalation: 'browser_degraded',
-            severity: 'warning',
-            state: 'active',
-            count: 1,
-            incidentIds: ['browser-summary-degraded'],
-            browserIds: ['browser-summary-degraded'],
-            remedyApplyCommand: 'agent-browser service remedies apply --escalation browser_degraded',
-            recommendedActionIncludes: 'browser health',
-          },
-        ],
+        ...expectedRemedySmokeResponse(),
       },
     },
     {
@@ -409,6 +437,32 @@ export function assertIncidentSummaryFilteredResponse(data, expected, label) {
         `${label} recommended action mismatch: ${JSON.stringify(group)}`,
       );
     }
+  }
+}
+
+export function assertServiceRemediesJsonResponse(data, label) {
+  assert(data?.filters?.remediesOnly === true, `${label} missing remediesOnly filter: ${JSON.stringify(data)}`);
+  assert(data?.filters?.state === 'active', `${label} missing active state filter: ${JSON.stringify(data)}`);
+  assertIncidentSummaryFilteredResponse(data, expectedRemedySmokeResponse(), label);
+}
+
+export function assertServiceRemediesTextOutput(output, label) {
+  assert(output.includes('Incident groups: 2'), `${label} missing group count:\n${output}`);
+  for (const group of remedySmokeExpectedGroups) {
+    assert(
+      output.includes(
+        `${group.severity} escalation=${group.escalation} state=${group.state} count=${group.count}`,
+      ),
+      `${label} missing ${group.escalation} group:\n${output}`,
+    );
+    assert(
+      output.includes(`browsers=${group.browserIds.join(',')}`),
+      `${label} missing ${group.escalation} browsers:\n${output}`,
+    );
+    assert(
+      output.includes(`apply=${group.remedyApplyCommand}`),
+      `${label} missing ${group.escalation} apply command:\n${output}`,
+    );
   }
 }
 

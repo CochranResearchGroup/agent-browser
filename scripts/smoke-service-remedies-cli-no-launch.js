@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import {
-  assert,
+  assertServiceRemediesTextOutput,
+  assertServiceStatusDidNotLaunch,
   closeSession,
   createSmokeContext,
   parseJsonOutput,
   runCli,
-  seedIncidentSummarySmokeEvents,
+  seedIncidentSummarySmokeState,
 } from './smoke-utils.js';
 
 const context = createSmokeContext({
@@ -28,19 +29,8 @@ async function cleanup() {
   }
 }
 
-async function seedIncidentEvents() {
-  const result = await runCli(context, ['--json', '--session', session, 'service', 'status']);
-  const status = parseJsonOutput(result.stdout, 'service status');
-  assert(status.success === true, `service status failed before seed: ${result.stdout}${result.stderr}`);
-  assert(
-    status.data?.control_plane?.browser_health === 'NotStarted',
-    `service status launched browser before remedies smoke: ${JSON.stringify(status.data?.control_plane)}`,
-  );
-  seedIncidentSummarySmokeEvents(context, { serviceName, agentName, taskName });
-}
-
 try {
-  await seedIncidentEvents();
+  await seedIncidentSummarySmokeState(context, { serviceName, agentName, taskName });
   const remedies = await runCli(context, [
     '--session',
     session,
@@ -54,39 +44,11 @@ try {
     taskName,
   ]);
 
-  const output = remedies.stdout;
-  assert(output.includes('Incident groups: 2'), `remedies output missing group count:\n${output}`);
-  assert(
-    output.includes('critical escalation=os_degraded_possible state=active count=2'),
-    `remedies output missing OS-degraded group:\n${output}`,
-  );
-  assert(
-    output.includes('warning escalation=browser_degraded state=active count=1'),
-    `remedies output missing degraded-browser group:\n${output}`,
-  );
-  assert(
-    output.includes('browsers=browser-summary-faulted-1,browser-summary-faulted-2'),
-    `remedies output missing affected faulted browsers:\n${output}`,
-  );
-  assert(
-    output.includes('browsers=browser-summary-degraded'),
-    `remedies output missing affected degraded browser:\n${output}`,
-  );
-  assert(
-    output.includes('apply=agent-browser service remedies apply --escalation os_degraded_possible'),
-    `remedies output missing OS-degraded apply command:\n${output}`,
-  );
-  assert(
-    output.includes('apply=agent-browser service remedies apply --escalation browser_degraded'),
-    `remedies output missing degraded-browser apply command:\n${output}`,
-  );
+  assertServiceRemediesTextOutput(remedies.stdout, 'service remedies text output');
 
   const statusResult = await runCli(context, ['--json', '--session', session, 'service', 'status']);
   const status = parseJsonOutput(statusResult.stdout, 'service status after remedies');
-  assert(
-    status.data?.control_plane?.browser_health === 'NotStarted',
-    `service remedies launched browser: ${JSON.stringify(status.data?.control_plane)}`,
-  );
+  assertServiceStatusDidNotLaunch(status, 'service remedies');
 
   await cleanup();
   console.log('Service remedies CLI no-launch smoke passed');
