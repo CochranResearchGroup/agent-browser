@@ -143,7 +143,9 @@
               "latestTimestamp",
               "recommendedAction",
               "incidentIds",
-              "monitorIds"
+              "browserIds",
+              "monitorIds",
+              "remedyApplyCommand"
             ],
             "properties": {
               "escalation": {
@@ -171,6 +173,13 @@
                   "type": "string"
                 }
               },
+              "browserIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Browser ids represented in this group when incidents came from browser health or browser-scoped job events."
+              },
               "monitorIds": {
                 "type": "array",
                 "items": {
@@ -184,6 +193,10 @@
                   "type": "string"
                 },
                 "description": "CLI reset commands for monitor ids in this group, suitable after a reviewed failure has been triaged."
+              },
+              "remedyApplyCommand": {
+                "type": ["string", "null"],
+                "description": "CLI command that applies this active remedy group through the service worker when the escalation supports batch application."
               }
             },
             "additionalProperties": true

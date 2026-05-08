@@ -194,6 +194,8 @@ export function incidentSummarySmokeFilterCases({
             state: 'active',
             count: 2,
             incidentIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+            browserIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+            remedyApplyCommand: 'agent-browser service remedies apply --escalation os_degraded_possible',
             recommendedActionIncludes: 'host OS',
           },
           {
@@ -202,6 +204,8 @@ export function incidentSummarySmokeFilterCases({
             state: 'active',
             count: 1,
             incidentIds: ['browser-summary-degraded'],
+            browserIds: ['browser-summary-degraded'],
+            remedyApplyCommand: 'agent-browser service remedies apply --escalation browser_degraded',
             recommendedActionIncludes: 'browser health',
           },
         ],
@@ -238,6 +242,8 @@ export function incidentSummarySmokeFilterCases({
             state: 'active',
             count: 2,
             incidentIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+            browserIds: ['browser-summary-faulted-1', 'browser-summary-faulted-2'],
+            remedyApplyCommand: 'agent-browser service remedies apply --escalation os_degraded_possible',
             recommendedActionIncludes: 'host OS',
           },
         ],
@@ -273,6 +279,8 @@ export function incidentSummarySmokeFilterCases({
             state: 'active',
             count: 1,
             incidentIds: ['browser-summary-degraded'],
+            browserIds: ['browser-summary-degraded'],
+            remedyApplyCommand: 'agent-browser service remedies apply --escalation browser_degraded',
             recommendedActionIncludes: 'browser health',
           },
         ],
@@ -320,6 +328,15 @@ export function assertIncidentSummarySmokeShape(summary, label) {
     `${label} summary critical IDs mismatch: ${JSON.stringify(critical)}`,
   );
   assert(
+    critical.browserIds.includes('browser-summary-faulted-1') &&
+      critical.browserIds.includes('browser-summary-faulted-2'),
+    `${label} summary critical browser IDs mismatch: ${JSON.stringify(critical)}`,
+  );
+  assert(
+    critical.remedyApplyCommand === 'agent-browser service remedies apply --escalation os_degraded_possible',
+    `${label} summary critical apply command mismatch: ${JSON.stringify(critical)}`,
+  );
+  assert(
     critical.recommendedAction.includes('host OS'),
     `${label} summary critical remedy mismatch: ${JSON.stringify(critical)}`,
   );
@@ -330,6 +347,14 @@ export function assertIncidentSummarySmokeShape(summary, label) {
   assert(
     warning.incidentIds.includes('browser-summary-degraded'),
     `${label} summary warning IDs mismatch: ${JSON.stringify(warning)}`,
+  );
+  assert(
+    warning.browserIds.includes('browser-summary-degraded'),
+    `${label} summary warning browser IDs mismatch: ${JSON.stringify(warning)}`,
+  );
+  assert(
+    warning.remedyApplyCommand === 'agent-browser service remedies apply --escalation browser_degraded',
+    `${label} summary warning apply command mismatch: ${JSON.stringify(warning)}`,
   );
 }
 
@@ -364,6 +389,18 @@ export function assertIncidentSummaryFilteredResponse(data, expected, label) {
       assert(
         group.incidentIds.includes(incidentId),
         `${label} missing incident ${incidentId} in ${JSON.stringify(group)}`,
+      );
+    }
+    for (const browserId of expectedGroup.browserIds ?? []) {
+      assert(
+        group.browserIds.includes(browserId),
+        `${label} missing browser ${browserId} in ${JSON.stringify(group)}`,
+      );
+    }
+    if (expectedGroup.remedyApplyCommand) {
+      assert(
+        group.remedyApplyCommand === expectedGroup.remedyApplyCommand,
+        `${label} remedy apply command mismatch: ${JSON.stringify(group)}`,
       );
     }
     if (expectedGroup.recommendedActionIncludes) {

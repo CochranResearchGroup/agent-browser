@@ -174,6 +174,17 @@ pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
                 .iter()
                 .filter_map(|incident| incident.get("id").and_then(|value| value.as_str()))
                 .collect::<Vec<_>>();
+            let mut browser_ids = incidents
+                .iter()
+                .filter_map(|incident| {
+                    incident
+                        .get("browserId")
+                        .and_then(|value| value.as_str())
+                        .filter(|value| !value.is_empty())
+                })
+                .collect::<Vec<_>>();
+            browser_ids.sort();
+            browser_ids.dedup();
             let mut monitor_ids = incidents
                 .iter()
                 .filter_map(|incident| {
@@ -189,6 +200,8 @@ pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
                 .iter()
                 .map(|monitor_id| format!("agent-browser service monitors reset {monitor_id}"))
                 .collect::<Vec<_>>();
+            let remedy_apply_command =
+                service_incident_group_remedy_apply_command(escalation.as_str(), state.as_str());
             let newest = incidents
                 .iter()
                 .filter_map(|incident| {
@@ -206,8 +219,10 @@ pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
                 "latestTimestamp": newest,
                 "recommendedAction": recommended_action,
                 "incidentIds": ids,
+                "browserIds": browser_ids,
                 "monitorIds": monitor_ids,
                 "monitorResetCommands": monitor_reset_commands,
+                "remedyApplyCommand": remedy_apply_command,
             })
         })
         .collect::<Vec<_>>();
@@ -216,6 +231,18 @@ pub(crate) fn service_incident_summary(incidents: &[Value]) -> Value {
         "groupCount": groups.len(),
         "groups": groups,
     })
+}
+
+fn service_incident_group_remedy_apply_command(escalation: &str, state: &str) -> Option<String> {
+    if state != "active" {
+        return None;
+    }
+    match escalation {
+        "browser_degraded" | "monitor_attention" | "os_degraded_possible" => Some(format!(
+            "agent-browser service remedies apply --escalation {escalation}"
+        )),
+        _ => None,
+    }
 }
 
 pub(crate) fn acknowledge_persisted_service_incident(

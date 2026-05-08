@@ -15,6 +15,9 @@ const groups = [
     latestTimestamp: '2026-04-25T12:04:00Z',
     recommendedAction: 'Retry the browser after checking CDP health.',
     incidentIds: ['warning-1', 'warning-2', 'warning-3', 'warning-4', 'warning-5'],
+    browserIds: ['browser-warning-1', 'browser-warning-2', 'browser-warning-3', 'browser-warning-4'],
+    monitorIds: [],
+    remedyApplyCommand: 'agent-browser service remedies apply --escalation browser_degraded',
   },
   {
     escalation: 'os_degraded_possible',
@@ -24,6 +27,9 @@ const groups = [
     latestTimestamp: '2026-04-25T12:03:00Z',
     recommendedAction: 'Inspect the host OS and process table before retrying browser automation.',
     incidentIds: ['critical-1'],
+    browserIds: ['browser-critical-1'],
+    monitorIds: [],
+    remedyApplyCommand: 'agent-browser service remedies apply --escalation os_degraded_possible',
   },
   {
     escalation: 'job_attention',
@@ -33,6 +39,9 @@ const groups = [
     latestTimestamp: '2026-04-25T12:05:00Z',
     recommendedAction: 'Inspect cancelled or timed-out jobs.',
     incidentIds: ['error-1', 'error-2', 'error-3'],
+    browserIds: [],
+    monitorIds: [],
+    remedyApplyCommand: null,
   },
   {
     escalation: 'service_triage',
@@ -42,6 +51,9 @@ const groups = [
     latestTimestamp: '2026-04-25T12:02:00Z',
     recommendedAction: 'Inspect service reconciliation errors.',
     incidentIds: ['error-4'],
+    browserIds: [],
+    monitorIds: ['monitor-1', 'monitor-2', 'monitor-3', 'monitor-4'],
+    remedyApplyCommand: null,
   },
 ];
 
@@ -66,6 +78,9 @@ assert.equal(
   'Inspect the host OS and process table before retrying browser automation.',
 );
 assert.equal(rows[3].incidentIdLabel, 'warning-1 / warning-2 / warning-3 / warning-4 +1');
+assert.equal(rows[3].browserIdLabel, 'browser-warning-1 / browser-warning-2 / browser-warning-3 +1');
+assert.equal(rows[1].monitorIdLabel, 'monitor-1 / monitor-2 / monitor-3 +1');
+assert.equal(rows[0].remedyApplyCommand, 'agent-browser service remedies apply --escalation os_degraded_possible');
 
 const fallbackRow = incidentSummaryGroupView({
   severity: null,
@@ -80,5 +95,7 @@ assert.equal(fallbackRow.stateLabel, 'unknown');
 assert.equal(fallbackRow.count, 0);
 assert.equal(fallbackRow.recommendedAction, 'Inspect incident details.');
 assert.equal(fallbackRow.incidentIdLabel, 'No incident IDs');
+assert.equal(fallbackRow.browserIdLabel, 'No browser IDs');
+assert.equal(fallbackRow.monitorIdLabel, 'No monitor IDs');
 
 console.log('Dashboard incident summary contract smoke passed');

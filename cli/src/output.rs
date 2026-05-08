@@ -379,6 +379,18 @@ fn format_service_incident_summary_text(summary: &serde_json::Value) -> Option<S
             })
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "none".to_string());
+        let browsers = group
+            .get("browserIds")
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "none".to_string());
         let reset_commands = group
             .get("monitorResetCommands")
             .and_then(|value| value.as_array())
@@ -392,8 +404,14 @@ fn format_service_incident_summary_text(summary: &serde_json::Value) -> Option<S
             .filter(|value| !value.is_empty())
             .map(|value| format!(" reset={value}"))
             .unwrap_or_default();
+        let apply_command = group
+            .get("remedyApplyCommand")
+            .and_then(|value| value.as_str())
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("\n  apply={value}"))
+            .unwrap_or_default();
         format!(
-            "{severity} escalation={escalation} state={state} count={count} latest={latest} incidents={ids} monitors={monitors}{reset_commands}\n  next={action}"
+            "{severity} escalation={escalation} state={state} count={count} latest={latest} incidents={ids} browsers={browsers} monitors={monitors}{reset_commands}\n  next={action}{apply_command}"
         )
     }));
     Some(lines.join("\n"))
@@ -4099,7 +4117,7 @@ Notes:
   - Monitor triage acknowledges the related monitor incident and clears reviewed failure counts in one queued service operation.
   - Job filters match state, action, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - Incidents include severity, escalation, recommendedAction, and monitor metadata when a failed service monitor created the incident.
-  - service incidents --summary groups the current filtered incident set by escalation, severity, and state with recommended next actions.
+  - service incidents --summary groups the current filtered incident set by escalation, severity, and state with recommended next actions, browserIds, monitorIds, and remedyApplyCommand when a batch apply remedy is supported.
   - Failed service monitors use monitor_attention escalation and include monitorIds plus reset commands in summary groups.
   - Monitor filters match --state and --failed before rendering; --summary adds state, failure, repeated-failure, never-checked, and latest-failure totals.
   - service monitors run-due checks due active monitors immediately and updates retained health fields plus monitor incidents through the same runner as the scheduler.
@@ -5536,8 +5554,10 @@ mod tests {
                     "latestTimestamp": "2026-05-01T00:00:00Z",
                     "recommendedAction": "Inspect the host OS.",
                     "incidentIds": ["browser-1", "browser-2"],
+                    "browserIds": ["browser-1", "browser-2"],
                     "monitorIds": [],
-                    "monitorResetCommands": []
+                    "monitorResetCommands": [],
+                    "remedyApplyCommand": "agent-browser service remedies apply --escalation os_degraded_possible"
                 }]
             },
             "incidents": []
@@ -5547,7 +5567,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Incident groups: 1\ncritical escalation=os_degraded_possible state=active count=2 latest=2026-05-01T00:00:00Z incidents=browser-1,browser-2 monitors=none\n  next=Inspect the host OS."
+            "Incident groups: 1\ncritical escalation=os_degraded_possible state=active count=2 latest=2026-05-01T00:00:00Z incidents=browser-1,browser-2 browsers=browser-1,browser-2 monitors=none\n  next=Inspect the host OS.\n  apply=agent-browser service remedies apply --escalation os_degraded_possible"
         );
     }
 

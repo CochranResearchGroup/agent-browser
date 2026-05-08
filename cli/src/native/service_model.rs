@@ -996,12 +996,18 @@ pub fn assert_service_incidents_response_contract(value: &serde_json::Value) {
                     "latestTimestamp",
                     "recommendedAction",
                     "incidentIds",
+                    "browserIds",
                     "monitorIds",
+                    "remedyApplyCommand",
                 ],
                 &[],
             );
             assert!(group["incidentIds"].is_array());
+            assert!(group["browserIds"].is_array());
             assert!(group["monitorIds"].is_array());
+            assert!(
+                group["remedyApplyCommand"].is_string() || group["remedyApplyCommand"].is_null()
+            );
         }
     }
     if let Some(events) = value.get("events").and_then(|events| events.as_array()) {
@@ -4167,6 +4173,21 @@ mod tests {
                 "taskName",
                 "since",
                 "limit",
+            ],
+        );
+        assert_schema_required_fields(
+            &response_schema["properties"]["summary"]["properties"]["groups"]["items"],
+            &[
+                "escalation",
+                "severity",
+                "state",
+                "count",
+                "latestTimestamp",
+                "recommendedAction",
+                "incidentIds",
+                "browserIds",
+                "monitorIds",
+                "remedyApplyCommand",
             ],
         );
 

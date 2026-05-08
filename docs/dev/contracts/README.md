@@ -124,9 +124,9 @@ filters.
 
 Failed service monitors derive incidents with `monitor_attention` escalation.
 Those incident records include `monitorId`, `monitorTarget`, and `monitorResult`,
-and summary groups include `monitorIds` plus `monitorResetCommands` so operator
-and dashboard surfaces can show the failed probe and reviewed-failure cleanup
-path without expanding raw events.
+and summary groups include `browserIds`, `monitorIds`, `monitorResetCommands`,
+and `remedyApplyCommand` so operator and dashboard surfaces can show affected
+browsers, failed probes, and batch apply commands without expanding raw events.
 `service-monitor-triage-response.v1.schema.json` describes the serialized
 monitor triage response returned by CLI `service monitors triage <id>`, HTTP
 `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, and

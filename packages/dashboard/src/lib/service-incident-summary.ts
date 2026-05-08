@@ -13,6 +13,9 @@ export type ServiceIncidentSummaryGroup = {
   latestTimestamp?: string | null;
   recommendedAction?: string | null;
   incidentIds?: string[];
+  browserIds?: string[];
+  monitorIds?: string[];
+  remedyApplyCommand?: string | null;
 };
 
 export type ServiceIncidentsData = {
@@ -37,6 +40,11 @@ export type ServiceIncidentSummaryGroupView = {
   recommendedAction: string;
   incidentIds: string[];
   incidentIdLabel: string;
+  browserIds: string[];
+  browserIdLabel: string;
+  monitorIds: string[];
+  monitorIdLabel: string;
+  remedyApplyCommand?: string | null;
 };
 
 function incidentSeverityRank(value?: ServiceIncidentSeverity | null): number {
@@ -63,8 +71,14 @@ export function incidentSummaryGroupView(
   group: ServiceIncidentSummaryGroup,
 ): ServiceIncidentSummaryGroupView {
   const incidentIds = group.incidentIds ?? [];
+  const browserIds = group.browserIds ?? [];
+  const monitorIds = group.monitorIds ?? [];
   const visibleIncidentIds = incidentIds.slice(0, 4);
   const hiddenCount = Math.max(incidentIds.length - visibleIncidentIds.length, 0);
+  const visibleBrowserIds = browserIds.slice(0, 3);
+  const hiddenBrowserCount = Math.max(browserIds.length - visibleBrowserIds.length, 0);
+  const visibleMonitorIds = monitorIds.slice(0, 3);
+  const hiddenMonitorCount = Math.max(monitorIds.length - visibleMonitorIds.length, 0);
   return {
     key: `${group.escalation ?? "unknown"}-${group.severity ?? "unknown"}-${group.state ?? "unknown"}`,
     severityTone: incidentSeverityTone(group.severity),
@@ -78,6 +92,15 @@ export function incidentSummaryGroupView(
     incidentIdLabel: visibleIncidentIds.length > 0
       ? `${visibleIncidentIds.join(" / ")}${hiddenCount > 0 ? ` +${hiddenCount}` : ""}`
       : "No incident IDs",
+    browserIds,
+    browserIdLabel: visibleBrowserIds.length > 0
+      ? `${visibleBrowserIds.join(" / ")}${hiddenBrowserCount > 0 ? ` +${hiddenBrowserCount}` : ""}`
+      : "No browser IDs",
+    monitorIds,
+    monitorIdLabel: visibleMonitorIds.length > 0
+      ? `${visibleMonitorIds.join(" / ")}${hiddenMonitorCount > 0 ? ` +${hiddenMonitorCount}` : ""}`
+      : "No monitor IDs",
+    remedyApplyCommand: group.remedyApplyCommand,
   };
 }
 

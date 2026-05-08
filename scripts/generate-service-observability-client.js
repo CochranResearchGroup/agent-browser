@@ -599,7 +599,9 @@ export interface ServiceIncidentSummaryGroup {
   latestTimestamp: string;
   recommendedAction: string;
   incidentIds: string[];
+  browserIds: string[];
   monitorIds: string[];
+  remedyApplyCommand: string | null;
   [key: string]: unknown;
 }
 

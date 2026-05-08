@@ -1188,8 +1188,21 @@ function IncidentSummaryGroupRow({ group }: { group: ServiceIncidentSummaryGroup
           {group.recommendedAction}
         </p>
         <p className="mt-1 truncate text-[10px] text-muted-foreground">
-          {group.incidentIdLabel}
+          incidents {group.incidentIdLabel}
         </p>
+        <p className="mt-1 truncate text-[10px] text-muted-foreground">
+          browsers {group.browserIdLabel}
+        </p>
+        {group.monitorIds.length > 0 && (
+          <p className="mt-1 truncate text-[10px] text-muted-foreground">
+            monitors {group.monitorIdLabel}
+          </p>
+        )}
+        {group.remedyApplyCommand && (
+          <p className="mt-1 truncate text-[10px] font-semibold text-foreground">
+            {group.remedyApplyCommand}
+          </p>
+        )}
       </div>
       <div className="shrink-0 text-right">
         <p className="text-xl font-black tracking-[-0.05em] text-foreground">{group.count}</p>
