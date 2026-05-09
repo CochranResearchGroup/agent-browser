@@ -168,6 +168,15 @@ function assertAccessPlan(data, label) {
     data?.readinessSummary?.manualSeedingRequired === true,
     `${label} readiness summary mismatch: ${JSON.stringify(data)}`,
   );
+  assert(
+    data?.monitorFindings?.profileReadinessAttentionRequired === false,
+    `${label} monitor findings mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    Array.isArray(data?.monitorFindings?.profileReadinessMonitorIds) &&
+      data.monitorFindings.profileReadinessMonitorIds.length === 0,
+    `${label} monitor IDs mismatch: ${JSON.stringify(data)}`,
+  );
   assert(data?.sitePolicy?.id === sitePolicyId, `${label} site policy mismatch: ${JSON.stringify(data)}`);
   assert(
     data?.sitePolicySource?.source === 'persisted_state',
@@ -191,6 +200,10 @@ function assertAccessPlan(data, label) {
   assert(
     data?.decision?.manualSeedingRequired === true,
     `${label} manual seeding flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorAttentionRequired === false,
+    `${label} monitor attention flag mismatch: ${JSON.stringify(data)}`,
   );
   assert(
     data?.decision?.providerIds?.includes(providerId),

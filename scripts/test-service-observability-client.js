@@ -680,6 +680,13 @@ async function main() {
           targetServiceIds: [],
           recommendedActions: [],
         },
+        monitorFindings: {
+          profileReadinessAttentionRequired: true,
+          profileReadinessIncidentIds: ['monitor:canva-freshness'],
+          profileReadinessMonitorIds: ['canva-freshness'],
+          profileReadinessResults: ['profile_readiness_expired'],
+          targetServiceIds: ['canva'],
+        },
         sitePolicy: {
           id: 'canva',
           originPattern: 'https://www.canva.com',
@@ -705,6 +712,7 @@ async function main() {
           profileId: 'authenticated',
           manualActionRequired: false,
           manualSeedingRequired: false,
+          monitorAttentionRequired: true,
           providerIds: [],
           challengeIds: [],
           reasons: ['site_policy_selected'],
@@ -723,6 +731,11 @@ async function main() {
   assert.equal(accessPlan.calls.length, 1);
   assert.equal(accessPlanResult.selectedProfile?.id, 'authenticated');
   assert.equal(accessPlanResult.sitePolicy?.id, 'canva');
+  assert.equal(accessPlanResult.monitorFindings.profileReadinessAttentionRequired, true);
+  assert.deepEqual(accessPlanResult.monitorFindings.profileReadinessMonitorIds, [
+    'canva-freshness',
+  ]);
+  assert.equal(accessPlanResult.decision.monitorAttentionRequired, true);
   assert.equal(accessPlanResult.decision.recommendedAction, 'use_selected_profile');
 
   const emptyLookup = createFetchRecorder({

@@ -11,9 +11,9 @@ use super::service_lifecycle::{select_service_profile_for_request, ProfileSelect
 use super::service_model::{
     builtin_site_policy, BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy,
     ChallengeState, InteractionMode, ProfileSelectionReason, ProviderCapability,
-    ServiceEntitySource, ServiceProvider, ServiceState, SitePolicy,
-    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState, ServiceProvider,
+    ServiceState, SitePolicy, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -119,6 +119,7 @@ pub(crate) fn service_access_plan_for_state(
         })
     });
     let readiness_summary = readiness_summary(readiness.as_ref(), &request.target_service_ids);
+    let monitor_findings = access_plan_monitor_findings(service_state, &request.target_service_ids);
     let selected_site_policy =
         select_site_policy(original_state, &request, selected_profile.as_ref());
     let site_policy = selected_site_policy
@@ -146,6 +147,7 @@ pub(crate) fn service_access_plan_for_state(
         readiness: readiness.as_ref(),
         target_service_ids: &request.target_service_ids,
         readiness_summary: &readiness_summary,
+        monitor_findings: &monitor_findings,
         naming_warnings: &naming_warnings,
     });
 
@@ -180,6 +182,7 @@ pub(crate) fn service_access_plan_for_state(
         }),
         "readiness": readiness,
         "readinessSummary": readiness_summary,
+        "monitorFindings": monitor_findings,
         "sitePolicy": site_policy,
         "sitePolicySource": site_policy_source,
         "providers": providers,
@@ -366,6 +369,7 @@ struct AccessPlanDecisionInput<'a> {
     readiness: Option<&'a Value>,
     target_service_ids: &'a [String],
     readiness_summary: &'a Value,
+    monitor_findings: &'a Value,
     naming_warnings: &'a [&'static str],
 }
 
@@ -377,10 +381,13 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     let readiness = input.readiness;
     let target_service_ids = input.target_service_ids;
     let readiness_summary = input.readiness_summary;
+    let monitor_findings = input.monitor_findings;
     let naming_warnings = input.naming_warnings;
     let mut reasons = Vec::new();
     let manual_seeding_required =
         readiness_summary["manualSeedingRequired"].as_bool() == Some(true);
+    let profile_readiness_monitor_attention =
+        monitor_findings["profileReadinessAttentionRequired"].as_bool() == Some(true);
     let denied_challenge = challenges
         .iter()
         .any(|challenge| matches!(challenge.state, ChallengeState::Denied));
@@ -426,6 +433,9 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     if manual_seeding_required {
         reasons.push("manual_seeding_required");
     }
+    if profile_readiness_monitor_attention {
+        reasons.push("profile_readiness_monitor_attention");
+    }
     if let Some(site_policy) = site_policy {
         reasons.push("site_policy_selected");
         if site_policy.manual_login_preferred {
@@ -468,6 +478,10 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "register_or_seed_managed_profile"
     } else if selected_profile.is_none() {
         "register_managed_profile_or_request_throwaway_browser"
+    } else if profile_readiness_monitor_attention
+        && readiness_profile_needs_probe(readiness, target_service_ids)
+    {
+        "probe_target_auth_or_reseed_if_needed"
     } else if readiness_profile_needs_probe(readiness, target_service_ids) {
         "verify_or_seed_profile_before_authenticated_work"
     } else {
@@ -491,6 +505,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "profileId": selected_profile.map(|profile| profile.id.clone()),
         "manualActionRequired": manual_action_required,
         "manualSeedingRequired": manual_seeding_required,
+        "monitorAttentionRequired": profile_readiness_monitor_attention,
         "providerIds": providers.iter().map(|provider| provider.id.clone()).collect::<Vec<_>>(),
         "authProviderIds": provider_decision.auth_provider_ids,
         "challengeProviderIds": provider_decision.challenge_provider_ids,
@@ -930,6 +945,64 @@ fn non_empty(value: String) -> Option<String> {
     }
 }
 
+fn access_plan_monitor_findings(
+    service_state: &ServiceState,
+    target_service_ids: &[String],
+) -> Value {
+    let mut incident_ids = Vec::new();
+    let mut monitor_ids = Vec::new();
+    let mut monitor_results = Vec::new();
+    let mut matched_target_service_ids = Vec::new();
+
+    for incident in &service_state.incidents {
+        if incident.state != ServiceIncidentState::Active
+            || incident.escalation != ServiceIncidentEscalation::MonitorAttention
+        {
+            continue;
+        }
+        let Some(target_service_id) = incident
+            .monitor_target
+            .as_ref()
+            .and_then(|target| target.get("profile_readiness"))
+            .and_then(|target| target.as_str())
+        else {
+            continue;
+        };
+        if !target_service_ids.is_empty()
+            && !target_service_ids
+                .iter()
+                .any(|requested| requested == target_service_id)
+        {
+            continue;
+        }
+        incident_ids.push(incident.id.clone());
+        if let Some(monitor_id) = incident.monitor_id.as_ref() {
+            monitor_ids.push(monitor_id.clone());
+        }
+        if let Some(monitor_result) = incident.monitor_result.as_ref() {
+            monitor_results.push(monitor_result.clone());
+        }
+        matched_target_service_ids.push(target_service_id.to_string());
+    }
+
+    incident_ids.sort();
+    incident_ids.dedup();
+    monitor_ids.sort();
+    monitor_ids.dedup();
+    monitor_results.sort();
+    monitor_results.dedup();
+    matched_target_service_ids.sort();
+    matched_target_service_ids.dedup();
+
+    json!({
+        "profileReadinessAttentionRequired": !incident_ids.is_empty(),
+        "profileReadinessIncidentIds": incident_ids,
+        "profileReadinessMonitorIds": monitor_ids,
+        "profileReadinessResults": monitor_results,
+        "targetServiceIds": matched_target_service_ids,
+    })
+}
+
 fn readiness_summary(readiness: Option<&Value>, target_service_ids: &[String]) -> Value {
     let manual_rows = readiness
         .and_then(|readiness| readiness["targetReadiness"].as_array())
@@ -1037,7 +1110,7 @@ mod tests {
     use crate::native::service_model::{
         BrowserHost, BrowserProfile, Challenge, ChallengeKind, InteractionMode,
         ProfileReadinessState, ProfileTargetReadiness, ProviderCapability, ProviderKind,
-        RateLimitPolicy, ServiceProvider, SitePolicy,
+        RateLimitPolicy, ServiceIncident, ServiceProvider, SitePolicy,
     };
     use serde_json::json;
 
@@ -1257,6 +1330,77 @@ mod tests {
             plan["query"]["namingWarnings"]
         );
         assert_eq!(plan["decision"]["hasNamingWarning"], true);
+    }
+
+    #[test]
+    fn service_access_plan_reports_profile_readiness_monitor_attention() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "journal-acs".to_string(),
+                BrowserProfile {
+                    id: "journal-acs".to_string(),
+                    name: "Journal ACS".to_string(),
+                    target_service_ids: vec!["acs".to_string()],
+                    shared_service_ids: vec!["JournalDownloader".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "acs".to_string(),
+                        state: ProfileReadinessState::Stale,
+                        evidence: "freshness_expired_by_monitor:acs-freshness".to_string(),
+                        recommended_action: "probe_target_auth_or_reseed_if_needed".to_string(),
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            incidents: vec![ServiceIncident {
+                id: "monitor:acs-freshness".to_string(),
+                monitor_id: Some("acs-freshness".to_string()),
+                monitor_target: Some(json!({"profile_readiness": "acs"})),
+                monitor_result: Some("profile_readiness_expired".to_string()),
+                state: ServiceIncidentState::Active,
+                escalation: ServiceIncidentEscalation::MonitorAttention,
+                latest_timestamp: "2026-05-09T00:00:00Z".to_string(),
+                latest_kind: "reconciliation_error".to_string(),
+                ..ServiceIncident::default()
+            }],
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                target_service_ids: vec!["acs".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["monitorFindings"]["profileReadinessAttentionRequired"],
+            true
+        );
+        assert_eq!(
+            plan["monitorFindings"]["profileReadinessIncidentIds"],
+            json!(["monitor:acs-freshness"])
+        );
+        assert_eq!(
+            plan["monitorFindings"]["profileReadinessMonitorIds"],
+            json!(["acs-freshness"])
+        );
+        assert_eq!(
+            plan["monitorFindings"]["profileReadinessResults"],
+            json!(["profile_readiness_expired"])
+        );
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            "probe_target_auth_or_reseed_if_needed"
+        );
+        assert_eq!(plan["decision"]["monitorAttentionRequired"], true);
+        assert!(plan["decision"]["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "profile_readiness_monitor_attention"));
     }
 
     #[test]

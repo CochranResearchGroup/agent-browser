@@ -69,8 +69,12 @@ agent-browser to select by `serviceName` plus `loginId`, `siteId`, or
 service launches: authenticated target state, target scope, then shared caller
 service. Software clients should prefer `getServiceAccessPlan()` when they need
 the broader no-launch recommendation that combines the selected profile,
-readiness summary, matching site policy, enabled providers, retained
-challenges, and the service-owned decision before requesting browser control.
+readiness summary, profile-readiness monitor findings, matching site policy,
+enabled providers, retained challenges, and the service-owned decision before
+requesting browser control. Access-plan `monitorFindings` reports active
+`profile_readiness` monitor incidents for the requested target identities, and
+`decision.monitorAttentionRequired` mirrors whether those findings need
+operator or probe attention before trusting the profile.
 
 `packages/client/src/service-request.generated.d.ts` and
 `packages/client/src/service-request.generated.js` are generated from these

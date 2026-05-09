@@ -834,6 +834,15 @@ export interface ServiceAccessPlanServiceRequest {
   [key: string]: unknown;
 }
 
+export interface ServiceAccessPlanMonitorFindings {
+  profileReadinessAttentionRequired: boolean;
+  profileReadinessIncidentIds: string[];
+  profileReadinessMonitorIds: string[];
+  profileReadinessResults: string[];
+  targetServiceIds: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanDecision {
   recommendedAction: string;
   browserHost: string | null;
@@ -842,6 +851,7 @@ export interface ServiceAccessPlanDecision {
   profileId: string | null;
   manualActionRequired: boolean;
   manualSeedingRequired: boolean;
+  monitorAttentionRequired: boolean;
   providerIds: string[];
   challengeIds: string[];
   freshnessUpdate: ServiceAccessPlanFreshnessUpdate;
@@ -955,6 +965,8 @@ export interface ServiceAccessPlanResponse {
   readiness: ServiceProfileReadinessResponse | null;
   /** Compact manual-seeding summary suitable for operator UI or logs. */
   readinessSummary: ServiceProfileReadinessSummary;
+  /** Active monitor findings relevant to this access-plan request. */
+  monitorFindings: ServiceAccessPlanMonitorFindings;
   /** Site policy selected for this request, or null when none matches. */
   sitePolicy: ServiceSitePolicyRecord | null;
   /** Provenance for the selected site policy after config, persisted state, and built-ins are layered. */

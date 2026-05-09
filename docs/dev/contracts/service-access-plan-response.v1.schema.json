@@ -11,6 +11,7 @@
     "selectedProfileMatch",
     "readiness",
     "readinessSummary",
+    "monitorFindings",
     "sitePolicy",
     "sitePolicySource",
     "providers",
@@ -167,6 +168,46 @@
       },
       "additionalProperties": true
     },
+    "monitorFindings": {
+      "type": "object",
+      "required": [
+        "profileReadinessAttentionRequired",
+        "profileReadinessIncidentIds",
+        "profileReadinessMonitorIds",
+        "profileReadinessResults",
+        "targetServiceIds"
+      ],
+      "properties": {
+        "profileReadinessAttentionRequired": {
+          "type": "boolean"
+        },
+        "profileReadinessIncidentIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "profileReadinessMonitorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "profileReadinessResults": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
     "sitePolicy": {
       "oneOf": [
         {
@@ -241,6 +282,7 @@
         "profileId",
         "manualActionRequired",
         "manualSeedingRequired",
+        "monitorAttentionRequired",
         "providerIds",
         "authProviderIds",
         "challengeProviderIds",
@@ -378,6 +420,9 @@
           "type": "boolean"
         },
         "manualSeedingRequired": {
+          "type": "boolean"
+        },
+        "monitorAttentionRequired": {
           "type": "boolean"
         },
         "providerIds": {
