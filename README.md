@@ -1827,10 +1827,10 @@ known queued-job cancellation with `cancelServiceJob`. Run
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that uses the no-launch profile planning surfaces to
 ask agent-browser for an access plan, inspect readiness and the service-owned
-decision, request tabs by login identity, and register a managed login profile
-only when agent-browser has no suitable one. It can also post bounded auth-probe
-evidence through `updateServiceProfileFreshness()` for an existing managed
-profile. Its output includes
+decision, pass the access-plan response to `requestServiceTab()`, and register
+a managed login profile only when agent-browser has no suitable one. It can
+also post bounded auth-probe evidence through `updateServiceProfileFreshness()`
+for an existing managed profile. Its output includes
 `readinessSummary.needsManualSeeding` plus target service IDs and recommended
 actions when readiness says an operator must seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke

@@ -133,9 +133,7 @@ if (!accessPlan.selectedProfile) {
 
 await requestServiceTab({
   baseUrl: 'http://127.0.0.1:4849',
-  serviceName: 'CanvaCLI',
-  agentName: 'canva-cli-agent',
-  taskName: 'openCanvaWorkspace',
+  accessPlan,
   loginId: 'canva',
   targetServiceId: 'canva',
   url: 'https://www.canva.com/',
@@ -148,7 +146,7 @@ Use `managed-profile-flow.mjs` when a software client needs the CanvaCLI-style
 profile-broker pattern:
 
 1. Ask agent-browser for a no-launch access plan with `getServiceAccessPlan()`.
-2. Request the target identity with `requestServiceTab()`.
+2. Pass the access-plan response to `requestServiceTab({ accessPlan })`.
 3. Register a managed profile only when agent-browser has no suitable profile.
 4. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
 

@@ -72,7 +72,7 @@ export function buildManagedProfilePlan({
     decisionOrder: [
       'ask agent-browser for the no-launch access plan',
       'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
-      'request a tab by login or target identity',
+      'pass the access-plan response to requestServiceTab',
       'register a managed profile only when agent-browser has no suitable one',
       'seed the profile manually when readiness reports needs_manual_seeding',
     ],
@@ -95,11 +95,8 @@ export function buildManagedProfilePlan({
       : null,
     tabRequest: {
       helper: 'requestServiceTab',
-      serviceName,
-      agentName,
-      taskName,
-      loginId,
-      targetServiceId,
+      accessPlan: 'getServiceAccessPlan response',
+      overrides: ['url', 'jobTimeoutMs'],
       url,
     },
     optionalRegistration: registerProfileId
@@ -228,12 +225,8 @@ export async function runManagedProfileWorkflow({
   const tab = await requestServiceTab({
     baseUrl,
     fetch,
+    accessPlan,
     url,
-    serviceName,
-    agentName,
-    taskName,
-    loginId,
-    targetServiceId,
     jobTimeoutMs: 30000,
   });
 

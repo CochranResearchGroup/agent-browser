@@ -229,10 +229,12 @@ async function testIdentityFirstGuidanceDrift() {
 
   assert.equal(plan.profileInspection.helper, 'getServiceAccessPlan');
   assert.equal(plan.tabRequest.helper, 'requestServiceTab');
+  assert.equal(plan.tabRequest.accessPlan, 'getServiceAccessPlan response');
+  assert.deepEqual(plan.tabRequest.overrides, ['url', 'jobTimeoutMs']);
   assert.deepEqual(plan.decisionOrder.slice(0, 4), [
     'ask agent-browser for the no-launch access plan',
     'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
-    'request a tab by login or target identity',
+    'pass the access-plan response to requestServiceTab',
     'register a managed profile only when agent-browser has no suitable one',
   ]);
 
@@ -356,6 +358,18 @@ function createMockFetch({
               : selectedProfile
                 ? 'use_selected_profile'
                 : 'register_managed_profile_or_request_throwaway_browser',
+          serviceRequest: {
+            available: true,
+            request: {
+              serviceName: 'CanvaCLI',
+              agentName: 'canva-cli-agent',
+              taskName: 'openCanvaWorkspace',
+              loginId: 'canva',
+              targetServiceId: 'canva',
+              profileLeasePolicy: 'wait',
+              action: 'tab_new',
+            },
+          },
           browserHost: null,
           interactionMode: null,
           challengePolicy: null,
@@ -412,6 +426,7 @@ function createMockFetch({
       assert.equal(request.taskName, 'openCanvaWorkspace');
       assert.equal(request.loginId, 'canva');
       assert.equal(request.targetServiceId, 'canva');
+      assert.equal(request.profileLeasePolicy, 'wait');
       return jsonResponse({
         success: true,
         data: {
