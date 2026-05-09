@@ -12,6 +12,7 @@ import {
   getServiceProfileAllocation,
   getServiceProfileForIdentity,
   getServiceProfileReadiness,
+  getServiceProfileSeedingHandoff,
   getServiceStatus,
   getServiceTrace,
   lookupServiceProfile,
@@ -494,6 +495,38 @@ async function main() {
     targetServiceIds: [],
     recommendedActions: [],
   });
+
+  const handoff = createFetchRecorder({
+    success: true,
+    data: {
+      profileId: 'work',
+      profileName: 'Work',
+      targetServiceId: 'google',
+      loginId: null,
+      manualSeedingRequired: true,
+      seedingMode: 'detached_headed_no_cdp',
+      cdpAttachmentAllowedDuringSeeding: false,
+      preferredKeyring: 'basic_password_store',
+      setupScopes: ['signin', 'chrome_sync', 'passkeys', 'browser_plugins'],
+      recommendedAction: 'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+      url: 'https://accounts.google.com',
+      command: 'agent-browser --runtime-profile work runtime login https://accounts.google.com',
+      operatorSteps: ['Run the command exactly as shown.'],
+      warnings: ['Do not add --attachable or any remote debugging/CDP flag during first seeding.'],
+    },
+  });
+  const handoffResult = await getServiceProfileSeedingHandoff({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: handoff.fetch,
+    id: 'work',
+    targetServiceId: 'google',
+  });
+  assert.equal(
+    handoff.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/work/seeding-handoff?targetServiceId=google',
+  );
+  assert.equal(handoff.calls[0].init.method, 'GET');
+  assert.equal(handoffResult.command, 'agent-browser --runtime-profile work runtime login https://accounts.google.com');
 
   const profileMatches = [
     {

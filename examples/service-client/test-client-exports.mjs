@@ -16,6 +16,7 @@ import {
   getServiceAccessPlan,
   getServiceProfileForIdentity,
   getServiceProfileReadiness,
+  getServiceProfileSeedingHandoff,
   getServiceProfiles,
   getServiceStatus,
   getServiceTrace,
@@ -37,6 +38,7 @@ assert.equal(typeof findServiceProfileForIdentity, 'function');
 assert.equal(typeof getServiceAccessPlan, 'function');
 assert.equal(typeof getServiceProfileForIdentity, 'function');
 assert.equal(typeof getServiceProfileReadiness, 'function');
+assert.equal(typeof getServiceProfileSeedingHandoff, 'function');
 assert.equal(typeof getServiceProfiles, 'function');
 assert.equal(typeof getServiceStatus, 'function');
 assert.equal(typeof getServiceTrace, 'function');

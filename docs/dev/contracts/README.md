@@ -278,6 +278,14 @@ envelope returned by HTTP `GET /api/service/profiles/<id>/readiness` when a
 software client needs one profile's no-launch target-readiness rows without
 fetching allocation details or the full profile collection.
 
+`service-profile-seeding-handoff-response.v1.schema.json` describes the
+operator-ready handoff returned by HTTP
+`GET /api/service/profiles/<id>/seeding-handoff`. The handoff is derived from
+`targetReadiness` and includes the exact detached `runtime login` command,
+setup URL, seeding mode, keyring preference, setup scopes, operator steps, and
+warnings. Use `targetServiceId`, `siteId`, or `loginId` query parameters when a
+profile has multiple target identities.
+
 `POST /api/service/profiles/<id>/freshness` and MCP
 `service_profile_freshness_update` reuse the profile upsert response envelope
 after merging bounded-probe freshness evidence into one persisted profile.

@@ -14,6 +14,7 @@ const schemas = {
   profilesResponse: readSchema('service-profiles-response.v1.schema.json'),
   profileAllocationResponse: readSchema('service-profile-allocation-response.v1.schema.json'),
   profileReadinessResponse: readSchema('service-profile-readiness-response.v1.schema.json'),
+  profileSeedingHandoffResponse: readSchema('service-profile-seeding-handoff-response.v1.schema.json'),
   profileLookupResponse: readSchema('service-profile-lookup-response.v1.schema.json'),
   accessPlanResponse: readSchema('service-access-plan-response.v1.schema.json'),
   browser: readSchema('service-browser-record.v1.schema.json'),
@@ -424,6 +425,28 @@ export interface ServiceProfileReadinessResponse {
   targetReadiness: ServiceProfileTargetReadiness[];
   count: number;
   [key: string]: unknown;
+}
+
+export interface ServiceProfileSeedingHandoffResponse {
+  profileId: string;
+  profileName: string;
+  targetServiceId: string;
+  loginId: string | null;
+  manualSeedingRequired: boolean;
+  seedingMode: 'not_required' | 'detached_headed_no_cdp' | 'attachable_ok' | string;
+  cdpAttachmentAllowedDuringSeeding: boolean;
+  preferredKeyring: 'basic_password_store' | 'real_os_keychain' | 'managed_vault' | 'manual_login_profile' | string | null;
+  setupScopes: Array<'signin' | 'chrome_sync' | 'passkeys' | 'browser_plugins' | string>;
+  recommendedAction: string;
+  url: string;
+  command: string;
+  operatorSteps: string[];
+  warnings: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileSeedingHandoffOptions extends ServiceIdOptions {
+  targetServiceId?: string;
 }
 
 export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {
@@ -1067,6 +1090,8 @@ export declare function getServiceProfiles(options: ServiceQueryOptions): Promis
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
 /** Read one profile's no-launch target readiness rows. */
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
+/** Read the operator-ready detached profile seeding handoff for one profile. */
+export declare function getServiceProfileSeedingHandoff(options: ServiceProfileSeedingHandoffOptions): Promise<ServiceProfileSeedingHandoffResponse>;
 export declare function summarizeServiceProfileReadiness(readiness?: ServiceProfileReadinessResponse | null): ServiceProfileReadinessSummary;
 export declare function findServiceProfileForIdentity(profiles: ServiceProfileRecord[] | undefined | null, options: ServiceProfileIdentityMatchOptions): ServiceProfileIdentityMatchResult;
 /** Older descriptive alias for lookupServiceProfile. */

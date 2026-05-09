@@ -399,6 +399,30 @@ const serviceHttpOnlySurface = [
   },
   {
     method: 'GET',
+    route: '/api/service/profiles/<id>/seeding-handoff',
+    docsNeedles: [
+      '/api/service/profiles/<profile-id>/seeding-handoff',
+      '/api/service/profiles/<id>/seeding-handoff',
+      '/api/service/profiles/&lt;id&gt;/seeding-handoff',
+    ],
+    httpNeedles: [
+      'service_profile_seeding_handoff_id(path)',
+      '"operatorSteps"',
+      'SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE',
+      'SERVICE_PROFILE_SEEDING_HANDOFF_RESPONSE_SCHEMA_ID',
+      '"serviceProfileSeedingHandoffResponse"',
+    ],
+    clientNeedles: [
+      'getServiceProfileSeedingHandoff',
+      '/api/service/profiles/${encodeURIComponent(id)}/seeding-handoff',
+    ],
+    contractNeedles: [
+      'service-profile-seeding-handoff-response.v1.schema.json',
+      'GET /api/service/profiles/<id>/seeding-handoff',
+    ],
+  },
+  {
+    method: 'GET',
     route: '/api/service/profiles/lookup',
     docsNeedles: [
       '/api/service/profiles/lookup',

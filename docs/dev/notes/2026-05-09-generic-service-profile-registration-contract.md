@@ -25,6 +25,8 @@ New profiles that may need Google sign-on, Chrome sync setup, passkeys, or brows
 
 The structured readiness contract now exposes this directly on `targetReadiness` rows. Google-style manual seeding rows should report `seedingMode: "detached_headed_no_cdp"`, `cdpAttachmentAllowedDuringSeeding: false`, `preferredKeyring: "basic_password_store"`, and `setupScopes` covering `signin`, `chrome_sync`, `passkeys`, and `browser_plugins`.
 
+Use the seeding handoff surface when an operator needs exact instructions: `agent-browser service profiles <profile-id> seeding-handoff google`, HTTP `GET /api/service/profiles/<profile-id>/seeding-handoff?targetServiceId=google`, or `getServiceProfileSeedingHandoff({ id, targetServiceId: "google" })`.
+
 ## What changed
 
 - `55ebfb8` added `createServiceProfileReadinessMonitor()` and `upsertServiceProfileReadinessMonitor()` to the service observability client and taught the managed-profile example how to create the retained freshness monitor.

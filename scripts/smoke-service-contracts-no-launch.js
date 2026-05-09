@@ -162,6 +162,27 @@ try {
     `serviceProfileReadinessResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.schemaId ===
+      'https://agent-browser.local/contracts/service-profile-seeding-handoff-response.v1.schema.json',
+    `serviceProfileSeedingHandoffResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.schemaPath ===
+      'docs/dev/contracts/service-profile-seeding-handoff-response.v1.schema.json',
+    `serviceProfileSeedingHandoffResponse schema path mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.http?.route ===
+      '/api/service/profiles/<id>/seeding-handoff',
+    `serviceProfileSeedingHandoffResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(
+      'getServiceProfileSeedingHandoff',
+    ),
+    `serviceProfileSeedingHandoffResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileLookupResponse?.schemaId ===
       'https://agent-browser.local/contracts/service-profile-lookup-response.v1.schema.json',
     `serviceProfileLookupResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
@@ -207,6 +228,12 @@ try {
     `service client could not discover getServiceProfileReadiness helper: ${JSON.stringify(clientContracts.contracts?.serviceProfileReadinessResponse)}`,
   );
   assert(
+    clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(
+      'getServiceProfileSeedingHandoff',
+    ),
+    `service client could not discover getServiceProfileSeedingHandoff helper: ${JSON.stringify(clientContracts.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
     JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===
       JSON.stringify(['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds']),
     `service client could not discover profile lookup selection order: ${JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse)}`,
@@ -218,6 +245,11 @@ try {
   assert(
     contracts.data?.http?.serviceProfileReadinessRoute === '/api/service/profiles/<id>/readiness',
     `serviceProfileReadinessRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
+  );
+  assert(
+    contracts.data?.http?.serviceProfileSeedingHandoffRoute ===
+      '/api/service/profiles/<id>/seeding-handoff',
+    `serviceProfileSeedingHandoffRoute mismatch: ${JSON.stringify(contracts.data?.http)}`,
   );
   assert(
     contracts.data?.http?.serviceProfileLookupRoute === '/api/service/profiles/lookup',

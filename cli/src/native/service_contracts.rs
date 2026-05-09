@@ -5,6 +5,8 @@ pub const SERVICE_CONTRACTS_HTTP_ROUTE: &str = "/api/service/contracts";
 pub const SERVICE_REQUEST_HTTP_ROUTE: &str = "/api/service/request";
 pub const SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE: &str = "/api/service/profiles/<id>/allocation";
 pub const SERVICE_PROFILE_READINESS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/readiness";
+pub const SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE: &str =
+    "/api/service/profiles/<id>/seeding-handoff";
 pub const SERVICE_PROFILE_LOOKUP_HTTP_ROUTE: &str = "/api/service/profiles/lookup";
 pub const SERVICE_ACCESS_PLAN_HTTP_ROUTE: &str = "/api/service/access-plan";
 pub const SERVICE_REMEDIES_APPLY_HTTP_ROUTE: &str = "/api/service/remedies/apply";
@@ -30,6 +32,8 @@ pub const SERVICE_PROFILE_ALLOCATION_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-allocation-response.v1.schema.json";
 pub const SERVICE_PROFILE_READINESS_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-readiness-response.v1.schema.json";
+pub const SERVICE_PROFILE_SEEDING_HANDOFF_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-seeding-handoff-response.v1.schema.json";
 pub const SERVICE_PROFILE_LOOKUP_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-lookup-response.v1.schema.json";
 pub const SERVICE_ACCESS_PLAN_RESPONSE_SCHEMA_ID: &str =
@@ -161,6 +165,20 @@ pub fn service_contracts_metadata() -> Value {
                     "helpers": ["getServiceProfileReadiness", "summarizeServiceProfileReadiness"],
                 },
             },
+            "serviceProfileSeedingHandoffResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_PROFILE_SEEDING_HANDOFF_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-profile-seeding-handoff-response.v1.schema.json",
+                "http": {
+                    "method": "GET",
+                    "route": SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE,
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["getServiceProfileSeedingHandoff"],
+                },
+                "responseFields": ["command", "operatorSteps", "warnings"],
+            },
             "serviceProfileLookupResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
                 "schemaId": SERVICE_PROFILE_LOOKUP_RESPONSE_SCHEMA_ID,
@@ -282,6 +300,7 @@ pub fn service_contracts_metadata() -> Value {
             "serviceRequestRoute": SERVICE_REQUEST_HTTP_ROUTE,
             "serviceProfileAllocationRoute": SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE,
             "serviceProfileReadinessRoute": SERVICE_PROFILE_READINESS_HTTP_ROUTE,
+            "serviceProfileSeedingHandoffRoute": SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE,
             "serviceProfileLookupRoute": SERVICE_PROFILE_LOOKUP_HTTP_ROUTE,
             "serviceAccessPlanRoute": SERVICE_ACCESS_PLAN_HTTP_ROUTE,
             "serviceRemediesApplyRoute": SERVICE_REMEDIES_APPLY_HTTP_ROUTE,
@@ -349,6 +368,18 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceProfileReadinessResponse"]["client"]["helpers"][0],
             "getServiceProfileReadiness"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileSeedingHandoffResponse"]["schemaId"],
+            SERVICE_PROFILE_SEEDING_HANDOFF_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileSeedingHandoffResponse"]["http"]["route"],
+            SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileSeedingHandoffResponse"]["client"]["helpers"][0],
+            "getServiceProfileSeedingHandoff"
         );
         assert_eq!(
             metadata["contracts"]["serviceProfileLookupResponse"]["schemaId"],

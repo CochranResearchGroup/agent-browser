@@ -946,10 +946,28 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "serviceState": flags.service_state.clone(),
             })),
             Some("profiles") => {
+                if rest.len() > 4 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service profiles: {}", rest[1]),
+                        usage: "service profiles [<profile-id> seeding-handoff [target-service-id]]",
+                    });
+                }
+                if rest.len() >= 3 && rest[2] == "seeding-handoff" {
+                    let mut cmd = json!({
+                        "id": id,
+                        "action": "service_profile_seeding_handoff",
+                        "profileId": rest[1],
+                        "serviceState": flags.service_state.clone(),
+                    });
+                    if let Some(target) = rest.get(3) {
+                        cmd["targetServiceId"] = json!(target);
+                    }
+                    return Ok(cmd);
+                }
                 if rest.len() > 1 {
                     return Err(ParseError::InvalidValue {
                         message: format!("Unknown argument for service profiles: {}", rest[1]),
-                        usage: "service profiles",
+                        usage: "service profiles [<profile-id> seeding-handoff [target-service-id]]",
                     });
                 }
                 Ok(json!({
@@ -5420,6 +5438,20 @@ mod tests {
         let cmd = parse_command(&args("service profiles"), &default_flags()).unwrap();
 
         assert_eq!(cmd["action"], "service_profiles");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_profile_seeding_handoff() {
+        let cmd = parse_command(
+            &args("service profiles google-work seeding-handoff google"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_profile_seeding_handoff");
+        assert_eq!(cmd["profileId"], "google-work");
+        assert_eq!(cmd["targetServiceId"], "google");
         assert!(cmd["serviceState"].is_object());
     }
 

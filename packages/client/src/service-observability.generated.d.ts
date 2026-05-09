@@ -373,6 +373,28 @@ export interface ServiceProfileReadinessResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileSeedingHandoffResponse {
+  profileId: string;
+  profileName: string;
+  targetServiceId: string;
+  loginId: string | null;
+  manualSeedingRequired: boolean;
+  seedingMode: 'not_required' | 'detached_headed_no_cdp' | 'attachable_ok' | string;
+  cdpAttachmentAllowedDuringSeeding: boolean;
+  preferredKeyring: 'basic_password_store' | 'real_os_keychain' | 'managed_vault' | 'manual_login_profile' | string | null;
+  setupScopes: Array<'signin' | 'chrome_sync' | 'passkeys' | 'browser_plugins' | string>;
+  recommendedAction: string;
+  url: string;
+  command: string;
+  operatorSteps: string[];
+  warnings: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileSeedingHandoffOptions extends ServiceIdOptions {
+  targetServiceId?: string;
+}
+
 export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {
   browsers: ServiceBrowserRecord[];
 }
@@ -1020,6 +1042,8 @@ export declare function getServiceProfiles(options: ServiceQueryOptions): Promis
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
 /** Read one profile's no-launch target readiness rows. */
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
+/** Read the operator-ready detached profile seeding handoff for one profile. */
+export declare function getServiceProfileSeedingHandoff(options: ServiceProfileSeedingHandoffOptions): Promise<ServiceProfileSeedingHandoffResponse>;
 export declare function summarizeServiceProfileReadiness(readiness?: ServiceProfileReadinessResponse | null): ServiceProfileReadinessSummary;
 export declare function findServiceProfileForIdentity(profiles: ServiceProfileRecord[] | undefined | null, options: ServiceProfileIdentityMatchOptions): ServiceProfileIdentityMatchResult;
 /** Older descriptive alias for lookupServiceProfile. */

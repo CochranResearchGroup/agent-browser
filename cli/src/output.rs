@@ -1002,6 +1002,43 @@ fn format_service_profiles_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_profile_seeding_handoff_text(data: &serde_json::Value) -> Option<String> {
+    let profile = value_str(data, "profileId", "unknown-profile");
+    let target = value_str(data, "targetServiceId", "unknown-target");
+    let command = value_str(data, "command", "");
+    let seeding = value_str(data, "seedingMode", "unknown");
+    let keyring = value_str(data, "preferredKeyring", "none");
+    let cdp = value_bool_label(data, "cdpAttachmentAllowedDuringSeeding");
+    let mut lines = vec![
+        format!("Profile seeding handoff: profile={profile} target={target} seeding={seeding} cdp_allowed={cdp} keyring={keyring}"),
+        format!("Command: {command}"),
+    ];
+    if let Some(steps) = data.get("operatorSteps").and_then(|value| value.as_array()) {
+        lines.push("Operator steps:".to_string());
+        lines.extend(
+            steps
+                .iter()
+                .filter_map(|step| step.as_str())
+                .map(|step| format!("  - {step}")),
+        );
+    }
+    if let Some(warnings) = data.get("warnings").and_then(|value| value.as_array()) {
+        let warning_lines = warnings
+            .iter()
+            .filter_map(|warning| warning.as_str())
+            .collect::<Vec<_>>();
+        if !warning_lines.is_empty() {
+            lines.push("Warnings:".to_string());
+            lines.extend(
+                warning_lines
+                    .into_iter()
+                    .map(|warning| format!("  - {warning}")),
+            );
+        }
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_session_line(session: &serde_json::Value) -> String {
     let id = value_str(session, "id", "unknown-session");
     let service = value_str(session, "serviceName", "none");
@@ -1605,6 +1642,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_profiles") {
             if let Some(output) = format_service_profiles_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_profile_seeding_handoff") {
+            if let Some(output) = format_service_profile_seeding_handoff_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -4079,12 +4122,15 @@ Usage:
   agent-browser service remedies [--limit <n>] [--handling-state <state>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service remedies apply --escalation <browser_degraded|monitor_attention|os_degraded_possible> [--by <text>] [--note <text>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
+  agent-browser service profiles <profile-id> seeding-handoff [target-service-id]
 
 Commands:
   status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
   profiles              Show retained service profile records and derived allocation state
+  profiles <id> seeding-handoff [target]
+                        Show the detached runtime-login command and operator steps for profile seeding
   sessions              Show retained service session records
   browsers              Show retained service browser records and latest health evidence
   tabs                  Show retained service tab records
@@ -4144,6 +4190,7 @@ Notes:
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, and recommended actions.
   - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding with seedingMode=detached_headed_no_cdp, cdpAttachmentAllowedDuringSeeding=false, preferredKeyring=basic_password_store, and setup scopes for sign-in, Chrome sync, passkeys, and browser plugins. Explicit freshness rows are preserved through readiness refreshes.
+  - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus operator steps for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
@@ -4158,7 +4205,7 @@ Notes:
   - The bounded events log records reconciliation summaries, browser launch metadata including profileSelectionReason and profileLeaseDisposition when known, browser health transitions, browser recovery starts, profile lease wait transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes named browser control endpoints at /api/browser/url, /api/browser/title, /api/browser/tabs, /api/browser/navigate, /api/browser/back, /api/browser/forward, /api/browser/reload, /api/browser/new-tab, /api/browser/switch-tab, /api/browser/close-tab, /api/browser/viewport, /api/browser/user-agent, /api/browser/media, /api/browser/timezone, /api/browser/locale, /api/browser/geolocation, /api/browser/permissions, /api/browser/cookies/get, /api/browser/cookies/set, /api/browser/cookies/clear, /api/browser/storage/get, /api/browser/storage/set, /api/browser/storage/clear, /api/browser/console, /api/browser/errors, /api/browser/set-content, /api/browser/headers, /api/browser/offline, /api/browser/dialog, /api/browser/clipboard, /api/browser/upload, /api/browser/download, /api/browser/wait-for-download, /api/browser/pdf, /api/browser/response-body, /api/browser/har/start, /api/browser/har/stop, /api/browser/route, /api/browser/unroute, /api/browser/requests, /api/browser/request-detail, /api/browser/snapshot, /api/browser/screenshot, /api/browser/click, /api/browser/fill, /api/browser/wait, /api/browser/type, /api/browser/press, /api/browser/hover, /api/browser/select, /api/browser/get-text, /api/browser/get-value, /api/browser/is-visible, /api/browser/get-attribute, /api/browser/get-html, /api/browser/get-styles, /api/browser/count, /api/browser/get-box, /api/browser/is-enabled, /api/browser/is-checked, /api/browser/check, /api/browser/uncheck, /api/browser/scroll, /api/browser/scroll-into-view, /api/browser/focus, and /api/browser/clear.
-  - The stream server exposes the service surface at /api/service/status, /api/service/request, /api/service/profiles, /api/service/profiles/lookup, /api/service/profiles/<id>/allocation, /api/service/profiles/<id>/readiness, /api/service/profiles/<id>, /api/service/profiles/<id>/freshness, /api/service/sessions, /api/service/sessions/<id>, /api/service/browsers, /api/service/tabs, /api/service/monitors, /api/service/monitors/run-due, /api/service/monitors/<id>/pause, /api/service/monitors/<id>/resume, /api/service/monitors/<id>/reset-failures, /api/service/monitors/<id>/triage, /api/service/site-policies, /api/service/site-policies/<id>, /api/service/providers, /api/service/providers/<id>, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile. GET /api/service/monitors accepts state, failed, and summary query parameters.
+  - The stream server exposes the service surface at /api/service/status, /api/service/request, /api/service/profiles, /api/service/profiles/lookup, /api/service/profiles/<id>/allocation, /api/service/profiles/<id>/readiness, /api/service/profiles/<id>/seeding-handoff, /api/service/profiles/<id>, /api/service/profiles/<id>/freshness, /api/service/sessions, /api/service/sessions/<id>, /api/service/browsers, /api/service/tabs, /api/service/monitors, /api/service/monitors/run-due, /api/service/monitors/<id>/pause, /api/service/monitors/<id>/resume, /api/service/monitors/<id>/reset-failures, /api/service/monitors/<id>/triage, /api/service/site-policies, /api/service/site-policies/<id>, /api/service/providers, /api/service/providers/<id>, /api/service/challenges, /api/service/trace, /api/service/jobs, /api/service/jobs/<id>, /api/service/jobs/<id>/cancel, /api/service/incidents, /api/service/incidents/<id>, /api/service/incidents/<id>/activity, /api/service/incidents/<id>/acknowledge, /api/service/incidents/<id>/resolve, /api/service/events, and /api/service/reconcile. GET /api/service/monitors accepts state, failed, and summary query parameters.
   - POST /api/service/request accepts one intent object with serviceName, agentName, taskName, siteId/loginId, targetServiceId, profile or runtimeProfile hints, profileLeasePolicy, profileLeaseWaitTimeoutMs, action, params, and jobTimeoutMs, then queues the browser command through the same service-owned control path.
   - POST /api/service/profiles/<id>, POST /api/service/profiles/<id>/freshness, POST /api/service/sessions/<id>, POST /api/service/site-policies/<id>, POST /api/service/monitors/<id>, and POST /api/service/providers/<id> persist service config records through the service worker queue. POST /api/service/monitors/run-due runs due active monitors now. POST /api/service/monitors/<id>/pause and POST /api/service/monitors/<id>/resume update retained monitor state. POST /api/service/monitors/<id>/triage acknowledges related incidents and clears reviewed failures. DELETE on the same entity paths removes persisted records through the same queue.
   - Service config mutation uses the path ID as authoritative and rejects a request body whose nested id conflicts with the path.
@@ -4241,6 +4288,7 @@ Notes:
   - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks.
   - HTTP GET /api/service/profiles/lookup applies the authoritative service profile selector for serviceName plus targetServiceId, siteId, loginId, or their array aliases and returns the selected profile, reason, readiness, and readiness summary.
   - HTTP GET /api/service/profiles/<id>/readiness returns one profile's no-launch targetReadiness rows for software clients that do not need allocation details.
+  - HTTP GET /api/service/profiles/<id>/seeding-handoff returns the exact detached runtime-login command, setup URL, operator steps, and warnings derived from one profile's targetReadiness rows.
   - HTTP GET /api/service/access-plan accepts serviceName, agentName, taskName, targetServiceId, siteId, loginId, or their array aliases, then returns the no-launch service-owned profile, policy, provider, challenge, readiness, monitorFindings, caller-label warning, and recommendation payload.
   - browser_navigate, browser_back, browser_forward, browser_reload, browser_tab_*, browser_set_content, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_*, browser_storage_*, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_*, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, and browser_clipboard provide typed schemas for common navigation, tab, page-content, request-inspection, session-shaping, observability, artifact, file-transfer, HAR, routing, cookie, and storage workflows.
   - browser_command queues remaining HTTP-parity actions with params copied into the queued daemon command when a typed browser_* tool is not yet available.
@@ -5119,7 +5167,8 @@ mod tests {
         format_service_browsers_text, format_service_challenges_text, format_service_events_text,
         format_service_incidents_text, format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
-        format_service_profiles_text, format_service_providers_text, format_service_sessions_text,
+        format_service_profile_seeding_handoff_text, format_service_profiles_text,
+        format_service_providers_text, format_service_sessions_text,
         format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
         format_service_trace_text, format_storage_text,
     };
@@ -5345,6 +5394,28 @@ mod tests {
             rendered,
             "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs readiness=none user_data=/tmp/work-profile\nProfile allocations: 1\n  work state=conflicted action=release_holder_or_redirect_waiting_jobs readiness=none holders=runtime-session waiting=job-1 conflicts=runtime-session services=JournalDownloader agents=codex tasks=probeACSwebsite browsers=browser-1 tabs=tab-1"
         );
+    }
+
+    #[test]
+    fn test_format_service_profile_seeding_handoff_text_includes_command() {
+        let data = json!({
+            "profileId": "google-new",
+            "targetServiceId": "google",
+            "seedingMode": "detached_headed_no_cdp",
+            "cdpAttachmentAllowedDuringSeeding": false,
+            "preferredKeyring": "basic_password_store",
+            "command": "agent-browser --runtime-profile google-new runtime login https://accounts.google.com",
+            "operatorSteps": ["Run the command exactly as shown."],
+            "warnings": ["Do not add --attachable."]
+        });
+
+        let rendered = format_service_profile_seeding_handoff_text(&data).unwrap();
+
+        assert!(rendered.contains("profile=google-new target=google"));
+        assert!(rendered.contains(
+            "Command: agent-browser --runtime-profile google-new runtime login https://accounts.google.com"
+        ));
+        assert!(rendered.contains("Do not add --attachable."));
     }
 
     #[test]

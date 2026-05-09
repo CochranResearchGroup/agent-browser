@@ -19,8 +19,9 @@ use crate::native::service_lifecycle::{
     select_service_profile_for_request, ProfileSelectionRequest,
 };
 use crate::native::service_model::{
-    service_profile_allocations, service_profile_sources, service_site_policy_sources,
-    BrowserProfile, ProfileSelectionReason, ServiceEntitySource, ServiceState,
+    service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
+    service_site_policy_sources, BrowserProfile, ProfileSelectionReason, ServiceEntitySource,
+    ServiceState,
 };
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
@@ -476,6 +477,47 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" {
+        if let Some(profile_id) = service_profile_seeding_handoff_id(path) {
+            let mut service_state = load_service_state();
+            service_state.refresh_profile_readiness();
+            let target_service_id = query_params(query).into_iter().find_map(|(key, value)| {
+                matches!(
+                    key.as_str(),
+                    "targetServiceId"
+                        | "target_service_id"
+                        | "target-service-id"
+                        | "targetService"
+                        | "target_service"
+                        | "target-service"
+                        | "siteId"
+                        | "site_id"
+                        | "site-id"
+                        | "loginId"
+                        | "login_id"
+                        | "login-id"
+                )
+                .then_some(value)
+            });
+            match service_profile_seeding_handoff(
+                &service_state,
+                profile_id,
+                target_service_id.as_deref(),
+            ) {
+                Ok(data) => {
+                    write_json_value(
+                        &mut stream,
+                        "200 OK",
+                        json!({"success": true, "data": data}),
+                    )
+                    .await;
+                }
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "404 Not Found").await;
+                }
+            }
+            return;
+        }
+
         if let Some(profile_id) = service_profile_readiness_id(path) {
             let service_state = load_service_state();
             let profile = service_state.profiles.get(profile_id);
@@ -1585,6 +1627,12 @@ fn service_profile_allocation_id(path: &str) -> Option<&str> {
 fn service_profile_readiness_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/profiles/")
         .and_then(|suffix| suffix.strip_suffix("/readiness"))
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+}
+
+fn service_profile_seeding_handoff_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/profiles/")
+        .and_then(|suffix| suffix.strip_suffix("/seeding-handoff"))
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
@@ -2979,6 +3027,12 @@ mod tests {
             Some("journal-downloader")
         );
         assert_eq!(
+            service_profile_seeding_handoff_id(
+                "/api/service/profiles/journal-downloader/seeding-handoff"
+            ),
+            Some("journal-downloader")
+        );
+        assert_eq!(
             service_profile_freshness_id("/api/service/profiles/journal-downloader/freshness"),
             Some("journal-downloader")
         );
@@ -3059,6 +3113,12 @@ mod tests {
         );
         assert_eq!(
             service_profile_readiness_id("/api/service/profiles/journal/extra/readiness"),
+            None
+        );
+        assert_eq!(
+            service_profile_seeding_handoff_id(
+                "/api/service/profiles/journal/extra/seeding-handoff"
+            ),
             None
         );
         assert_eq!(

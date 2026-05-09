@@ -66,10 +66,10 @@ use super::service_lifecycle::{
     ProfileSelectionRequest, ServiceLaunchMetadata,
 };
 use super::service_model::{
-    service_profile_allocations, service_profile_sources, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, JobState as ServiceJobState, MonitorState,
-    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent,
-    ServiceEventKind, ServiceState, SessionCleanupPolicy,
+    service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
+    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
+    JobState as ServiceJobState, MonitorState, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -234,6 +234,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_incident_activity"
             | "service_trace"
             | "service_profiles"
+            | "service_profile_seeding_handoff"
             | "service_sessions"
             | "service_browsers"
             | "service_tabs"
@@ -2487,6 +2488,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_incident_activity" => handle_service_incident_activity(cmd).await,
         "service_trace" => handle_service_trace(cmd).await,
         "service_profiles" => handle_service_profiles(cmd).await,
+        "service_profile_seeding_handoff" => handle_service_profile_seeding_handoff(cmd).await,
         "service_sessions" => handle_service_sessions(cmd).await,
         "service_browsers" => handle_service_browsers(cmd).await,
         "service_tabs" => handle_service_tabs(cmd).await,
@@ -6641,6 +6643,27 @@ async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_profile_seeding_handoff(cmd: &Value) -> Result<Value, String> {
+    let mut service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    service_state.refresh_profile_readiness();
+    let profile_id = cmd
+        .get("profileId")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "service_profile_seeding_handoff requires profileId".to_string())?;
+    let target_service_id = cmd
+        .get("targetServiceId")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty());
+    service_profile_seeding_handoff(&service_state, profile_id, target_service_id)
+}
+
 /// Return the service-owned session collection without the full status payload.
 async fn handle_service_sessions(cmd: &Value) -> Result<Value, String> {
     let service_state = cmd
@@ -10783,6 +10806,7 @@ mod tests {
             "service_incident_activity",
             "service_trace",
             "service_profiles",
+            "service_profile_seeding_handoff",
             "service_sessions",
             "service_browsers",
             "service_tabs",
@@ -11883,6 +11907,43 @@ mod tests {
         assert_eq!(
             result["data"]["profileAllocations"][0]["serviceNames"][0],
             "JournalDownloader"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_profile_seeding_handoff_via_actions_returns_command() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_profile_seeding_handoff",
+            "id": "svc-profile-seeding-1",
+            "profileId": "work",
+            "targetServiceId": "google",
+            "serviceState": {
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "targetServiceIds": ["google"]
+                    }
+                },
+                "sitePolicies": {
+                    "google": {
+                        "id": "google",
+                        "originPattern": "https://accounts.google.com",
+                        "manualLoginPreferred": true
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["profileId"], "work");
+        assert_eq!(result["data"]["seedingMode"], "detached_headed_no_cdp");
+        assert_eq!(
+            result["data"]["command"],
+            "agent-browser --runtime-profile work runtime login https://accounts.google.com"
         );
         assert!(state.browser.is_none());
     }

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-seeding-handoff-response.v1.schema.json",
+  "title": "agent-browser service profile seeding handoff response",
+  "description": "Stable API shape for an operator-ready profile seeding command and instructions derived from targetReadiness.",
+  "type": "object",
+  "required": [
+    "profileId",
+    "profileName",
+    "targetServiceId",
+    "loginId",
+    "manualSeedingRequired",
+    "seedingMode",
+    "cdpAttachmentAllowedDuringSeeding",
+    "preferredKeyring",
+    "setupScopes",
+    "recommendedAction",
+    "url",
+    "command",
+    "operatorSteps",
+    "warnings"
+  ],
+  "properties": {
+    "profileId": {
+      "type": "string"
+    },
+    "profileName": {
+      "type": "string"
+    },
+    "targetServiceId": {
+      "type": "string"
+    },
+    "loginId": {
+      "type": ["string", "null"]
+    },
+    "manualSeedingRequired": {
+      "type": "boolean"
+    },
+    "seedingMode": {
+      "type": "string",
+      "enum": ["not_required", "detached_headed_no_cdp", "attachable_ok"]
+    },
+    "cdpAttachmentAllowedDuringSeeding": {
+      "type": "boolean"
+    },
+    "preferredKeyring": {
+      "type": ["string", "null"],
+      "enum": [
+        "basic_password_store",
+        "real_os_keychain",
+        "managed_vault",
+        "manual_login_profile",
+        null
+      ]
+    },
+    "setupScopes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["signin", "chrome_sync", "passkeys", "browser_plugins"]
+      }
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "command": {
+      "type": "string"
+    },
+    "operatorSteps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

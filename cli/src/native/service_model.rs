@@ -2192,6 +2192,74 @@ pub fn service_site_policy_sources(service_state: &ServiceState) -> Vec<SitePoli
         .collect()
 }
 
+pub fn service_profile_seeding_handoff(
+    service_state: &ServiceState,
+    profile_id: &str,
+    target_service_id: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    let profile = service_state
+        .profiles
+        .get(profile_id)
+        .ok_or_else(|| format!("Profile seeding handoff not found: {profile_id}"))?;
+    let readiness = profile
+        .target_readiness
+        .iter()
+        .find(|row| {
+            target_service_id
+                .map(|target| row.target_service_id == target)
+                .unwrap_or(row.manual_seeding_required)
+        })
+        .or_else(|| profile.target_readiness.first())
+        .ok_or_else(|| format!("Profile has no target readiness rows: {profile_id}"))?;
+    let target = readiness.target_service_id.as_str();
+    let policy = service_state.site_policies.get(target);
+    let url = policy
+        .map(|policy| policy.origin_pattern.as_str())
+        .filter(|origin| origin.starts_with("http://") || origin.starts_with("https://"))
+        .unwrap_or_else(|| default_seeding_url(target));
+    let command = format!("agent-browser --runtime-profile {profile_id} runtime login {url}");
+    let mut warnings = Vec::new();
+    if readiness.seeding_mode == ProfileSeedingMode::DetachedHeadedNoCdp {
+        warnings.push(
+            "Do not add --attachable or any remote debugging/CDP flag during first seeding."
+                .to_string(),
+        );
+    }
+    if readiness.preferred_keyring != Some(ProfileKeyringPolicy::BasicPasswordStore) {
+        warnings.push("Consider basic_password_store for managed profiles so OS keyring modals do not block unattended workflows.".to_string());
+    }
+
+    Ok(serde_json::json!({
+        "profileId": profile_id,
+        "profileName": profile.name.clone(),
+        "targetServiceId": readiness.target_service_id.clone(),
+        "loginId": readiness.login_id.clone(),
+        "manualSeedingRequired": readiness.manual_seeding_required,
+        "seedingMode": readiness.seeding_mode,
+        "cdpAttachmentAllowedDuringSeeding": readiness.cdp_attachment_allowed_during_seeding,
+        "preferredKeyring": readiness.preferred_keyring,
+        "setupScopes": readiness.setup_scopes.clone(),
+        "recommendedAction": readiness.recommended_action.clone(),
+        "url": url,
+        "command": command,
+        "operatorSteps": [
+            "Run the command exactly as shown.",
+            "Complete sign-in and any requested sync, passkey, or browser plugin setup in the headed browser.",
+            "Close Chrome after seeding is complete.",
+            "Request future tabs through service-owned agent-browser automation so CDP attaches only after seeding."
+        ],
+        "warnings": warnings,
+    }))
+}
+
+fn default_seeding_url(target_service_id: &str) -> &'static str {
+    if target_is_google_signin(target_service_id) {
+        "https://accounts.google.com"
+    } else {
+        "about:blank"
+    }
+}
+
 fn builtin_site_policies() -> Vec<SitePolicy> {
     vec![
         SitePolicy {
@@ -5864,6 +5932,49 @@ mod tests {
             seeded_google.recommended_action,
             "probe_target_auth_or_reuse_if_acceptable"
         );
+    }
+
+    #[test]
+    fn service_profile_seeding_handoff_returns_detached_runtime_command() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-new".to_string(),
+                BrowserProfile {
+                    id: "google-new".to_string(),
+                    name: "Google New".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            site_policies: BTreeMap::from([(
+                "google".to_string(),
+                SitePolicy {
+                    id: "google".to_string(),
+                    origin_pattern: "https://accounts.google.com".to_string(),
+                    manual_login_preferred: true,
+                    ..SitePolicy::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        state.refresh_profile_readiness();
+
+        let handoff =
+            service_profile_seeding_handoff(&state, "google-new", Some("google")).unwrap();
+
+        assert_eq!(handoff["profileId"], "google-new");
+        assert_eq!(handoff["targetServiceId"], "google");
+        assert_eq!(handoff["seedingMode"], "detached_headed_no_cdp");
+        assert_eq!(handoff["cdpAttachmentAllowedDuringSeeding"], false);
+        assert_eq!(handoff["preferredKeyring"], "basic_password_store");
+        assert_eq!(
+            handoff["command"],
+            "agent-browser --runtime-profile google-new runtime login https://accounts.google.com"
+        );
+        assert!(handoff["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("--attachable"));
     }
 
     #[test]

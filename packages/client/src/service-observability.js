@@ -45,6 +45,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileReadinessResponse} ServiceProfileReadinessResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffOptions} ServiceProfileSeedingHandoffOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffResponse} ServiceProfileSeedingHandoffResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileMutationOptions} ServiceProfileMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileUpsertResponse} ServiceProfileUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceProviderDeleteResponse} ServiceProviderDeleteResponse
@@ -116,6 +118,23 @@ export function getServiceProfileAllocation({ id, ...options }) {
 export function getServiceProfileReadiness({ id, ...options }) {
   assertServiceId(id, 'getServiceProfileReadiness');
   return serviceGet(options, `/api/service/profiles/${encodeURIComponent(id)}/readiness`);
+}
+
+/**
+ * @param {ServiceProfileSeedingHandoffOptions} options
+ * @returns {Promise<ServiceProfileSeedingHandoffResponse>}
+ */
+export function getServiceProfileSeedingHandoff({ id, targetServiceId, ...options }) {
+  assertServiceId(id, 'getServiceProfileSeedingHandoff');
+  return serviceGet(
+    {
+      ...options,
+      query: {
+        targetServiceId,
+      },
+    },
+    `/api/service/profiles/${encodeURIComponent(id)}/seeding-handoff`,
+  );
 }
 
 /**
