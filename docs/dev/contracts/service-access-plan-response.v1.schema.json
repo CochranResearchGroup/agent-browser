@@ -248,6 +248,7 @@
         "challengeStrategy",
         "challengeIds",
         "freshnessUpdate",
+        "serviceRequest",
         "namingWarnings",
         "hasNamingWarning",
         "reasons"
@@ -500,6 +501,126 @@
                 "helper": {
                   "type": "string",
                   "enum": ["updateServiceProfileFreshness"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "requestFields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "serviceRequest": {
+          "type": "object",
+          "required": [
+            "available",
+            "recommendedAfterManualAction",
+            "blockedByManualAction",
+            "blockedByPolicy",
+            "action",
+            "selectedProfileId",
+            "profileLeasePolicy",
+            "request",
+            "http",
+            "mcp",
+            "client",
+            "requestFields"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "recommendedAfterManualAction": {
+              "type": "boolean"
+            },
+            "blockedByManualAction": {
+              "type": "boolean"
+            },
+            "blockedByPolicy": {
+              "type": "boolean"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["tab_new"]
+            },
+            "selectedProfileId": {
+              "type": ["string", "null"]
+            },
+            "profileLeasePolicy": {
+              "type": "string",
+              "enum": ["wait"]
+            },
+            "request": {
+              "type": "object",
+              "required": ["action", "profileLeasePolicy"],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": ["tab_new"]
+                },
+                "serviceName": {
+                  "type": "string"
+                },
+                "agentName": {
+                  "type": "string"
+                },
+                "taskName": {
+                  "type": "string"
+                },
+                "targetServiceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "profileLeasePolicy": {
+                  "type": "string",
+                  "enum": ["wait"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "http": {
+              "type": "object",
+              "required": ["method", "route"],
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "enum": ["POST"]
+                },
+                "route": {
+                  "type": "string",
+                  "enum": ["/api/service/request"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "mcp": {
+              "type": "object",
+              "required": ["tool"],
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "enum": ["service_request"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "client": {
+              "type": "object",
+              "required": ["package", "helper"],
+              "properties": {
+                "package": {
+                  "type": "string",
+                  "enum": ["@agent-browser/client/service-request"]
+                },
+                "helper": {
+                  "type": "string",
+                  "enum": ["requestServiceTab"]
                 }
               },
               "additionalProperties": true

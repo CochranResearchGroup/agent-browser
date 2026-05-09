@@ -233,6 +233,56 @@ function assertAccessPlan(data, label) {
     `${label} freshness update client helper mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.decision?.serviceRequest?.available === false,
+    `${label} service request availability mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.recommendedAfterManualAction === true,
+    `${label} service request manual-action recommendation mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.blockedByManualAction === true,
+    `${label} service request manual block mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.action === 'tab_new',
+    `${label} service request action mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.selectedProfileId === profileId,
+    `${label} service request selected profile mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.profileLeasePolicy === 'wait',
+    `${label} service request lease policy mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.request?.serviceName === serviceName &&
+      data.decision.serviceRequest.request.agentName === agentName &&
+      data.decision.serviceRequest.request.taskName === taskName,
+    `${label} service request caller labels mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.request?.targetServiceIds?.includes(targetServiceId),
+    `${label} service request target IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.request?.profileLeasePolicy === 'wait',
+    `${label} service request body lease policy mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.http?.route === '/api/service/request',
+    `${label} service request HTTP route mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.mcp?.tool === 'service_request',
+    `${label} service request MCP tool mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.client?.helper === 'requestServiceTab',
+    `${label} service request client helper mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     Array.isArray(data?.decision?.namingWarnings) && data.decision.namingWarnings.length === 0,
     `${label} decision naming warnings mismatch: ${JSON.stringify(data)}`,
   );

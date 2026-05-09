@@ -1715,6 +1715,12 @@ stale or unseeded login on the same profile does not block the requested site.
 The decision includes `freshnessUpdate`, which names the selected profile,
 target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.
+It also includes `serviceRequest`, a copyable service-owned tab request recipe
+for `POST /api/service/request`, MCP `service_request`, and
+`requestServiceTab()`. `serviceRequest.available` is true when the planned tab
+request can be queued immediately. When manual seeding or challenge work must
+finish first, `recommendedAfterManualAction` tells clients to reuse the same
+identity request after the operator completes that step.
 Access-plan responses echo `agentName` and `taskName` in `query` and report
 `namingWarnings` plus `hasNamingWarning` in both `query` and `decision` when
 the caller omits `serviceName`, `agentName`, or `taskName`.
@@ -1784,13 +1790,12 @@ if (!accessPlan.selectedProfile) {
   });
 }
 
+const { action: _plannedAction, ...plannedTabRequest } =
+  accessPlan.decision.serviceRequest.request;
 const tab = await requestServiceTab({
   baseUrl,
-  serviceName,
-  agentName: 'canva-cli-agent',
-  taskName: 'openCanvaWorkspace',
+  ...plannedTabRequest,
   loginId,
-  targetServiceId: loginId,
   url: 'https://www.canva.com/',
   jobTimeoutMs: 30000,
 });

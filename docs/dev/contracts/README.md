@@ -287,7 +287,11 @@ selected site policy, enabled providers, retained challenges, and a `decision`
 object with `recommendedAction`, manual-action flags, selected profile ID,
 provider IDs, challenge IDs, stable reason strings, and `freshnessUpdate`
 instructions that identify the serialized profile freshness write path for
-bounded auth probes.
+bounded auth probes. The same decision includes `serviceRequest`, a copyable
+queued tab-request recipe for HTTP `POST /api/service/request`, MCP
+`service_request`, and the `requestServiceTab()` client helper. It reports
+whether the request can be sent immediately or should be reused after manual
+seeding, challenge approval, or provider work completes.
 
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

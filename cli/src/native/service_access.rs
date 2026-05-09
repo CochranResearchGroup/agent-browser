@@ -5,7 +5,7 @@
 //! browser. It is intentionally read-only so agents and software clients can
 //! get the service recommendation without creating browser process pressure.
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
@@ -138,6 +138,7 @@ pub(crate) fn service_access_plan_for_state(
     let naming_warnings = access_plan_naming_warnings(&request);
     let has_naming_warning = !naming_warnings.is_empty();
     let decision = access_plan_decision(AccessPlanDecisionInput {
+        request: &request,
         selected_profile: selected_profile.as_ref(),
         site_policy: site_policy.as_ref(),
         challenges: &challenges,
@@ -357,6 +358,7 @@ fn select_providers(
 }
 
 struct AccessPlanDecisionInput<'a> {
+    request: &'a ServiceAccessPlanRequest,
     selected_profile: Option<&'a BrowserProfile>,
     site_policy: Option<&'a SitePolicy>,
     challenges: &'a [Challenge],
@@ -401,6 +403,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     let interaction_decision = interaction_decision(site_policy);
     let launch_posture =
         launch_posture_decision(selected_profile, site_policy, manual_seeding_required);
+    let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
     let freshness_update = freshness_update_decision(
         selected_profile,
         target_service_ids,
@@ -470,6 +473,12 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     } else {
         "use_selected_profile"
     };
+    let service_request = service_request_decision(
+        input.request,
+        selected_profile,
+        policy_denies || denied_challenge,
+        manual_action_required,
+    );
 
     json!({
         "recommendedAction": recommended_action,
@@ -480,7 +489,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "pacing": interaction_decision.pacing,
         "challengePolicy": site_policy.map(|policy| policy.challenge_policy),
         "profileId": selected_profile.map(|profile| profile.id.clone()),
-        "manualActionRequired": manual_seeding_required || waiting_for_human || failed_challenge,
+        "manualActionRequired": manual_action_required,
         "manualSeedingRequired": manual_seeding_required,
         "providerIds": providers.iter().map(|provider| provider.id.clone()).collect::<Vec<_>>(),
         "authProviderIds": provider_decision.auth_provider_ids,
@@ -489,9 +498,72 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "challengeStrategy": provider_decision.challenge_strategy,
         "challengeIds": challenges.iter().map(|challenge| challenge.id.clone()).collect::<Vec<_>>(),
         "freshnessUpdate": freshness_update,
+        "serviceRequest": service_request,
         "namingWarnings": naming_warnings,
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
+    })
+}
+
+/// Describe the queued browser-control handoff clients should use after planning.
+fn service_request_decision(
+    request: &ServiceAccessPlanRequest,
+    selected_profile: Option<&BrowserProfile>,
+    denied: bool,
+    manual_action_required: bool,
+) -> Value {
+    let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
+    let available = selected_profile_id.is_some() && !denied && !manual_action_required;
+    let recommended_after_manual_action =
+        selected_profile_id.is_some() && !denied && manual_action_required;
+    let mut service_request = Map::new();
+    service_request.insert("action".to_string(), json!("tab_new"));
+    if let Some(service_name) = request.service_name.as_ref() {
+        service_request.insert("serviceName".to_string(), json!(service_name));
+    }
+    if let Some(agent_name) = request.agent_name.as_ref() {
+        service_request.insert("agentName".to_string(), json!(agent_name));
+    }
+    if let Some(task_name) = request.task_name.as_ref() {
+        service_request.insert("taskName".to_string(), json!(task_name));
+    }
+    if !request.target_service_ids.is_empty() {
+        service_request.insert(
+            "targetServiceIds".to_string(),
+            json!(request.target_service_ids),
+        );
+    }
+    service_request.insert("profileLeasePolicy".to_string(), json!("wait"));
+
+    json!({
+        "available": available,
+        "recommendedAfterManualAction": recommended_after_manual_action,
+        "blockedByManualAction": manual_action_required,
+        "blockedByPolicy": denied,
+        "action": "tab_new",
+        "selectedProfileId": selected_profile_id,
+        "profileLeasePolicy": "wait",
+        "request": Value::Object(service_request),
+        "http": {
+            "method": "POST",
+            "route": "/api/service/request",
+        },
+        "mcp": {
+            "tool": "service_request",
+        },
+        "client": {
+            "package": "@agent-browser/client/service-request",
+            "helper": "requestServiceTab",
+        },
+        "requestFields": [
+            "serviceName",
+            "agentName",
+            "taskName",
+            "targetServiceIds",
+            "profileLeasePolicy",
+            "url",
+            "params",
+        ],
     })
 }
 
@@ -1097,6 +1169,56 @@ mod tests {
             plan["decision"]["freshnessUpdate"]["client"]["helper"],
             "updateServiceProfileFreshness"
         );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["recommendedAfterManualAction"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["blockedByManualAction"],
+            true
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["action"], "tab_new");
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["selectedProfileId"],
+            "google-work"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["profileLeasePolicy"],
+            "wait"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["serviceName"],
+            "JournalDownloader"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["agentName"],
+            "codex"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["taskName"],
+            "probeGoogleLogin"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["targetServiceIds"][0],
+            "google"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["profileLeasePolicy"],
+            "wait"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["http"]["route"],
+            "/api/service/request"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["mcp"]["tool"],
+            "service_request"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["client"]["helper"],
+            "requestServiceTab"
+        );
         assert_eq!(
             plan["decision"]["recommendedAction"],
             "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
@@ -1200,6 +1322,31 @@ mod tests {
         assert_eq!(
             plan["decision"]["freshnessUpdate"]["recommendedAfterProbe"],
             false
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["recommendedAfterManualAction"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["blockedByManualAction"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["selectedProfileId"],
+            "acs"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["serviceName"],
+            "JournalDownloader"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["targetServiceIds"][0],
+            "acs"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["client"]["package"],
+            "@agent-browser/client/service-request"
         );
     }
 

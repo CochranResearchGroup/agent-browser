@@ -739,6 +739,48 @@ export interface ServiceAccessPlanFreshnessUpdate {
   [key: string]: unknown;
 }
 
+export interface ServiceAccessPlanServiceRequest {
+  /** True when this planned tab request can be sent immediately. */
+  available: boolean;
+  /** True when the same request is recommended after manual seeding or challenge work completes. */
+  recommendedAfterManualAction: boolean;
+  /** True when the request is blocked until operator or provider work completes. */
+  blockedByManualAction: boolean;
+  /** True when site policy or challenge state denies the request. */
+  blockedByPolicy: boolean;
+  action: 'tab_new';
+  /** Profile selected by the planner, or null when no managed profile matched. */
+  selectedProfileId: string | null;
+  /** Lease policy the planner recommends for service-owned queue coordination. */
+  profileLeasePolicy: 'wait';
+  /** Copyable POST /api/service/request payload for the planned tab request. */
+  request: {
+    action: 'tab_new';
+    serviceName?: string;
+    agentName?: string;
+    taskName?: string;
+    targetServiceIds?: string[];
+    profileLeasePolicy: 'wait';
+    [key: string]: unknown;
+  };
+  http: {
+    method: 'POST';
+    route: '/api/service/request';
+    [key: string]: unknown;
+  };
+  mcp: {
+    tool: 'service_request';
+    [key: string]: unknown;
+  };
+  client: {
+    package: '@agent-browser/client/service-request';
+    helper: 'requestServiceTab';
+    [key: string]: unknown;
+  };
+  requestFields: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanDecision {
   recommendedAction: string;
   browserHost: string | null;
@@ -750,6 +792,7 @@ export interface ServiceAccessPlanDecision {
   providerIds: string[];
   challengeIds: string[];
   freshnessUpdate: ServiceAccessPlanFreshnessUpdate;
+  serviceRequest: ServiceAccessPlanServiceRequest;
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
   reasons: string[];
