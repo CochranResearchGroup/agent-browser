@@ -3595,6 +3595,8 @@ pub enum MonitorTarget {
     Url(String),
     Tab(String),
     SitePolicy(String),
+    /// Checks retained no-launch target readiness for a login/service identity.
+    ProfileReadiness(String),
 }
 
 /// Monitor execution state.

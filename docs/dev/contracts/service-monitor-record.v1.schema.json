@@ -26,6 +26,7 @@
     "target": {
       "type": "object",
       "minProperties": 1,
+      "description": "Monitor target. Supported keys are url, tab, site_policy, and profile_readiness. profile_readiness values are target service IDs whose retained profile readiness should be checked without launching Chrome.",
       "additionalProperties": {
         "type": "string"
       }

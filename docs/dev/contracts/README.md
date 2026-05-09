@@ -136,10 +136,15 @@ batch apply responses and update persisted monitor or browser state without
 launching Chrome.
 
 Failed service monitors derive incidents with `monitor_attention` escalation.
-Those incident records include `monitorId`, `monitorTarget`, and `monitorResult`,
-and summary groups include `browserIds`, `monitorIds`, `monitorResetCommands`,
-and `remedyApplyCommand` so operator and dashboard surfaces can show affected
-browsers, failed probes, and batch apply commands without expanding raw events.
+Monitor targets include `url`, `tab`, `site_policy`, and `profile_readiness`.
+The `profile_readiness` target checks retained no-launch target readiness, marks
+expired fresh rows stale, removes the expired target from
+`authenticatedServiceIds`, and records `staleProfileIds` in the monitor event
+without launching Chrome. Incident records include `monitorId`, `monitorTarget`,
+and `monitorResult`, and summary groups include `browserIds`, `monitorIds`,
+`monitorResetCommands`, and `remedyApplyCommand` so operator and dashboard
+surfaces can show affected browsers, failed probes, and batch apply commands
+without expanding raw events.
 `service-monitor-triage-response.v1.schema.json` describes the serialized
 monitor triage response returned by CLI `service monitors triage <id>`, HTTP
 `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, and

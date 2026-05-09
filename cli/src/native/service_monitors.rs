@@ -6,8 +6,8 @@ use std::time::Duration;
 use crate::flags::load_config;
 
 use super::service_model::{
-    JobState, MonitorState, MonitorTarget, ServiceEvent, ServiceEventKind, ServiceState,
-    SiteMonitor, TabLifecycle,
+    JobState, MonitorState, MonitorTarget, ProfileReadinessState, ServiceEvent, ServiceEventKind,
+    ServiceState, SiteMonitor, TabLifecycle,
 };
 use super::service_store::{
     load_default_service_state_snapshot, LockedServiceStateRepository, ServiceStateRepository,
@@ -43,6 +43,7 @@ struct MonitorProbeResult {
     event_kind: ServiceEventKind,
     message: String,
     target: MonitorTarget,
+    stale_profile_ids: Vec<String>,
 }
 
 pub fn persisted_due_monitor_work_pending() -> bool {
@@ -191,31 +192,54 @@ fn monitor_due(monitor: &SiteMonitor, now: DateTime<Utc>) -> bool {
 
 async fn run_monitor_probe(monitor: &SiteMonitor, state: &ServiceState) -> MonitorProbeResult {
     let checked_at = current_timestamp();
-    let (success, result) = match &monitor.target {
-        MonitorTarget::Url(url) => probe_url(url).await,
-        MonitorTarget::Tab(tab_id) => probe_tab(state, tab_id),
-        MonitorTarget::SitePolicy(site_policy_id) => probe_site_policy(state, site_policy_id),
+    let probe = match &monitor.target {
+        MonitorTarget::Url(url) => MonitorProbeOutcome::new(probe_url(url).await),
+        MonitorTarget::Tab(tab_id) => MonitorProbeOutcome::new(probe_tab(state, tab_id)),
+        MonitorTarget::SitePolicy(site_policy_id) => {
+            MonitorProbeOutcome::new(probe_site_policy(state, site_policy_id))
+        }
+        MonitorTarget::ProfileReadiness(target_service_id) => {
+            probe_profile_readiness(state, target_service_id, &checked_at)
+        }
     };
-    let event_kind = if success {
+    let event_kind = if probe.success {
         ServiceEventKind::Reconciliation
     } else {
         ServiceEventKind::ReconciliationError
     };
-    let message = if success {
-        format!("Service monitor {} succeeded: {}", monitor.id, result)
+    let message = if probe.success {
+        format!("Service monitor {} succeeded: {}", monitor.id, probe.result)
     } else {
-        format!("Service monitor {} failed: {}", monitor.id, result)
+        format!("Service monitor {} failed: {}", monitor.id, probe.result)
     };
 
     MonitorProbeResult {
         monitor: monitor.clone(),
         monitor_id: monitor.id.clone(),
         checked_at,
-        success,
-        result,
+        success: probe.success,
+        result: probe.result,
         event_kind,
         message,
         target: monitor.target.clone(),
+        stale_profile_ids: probe.stale_profile_ids,
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct MonitorProbeOutcome {
+    success: bool,
+    result: String,
+    stale_profile_ids: Vec<String>,
+}
+
+impl MonitorProbeOutcome {
+    fn new((success, result): (bool, String)) -> Self {
+        Self {
+            success,
+            result,
+            stale_profile_ids: Vec::new(),
+        }
     }
 }
 
@@ -260,6 +284,82 @@ fn probe_site_policy(state: &ServiceState, site_policy_id: &str) -> (bool, Strin
     } else {
         (false, "site_policy_missing".to_string())
     }
+}
+
+fn probe_profile_readiness(
+    state: &ServiceState,
+    target_service_id: &str,
+    checked_at: &str,
+) -> MonitorProbeOutcome {
+    let Ok(checked_at) = DateTime::parse_from_rfc3339(checked_at) else {
+        return MonitorProbeOutcome {
+            success: false,
+            result: "profile_readiness_clock_error".to_string(),
+            stale_profile_ids: Vec::new(),
+        };
+    };
+    let checked_at = checked_at.with_timezone(&Utc);
+    let mut observed_rows = 0_usize;
+    let mut fresh_rows = 0_usize;
+    let mut expired_profile_ids = Vec::new();
+
+    for profile in state.profiles.values() {
+        for row in profile
+            .target_readiness
+            .iter()
+            .filter(|row| row.target_service_id == target_service_id)
+        {
+            observed_rows += 1;
+            if row.state != ProfileReadinessState::Fresh {
+                continue;
+            }
+            if freshness_expired(row.freshness_expires_at.as_deref(), checked_at) {
+                expired_profile_ids.push(profile.id.clone());
+            } else {
+                fresh_rows += 1;
+            }
+        }
+    }
+
+    expired_profile_ids.sort();
+    expired_profile_ids.dedup();
+
+    if !expired_profile_ids.is_empty() {
+        return MonitorProbeOutcome {
+            success: false,
+            result: "profile_readiness_expired".to_string(),
+            stale_profile_ids: expired_profile_ids,
+        };
+    }
+    if fresh_rows > 0 {
+        return MonitorProbeOutcome {
+            success: true,
+            result: "profile_readiness_fresh".to_string(),
+            stale_profile_ids: Vec::new(),
+        };
+    }
+    if observed_rows > 0 {
+        MonitorProbeOutcome {
+            success: false,
+            result: "profile_readiness_not_fresh".to_string(),
+            stale_profile_ids: Vec::new(),
+        }
+    } else {
+        MonitorProbeOutcome {
+            success: false,
+            result: "profile_readiness_missing".to_string(),
+            stale_profile_ids: Vec::new(),
+        }
+    }
+}
+
+fn freshness_expired(freshness_expires_at: Option<&str>, checked_at: DateTime<Utc>) -> bool {
+    let Some(freshness_expires_at) = freshness_expires_at else {
+        return false;
+    };
+    DateTime::parse_from_rfc3339(freshness_expires_at)
+        .map(|expires_at| expires_at.with_timezone(&Utc) <= checked_at)
+        .unwrap_or(true)
 }
 
 fn summarize_results(results: &[MonitorProbeResult]) -> MonitorRunSummary {
@@ -357,6 +457,7 @@ fn monitor_collection_summary(monitors: &[serde_json::Value]) -> serde_json::Val
 }
 
 fn apply_monitor_result(state: &mut ServiceState, result: MonitorProbeResult) {
+    mark_expired_profile_readiness_stale(state, &result);
     let monitor = state
         .monitors
         .entry(result.monitor_id.clone())
@@ -383,12 +484,38 @@ fn apply_monitor_result(state: &mut ServiceState, result: MonitorProbeResult) {
             "target": result.target,
             "success": result.success,
             "result": result.result,
+            "staleProfileIds": result.stale_profile_ids,
         })),
         ..ServiceEvent::default()
     });
     if state.events.len() > MAX_SERVICE_EVENTS {
         let excess = state.events.len() - MAX_SERVICE_EVENTS;
         state.events.drain(0..excess);
+    }
+}
+
+fn mark_expired_profile_readiness_stale(state: &mut ServiceState, result: &MonitorProbeResult) {
+    let MonitorTarget::ProfileReadiness(target_service_id) = &result.target else {
+        return;
+    };
+    for profile_id in &result.stale_profile_ids {
+        let Some(profile) = state.profiles.get_mut(profile_id) else {
+            continue;
+        };
+        for row in profile
+            .target_readiness
+            .iter_mut()
+            .filter(|row| row.target_service_id == *target_service_id)
+            .filter(|row| row.state == ProfileReadinessState::Fresh)
+        {
+            row.state = ProfileReadinessState::Stale;
+            row.manual_seeding_required = false;
+            row.evidence = format!("freshness_expired_by_monitor:{}", result.monitor_id);
+            row.recommended_action = "probe_target_auth_or_reseed_if_needed".to_string();
+        }
+        profile
+            .authenticated_service_ids
+            .retain(|id| id != target_service_id);
     }
 }
 
@@ -410,7 +537,9 @@ fn apply_configured_service_state(mut state: ServiceState) -> ServiceState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::service_model::{BrowserTab, SitePolicy};
+    use crate::native::service_model::{
+        BrowserProfile, BrowserTab, ProfileTargetReadiness, SitePolicy,
+    };
     use crate::native::service_store::JsonServiceStateStore;
     use std::collections::BTreeMap;
 
@@ -574,5 +703,135 @@ mod tests {
             state.incidents[0].escalation,
             super::super::service_model::ServiceIncidentEscalation::MonitorAttention
         );
+    }
+
+    #[tokio::test]
+    async fn run_due_monitors_marks_expired_profile_readiness_stale() {
+        let path = unique_state_path("monitor-profile-readiness-expired");
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+        repository
+            .mutate(|state| {
+                state.monitors.insert(
+                    "acs-freshness".to_string(),
+                    SiteMonitor {
+                        id: "acs-freshness".to_string(),
+                        name: "ACS freshness".to_string(),
+                        target: MonitorTarget::ProfileReadiness("acs".to_string()),
+                        state: MonitorState::Active,
+                        last_checked_at: None,
+                        ..SiteMonitor::default()
+                    },
+                );
+                state.profiles.insert(
+                    "journal-acs".to_string(),
+                    BrowserProfile {
+                        id: "journal-acs".to_string(),
+                        target_service_ids: vec!["acs".to_string()],
+                        authenticated_service_ids: vec!["acs".to_string()],
+                        target_readiness: vec![ProfileTargetReadiness {
+                            target_service_id: "acs".to_string(),
+                            login_id: Some("acs".to_string()),
+                            state: ProfileReadinessState::Fresh,
+                            manual_seeding_required: false,
+                            evidence: "auth_probe_cookie_present".to_string(),
+                            recommended_action: "use_profile".to_string(),
+                            last_verified_at: Some("2026-05-01T00:00:00Z".to_string()),
+                            freshness_expires_at: Some("2026-05-01T00:00:01Z".to_string()),
+                        }],
+                        ..BrowserProfile::default()
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+
+        let summary = run_due_monitors_in_repository(&repository).await.unwrap();
+        let state = repository.load_snapshot().unwrap();
+
+        assert_eq!(summary.checked, 1);
+        assert_eq!(summary.failed, 1);
+        let monitor = &state.monitors["acs-freshness"];
+        assert_eq!(monitor.state, MonitorState::Faulted);
+        assert_eq!(
+            monitor.last_result.as_deref(),
+            Some("profile_readiness_expired")
+        );
+        let profile = &state.profiles["journal-acs"];
+        assert!(profile.authenticated_service_ids.is_empty());
+        let readiness = &profile.target_readiness[0];
+        assert_eq!(readiness.state, ProfileReadinessState::Stale);
+        assert_eq!(
+            readiness.evidence,
+            "freshness_expired_by_monitor:acs-freshness"
+        );
+        assert_eq!(
+            readiness.recommended_action,
+            "probe_target_auth_or_reseed_if_needed"
+        );
+        assert_eq!(state.events[0].kind, ServiceEventKind::ReconciliationError);
+        assert_eq!(
+            state.events[0].details.as_ref().unwrap()["staleProfileIds"],
+            json!(["journal-acs"])
+        );
+    }
+
+    #[tokio::test]
+    async fn run_due_monitors_succeeds_for_current_profile_readiness() {
+        let path = unique_state_path("monitor-profile-readiness-fresh");
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+        repository
+            .mutate(|state| {
+                state.monitors.insert(
+                    "acs-freshness".to_string(),
+                    SiteMonitor {
+                        id: "acs-freshness".to_string(),
+                        name: "ACS freshness".to_string(),
+                        target: MonitorTarget::ProfileReadiness("acs".to_string()),
+                        state: MonitorState::Active,
+                        last_checked_at: None,
+                        ..SiteMonitor::default()
+                    },
+                );
+                state.profiles.insert(
+                    "journal-acs".to_string(),
+                    BrowserProfile {
+                        id: "journal-acs".to_string(),
+                        target_service_ids: vec!["acs".to_string()],
+                        authenticated_service_ids: vec!["acs".to_string()],
+                        target_readiness: vec![ProfileTargetReadiness {
+                            target_service_id: "acs".to_string(),
+                            login_id: Some("acs".to_string()),
+                            state: ProfileReadinessState::Fresh,
+                            manual_seeding_required: false,
+                            evidence: "auth_probe_cookie_present".to_string(),
+                            recommended_action: "use_profile".to_string(),
+                            last_verified_at: Some("2026-05-01T00:00:00Z".to_string()),
+                            freshness_expires_at: Some("2999-05-01T00:00:01Z".to_string()),
+                        }],
+                        ..BrowserProfile::default()
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+
+        let summary = run_due_monitors_in_repository(&repository).await.unwrap();
+        let state = repository.load_snapshot().unwrap();
+
+        assert_eq!(summary.checked, 1);
+        assert_eq!(summary.succeeded, 1);
+        let monitor = &state.monitors["acs-freshness"];
+        assert_eq!(monitor.state, MonitorState::Active);
+        assert_eq!(
+            monitor.last_result.as_deref(),
+            Some("profile_readiness_fresh")
+        );
+        let profile = &state.profiles["journal-acs"];
+        assert_eq!(profile.authenticated_service_ids, vec!["acs".to_string()]);
+        assert_eq!(
+            profile.target_readiness[0].state,
+            ProfileReadinessState::Fresh
+        );
+        assert_eq!(state.events[0].kind, ServiceEventKind::Reconciliation);
     }
 }

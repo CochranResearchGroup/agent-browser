@@ -1248,7 +1248,7 @@ fn format_service_challenges_text(data: &serde_json::Value) -> Option<String> {
 }
 
 fn format_service_monitor_target(target: &serde_json::Value) -> String {
-    for key in ["url", "tab", "site_policy"] {
+    for key in ["url", "tab", "site_policy", "profile_readiness"] {
         if let Some(value) = target.get(key).and_then(|value| value.as_str()) {
             return format!("{key}:{value}");
         }
@@ -4121,6 +4121,7 @@ Notes:
   - Failed service monitors use monitor_attention escalation and include monitorIds plus reset commands in summary groups.
   - Monitor filters match --state and --failed before rendering; --summary adds state, failure, repeated-failure, never-checked, and latest-failure totals.
   - service monitors run-due checks due active monitors immediately and updates retained health fields plus monitor incidents through the same runner as the scheduler.
+  - profile_readiness monitor targets check retained no-launch target readiness, mark expired fresh rows stale, and remove the expired target from authenticatedServiceIds without launching Chrome.
   - service monitors pause and service monitors resume update only the retained monitor state, preserving health history for later triage.
   - service monitors triage <id> acknowledges the related monitor incident and resets reviewed failure counts in one service-owned operation.
   - service incidents --remedies and service remedies show active browser_degraded, monitor_attention, and os_degraded_possible groups for compact operator triage.
@@ -4140,7 +4141,7 @@ Notes:
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
-  - Text service monitors focuses monitor identity, target, interval, state, last health timestamps, and failure counts.
+  - Text service monitors focuses monitor identity, target, interval, state, last health timestamps, and failure counts, including profile_readiness:<targetServiceId> freshness monitors.
   - Text service site-policies focuses origin, source, overrideability, host, interaction, challenge, login, and profile-required policy fields.
   - Text service providers focuses provider identity, kind, enabled state, config reference, and capabilities.
   - Text service challenges focuses detected challenge kind, state, tab, provider, policy decision, human approval, and result.
@@ -5402,6 +5403,31 @@ mod tests {
             rendered,
             "Monitors: 1 of 1\n  login-freshness name=Login freshness state=paused target=site_policy:google interval_ms=60000 last_checked=2026-05-07T00:00:00Z last_succeeded=2026-05-07T00:00:00Z last_failed=never last_result=fresh consecutive_failures=0"
         );
+    }
+
+    #[test]
+    fn test_format_service_monitors_text_includes_profile_readiness_target() {
+        let data = json!({
+            "monitors": [{
+                "id": "acs-readiness",
+                "name": "ACS readiness",
+                "target": {
+                    "profile_readiness": "acs"
+                },
+                "intervalMs": 60000,
+                "state": "active",
+                "lastCheckedAt": null,
+                "lastSucceededAt": null,
+                "lastFailedAt": null,
+                "lastResult": null,
+                "consecutiveFailures": 0
+            }],
+            "matched": 1,
+            "total": 1
+        });
+        let rendered = format_service_monitors_text(&data).unwrap();
+
+        assert!(rendered.contains("target=profile_readiness:acs"));
     }
 
     #[test]
