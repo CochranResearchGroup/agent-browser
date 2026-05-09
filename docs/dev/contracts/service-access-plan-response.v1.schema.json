@@ -11,6 +11,7 @@
     "selectedProfileMatch",
     "readiness",
     "readinessSummary",
+    "seedingHandoff",
     "monitorFindings",
     "sitePolicy",
     "sitePolicySource",
@@ -167,6 +168,16 @@
         }
       },
       "additionalProperties": true
+    },
+    "seedingHandoff": {
+      "oneOf": [
+        {
+          "$ref": "service-profile-seeding-handoff-response.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "monitorFindings": {
       "type": "object",

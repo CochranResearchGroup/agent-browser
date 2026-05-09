@@ -74,7 +74,10 @@ enabled providers, retained challenges, and the service-owned decision before
 requesting browser control. Access-plan `monitorFindings` reports active
 `profile_readiness` monitor incidents for the requested target identities, and
 `decision.monitorAttentionRequired` mirrors whether those findings need
-operator or probe attention before trusting the profile.
+operator or probe attention before trusting the profile. Lookup and access-plan
+responses also include `seedingHandoff` when readiness requires manual profile
+seeding, so clients can show the detached runtime-login command without making
+a second profile-specific call.
 
 `packages/client/src/service-request.generated.d.ts` and
 `packages/client/src/service-request.generated.js` are generated from these
@@ -296,22 +299,26 @@ client wants agent-browser to apply the authoritative service profile selector
 for a service name plus site or login identity without fetching the full
 profile collection. `selectedProfileMatch` includes `matchedField` and
 `matchedIdentity` so clients can explain whether the match came from
-`authenticatedServiceIds`, `targetServiceIds`, or `sharedServiceIds`.
+`authenticatedServiceIds`, `targetServiceIds`, or `sharedServiceIds`. When
+`readinessSummary.manualSeedingRequired` is true, `seedingHandoff` contains the
+same operator-ready command and warnings as the explicit profile seeding
+handoff endpoint.
 
 `service-access-plan-response.v1.schema.json` describes the response envelope
 returned by HTTP `GET /api/service/access-plan` and MCP
 `agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}`.
 It is a read-only, no-launch planning surface. The response includes the same
 profile selector metadata and readiness summary as profile lookup, then adds the
-selected site policy, enabled providers, retained challenges, and a `decision`
-object with `recommendedAction`, manual-action flags, selected profile ID,
-provider IDs, challenge IDs, stable reason strings, and `freshnessUpdate`
-instructions that identify the serialized profile freshness write path for
-bounded auth probes. The same decision includes `serviceRequest`, a copyable
-queued tab-request recipe for HTTP `POST /api/service/request`, MCP
-`service_request`, and the `requestServiceTab()` client helper. It reports
-whether the request can be sent immediately or should be reused after manual
-seeding, challenge approval, or provider work completes.
+selected site policy, enabled providers, retained challenges, optional
+`seedingHandoff`, and a `decision` object with `recommendedAction`,
+manual-action flags, selected profile ID, provider IDs, challenge IDs, stable
+reason strings, and `freshnessUpdate` instructions that identify the serialized
+profile freshness write path for bounded auth probes. The same decision
+includes `serviceRequest`, a copyable queued tab-request recipe for HTTP
+`POST /api/service/request`, MCP `service_request`, and the
+`requestServiceTab()` client helper. It reports whether the request can be sent
+immediately or should be reused after manual seeding, challenge approval, or
+provider work completes.
 
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

@@ -1477,6 +1477,9 @@ fn service_profile_lookup_response_for_state(
             "count": target_readiness_count,
         })
     });
+    let readiness_summary = readiness_summary(readiness.as_ref());
+    let seeding_handoff =
+        seeding_handoff_for_readiness(service_state, readiness.as_ref(), &readiness_summary);
 
     Ok(json!({
         "query": {
@@ -1502,7 +1505,8 @@ fn service_profile_lookup_response_for_state(
             })
         }),
         "readiness": readiness,
-        "readinessSummary": readiness_summary(readiness.as_ref()),
+        "readinessSummary": readiness_summary,
+        "seedingHandoff": seeding_handoff,
     }))
 }
 
@@ -1606,6 +1610,25 @@ fn readiness_summary(readiness: Option<&Value>) -> Value {
         "targetServiceIds": target_service_ids,
         "recommendedActions": recommended_actions,
     })
+}
+
+fn seeding_handoff_for_readiness(
+    service_state: &ServiceState,
+    readiness: Option<&Value>,
+    readiness_summary: &Value,
+) -> Value {
+    if readiness_summary["manualSeedingRequired"].as_bool() != Some(true) {
+        return Value::Null;
+    }
+    let Some(profile_id) = readiness.and_then(|readiness| readiness["profileId"].as_str()) else {
+        return Value::Null;
+    };
+    let target_service_id = readiness_summary["targetServiceIds"]
+        .as_array()
+        .and_then(|targets| targets.iter().find_map(|target| target.as_str()));
+
+    service_profile_seeding_handoff(service_state, profile_id, target_service_id)
+        .unwrap_or(Value::Null)
 }
 
 fn service_site_policy_id(path: &str) -> Option<&str> {
@@ -2332,8 +2355,8 @@ mod tests {
         assert_service_event_record_contract, assert_service_incident_record_contract,
         assert_service_job_naming_warning_contract, service_job_naming_warning_values,
         BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState, MonitorState,
-        MonitorTarget, ProfileReadinessState, ProfileTargetReadiness, ProviderKind,
-        ServiceProvider, SiteMonitor, SitePolicy,
+        MonitorTarget, ProfileKeyringPolicy, ProfileReadinessState, ProfileSeedingMode,
+        ProfileTargetReadiness, ProviderKind, ServiceProvider, SiteMonitor, SitePolicy,
     };
 
     #[test]
@@ -2436,6 +2459,19 @@ mod tests {
                 name: "Target-only Google profile".to_string(),
                 target_service_ids: vec!["google".to_string(), "acs".to_string()],
                 shared_service_ids: vec!["JournalDownloader".to_string()],
+                target_readiness: vec![ProfileTargetReadiness {
+                    target_service_id: "google".to_string(),
+                    state: ProfileReadinessState::NeedsManualSeeding,
+                    manual_seeding_required: true,
+                    evidence: "manual_seed_required_without_authenticated_hint".to_string(),
+                    recommended_action:
+                        "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+                            .to_string(),
+                    seeding_mode: ProfileSeedingMode::DetachedHeadedNoCdp,
+                    cdp_attachment_allowed_during_seeding: false,
+                    preferred_keyring: Some(ProfileKeyringPolicy::BasicPasswordStore),
+                    ..ProfileTargetReadiness::default()
+                }],
                 persistent: true,
                 ..BrowserProfile::default()
             },
@@ -2454,6 +2490,12 @@ mod tests {
             "targetServiceIds"
         );
         assert_eq!(response["selectedProfileMatch"]["matchedIdentity"], "acs");
+        assert_eq!(response["seedingHandoff"]["profileId"], "target-only");
+        assert_eq!(response["seedingHandoff"]["targetServiceId"], "google");
+        assert_eq!(
+            response["seedingHandoff"]["command"],
+            "agent-browser --runtime-profile target-only runtime login https://accounts.google.com"
+        );
     }
 
     #[test]

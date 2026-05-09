@@ -975,6 +975,8 @@ export interface ServiceProfileLookupResponse {
   readiness: ServiceProfileReadinessResponse | null;
   /** Compact manual-seeding summary suitable for operator UI or logs. */
   readinessSummary: ServiceProfileReadinessSummary;
+  /** Operator-ready detached profile seeding handoff when readiness requires manual seeding. */
+  seedingHandoff: ServiceProfileSeedingHandoffResponse | null;
   [key: string]: unknown;
 }
 
@@ -1009,6 +1011,8 @@ export interface ServiceAccessPlanResponse {
   readiness: ServiceProfileReadinessResponse | null;
   /** Compact manual-seeding summary suitable for operator UI or logs. */
   readinessSummary: ServiceProfileReadinessSummary;
+  /** Operator-ready detached profile seeding handoff when readiness requires manual seeding. */
+  seedingHandoff: ServiceProfileSeedingHandoffResponse | null;
   /** Active monitor findings relevant to this access-plan request. */
   monitorFindings: ServiceAccessPlanMonitorFindings;
   /** Site policy selected for this request, or null when none matches. */

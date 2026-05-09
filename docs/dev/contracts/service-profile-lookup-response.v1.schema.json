@@ -10,7 +10,8 @@
     "selectedProfileSource",
     "selectedProfileMatch",
     "readiness",
-    "readinessSummary"
+    "readinessSummary",
+    "seedingHandoff"
   ],
   "properties": {
     "query": {
@@ -129,6 +130,16 @@
         }
       },
       "additionalProperties": true
+    },
+    "seedingHandoff": {
+      "oneOf": [
+        {
+          "$ref": "service-profile-seeding-handoff-response.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "additionalProperties": true

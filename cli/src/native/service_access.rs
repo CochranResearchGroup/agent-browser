@@ -9,10 +9,10 @@ use serde_json::{json, Map, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    builtin_site_policy, BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy,
-    ChallengeState, InteractionMode, ProfileSelectionReason, ProviderCapability,
-    ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState, ServiceProvider,
-    ServiceState, SitePolicy, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    builtin_site_policy, service_profile_seeding_handoff, BrowserHost, BrowserProfile, Challenge,
+    ChallengeKind, ChallengePolicy, ChallengeState, InteractionMode, ProfileSelectionReason,
+    ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState,
+    ServiceProvider, ServiceState, SitePolicy, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
     SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
@@ -119,6 +119,8 @@ pub(crate) fn service_access_plan_for_state(
         })
     });
     let readiness_summary = readiness_summary(readiness.as_ref(), &request.target_service_ids);
+    let seeding_handoff =
+        seeding_handoff_for_readiness(service_state, readiness.as_ref(), &readiness_summary);
     let monitor_findings = access_plan_monitor_findings(service_state, &request.target_service_ids);
     let selected_site_policy =
         select_site_policy(original_state, &request, selected_profile.as_ref());
@@ -182,6 +184,7 @@ pub(crate) fn service_access_plan_for_state(
         }),
         "readiness": readiness,
         "readinessSummary": readiness_summary,
+        "seedingHandoff": seeding_handoff,
         "monitorFindings": monitor_findings,
         "sitePolicy": site_policy,
         "sitePolicySource": site_policy_source,
@@ -1036,6 +1039,25 @@ fn readiness_summary(readiness: Option<&Value>, target_service_ids: &[String]) -
     })
 }
 
+fn seeding_handoff_for_readiness(
+    service_state: &ServiceState,
+    readiness: Option<&Value>,
+    readiness_summary: &Value,
+) -> Value {
+    if readiness_summary["manualSeedingRequired"].as_bool() != Some(true) {
+        return Value::Null;
+    }
+    let Some(profile_id) = readiness.and_then(|readiness| readiness["profileId"].as_str()) else {
+        return Value::Null;
+    };
+    let target_service_id = readiness_summary["targetServiceIds"]
+        .as_array()
+        .and_then(|targets| targets.iter().find_map(|target| target.as_str()));
+
+    service_profile_seeding_handoff(service_state, profile_id, target_service_id)
+        .unwrap_or(Value::Null)
+}
+
 fn readiness_recommended_action<'a>(
     readiness: Option<&'a Value>,
     target_service_ids: &[String],
@@ -1109,8 +1131,9 @@ mod tests {
     use super::*;
     use crate::native::service_model::{
         BrowserHost, BrowserProfile, Challenge, ChallengeKind, InteractionMode,
-        ProfileReadinessState, ProfileTargetReadiness, ProviderCapability, ProviderKind,
-        RateLimitPolicy, ServiceIncident, ServiceProvider, SitePolicy,
+        ProfileKeyringPolicy, ProfileReadinessState, ProfileSeedingMode, ProfileTargetReadiness,
+        ProviderCapability, ProviderKind, RateLimitPolicy, ServiceIncident, ServiceProvider,
+        SitePolicy,
     };
     use serde_json::json;
 
@@ -1133,6 +1156,9 @@ mod tests {
                         recommended_action:
                             "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
                                 .to_string(),
+                        seeding_mode: ProfileSeedingMode::DetachedHeadedNoCdp,
+                        cdp_attachment_allowed_during_seeding: false,
+                        preferred_keyring: Some(ProfileKeyringPolicy::BasicPasswordStore),
                         ..ProfileTargetReadiness::default()
                     }],
                     ..BrowserProfile::default()
@@ -1197,6 +1223,16 @@ mod tests {
         assert_eq!(plan["providers"][0]["id"], "manual");
         assert_eq!(plan["challenges"][0]["id"], "challenge-1");
         assert_eq!(plan["readinessSummary"]["manualSeedingRequired"], true);
+        assert_eq!(plan["seedingHandoff"]["profileId"], "google-work");
+        assert_eq!(plan["seedingHandoff"]["targetServiceId"], "google");
+        assert_eq!(
+            plan["seedingHandoff"]["seedingMode"],
+            "detached_headed_no_cdp"
+        );
+        assert_eq!(
+            plan["seedingHandoff"]["command"],
+            "agent-browser --runtime-profile google-work runtime login https://accounts.google.com"
+        );
         assert_eq!(plan["decision"]["authProviderIds"][0], "manual");
         assert_eq!(plan["decision"]["challengeProviderIds"][0], "manual");
         assert_eq!(plan["decision"]["challengeStrategy"], "manual_only");

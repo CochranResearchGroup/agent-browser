@@ -1831,10 +1831,11 @@ const tab = await requestServiceTab({
 ```
 
 If `accessPlan.readinessSummary.needsManualSeeding` is true, show the returned
-recommended actions to the operator and seed the managed profile before
-expecting authenticated automation to succeed for the requested identity. Use
-`lookupServiceProfile()` only when the caller needs the narrower profile-only
-selector response.
+`seedingHandoff` command, setup URL, operator steps, warnings, and recommended
+actions to the operator before expecting authenticated automation to succeed
+for the requested identity. Use `lookupServiceProfile()` only when the caller
+needs the narrower profile-only selector response; it also includes
+`seedingHandoff` when profile readiness requires manual seeding.
 
 Direct profile selection is an override. Use it when an operator knows the
 desired login state lives in a specific managed runtime profile, or when a
@@ -1861,9 +1862,10 @@ for an existing managed profile. When the recipe registers a profile, it can
 also call `upsertServiceProfileReadinessMonitor()` so the service periodically
 checks retained freshness and surfaces stale profile auth through access-plan
 `monitorFindings`. Access plans include `monitorFindings` so a client can see
-active `profile_readiness` monitor incidents before requesting browser control. Its output includes
-`readinessSummary.needsManualSeeding` plus target service IDs and recommended
-actions when readiness says an operator must seed the profile. Run
+active `profile_readiness` monitor incidents before requesting browser control.
+Its output includes `readinessSummary.needsManualSeeding`, target service IDs,
+recommended actions, and `seedingHandoff` when readiness says an operator must
+seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke
 that proves an existing managed profile is selected without registering a new
 one. Run `pnpm test:service-access-plan-no-launch` when changing the access-plan
