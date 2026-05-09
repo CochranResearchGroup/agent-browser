@@ -199,6 +199,11 @@ Only add `--register-profile-id canva-default` when the service has no suitable
 managed profile or the operator intentionally wants a new account lane. The
 script registers with `authenticated: false` by default so readiness can drive
 manual seeding instead of pretending a new profile is already signed in.
+For Google sign-on, Chrome sync, passkeys, or browser plugin setup, seed the
+new profile in headed Chrome before CDP is attached. Do not use `--attachable`
+or a remote debugging port for the first Google sign-in. Prefer the default
+`basic_password_store` keyring policy so OS keyring prompts do not block later
+unattended work.
 Add `--register-readiness-monitor` for recurring service-owned profiles. The
 script then calls `upsertServiceProfileReadinessMonitor()` after registration
 so the service can mark expired freshness stale and expose the result through

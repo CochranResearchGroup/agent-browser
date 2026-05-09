@@ -4506,7 +4506,7 @@ Global Options:
   --leave-open                  Detach on close instead of shutting down a managed runtime-profile browser
   --executable-path <path>      Custom browser executable
   --headed                      Ignored for runtime login; manual login is always headed
-  --attachable                  Keep DevTools enabled for runtime login so a later runtime attach can bind to the live browser; avoid for initial Google sign-in
+  --attachable                  Keep DevTools enabled for runtime login so a later runtime attach can bind to the live browser; avoid for initial Google sign-in, sync, passkey, or plugin setup
   --set-default                 Set a created runtime profile as default in user config
 
 Examples:
@@ -4518,6 +4518,14 @@ Examples:
   agent-browser runtime login https://example.com --attachable
   agent-browser runtime attach work
   agent-browser --runtime-profile work runtime login https://app.example.com
+
+Google and similar SSO setup:
+  Seed new Google-capable profiles in headed Chrome before CDP is attached.
+  Do not use --attachable or a remote debugging port for the first sign-in,
+  Chrome sync, passkey setup, or browser plugin setup. Close Chrome after
+  seeding, then relaunch or request tabs through service-owned automation.
+  Prefer keyring=basic_password_store for managed profiles so OS keyring
+  modals do not block unattended workflows.
 "##
         }
 
@@ -4855,8 +4863,12 @@ Configuration:
 
   Service hints are advisory. When a configured service marks
   manualLoginPreferred, navigation to known login hosts emits a warning that
-  points agents to detached `runtime login`. For ordinary sites, agents can use
-  the attachable manual-login flow when DevTools during login is accepted.
+  points agents to detached `runtime login`. For Google, Gmail, Chrome sync,
+  passkeys, or browser plugin setup, the first seeding launch must be headed
+  and detached without --attachable or any CDP/DevTools attachment. Prefer
+  keyring=basic_password_store for managed profiles so OS keyring modals do
+  not block unattended workflows. For ordinary sites, agents can use the
+  attachable manual-login flow when DevTools during login is accepted.
   Set `launch.leaveOpen` or pass `--leave-open` when you want `close` to
   detach from a managed runtime-profile browser instead of shutting it down.
   Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640

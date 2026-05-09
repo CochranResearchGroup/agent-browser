@@ -1761,6 +1761,14 @@ as the older descriptive alias for the same route. Only call
 agent-browser has no suitable managed profile, readiness reports
 `needs_manual_seeding`, the operator wants a separate account lane, or the
 client is explicitly bringing its own profile.
+New profiles that need Google sign-on, Chrome sync, passkeys, or browser
+plugin setup must be seeded in headed Chrome before CDP is attached. Do not use
+`--attachable`, a remote debugging port, or any DevTools/CDP attachment for the
+first Google sign-in. Register the profile as unauthenticated, prefer
+`keyring: "basic_password_store"`, launch
+`agent-browser --runtime-profile <name> runtime login https://accounts.google.com`,
+let the operator complete sign-in, sync, passkey, and extension setup, then
+close Chrome. Future service-owned requests can attach after that manual phase.
 When a software client has just completed a bounded auth probe, it can pass
 `readinessState: "fresh"`, `readinessEvidence`, `lastVerifiedAt`, and
 `freshnessExpiresAt` to the same helper so agent-browser records target
