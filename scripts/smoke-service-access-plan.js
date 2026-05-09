@@ -20,6 +20,7 @@ const context = createSmokeContext({
   sessionPrefix: 'access-plan',
 });
 context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
+context.env.AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS = '0';
 
 const { agentHome, session, tempHome } = context;
 const serviceName = 'AccessPlanSmoke';
@@ -30,6 +31,9 @@ const profileId = `access-plan-google-${process.pid}`;
 const sitePolicyId = 'google';
 const providerId = 'manual';
 const challengeId = `access-plan-challenge-${process.pid}`;
+const monitoredTargetServiceId = 'acs';
+const monitoredProfileId = `access-plan-acs-${process.pid}`;
+const monitoredMonitorId = `access-plan-acs-freshness-${process.pid}`;
 
 async function cleanup() {
   try {
@@ -61,6 +65,41 @@ function seedServiceState() {
             sharedServiceIds: [serviceName],
             credentialProviderIds: [providerId],
             persistent: true,
+          },
+          [monitoredProfileId]: {
+            id: monitoredProfileId,
+            name: 'Access-plan ACS profile',
+            userDataDir: join(tempHome, 'acs-profile-user-data'),
+            targetServiceIds: [monitoredTargetServiceId],
+            authenticatedServiceIds: [monitoredTargetServiceId],
+            sharedServiceIds: [serviceName],
+            targetReadiness: [
+              {
+                targetServiceId: monitoredTargetServiceId,
+                loginId: monitoredTargetServiceId,
+                state: 'fresh',
+                manualSeedingRequired: false,
+                evidence: 'auth_probe_cookie_present',
+                recommendedAction: 'use_profile',
+                lastVerifiedAt: '2026-05-01T00:00:00Z',
+                freshnessExpiresAt: '2026-05-01T00:00:01Z',
+              },
+            ],
+            persistent: true,
+          },
+        },
+        monitors: {
+          [monitoredMonitorId]: {
+            id: monitoredMonitorId,
+            name: 'ACS profile readiness',
+            target: { profile_readiness: monitoredTargetServiceId },
+            intervalMs: 60000,
+            state: 'active',
+            lastCheckedAt: null,
+            lastSucceededAt: null,
+            lastFailedAt: null,
+            lastResult: null,
+            consecutiveFailures: 0,
           },
         },
         sitePolicies: {
@@ -98,6 +137,25 @@ function seedServiceState() {
       null,
       2,
     )}\n`,
+  );
+}
+
+async function runDueMonitors() {
+  const result = await runCli(context, [
+    '--json',
+    '--session',
+    session,
+    'service',
+    'monitors',
+    'run-due',
+  ]);
+  const payload = parseJsonOutput(result.stdout, 'service monitors run-due');
+  assert(payload.success === true, `service monitors run-due failed: ${result.stdout}${result.stderr}`);
+  assert(payload.data?.checked === 1, `service monitors run-due checked mismatch: ${JSON.stringify(payload)}`);
+  assert(payload.data?.failed === 1, `service monitors run-due failed count mismatch: ${JSON.stringify(payload)}`);
+  assert(
+    payload.data?.monitorIds?.includes(monitoredMonitorId),
+    `service monitors run-due missing monitor ID: ${JSON.stringify(payload)}`,
   );
 }
 
@@ -305,6 +363,69 @@ function assertAccessPlan(data, label) {
   );
 }
 
+function assertMonitoredAccessPlan(data, label) {
+  assert(data?.query?.serviceName === serviceName, `${label} serviceName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.agentName === agentName, `${label} agentName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.taskName === taskName, `${label} taskName mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.query?.targetServiceIds?.includes(monitoredTargetServiceId),
+    `${label} targetServiceIds mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(data?.selectedProfile?.id === monitoredProfileId, `${label} selected profile mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.selectedProfileMatch?.reason === 'target_match',
+    `${label} selected profile reason mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readiness?.profileId === monitoredProfileId,
+    `${label} readiness profile mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readiness?.targetReadiness?.[0]?.state === 'stale',
+    `${label} readiness state mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readiness?.targetReadiness?.[0]?.evidence === `freshness_expired_by_monitor:${monitoredMonitorId}`,
+    `${label} readiness evidence mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.profileReadinessAttentionRequired === true,
+    `${label} monitor findings mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.profileReadinessIncidentIds?.includes(`monitor:${monitoredMonitorId}`),
+    `${label} monitor incident IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.profileReadinessMonitorIds?.includes(monitoredMonitorId),
+    `${label} monitor IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.profileReadinessResults?.includes('profile_readiness_expired'),
+    `${label} monitor results mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.targetServiceIds?.includes(monitoredTargetServiceId),
+    `${label} monitor target IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorAttentionRequired === true,
+    `${label} monitor attention flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.recommendedAction === 'probe_target_auth_or_reseed_if_needed',
+    `${label} recommended action mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.reasons?.includes('profile_readiness_monitor_attention'),
+    `${label} monitor attention reason mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.freshnessUpdate?.recommendedAfterProbe === true,
+    `${label} freshness update recommendation mismatch: ${JSON.stringify(data)}`,
+  );
+}
+
 function assertAnonymousAccessPlan(data, label) {
   assert(data?.query?.serviceName === null, `${label} anonymous serviceName mismatch: ${JSON.stringify(data)}`);
   assert(data?.query?.agentName === null, `${label} anonymous agentName mismatch: ${JSON.stringify(data)}`);
@@ -344,6 +465,7 @@ function assertNoBrowserLaunchState() {
 try {
   seedServiceState();
   const port = await enableStream();
+  await runDueMonitors();
   const query =
     `service-name=${encodeURIComponent(serviceName)}` +
     `&agent-name=${encodeURIComponent(agentName)}` +
@@ -380,6 +502,44 @@ try {
     challengeId,
   });
   assertAccessPlan(clientPlan, 'client access plan');
+
+  const monitoredQuery =
+    `service-name=${encodeURIComponent(serviceName)}` +
+    `&agent-name=${encodeURIComponent(agentName)}` +
+    `&task-name=${encodeURIComponent(taskName)}` +
+    `&login-id=${encodeURIComponent(monitoredTargetServiceId)}` +
+    '&challenge-id=none';
+
+  const monitoredHttpPlan = await httpJson(port, 'GET', `/api/service/access-plan?${monitoredQuery}`);
+  assert(
+    monitoredHttpPlan.success === true,
+    `HTTP monitored access plan failed: ${JSON.stringify(monitoredHttpPlan)}`,
+  );
+  assertMonitoredAccessPlan(monitoredHttpPlan.data, 'HTTP monitored access plan');
+
+  const monitoredMcpResult = await runCli(context, [
+    '--json',
+    '--session',
+    session,
+    'mcp',
+    'read',
+    `agent-browser://access-plan?${monitoredQuery}`,
+  ]);
+  const monitoredMcpPlan = readResourceContents(
+    parseJsonOutput(monitoredMcpResult.stdout, 'mcp monitored access plan resource'),
+    'monitored access plan',
+  );
+  assertMonitoredAccessPlan(monitoredMcpPlan, 'MCP monitored access plan');
+
+  const monitoredClientPlan = await getServiceAccessPlan({
+    baseUrl: `http://127.0.0.1:${port}`,
+    serviceName,
+    agentName,
+    taskName,
+    loginId: monitoredTargetServiceId,
+    challengeId: 'none',
+  });
+  assertMonitoredAccessPlan(monitoredClientPlan, 'client monitored access plan');
 
   const anonymousPlan = await httpJson(port, 'GET', `/api/service/access-plan?login-id=${targetServiceId}`);
   assert(anonymousPlan.success === true, `anonymous HTTP access plan failed: ${JSON.stringify(anonymousPlan)}`);
