@@ -2,6 +2,7 @@
 
 import {
   assertBrowserDegradedRemediesApplyJsonResponse,
+  assertMonitorAttentionRemediesApplyJsonResponse,
   assertOsDegradedRemediesApplyJsonResponse,
   assertServiceStatusDidNotLaunch,
   closeSession,
@@ -10,6 +11,7 @@ import {
   runCli,
   seedDegradedRemedySmokeBrowser,
   seedIncidentSummarySmokeState,
+  seedMonitorAttentionRemedySmokeMonitor,
   seedOsDegradedRemedySmokeBrowsers,
 } from './smoke-utils.js';
 
@@ -36,6 +38,31 @@ try {
   await seedIncidentSummarySmokeState(context, { serviceName, agentName, taskName });
   seedDegradedRemedySmokeBrowser(context);
   seedOsDegradedRemedySmokeBrowsers(context);
+  seedMonitorAttentionRemedySmokeMonitor(context, { serviceName, agentName, taskName });
+
+  const monitorResult = await runCli(context, [
+    '--json',
+    '--session',
+    session,
+    'service',
+    'remedies',
+    'apply',
+    '--escalation',
+    'monitor_attention',
+    '--by',
+    'operator',
+    '--note',
+    'reviewed',
+  ]);
+  const monitorApply = parseJsonOutput(monitorResult.stdout, 'service remedies apply monitor_attention');
+
+  if (monitorApply.success !== true) {
+    throw new Error(`service remedies apply monitor_attention JSON failed: ${monitorResult.stdout}${monitorResult.stderr}`);
+  }
+  assertMonitorAttentionRemediesApplyJsonResponse(
+    monitorApply.data,
+    'service remedies apply monitor_attention JSON output',
+  );
 
   const degradedResult = await runCli(context, [
     '--json',
@@ -111,6 +138,25 @@ try {
   );
 
   const browsers = status.data?.service_state?.browsers ?? {};
+  const monitor = status.data?.service_state?.monitors?.['google-login-freshness'];
+  assertMonitorAttentionRemediesApplyJsonResponse(
+    {
+      applied: true,
+      escalation: 'monitor_attention',
+      count: 1,
+      monitorIds: ['google-login-freshness'],
+      monitorResults: [
+        {
+          ...monitorApply.data.monitorResults[0],
+          monitor,
+        },
+      ],
+      browserIds: [],
+      browserResults: [],
+    },
+    'persisted service remedies apply monitor state',
+  );
+
   assertOsDegradedRemediesApplyJsonResponse(
     {
       applied: true,

@@ -130,9 +130,10 @@ output. It verifies `agent-browser --json service remedies` preserves grouped
 browser IDs, incident IDs, and remedy apply commands without launching Chrome.
 Run `pnpm test:service-remedies-apply-json-no-launch` when changing remedy
 apply output or browser retry behavior. It verifies
-`agent-browser --json service remedies apply --escalation browser_degraded` and
-`--escalation os_degraded_possible` return batch retry responses and update
-persisted browser state without launching Chrome.
+`agent-browser --json service remedies apply --escalation monitor_attention`,
+`--escalation browser_degraded`, and `--escalation os_degraded_possible` return
+batch apply responses and update persisted monitor or browser state without
+launching Chrome.
 
 Failed service monitors derive incidents with `monitor_attention` escalation.
 Those incident records include `monitorId`, `monitorTarget`, and `monitorResult`,

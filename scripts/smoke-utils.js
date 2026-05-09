@@ -163,6 +163,49 @@ export function seedOsDegradedRemedySmokeBrowsers(context) {
   });
 }
 
+export function seedMonitorAttentionRemedySmokeMonitor(context, {
+  agentName,
+  serviceName,
+  taskName,
+}) {
+  const serviceDir = join(context.agentHome, 'service');
+  const statePath = join(serviceDir, 'state.json');
+  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  state.monitors['google-login-freshness'] = {
+    id: 'google-login-freshness',
+    name: 'Google login freshness',
+    target: { site_policy: 'google' },
+    intervalMs: 60000,
+    state: 'faulted',
+    lastCheckedAt: '2026-05-01T10:03:00Z',
+    lastSucceededAt: null,
+    lastFailedAt: '2026-05-01T10:03:00Z',
+    lastResult: 'site_policy_missing',
+    consecutiveFailures: 3,
+  };
+  state.events.push({
+    id: 'event-monitor-failed',
+    timestamp: '2026-05-01T10:03:00Z',
+    kind: 'reconciliation_error',
+    message: 'Service monitor google-login-freshness failed',
+    browserId: null,
+    profileId: null,
+    sessionId: context.session,
+    serviceName,
+    agentName,
+    taskName,
+    previousHealth: null,
+    currentHealth: null,
+    details: {
+      incidentId: 'monitor:google-login-freshness',
+      monitorId: 'google-login-freshness',
+      monitorResult: 'site_policy_missing',
+      monitorTarget: { site_policy: 'google' },
+    },
+  });
+  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+}
+
 export function seedIncidentSummarySmokeEvents(context, {
   agentName,
   serviceName,
@@ -562,6 +605,38 @@ export function assertOsDegradedRemediesApplyJsonResponse(data, label) {
     escalation: 'os_degraded_possible',
     label,
   });
+}
+
+export function assertMonitorAttentionRemediesApplyJsonResponse(data, label) {
+  assert(data?.applied === true, `${label} missing applied=true: ${JSON.stringify(data)}`);
+  assert(data.escalation === 'monitor_attention', `${label} escalation mismatch: ${JSON.stringify(data)}`);
+  assert(data.count === 1, `${label} count mismatch: ${JSON.stringify(data)}`);
+  assert(Array.isArray(data.browserIds), `${label} missing browserIds array: ${JSON.stringify(data)}`);
+  assert(data.browserIds.length === 0, `${label} browserIds should be empty: ${JSON.stringify(data)}`);
+  assert(Array.isArray(data.browserResults), `${label} missing browserResults array: ${JSON.stringify(data)}`);
+  assert(data.browserResults.length === 0, `${label} browserResults should be empty: ${JSON.stringify(data)}`);
+  assert(Array.isArray(data.monitorIds), `${label} missing monitorIds array: ${JSON.stringify(data)}`);
+  assert(
+    data.monitorIds.includes('google-login-freshness'),
+    `${label} missing monitor ID: ${JSON.stringify(data)}`,
+  );
+  assert(Array.isArray(data.monitorResults), `${label} missing monitorResults array: ${JSON.stringify(data)}`);
+  assert(data.monitorResults.length === 1, `${label} monitorResults length mismatch: ${JSON.stringify(data)}`);
+
+  const result = data.monitorResults[0];
+  assert(result.id === 'google-login-freshness', `${label} monitor result ID mismatch: ${JSON.stringify(result)}`);
+  assert(result.state === 'active', `${label} monitor state mismatch: ${JSON.stringify(result)}`);
+  assert(result.updated === true, `${label} monitor updated mismatch: ${JSON.stringify(result)}`);
+  assert(result.resetFailures === true, `${label} resetFailures mismatch: ${JSON.stringify(result)}`);
+  assert(result.acknowledged === true, `${label} acknowledged mismatch: ${JSON.stringify(result)}`);
+  assert(result.monitor?.id === 'google-login-freshness', `${label} monitor record ID mismatch: ${JSON.stringify(result)}`);
+  assert(result.monitor?.state === 'active', `${label} monitor record state mismatch: ${JSON.stringify(result)}`);
+  assert(result.monitor?.consecutiveFailures === 0, `${label} monitor failures not reset: ${JSON.stringify(result)}`);
+  assert(result.monitor?.lastResult === 'site_policy_missing', `${label} monitor lastResult mismatch: ${JSON.stringify(result)}`);
+  assert(result.incident?.id === 'monitor:google-login-freshness', `${label} incident ID mismatch: ${JSON.stringify(result)}`);
+  assert(result.incident?.monitorId === 'google-login-freshness', `${label} incident monitor mismatch: ${JSON.stringify(result)}`);
+  assert(result.incident?.escalation === 'monitor_attention', `${label} incident escalation mismatch: ${JSON.stringify(result)}`);
+  assert(result.incident?.acknowledgedBy === 'operator', `${label} incident acknowledgement mismatch: ${JSON.stringify(result)}`);
 }
 
 export function httpJson(port, method, path, body) {
