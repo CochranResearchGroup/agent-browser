@@ -508,7 +508,19 @@ export interface ServiceRequestResponse<TData = unknown> {
   [key: string]: unknown;
 }
 
+export interface ServiceTabAccessPlan {
+  decision: {
+    serviceRequest: {
+      request: ServiceRequestForAction<"tab_new">;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface ServiceTabRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  accessPlan?: ServiceTabAccessPlan;
   url?: string;
   params?: Record<string, unknown>;
 }
@@ -532,6 +544,10 @@ export declare function postServiceRequest<TRequest extends ServiceRequest>(
   options: ServiceRequestHttpOptions<TRequest>,
 ): Promise<ServiceRequestResponse<ServiceRequestDataForAction<TRequest["action"]>>>;
 export declare function createServiceTabRequest(input: ServiceTabRequestOptions): ServiceRequestForAction<"tab_new">;
+export declare function createServiceTabRequestFromAccessPlan(
+  accessPlan: ServiceTabAccessPlan,
+  input?: Omit<ServiceTabRequestOptions, "accessPlan">,
+): ServiceRequestForAction<"tab_new">;
 export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<ServiceRequestResponse<ServiceTabNewData>>;
 `;
 }

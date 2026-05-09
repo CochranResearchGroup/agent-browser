@@ -14,6 +14,7 @@ const actionSet = new Set(SERVICE_REQUEST_ACTIONS);
  * @typedef {import('./service-request.generated.js').ServiceRequest} ServiceRequest
  * @typedef {import('./service-request.generated.js').ServiceRequestHttpOptions} ServiceRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRequestResponse} ServiceRequestResponse
+ * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
  * @typedef {import('./service-request.generated.js').ServiceTabRequestHttpOptions} ServiceTabRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestOptions} ServiceTabRequestOptions
  */
@@ -87,13 +88,15 @@ export function createServiceRequestMcpToolCall(input) {
  */
 export function createServiceTabRequest(input) {
   assertPlainObject(input, 'service tab request');
-  const { url, params, ...request } = input;
+  const { accessPlan, url, params, ...request } = input;
   if (url !== undefined && typeof url !== 'string') {
     throw new TypeError('service tab request url must be a string');
   }
   if (params !== undefined) {
     assertPlainObject(params, 'service tab request params');
   }
+  const plannedRequest =
+    accessPlan !== undefined ? accessPlanServiceTabRequest(accessPlan) : {};
 
   const tabParams = { ...(params ?? {}) };
   if (url !== undefined) {
@@ -101,10 +104,21 @@ export function createServiceTabRequest(input) {
   }
 
   return createServiceRequest({
+    ...plannedRequest,
     ...request,
     action: 'tab_new',
     ...(Object.keys(tabParams).length > 0 ? { params: tabParams } : {}),
   });
+}
+
+/**
+ * @param {ServiceTabAccessPlan} accessPlan
+ * @param {Omit<ServiceTabRequestOptions, 'accessPlan'>} [input]
+ * @returns {ServiceRequest}
+ */
+export function createServiceTabRequestFromAccessPlan(accessPlan, input = {}) {
+  assertPlainObject(input, 'service tab request override');
+  return createServiceTabRequest({ ...input, accessPlan });
 }
 
 /**
@@ -144,6 +158,29 @@ export async function requestServiceTab({ baseUrl, fetch = globalThis.fetch, sig
     signal,
     request: createServiceTabRequest(request),
   });
+}
+
+/**
+ * @param {ServiceTabAccessPlan} accessPlan
+ * @returns {Record<string, unknown>}
+ */
+function accessPlanServiceTabRequest(accessPlan) {
+  assertPlainObject(accessPlan, 'service access plan');
+  const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
+  assertPlainObject(decision, 'service access plan decision');
+  const decisionRecord = /** @type {Record<string, unknown>} */ (decision);
+  const serviceRequest = decisionRecord.serviceRequest;
+  assertPlainObject(serviceRequest, 'service access plan serviceRequest');
+  const serviceRequestRecord = /** @type {Record<string, unknown>} */ (serviceRequest);
+  const request = serviceRequestRecord.request;
+  assertPlainObject(request, 'service access plan serviceRequest.request');
+  const requestRecord = /** @type {Record<string, unknown>} */ (request);
+  if (requestRecord.action !== 'tab_new') {
+    throw new TypeError('service access plan serviceRequest.request action must be tab_new');
+  }
+
+  const { action: _action, ...tabRequest } = requestRecord;
+  return tabRequest;
 }
 
 /**

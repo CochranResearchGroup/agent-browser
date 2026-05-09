@@ -7,6 +7,7 @@ import {
   createServiceRequest,
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
+  createServiceTabRequestFromAccessPlan,
   postServiceRequest,
   requestServiceTab,
 } from '../packages/client/src/service-request.js';
@@ -171,6 +172,71 @@ async function main() {
     },
     jobTimeoutMs: 45_000,
   });
+  const accessPlan = {
+    decision: {
+      serviceRequest: {
+        request: {
+          serviceName: 'JournalDownloader',
+          agentName: 'article-probe-agent',
+          taskName: 'plannedProbeACSwebsite',
+          targetServiceIds: ['acs'],
+          profileLeasePolicy: 'wait',
+          action: 'tab_new',
+        },
+      },
+    },
+  };
+  assert.deepEqual(
+    createServiceTabRequestFromAccessPlan(accessPlan, {
+      url: 'https://example.com/planned',
+      jobTimeoutMs: 60_000,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'plannedProbeACSwebsite',
+      targetServiceIds: ['acs'],
+      profileLeasePolicy: 'wait',
+      action: 'tab_new',
+      params: {
+        url: 'https://example.com/planned',
+      },
+      jobTimeoutMs: 60_000,
+    },
+  );
+  assert.deepEqual(
+    createServiceTabRequest({
+      accessPlan,
+      taskName: 'overrideTask',
+      url: 'https://example.com/override',
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'overrideTask',
+      targetServiceIds: ['acs'],
+      profileLeasePolicy: 'wait',
+      action: 'tab_new',
+      params: {
+        url: 'https://example.com/override',
+      },
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceTabRequest({
+        accessPlan: {
+          decision: {
+            serviceRequest: {
+              request: {
+                action: 'navigate',
+              },
+            },
+          },
+        },
+      }),
+    /serviceRequest.request action must be tab_new/,
+  );
 
   const postRecorder = createFetchRecorder({ success: true, data: { jobId: 'job-post' } });
   const postResponse = await postServiceRequest({
@@ -209,6 +275,27 @@ async function main() {
     params: {
       url: 'https://example.com/new',
     },
+  });
+  const plannedTabRecorder = createFetchRecorder({ success: true, data: { jobId: 'job-planned-tab' } });
+  const plannedTabResponse = await requestServiceTab({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: plannedTabRecorder.fetch,
+    accessPlan,
+    url: 'https://example.com/from-plan',
+    jobTimeoutMs: 60_000,
+  });
+  assert.deepEqual(plannedTabResponse, { success: true, data: { jobId: 'job-planned-tab' } });
+  assert.deepEqual(plannedTabRecorder.calls[0].body, {
+    serviceName: 'JournalDownloader',
+    agentName: 'article-probe-agent',
+    taskName: 'plannedProbeACSwebsite',
+    targetServiceIds: ['acs'],
+    profileLeasePolicy: 'wait',
+    action: 'tab_new',
+    params: {
+      url: 'https://example.com/from-plan',
+    },
+    jobTimeoutMs: 60_000,
   });
 
   console.log('Service request client helper tests passed');

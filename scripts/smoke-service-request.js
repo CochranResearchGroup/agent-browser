@@ -15,6 +15,7 @@ import {
   createServiceRequest,
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
+  createServiceTabRequestFromAccessPlan,
   postServiceRequest,
   requestServiceTab,
 } from '../packages/client/src/service-request.js';
@@ -307,12 +308,19 @@ try {
     accessPlan.decision.serviceRequest.request?.profileLeasePolicy === 'wait',
     `access plan service request lease policy mismatch: ${JSON.stringify(accessPlan)}`,
   );
-  const { action: plannedAction, ...plannedTabRequest } = accessPlan.decision.serviceRequest.request;
-  assert(plannedAction === 'tab_new', `access plan service request action mismatch: ${JSON.stringify(accessPlan)}`);
   const plannedTabUrl = smokeDataUrl('Planned Service Tab Request Smoke', 'Planned Service Tab Request Smoke');
+  const plannedTabRequest = createServiceTabRequestFromAccessPlan(accessPlan, {
+    url: plannedTabUrl,
+    jobTimeoutMs: 30000,
+  });
+  assertServiceRequestPayloadSchemaRecord(
+    plannedTabRequest,
+    serviceRequestSchema,
+    'planned access-plan service tab request payload',
+  );
   const plannedTabResponse = await requestServiceTab({
     baseUrl: serviceBaseUrl,
-    ...plannedTabRequest,
+    accessPlan,
     url: plannedTabUrl,
     jobTimeoutMs: 30000,
   });

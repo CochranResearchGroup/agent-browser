@@ -1627,7 +1627,11 @@ MCP `service_profile_freshness_update` mirrors `POST /api/service/profiles/<id>/
 Software clients can use this TypeScript-shaped payload for `POST /api/service/request`:
 
 ```ts
-import { createServiceRequest, postServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
+import {
+  createServiceRequest,
+  postServiceRequest,
+  requestServiceTab,
+} from '@agent-browser/client/service-request';
 
 const request = {
   serviceName: 'JournalDownloader',
@@ -1671,7 +1675,12 @@ command envelope with `success`, optional `data`, optional `error`, optional
 `docs/dev/contracts/service-request.v1.schema.json` gets a typed `data` shape
 through
 `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new`
-data. When adding or removing service request actions, update the Rust
+data. `requestServiceTab`, `createServiceTabRequest`, and
+`createServiceTabRequestFromAccessPlan` accept an access-plan response so
+software clients can queue the planned tab request without manually unpacking
+`decision.serviceRequest.request`. Explicit call fields such as `url`,
+`params`, `jobTimeoutMs`, or caller labels override the planned defaults. When
+adding or removing service request actions, update the Rust
 `SERVICE_REQUEST_ACTIONS` list, the JSON schema enum, MCP `service_request`,
 HTTP `/api/service/request`, and generated client files together; run
 `pnpm test:service-api-mcp-parity`, `pnpm test:service-client-contract`, and
@@ -1790,11 +1799,9 @@ if (!accessPlan.selectedProfile) {
   });
 }
 
-const { action: _plannedAction, ...plannedTabRequest } =
-  accessPlan.decision.serviceRequest.request;
 const tab = await requestServiceTab({
   baseUrl,
-  ...plannedTabRequest,
+  accessPlan,
   loginId,
   url: 'https://www.canva.com/',
   jobTimeoutMs: 30000,
@@ -1834,9 +1841,8 @@ surface; it verifies HTTP `/api/service/access-plan`, MCP
 seeded no-launch recommendation, including caller label warnings, without
 creating browsers or browser-launching jobs. Run
 `pnpm test:service-request-live` when changing the planned tab-request
-handoff; it verifies an access-plan `decision.serviceRequest.request` can be
-passed into `requestServiceTab()` against an isolated daemon and real browser
-session. Run
+handoff; it verifies an access-plan response can be passed into
+`requestServiceTab()` against an isolated daemon and real browser session. Run
 `pnpm test:service-client-example-live` to validate the main trace
 example against a real isolated daemon and browser session.
 
