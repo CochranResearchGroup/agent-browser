@@ -11,6 +11,7 @@ import {
   postServiceRequest,
   requestServiceTab,
 } from '../packages/client/src/service-request.js';
+import { getServiceAccessPlan } from '../packages/client/src/service-observability.js';
 
 function assertServiceRequestActionDataCoverage() {
   const schema = JSON.parse(
@@ -45,6 +46,56 @@ function createFetchRecorder(payload = { success: true, data: { jobId: 'job-1' }
       status: 200,
       json: async () => payload,
     };
+  };
+  return { calls, fetch };
+}
+
+function createAccessPlanToServiceRequestFetchRecorder() {
+  const calls = [];
+  const accessPlan = {
+    selectedProfile: {
+      id: 'journal-acs',
+    },
+    decision: {
+      serviceRequest: {
+        available: true,
+        request: {
+          serviceName: 'JournalDownloader',
+          agentName: 'article-probe-agent',
+          taskName: 'probeACSwebsite',
+          loginId: 'acs',
+          targetServiceId: 'acs',
+          profileLeasePolicy: 'wait',
+          action: 'tab_new',
+        },
+      },
+    },
+  };
+  const fetch = async (url, init = {}) => {
+    const parsed = new URL(String(url));
+    calls.push({
+      url: String(url),
+      method: init.method || 'GET',
+      body: init.body ? JSON.parse(String(init.body)) : null,
+    });
+
+    if (parsed.pathname === '/api/service/access-plan') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: accessPlan }),
+      };
+    }
+
+    if (parsed.pathname === '/api/service/request') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: { jobId: 'job-access-plan-tab' } }),
+      };
+    }
+
+    throw new Error(`Unexpected request: ${String(url)}`);
   };
   return { calls, fetch };
 }
@@ -296,6 +347,46 @@ async function main() {
       url: 'https://example.com/from-plan',
     },
     jobTimeoutMs: 60_000,
+  });
+
+  const accessPlanWorkflow = createAccessPlanToServiceRequestFetchRecorder();
+  const observedAccessPlan = await getServiceAccessPlan({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: accessPlanWorkflow.fetch,
+    serviceName: 'JournalDownloader',
+    agentName: 'article-probe-agent',
+    taskName: 'probeACSwebsite',
+    loginId: 'acs',
+    targetServiceId: 'acs',
+  });
+  const accessPlanTabResponse = await requestServiceTab({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: accessPlanWorkflow.fetch,
+    accessPlan: observedAccessPlan,
+    url: 'https://example.com/access-plan-workflow',
+    jobTimeoutMs: 90_000,
+  });
+  assert.deepEqual(accessPlanTabResponse, {
+    success: true,
+    data: { jobId: 'job-access-plan-tab' },
+  });
+  assert.equal(accessPlanWorkflow.calls.length, 2);
+  assert.equal(
+    accessPlanWorkflow.calls[0].url,
+    'http://127.0.0.1:4849/api/service/access-plan?serviceName=JournalDownloader&agentName=article-probe-agent&taskName=probeACSwebsite&loginId=acs&targetServiceId=acs',
+  );
+  assert.deepEqual(accessPlanWorkflow.calls[1].body, {
+    serviceName: 'JournalDownloader',
+    agentName: 'article-probe-agent',
+    taskName: 'probeACSwebsite',
+    loginId: 'acs',
+    targetServiceId: 'acs',
+    profileLeasePolicy: 'wait',
+    action: 'tab_new',
+    params: {
+      url: 'https://example.com/access-plan-workflow',
+    },
+    jobTimeoutMs: 90_000,
   });
 
   console.log('Service request client helper tests passed');
