@@ -1833,6 +1833,10 @@ surface; it verifies HTTP `/api/service/access-plan`, MCP
 `agent-browser://access-plan`, and `getServiceAccessPlan()` agree on the same
 seeded no-launch recommendation, including caller label warnings, without
 creating browsers or browser-launching jobs. Run
+`pnpm test:service-request-live` when changing the planned tab-request
+handoff; it verifies an access-plan `decision.serviceRequest.request` can be
+passed into `requestServiceTab()` against an isolated daemon and real browser
+session. Run
 `pnpm test:service-client-example-live` to validate the main trace
 example against a real isolated daemon and browser session.
 

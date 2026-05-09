@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  getServiceAccessPlan,
   getServiceEvents,
   getServiceJob,
   getServiceJobs,
@@ -68,6 +69,7 @@ const fallbackUserDataDir = join(tempHome, 'fallback-profile-user-data');
 const httpTaskName = 'httpServiceRequestSmoke';
 const mcpTaskName = 'mcpServiceRequestSmoke';
 const tabTaskName = 'serviceTabRequestSmoke';
+const plannedTabTaskName = 'plannedServiceTabRequestSmoke';
 const jobRecordSchema = loadServiceRecordSchema('../docs/dev/contracts/service-job-record.v1.schema.json');
 const jobsResponseSchema = loadServiceRecordSchema('../docs/dev/contracts/service-jobs-response.v1.schema.json');
 const serviceRequestSchema = loadServiceRecordSchema('../docs/dev/contracts/service-request.v1.schema.json');
@@ -277,6 +279,48 @@ try {
   });
   assert(tabResponse.success === true, `client service tab request failed: ${JSON.stringify(tabResponse)}`);
 
+  const accessPlan = await getServiceAccessPlan({
+    baseUrl: serviceBaseUrl,
+    serviceName,
+    agentName,
+    taskName: plannedTabTaskName,
+    loginId: targetServiceId,
+  });
+  assert(accessPlan.selectedProfile?.id === selectedProfileId, `access plan selected wrong profile: ${JSON.stringify(accessPlan)}`);
+  assert(
+    accessPlan.selectedProfileMatch?.reason === 'authenticated_target',
+    `access plan selected profile for wrong reason: ${JSON.stringify(accessPlan)}`,
+  );
+  assert(accessPlan.decision?.serviceRequest?.available === true, `access plan service request was unavailable: ${JSON.stringify(accessPlan)}`);
+  assert(
+    accessPlan.decision.serviceRequest.request?.serviceName === serviceName &&
+      accessPlan.decision.serviceRequest.request.agentName === agentName &&
+      accessPlan.decision.serviceRequest.request.taskName === plannedTabTaskName,
+    `access plan service request missing caller labels: ${JSON.stringify(accessPlan)}`,
+  );
+  assert(
+    JSON.stringify(accessPlan.decision.serviceRequest.request?.targetServiceIds) ===
+      JSON.stringify([targetServiceId]),
+    `access plan service request target IDs mismatch: ${JSON.stringify(accessPlan)}`,
+  );
+  assert(
+    accessPlan.decision.serviceRequest.request?.profileLeasePolicy === 'wait',
+    `access plan service request lease policy mismatch: ${JSON.stringify(accessPlan)}`,
+  );
+  const { action: plannedAction, ...plannedTabRequest } = accessPlan.decision.serviceRequest.request;
+  assert(plannedAction === 'tab_new', `access plan service request action mismatch: ${JSON.stringify(accessPlan)}`);
+  const plannedTabUrl = smokeDataUrl('Planned Service Tab Request Smoke', 'Planned Service Tab Request Smoke');
+  const plannedTabResponse = await requestServiceTab({
+    baseUrl: serviceBaseUrl,
+    ...plannedTabRequest,
+    url: plannedTabUrl,
+    jobTimeoutMs: 30000,
+  });
+  assert(
+    plannedTabResponse.success === true,
+    `planned client service tab request failed: ${JSON.stringify(plannedTabResponse)}`,
+  );
+
   mcp = createMcpStdioClient({
     context,
     args: ['--session', session, 'mcp', 'serve'],
@@ -370,6 +414,31 @@ try {
       targetServiceIds: fallbackTargetServiceIds,
     },
     'client service tab request job',
+  );
+
+  const plannedTabJob = findJob(jobs, {
+    prefix: 'http-service-request-tab_new-',
+    taskName: plannedTabTaskName,
+  });
+  assert(plannedTabJob, `planned client service tab request job missing: ${JSON.stringify(jobs)}`);
+  assertServiceJobSchemaRecord(plannedTabJob, jobRecordSchema, 'planned client service tab request job');
+  assert(
+    plannedTabJob.action === 'tab_new',
+    `planned client service tab request action mismatch: ${JSON.stringify(plannedTabJob)}`,
+  );
+  assert(
+    plannedTabJob.state === 'succeeded',
+    `planned client service tab request did not succeed: ${JSON.stringify(plannedTabJob)}`,
+  );
+  assertJobIdentityHints(
+    plannedTabJob,
+    {
+      siteId: null,
+      loginId: null,
+      targetServiceId: null,
+      targetServiceIds: [targetServiceId],
+    },
+    'planned client service tab request job',
   );
 
   const httpJobDetail = await getServiceJob({
