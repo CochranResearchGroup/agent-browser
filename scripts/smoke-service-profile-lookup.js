@@ -24,11 +24,14 @@ const { agentHome, session, tempHome } = context;
 const serviceName = 'ProfileLookupSmoke';
 const targetMatchServiceName = 'ProfileLookupTargetOnlySmoke';
 const fallbackServiceName = 'ProfileLookupFallbackSmoke';
+const manualSeedingServiceName = 'ProfileLookupManualSeedingSmoke';
 const targetServiceId = 'acs';
+const manualSeedingTargetServiceId = 'google';
 const authenticatedProfileId = `profile-lookup-authenticated-${process.pid}`;
 const targetOnlyProfileId = `profile-lookup-target-${process.pid}`;
 const otherServiceProfileId = `profile-lookup-other-service-${process.pid}`;
 const serviceSharedProfileId = `profile-lookup-service-shared-${process.pid}`;
+const manualSeedingProfileId = `profile-lookup-google-${process.pid}`;
 
 async function cleanup() {
   try {
@@ -84,6 +87,29 @@ function seedServiceState() {
             targetServiceIds: [],
             authenticatedServiceIds: [],
             sharedServiceIds: [fallbackServiceName],
+            persistent: true,
+          },
+          [manualSeedingProfileId]: {
+            id: manualSeedingProfileId,
+            name: 'Manual seeding Google profile',
+            userDataDir: join(tempHome, 'manual-seeding-profile-user-data'),
+            targetServiceIds: [manualSeedingTargetServiceId],
+            authenticatedServiceIds: [],
+            sharedServiceIds: [manualSeedingServiceName],
+            targetReadiness: [
+              {
+                targetServiceId: manualSeedingTargetServiceId,
+                loginId: manualSeedingTargetServiceId,
+                state: 'needs_manual_seeding',
+                manualSeedingRequired: true,
+                evidence: 'manual_seed_required_without_authenticated_hint',
+                recommendedAction: 'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+                seedingMode: 'detached_headed_no_cdp',
+                cdpAttachmentAllowedDuringSeeding: false,
+                preferredKeyring: 'basic_password_store',
+                setupScopes: ['signin', 'chrome_sync', 'passkeys', 'browser_plugins'],
+              },
+            ],
             persistent: true,
           },
         },
@@ -173,6 +199,10 @@ try {
     lookup.data?.readinessSummary?.needsManualSeeding === false,
     `profile lookup readiness summary unexpectedly requires manual seeding: ${JSON.stringify(lookup.data)}`,
   );
+  assert(
+    lookup.data?.seedingHandoff === null,
+    `profile lookup unexpectedly returned seeding handoff: ${JSON.stringify(lookup.data)}`,
+  );
 
   const targetMatchLookup = await httpJson(
     port,
@@ -222,6 +252,43 @@ try {
     `fallback profile lookup did not report service matched identity: ${JSON.stringify(fallbackLookup.data)}`,
   );
 
+  const manualSeedingLookup = await httpJson(
+    port,
+    'GET',
+    `/api/service/profiles/lookup?service-name=${encodeURIComponent(
+      manualSeedingServiceName,
+    )}&login-id=${encodeURIComponent(manualSeedingTargetServiceId)}`,
+  );
+  assert(
+    manualSeedingLookup.success === true,
+    `manual seeding profile lookup failed: ${JSON.stringify(manualSeedingLookup)}`,
+  );
+  assert(
+    manualSeedingLookup.data?.selectedProfile?.id === manualSeedingProfileId,
+    `manual seeding profile lookup did not select Google profile: ${JSON.stringify(manualSeedingLookup.data)}`,
+  );
+  assert(
+    manualSeedingLookup.data?.readinessSummary?.needsManualSeeding === true,
+    `manual seeding profile lookup did not report seeding need: ${JSON.stringify(manualSeedingLookup.data)}`,
+  );
+  assert(
+    manualSeedingLookup.data?.seedingHandoff?.profileId === manualSeedingProfileId,
+    `manual seeding profile lookup handoff profile mismatch: ${JSON.stringify(manualSeedingLookup.data)}`,
+  );
+  assert(
+    manualSeedingLookup.data?.seedingHandoff?.targetServiceId === manualSeedingTargetServiceId,
+    `manual seeding profile lookup handoff target mismatch: ${JSON.stringify(manualSeedingLookup.data)}`,
+  );
+  assert(
+    manualSeedingLookup.data?.seedingHandoff?.seedingMode === 'detached_headed_no_cdp',
+    `manual seeding profile lookup handoff mode mismatch: ${JSON.stringify(manualSeedingLookup.data)}`,
+  );
+  assert(
+    manualSeedingLookup.data?.seedingHandoff?.command ===
+      `agent-browser --runtime-profile ${manualSeedingProfileId} runtime login https://accounts.google.com`,
+    `manual seeding profile lookup handoff command mismatch: ${JSON.stringify(manualSeedingLookup.data)}`,
+  );
+
   const clientLookup = await lookupServiceProfile({
     baseUrl: `http://127.0.0.1:${port}`,
     serviceName,
@@ -254,6 +321,33 @@ try {
   assert(
     clientLookup.readinessSummary?.needsManualSeeding === false,
     `client lookup readiness summary unexpectedly requires manual seeding: ${JSON.stringify(clientLookup)}`,
+  );
+  assert(
+    clientLookup.seedingHandoff === null,
+    `client lookup unexpectedly returned seeding handoff: ${JSON.stringify(clientLookup)}`,
+  );
+
+  const clientManualSeedingLookup = await lookupServiceProfile({
+    baseUrl: `http://127.0.0.1:${port}`,
+    serviceName: manualSeedingServiceName,
+    loginId: manualSeedingTargetServiceId,
+  });
+  assert(
+    clientManualSeedingLookup.selectedProfile?.id === manualSeedingProfileId,
+    `client manual seeding lookup did not select Google profile: ${JSON.stringify(clientManualSeedingLookup)}`,
+  );
+  assert(
+    clientManualSeedingLookup.readinessSummary?.needsManualSeeding === true,
+    `client manual seeding lookup did not report seeding need: ${JSON.stringify(clientManualSeedingLookup)}`,
+  );
+  assert(
+    clientManualSeedingLookup.seedingHandoff?.profileId === manualSeedingProfileId,
+    `client manual seeding lookup handoff profile mismatch: ${JSON.stringify(clientManualSeedingLookup)}`,
+  );
+  assert(
+    clientManualSeedingLookup.seedingHandoff?.command ===
+      `agent-browser --runtime-profile ${manualSeedingProfileId} runtime login https://accounts.google.com`,
+    `client manual seeding lookup handoff command mismatch: ${JSON.stringify(clientManualSeedingLookup)}`,
   );
 
   await cleanup();

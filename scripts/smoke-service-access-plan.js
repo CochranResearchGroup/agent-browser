@@ -242,6 +242,36 @@ function assertAccessPlan(data, label) {
     data?.readinessSummary?.manualSeedingRequired === true,
     `${label} readiness summary mismatch: ${JSON.stringify(data)}`,
   );
+  assert(data?.seedingHandoff?.profileId === profileId, `${label} seeding handoff profile mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.seedingHandoff?.targetServiceId === targetServiceId,
+    `${label} seeding handoff target mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.seedingMode === 'detached_headed_no_cdp',
+    `${label} seeding handoff mode mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.cdpAttachmentAllowedDuringSeeding === false,
+    `${label} seeding handoff CDP policy mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.preferredKeyring === 'basic_password_store',
+    `${label} seeding handoff keyring mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.setupScopes?.includes('chrome_sync'),
+    `${label} seeding handoff setup scopes mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.command ===
+      `agent-browser --runtime-profile ${profileId} runtime login https://accounts.google.com`,
+    `${label} seeding handoff command mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.warnings?.some((warning) => warning.includes('CDP')),
+    `${label} seeding handoff warnings mismatch: ${JSON.stringify(data)}`,
+  );
   assert(
     data?.monitorFindings?.profileReadinessAttentionRequired === false,
     `${label} monitor findings mismatch: ${JSON.stringify(data)}`,
@@ -404,6 +434,7 @@ function assertMonitoredAccessPlan(data, label) {
     data?.readiness?.targetReadiness?.[0]?.evidence === `freshness_expired_by_monitor:${monitoredMonitorId}`,
     `${label} readiness evidence mismatch: ${JSON.stringify(data)}`,
   );
+  assert(data?.seedingHandoff === null, `${label} seeding handoff should be null: ${JSON.stringify(data)}`);
   assert(
     data?.monitorFindings?.profileReadinessAttentionRequired === true,
     `${label} monitor findings mismatch: ${JSON.stringify(data)}`,
