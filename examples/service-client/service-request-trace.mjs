@@ -2,7 +2,12 @@
 // @ts-check
 
 import { createServiceRequest, postServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
-import { cancelServiceJob, getServiceTrace, registerServiceLoginProfile } from '@agent-browser/client/service-observability';
+import {
+  cancelServiceJob,
+  getServiceAccessPlan,
+  getServiceTrace,
+  registerServiceLoginProfile,
+} from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://example.com';
 const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | undefined>, exit(code?: number): never }} */ (
@@ -71,6 +76,7 @@ export async function runServiceWorkflow({
       dryRun: true,
       request,
       traceQuery: { serviceName, agentName, taskName, limit: 50 },
+      accessPlanQuery: { serviceName, agentName, taskName, siteId, loginId },
       profileSelection: {
         requestedIdentity: loginId || siteId,
         preferredProfileFields: ['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds'],
@@ -104,14 +110,18 @@ export async function runServiceWorkflow({
         }),
       })
     : null;
-  const commandResult = await requestServiceTab({
+  const accessPlan = await getServiceAccessPlan({
     baseUrl,
-    url,
     serviceName,
     agentName,
     taskName,
     siteId,
     loginId,
+  });
+  const commandResult = await requestServiceTab({
+    baseUrl,
+    accessPlan,
+    url,
     jobTimeoutMs: 30000,
   });
   const titleResult = await postServiceRequest({
@@ -174,6 +184,7 @@ export async function runServiceWorkflow({
   return {
     dryRun: false,
     profileRegistration,
+    accessPlan,
     commandResult,
     commandResultData: {
       tabIndex: commandResult.data?.index,

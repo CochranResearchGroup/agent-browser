@@ -174,6 +174,13 @@ try {
       output.profileRegistration?.profile?.authenticatedServiceIds?.includes(targetServiceId),
     `example did not register login profile: ${JSON.stringify(output.profileRegistration)}`,
   );
+  assert(
+    output.accessPlan?.decision?.serviceRequest?.request?.action === 'tab_new' &&
+      output.accessPlan?.decision?.serviceRequest?.request?.serviceName === serviceName &&
+      output.accessPlan?.decision?.serviceRequest?.request?.agentName === agentName &&
+      output.accessPlan?.decision?.serviceRequest?.request?.taskName === taskName,
+    `example did not fetch a usable tab access plan: ${JSON.stringify(output.accessPlan)}`,
+  );
   assert(output.traceSummary?.jobs >= 1, `example trace summary missed jobs: ${JSON.stringify(output)}`);
   const latestJob = output.latestJobs?.find(
     (job) =>

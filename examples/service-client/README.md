@@ -3,6 +3,7 @@
 This example shows the software-client workflow for agent-browser service mode:
 
 - register or refresh a login profile with `registerServiceLoginProfile`
+- ask agent-browser for an access plan with `getServiceAccessPlan`
 - request one intent-based service tab with `requestServiceTab`
 - read the matching service trace with `getServiceTrace`
 - optionally cancel a queued job with `cancelServiceJob`
@@ -14,8 +15,8 @@ This example shows the software-client workflow for agent-browser service mode:
 pnpm --filter agent-browser-service-client-example dry-run
 ```
 
-The dry run validates imports and prints the request and trace query without
-contacting a running agent-browser service.
+The dry run validates imports and prints the request, access-plan query, and
+trace query without contacting a running agent-browser service.
 
 The repo-level live smoke validates the same example against an isolated
 daemon and browser session:
@@ -43,9 +44,10 @@ pnpm --filter agent-browser-service-client-example exec node service-request-tra
 You can also set `AGENT_BROWSER_SERVICE_BASE_URL` instead of passing
 `--base-url`.
 
-The script prints the command result, typed tab, title, wait, viewport, and
-console result fields, trace counts, and the latest retained jobs so software
-projects can confirm that the request and trace metadata are connected.
+The script prints the access plan, command result, typed tab, title, wait,
+viewport, and console result fields, trace counts, and the latest retained jobs
+so software projects can confirm that the planning, request, and trace metadata
+are connected.
 
 ## Profile Selection By Login Identity
 

@@ -1820,9 +1820,9 @@ client explicitly brings its own profile directory and accepts responsibility
 for that browser identity. Otherwise, let agent-browser coordinate profile
 choice, profile lease waiting, browser reuse, and queued control requests.
 
-See `examples/service-client/` for a copyable workflow that requests a service
-tab with `requestServiceTab`, reads the matching trace, and can demonstrate
-known queued-job cancellation with `cancelServiceJob`. Run
+See `examples/service-client/` for a copyable workflow that asks for an access
+plan, requests a service tab with `requestServiceTab`, reads the matching trace,
+and can demonstrate known queued-job cancellation with `cancelServiceJob`. Run
 `pnpm test:service-client-example` to validate the example in dry-run mode.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that uses the no-launch profile planning surfaces to
