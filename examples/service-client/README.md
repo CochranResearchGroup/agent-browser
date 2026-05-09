@@ -112,6 +112,7 @@ import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
   getServiceAccessPlan,
   registerServiceLoginProfile,
+  upsertServiceProfileReadinessMonitor,
 } from '@agent-browser/client/service-observability';
 
 const accessPlan = await getServiceAccessPlan({
@@ -130,6 +131,11 @@ if (!accessPlan.selectedProfile) {
     serviceName: 'CanvaCLI',
     loginId: 'canva',
     authenticated: false,
+  });
+  await upsertServiceProfileReadinessMonitor({
+    baseUrl: 'http://127.0.0.1:4849',
+    serviceName: 'CanvaCLI',
+    loginId: 'canva',
   });
 }
 
@@ -150,7 +156,8 @@ profile-broker pattern:
 1. Ask agent-browser for a no-launch access plan with `getServiceAccessPlan()`.
 2. Pass the access-plan response to `requestServiceTab({ accessPlan })`.
 3. Register a managed profile only when agent-browser has no suitable profile.
-4. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
+4. Add a `profile_readiness` monitor when registering a new recurring profile.
+5. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
 
 Dry-run the recipe without contacting a service:
 
@@ -182,6 +189,10 @@ Only add `--register-profile-id canva-default` when the service has no suitable
 managed profile or the operator intentionally wants a new account lane. The
 script registers with `authenticated: false` by default so readiness can drive
 manual seeding instead of pretending a new profile is already signed in.
+Add `--register-readiness-monitor` for recurring service-owned profiles. The
+script then calls `upsertServiceProfileReadinessMonitor()` after registration
+so the service can mark expired freshness stale and expose the result through
+access-plan `monitorFindings`.
 When a readiness row reports `needs_manual_seeding`, the script output includes
 `readinessSummary.needsManualSeeding: true` plus the target service IDs and
 recommended actions so the client can show operator instructions directly.

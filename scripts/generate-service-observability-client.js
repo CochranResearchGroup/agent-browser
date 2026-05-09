@@ -739,6 +739,23 @@ export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabi
   profile?: Record<string, unknown>;
 }
 
+export interface ServiceProfileReadinessMonitorRecipeOptions {
+  id?: string;
+  serviceName?: string;
+  loginId?: string;
+  siteId?: string;
+  targetServiceId?: string;
+  targetServiceIds?: string[];
+  name?: string;
+  intervalMs?: number;
+  state?: ServiceMonitorRecord['state'];
+  monitor?: Record<string, unknown>;
+}
+
+export interface ServiceProfileReadinessMonitorOptions
+  extends ServiceObservabilityHttpOptions,
+    ServiceProfileReadinessMonitorRecipeOptions {}
+
 export interface ServiceProfileFreshnessUpdateOptions extends ServiceObservabilityHttpOptions {
   id: string;
   loginId?: string;
@@ -1066,6 +1083,10 @@ export declare function getServiceChallenges(options: ServiceQueryOptions): Prom
 export declare function postServiceReconcile(options: ServiceObservabilityHttpOptions): Promise<ServiceReconcileResponse>;
 export declare function upsertServiceProfile(options: ServiceProfileMutationOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function registerServiceLoginProfile(options: ServiceLoginProfileRegistrationOptions): Promise<ServiceProfileUpsertResponse>;
+/** Build the standard no-launch profile-readiness monitor record for one target identity. */
+export declare function createServiceProfileReadinessMonitor(options: ServiceProfileReadinessMonitorRecipeOptions): { id: string, monitor: Record<string, unknown> };
+/** Upsert the standard no-launch profile-readiness monitor for one target identity. */
+export declare function upsertServiceProfileReadinessMonitor(options: ServiceProfileReadinessMonitorOptions): Promise<ServiceMonitorUpsertResponse>;
 /** Ask the service to merge bounded-probe freshness evidence into a profile. */
 export declare function updateServiceProfileFreshness(options: ServiceProfileFreshnessUpdateOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;

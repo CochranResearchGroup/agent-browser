@@ -19,6 +19,7 @@ const profile = {
 await testExistingProfileSelection();
 await testExistingProfileFreshnessUpdate();
 await testMissingProfileRegistration();
+await testMissingProfileRegistrationWithReadinessMonitor();
 await testManualSeedingReadinessSummary();
 await testIdentityFirstGuidanceDrift();
 
@@ -179,6 +180,56 @@ async function testMissingProfileRegistration() {
   );
 }
 
+async function testMissingProfileRegistrationWithReadinessMonitor() {
+  const calls = [];
+  const fetch = createMockFetch({
+    profiles: [],
+    calls,
+  });
+
+  const result = await runManagedProfileWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    registerProfileId: 'canva-default',
+    registerReadinessMonitor: true,
+    readinessMonitorIntervalMs: 900000,
+    url: 'https://www.canva.com/',
+  });
+
+  assert.equal(result.profileRegistration?.upserted, true);
+  assert.equal(result.profileReadinessMonitor?.upserted, true);
+  assert.equal(result.profileReadinessMonitor?.monitor?.id, 'canvacli-canva-profile-readiness');
+  assert.deepEqual(result.profileReadinessMonitor?.monitor?.target, { profile_readiness: 'canva' });
+  assert.equal(result.profileReadinessMonitor?.monitor?.intervalMs, 900000);
+  assert.equal(result.profileReadinessMonitor?.monitor?.state, 'active');
+  assert.equal(result.tab?.success, true);
+
+  const monitorCall = calls.find(
+    (call) => call.method === 'POST' && call.path === '/api/service/monitors/canvacli-canva-profile-readiness',
+  );
+  assert(monitorCall, 'missing-profile path did not register a profile-readiness monitor');
+  const monitor = JSON.parse(String(monitorCall.body));
+  assert.equal(monitor.name, 'CanvaCLI canva profile readiness');
+  assert.deepEqual(monitor.target, { profile_readiness: 'canva' });
+  assert.equal(monitor.intervalMs, 900000);
+  assert.equal(monitor.state, 'active');
+
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    [
+      'GET /api/service/access-plan',
+      'POST /api/service/profiles/canva-default',
+      'POST /api/service/monitors/canvacli-canva-profile-readiness',
+      'POST /api/service/request',
+    ],
+  );
+}
+
 async function testManualSeedingReadinessSummary() {
   const calls = [];
   const fetch = createMockFetch({
@@ -251,6 +302,7 @@ async function testIdentityFirstGuidanceDrift() {
     'request the tab by the same identity through `requestServiceTab()`',
     'Direct profile selection is an override',
     'updateServiceProfileFreshness()',
+    'upsertServiceProfileReadinessMonitor()',
   ]);
   assertContainsAll(serviceModeDocs, [
     'The normal request model is identity-first',
@@ -258,18 +310,21 @@ async function testIdentityFirstGuidanceDrift() {
     '<code>requestServiceTab</code> or <code>POST /api/service/request</code>',
     'bring-your-own-profile workflows',
     '<code>updateServiceProfileFreshness()</code>',
+    '<code>upsertServiceProfileReadinessMonitor()</code>',
   ]);
   assertContainsAll(commandsDocs, [
     'Service requests should be identity-first',
     '`siteId`, `loginId`, or `targetServiceId`',
     'known-login overrides or bring-your-own-profile workflows',
     'POST /api/service/profiles/<id>/freshness',
+    '`profile_readiness` monitor',
   ]);
   assertContainsAll(skill, [
     '`getServiceAccessPlan()` with `serviceName`, `agentName`, `taskName`',
     'request the tab by the same identity through `requestServiceTab()`',
     'Register a new managed login profile only when agent-browser',
     'MCP `service_profile_freshness_update`',
+    '`upsertServiceProfileReadinessMonitor()`',
   ]);
 }
 
@@ -415,6 +470,22 @@ function createMockFetch({
               freshnessExpiresAt: requestedFreshness.freshnessExpiresAt,
             },
           ],
+        },
+      });
+    }
+
+    if (method === 'POST' && parsed.pathname === '/api/service/monitors/canvacli-canva-profile-readiness') {
+      const requestedMonitor = JSON.parse(String(init.body));
+      return serviceResponse({
+        upserted: true,
+        monitor: {
+          id: 'canvacli-canva-profile-readiness',
+          lastCheckedAt: null,
+          lastSucceededAt: null,
+          lastFailedAt: null,
+          lastResult: null,
+          consecutiveFailures: 0,
+          ...requestedMonitor,
         },
       });
     }

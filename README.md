@@ -1708,6 +1708,8 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 including optional freshness fields such as `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`,
 `updateServiceProfileFreshness` for service-side bounded probe freshness updates through `POST /api/service/profiles/<id>/freshness`,
+`createServiceProfileReadinessMonitor` and `upsertServiceProfileReadinessMonitor` for the standard
+`profile_readiness` monitor recipe that keeps registered login profiles from silently aging out,
 operator remedy helpers for job cancel, browser retry, and incident handling,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
 `getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
@@ -1775,6 +1777,7 @@ import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
   getServiceAccessPlan,
   registerServiceLoginProfile,
+  upsertServiceProfileReadinessMonitor,
 } from '@agent-browser/client/service-observability';
 
 const baseUrl = `http://127.0.0.1:${streamPort}`;
@@ -1797,6 +1800,11 @@ if (!accessPlan.selectedProfile) {
     serviceName,
     loginId,
     authenticated: false,
+  });
+  await upsertServiceProfileReadinessMonitor({
+    baseUrl,
+    serviceName,
+    loginId,
   });
 }
 
@@ -1831,9 +1839,11 @@ ask agent-browser for an access plan, inspect readiness and the service-owned
 decision, pass the access-plan response to `requestServiceTab()`, and register
 a managed login profile only when agent-browser has no suitable one. It can
 also post bounded auth-probe evidence through `updateServiceProfileFreshness()`
-for an existing managed profile. Access plans include `monitorFindings` so a
-client can see active `profile_readiness` monitor incidents before requesting
-browser control. Its output includes
+for an existing managed profile. When the recipe registers a profile, it can
+also call `upsertServiceProfileReadinessMonitor()` so the service periodically
+checks retained freshness and surfaces stale profile auth through access-plan
+`monitorFindings`. Access plans include `monitorFindings` so a client can see
+active `profile_readiness` monitor incidents before requesting browser control. Its output includes
 `readinessSummary.needsManualSeeding` plus target service IDs and recommended
 actions when readiness says an operator must seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke

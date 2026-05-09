@@ -12,6 +12,7 @@ import {
   getServiceSessions,
   getServiceSitePolicies,
   updateServiceProfileFreshness,
+  upsertServiceProfileReadinessMonitor,
   upsertServiceMonitor,
   upsertServiceProfile,
   upsertServiceProvider,
@@ -418,6 +419,25 @@ try {
     monitorUpsertResponseSchema,
     'client monitor upsert response',
   );
+  const clientProfileReadinessMonitor = await upsertServiceProfileReadinessMonitor({
+    baseUrl: serviceBaseUrl,
+    serviceName,
+    loginId: 'client-target',
+    intervalMs: 1800000,
+  });
+  assertServiceMonitorUpsertResponseSchemaRecord(
+    clientProfileReadinessMonitor,
+    monitorUpsertResponseSchema,
+    'client profile-readiness monitor upsert response',
+  );
+  assert(
+    clientProfileReadinessMonitor.monitor?.id === 'serviceconfigsmoke-client-target-profile-readiness',
+    `client profile-readiness monitor id mismatch: ${JSON.stringify(clientProfileReadinessMonitor)}`,
+  );
+  assert(
+    clientProfileReadinessMonitor.monitor?.target?.profile_readiness === 'client-target',
+    `client profile-readiness monitor target mismatch: ${JSON.stringify(clientProfileReadinessMonitor)}`,
+  );
 
   const httpMonitors = await getServiceMonitors({ baseUrl: serviceBaseUrl });
   assert(
@@ -428,6 +448,14 @@ try {
         monitor.target?.site_policy === 'google',
     ),
     `HTTP monitors did not include MCP-upserted monitor: ${JSON.stringify(httpMonitors)}`,
+  );
+  assert(
+    httpMonitors.monitors?.some(
+      (monitor) =>
+        monitor.id === 'serviceconfigsmoke-client-target-profile-readiness' &&
+        monitor.target?.profile_readiness === 'client-target',
+    ),
+    `HTTP monitors did not include client profile-readiness monitor: ${JSON.stringify(httpMonitors)}`,
   );
 
   const mcpProviderResult = await send('tools/call', {
@@ -500,10 +528,25 @@ try {
     monitorDeleteResponseSchema,
     'client monitor delete response',
   );
+  const clientDeleteProfileReadinessMonitor = await deleteServiceMonitor({
+    baseUrl: serviceBaseUrl,
+    id: 'serviceconfigsmoke-client-target-profile-readiness',
+  });
+  assertServiceMonitorDeleteResponseSchemaRecord(
+    clientDeleteProfileReadinessMonitor,
+    monitorDeleteResponseSchema,
+    'client profile-readiness monitor delete response',
+  );
 
   const httpMonitorsAfterDelete = await getServiceMonitors({ baseUrl: serviceBaseUrl });
   assertCollectionMissing(httpMonitorsAfterDelete, 'monitors', 'google-login-freshness', 'HTTP monitors');
   assertCollectionMissing(httpMonitorsAfterDelete, 'monitors', 'client-google-login-freshness', 'HTTP monitors');
+  assertCollectionMissing(
+    httpMonitorsAfterDelete,
+    'monitors',
+    'serviceconfigsmoke-client-target-profile-readiness',
+    'HTTP monitors',
+  );
 
   const mcpDeletePolicyResult = await send('tools/call', {
     name: 'service_site_policy_delete',

@@ -24,6 +24,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorDeleteResponse} ServiceMonitorDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorMutationOptions} ServiceMonitorMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileReadinessMonitorOptions} ServiceProfileReadinessMonitorOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileReadinessMonitorRecipeOptions} ServiceProfileReadinessMonitorRecipeOptions
  * @typedef {import('./service-observability.generated.js').ServiceMonitorRunDueResponse} ServiceMonitorRunDueResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorStateResponse} ServiceMonitorStateResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorTriageOptions} ServiceMonitorTriageOptions
@@ -427,6 +429,54 @@ export function registerServiceLoginProfile({
 }
 
 /**
+ * Build the standard no-launch profile-readiness monitor record for one target identity.
+ *
+ * @param {ServiceProfileReadinessMonitorRecipeOptions} options
+ * @returns {{ id: string, monitor: Record<string, unknown> }}
+ */
+export function createServiceProfileReadinessMonitor({
+  id,
+  serviceName,
+  loginId,
+  siteId,
+  targetServiceId,
+  targetServiceIds = [],
+  name,
+  intervalMs = 3600000,
+  state = 'active',
+  monitor = {},
+}) {
+  const targetId = loginId ?? siteId ?? targetServiceId ?? targetServiceIds[0];
+  if (typeof targetId !== 'string' || targetId.length === 0) {
+    throw new TypeError(
+      'createServiceProfileReadinessMonitor requires loginId, siteId, targetServiceId, or targetServiceIds',
+    );
+  }
+  const monitorId = id ?? serviceProfileReadinessMonitorId(serviceName, targetId);
+  return {
+    id: monitorId,
+    monitor: {
+      name: name ?? serviceProfileReadinessMonitorName(serviceName, targetId),
+      target: { profile_readiness: targetId },
+      intervalMs,
+      state,
+      ...monitor,
+    },
+  };
+}
+
+/**
+ * Upsert the standard no-launch profile-readiness monitor for one target identity.
+ *
+ * @param {ServiceProfileReadinessMonitorOptions} options
+ * @returns {Promise<ServiceMonitorUpsertResponse>}
+ */
+export function upsertServiceProfileReadinessMonitor(options) {
+  const { id, monitor } = createServiceProfileReadinessMonitor(options);
+  return upsertServiceMonitor({ ...options, id, monitor });
+}
+
+/**
  * Ask the service to merge bounded-probe freshness evidence into a profile.
  *
  * @param {ServiceProfileFreshnessUpdateOptions} options
@@ -528,6 +578,24 @@ function serviceLoginProfileReadinessAction(state) {
     default:
       return 'verify_or_seed_profile_before_authenticated_work';
   }
+}
+
+function serviceProfileReadinessMonitorId(serviceName, targetId) {
+  const prefix = typeof serviceName === 'string' && serviceName.length > 0 ? serviceName : 'service';
+  return `${serviceIdSlug(prefix)}-${serviceIdSlug(targetId)}-profile-readiness`;
+}
+
+function serviceProfileReadinessMonitorName(serviceName, targetId) {
+  const prefix = typeof serviceName === 'string' && serviceName.length > 0 ? serviceName : 'Service';
+  return `${prefix} ${targetId} profile readiness`;
+}
+
+function serviceIdSlug(value) {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'target';
 }
 
 /**

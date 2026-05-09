@@ -6,6 +6,7 @@ import {
   getServiceAccessPlan,
   registerServiceLoginProfile,
   updateServiceProfileFreshness,
+  upsertServiceProfileReadinessMonitor,
 } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://www.canva.com/';
@@ -30,6 +31,9 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   registerProfileId?: string;
  *   profileUserDataDir?: string;
  *   registerAuthenticated?: boolean;
+ *   registerReadinessMonitor?: boolean;
+ *   readinessMonitorId?: string;
+ *   readinessMonitorIntervalMs?: number;
  *   freshnessProfileId?: string;
  *   freshnessReadinessState?: ServiceProfileReadinessState;
  *   freshnessEvidence?: string;
@@ -55,6 +59,9 @@ export function buildManagedProfilePlan({
   registerProfileId,
   profileUserDataDir,
   registerAuthenticated = false,
+  registerReadinessMonitor = false,
+  readinessMonitorId,
+  readinessMonitorIntervalMs,
   freshnessProfileId,
   freshnessReadinessState = 'fresh',
   freshnessEvidence,
@@ -109,6 +116,16 @@ export function buildManagedProfilePlan({
           authenticated: registerAuthenticated,
         })
       : null,
+    optionalReadinessMonitor:
+      registerProfileId && registerReadinessMonitor
+        ? buildProfileReadinessMonitor({
+            id: readinessMonitorId,
+            serviceName,
+            loginId,
+            targetServiceId,
+            intervalMs: readinessMonitorIntervalMs,
+          })
+        : null,
     optionalFreshnessUpdate: freshnessProfileId
       ? buildProfileFreshnessUpdate({
           id: freshnessProfileId,
@@ -139,6 +156,9 @@ export async function runManagedProfileWorkflow({
   registerProfileId,
   profileUserDataDir,
   registerAuthenticated = false,
+  registerReadinessMonitor = false,
+  readinessMonitorId,
+  readinessMonitorIntervalMs,
   freshnessProfileId,
   freshnessReadinessState = 'fresh',
   freshnessEvidence,
@@ -159,6 +179,9 @@ export async function runManagedProfileWorkflow({
     registerProfileId,
     profileUserDataDir,
     registerAuthenticated,
+    registerReadinessMonitor,
+    readinessMonitorId,
+    readinessMonitorIntervalMs,
     freshnessProfileId,
     freshnessReadinessState,
     freshnessEvidence,
@@ -205,6 +228,21 @@ export async function runManagedProfileWorkflow({
         })
       : null;
 
+  const profileReadinessMonitor =
+    profileRegistration && registerReadinessMonitor
+      ? await upsertServiceProfileReadinessMonitor({
+          baseUrl,
+          fetch,
+          ...buildProfileReadinessMonitor({
+            id: readinessMonitorId,
+            serviceName,
+            loginId,
+            targetServiceId,
+            intervalMs: readinessMonitorIntervalMs,
+          }),
+        })
+      : null;
+
   const profileFreshnessUpdate = freshnessProfileId
     ? await updateServiceProfileFreshness({
         baseUrl,
@@ -243,6 +281,7 @@ export async function runManagedProfileWorkflow({
     providers: accessPlan.providers,
     challenges: accessPlan.challenges,
     profileRegistration,
+    profileReadinessMonitor,
     profileFreshnessUpdate,
     tab,
   };
@@ -327,6 +366,32 @@ function buildProfileFreshnessUpdate({
   };
 }
 
+/**
+ * @param {{
+ *   id?: string,
+ *   serviceName: string,
+ *   loginId?: string,
+ *   targetServiceId?: string,
+ *   intervalMs?: number,
+ * }} options
+ */
+function buildProfileReadinessMonitor({
+  id,
+  serviceName,
+  loginId,
+  targetServiceId,
+  intervalMs,
+}) {
+  const identity = loginId || targetServiceId;
+  return {
+    id,
+    serviceName,
+    loginId: identity,
+    targetServiceId,
+    intervalMs,
+  };
+}
+
 if (import.meta.url === `file://${nodeProcess.argv[1]}`) {
   runManagedProfileWorkflow(parseArgs(nodeProcess.argv.slice(2)))
     .then((result) => {
@@ -356,6 +421,9 @@ function parseArgs(args) {
     registerProfileId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_PROFILE_ID,
     profileUserDataDir: nodeProcess.env.AGENT_BROWSER_EXAMPLE_PROFILE_USER_DATA_DIR,
     registerAuthenticated: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_AUTHENTICATED === '1',
+    registerReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_READINESS_MONITOR === '1',
+    readinessMonitorId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_ID,
+    readinessMonitorIntervalMs: numberEnv(nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_INTERVAL_MS),
     freshnessProfileId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_PROFILE_ID,
     freshnessReadinessState: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_STATE || 'fresh',
     freshnessEvidence: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_EVIDENCE,
@@ -392,6 +460,12 @@ function parseArgs(args) {
       parsed.profileUserDataDir = requiredValue(args, ++index, arg);
     } else if (arg === '--register-authenticated') {
       parsed.registerAuthenticated = true;
+    } else if (arg === '--register-readiness-monitor') {
+      parsed.registerReadinessMonitor = true;
+    } else if (arg === '--readiness-monitor-id') {
+      parsed.readinessMonitorId = requiredValue(args, ++index, arg);
+    } else if (arg === '--readiness-monitor-interval-ms') {
+      parsed.readinessMonitorIntervalMs = Number(requiredValue(args, ++index, arg));
     } else if (arg === '--freshness-profile-id') {
       parsed.freshnessProfileId = requiredValue(args, ++index, arg);
     } else if (arg === '--freshness-state') {
@@ -412,6 +486,16 @@ function parseArgs(args) {
   }
 
   return parsed;
+}
+
+/**
+ * @param {string | undefined} value
+ */
+function numberEnv(value) {
+  if (value === undefined || value === '') {
+    return undefined;
+  }
+  return Number(value);
 }
 
 /**
