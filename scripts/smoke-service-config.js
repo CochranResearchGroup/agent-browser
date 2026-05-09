@@ -50,6 +50,9 @@ const serviceName = 'ServiceConfigSmoke';
 const agentName = 'smoke-agent';
 const taskName = 'configMutationParity';
 const traceFields = { serviceName, agentName, taskName };
+const genericProfileId = 'generic-journal-profile';
+const genericTargetId = 'generic-journal-login';
+const genericMonitorId = 'generic-journal-login-profile-readiness';
 const profileUpsertResponseSchema = loadServiceRecordSchema(
   '../docs/dev/contracts/service-profile-upsert-response.v1.schema.json',
 );
@@ -140,6 +143,49 @@ function assertSource(collection, key, id, expectedSource, label) {
   assert(
     collection[key].some((source) => source.id === id && source.source === expectedSource),
     `${label} did not report ${id} as ${expectedSource}: ${JSON.stringify(collection)}`,
+  );
+}
+
+function assertGenericRegistrationAccessPlan(data, label) {
+  assert(data?.query?.serviceName === serviceName, `${label} serviceName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.agentName === agentName, `${label} agentName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.taskName === taskName, `${label} taskName mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.query?.targetServiceIds?.includes(genericTargetId),
+    `${label} target identity mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(data?.selectedProfile?.id === genericProfileId, `${label} selected profile mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.selectedProfileMatch?.reason === 'authenticated_target',
+    `${label} selected profile reason mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.profileReadinessAttentionRequired === false,
+    `${label} monitor findings should not require attention: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.available === true,
+    `${label} planned service request unavailable: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.request?.action === 'tab_new',
+    `${label} planned action mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.request?.serviceName === serviceName &&
+      data?.decision?.serviceRequest?.request?.agentName === agentName &&
+      data?.decision?.serviceRequest?.request?.taskName === taskName,
+    `${label} planned caller labels mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.request?.loginId === genericTargetId ||
+      data?.decision?.serviceRequest?.request?.targetServiceId === genericTargetId ||
+      data?.decision?.serviceRequest?.request?.targetServiceIds?.includes(genericTargetId),
+    `${label} planned target identity mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.mcp?.tool === 'service_request',
+    `${label} planned MCP tool mismatch: ${JSON.stringify(data)}`,
   );
 }
 
@@ -275,6 +321,27 @@ try {
     `MCP profiles resource did not include HTTP-upserted profile: ${JSON.stringify(mcpProfiles)}`,
   );
 
+  const genericHttpProfile = await httpJson(
+    port,
+    'POST',
+    `/api/service/profiles/${genericProfileId}`,
+    {
+      name: 'Generic Journal Login',
+      allocation: 'per_service',
+      keyring: 'basic_password_store',
+      persistent: true,
+      targetServiceIds: [genericTargetId],
+      authenticatedServiceIds: [genericTargetId],
+      sharedServiceIds: [serviceName],
+    },
+  );
+  assert(genericHttpProfile.success === true, `generic HTTP profile upsert failed: ${JSON.stringify(genericHttpProfile)}`);
+  assertServiceProfileUpsertResponseSchemaRecord(
+    genericHttpProfile.data,
+    profileUpsertResponseSchema,
+    'generic HTTP profile upsert response',
+  );
+
   const mcpFreshnessResult = await send('tools/call', {
     name: 'service_profile_freshness_update',
     arguments: {
@@ -403,6 +470,65 @@ try {
     monitorUpsertResponseSchema,
     'MCP monitor upsert response',
   );
+  const mcpGenericMonitorResult = await send('tools/call', {
+    name: 'service_monitor_upsert',
+    arguments: {
+      id: genericMonitorId,
+      monitor: {
+        name: 'Generic journal login profile readiness',
+        target: { profile_readiness: genericTargetId },
+        intervalMs: 900000,
+        state: 'active',
+      },
+      ...traceFields,
+    },
+  });
+  const mcpGenericMonitor = parseMcpToolPayload(
+    mcpGenericMonitorResult,
+    'MCP generic service_monitor_upsert',
+  );
+  assert(
+    mcpGenericMonitor.success === true,
+    `MCP generic monitor upsert failed: ${JSON.stringify(mcpGenericMonitor)}`,
+  );
+  assertServiceMonitorUpsertResponseSchemaRecord(
+    mcpGenericMonitor.data,
+    monitorUpsertResponseSchema,
+    'MCP generic monitor upsert response',
+  );
+
+  const genericAccessPlanQuery =
+    `service-name=${encodeURIComponent(serviceName)}` +
+    `&agent-name=${encodeURIComponent(agentName)}` +
+    `&task-name=${encodeURIComponent(taskName)}` +
+    `&login-id=${encodeURIComponent(genericTargetId)}` +
+    '&challenge-id=none';
+  const genericHttpAccessPlan = await httpJson(
+    port,
+    'GET',
+    `/api/service/access-plan?${genericAccessPlanQuery}`,
+  );
+  assert(
+    genericHttpAccessPlan.success === true,
+    `generic HTTP access-plan failed: ${JSON.stringify(genericHttpAccessPlan)}`,
+  );
+  assertGenericRegistrationAccessPlan(genericHttpAccessPlan.data, 'generic HTTP access-plan');
+
+  const genericMcpAccessPlanUri =
+    `agent-browser://access-plan?serviceName=${encodeURIComponent(serviceName)}` +
+    `&agentName=${encodeURIComponent(agentName)}` +
+    `&taskName=${encodeURIComponent(taskName)}` +
+    `&loginId=${encodeURIComponent(genericTargetId)}` +
+    '&challengeId=none';
+  const genericMcpAccessPlanResource = await send('resources/read', {
+    uri: genericMcpAccessPlanUri,
+  });
+  const genericMcpAccessPlan = parseMcpJsonResource(
+    genericMcpAccessPlanResource,
+    genericMcpAccessPlanUri,
+    'MCP generic access-plan resource',
+  );
+  assertGenericRegistrationAccessPlan(genericMcpAccessPlan, 'generic MCP access-plan');
 
   const clientMonitor = await upsertServiceMonitor({
     baseUrl: serviceBaseUrl,
@@ -448,6 +574,15 @@ try {
         monitor.target?.site_policy === 'google',
     ),
     `HTTP monitors did not include MCP-upserted monitor: ${JSON.stringify(httpMonitors)}`,
+  );
+  assert(
+    httpMonitors.monitors?.some(
+      (monitor) =>
+        monitor.id === genericMonitorId &&
+        monitor.target?.profile_readiness === genericTargetId &&
+        monitor.state === 'active',
+    ),
+    `HTTP monitors did not include MCP-upserted generic profile-readiness monitor: ${JSON.stringify(httpMonitors)}`,
   );
   assert(
     httpMonitors.monitors?.some(
@@ -537,6 +672,15 @@ try {
     monitorDeleteResponseSchema,
     'client profile-readiness monitor delete response',
   );
+  const clientDeleteGenericMonitor = await deleteServiceMonitor({
+    baseUrl: serviceBaseUrl,
+    id: genericMonitorId,
+  });
+  assertServiceMonitorDeleteResponseSchemaRecord(
+    clientDeleteGenericMonitor,
+    monitorDeleteResponseSchema,
+    'generic profile-readiness monitor delete response',
+  );
 
   const httpMonitorsAfterDelete = await getServiceMonitors({ baseUrl: serviceBaseUrl });
   assertCollectionMissing(httpMonitorsAfterDelete, 'monitors', 'google-login-freshness', 'HTTP monitors');
@@ -547,6 +691,7 @@ try {
     'serviceconfigsmoke-client-target-profile-readiness',
     'HTTP monitors',
   );
+  assertCollectionMissing(httpMonitorsAfterDelete, 'monitors', genericMonitorId, 'HTTP monitors');
 
   const mcpDeletePolicyResult = await send('tools/call', {
     name: 'service_site_policy_delete',
@@ -636,10 +781,20 @@ try {
     profileDeleteResponseSchema,
     'client profile delete response',
   );
+  const clientDeleteGenericProfile = await deleteServiceProfile({
+    baseUrl: serviceBaseUrl,
+    id: genericProfileId,
+  });
+  assertServiceProfileDeleteResponseSchemaRecord(
+    clientDeleteGenericProfile,
+    profileDeleteResponseSchema,
+    'generic profile delete response',
+  );
 
   const httpProfilesAfterDelete = await getServiceProfiles({ baseUrl: serviceBaseUrl });
   assertCollectionMissing(httpProfilesAfterDelete, 'profiles', 'journal-downloader', 'HTTP profiles');
   assertCollectionMissing(httpProfilesAfterDelete, 'profiles', 'client-profile', 'HTTP profiles');
+  assertCollectionMissing(httpProfilesAfterDelete, 'profiles', genericProfileId, 'HTTP profiles');
 
   const httpDeleteProvider = await deleteServiceProvider({
     baseUrl: serviceBaseUrl,
