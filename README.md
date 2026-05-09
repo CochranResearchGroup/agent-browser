@@ -1833,6 +1833,11 @@ See `examples/service-client/` for a copyable workflow that asks for an access
 plan, requests a service tab with `requestServiceTab`, reads the matching trace,
 and can demonstrate known queued-job cancellation with `cancelServiceJob`. Run
 `pnpm test:service-client-example` to validate the example in dry-run mode.
+The main `service-request-trace.mjs` example is the generic integration path
+for non-Canva software clients: pass `--register-profile-id` and
+`--register-readiness-monitor` when the service needs a recurring managed
+profile, then let agent-browser register the profile, add the retained
+freshness monitor, get the access plan, and submit the planned tab request.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that uses the no-launch profile planning surfaces to
 ask agent-browser for an access plan, inspect readiness and the service-owned

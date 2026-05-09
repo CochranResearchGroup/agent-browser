@@ -7,6 +7,7 @@ import {
   getServiceAccessPlan,
   getServiceTrace,
   registerServiceLoginProfile,
+  upsertServiceProfileReadinessMonitor,
 } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://example.com';
@@ -25,6 +26,9 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   loginId?: string;
  *   registerProfileId?: string;
  *   profileUserDataDir?: string;
+ *   registerReadinessMonitor?: boolean;
+ *   readinessMonitorId?: string;
+ *   readinessMonitorIntervalMs?: number;
  *   cancelJobId?: string;
  *   dryRun?: boolean;
  * }} WorkflowOptions
@@ -66,6 +70,9 @@ export async function runServiceWorkflow({
   loginId = siteId,
   registerProfileId,
   profileUserDataDir,
+  registerReadinessMonitor = false,
+  readinessMonitorId,
+  readinessMonitorIntervalMs,
   cancelJobId,
   dryRun = false,
 } = {}) {
@@ -90,6 +97,16 @@ export async function runServiceWorkflow({
             userDataDir: profileUserDataDir,
           })
         : null,
+      profileReadinessMonitor:
+        registerProfileId && registerReadinessMonitor
+          ? buildProfileReadinessMonitor({
+              id: readinessMonitorId,
+              serviceName,
+              loginId,
+              siteId,
+              intervalMs: readinessMonitorIntervalMs,
+            })
+          : null,
       cancelRequest: cancelJobId ? { jobId: cancelJobId, remedy: 'cancelServiceJob' } : null,
     };
   }
@@ -110,6 +127,19 @@ export async function runServiceWorkflow({
         }),
       })
     : null;
+  const profileReadinessMonitor =
+    profileRegistration && registerReadinessMonitor
+      ? await upsertServiceProfileReadinessMonitor({
+          baseUrl,
+          ...buildProfileReadinessMonitor({
+            id: readinessMonitorId,
+            serviceName,
+            loginId,
+            siteId,
+            intervalMs: readinessMonitorIntervalMs,
+          }),
+        })
+      : null;
   const accessPlan = await getServiceAccessPlan({
     baseUrl,
     serviceName,
@@ -184,6 +214,7 @@ export async function runServiceWorkflow({
   return {
     dryRun: false,
     profileRegistration,
+    profileReadinessMonitor,
     accessPlan,
     commandResult,
     commandResultData: {
@@ -241,6 +272,20 @@ function buildLoginProfileRegistration({ id, serviceName, loginId, siteId, userD
   };
 }
 
+/**
+ * @param {{ id?: string, serviceName: string, loginId?: string, siteId?: string, intervalMs?: number }} options
+ */
+function buildProfileReadinessMonitor({ id, serviceName, loginId, siteId, intervalMs }) {
+  const identity = loginId || siteId;
+  return {
+    id,
+    serviceName,
+    loginId: identity,
+    siteId,
+    intervalMs,
+  };
+}
+
 if (import.meta.url === `file://${nodeProcess.argv[1]}`) {
   runServiceWorkflow(parseArgs(nodeProcess.argv.slice(2)))
     .then((result) => {
@@ -268,6 +313,9 @@ function parseArgs(args) {
     loginId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_LOGIN || nodeProcess.env.AGENT_BROWSER_EXAMPLE_SITE || 'example',
     registerProfileId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_PROFILE_ID,
     profileUserDataDir: nodeProcess.env.AGENT_BROWSER_EXAMPLE_PROFILE_USER_DATA_DIR,
+    registerReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_READINESS_MONITOR === '1',
+    readinessMonitorId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_ID,
+    readinessMonitorIntervalMs: numberEnv(nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_INTERVAL_MS),
     cancelJobId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_CANCEL_JOB_ID,
     dryRun: false,
   };
@@ -294,6 +342,12 @@ function parseArgs(args) {
       parsed.registerProfileId = requiredValue(args, ++index, arg);
     } else if (arg === '--profile-user-data-dir') {
       parsed.profileUserDataDir = requiredValue(args, ++index, arg);
+    } else if (arg === '--register-readiness-monitor') {
+      parsed.registerReadinessMonitor = true;
+    } else if (arg === '--readiness-monitor-id') {
+      parsed.readinessMonitorId = requiredValue(args, ++index, arg);
+    } else if (arg === '--readiness-monitor-interval-ms') {
+      parsed.readinessMonitorIntervalMs = Number(requiredValue(args, ++index, arg));
     } else if (arg === '--cancel-job-id') {
       parsed.cancelJobId = requiredValue(args, ++index, arg);
     } else {
@@ -302,6 +356,16 @@ function parseArgs(args) {
   }
 
   return parsed;
+}
+
+/**
+ * @param {string | undefined} value
+ */
+function numberEnv(value) {
+  if (value === undefined || value === '') {
+    return undefined;
+  }
+  return Number(value);
 }
 
 /**

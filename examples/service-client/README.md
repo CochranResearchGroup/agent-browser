@@ -3,6 +3,7 @@
 This example shows the software-client workflow for agent-browser service mode:
 
 - register or refresh a login profile with `registerServiceLoginProfile`
+- add a retained profile-readiness monitor with `upsertServiceProfileReadinessMonitor`
 - ask agent-browser for an access plan with `getServiceAccessPlan`
 - request one intent-based service tab with `requestServiceTab`
 - read the matching service trace with `getServiceTrace`
@@ -38,7 +39,8 @@ pnpm --filter agent-browser-service-client-example exec node service-request-tra
   --task-name probeACSwebsite \
   --site-id example \
   --login-id example \
-  --register-profile-id journal-example
+  --register-profile-id journal-example \
+  --register-readiness-monitor
 ```
 
 You can also set `AGENT_BROWSER_SERVICE_BASE_URL` instead of passing
@@ -48,6 +50,14 @@ The script prints the access plan, command result, typed tab, title, wait,
 viewport, and console result fields, trace counts, and the latest retained jobs
 so software projects can confirm that the planning, request, and trace metadata
 are connected.
+
+For a recurring service-owned profile, pass `--register-readiness-monitor`
+with `--register-profile-id`. The script registers the managed profile, adds a
+`profile_readiness` monitor for the same login identity, asks for the no-launch
+access plan, and then submits the planned tab request. That is the default
+integration pattern for non-Canva clients: request by identity, let
+agent-browser own profile coordination, and let monitor findings warn when
+retained freshness has expired.
 
 ## Profile Selection By Login Identity
 

@@ -239,6 +239,8 @@ Configured service profiles and sessions can describe ownership, lease behavior,
 
 Software clients that register recurring managed login profiles should also add a retained freshness monitor for the same target identity. Use <code>upsertServiceProfileReadinessMonitor()</code> from <code>@agent-browser/client/service-observability</code> or write a monitor with target <code>&#123; "profile_readiness": "acs" &#125;</code> through <code>POST /api/service/monitors/&lt;id&gt;</code>. The monitor is no-launch: it checks retained <code>targetReadiness</code>, marks expired fresh rows stale, removes the expired target from <code>authenticatedServiceIds</code>, and lets access-plan <code>monitorFindings</code> warn callers before they request a tab.
 
+The generic <code>examples/service-client/service-request-trace.mjs</code> workflow demonstrates this path for non-Canva clients. Pass <code>--register-profile-id</code> with <code>--register-readiness-monitor</code> to register a recurring service-owned profile, add the freshness monitor, request the access plan, and submit the planned tab request through the service queue.
+
 ## Browser health and recovery
 
 Service reconciliation probes persisted browser records and updates health before clients make decisions from stale state. Local process exits are marked `process_exited`. CDP endpoints with a live process but failed CDP connection are marked `cdp_disconnected`. Endpoints without a live process are marked `unreachable`. Endpoints that answer health probes but fail target discovery are marked `degraded`.

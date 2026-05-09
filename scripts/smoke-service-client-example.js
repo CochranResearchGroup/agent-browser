@@ -160,6 +160,9 @@ try {
     profileId,
     '--profile-user-data-dir',
     userDataDir,
+    '--register-readiness-monitor',
+    '--readiness-monitor-interval-ms',
+    '900000',
   ]);
   const output = parseJsonOutput(exampleResult.stdout, 'service client example');
 
@@ -173,6 +176,12 @@ try {
       output.profileRegistration?.profile?.id === profileId &&
       output.profileRegistration?.profile?.authenticatedServiceIds?.includes(targetServiceId),
     `example did not register login profile: ${JSON.stringify(output.profileRegistration)}`,
+  );
+  assert(
+    output.profileReadinessMonitor?.upserted === true &&
+      output.profileReadinessMonitor?.monitor?.target?.profile_readiness === targetServiceId &&
+      output.profileReadinessMonitor?.monitor?.intervalMs === 900000,
+    `example did not register profile-readiness monitor: ${JSON.stringify(output.profileReadinessMonitor)}`,
   );
   assert(
     output.accessPlan?.decision?.serviceRequest?.request?.action === 'tab_new' &&
