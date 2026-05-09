@@ -548,6 +548,10 @@ function serviceLoginProfileTargetReadiness({
     manualSeedingRequired: state === 'needs_manual_seeding',
     evidence: readinessEvidence ?? (state === 'fresh' ? 'client_reported_authenticated' : 'client_reported_stale'),
     recommendedAction: readinessRecommendedAction ?? serviceLoginProfileReadinessAction(state),
+    seedingMode: state === 'needs_manual_seeding' ? 'detached_headed_no_cdp' : 'not_required',
+    cdpAttachmentAllowedDuringSeeding: false,
+    preferredKeyring: state === 'needs_manual_seeding' ? 'basic_password_store' : null,
+    setupScopes: state === 'needs_manual_seeding' ? serviceLoginProfileSeedingSetupScopes(targetServiceId) : [],
     lastVerifiedAt: lastVerifiedAt ?? null,
     freshnessExpiresAt: freshnessExpiresAt ?? null,
   }));
@@ -578,6 +582,14 @@ function serviceLoginProfileReadinessAction(state) {
     default:
       return 'verify_or_seed_profile_before_authenticated_work';
   }
+}
+
+function serviceLoginProfileSeedingSetupScopes(targetServiceId) {
+  const normalized = typeof targetServiceId === 'string' ? targetServiceId.toLowerCase() : '';
+  if (['google', 'gmail', 'google-login', 'google_signin', 'google-signin'].includes(normalized)) {
+    return ['signin', 'chrome_sync', 'passkeys', 'browser_plugins'];
+  }
+  return ['signin'];
 }
 
 function serviceProfileReadinessMonitorId(serviceName, targetId) {

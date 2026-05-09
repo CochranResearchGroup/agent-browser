@@ -128,6 +128,10 @@
         "manualSeedingRequired",
         "evidence",
         "recommendedAction",
+        "seedingMode",
+        "cdpAttachmentAllowedDuringSeeding",
+        "preferredKeyring",
+        "setupScopes",
         "lastVerifiedAt",
         "freshnessExpiresAt"
       ],
@@ -157,6 +161,30 @@
         },
         "recommendedAction": {
           "type": "string"
+        },
+        "seedingMode": {
+          "type": "string",
+          "enum": ["not_required", "detached_headed_no_cdp", "attachable_ok"]
+        },
+        "cdpAttachmentAllowedDuringSeeding": {
+          "type": "boolean"
+        },
+        "preferredKeyring": {
+          "type": ["string", "null"],
+          "enum": [
+            "basic_password_store",
+            "real_os_keychain",
+            "managed_vault",
+            "manual_login_profile",
+            null
+          ]
+        },
+        "setupScopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["signin", "chrome_sync", "passkeys", "browser_plugins"]
+          }
         },
         "lastVerifiedAt": {
           "type": ["string", "null"]

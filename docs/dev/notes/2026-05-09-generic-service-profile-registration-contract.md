@@ -23,6 +23,8 @@ New profiles that may need Google sign-on, Chrome sync setup, passkeys, or brows
 
 `basic_password_store` is the preferred managed-profile keyring posture because it avoids blocking GNOME Keyring, KWallet, or OS keychain modals during unattended browser workflows. Other keyring policies should be explicit service or operator decisions.
 
+The structured readiness contract now exposes this directly on `targetReadiness` rows. Google-style manual seeding rows should report `seedingMode: "detached_headed_no_cdp"`, `cdpAttachmentAllowedDuringSeeding: false`, `preferredKeyring: "basic_password_store"`, and `setupScopes` covering `signin`, `chrome_sync`, `passkeys`, and `browser_plugins`.
+
 ## What changed
 
 - `55ebfb8` added `createServiceProfileReadinessMonitor()` and `upsertServiceProfileReadinessMonitor()` to the service observability client and taught the managed-profile example how to create the retained freshness monitor.

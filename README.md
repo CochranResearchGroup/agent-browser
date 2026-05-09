@@ -1769,6 +1769,11 @@ first Google sign-in. Register the profile as unauthenticated, prefer
 `agent-browser --runtime-profile <name> runtime login https://accounts.google.com`,
 let the operator complete sign-in, sync, passkey, and extension setup, then
 close Chrome. Future service-owned requests can attach after that manual phase.
+Structured `targetReadiness` rows expose this requirement with
+`seedingMode: "detached_headed_no_cdp"`,
+`cdpAttachmentAllowedDuringSeeding: false`,
+`preferredKeyring: "basic_password_store"`, and setup scopes for sign-in,
+Chrome sync, passkeys, and browser plugins.
 When a software client has just completed a bounded auth probe, it can pass
 `readinessState: "fresh"`, `readinessEvidence`, `lastVerifiedAt`, and
 `freshnessExpiresAt` to the same helper so agent-browser records target

@@ -223,6 +223,22 @@ function assertAccessPlan(data, label) {
     `${label} readiness state mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.readiness?.targetReadiness?.[0]?.seedingMode === 'detached_headed_no_cdp',
+    `${label} readiness seeding mode mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readiness?.targetReadiness?.[0]?.cdpAttachmentAllowedDuringSeeding === false,
+    `${label} readiness CDP attachment policy mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readiness?.targetReadiness?.[0]?.preferredKeyring === 'basic_password_store',
+    `${label} readiness keyring preference mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.readiness?.targetReadiness?.[0]?.setupScopes?.includes('signin'),
+    `${label} readiness setup scopes missing signin: ${JSON.stringify(data)}`,
+  );
+  assert(
     data?.readinessSummary?.manualSeedingRequired === true,
     `${label} readiness summary mismatch: ${JSON.stringify(data)}`,
   );

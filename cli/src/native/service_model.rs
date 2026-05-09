@@ -133,6 +133,8 @@ pub const SERVICE_PROFILE_READINESS_VALUES: [&str; 6] = [
     "stale",
     "blocked_by_attached_devtools",
 ];
+pub const SERVICE_PROFILE_SEEDING_MODE_VALUES: [&str; 3] =
+    ["not_required", "detached_headed_no_cdp", "attachable_ok"];
 pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
     "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
 ];
@@ -443,6 +445,10 @@ pub fn assert_service_profile_readiness_contract(value: &serde_json::Value) {
             "manualSeedingRequired",
             "evidence",
             "recommendedAction",
+            "seedingMode",
+            "cdpAttachmentAllowedDuringSeeding",
+            "preferredKeyring",
+            "setupScopes",
             "lastVerifiedAt",
             "freshnessExpiresAt",
         ],
@@ -451,11 +457,23 @@ pub fn assert_service_profile_readiness_contract(value: &serde_json::Value) {
             "login_id",
             "manual_seeding_required",
             "recommended_action",
+            "seeding_mode",
+            "cdp_attachment_allowed_during_seeding",
+            "preferred_keyring",
+            "setup_scopes",
             "last_verified_at",
             "freshness_expires_at",
         ],
     );
     assert!(SERVICE_PROFILE_READINESS_VALUES.contains(&value["state"].as_str().unwrap()));
+    assert!(SERVICE_PROFILE_SEEDING_MODE_VALUES.contains(&value["seedingMode"].as_str().unwrap()));
+    assert!(value["cdpAttachmentAllowedDuringSeeding"].is_boolean());
+    if let Some(keyring) = value["preferredKeyring"].as_str() {
+        assert!(SERVICE_PROFILE_KEYRING_VALUES.contains(&keyring));
+    } else {
+        assert!(value["preferredKeyring"].is_null());
+    }
+    assert!(value["setupScopes"].is_array());
 }
 
 #[cfg(test)]
@@ -2093,6 +2111,25 @@ fn normalize_explicit_target_readiness(
     } else {
         explicit.recommended_action.clone()
     };
+    let seeding_mode = if explicit.manual_seeding_required
+        || matches!(explicit.state, ProfileReadinessState::NeedsManualSeeding)
+    {
+        ProfileSeedingMode::DetachedHeadedNoCdp
+    } else {
+        explicit.seeding_mode
+    };
+    let preferred_keyring = explicit
+        .preferred_keyring
+        .or(derived.preferred_keyring)
+        .or_else(|| {
+            matches!(seeding_mode, ProfileSeedingMode::DetachedHeadedNoCdp)
+                .then_some(ProfileKeyringPolicy::BasicPasswordStore)
+        });
+    let setup_scopes = if explicit.setup_scopes.is_empty() {
+        derived.setup_scopes
+    } else {
+        explicit.setup_scopes.clone()
+    };
 
     ProfileTargetReadiness {
         target_service_id: explicit.target_service_id.clone(),
@@ -2109,6 +2146,13 @@ fn normalize_explicit_target_readiness(
             explicit.evidence.clone()
         },
         recommended_action,
+        seeding_mode,
+        cdp_attachment_allowed_during_seeding: matches!(
+            seeding_mode,
+            ProfileSeedingMode::AttachableOk
+        ),
+        preferred_keyring,
+        setup_scopes,
         last_verified_at: explicit
             .last_verified_at
             .clone()
@@ -2235,26 +2279,36 @@ fn derive_target_readiness_for_profile(
         .any(|id| id == target_service_id);
     let manual_seeding_required = !authenticated
         && target_requires_detached_manual_seeding(profile, site_policies, target_service_id);
-    let (state, evidence, recommended_action) = if authenticated {
-        (
-            ProfileReadinessState::SeededUnknownFreshness,
-            "profile_authenticated_service_hint".to_string(),
-            "probe_target_auth_or_reuse_if_acceptable".to_string(),
-        )
-    } else if manual_seeding_required {
-        (
-            ProfileReadinessState::NeedsManualSeeding,
-            "manual_seed_required_without_authenticated_hint".to_string(),
-            "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
-                .to_string(),
-        )
-    } else {
-        (
-            ProfileReadinessState::Unknown,
-            "no_authenticated_service_hint".to_string(),
-            "verify_or_seed_profile_before_authenticated_work".to_string(),
-        )
-    };
+    let (state, evidence, recommended_action, seeding_mode, preferred_keyring, setup_scopes) =
+        if authenticated {
+            (
+                ProfileReadinessState::SeededUnknownFreshness,
+                "profile_authenticated_service_hint".to_string(),
+                "probe_target_auth_or_reuse_if_acceptable".to_string(),
+                ProfileSeedingMode::NotRequired,
+                None,
+                Vec::new(),
+            )
+        } else if manual_seeding_required {
+            (
+                ProfileReadinessState::NeedsManualSeeding,
+                "manual_seed_required_without_authenticated_hint".to_string(),
+                "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+                    .to_string(),
+                ProfileSeedingMode::DetachedHeadedNoCdp,
+                Some(ProfileKeyringPolicy::BasicPasswordStore),
+                profile_seeding_setup_scopes(target_service_id),
+            )
+        } else {
+            (
+                ProfileReadinessState::Unknown,
+                "no_authenticated_service_hint".to_string(),
+                "verify_or_seed_profile_before_authenticated_work".to_string(),
+                ProfileSeedingMode::AttachableOk,
+                Some(profile.keyring),
+                vec!["signin".to_string()],
+            )
+        };
 
     ProfileTargetReadiness {
         target_service_id: target_service_id.to_string(),
@@ -2263,6 +2317,13 @@ fn derive_target_readiness_for_profile(
         manual_seeding_required,
         evidence,
         recommended_action,
+        seeding_mode,
+        cdp_attachment_allowed_during_seeding: matches!(
+            seeding_mode,
+            ProfileSeedingMode::AttachableOk
+        ),
+        preferred_keyring,
+        setup_scopes,
         last_verified_at: None,
         freshness_expires_at: None,
     }
@@ -2287,6 +2348,19 @@ fn target_is_google_signin(target_service_id: &str) -> bool {
         normalized.as_str(),
         "google" | "gmail" | "google-login" | "google_signin" | "google-signin"
     )
+}
+
+fn profile_seeding_setup_scopes(target_service_id: &str) -> Vec<String> {
+    if target_is_google_signin(target_service_id) {
+        vec![
+            "signin".to_string(),
+            "chrome_sync".to_string(),
+            "passkeys".to_string(),
+            "browser_plugins".to_string(),
+        ]
+    } else {
+        vec!["signin".to_string()]
+    }
 }
 
 fn is_inactive_lease(lease: LeaseState) -> bool {
@@ -2961,8 +3035,22 @@ pub struct ProfileTargetReadiness {
     pub manual_seeding_required: bool,
     pub evidence: String,
     pub recommended_action: String,
+    pub seeding_mode: ProfileSeedingMode,
+    pub cdp_attachment_allowed_during_seeding: bool,
+    pub preferred_keyring: Option<ProfileKeyringPolicy>,
+    pub setup_scopes: Vec<String>,
     pub last_verified_at: Option<String>,
     pub freshness_expires_at: Option<String>,
+}
+
+/// Browser launch posture required while a target profile is being seeded.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileSeedingMode {
+    #[default]
+    NotRequired,
+    DetachedHeadedNoCdp,
+    AttachableOk,
 }
 
 /// Profile readiness state for one target service or login identity.
@@ -5750,6 +5838,19 @@ mod tests {
             new_google.recommended_action,
             "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
         );
+        assert_eq!(
+            new_google.seeding_mode,
+            ProfileSeedingMode::DetachedHeadedNoCdp
+        );
+        assert!(!new_google.cdp_attachment_allowed_during_seeding);
+        assert_eq!(
+            new_google.preferred_keyring,
+            Some(ProfileKeyringPolicy::BasicPasswordStore)
+        );
+        assert_eq!(
+            new_google.setup_scopes,
+            vec!["signin", "chrome_sync", "passkeys", "browser_plugins"]
+        );
 
         let seeded_google = &state.profiles["google-seeded"].target_readiness[0];
         assert_eq!(
@@ -5757,6 +5858,8 @@ mod tests {
             ProfileReadinessState::SeededUnknownFreshness
         );
         assert!(!seeded_google.manual_seeding_required);
+        assert_eq!(seeded_google.seeding_mode, ProfileSeedingMode::NotRequired);
+        assert!(seeded_google.setup_scopes.is_empty());
         assert_eq!(
             seeded_google.recommended_action,
             "probe_target_auth_or_reuse_if_acceptable"

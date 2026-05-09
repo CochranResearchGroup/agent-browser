@@ -126,6 +126,10 @@ export interface ServiceProfileTargetReadiness {
   manualSeedingRequired: boolean;
   evidence: string;
   recommendedAction: string;
+  seedingMode?: 'not_required' | 'detached_headed_no_cdp' | 'attachable_ok' | string;
+  cdpAttachmentAllowedDuringSeeding?: boolean;
+  preferredKeyring?: 'basic_password_store' | 'real_os_keychain' | 'managed_vault' | 'manual_login_profile' | string | null;
+  setupScopes?: Array<'signin' | 'chrome_sync' | 'passkeys' | 'browser_plugins' | string>;
   lastVerifiedAt: string | null;
   freshnessExpiresAt: string | null;
   [key: string]: unknown;

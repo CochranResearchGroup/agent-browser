@@ -211,6 +211,10 @@ access-plan `monitorFindings`.
 When a readiness row reports `needs_manual_seeding`, the script output includes
 `readinessSummary.needsManualSeeding: true` plus the target service IDs and
 recommended actions so the client can show operator instructions directly.
+The underlying `targetReadiness` row also includes `seedingMode`,
+`cdpAttachmentAllowedDuringSeeding`, `preferredKeyring`, and `setupScopes` so
+clients can render Google-style detached no-CDP setup requirements without
+parsing the recommendation string.
 The summary comes from `summarizeServiceProfileReadiness()` in
 `@agent-browser/client/service-observability`, so clients can reuse the same
 logic without copying this example.

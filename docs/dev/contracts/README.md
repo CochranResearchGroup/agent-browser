@@ -211,10 +211,13 @@ These schemas cover `profiles`, `browsers`, `sessions`, `tabs`, `monitors`,
 `sitePolicies`, `providers`, and `challenges` records. Monitor records are
 currently service-owned state for recurring heartbeat, site-policy, tab, and
 login freshness probes; scheduling and mutation workflows are separate service
-roadmap slices. Profile records include derived `targetReadiness` rows for no-launch target-service readiness. Google
-targets without authenticated evidence report `needs_manual_seeding` and
-recommend detached `runtime login` before attachable automation. Once a managed
-profile lists the target in `authenticatedServiceIds`, readiness changes to
+roadmap slices. Profile records include derived `targetReadiness` rows for
+no-launch target-service readiness. Google targets without authenticated
+evidence report `needs_manual_seeding`, `seedingMode:
+"detached_headed_no_cdp"`, `cdpAttachmentAllowedDuringSeeding: false`,
+`preferredKeyring: "basic_password_store"`, and setup scopes for sign-in,
+Chrome sync, passkeys, and browser plugins. Once a managed profile lists the
+target in `authenticatedServiceIds`, readiness changes to
 `seeded_unknown_freshness` and access-plan no longer treats first-login seeding
 as a required manual action. Explicit `fresh`, `stale`, and
 `blocked_by_attached_devtools` rows, plus rows with `lastVerifiedAt` or
@@ -341,7 +344,9 @@ Profile records separate caller ownership from target login scope.
 `targetServiceIds` names target sites or identity providers whose credentials
 or login state should live in the profile, and `authenticatedServiceIds` names
 targets currently believed to have usable authenticated state. `targetReadiness`
-is the no-launch readiness view derived from those hints and site policy.
+is the no-launch readiness view derived from those hints and site policy. Its
+seeding metadata lets clients distinguish Google-style detached headed seeding
+from ordinary attachable login flows without parsing prose recommendations.
 Explicit freshness rows are preserved when they report `fresh`, `stale`,
 `blocked_by_attached_devtools`, `lastVerifiedAt`, or `freshnessExpiresAt`.
 Session records include `profileSelectionReason` so clients can distinguish

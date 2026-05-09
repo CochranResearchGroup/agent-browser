@@ -7,9 +7,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::service_model::{
-    BrowserProfile, BrowserSession, MonitorState, ProfileAllocationPolicy, ProfileReadinessState,
-    ProfileTargetReadiness, ServiceActor, ServiceEntitySource, ServiceProvider, ServiceState,
-    SiteMonitor, SitePolicy,
+    BrowserProfile, BrowserSession, MonitorState, ProfileAllocationPolicy, ProfileKeyringPolicy,
+    ProfileReadinessState, ProfileSeedingMode, ProfileTargetReadiness, ServiceActor,
+    ServiceEntitySource, ServiceProvider, ServiceState, SiteMonitor, SitePolicy,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -140,6 +140,23 @@ fn readiness_recommended_action(state: ProfileReadinessState) -> &'static str {
         }
         ProfileReadinessState::SeededUnknownFreshness => "probe_target_auth_or_reuse_if_acceptable",
         ProfileReadinessState::Unknown => "verify_or_seed_profile_before_authenticated_work",
+    }
+}
+
+fn profile_seeding_setup_scopes(target_service_id: &str) -> Vec<String> {
+    let normalized = target_service_id.to_ascii_lowercase();
+    if matches!(
+        normalized.as_str(),
+        "google" | "gmail" | "google-login" | "google_signin" | "google-signin"
+    ) {
+        vec![
+            "signin".to_string(),
+            "chrome_sync".to_string(),
+            "passkeys".to_string(),
+            "browser_plugins".to_string(),
+        ]
+    } else {
+        vec!["signin".to_string()]
     }
 }
 
@@ -283,13 +300,14 @@ pub fn update_profile_freshness(
         {
             profile.target_service_ids.push(target.clone());
         }
+        let manual_seeding_required =
+            update.readiness_state == ProfileReadinessState::NeedsManualSeeding;
         let row =
             ProfileTargetReadiness {
                 target_service_id: target.clone(),
                 login_id: login_id.clone(),
                 state: update.readiness_state,
-                manual_seeding_required: update.readiness_state
-                    == ProfileReadinessState::NeedsManualSeeding,
+                manual_seeding_required,
                 evidence: update
                     .readiness_evidence
                     .clone()
@@ -297,6 +315,19 @@ pub fn update_profile_freshness(
                 recommended_action: update.readiness_recommended_action.clone().unwrap_or_else(
                     || readiness_recommended_action(update.readiness_state).to_string(),
                 ),
+                seeding_mode: if manual_seeding_required {
+                    ProfileSeedingMode::DetachedHeadedNoCdp
+                } else {
+                    ProfileSeedingMode::NotRequired
+                },
+                cdp_attachment_allowed_during_seeding: false,
+                preferred_keyring: manual_seeding_required
+                    .then_some(ProfileKeyringPolicy::BasicPasswordStore),
+                setup_scopes: if manual_seeding_required {
+                    profile_seeding_setup_scopes(target)
+                } else {
+                    Vec::new()
+                },
                 last_verified_at: Some(last_verified_at.clone()),
                 freshness_expires_at: update.freshness_expires_at.clone(),
             };

@@ -737,6 +737,7 @@ mod tests {
                             recommended_action: "use_profile".to_string(),
                             last_verified_at: Some("2026-05-01T00:00:00Z".to_string()),
                             freshness_expires_at: Some("2026-05-01T00:00:01Z".to_string()),
+                            ..ProfileTargetReadiness::default()
                         }],
                         ..BrowserProfile::default()
                     },
@@ -807,6 +808,7 @@ mod tests {
                             recommended_action: "use_profile".to_string(),
                             last_verified_at: Some("2026-05-01T00:00:00Z".to_string()),
                             freshness_expires_at: Some("2999-05-01T00:00:01Z".to_string()),
+                            ..ProfileTargetReadiness::default()
                         }],
                         ..BrowserProfile::default()
                     },
