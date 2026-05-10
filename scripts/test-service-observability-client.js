@@ -27,6 +27,7 @@ import {
   updateServiceProfileFreshness,
   updateServiceProfileSeedingHandoff,
   upsertServiceMonitor,
+  verifyServiceProfileSeeding,
 } from '../packages/client/src/service-observability.js';
 
 function createFetchRecorder(payload) {
@@ -1435,6 +1436,25 @@ async function main() {
     readinessState: 'stale',
     readinessEvidence: 'auth_probe_cookie_missing',
     lastVerifiedAt: '2026-05-06T14:00:00Z',
+    updateAuthenticatedServiceIds: true,
+  });
+
+  const seedingVerification = createFetchRecorder();
+  await verifyServiceProfileSeeding({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: seedingVerification.fetch,
+    id: 'journal-google',
+    targetServiceId: 'google',
+  });
+  assert.equal(
+    seedingVerification.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/journal-google/freshness',
+  );
+  assert.deepEqual(seedingVerification.calls[0].body, {
+    targetServiceId: 'google',
+    targetServiceIds: ['google'],
+    readinessState: 'fresh',
+    readinessEvidence: 'post_seeding_auth_probe_fresh',
     updateAuthenticatedServiceIds: true,
   });
 

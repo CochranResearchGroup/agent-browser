@@ -71,6 +71,116 @@ pub fn gen_id() -> String {
     )
 }
 
+const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
+
+fn parse_service_profile_verify_seeding(
+    id: String,
+    rest: &[&str],
+    _flags: &Flags,
+) -> Result<Value, ParseError> {
+    let Some(profile_id) = rest.get(1) else {
+        return Err(ParseError::MissingArguments {
+            context: "service profiles verify-seeding".to_string(),
+            usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+        });
+    };
+    let Some(target) = rest.get(3) else {
+        return Err(ParseError::MissingArguments {
+            context: "service profiles verify-seeding".to_string(),
+            usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+        });
+    };
+    let mut freshness = json!({
+        "targetServiceId": target,
+        "readinessState": "fresh",
+        "readinessEvidence": "post_seeding_auth_probe_fresh",
+    });
+    let mut i = 4;
+    while i < rest.len() {
+        match rest[i] {
+            "--state" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --state".to_string(),
+                        usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+                    });
+                };
+                match *value {
+                    "fresh"
+                    | "stale"
+                    | "seeded_unknown_freshness"
+                    | "blocked_by_attached_devtools" => {
+                        freshness["readinessState"] = json!(value);
+                        if freshness
+                            .get("readinessEvidence")
+                            .and_then(|value| value.as_str())
+                            == Some("post_seeding_auth_probe_fresh")
+                            && *value != "fresh"
+                        {
+                            freshness["readinessEvidence"] =
+                                json!(format!("post_seeding_auth_probe_{}", value));
+                        }
+                    }
+                    _ => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --state value: {}", value),
+                            usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--evidence" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --evidence".to_string(),
+                        usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+                    });
+                };
+                freshness["readinessEvidence"] = json!(value);
+                i += 1;
+            }
+            "--last-verified-at" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --last-verified-at".to_string(),
+                        usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+                    });
+                };
+                freshness["lastVerifiedAt"] = json!(value);
+                i += 1;
+            }
+            "--freshness-expires-at" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --freshness-expires-at".to_string(),
+                        usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+                    });
+                };
+                freshness["freshnessExpiresAt"] = json!(value);
+                i += 1;
+            }
+            "--no-authenticated-service-update" => {
+                freshness["updateAuthenticatedServiceIds"] = json!(false);
+            }
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for service profiles verify-seeding: {}", flag),
+                    usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+                });
+            }
+        }
+        i += 1;
+    }
+
+    Ok(json!({
+        "id": id,
+        "action": "service_profile_freshness_update",
+        "profileId": profile_id,
+        "freshness": freshness,
+    }))
+}
+
 pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError> {
     let mut result = parse_command_inner(args, flags)?;
 
@@ -946,13 +1056,13 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "serviceState": flags.service_state.clone(),
             })),
             Some("profiles") => {
-                if rest.len() > 4 {
-                    return Err(ParseError::InvalidValue {
-                        message: format!("Unknown argument for service profiles: {}", rest[1]),
-                        usage: "service profiles [<profile-id> seeding-handoff [target-service-id]]",
-                    });
-                }
                 if rest.len() >= 3 && rest[2] == "seeding-handoff" {
+                    if rest.len() > 4 {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Unknown argument for service profiles: {}", rest[4]),
+                            usage: "service profiles [<profile-id> <seeding-handoff|verify-seeding> [target-service-id]]",
+                        });
+                    }
                     let mut cmd = json!({
                         "id": id,
                         "action": "service_profile_seeding_handoff",
@@ -964,10 +1074,13 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     }
                     return Ok(cmd);
                 }
+                if rest.len() >= 3 && rest[2] == "verify-seeding" {
+                    return parse_service_profile_verify_seeding(id, &rest, flags);
+                }
                 if rest.len() > 1 {
                     return Err(ParseError::InvalidValue {
                         message: format!("Unknown argument for service profiles: {}", rest[1]),
-                        usage: "service profiles [<profile-id> seeding-handoff [target-service-id]]",
+                        usage: "service profiles [<profile-id> <seeding-handoff|verify-seeding> [target-service-id]]",
                     });
                 }
                 Ok(json!({
@@ -5453,6 +5566,48 @@ mod tests {
         assert_eq!(cmd["profileId"], "google-work");
         assert_eq!(cmd["targetServiceId"], "google");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_profile_verify_seeding_defaults_to_fresh_probe() {
+        let cmd = parse_command(
+            &args("service profiles google-work verify-seeding google"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_profile_freshness_update");
+        assert_eq!(cmd["profileId"], "google-work");
+        assert_eq!(cmd["freshness"]["targetServiceId"], "google");
+        assert_eq!(cmd["freshness"]["readinessState"], "fresh");
+        assert_eq!(
+            cmd["freshness"]["readinessEvidence"],
+            "post_seeding_auth_probe_fresh"
+        );
+    }
+
+    #[test]
+    fn test_service_profile_verify_seeding_accepts_bounded_probe_result() {
+        let cmd = parse_command(
+            &args(
+                "service profiles google-work verify-seeding google --state stale --evidence auth_probe_cookie_missing --last-verified-at 2026-05-10T12:00:00Z --freshness-expires-at 2026-05-10T13:00:00Z --no-authenticated-service-update",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_profile_freshness_update");
+        assert_eq!(cmd["freshness"]["readinessState"], "stale");
+        assert_eq!(
+            cmd["freshness"]["readinessEvidence"],
+            "auth_probe_cookie_missing"
+        );
+        assert_eq!(cmd["freshness"]["lastVerifiedAt"], "2026-05-10T12:00:00Z");
+        assert_eq!(
+            cmd["freshness"]["freshnessExpiresAt"],
+            "2026-05-10T13:00:00Z"
+        );
+        assert_eq!(cmd["freshness"]["updateAuthenticatedServiceIds"], false);
     }
 
     #[test]

@@ -641,6 +641,24 @@ export async function updateServiceProfileFreshness({
   });
 }
 
+/**
+ * Record the result of a bounded post-close seeding auth probe.
+ *
+ * @param {ServiceProfileFreshnessUpdateOptions} options
+ * @returns {Promise<ServiceProfileUpsertResponse>}
+ */
+export function verifyServiceProfileSeeding({
+  readinessState = 'fresh',
+  readinessEvidence,
+  ...options
+}) {
+  return updateServiceProfileFreshness({
+    ...options,
+    readinessState,
+    readinessEvidence: readinessEvidence ?? `post_seeding_auth_probe_${readinessState}`,
+  });
+}
+
 function serviceLoginProfileTargetReadiness({
   targets,
   loginId,

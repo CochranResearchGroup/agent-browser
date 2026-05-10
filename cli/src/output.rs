@@ -4148,6 +4148,7 @@ Usage:
   agent-browser service remedies apply --escalation <browser_degraded|monitor_attention|os_degraded_possible> [--by <text>] [--note <text>]
   agent-browser service events [--limit <n>] [--kind <kind>] [--browser-id <id>] [--profile-id <id>] [--session-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--since <timestamp>]
   agent-browser service profiles <profile-id> seeding-handoff [target-service-id]
+  agent-browser service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>]
 
 Commands:
   status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
@@ -4156,6 +4157,8 @@ Commands:
   profiles              Show retained service profile records and derived allocation state
   profiles <id> seeding-handoff [target]
                         Show the detached runtime-login command and operator steps for profile seeding
+  profiles <id> verify-seeding <target>
+                        Record the bounded post-close auth probe result for a seeded profile
   sessions              Show retained service session records
   browsers              Show retained service browser records and latest health evidence
   tabs                  Show retained service tab records
@@ -4216,6 +4219,7 @@ Notes:
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, and recommended actions.
   - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding with seedingMode=detached_headed_no_cdp, cdpAttachmentAllowedDuringSeeding=false, preferredKeyring=basic_password_store, and setup scopes for sign-in, Chrome sync, passkeys, and browser plugins. Explicit freshness rows are preserved through readiness refreshes.
   - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus lifecycle, operator steps, and close-detection state for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
+  - service profiles <id> verify-seeding <target> records a bounded post-close auth probe by reusing the serialized profile freshness update path. Fresh evidence moves a matching closed handoff to fresh; stale, blocked, or inconclusive evidence moves it to verification_pending.
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.

@@ -302,7 +302,10 @@ a profile has multiple target identities.
 after merging bounded-probe freshness evidence into one persisted profile.
 When a matching seeding handoff is already closed but unverified, the same
 freshness update records the post-close probe result by moving the handoff to
-`verification_pending` or `fresh`.
+`verification_pending` or `fresh`. The CLI `service profiles <id>
+verify-seeding <target>` command and service client
+`verifyServiceProfileSeeding()` helper are thin wrappers over this same
+serialized freshness mutation.
 `POST /api/service/profiles/<id>/seeding-handoff` and
 `updateServiceProfileSeedingHandoff()` persist CDP-free seeding lifecycle
 updates through the same serialized service-state mutator. Non-attachable

@@ -1188,6 +1188,8 @@ export declare function createServiceProfileReadinessMonitor(options: ServicePro
 export declare function upsertServiceProfileReadinessMonitor(options: ServiceProfileReadinessMonitorOptions): Promise<ServiceMonitorUpsertResponse>;
 /** Ask the service to merge bounded-probe freshness evidence into a profile. */
 export declare function updateServiceProfileFreshness(options: ServiceProfileFreshnessUpdateOptions): Promise<ServiceProfileUpsertResponse>;
+/** Record the result of a bounded post-close seeding auth probe. */
+export declare function verifyServiceProfileSeeding(options: ServiceProfileFreshnessUpdateOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;
 export declare function upsertServiceSession(options: ServiceSessionMutationOptions): Promise<ServiceSessionUpsertResponse>;
 export declare function deleteServiceSession(options: ServiceIdOptions): Promise<ServiceSessionDeleteResponse>;

@@ -1781,6 +1781,12 @@ unverified once that PID exits. After a bounded post-close auth probe,
 `verification_pending` for inconclusive or non-fresh evidence, or `fresh` when
 the probe reports usable authenticated state. A desktop popup is an optional
 notification provider, not the primary control plane.
+Operators can record that probe result without hand-building JSON:
+
+```bash
+agent-browser service profiles google-work verify-seeding google --state fresh --evidence post_seeding_auth_probe_cookie_present
+```
+
 When no local site policy exists, agent-browser applies shipped defaults for
 Google, Gmail, and Microsoft login identities. Local persisted or configured
 policies with the same IDs override those defaults. `sitePolicySource` reports
@@ -1822,7 +1828,9 @@ readiness row under the serialized service-state mutator, preserves unrelated pr
 `authenticatedServiceIds` so stale or blocked targets stop looking fresh. When
 the target has a closed but unverified seeding handoff, the same update records
 the post-close probe result by moving that lifecycle to `verification_pending`
-or `fresh`.
+or `fresh`. Software clients can use `verifyServiceProfileSeeding()` as the
+purpose-built wrapper when the update specifically records post-seeding probe
+evidence.
 
 ```ts
 import { requestServiceTab } from '@agent-browser/client/service-request';
