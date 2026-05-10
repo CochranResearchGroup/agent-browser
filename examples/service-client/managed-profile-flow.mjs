@@ -5,6 +5,7 @@ import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
   getServiceAccessPlan,
   registerServiceLoginProfile,
+  runServiceAccessPlanMonitorRunDue,
   updateServiceProfileFreshness,
   upsertServiceProfileReadinessMonitor,
 } from '@agent-browser/client/service-observability';
@@ -32,6 +33,7 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   profileUserDataDir?: string;
  *   registerAuthenticated?: boolean;
  *   registerReadinessMonitor?: boolean;
+ *   runDueReadinessMonitor?: boolean;
  *   readinessMonitorId?: string;
  *   readinessMonitorIntervalMs?: number;
  *   freshnessProfileId?: string;
@@ -60,6 +62,7 @@ export function buildManagedProfilePlan({
   profileUserDataDir,
   registerAuthenticated = false,
   registerReadinessMonitor = false,
+  runDueReadinessMonitor = false,
   readinessMonitorId,
   readinessMonitorIntervalMs,
   freshnessProfileId,
@@ -79,8 +82,9 @@ export function buildManagedProfilePlan({
     decisionOrder: [
       'ask agent-browser for the no-launch access plan',
       'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
-      'pass the access-plan response to requestServiceTab',
       'register a managed profile only when agent-browser has no suitable one',
+      'optionally run due profile-readiness monitors when access-plan recommends it',
+      'refresh the access plan before passing it to requestServiceTab',
       'seed the profile manually when readiness reports needs_manual_seeding',
     ],
     profileInspection: {
@@ -126,6 +130,13 @@ export function buildManagedProfilePlan({
             intervalMs: readinessMonitorIntervalMs,
           })
         : null,
+    optionalMonitorRunDue: runDueReadinessMonitor
+      ? {
+          helper: 'runServiceAccessPlanMonitorRunDue',
+          when: 'decision.monitorRunDue.recommendedBeforeUse',
+          refreshesAccessPlan: true,
+        }
+      : null,
     optionalFreshnessUpdate: freshnessProfileId
       ? buildProfileFreshnessUpdate({
           id: freshnessProfileId,
@@ -157,6 +168,7 @@ export async function runManagedProfileWorkflow({
   profileUserDataDir,
   registerAuthenticated = false,
   registerReadinessMonitor = false,
+  runDueReadinessMonitor = false,
   readinessMonitorId,
   readinessMonitorIntervalMs,
   freshnessProfileId,
@@ -180,6 +192,7 @@ export async function runManagedProfileWorkflow({
     profileUserDataDir,
     registerAuthenticated,
     registerReadinessMonitor,
+    runDueReadinessMonitor,
     readinessMonitorId,
     readinessMonitorIntervalMs,
     freshnessProfileId,
@@ -202,7 +215,7 @@ export async function runManagedProfileWorkflow({
     throw new Error('Missing baseUrl. Pass --base-url http://127.0.0.1:<stream-port>.');
   }
 
-  const accessPlan = await getServiceAccessPlan({
+  const initialAccessPlan = await getServiceAccessPlan({
     baseUrl,
     fetch,
     serviceName,
@@ -210,10 +223,10 @@ export async function runManagedProfileWorkflow({
     targetServiceId,
     readinessProfileId,
   });
-  const selectedProfile = accessPlan.selectedProfile;
+  let accessPlan = initialAccessPlan;
 
   const profileRegistration =
-    !accessPlan.selectedProfile && registerProfileId
+    !initialAccessPlan.selectedProfile && registerProfileId
       ? await registerServiceLoginProfile({
           baseUrl,
           fetch,
@@ -260,6 +273,39 @@ export async function runManagedProfileWorkflow({
       })
     : null;
 
+  if (profileRegistration || profileReadinessMonitor || profileFreshnessUpdate) {
+    accessPlan = await getServiceAccessPlan({
+      baseUrl,
+      fetch,
+      serviceName,
+      loginId,
+      targetServiceId,
+      readinessProfileId,
+    });
+  }
+
+  const monitorRunDue =
+    runDueReadinessMonitor && accessPlan.decision?.monitorRunDue?.recommendedBeforeUse === true
+      ? await runServiceAccessPlanMonitorRunDue({
+          baseUrl,
+          fetch,
+          accessPlan,
+        })
+      : null;
+
+  if (monitorRunDue) {
+    accessPlan = await getServiceAccessPlan({
+      baseUrl,
+      fetch,
+      serviceName,
+      loginId,
+      targetServiceId,
+      readinessProfileId,
+    });
+  }
+
+  const selectedProfile = accessPlan.selectedProfile;
+
   const manualSeedingRequired =
     accessPlan.readinessSummary?.manualSeedingRequired === true ||
     accessPlan.decision?.manualSeedingRequired === true;
@@ -281,6 +327,15 @@ export async function runManagedProfileWorkflow({
   return {
     dryRun: false,
     plan,
+    profileAcquisitionSummary: summarizeProfileAcquisition({
+      initialAccessPlan,
+      accessPlan,
+      selectedProfile,
+      profileRegistration,
+      profileReadinessMonitor,
+      monitorRunDue,
+    }),
+    initialAccessPlan,
     accessPlan,
     selectedProfile: selectedProfile ? summarizeProfile(selectedProfile) : null,
     selectedProfileMatch: accessPlan.selectedProfileMatch,
@@ -292,8 +347,29 @@ export async function runManagedProfileWorkflow({
     challenges: accessPlan.challenges,
     profileRegistration,
     profileReadinessMonitor,
+    monitorRunDue,
     profileFreshnessUpdate,
     tab,
+  };
+}
+
+function summarizeProfileAcquisition({
+  initialAccessPlan,
+  accessPlan,
+  selectedProfile,
+  profileRegistration,
+  profileReadinessMonitor,
+  monitorRunDue,
+}) {
+  return {
+    selectedProfileId: selectedProfile?.id ?? null,
+    registered: Boolean(profileRegistration),
+    monitorRegistered: Boolean(profileReadinessMonitor),
+    monitorRunDueRan: Boolean(monitorRunDue),
+    initialRecommendedAction: initialAccessPlan?.decision?.recommendedAction ?? null,
+    refreshedRecommendedAction: accessPlan?.decision?.recommendedAction ?? null,
+    monitorRunDueChecked: monitorRunDue?.checked ?? null,
+    monitorRunDueFailed: monitorRunDue?.failed ?? null,
   };
 }
 
@@ -432,6 +508,7 @@ function parseArgs(args) {
     profileUserDataDir: nodeProcess.env.AGENT_BROWSER_EXAMPLE_PROFILE_USER_DATA_DIR,
     registerAuthenticated: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_AUTHENTICATED === '1',
     registerReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_READINESS_MONITOR === '1',
+    runDueReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_RUN_DUE_READINESS_MONITOR === '1',
     readinessMonitorId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_ID,
     readinessMonitorIntervalMs: numberEnv(nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_INTERVAL_MS),
     freshnessProfileId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_PROFILE_ID,
@@ -472,6 +549,8 @@ function parseArgs(args) {
       parsed.registerAuthenticated = true;
     } else if (arg === '--register-readiness-monitor') {
       parsed.registerReadinessMonitor = true;
+    } else if (arg === '--run-due-readiness-monitor') {
+      parsed.runDueReadinessMonitor = true;
     } else if (arg === '--readiness-monitor-id') {
       parsed.readinessMonitorId = requiredValue(args, ++index, arg);
     } else if (arg === '--readiness-monitor-interval-ms') {

@@ -157,10 +157,11 @@ Use `managed-profile-flow.mjs` when a software client needs the CanvaCLI-style
 profile-broker pattern:
 
 1. Ask agent-browser for a no-launch access plan with `getServiceAccessPlan()`.
-2. Pass the access-plan response to `requestServiceTab({ accessPlan })`.
-3. Register a managed profile only when agent-browser has no suitable profile.
-4. Add a `profile_readiness` monitor when registering a new recurring profile.
-5. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
+2. Register a managed profile only when agent-browser has no suitable profile.
+3. Add a `profile_readiness` monitor when registering a new recurring profile.
+4. Optionally run due profile-readiness monitors when access-plan recommends it.
+5. Refresh the access plan before passing it to `requestServiceTab({ accessPlan })`.
+6. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
 
 Dry-run the recipe without contacting a service:
 
@@ -185,6 +186,7 @@ pnpm --filter agent-browser-service-client-example exec node managed-profile-flo
   --login-id canva \
   --target-service-id canva \
   --readiness-profile-id canva-default \
+  --run-due-readiness-monitor \
   --url https://www.canva.com/
 ```
 
@@ -201,6 +203,12 @@ Add `--register-readiness-monitor` for recurring service-owned profiles. The
 script then calls `upsertServiceProfileReadinessMonitor()` after registration
 so the service can mark expired freshness stale and expose the result through
 access-plan `monitorFindings`.
+Add `--run-due-readiness-monitor` when the script should execute an
+access-plan-recommended due profile-readiness monitor through
+`runServiceAccessPlanMonitorRunDue()` before it requests the tab. The script
+then refreshes the access plan and prints `profileAcquisitionSummary` with the
+selected profile ID, whether registration happened, whether a due monitor ran,
+the initial recommendation, and the refreshed recommendation.
 When a readiness row reports `needs_manual_seeding`, the script output includes
 `readinessSummary.needsManualSeeding: true` plus the target service IDs and
 recommended actions so the client can show operator instructions directly.

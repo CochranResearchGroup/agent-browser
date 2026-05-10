@@ -1925,10 +1925,12 @@ control begins.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that uses the no-launch profile planning surfaces to
 ask agent-browser for an access plan, inspect readiness and the service-owned
-decision, pass the access-plan response to `requestServiceTab()`, and register
-a managed login profile only when agent-browser has no suitable one. It can
-also post bounded auth-probe evidence through `updateServiceProfileFreshness()`
-for an existing managed profile. When the recipe registers a profile, it can
+decision, register a managed login profile only when agent-browser has no
+suitable one, optionally run access-plan-recommended due profile-readiness
+monitors with `--run-due-readiness-monitor`, refresh the access plan, and pass
+the final response to `requestServiceTab()`. It can also post bounded
+auth-probe evidence through `updateServiceProfileFreshness()` for an existing
+managed profile. When the recipe registers a profile, it can
 also call `upsertServiceProfileReadinessMonitor()` so the service periodically
 checks retained freshness and surfaces stale profile auth through access-plan
 `monitorFindings`. Access plans include `monitorFindings` so a client can see
@@ -1941,12 +1943,13 @@ decision recommends `run_due_profile_readiness_monitor` and includes
 `runServiceAccessPlanMonitorRunDue()` recipe for running due monitors through
 the serialized service worker before trusting the profile for authenticated
 work.
-Its output includes `readinessSummary.needsManualSeeding`, target service IDs,
-recommended actions, and `seedingHandoff` when readiness says an operator must
-seed the profile. Run
+Its output includes `profileAcquisitionSummary`,
+`readinessSummary.needsManualSeeding`, target service IDs, recommended actions,
+and `seedingHandoff` when readiness says an operator must seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke
 that proves an existing managed profile is selected without registering a new
-one. The `post-seeding-probe.mjs` example covers the next step after the
+one and can run due monitors before browser work. The `post-seeding-probe.mjs`
+example covers the next step after the
 operator closes the detached seeding browser: open a service-owned verification
 tab, collect bounded URL and title evidence, and persist that evidence with
 `verifyServiceProfileSeeding()`. Software clients that already have an access

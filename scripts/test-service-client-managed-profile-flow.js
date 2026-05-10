@@ -18,6 +18,7 @@ const profile = {
 
 await testExistingProfileSelection();
 await testExistingProfileFreshnessUpdate();
+await testExistingProfileDueMonitorRun();
 await testMissingProfileRegistration();
 await testMissingProfileRegistrationWithReadinessMonitor();
 await testManualSeedingReadinessSummary();
@@ -55,6 +56,16 @@ async function testExistingProfileSelection() {
   assert.equal(result.readinessSummary?.manualSeedingRequired, false);
   assert.equal(result.accessDecision?.recommendedAction, 'use_selected_profile');
   assert.equal(result.accessPlan?.decision?.recommendedAction, 'use_selected_profile');
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: 'canva-default',
+    registered: false,
+    monitorRegistered: false,
+    monitorRunDueRan: false,
+    initialRecommendedAction: 'use_selected_profile',
+    refreshedRecommendedAction: 'use_selected_profile',
+    monitorRunDueChecked: null,
+    monitorRunDueFailed: null,
+  });
   assert.equal(result.tab?.success, true);
   assert.equal(result.tab?.data?.url, 'https://www.canva.com/');
 
@@ -123,6 +134,53 @@ async function testExistingProfileFreshnessUpdate() {
     [
       'GET /api/service/access-plan',
       'POST /api/service/profiles/canva-default/freshness',
+      'GET /api/service/access-plan',
+      'POST /api/service/request',
+    ],
+  );
+}
+
+async function testExistingProfileDueMonitorRun() {
+  const calls = [];
+  const fetch = createMockFetch({
+    profiles: [profile],
+    calls,
+    dueMonitorRecommended: true,
+    rejectRegistration: true,
+  });
+
+  const result = await runManagedProfileWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    readinessProfileId: 'canva-default',
+    registerProfileId: 'canva-default',
+    runDueReadinessMonitor: true,
+    url: 'https://www.canva.com/',
+  });
+
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: 'canva-default',
+    registered: false,
+    monitorRegistered: false,
+    monitorRunDueRan: true,
+    initialRecommendedAction: 'run_due_profile_readiness_monitor',
+    refreshedRecommendedAction: 'use_selected_profile',
+    monitorRunDueChecked: 1,
+    monitorRunDueFailed: 0,
+  });
+  assert.equal(result.monitorRunDue?.checked, 1);
+  assert.equal(result.tab?.success, true);
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    [
+      'GET /api/service/access-plan',
+      'POST /api/service/monitors/run-due',
+      'GET /api/service/access-plan',
       'POST /api/service/request',
     ],
   );
@@ -176,7 +234,12 @@ async function testMissingProfileRegistration() {
 
   assert.deepEqual(
     calls.map((call) => `${call.method} ${call.path}`),
-    ['GET /api/service/access-plan', 'POST /api/service/profiles/canva-default', 'POST /api/service/request'],
+    [
+      'GET /api/service/access-plan',
+      'POST /api/service/profiles/canva-default',
+      'GET /api/service/access-plan',
+      'POST /api/service/request',
+    ],
   );
 }
 
@@ -225,6 +288,7 @@ async function testMissingProfileRegistrationWithReadinessMonitor() {
       'GET /api/service/access-plan',
       'POST /api/service/profiles/canva-default',
       'POST /api/service/monitors/canvacli-canva-profile-readiness',
+      'GET /api/service/access-plan',
       'POST /api/service/request',
     ],
   );
@@ -295,8 +359,8 @@ async function testIdentityFirstGuidanceDrift() {
   assert.deepEqual(plan.decisionOrder.slice(0, 4), [
     'ask agent-browser for the no-launch access plan',
     'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
-    'pass the access-plan response to requestServiceTab',
     'register a managed profile only when agent-browser has no suitable one',
+    'optionally run due profile-readiness monitors when access-plan recommends it',
   ]);
 
   const [readme, serviceModeDocs, commandsDocs, skill] = await Promise.all([
@@ -357,14 +421,17 @@ function createMockFetch({
   calls,
   readinessState = 'ready',
   readinessRecommendedAction = 'request_tab_by_login_identity',
+  dueMonitorRecommended = false,
   rejectRegistration = false,
 }) {
+  let accessPlanCount = 0;
   return async (url, init = {}) => {
     const parsed = new URL(String(url));
     const method = init.method || 'GET';
     calls.push({ method, path: parsed.pathname, body: init.body });
 
     if (method === 'GET' && parsed.pathname === '/api/service/access-plan') {
+      accessPlanCount += 1;
       const selectedProfile = profiles[0] ?? null;
       const targetReadiness = selectedProfile
         ? [
@@ -426,11 +493,36 @@ function createMockFetch({
         challenges: [],
         decision: {
           recommendedAction:
-            readinessState === 'needs_manual_seeding' && selectedProfile
+            dueMonitorRecommended && accessPlanCount === 1 && selectedProfile
+              ? 'run_due_profile_readiness_monitor'
+              : readinessState === 'needs_manual_seeding' && selectedProfile
               ? readinessRecommendedAction
               : selectedProfile
                 ? 'use_selected_profile'
                 : 'register_managed_profile_or_request_throwaway_browser',
+          monitorRunDue: {
+            available: dueMonitorRecommended && accessPlanCount === 1 && Boolean(selectedProfile),
+            recommendedBeforeUse: dueMonitorRecommended && accessPlanCount === 1 && Boolean(selectedProfile),
+            monitorIds:
+              dueMonitorRecommended && accessPlanCount === 1 && selectedProfile
+                ? ['canvacli-canva-profile-readiness']
+                : [],
+            neverCheckedMonitorIds: [],
+            targetServiceIds: dueMonitorRecommended && accessPlanCount === 1 && selectedProfile ? ['canva'] : [],
+            http: { method: 'POST', route: '/api/service/monitors/run-due' },
+            mcp: { tool: 'service_monitors_run_due' },
+            client: {
+              package: '@agent-browser/client/service-observability',
+              helper: 'runServiceAccessPlanMonitorRunDue',
+            },
+            fallbackClient: {
+              package: '@agent-browser/client/service-observability',
+              helper: 'runDueServiceMonitors',
+            },
+            cli: { command: 'agent-browser service monitors run-due' },
+            requestFields: [],
+            notes: [],
+          },
           serviceRequest: {
             available: !(readinessState === 'needs_manual_seeding' && Boolean(selectedProfile)),
             blockedByManualAction: readinessState === 'needs_manual_seeding' && Boolean(selectedProfile),
@@ -460,6 +552,15 @@ function createMockFetch({
           challengeIds: [],
           reasons: selectedProfile ? ['selected_profile_has_readiness_evidence'] : ['no_matching_profile'],
         },
+      });
+    }
+
+    if (method === 'POST' && parsed.pathname === '/api/service/monitors/run-due') {
+      return serviceResponse({
+        checked: 1,
+        succeeded: 1,
+        failed: 0,
+        monitorIds: ['canvacli-canva-profile-readiness'],
       });
     }
 
