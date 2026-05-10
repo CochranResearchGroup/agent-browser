@@ -18,6 +18,7 @@
     "url",
     "command",
     "operatorSteps",
+    "operatorIntervention",
     "warnings"
   ],
   "properties": {
@@ -75,11 +76,135 @@
         "type": "string"
       }
     },
+    "operatorIntervention": {
+      "$ref": "#/$defs/operatorIntervention"
+    },
     "warnings": {
       "type": "array",
       "items": {
         "type": "string"
       }
+    }
+  },
+  "$defs": {
+    "operatorIntervention": {
+      "description": "Machine-readable operator feedback contract for profile seeding. UI, desktop, webhook, and agent notifiers should render this state instead of inventing independent workflow rules.",
+      "type": "object",
+      "required": [
+        "state",
+        "severity",
+        "title",
+        "message",
+        "ownedBy",
+        "defaultChannels",
+        "optionalChannels",
+        "desktopPopupPolicy",
+        "blocksProfileLease",
+        "completionSignals",
+        "actions"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "not_required",
+            "needs_manual_seeding",
+            "seeding_launched_detached",
+            "seeding_waiting_for_close",
+            "completion_declared_waiting_for_close",
+            "seeding_closed_unverified",
+            "verification_pending",
+            "fresh",
+            "failed",
+            "abandoned"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "attention", "action_required", "danger"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "ownedBy": {
+          "type": "string",
+          "enum": ["agent-browser"]
+        },
+        "defaultChannels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["api", "mcp", "dashboard", "desktop", "webhook", "agent"]
+          }
+        },
+        "optionalChannels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["api", "mcp", "dashboard", "desktop", "webhook", "agent"]
+          }
+        },
+        "desktopPopupPolicy": {
+          "type": "string",
+          "enum": ["disabled", "optional_policy_controlled", "required"]
+        },
+        "blocksProfileLease": {
+          "type": "boolean"
+        },
+        "completionSignals": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "seeding_browser_closed",
+              "operator_or_agent_declared_complete",
+              "post_seeding_probe_records_freshness"
+            ]
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/operatorInterventionAction"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "operatorInterventionAction": {
+      "type": "object",
+      "required": ["id", "label", "kind", "safety", "description"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "operator_command",
+            "operator_instruction",
+            "service_request",
+            "operator_remedy"
+          ]
+        },
+        "safety": {
+          "type": "string",
+          "enum": ["safe", "caution", "danger"]
+        },
+        "command": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true

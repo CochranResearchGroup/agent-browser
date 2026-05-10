@@ -77,7 +77,12 @@ requesting browser control. Access-plan `monitorFindings` reports active
 operator or probe attention before trusting the profile. Lookup and access-plan
 responses also include `seedingHandoff` when readiness requires manual profile
 seeding, so clients can show the detached runtime-login command without making
-a second profile-specific call.
+a second profile-specific call. The seeding handoff response includes
+`operatorIntervention`, the canonical user-feedback contract for dashboards,
+agents, optional desktop popups, webhooks, and software clients. That block
+describes severity, notification channels, lease blocking, completion signals,
+and safe or dangerous actions; notification providers should render it instead
+of creating their own profile-seeding state machine.
 
 `packages/client/src/service-request.generated.d.ts` and
 `packages/client/src/service-request.generated.js` are generated from these

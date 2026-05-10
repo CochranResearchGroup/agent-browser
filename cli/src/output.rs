@@ -1013,6 +1013,31 @@ fn format_service_profile_seeding_handoff_text(data: &serde_json::Value) -> Opti
         format!("Profile seeding handoff: profile={profile} target={target} seeding={seeding} cdp_allowed={cdp} keyring={keyring}"),
         format!("Command: {command}"),
     ];
+    if let Some(intervention) = data
+        .get("operatorIntervention")
+        .and_then(|value| value.as_object())
+    {
+        let state = intervention
+            .get("state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let severity = intervention
+            .get("severity")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let popup = intervention
+            .get("desktopPopupPolicy")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let blocks_lease = intervention
+            .get("blocksProfileLease")
+            .and_then(|value| value.as_bool())
+            .map(|value| if value { "yes" } else { "no" })
+            .unwrap_or("unknown");
+        lines.push(format!(
+            "Intervention: state={state} severity={severity} desktop_popup={popup} blocks_profile_lease={blocks_lease}"
+        ));
+    }
     if let Some(steps) = data.get("operatorSteps").and_then(|value| value.as_array()) {
         lines.push("Operator steps:".to_string());
         lines.extend(
@@ -5406,6 +5431,12 @@ mod tests {
             "preferredKeyring": "basic_password_store",
             "command": "agent-browser --runtime-profile google-new runtime login https://accounts.google.com",
             "operatorSteps": ["Run the command exactly as shown."],
+            "operatorIntervention": {
+                "state": "needs_manual_seeding",
+                "severity": "action_required",
+                "desktopPopupPolicy": "optional_policy_controlled",
+                "blocksProfileLease": true
+            },
             "warnings": ["Do not add --attachable."]
         });
 
@@ -5415,6 +5446,10 @@ mod tests {
         assert!(rendered.contains(
             "Command: agent-browser --runtime-profile google-new runtime login https://accounts.google.com"
         ));
+        assert!(
+            rendered.contains("Intervention: state=needs_manual_seeding severity=action_required")
+        );
+        assert!(rendered.contains("desktop_popup=optional_policy_controlled"));
         assert!(rendered.contains("Do not add --attachable."));
     }
 

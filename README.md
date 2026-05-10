@@ -1764,6 +1764,13 @@ before creating browser pressure. The `launchPosture` block resolves the
 browser host from site policy, profile default, or the service default, and
 explains whether the plan is headed, remote-view capable, or requires detached
 first-login seeding.
+When manual seeding is required, `seedingHandoff.operatorIntervention` is the
+canonical user-feedback contract. It carries the intervention state, severity,
+default channels for API, MCP, and dashboard clients, optional desktop,
+webhook, and agent notification channels, completion signals, whether the
+profile lease remains blocked, and the safe or dangerous actions clients may
+render. A desktop popup is an optional notification provider, not the primary
+control plane.
 When no local site policy exists, agent-browser applies shipped defaults for
 Google, Gmail, and Microsoft login identities. Local persisted or configured
 policies with the same IDs override those defaults. `sitePolicySource` reports

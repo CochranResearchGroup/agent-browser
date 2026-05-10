@@ -206,10 +206,14 @@ clients can render Google-style detached no-CDP setup requirements without
 parsing the recommendation string.
 Use the inline `seedingHandoff` from the access plan when a client needs the
 exact detached `runtime login` command, setup URL, operator steps, and warnings
-for handoff instead of rebuilding those instructions itself. The managed
-profile flow skips `requestServiceTab()` while manual seeding is required. The
-lower-level tab helper also throws before posting `/api/service/request` unless
-the caller explicitly passes `allowManualAction: true`.
+for handoff instead of rebuilding those instructions itself.
+`seedingHandoff.operatorIntervention` is the machine-readable feedback contract
+for dashboards, agents, desktop notifications, webhooks, and software clients:
+render its severity, channels, completion signals, and actions rather than
+inventing separate seeding rules. The managed profile flow skips
+`requestServiceTab()` while manual seeding is required. The lower-level tab
+helper also throws before posting `/api/service/request` unless the caller
+explicitly passes `allowManualAction: true`.
 The summary comes from `summarizeServiceProfileReadiness()` in
 `@agent-browser/client/service-observability`, so clients can reuse the same
 logic without copying this example.

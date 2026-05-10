@@ -513,6 +513,33 @@ async function main() {
       url: 'https://accounts.google.com',
       command: 'agent-browser --runtime-profile work runtime login https://accounts.google.com',
       operatorSteps: ['Run the command exactly as shown.'],
+      operatorIntervention: {
+        state: 'needs_manual_seeding',
+        severity: 'action_required',
+        title: 'Seed profile work for google',
+        message:
+          'Launch the detached headed browser, complete setup, close Chrome, then let agent-browser verify freshness after CDP is allowed again.',
+        ownedBy: 'agent-browser',
+        defaultChannels: ['api', 'mcp', 'dashboard'],
+        optionalChannels: ['desktop', 'webhook', 'agent'],
+        desktopPopupPolicy: 'optional_policy_controlled',
+        blocksProfileLease: true,
+        completionSignals: [
+          'seeding_browser_closed',
+          'operator_or_agent_declared_complete',
+          'post_seeding_probe_records_freshness',
+        ],
+        actions: [
+          {
+            id: 'run_detached_seeding_command',
+            label: 'Run detached seeding command',
+            kind: 'operator_command',
+            safety: 'safe',
+            command: 'agent-browser --runtime-profile work runtime login https://accounts.google.com',
+            description: 'Launch headed Chrome without CDP or DevTools so first sign-in and setup can complete.',
+          },
+        ],
+      },
       warnings: ['Do not add --attachable or any remote debugging/CDP flag during first seeding.'],
     },
   });
@@ -528,6 +555,10 @@ async function main() {
   );
   assert.equal(handoff.calls[0].init.method, 'GET');
   assert.equal(handoffResult.command, 'agent-browser --runtime-profile work runtime login https://accounts.google.com');
+  assert.equal(handoffResult.operatorIntervention.severity, 'action_required');
+  assert.equal(handoffResult.operatorIntervention.desktopPopupPolicy, 'optional_policy_controlled');
+  assert.equal(handoffResult.operatorIntervention.blocksProfileLease, true);
+  assert.equal(handoffResult.operatorIntervention.actions[0].id, 'run_detached_seeding_command');
 
   const profileMatches = [
     {

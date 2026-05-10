@@ -2228,6 +2228,26 @@ pub fn service_profile_seeding_handoff(
     if readiness.preferred_keyring != Some(ProfileKeyringPolicy::BasicPasswordStore) {
         warnings.push("Consider basic_password_store for managed profiles so OS keyring modals do not block unattended workflows.".to_string());
     }
+    let intervention_state = if readiness.manual_seeding_required {
+        "needs_manual_seeding"
+    } else {
+        "not_required"
+    };
+    let intervention_severity = if readiness.manual_seeding_required {
+        "action_required"
+    } else {
+        "info"
+    };
+    let intervention_title = if readiness.manual_seeding_required {
+        format!("Seed profile {profile_id} for {target}")
+    } else {
+        format!("Profile {profile_id} does not require seeding for {target}")
+    };
+    let intervention_message = if readiness.manual_seeding_required {
+        "Launch the detached headed browser, complete setup, close Chrome, then let agent-browser verify freshness after CDP is allowed again."
+    } else {
+        "No CDP-free profile seeding action is required for this target."
+    };
 
     Ok(serde_json::json!({
         "profileId": profile_id,
@@ -2248,6 +2268,53 @@ pub fn service_profile_seeding_handoff(
             "Close Chrome after seeding is complete.",
             "Request future tabs through service-owned agent-browser automation so CDP attaches only after seeding."
         ],
+        "operatorIntervention": {
+            "state": intervention_state,
+            "severity": intervention_severity,
+            "title": intervention_title,
+            "message": intervention_message,
+            "ownedBy": "agent-browser",
+            "defaultChannels": ["api", "mcp", "dashboard"],
+            "optionalChannels": ["desktop", "webhook", "agent"],
+            "desktopPopupPolicy": "optional_policy_controlled",
+            "blocksProfileLease": readiness.manual_seeding_required,
+            "completionSignals": [
+                "seeding_browser_closed",
+                "operator_or_agent_declared_complete",
+                "post_seeding_probe_records_freshness"
+            ],
+            "actions": [
+                {
+                    "id": "run_detached_seeding_command",
+                    "label": "Run detached seeding command",
+                    "kind": "operator_command",
+                    "safety": "safe",
+                    "command": command,
+                    "description": "Launch headed Chrome without CDP or DevTools so first sign-in and setup can complete."
+                },
+                {
+                    "id": "close_seeded_browser",
+                    "label": "Close seeding browser when finished",
+                    "kind": "operator_instruction",
+                    "safety": "safe",
+                    "description": "Close Chrome after sign-in, sync, passkey, and plugin setup are complete so agent-browser can later attach."
+                },
+                {
+                    "id": "retry_access_plan_after_close",
+                    "label": "Retry the access plan after close",
+                    "kind": "service_request",
+                    "safety": "safe",
+                    "description": "Ask agent-browser for the same access plan again after the seeding browser closes."
+                },
+                {
+                    "id": "force_close_seeded_browser",
+                    "label": "Force close only after operator approval",
+                    "kind": "operator_remedy",
+                    "safety": "danger",
+                    "description": "Force close can lose setup progress or corrupt profile state; reserve it for abandoned seeding browsers."
+                }
+            ]
+        },
         "warnings": warnings,
     }))
 }
@@ -5971,6 +6038,25 @@ mod tests {
             handoff["command"],
             "agent-browser --runtime-profile google-new runtime login https://accounts.google.com"
         );
+        assert_eq!(
+            handoff["operatorIntervention"]["severity"],
+            "action_required"
+        );
+        assert_eq!(
+            handoff["operatorIntervention"]["desktopPopupPolicy"],
+            "optional_policy_controlled"
+        );
+        assert_eq!(handoff["operatorIntervention"]["blocksProfileLease"], true);
+        assert_eq!(
+            handoff["operatorIntervention"]["defaultChannels"],
+            serde_json::json!(["api", "mcp", "dashboard"])
+        );
+        assert!(handoff["operatorIntervention"]["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|action| action["id"] == "force_close_seeded_browser"
+                && action["safety"] == "danger"));
         assert!(handoff["warnings"][0]
             .as_str()
             .unwrap()

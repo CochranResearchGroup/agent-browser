@@ -273,6 +273,24 @@ function assertAccessPlan(data, label) {
     `${label} seeding handoff warnings mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.seedingHandoff?.operatorIntervention?.severity === 'action_required',
+    `${label} seeding handoff operator intervention severity mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.operatorIntervention?.desktopPopupPolicy === 'optional_policy_controlled',
+    `${label} seeding handoff desktop popup policy mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.operatorIntervention?.blocksProfileLease === true,
+    `${label} seeding handoff lease block mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.seedingHandoff?.operatorIntervention?.actions?.some(
+      (action) => action.id === 'force_close_seeded_browser' && action.safety === 'danger',
+    ),
+    `${label} seeding handoff force-close action mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     data?.monitorFindings?.profileReadinessAttentionRequired === false,
     `${label} monitor findings mismatch: ${JSON.stringify(data)}`,
   );

@@ -11945,6 +11945,18 @@ mod tests {
             result["data"]["command"],
             "agent-browser --runtime-profile work runtime login https://accounts.google.com"
         );
+        assert_eq!(
+            result["data"]["operatorIntervention"]["severity"],
+            "action_required"
+        );
+        assert_eq!(
+            result["data"]["operatorIntervention"]["desktopPopupPolicy"],
+            "optional_policy_controlled"
+        );
+        assert_eq!(
+            result["data"]["operatorIntervention"]["defaultChannels"],
+            json!(["api", "mcp", "dashboard"])
+        );
         assert!(state.browser.is_none());
     }
 

@@ -387,7 +387,46 @@ export interface ServiceProfileSeedingHandoffResponse {
   url: string;
   command: string;
   operatorSteps: string[];
+  operatorIntervention: ServiceProfileSeedingOperatorIntervention;
   warnings: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileSeedingOperatorIntervention {
+  state:
+    | 'not_required'
+    | 'needs_manual_seeding'
+    | 'seeding_launched_detached'
+    | 'seeding_waiting_for_close'
+    | 'completion_declared_waiting_for_close'
+    | 'seeding_closed_unverified'
+    | 'verification_pending'
+    | 'fresh'
+    | 'failed'
+    | 'abandoned'
+    | string;
+  severity: 'info' | 'attention' | 'action_required' | 'danger' | string;
+  title: string;
+  message: string;
+  ownedBy: 'agent-browser' | string;
+  defaultChannels: Array<'api' | 'mcp' | 'dashboard' | 'desktop' | 'webhook' | 'agent' | string>;
+  optionalChannels: Array<'api' | 'mcp' | 'dashboard' | 'desktop' | 'webhook' | 'agent' | string>;
+  desktopPopupPolicy: 'disabled' | 'optional_policy_controlled' | 'required' | string;
+  blocksProfileLease: boolean;
+  completionSignals: Array<
+    'seeding_browser_closed' | 'operator_or_agent_declared_complete' | 'post_seeding_probe_records_freshness' | string
+  >;
+  actions: ServiceProfileSeedingOperatorAction[];
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileSeedingOperatorAction {
+  id: string;
+  label: string;
+  kind: 'operator_command' | 'operator_instruction' | 'service_request' | 'operator_remedy' | string;
+  safety: 'safe' | 'caution' | 'danger' | string;
+  description: string;
+  command?: string;
   [key: string]: unknown;
 }
 
