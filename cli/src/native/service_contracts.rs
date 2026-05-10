@@ -26,6 +26,8 @@ pub const SERVICE_MONITOR_RESET_FAILURES_MCP_TOOL_NAME: &str = "service_monitor_
 pub const SERVICE_MONITOR_TRIAGE_MCP_TOOL_NAME: &str = "service_monitor_triage";
 pub const SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME: &str =
     "service_profile_seeding_handoff_update";
+pub const SERVICE_PROFILE_READINESS_MCP_RESOURCE_TEMPLATE: &str =
+    "agent-browser://profiles/{profile_id}/readiness";
 pub const SERVICE_PROFILE_SEEDING_HANDOFF_MCP_RESOURCE_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 pub const SERVICE_REQUEST_SCHEMA_ID: &str =
@@ -163,6 +165,9 @@ pub fn service_contracts_metadata() -> Value {
                 "http": {
                     "method": "GET",
                     "route": SERVICE_PROFILE_READINESS_HTTP_ROUTE,
+                },
+                "mcp": {
+                    "resourceTemplate": SERVICE_PROFILE_READINESS_MCP_RESOURCE_TEMPLATE,
                 },
                 "client": {
                     "package": "@agent-browser/client/service-observability",
@@ -373,6 +378,10 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceProfileReadinessResponse"]["http"]["route"],
             SERVICE_PROFILE_READINESS_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileReadinessResponse"]["mcp"]["resourceTemplate"],
+            SERVICE_PROFILE_READINESS_MCP_RESOURCE_TEMPLATE
         );
         assert_eq!(
             metadata["contracts"]["serviceProfileReadinessResponse"]["client"]["helpers"][0],

@@ -130,6 +130,24 @@ try {
     assert(initialize.capabilities?.resources, 'MCP resources capability missing');
     mcp.notify('notifications/initialized');
 
+    const readinessUri = `agent-browser://profiles/${profileId}/readiness`;
+    const readiness = parseMcpJsonResource(
+      await mcp.send('resources/read', { uri: readinessUri }),
+      readinessUri,
+      'MCP profile readiness resource',
+    );
+
+    assert(readiness.profileId === profileId, `readiness profile mismatch: ${JSON.stringify(readiness)}`);
+    assert(readiness.count === 1, `readiness count mismatch: ${JSON.stringify(readiness)}`);
+    assert(
+      readiness.targetReadiness?.[0]?.targetServiceId === targetServiceId,
+      `readiness target mismatch: ${JSON.stringify(readiness)}`,
+    );
+    assert(
+      readiness.targetReadiness?.[0]?.state === 'needs_manual_seeding',
+      `readiness state mismatch: ${JSON.stringify(readiness)}`,
+    );
+
     const uri = `agent-browser://profiles/${profileId}/seeding-handoff?targetServiceId=${targetServiceId}`;
     const handoff = parseMcpJsonResource(
       await mcp.send('resources/read', { uri }),

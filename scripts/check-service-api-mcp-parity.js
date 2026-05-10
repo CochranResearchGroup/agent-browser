@@ -393,6 +393,32 @@ const serviceResourceSurface = [
       'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
     ],
   },
+  {
+    resource: 'agent-browser://profiles/{profile_id}/readiness',
+    route: '/api/service/profiles/<id>/readiness',
+    docsNeedles: [
+      'agent-browser://profiles/{profile_id}/readiness',
+      '/api/service/profiles/<profile-id>/readiness',
+      '/api/service/profiles/<id>/readiness',
+      '/api/service/profiles/&lt;id&gt;/readiness',
+    ],
+    httpNeedles: [
+      'service_profile_readiness_id(path)',
+      '"targetReadiness"',
+      'SERVICE_PROFILE_READINESS_HTTP_ROUTE',
+      'SERVICE_PROFILE_READINESS_RESPONSE_SCHEMA_ID',
+      '"serviceProfileReadinessResponse"',
+    ],
+    clientNeedles: [
+      'getServiceProfileReadiness',
+      '/api/service/profiles/${encodeURIComponent(id)}/readiness',
+    ],
+    contractNeedles: [
+      'service-profile-readiness-response.v1.schema.json',
+      'GET /api/service/profiles/<id>/readiness',
+      'agent-browser://profiles/{profile_id}/readiness',
+    ],
+  },
 ];
 
 const serviceHttpOnlySurface = [
@@ -419,30 +445,6 @@ const serviceHttpOnlySurface = [
     contractNeedles: [
       'service-profile-allocation-response.v1.schema.json',
       'GET /api/service/profiles/<id>/allocation',
-    ],
-  },
-  {
-    method: 'GET',
-    route: '/api/service/profiles/<id>/readiness',
-    docsNeedles: [
-      '/api/service/profiles/<profile-id>/readiness',
-      '/api/service/profiles/<id>/readiness',
-      '/api/service/profiles/&lt;id&gt;/readiness',
-    ],
-    httpNeedles: [
-      'service_profile_readiness_id(path)',
-      '"targetReadiness"',
-      'SERVICE_PROFILE_READINESS_HTTP_ROUTE',
-      'SERVICE_PROFILE_READINESS_RESPONSE_SCHEMA_ID',
-      '"serviceProfileReadinessResponse"',
-    ],
-    clientNeedles: [
-      'getServiceProfileReadiness',
-      '/api/service/profiles/${encodeURIComponent(id)}/readiness',
-    ],
-    contractNeedles: [
-      'service-profile-readiness-response.v1.schema.json',
-      'GET /api/service/profiles/<id>/readiness',
     ],
   },
   {

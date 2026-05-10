@@ -151,6 +151,11 @@ try {
     `serviceProfileReadinessResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileReadinessResponse?.mcp?.resourceTemplate ===
+      'agent-browser://profiles/{profile_id}/readiness',
+    `serviceProfileReadinessResponse MCP resource template mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileReadinessResponse?.client?.package ===
       '@agent-browser/client/service-observability',
     `serviceProfileReadinessResponse client package mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
@@ -242,6 +247,11 @@ try {
       'getServiceProfileReadiness',
     ),
     `service client could not discover getServiceProfileReadiness helper: ${JSON.stringify(clientContracts.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceProfileReadinessResponse?.mcp?.resourceTemplate ===
+      'agent-browser://profiles/{profile_id}/readiness',
+    `service client could not discover readiness MCP resource template: ${JSON.stringify(clientContracts.contracts?.serviceProfileReadinessResponse)}`,
   );
   assert(
     clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(

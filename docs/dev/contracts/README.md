@@ -54,10 +54,10 @@ wrapper for invoking `service_request` with the same intent object.
 HTTP `GET /api/service/contracts` and MCP `agent-browser://contracts` expose
 runtime compatibility metadata for these contract IDs, their shared `v1`
 version, route and tool names, and the supported service request action list.
-The HTTP contracts metadata also advertises the HTTP-only
-`serviceProfileAllocationResponse` contract for
-`GET /api/service/profiles/<id>/allocation`, `serviceProfileReadinessResponse`
-for `GET /api/service/profiles/<id>/readiness`, and
+The HTTP contracts metadata also advertises `serviceProfileAllocationResponse`
+for the HTTP-only `GET /api/service/profiles/<id>/allocation` route,
+`serviceProfileReadinessResponse` for `GET /api/service/profiles/<id>/readiness`
+and MCP `agent-browser://profiles/{profile_id}/readiness`, and
 `serviceProfileLookupResponse` for `GET /api/service/profiles/lookup`, plus
 `serviceAccessPlanResponse` for `GET /api/service/access-plan` and MCP
 `agent-browser://access-plan`.
@@ -282,9 +282,10 @@ software client needs one derived profile allocation row without fetching the
 full profile collection.
 
 `service-profile-readiness-response.v1.schema.json` describes the response
-envelope returned by HTTP `GET /api/service/profiles/<id>/readiness` when a
-software client needs one profile's no-launch target-readiness rows without
-fetching allocation details or the full profile collection.
+envelope returned by HTTP `GET /api/service/profiles/<id>/readiness` and MCP
+`agent-browser://profiles/{profile_id}/readiness` when a software client or
+agent needs one profile's no-launch target-readiness rows without fetching
+allocation details or the full profile collection.
 
 `service-profile-seeding-handoff-response.v1.schema.json` describes the
 operator-ready handoff returned by HTTP
