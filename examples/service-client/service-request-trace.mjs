@@ -140,6 +140,7 @@ export async function runServiceWorkflow({
   });
   const { initialAccessPlan, profileRegistration, profileReadinessMonitor, monitorRunDue, accessPlan } =
     profileAcquisition;
+  const profileAcquisitionSummary = summarizeProfileAcquisition(profileAcquisition);
   const commandResult = await requestServiceTab({
     baseUrl,
     fetch,
@@ -216,6 +217,7 @@ export async function runServiceWorkflow({
     profileRegistration,
     profileReadinessMonitor,
     monitorRunDue,
+    profileAcquisitionSummary,
     accessPlan,
     commandResult,
     commandResultData: {
@@ -246,6 +248,19 @@ export async function runServiceWorkflow({
       agentName: job.agentName,
       taskName: job.taskName,
     })),
+  };
+}
+
+function summarizeProfileAcquisition(profileAcquisition) {
+  return {
+    selectedProfileId: profileAcquisition.selectedProfile?.id ?? null,
+    registered: profileAcquisition.registered === true,
+    monitorRegistered: profileAcquisition.monitorRegistered === true,
+    monitorRunDueRan: profileAcquisition.monitorRunDueRan === true,
+    initialRecommendedAction: profileAcquisition.initialAccessPlan?.decision?.recommendedAction ?? null,
+    refreshedRecommendedAction: profileAcquisition.accessPlan?.decision?.recommendedAction ?? null,
+    monitorRunDueChecked: profileAcquisition.monitorRunDue?.checked ?? null,
+    monitorRunDueFailed: profileAcquisition.monitorRunDue?.failed ?? null,
   };
 }
 

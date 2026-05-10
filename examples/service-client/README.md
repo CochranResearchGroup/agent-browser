@@ -117,8 +117,11 @@ the older descriptive alias for the same route.
 Prefer `acquireServiceLoginProfile()` when the client is deciding whether to
 register or seed a managed profile. It calls `getServiceAccessPlan()` first,
 registers the fallback profile only when no profile is selected, optionally
-adds the standard retained profile-readiness monitor, then returns the refreshed
-access plan for the tab request.
+adds the standard retained profile-readiness monitor, optionally runs due
+readiness monitors when `runDueReadinessMonitor` is true, then returns the
+refreshed access plan for the tab request. The generic example output includes
+`profileAcquisitionSummary` with `monitorRunDueRan`, initial recommendation,
+and refreshed recommendation fields for operator inspection.
 
 ```js
 import { requestServiceTab } from '@agent-browser/client/service-request';

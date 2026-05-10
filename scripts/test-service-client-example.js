@@ -12,6 +12,7 @@ const profileId = 'journal-example';
 
 await testSkipsRegistrationWhenBrokerSelectsProfile();
 await testRegistersFallbackOnlyAfterAccessPlanMiss();
+await testRunsDueMonitorAndShowsRefreshedRecommendation();
 
 console.log('Service client example no-launch broker tests passed');
 
@@ -41,6 +42,16 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
   assert.equal(result.accessPlan?.selectedProfile?.id, profileId);
   assert.equal(result.profileRegistration, null);
   assert.equal(result.profileReadinessMonitor, null);
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: profileId,
+    registered: false,
+    monitorRegistered: false,
+    monitorRunDueRan: false,
+    initialRecommendedAction: 'use_selected_profile',
+    refreshedRecommendedAction: 'use_selected_profile',
+    monitorRunDueChecked: null,
+    monitorRunDueFailed: null,
+  });
   assert.equal(result.commandResult?.success, true);
   assert.deepEqual(callSequence(calls), [
     'GET /api/service/access-plan',
@@ -85,6 +96,16 @@ async function testRegistersFallbackOnlyAfterAccessPlanMiss() {
   assert.equal(result.profileReadinessMonitor?.monitor?.target?.profile_readiness, loginId);
   assert.equal(result.profileReadinessMonitor?.monitor?.intervalMs, 900000);
   assert.equal(result.accessPlan?.selectedProfile?.id, profileId);
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: profileId,
+    registered: true,
+    monitorRegistered: true,
+    monitorRunDueRan: false,
+    initialRecommendedAction: 'register_managed_profile_or_request_throwaway_browser',
+    refreshedRecommendedAction: 'use_selected_profile',
+    monitorRunDueChecked: null,
+    monitorRunDueFailed: null,
+  });
   assert.equal(result.commandResult?.success, true);
 
   assert.deepEqual(callSequence(calls), [
@@ -107,10 +128,55 @@ async function testRegistersFallbackOnlyAfterAccessPlanMiss() {
   assert.equal(registrationBody.userDataDir, '/tmp/journal-example-profile');
 }
 
+async function testRunsDueMonitorAndShowsRefreshedRecommendation() {
+  const calls = [];
+  const fetch = createBrokerFirstFetch({
+    calls,
+    initialSelectedProfile: brokerProfile(),
+    dueMonitorRecommended: true,
+  });
+
+  const result = await runServiceWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName,
+    agentName,
+    taskName,
+    siteId: loginId,
+    loginId,
+    runDueReadinessMonitor: true,
+    url: 'https://example.com',
+  });
+
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: profileId,
+    registered: false,
+    monitorRegistered: false,
+    monitorRunDueRan: true,
+    initialRecommendedAction: 'run_due_profile_readiness_monitor',
+    refreshedRecommendedAction: 'use_selected_profile',
+    monitorRunDueChecked: 1,
+    monitorRunDueFailed: 0,
+  });
+  assert.equal(result.monitorRunDue?.checked, 1);
+  assert.deepEqual(callSequence(calls), [
+    'GET /api/service/access-plan',
+    'POST /api/service/monitors/run-due',
+    'GET /api/service/access-plan',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'GET /api/service/trace',
+  ]);
+}
+
 function createBrokerFirstFetch({
   calls,
   initialSelectedProfile,
   refreshedSelectedProfile = initialSelectedProfile,
+  dueMonitorRecommended = false,
   failRegistration = false,
 }) {
   let accessPlanCount = 0;
@@ -123,7 +189,20 @@ function createBrokerFirstFetch({
     if (method === 'GET' && parsed.pathname === '/api/service/access-plan') {
       accessPlanCount += 1;
       const selectedProfile = accessPlanCount === 1 ? initialSelectedProfile : refreshedSelectedProfile;
-      return serviceResponse(accessPlanResponse(selectedProfile));
+      return serviceResponse(
+        accessPlanResponse(selectedProfile, {
+          dueMonitorRecommended: dueMonitorRecommended && accessPlanCount === 1,
+        }),
+      );
+    }
+
+    if (method === 'POST' && parsed.pathname === '/api/service/monitors/run-due') {
+      return serviceResponse({
+        checked: 1,
+        succeeded: 1,
+        failed: 0,
+        monitorIds: ['journaldownloader-example-profile-readiness'],
+      });
     }
 
     if (method === 'POST' && parsed.pathname === `/api/service/profiles/${profileId}`) {
@@ -206,7 +285,7 @@ function createBrokerFirstFetch({
   };
 }
 
-function accessPlanResponse(selectedProfile) {
+function accessPlanResponse(selectedProfile, { dueMonitorRecommended = false } = {}) {
   return {
     query: {
       serviceName,
@@ -237,7 +316,31 @@ function accessPlanResponse(selectedProfile) {
     providers: [],
     challenges: [],
     decision: {
-      recommendedAction: selectedProfile ? 'use_selected_profile' : 'register_managed_profile_or_request_throwaway_browser',
+      recommendedAction: dueMonitorRecommended
+        ? 'run_due_profile_readiness_monitor'
+        : selectedProfile
+          ? 'use_selected_profile'
+          : 'register_managed_profile_or_request_throwaway_browser',
+      monitorRunDue: {
+        available: dueMonitorRecommended,
+        recommendedBeforeUse: dueMonitorRecommended,
+        monitorIds: dueMonitorRecommended ? ['journaldownloader-example-profile-readiness'] : [],
+        neverCheckedMonitorIds: [],
+        targetServiceIds: dueMonitorRecommended ? [loginId] : [],
+        http: { method: 'POST', route: '/api/service/monitors/run-due' },
+        mcp: { tool: 'service_monitors_run_due' },
+        client: {
+          package: '@agent-browser/client/service-observability',
+          helper: 'runServiceAccessPlanMonitorRunDue',
+        },
+        fallbackClient: {
+          package: '@agent-browser/client/service-observability',
+          helper: 'runDueServiceMonitors',
+        },
+        cli: { command: 'agent-browser service monitors run-due' },
+        requestFields: [],
+        notes: [],
+      },
       serviceRequest: {
         available: true,
         recommendedAfterManualAction: false,
