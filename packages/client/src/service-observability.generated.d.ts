@@ -977,10 +977,14 @@ export interface ServiceAccessPlanPostSeedingProbeRunResult {
 
 export interface ServiceAccessPlanMonitorFindings {
   profileReadinessAttentionRequired: boolean;
+  profileReadinessProbeDue: boolean;
   profileReadinessIncidentIds: string[];
   profileReadinessMonitorIds: string[];
+  profileReadinessDueMonitorIds: string[];
+  profileReadinessNeverCheckedMonitorIds: string[];
   profileReadinessResults: string[];
   targetServiceIds: string[];
+  dueTargetServiceIds: string[];
   [key: string]: unknown;
 }
 
@@ -993,6 +997,7 @@ export interface ServiceAccessPlanDecision {
   manualActionRequired: boolean;
   manualSeedingRequired: boolean;
   monitorAttentionRequired: boolean;
+  monitorProbeDue: boolean;
   providerIds: string[];
   challengeIds: string[];
   freshnessUpdate: ServiceAccessPlanFreshnessUpdate;

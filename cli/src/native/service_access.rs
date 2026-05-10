@@ -5,6 +5,7 @@
 //! browser. It is intentionally read-only so agents and software clients can
 //! get the service recommendation without creating browser process pressure.
 
+use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
@@ -391,6 +392,8 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         readiness_summary["manualSeedingRequired"].as_bool() == Some(true);
     let profile_readiness_monitor_attention =
         monitor_findings["profileReadinessAttentionRequired"].as_bool() == Some(true);
+    let profile_readiness_probe_due =
+        monitor_findings["profileReadinessProbeDue"].as_bool() == Some(true);
     let denied_challenge = challenges
         .iter()
         .any(|challenge| matches!(challenge.state, ChallengeState::Denied));
@@ -439,6 +442,9 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     if profile_readiness_monitor_attention {
         reasons.push("profile_readiness_monitor_attention");
     }
+    if profile_readiness_probe_due {
+        reasons.push("profile_readiness_probe_due");
+    }
     if let Some(site_policy) = site_policy {
         reasons.push("site_policy_selected");
         if site_policy.manual_login_preferred {
@@ -485,6 +491,8 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         && readiness_profile_needs_probe(readiness, target_service_ids)
     {
         "probe_target_auth_or_reseed_if_needed"
+    } else if profile_readiness_probe_due {
+        "run_due_profile_readiness_monitor"
     } else if readiness_profile_needs_probe(readiness, target_service_ids) {
         "verify_or_seed_profile_before_authenticated_work"
     } else {
@@ -516,6 +524,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "manualActionRequired": manual_action_required,
         "manualSeedingRequired": manual_seeding_required,
         "monitorAttentionRequired": profile_readiness_monitor_attention,
+        "monitorProbeDue": profile_readiness_probe_due,
         "providerIds": providers.iter().map(|provider| provider.id.clone()).collect::<Vec<_>>(),
         "authProviderIds": provider_decision.auth_provider_ids,
         "challengeProviderIds": provider_decision.challenge_provider_ids,
@@ -1051,6 +1060,31 @@ fn access_plan_monitor_findings(
     let mut monitor_ids = Vec::new();
     let mut monitor_results = Vec::new();
     let mut matched_target_service_ids = Vec::new();
+    let mut due_monitor_ids = Vec::new();
+    let mut never_checked_monitor_ids = Vec::new();
+    let mut due_target_service_ids = Vec::new();
+    let now = Utc::now();
+
+    for monitor in service_state.monitors.values() {
+        if monitor.state != super::service_model::MonitorState::Active {
+            continue;
+        }
+        let super::service_model::MonitorTarget::ProfileReadiness(target_service_id) =
+            &monitor.target
+        else {
+            continue;
+        };
+        if !target_matches_request(target_service_id, target_service_ids) {
+            continue;
+        }
+        if profile_readiness_monitor_due_for_access_plan(monitor, now) {
+            due_monitor_ids.push(monitor.id.clone());
+            due_target_service_ids.push(target_service_id.clone());
+            if monitor.last_checked_at.is_none() {
+                never_checked_monitor_ids.push(monitor.id.clone());
+            }
+        }
+    }
 
     for incident in &service_state.incidents {
         if incident.state != ServiceIncidentState::Active
@@ -1091,14 +1125,47 @@ fn access_plan_monitor_findings(
     monitor_results.dedup();
     matched_target_service_ids.sort();
     matched_target_service_ids.dedup();
+    due_monitor_ids.sort();
+    due_monitor_ids.dedup();
+    never_checked_monitor_ids.sort();
+    never_checked_monitor_ids.dedup();
+    due_target_service_ids.sort();
+    due_target_service_ids.dedup();
 
     json!({
         "profileReadinessAttentionRequired": !incident_ids.is_empty(),
+        "profileReadinessProbeDue": !due_monitor_ids.is_empty(),
         "profileReadinessIncidentIds": incident_ids,
         "profileReadinessMonitorIds": monitor_ids,
+        "profileReadinessDueMonitorIds": due_monitor_ids,
+        "profileReadinessNeverCheckedMonitorIds": never_checked_monitor_ids,
         "profileReadinessResults": monitor_results,
         "targetServiceIds": matched_target_service_ids,
+        "dueTargetServiceIds": due_target_service_ids,
     })
+}
+
+fn target_matches_request(target_service_id: &str, target_service_ids: &[String]) -> bool {
+    target_service_ids.is_empty()
+        || target_service_ids
+            .iter()
+            .any(|requested| requested == target_service_id)
+}
+
+fn profile_readiness_monitor_due_for_access_plan(
+    monitor: &super::service_model::SiteMonitor,
+    now: DateTime<Utc>,
+) -> bool {
+    let Some(last_checked_at) = monitor.last_checked_at.as_deref() else {
+        return true;
+    };
+    let Ok(last_checked_at) = DateTime::parse_from_rfc3339(last_checked_at) else {
+        return true;
+    };
+    let elapsed_ms = now
+        .signed_duration_since(last_checked_at.with_timezone(&Utc))
+        .num_milliseconds();
+    elapsed_ms >= 0 && elapsed_ms as u64 >= monitor.interval_ms
 }
 
 fn readiness_summary(readiness: Option<&Value>, target_service_ids: &[String]) -> Value {
@@ -1225,10 +1292,10 @@ mod tests {
 
     use super::*;
     use crate::native::service_model::{
-        BrowserHost, BrowserProfile, Challenge, ChallengeKind, InteractionMode,
-        ProfileKeyringPolicy, ProfileReadinessState, ProfileSeedingMode, ProfileTargetReadiness,
-        ProviderCapability, ProviderKind, RateLimitPolicy, ServiceIncident, ServiceProvider,
-        SitePolicy,
+        BrowserHost, BrowserProfile, Challenge, ChallengeKind, InteractionMode, MonitorState,
+        MonitorTarget, ProfileKeyringPolicy, ProfileReadinessState, ProfileSeedingMode,
+        ProfileTargetReadiness, ProviderCapability, ProviderKind, RateLimitPolicy, ServiceIncident,
+        ServiceProvider, SiteMonitor, SitePolicy,
     };
     use serde_json::json;
 
@@ -1573,6 +1640,85 @@ mod tests {
             .unwrap()
             .iter()
             .any(|reason| reason == "profile_readiness_monitor_attention"));
+    }
+
+    #[test]
+    fn service_access_plan_reports_due_profile_readiness_monitor_before_tab_request() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "journal-acs".to_string(),
+                BrowserProfile {
+                    id: "journal-acs".to_string(),
+                    name: "Journal ACS".to_string(),
+                    target_service_ids: vec!["acs".to_string()],
+                    authenticated_service_ids: vec!["acs".to_string()],
+                    shared_service_ids: vec!["JournalDownloader".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "acs".to_string(),
+                        login_id: Some("acs".to_string()),
+                        state: ProfileReadinessState::Fresh,
+                        evidence: "auth_probe_cookie_present".to_string(),
+                        recommended_action: "use_profile".to_string(),
+                        freshness_expires_at: Some("2999-05-01T00:00:01Z".to_string()),
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            monitors: BTreeMap::from([(
+                "acs-freshness".to_string(),
+                SiteMonitor {
+                    id: "acs-freshness".to_string(),
+                    name: "ACS freshness".to_string(),
+                    target: MonitorTarget::ProfileReadiness("acs".to_string()),
+                    state: MonitorState::Active,
+                    last_checked_at: None,
+                    interval_ms: 60_000,
+                    ..SiteMonitor::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("JournalDownloader".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("probeACSwebsite".to_string()),
+                target_service_ids: vec!["acs".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["monitorFindings"]["profileReadinessAttentionRequired"],
+            false
+        );
+        assert_eq!(plan["monitorFindings"]["profileReadinessProbeDue"], true);
+        assert_eq!(
+            plan["monitorFindings"]["profileReadinessDueMonitorIds"],
+            json!(["acs-freshness"])
+        );
+        assert_eq!(
+            plan["monitorFindings"]["profileReadinessNeverCheckedMonitorIds"],
+            json!(["acs-freshness"])
+        );
+        assert_eq!(
+            plan["monitorFindings"]["dueTargetServiceIds"],
+            json!(["acs"])
+        );
+        assert_eq!(plan["decision"]["monitorProbeDue"], true);
+        assert_eq!(
+            plan["decision"]["recommendedAction"],
+            "run_due_profile_readiness_monitor"
+        );
+        assert!(plan["decision"]["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "profile_readiness_probe_due"));
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
     }
 
     #[test]

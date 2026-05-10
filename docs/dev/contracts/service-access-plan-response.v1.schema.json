@@ -183,13 +183,20 @@
       "type": "object",
       "required": [
         "profileReadinessAttentionRequired",
+        "profileReadinessProbeDue",
         "profileReadinessIncidentIds",
         "profileReadinessMonitorIds",
+        "profileReadinessDueMonitorIds",
+        "profileReadinessNeverCheckedMonitorIds",
         "profileReadinessResults",
-        "targetServiceIds"
+        "targetServiceIds",
+        "dueTargetServiceIds"
       ],
       "properties": {
         "profileReadinessAttentionRequired": {
+          "type": "boolean"
+        },
+        "profileReadinessProbeDue": {
           "type": "boolean"
         },
         "profileReadinessIncidentIds": {
@@ -204,6 +211,18 @@
             "type": "string"
           }
         },
+        "profileReadinessDueMonitorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "profileReadinessNeverCheckedMonitorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "profileReadinessResults": {
           "type": "array",
           "items": {
@@ -211,6 +230,12 @@
           }
         },
         "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dueTargetServiceIds": {
           "type": "array",
           "items": {
             "type": "string"
@@ -435,6 +460,9 @@
           "type": "boolean"
         },
         "monitorAttentionRequired": {
+          "type": "boolean"
+        },
+        "monitorProbeDue": {
           "type": "boolean"
         },
         "providerIds": {

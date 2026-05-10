@@ -295,6 +295,10 @@ function assertAccessPlan(data, label) {
     `${label} monitor findings mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.monitorFindings?.profileReadinessProbeDue === false,
+    `${label} monitor probe due mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     Array.isArray(data?.monitorFindings?.profileReadinessMonitorIds) &&
       data.monitorFindings.profileReadinessMonitorIds.length === 0,
     `${label} monitor IDs mismatch: ${JSON.stringify(data)}`,
@@ -326,6 +330,10 @@ function assertAccessPlan(data, label) {
   assert(
     data?.decision?.monitorAttentionRequired === false,
     `${label} monitor attention flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorProbeDue === false,
+    `${label} monitor probe due flag mismatch: ${JSON.stringify(data)}`,
   );
   assert(
     data?.decision?.providerIds?.includes(providerId),
@@ -496,6 +504,10 @@ function assertMonitoredAccessPlan(data, label) {
     `${label} monitor findings mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.monitorFindings?.profileReadinessProbeDue === false,
+    `${label} monitor probe due mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     data?.monitorFindings?.profileReadinessIncidentIds?.includes(`monitor:${monitoredMonitorId}`),
     `${label} monitor incident IDs mismatch: ${JSON.stringify(data)}`,
   );
@@ -514,6 +526,10 @@ function assertMonitoredAccessPlan(data, label) {
   assert(
     data?.decision?.monitorAttentionRequired === true,
     `${label} monitor attention flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorProbeDue === false,
+    `${label} monitor probe due flag mismatch: ${JSON.stringify(data)}`,
   );
   assert(
     data?.decision?.recommendedAction === 'probe_target_auth_or_reseed_if_needed',

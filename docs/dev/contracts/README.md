@@ -77,7 +77,13 @@ enabled providers, retained challenges, and the service-owned decision before
 requesting browser control. Access-plan `monitorFindings` reports active
 `profile_readiness` monitor incidents for the requested target identities, and
 `decision.monitorAttentionRequired` mirrors whether those findings need
-operator or probe attention before trusting the profile. Lookup and access-plan
+operator or probe attention before trusting the profile. It also reports
+matching active profile-readiness monitors that are due or never checked through
+`profileReadinessProbeDue`, `profileReadinessDueMonitorIds`,
+`profileReadinessNeverCheckedMonitorIds`, and `dueTargetServiceIds`; those
+findings set `decision.monitorProbeDue` and recommend
+`run_due_profile_readiness_monitor` before the caller relies on retained
+freshness. Lookup and access-plan
 responses also include `seedingHandoff` when readiness requires manual profile
 seeding, so clients can show the detached runtime-login command without making
 a second profile-specific call. The seeding handoff response includes
