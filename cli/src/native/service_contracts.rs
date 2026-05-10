@@ -26,6 +26,8 @@ pub const SERVICE_MONITOR_RESET_FAILURES_MCP_TOOL_NAME: &str = "service_monitor_
 pub const SERVICE_MONITOR_TRIAGE_MCP_TOOL_NAME: &str = "service_monitor_triage";
 pub const SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME: &str =
     "service_profile_seeding_handoff_update";
+pub const SERVICE_PROFILE_SEEDING_HANDOFF_MCP_RESOURCE_TEMPLATE: &str =
+    "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 pub const SERVICE_REQUEST_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-request.v1.schema.json";
 pub const SERVICE_REQUEST_MCP_TOOL_CALL_SCHEMA_ID: &str =
@@ -181,6 +183,7 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "mcp": {
                     "tool": SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
+                    "resourceTemplate": SERVICE_PROFILE_SEEDING_HANDOFF_MCP_RESOURCE_TEMPLATE,
                 },
                 "responseFields": ["command", "lifecycle", "operatorIntervention", "operatorSteps", "warnings"],
             },

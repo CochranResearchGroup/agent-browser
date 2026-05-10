@@ -182,6 +182,11 @@ try {
     `serviceProfileSeedingHandoffResponse MCP tool mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.mcp?.resourceTemplate ===
+      'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
+    `serviceProfileSeedingHandoffResponse MCP resource template mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(
       'getServiceProfileSeedingHandoff',
     ),
@@ -254,6 +259,11 @@ try {
     clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.mcp?.tool ===
       'service_profile_seeding_handoff_update',
     `service client could not discover seeding handoff MCP tool: ${JSON.stringify(clientContracts.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.mcp?.resourceTemplate ===
+      'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
+    `service client could not discover seeding handoff MCP resource template: ${JSON.stringify(clientContracts.contracts?.serviceProfileSeedingHandoffResponse)}`,
   );
   assert(
     JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===

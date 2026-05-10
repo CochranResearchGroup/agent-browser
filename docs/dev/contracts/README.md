@@ -288,14 +288,15 @@ fetching allocation details or the full profile collection.
 
 `service-profile-seeding-handoff-response.v1.schema.json` describes the
 operator-ready handoff returned by HTTP
-`GET /api/service/profiles/<id>/seeding-handoff`. The handoff is derived from
-`targetReadiness` and includes the exact detached `runtime login` command,
-setup URL, seeding mode, keyring preference, setup scopes, operator steps, and
-warnings. It also includes the persisted lifecycle record that drives
-`operatorIntervention.state` after the detached browser is launched, waiting
-for close, declared complete, closed but unverified, verified fresh, failed, or
-abandoned. Use `targetServiceId`, `siteId`, or `loginId` query parameters when
-a profile has multiple target identities.
+`GET /api/service/profiles/<id>/seeding-handoff` and MCP
+`agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}`.
+The handoff is derived from `targetReadiness` and includes the exact detached
+`runtime login` command, setup URL, seeding mode, keyring preference, setup
+scopes, operator steps, and warnings. It also includes the persisted lifecycle
+record that drives `operatorIntervention.state` after the detached browser is
+launched, waiting for close, declared complete, closed but unverified, verified
+fresh, failed, or abandoned. Use `targetServiceId`, `siteId`, or `loginId`
+query parameters when a profile has multiple target identities.
 
 `POST /api/service/profiles/<id>/freshness` and MCP
 `service_profile_freshness_update` reuse the profile upsert response envelope

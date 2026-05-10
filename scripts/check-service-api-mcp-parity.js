@@ -367,6 +367,32 @@ const serviceResourceSurface = [
     ],
     httpNeedles: ['service_incident_action_id(path, "/activity")'],
   },
+  {
+    resource: 'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
+    route: '/api/service/profiles/<id>/seeding-handoff',
+    docsNeedles: [
+      'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
+      '/api/service/profiles/<profile-id>/seeding-handoff',
+      '/api/service/profiles/<id>/seeding-handoff',
+      '/api/service/profiles/&lt;id&gt;/seeding-handoff',
+    ],
+    httpNeedles: [
+      'service_profile_seeding_handoff_id(path)',
+      '"operatorSteps"',
+      'SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE',
+      'SERVICE_PROFILE_SEEDING_HANDOFF_RESPONSE_SCHEMA_ID',
+      '"serviceProfileSeedingHandoffResponse"',
+    ],
+    clientNeedles: [
+      'getServiceProfileSeedingHandoff',
+      '/api/service/profiles/${encodeURIComponent(id)}/seeding-handoff',
+    ],
+    contractNeedles: [
+      'service-profile-seeding-handoff-response.v1.schema.json',
+      'GET /api/service/profiles/<id>/seeding-handoff',
+      'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
+    ],
+  },
 ];
 
 const serviceHttpOnlySurface = [
@@ -417,30 +443,6 @@ const serviceHttpOnlySurface = [
     contractNeedles: [
       'service-profile-readiness-response.v1.schema.json',
       'GET /api/service/profiles/<id>/readiness',
-    ],
-  },
-  {
-    method: 'GET',
-    route: '/api/service/profiles/<id>/seeding-handoff',
-    docsNeedles: [
-      '/api/service/profiles/<profile-id>/seeding-handoff',
-      '/api/service/profiles/<id>/seeding-handoff',
-      '/api/service/profiles/&lt;id&gt;/seeding-handoff',
-    ],
-    httpNeedles: [
-      'service_profile_seeding_handoff_id(path)',
-      '"operatorSteps"',
-      'SERVICE_PROFILE_SEEDING_HANDOFF_HTTP_ROUTE',
-      'SERVICE_PROFILE_SEEDING_HANDOFF_RESPONSE_SCHEMA_ID',
-      '"serviceProfileSeedingHandoffResponse"',
-    ],
-    clientNeedles: [
-      'getServiceProfileSeedingHandoff',
-      '/api/service/profiles/${encodeURIComponent(id)}/seeding-handoff',
-    ],
-    contractNeedles: [
-      'service-profile-seeding-handoff-response.v1.schema.json',
-      'GET /api/service/profiles/<id>/seeding-handoff',
     ],
   },
   {

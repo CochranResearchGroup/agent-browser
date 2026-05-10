@@ -15,7 +15,8 @@ use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
 };
 use crate::native::service_model::{
-    service_profile_allocations, service_profile_sources, service_site_policy_sources, ServiceState,
+    service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
+    service_site_policy_sources, ServiceState,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
@@ -34,6 +35,8 @@ const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
 const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}";
+const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
+    "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
 
@@ -228,6 +231,12 @@ fn service_mcp_resource_templates() -> Vec<Value> {
             "mimeType": "application/json",
             "description": "Canonical service-owned chronological activity timeline for one incident"
         }),
+        json!({
+            "uriTemplate": PROFILE_SEEDING_HANDOFF_TEMPLATE,
+            "name": "Service profile seeding handoff",
+            "mimeType": "application/json",
+            "description": "Operator-ready detached profile-seeding command, lifecycle, and intervention payload for one profile target"
+        }),
     ]
 }
 
@@ -335,6 +344,10 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
         _ => {
             if let Some(incident_id) = incident_activity_resource_id(uri) {
                 service_incident_activity_response(&state, incident_id)?
+            } else if let Some((profile_id, target_service_id)) =
+                profile_seeding_handoff_resource(uri)
+            {
+                service_profile_seeding_handoff(&state, &profile_id, target_service_id.as_deref())?
             } else if let Some(query) = access_plan_resource_query(uri) {
                 let request = parse_service_access_plan_query(query)?;
                 service_access_plan_for_state(&state, request)
@@ -8556,6 +8569,40 @@ fn access_plan_resource_query(uri: &str) -> Option<Vec<(String, String)>> {
     )
 }
 
+fn profile_seeding_handoff_resource(uri: &str) -> Option<(String, Option<String>)> {
+    let rest = uri.strip_prefix("agent-browser://profiles/")?;
+    let (path, query) = match rest.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (rest, None),
+    };
+    let profile_id = path
+        .strip_suffix("/seeding-handoff")
+        .filter(|id| !id.is_empty() && !id.contains('/'))?;
+    let profile_id = urlencoding::decode(profile_id).ok()?.into_owned();
+    let target_service_id = query.and_then(|query| {
+        url::form_urlencoded::parse(query.as_bytes()).find_map(|(key, value)| {
+            matches!(
+                key.as_ref(),
+                "targetServiceId"
+                    | "target_service_id"
+                    | "target-service-id"
+                    | "targetService"
+                    | "target_service"
+                    | "target-service"
+                    | "siteId"
+                    | "site_id"
+                    | "site-id"
+                    | "loginId"
+                    | "login_id"
+                    | "login-id"
+            )
+            .then(|| value.into_owned())
+            .filter(|value| !value.trim().is_empty())
+        })
+    });
+    Some((profile_id, target_service_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -8598,6 +8645,10 @@ mod tests {
             response["data"]["resourceTemplates"][1]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
         );
+        assert_eq!(
+            response["data"]["resourceTemplates"][2]["uriTemplate"],
+            PROFILE_SEEDING_HANDOFF_TEMPLATE
+        );
     }
 
     #[test]
@@ -8612,6 +8663,34 @@ mod tests {
         );
         assert_eq!(
             incident_activity_resource_id("agent-browser://incidents/browser-1/events"),
+            None
+        );
+    }
+
+    #[test]
+    fn profile_seeding_handoff_resource_maps_uri() {
+        assert_eq!(
+            profile_seeding_handoff_resource(
+                "agent-browser://profiles/google-work/seeding-handoff?targetServiceId=google"
+            ),
+            Some(("google-work".to_string(), Some("google".to_string())))
+        );
+        assert_eq!(
+            profile_seeding_handoff_resource(
+                "agent-browser://profiles/google%20work/seeding-handoff?loginId=gmail"
+            ),
+            Some(("google work".to_string(), Some("gmail".to_string())))
+        );
+        assert_eq!(
+            profile_seeding_handoff_resource(
+                "agent-browser://profiles/google-work/seeding-handoff"
+            ),
+            Some(("google-work".to_string(), None))
+        );
+        assert_eq!(
+            profile_seeding_handoff_resource(
+                "agent-browser://profiles/google-work/tabs?targetServiceId=google"
+            ),
             None
         );
     }
@@ -8688,6 +8767,10 @@ mod tests {
         assert_eq!(
             response["result"]["resourceTemplates"][1]["uriTemplate"],
             "agent-browser://incidents/{incident_id}/activity"
+        );
+        assert_eq!(
+            response["result"]["resourceTemplates"][2]["uriTemplate"],
+            PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
     }
 
@@ -12203,6 +12286,60 @@ mod tests {
         assert_eq!(
             resource["contents"]["decision"]["recommendedAction"],
             "use_selected_profile"
+        );
+    }
+
+    #[test]
+    fn read_profile_seeding_handoff_resource_returns_operator_handoff() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            BrowserProfile, ProfileReadinessState, ProfileSeedingMode, ProfileTargetReadiness,
+        };
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-work".to_string(),
+                BrowserProfile {
+                    id: "google-work".to_string(),
+                    name: "Google Work".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "google".to_string(),
+                        state: ProfileReadinessState::NeedsManualSeeding,
+                        seeding_mode: ProfileSeedingMode::DetachedHeadedNoCdp,
+                        cdp_attachment_allowed_during_seeding: false,
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(
+            "agent-browser://profiles/google-work/seeding-handoff?targetServiceId=google",
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(
+            resource["uri"],
+            "agent-browser://profiles/google-work/seeding-handoff?targetServiceId=google"
+        );
+        assert_eq!(resource["contents"]["profileId"], "google-work");
+        assert_eq!(resource["contents"]["targetServiceId"], "google");
+        assert_eq!(
+            resource["contents"]["seedingMode"],
+            "detached_headed_no_cdp"
+        );
+        assert_eq!(
+            resource["contents"]["operatorIntervention"]["state"],
+            "needs_manual_seeding"
+        );
+        assert_eq!(
+            resource["contents"]["operatorIntervention"]["defaultChannels"][1],
+            "mcp"
         );
     }
 
