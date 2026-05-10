@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   assert,
   closeSession,
   createSmokeContext,
+  createMcpStdioClient,
   parseJsonOutput,
   readResourceContents,
   runCli,
 } from './smoke-utils.js';
+import { parseMcpJsonResource } from './smoke-schema-utils.js';
 
 const context = createSmokeContext({
   prefix: 'ab-mcp-read-no-launch-',
@@ -19,6 +21,9 @@ const context = createSmokeContext({
 context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
 
 const { agentHome, session } = context;
+const profileId = `mcp-read-google-${process.pid}`;
+const targetServiceId = 'google';
+let mcp;
 
 async function cleanup() {
   try {
@@ -28,7 +33,62 @@ async function cleanup() {
   }
 }
 
+function seedServiceState() {
+  const serviceDir = join(agentHome, 'service');
+  mkdirSync(serviceDir, { recursive: true });
+  writeFileSync(
+    join(serviceDir, 'state.json'),
+    `${JSON.stringify(
+      {
+        profiles: {
+          [profileId]: {
+            id: profileId,
+            name: 'MCP read Google profile',
+            userDataDir: join(context.tempHome, 'google-profile-user-data'),
+            targetServiceIds: [targetServiceId],
+            authenticatedServiceIds: [],
+            sharedServiceIds: ['McpReadSmoke'],
+            targetReadiness: [
+              {
+                targetServiceId,
+                loginId: targetServiceId,
+                state: 'needs_manual_seeding',
+                manualSeedingRequired: true,
+                evidence: 'manual_seed_required_without_authenticated_hint',
+                recommendedAction:
+                  'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+                seedingMode: 'detached_headed_no_cdp',
+                cdpAttachmentAllowedDuringSeeding: false,
+                preferredKeyring: 'basic_password_store',
+                setupScopes: ['signin', 'chrome_sync', 'passkeys', 'browser_plugins'],
+              },
+            ],
+            persistent: true,
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+function assertNoLaunchSideEffects(statePath) {
+  if (!existsSync(statePath)) return;
+  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  assert(
+    Object.keys(state.jobs ?? {}).length === 0,
+    `mcp read persisted jobs: ${JSON.stringify(state.jobs)}`,
+  );
+  assert(
+    Object.keys(state.browsers ?? {}).length === 0,
+    `mcp read persisted browsers: ${JSON.stringify(state.browsers)}`,
+  );
+}
+
 try {
+  seedServiceState();
+
   const sessionsResult = await runCli(context, [
     '--json',
     '--session',
@@ -49,17 +109,61 @@ try {
   assert(sessions.count === 0, `mcp read returned unexpected sessions: ${sessionsResult.stdout}`);
 
   const statePath = join(agentHome, 'service', 'state.json');
-  if (existsSync(statePath)) {
-    const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  assertNoLaunchSideEffects(statePath);
+
+  mcp = createMcpStdioClient({
+    context,
+    args: ['--session', session, 'mcp', 'serve'],
+    onFatal: (message, stderr) => {
+      console.error(message);
+      if (stderr.trim()) {
+        console.error(stderr.trim());
+      }
+    },
+  });
+  try {
+    const initialize = await mcp.send('initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'agent-browser-mcp-read-no-launch-smoke', version: '0' },
+    });
+    assert(initialize.capabilities?.resources, 'MCP resources capability missing');
+    mcp.notify('notifications/initialized');
+
+    const uri = `agent-browser://profiles/${profileId}/seeding-handoff?targetServiceId=${targetServiceId}`;
+    const handoff = parseMcpJsonResource(
+      await mcp.send('resources/read', { uri }),
+      uri,
+      'MCP profile seeding handoff resource',
+    );
+
+    assert(handoff.profileId === profileId, `handoff profile mismatch: ${JSON.stringify(handoff)}`);
     assert(
-      Object.keys(state.jobs ?? {}).length === 0,
-      `mcp read persisted jobs: ${JSON.stringify(state.jobs)}`,
+      handoff.targetServiceId === targetServiceId,
+      `handoff target mismatch: ${JSON.stringify(handoff)}`,
     );
     assert(
-      Object.keys(state.browsers ?? {}).length === 0,
-      `mcp read persisted browsers: ${JSON.stringify(state.browsers)}`,
+      handoff.command === `agent-browser --runtime-profile ${profileId} runtime login https://accounts.google.com`,
+      `handoff command mismatch: ${JSON.stringify(handoff)}`,
     );
+    assert(
+      handoff.lifecycle?.state === 'needs_manual_seeding',
+      `handoff lifecycle mismatch: ${JSON.stringify(handoff)}`,
+    );
+    assert(
+      handoff.operatorIntervention?.defaultChannels?.includes('mcp'),
+      `handoff intervention missing MCP channel: ${JSON.stringify(handoff)}`,
+    );
+    assert(
+      handoff.operatorIntervention?.blocksProfileLease === true,
+      `handoff intervention should block profile lease: ${JSON.stringify(handoff)}`,
+    );
+  } finally {
+    mcp.close();
+    mcp = null;
   }
+
+  assertNoLaunchSideEffects(statePath);
 
   await cleanup();
   console.log('MCP read no-launch smoke passed');
