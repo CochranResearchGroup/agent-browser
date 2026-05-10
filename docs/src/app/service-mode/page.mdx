@@ -345,6 +345,10 @@ Named browser-control routes accept the same action fields as the underlying com
 agent-browser://profiles
 agent-browser://contracts
 agent-browser://access-plan
+agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}
+agent-browser://profiles/{profile_id}/readiness
+agent-browser://profiles/{profile_id}/allocation
+agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}
 agent-browser://sessions
 agent-browser://browsers
 agent-browser://tabs
@@ -358,6 +362,50 @@ agent-browser://events
 agent-browser://incidents
 agent-browser://incidents/{incident_id}/activity
 ```
+
+The guarded service read surface has MCP resource parity, so agents can read
+the same durable state that software clients read over HTTP. Prefer the
+access-plan resource for agent-facing profile selection because it combines
+profile selection, readiness, site policy, providers, retained challenges,
+monitor findings, seeding handoff, and a copyable queued service request before
+the caller asks for browser control.
+
+<table>
+  <thead>
+    <tr>
+      <th>Need</th>
+      <th>HTTP route</th>
+      <th>MCP resource</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Preferred agent selector</td>
+      <td><code>GET /api/service/access-plan</code></td>
+      <td><code>agent-browser://access-plan&#123;?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId&#125;</code></td>
+    </tr>
+    <tr>
+      <td>Narrow profile lookup</td>
+      <td><code>GET /api/service/profiles/lookup</code></td>
+      <td><code>agent-browser://profiles/lookup&#123;?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId&#125;</code></td>
+    </tr>
+    <tr>
+      <td>One profile readiness or allocation</td>
+      <td><code>GET /api/service/profiles/&lt;id&gt;/readiness</code> or <code>GET /api/service/profiles/&lt;id&gt;/allocation</code></td>
+      <td><code>agent-browser://profiles/&#123;profile_id&#125;/readiness</code> or <code>agent-browser://profiles/&#123;profile_id&#125;/allocation</code></td>
+    </tr>
+    <tr>
+      <td>Manual seeding handoff</td>
+      <td><code>GET /api/service/profiles/&lt;id&gt;/seeding-handoff</code></td>
+      <td><code>agent-browser://profiles/&#123;profile_id&#125;/seeding-handoff&#123;?targetServiceId,siteId,loginId&#125;</code></td>
+    </tr>
+    <tr>
+      <td>Service collections and activity</td>
+      <td><code>GET /api/service/profiles</code>, <code>jobs</code>, <code>events</code>, <code>incidents</code>, and related collection routes</td>
+      <td><code>agent-browser://profiles</code>, <code>jobs</code>, <code>events</code>, <code>incidents</code>, and related collection resources</td>
+    </tr>
+  </tbody>
+</table>
 
 Service tools include `service_request`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, and `service_provider_delete`. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
 

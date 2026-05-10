@@ -87,6 +87,67 @@ describes severity, notification channels, lease blocking, completion signals,
 and safe or dangerous actions; notification providers should render it instead
 of creating their own profile-seeding state machine.
 
+## Service Read Surface Parity
+
+The guarded service read surface has MCP resource parity. Software clients can
+use HTTP helpers, while agents can use the matching MCP resources without
+launching Chrome or bypassing the service-owned state model. Prefer the
+access-plan resource for agent-facing profile selection because it combines the
+selected profile, readiness, policy, providers, retained challenges, monitor
+findings, and the service-owned decision before the caller requests a tab.
+
+<table>
+  <thead>
+    <tr>
+      <th>HTTP route</th>
+      <th>MCP resource</th>
+      <th>Primary use</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>GET /api/service/contracts</code></td>
+      <td><code>agent-browser://contracts</code></td>
+      <td>Compatibility metadata and service request action support</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/service/access-plan</code></td>
+      <td><code>agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}</code></td>
+      <td>Preferred no-launch selector and recommendation payload</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/service/profiles/lookup</code></td>
+      <td><code>agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}</code></td>
+      <td>Narrow profile selector when the caller does not need the full access plan</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/service/profiles/&lt;id&gt;/readiness</code></td>
+      <td><code>agent-browser://profiles/{profile_id}/readiness</code></td>
+      <td>One profile's no-launch target readiness</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/service/profiles/&lt;id&gt;/allocation</code></td>
+      <td><code>agent-browser://profiles/{profile_id}/allocation</code></td>
+      <td>One profile's lease, holder, conflict, and readiness state</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/service/profiles/&lt;id&gt;/seeding-handoff</code></td>
+      <td><code>agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}</code></td>
+      <td>Operator-ready detached seeding command and lifecycle state</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/service/profiles</code>, <code>sessions</code>, <code>browsers</code>, <code>tabs</code>, <code>monitors</code>, <code>site-policies</code>, <code>providers</code>, <code>challenges</code>, <code>jobs</code>, <code>events</code>, and <code>incidents</code></td>
+      <td><code>agent-browser://profiles</code>, <code>sessions</code>, <code>browsers</code>, <code>tabs</code>, <code>monitors</code>, <code>site-policies</code>, <code>providers</code>, <code>challenges</code>, <code>jobs</code>, <code>events</code>, and <code>incidents</code></td>
+      <td>Service-owned collections for agents and software clients</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/service/incidents/&lt;id&gt;/activity</code></td>
+      <td><code>agent-browser://incidents/{incident_id}/activity</code></td>
+      <td>Incident timeline detail</td>
+    </tr>
+  </tbody>
+</table>
+
 `packages/client/src/service-request.generated.d.ts` and
 `packages/client/src/service-request.generated.js` are generated from these
 schemas. Run `pnpm generate:service-client` after changing the schemas and
