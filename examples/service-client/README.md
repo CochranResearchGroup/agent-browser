@@ -215,9 +215,12 @@ The underlying `targetReadiness` row also includes `seedingMode`,
 `cdpAttachmentAllowedDuringSeeding`, `preferredKeyring`, and `setupScopes` so
 clients can render Google-style detached no-CDP setup requirements without
 parsing the recommendation string.
-Use `getServiceProfileSeedingHandoff({ id, targetServiceId })` when a client
-needs the exact detached `runtime login` command, setup URL, operator steps,
-and warnings for handoff instead of rebuilding those instructions itself.
+Use the inline `seedingHandoff` from the access plan when a client needs the
+exact detached `runtime login` command, setup URL, operator steps, and warnings
+for handoff instead of rebuilding those instructions itself. The managed
+profile flow skips `requestServiceTab()` while manual seeding is required. The
+lower-level tab helper also throws before posting `/api/service/request` unless
+the caller explicitly passes `allowManualAction: true`.
 The summary comes from `summarizeServiceProfileReadiness()` in
 `@agent-browser/client/service-observability`, so clients can reuse the same
 logic without copying this example.

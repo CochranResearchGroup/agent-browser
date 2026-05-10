@@ -83,20 +83,26 @@ export function createServiceRequestMcpToolCall(input) {
 }
 
 /**
+ * Builds a tab request and refuses access plans that still require manual
+ * profile seeding unless allowManualAction is explicitly true.
+ *
  * @param {ServiceTabRequestOptions} input
  * @returns {ServiceRequest}
  */
 export function createServiceTabRequest(input) {
   assertPlainObject(input, 'service tab request');
-  const { accessPlan, url, params, ...request } = input;
+  const { accessPlan, allowManualAction, url, params, ...request } = input;
   if (url !== undefined && typeof url !== 'string') {
     throw new TypeError('service tab request url must be a string');
+  }
+  if (allowManualAction !== undefined && typeof allowManualAction !== 'boolean') {
+    throw new TypeError('service tab request allowManualAction must be a boolean');
   }
   if (params !== undefined) {
     assertPlainObject(params, 'service tab request params');
   }
   const plannedRequest =
-    accessPlan !== undefined ? accessPlanServiceTabRequest(accessPlan) : {};
+    accessPlan !== undefined ? accessPlanServiceTabRequest(accessPlan, { allowManualAction }) : {};
 
   const tabParams = { ...(params ?? {}) };
   if (url !== undefined) {
@@ -161,14 +167,26 @@ export async function requestServiceTab({ baseUrl, fetch = globalThis.fetch, sig
 }
 
 /**
- * @param {ServiceTabAccessPlan} accessPlan
+ * @param {Record<string, unknown>} accessPlan
+ * @param {{ allowManualAction?: boolean }} options
  * @returns {Record<string, unknown>}
  */
-function accessPlanServiceTabRequest(accessPlan) {
+function accessPlanServiceTabRequest(accessPlan, options = {}) {
   assertPlainObject(accessPlan, 'service access plan');
-  const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
+  const accessPlanRecord = /** @type {Record<string, unknown>} */ (accessPlan);
+  const decision = accessPlanRecord.decision;
   assertPlainObject(decision, 'service access plan decision');
   const decisionRecord = /** @type {Record<string, unknown>} */ (decision);
+  if (!options.allowManualAction && accessPlanRequiresManualSeeding(accessPlanRecord, decisionRecord)) {
+    const handoff = accessPlanRecord.seedingHandoff;
+    const command =
+      handoff && typeof handoff === 'object' && !Array.isArray(handoff)
+        ? /** @type {Record<string, unknown>} */ (handoff).command
+        : undefined;
+    throw new Error(
+      `service access plan requires manual profile seeding before tab request${typeof command === 'string' ? `: ${command}` : ''}`,
+    );
+  }
   const serviceRequest = decisionRecord.serviceRequest;
   assertPlainObject(serviceRequest, 'service access plan serviceRequest');
   const serviceRequestRecord = /** @type {Record<string, unknown>} */ (serviceRequest);
@@ -181,6 +199,23 @@ function accessPlanServiceTabRequest(accessPlan) {
 
   const { action: _action, ...tabRequest } = requestRecord;
   return tabRequest;
+}
+
+/**
+ * @param {Record<string, unknown>} accessPlan
+ * @param {Record<string, unknown>} decision
+ */
+function accessPlanRequiresManualSeeding(accessPlan, decision) {
+  const readinessSummary = accessPlan.readinessSummary;
+  const summaryRequiresSeeding =
+    readinessSummary &&
+    typeof readinessSummary === 'object' &&
+    !Array.isArray(readinessSummary) &&
+    /** @type {Record<string, unknown>} */ (readinessSummary).manualSeedingRequired === true;
+  return (
+    decision.manualSeedingRequired === true ||
+    (summaryRequiresSeeding && accessPlan.seedingHandoff !== null && accessPlan.seedingHandoff !== undefined)
+  );
 }
 
 /**

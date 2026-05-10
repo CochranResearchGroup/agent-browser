@@ -265,7 +265,17 @@ async function testManualSeedingReadinessSummary() {
     result.accessDecision?.recommendedAction,
     'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
   );
-  assert.equal(result.tab?.success, true);
+  assert.equal(result.tab?.success, false);
+  assert.equal(result.tab?.skipped, true);
+  assert.equal(result.tab?.reason, 'manual_seeding_required');
+  assert.equal(
+    result.tab?.seedingHandoff?.command,
+    'agent-browser --runtime-profile canva-default runtime login about:blank',
+  );
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    ['GET /api/service/access-plan'],
+  );
 }
 
 async function testIdentityFirstGuidanceDrift() {
@@ -403,6 +413,14 @@ function createMockFetch({
           recommendedActions:
             readinessState === 'needs_manual_seeding' && selectedProfile ? [readinessRecommendedAction] : [],
         },
+        seedingHandoff:
+          readinessState === 'needs_manual_seeding' && selectedProfile
+            ? {
+                profileId: selectedProfile.id,
+                targetServiceId: 'canva',
+                command: 'agent-browser --runtime-profile canva-default runtime login about:blank',
+              }
+            : null,
         sitePolicy: null,
         providers: [],
         challenges: [],
@@ -414,7 +432,8 @@ function createMockFetch({
                 ? 'use_selected_profile'
                 : 'register_managed_profile_or_request_throwaway_browser',
           serviceRequest: {
-            available: true,
+            available: !(readinessState === 'needs_manual_seeding' && Boolean(selectedProfile)),
+            blockedByManualAction: readinessState === 'needs_manual_seeding' && Boolean(selectedProfile),
             request: {
               serviceName: 'CanvaCLI',
               agentName: 'canva-cli-agent',

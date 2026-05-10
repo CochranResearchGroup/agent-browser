@@ -515,7 +515,14 @@ export interface ServiceRequestResponse<TData = unknown> {
 }
 
 export interface ServiceTabAccessPlan {
+  readinessSummary?: {
+    manualSeedingRequired?: boolean;
+  };
+  seedingHandoff?: {
+    command?: string;
+  } | null;
   decision: {
+    manualSeedingRequired?: boolean;
     serviceRequest: {
       request: ServiceRequestForAction<"tab_new">;
       [key: string]: unknown;
@@ -527,6 +534,7 @@ export interface ServiceTabAccessPlan {
 
 export interface ServiceTabRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
   accessPlan?: ServiceTabAccessPlan;
+  allowManualAction?: boolean;
   url?: string;
   params?: Record<string, unknown>;
 }

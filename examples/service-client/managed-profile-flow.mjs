@@ -260,13 +260,23 @@ export async function runManagedProfileWorkflow({
       })
     : null;
 
-  const tab = await requestServiceTab({
-    baseUrl,
-    fetch,
-    accessPlan,
-    url,
-    jobTimeoutMs: 30000,
-  });
+  const manualSeedingRequired =
+    accessPlan.readinessSummary?.manualSeedingRequired === true ||
+    accessPlan.decision?.manualSeedingRequired === true;
+  const tab = manualSeedingRequired
+    ? {
+        success: false,
+        skipped: true,
+        reason: 'manual_seeding_required',
+        seedingHandoff: accessPlan.seedingHandoff ?? null,
+      }
+    : await requestServiceTab({
+        baseUrl,
+        fetch,
+        accessPlan,
+        url,
+        jobTimeoutMs: 30000,
+      });
 
   return {
     dryRun: false,

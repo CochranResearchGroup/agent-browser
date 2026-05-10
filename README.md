@@ -1680,8 +1680,12 @@ data. `requestServiceTab`, `createServiceTabRequest`, and
 `createServiceTabRequestFromAccessPlan` accept an access-plan response so
 software clients can queue the planned tab request without manually unpacking
 `decision.serviceRequest.request`. Explicit call fields such as `url`,
-`params`, `jobTimeoutMs`, or caller labels override the planned defaults. When
-adding or removing service request actions, update the Rust
+`params`, `jobTimeoutMs`, or caller labels override the planned defaults.
+When an access plan reports `manualSeedingRequired` with `seedingHandoff`,
+these helpers throw before posting `/api/service/request` unless the caller
+explicitly passes `allowManualAction: true`; show the handoff to the operator
+and retry the same identity request after seeding instead. When adding or
+removing service request actions, update the Rust
 `SERVICE_REQUEST_ACTIONS` list, the JSON schema enum, MCP `service_request`,
 HTTP `/api/service/request`, and generated client files together; run
 `pnpm test:service-api-mcp-parity`, `pnpm test:service-client-contract`, and
@@ -1732,7 +1736,9 @@ for `POST /api/service/request`, MCP `service_request`, and
 `requestServiceTab()`. `serviceRequest.available` is true when the planned tab
 request can be queued immediately. When manual seeding or challenge work must
 finish first, `recommendedAfterManualAction` tells clients to reuse the same
-identity request after the operator completes that step.
+identity request after the operator completes that step. The service request
+client refuses to post an access-plan-backed tab request while manual profile
+seeding is still required unless `allowManualAction: true` is supplied.
 Access-plan responses echo `agentName` and `taskName` in `query` and report
 `namingWarnings` plus `hasNamingWarning` in both `query` and `decision` when
 the caller omits `serviceName`, `agentName`, or `taskName`.
@@ -1833,9 +1839,12 @@ const tab = await requestServiceTab({
 If `accessPlan.readinessSummary.needsManualSeeding` is true, show the returned
 `seedingHandoff` command, setup URL, operator steps, warnings, and recommended
 actions to the operator before expecting authenticated automation to succeed
-for the requested identity. Use `lookupServiceProfile()` only when the caller
-needs the narrower profile-only selector response; it also includes
-`seedingHandoff` when profile readiness requires manual seeding.
+for the requested identity. `requestServiceTab({ accessPlan })` refuses this
+state by default, so clients should retry the same identity request after
+seeding or pass `allowManualAction: true` only for an intentional override. Use
+`lookupServiceProfile()` only when the caller needs the narrower profile-only
+selector response; it also includes `seedingHandoff` when profile readiness
+requires manual seeding.
 
 Direct profile selection is an override. Use it when an operator knows the
 desired login state lives in a specific managed runtime profile, or when a

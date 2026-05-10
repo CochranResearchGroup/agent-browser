@@ -237,6 +237,29 @@ async function main() {
       },
     },
   };
+  const manualSeedingAccessPlan = {
+    readinessSummary: {
+      manualSeedingRequired: true,
+    },
+    seedingHandoff: {
+      command: 'agent-browser --runtime-profile google-work runtime login https://accounts.google.com',
+    },
+    decision: {
+      manualSeedingRequired: true,
+      serviceRequest: {
+        available: false,
+        blockedByManualAction: true,
+        request: {
+          serviceName: 'JournalDownloader',
+          agentName: 'article-probe-agent',
+          taskName: 'seedThenProbeGoogle',
+          targetServiceIds: ['google'],
+          profileLeasePolicy: 'wait',
+          action: 'tab_new',
+        },
+      },
+    },
+  };
   assert.deepEqual(
     createServiceTabRequestFromAccessPlan(accessPlan, {
       url: 'https://example.com/planned',
@@ -253,6 +276,30 @@ async function main() {
         url: 'https://example.com/planned',
       },
       jobTimeoutMs: 60_000,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceTabRequestFromAccessPlan(manualSeedingAccessPlan, {
+        url: 'https://accounts.google.com',
+      }),
+    /requires manual profile seeding.*agent-browser --runtime-profile google-work runtime login https:\/\/accounts.google.com/,
+  );
+  assert.deepEqual(
+    createServiceTabRequestFromAccessPlan(manualSeedingAccessPlan, {
+      allowManualAction: true,
+      url: 'https://accounts.google.com',
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'seedThenProbeGoogle',
+      targetServiceIds: ['google'],
+      profileLeasePolicy: 'wait',
+      action: 'tab_new',
+      params: {
+        url: 'https://accounts.google.com',
+      },
     },
   );
   assert.deepEqual(
@@ -348,6 +395,18 @@ async function main() {
     },
     jobTimeoutMs: 60_000,
   });
+  const blockedTabRecorder = createFetchRecorder({ success: true, data: { jobId: 'should-not-run' } });
+  await assert.rejects(
+    () =>
+      requestServiceTab({
+        baseUrl: 'http://127.0.0.1:4849',
+        fetch: blockedTabRecorder.fetch,
+        accessPlan: manualSeedingAccessPlan,
+        url: 'https://accounts.google.com',
+      }),
+    /requires manual profile seeding/,
+  );
+  assert.equal(blockedTabRecorder.calls.length, 0);
 
   const accessPlanWorkflow = createAccessPlanToServiceRequestFetchRecorder();
   const observedAccessPlan = await getServiceAccessPlan({
