@@ -6,6 +6,8 @@
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::runtime_profile::pid_is_running;
+
 use super::service_model::{
     profile_seeding_handoff_id, BrowserProfile, BrowserSession, MonitorState,
     ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileReadinessState,
@@ -190,6 +192,10 @@ fn readiness_evidence(state: ProfileReadinessState) -> &'static str {
 
 fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
+}
+
+fn rfc3339_minutes_from_now(minutes: i64) -> String {
+    (chrono::Utc::now() + chrono::Duration::minutes(minutes)).to_rfc3339()
 }
 
 fn normalize_session_owner(session: &mut BrowserSession) {
@@ -388,6 +394,57 @@ pub fn update_profile_freshness(
     Ok(profile.clone())
 }
 
+fn inferred_target_service_from_url(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    if host == "accounts.google.com" || host == "myaccount.google.com" {
+        return Some("google".to_string());
+    }
+    if host == "mail.google.com" {
+        return Some("gmail".to_string());
+    }
+    if host == "login.microsoftonline.com"
+        || host == "login.live.com"
+        || host == "account.microsoft.com"
+    {
+        return Some("microsoft".to_string());
+    }
+    None
+}
+
+/// Choose the target identity a detached runtime-login launch is seeding.
+pub fn infer_profile_seeding_handoff_target(
+    state: &ServiceState,
+    profile_id: &str,
+    url: Option<&str>,
+) -> Option<String> {
+    let profile = state.profiles.get(profile_id)?;
+    let url_target = url.and_then(inferred_target_service_from_url);
+    if let Some(url_target) = url_target.as_deref() {
+        if profile
+            .target_readiness
+            .iter()
+            .any(|row| row.target_service_id == url_target)
+        {
+            return Some(url_target.to_string());
+        }
+    }
+
+    let mut manual_targets = profile
+        .target_readiness
+        .iter()
+        .filter(|row| row.state == ProfileReadinessState::NeedsManualSeeding)
+        .map(|row| row.target_service_id.clone())
+        .collect::<Vec<_>>();
+    manual_targets.sort();
+    manual_targets.dedup();
+
+    if manual_targets.len() == 1 {
+        return manual_targets.into_iter().next();
+    }
+    url_target
+}
+
 /// Upsert one persisted CDP-free profile seeding handoff lifecycle record.
 pub fn update_profile_seeding_handoff(
     state: &mut ServiceState,
@@ -448,6 +505,56 @@ pub fn update_profile_seeding_handoff(
     }
     record.updated_at = Some(updated_at);
     Ok(record.clone())
+}
+
+/// Record that agent-browser launched the CDP-free browser for manual seeding.
+pub fn record_profile_seeding_handoff_launch(
+    state: &mut ServiceState,
+    profile_id: &str,
+    target_service_id: &str,
+    pid: u32,
+    actor: Option<String>,
+    note: Option<String>,
+) -> Result<ProfileSeedingHandoffRecord, String> {
+    update_profile_seeding_handoff(
+        state,
+        profile_id,
+        ProfileSeedingHandoffUpdate {
+            target_service_id: Some(target_service_id.to_string()),
+            state: Some(ProfileSeedingHandoffState::SeedingWaitingForClose),
+            pid: Some(pid),
+            started_at: Some(now_rfc3339()),
+            expires_at: Some(rfc3339_minutes_from_now(30)),
+            last_prompted_at: Some(now_rfc3339()),
+            actor,
+            note,
+            ..ProfileSeedingHandoffUpdate::default()
+        },
+    )
+}
+
+/// Advance persisted handoffs whose detached browser PID has exited.
+pub fn refresh_profile_seeding_handoff_lifecycles(state: &mut ServiceState) -> usize {
+    let mut updated = 0;
+    for record in state.profile_seeding_handoffs.values_mut() {
+        if !record.state.blocks_profile_lease() {
+            continue;
+        }
+        let Some(pid) = record.pid else {
+            continue;
+        };
+        if pid_is_running(pid) {
+            continue;
+        }
+        let now = now_rfc3339();
+        record.state = ProfileSeedingHandoffState::SeedingClosedUnverified;
+        if record.closed_at.is_none() {
+            record.closed_at = Some(now.clone());
+        }
+        record.updated_at = Some(now);
+        updated += 1;
+    }
+    updated
 }
 
 /// Delete one service profile record from persisted service state.
@@ -577,6 +684,37 @@ pub fn update_persisted_profile_seeding_handoff(
         .map_err(|err| format!("Invalid profile seeding handoff update: {err}"))?;
     let repository = LockedServiceStateRepository::default_json()?;
     update_profile_seeding_handoff_in_repository(&repository, id, update)
+}
+
+/// Refresh default persisted handoff lifecycles from retained PID state.
+pub fn refresh_persisted_profile_seeding_handoffs() -> Result<usize, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|state| Ok(refresh_profile_seeding_handoff_lifecycles(state)))
+}
+
+/// Record a default persisted CDP-free runtime-login launch, if it maps to a known profile target.
+pub fn record_persisted_profile_seeding_handoff_launch(
+    profile_id: &str,
+    url: Option<&str>,
+    pid: u32,
+) -> Result<Option<ProfileSeedingHandoffRecord>, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|state| {
+        state.refresh_profile_readiness();
+        let Some(target_service_id) = infer_profile_seeding_handoff_target(state, profile_id, url)
+        else {
+            return Ok(None);
+        };
+        record_profile_seeding_handoff_launch(
+            state,
+            profile_id,
+            &target_service_id,
+            pid,
+            Some("agent-browser".to_string()),
+            Some("detached runtime login launched without CDP".to_string()),
+        )
+        .map(Some)
+    })
 }
 
 /// Delete one persisted profile record under the serialized state mutator.
@@ -888,6 +1026,61 @@ mod tests {
             profile.target_readiness[0].last_verified_at.as_deref(),
             Some("2026-05-06T14:00:00Z")
         );
+    }
+
+    #[test]
+    fn profile_seeding_handoff_launch_records_waiting_and_refreshes_closed_pid() {
+        let mut state = ServiceState::default();
+        upsert_profile(
+            &mut state,
+            "google-work",
+            json!({
+                "name": "Google Work",
+                "allocation": "per_service",
+                "keyring": "basic_password_store",
+                "persistent": true,
+                "targetServiceIds": ["google"],
+                "targetReadiness": [{
+                    "targetServiceId": "google",
+                    "loginId": "google",
+                    "state": "needs_manual_seeding",
+                    "manualSeedingRequired": true
+                }]
+            }),
+        )
+        .unwrap();
+
+        let target = infer_profile_seeding_handoff_target(
+            &state,
+            "google-work",
+            Some("https://accounts.google.com"),
+        );
+        assert_eq!(target.as_deref(), Some("google"));
+
+        let record = record_profile_seeding_handoff_launch(
+            &mut state,
+            "google-work",
+            "google",
+            99_999_999,
+            Some("agent-browser".to_string()),
+            Some("detached runtime login launched without CDP".to_string()),
+        )
+        .unwrap();
+        assert_eq!(
+            record.state,
+            ProfileSeedingHandoffState::SeedingWaitingForClose
+        );
+        assert_eq!(record.pid, Some(99_999_999));
+        assert!(record.started_at.is_some());
+        assert!(record.expires_at.is_some());
+
+        assert_eq!(refresh_profile_seeding_handoff_lifecycles(&mut state), 1);
+        let refreshed = &state.profile_seeding_handoffs["google-work:google"];
+        assert_eq!(
+            refreshed.state,
+            ProfileSeedingHandoffState::SeedingClosedUnverified
+        );
+        assert!(refreshed.closed_at.is_some());
     }
 
     #[test]

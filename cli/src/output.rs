@@ -4215,7 +4215,7 @@ Notes:
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, and recommended actions.
   - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding with seedingMode=detached_headed_no_cdp, cdpAttachmentAllowedDuringSeeding=false, preferredKeyring=basic_password_store, and setup scopes for sign-in, Chrome sync, passkeys, and browser plugins. Explicit freshness rows are preserved through readiness refreshes.
-  - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus operator steps for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
+  - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus lifecycle, operator steps, and close-detection state for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
   - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
@@ -4602,6 +4602,9 @@ Google and similar SSO setup:
   Do not use --attachable or a remote debugging port for the first sign-in,
   Chrome sync, passkey setup, or browser plugin setup. Close Chrome after
   seeding, then relaunch or request tabs through service-owned automation.
+  Non-attachable runtime login records the seeding browser PID when it maps to
+  a service profile target; later runtime or service reads mark the handoff
+  closed but unverified once that PID exits.
   Prefer keyring=basic_password_store for managed profiles so OS keyring
   modals do not block unattended workflows.
 "##

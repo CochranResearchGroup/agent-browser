@@ -12,6 +12,7 @@ use crate::flags::parse_flags;
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state,
 };
+use crate::native::service_config::refresh_persisted_profile_seeding_handoffs;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
@@ -2279,11 +2280,13 @@ fn query_params(query: Option<&str>) -> Vec<(String, String)> {
 }
 
 fn load_service_state_snapshot() -> Value {
+    let _ = refresh_persisted_profile_seeding_handoffs();
     let args = vec!["service".to_string(), "status".to_string()];
     serde_json::to_value(parse_flags(&args).service_state).unwrap_or_else(|_| json!({}))
 }
 
 fn load_service_state() -> ServiceState {
+    let _ = refresh_persisted_profile_seeding_handoffs();
     let args = vec!["service".to_string(), "status".to_string()];
     let mut service_state = parse_flags(&args).service_state;
     service_state.refresh_profile_readiness();

@@ -1773,7 +1773,10 @@ profile lease remains blocked, and the safe or dangerous actions clients may
 render. `seedingHandoff.lifecycle` records the persisted CDP-free seeding
 state, and `updateServiceProfileSeedingHandoff()` moves it through detached
 launch, waiting for close, declared complete, closed but unverified, verified
-fresh, failed, or abandoned states. A desktop popup is an optional notification
+fresh, failed, or abandoned states. Non-attachable `runtime login` records the
+seeding browser PID when the runtime profile maps to a known manual-seeding
+target, and later runtime or service reads mark the handoff closed but
+unverified once that PID exits. A desktop popup is an optional notification
 provider, not the primary control plane.
 When no local site policy exists, agent-browser applies shipped defaults for
 Google, Gmail, and Microsoft login identities. Local persisted or configured

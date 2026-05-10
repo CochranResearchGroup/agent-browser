@@ -29,6 +29,9 @@ use connection::{cleanup_stale_files, ensure_daemon, get_socket_dir, send_comman
 use flags::{clean_args, parse_flags, upsert_runtime_profile_in_user_config, Flags};
 use install::run_install;
 use native::cdp::chrome::{launch_chrome_detached, LaunchOptions};
+use native::service_config::{
+    record_persisted_profile_seeding_handoff_launch, refresh_persisted_profile_seeding_handoffs,
+};
 use output::{
     print_command_help, print_help, print_response_with_opts, print_version, OutputOptions,
 };
@@ -641,6 +644,15 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
 
             match launch_chrome_detached(&options) {
                 Ok(result) => {
+                    if !attachable {
+                        if let Some(runtime_profile) = result.runtime_profile.as_deref() {
+                            let _ = record_persisted_profile_seeding_handoff_launch(
+                                runtime_profile,
+                                options.args.first().map(String::as_str),
+                                result.pid,
+                            );
+                        }
+                    }
                     if flags.json {
                         print_json_value(json!({
                             "launched": true,
@@ -1301,6 +1313,12 @@ fn main() {
     }
 
     let args: Vec<String> = env::args().skip(1).collect();
+    if matches!(
+        args.first().map(String::as_str),
+        Some("service") | Some("runtime")
+    ) {
+        let _ = refresh_persisted_profile_seeding_handoffs();
+    }
     let flags = parse_flags(&args);
     let clean = clean_args(&args);
 

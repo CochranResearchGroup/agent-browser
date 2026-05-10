@@ -302,7 +302,10 @@ a profile has multiple target identities.
 after merging bounded-probe freshness evidence into one persisted profile.
 `POST /api/service/profiles/<id>/seeding-handoff` and
 `updateServiceProfileSeedingHandoff()` persist CDP-free seeding lifecycle
-updates through the same serialized service-state mutator.
+updates through the same serialized service-state mutator. Non-attachable
+`runtime login` records the seeding browser PID when the runtime profile maps
+to a known manual-seeding target, and later runtime or service reads mark the
+handoff closed but unverified once that PID exits.
 
 `service-profile-lookup-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/lookup` when a software
