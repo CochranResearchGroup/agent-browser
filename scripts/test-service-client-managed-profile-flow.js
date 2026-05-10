@@ -21,6 +21,7 @@ await testExistingProfileFreshnessUpdate();
 await testExistingProfileDueMonitorRun();
 await testMissingProfileRegistration();
 await testMissingProfileRegistrationWithReadinessMonitor();
+await testMissingProfileRegistrationThenDueMonitorRun();
 await testManualSeedingReadinessSummary();
 await testIdentityFirstGuidanceDrift();
 
@@ -294,6 +295,62 @@ async function testMissingProfileRegistrationWithReadinessMonitor() {
   );
 }
 
+async function testMissingProfileRegistrationThenDueMonitorRun() {
+  const calls = [];
+  const fetch = createMockFetch({
+    profiles: [],
+    calls,
+    selectRegisteredProfile: true,
+    dueMonitorRecommended: true,
+    dueMonitorRecommendedOnAccessPlan: 2,
+  });
+
+  const result = await runManagedProfileWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    registerProfileId: 'canva-default',
+    registerReadinessMonitor: true,
+    readinessMonitorIntervalMs: 900000,
+    runDueReadinessMonitor: true,
+    url: 'https://www.canva.com/',
+  });
+
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: 'canva-default',
+    registered: true,
+    monitorRegistered: true,
+    monitorRunDueRan: true,
+    initialRecommendedAction: 'register_managed_profile_or_request_throwaway_browser',
+    refreshedRecommendedAction: 'use_selected_profile',
+    monitorRunDueChecked: 1,
+    monitorRunDueFailed: 0,
+  });
+  assert.equal(result.profileRegistration?.upserted, true);
+  assert.equal(result.profileReadinessMonitor?.upserted, true);
+  assert.equal(result.monitorRunDue?.checked, 1);
+  assert.equal(result.accessPlan?.decision?.recommendedAction, 'use_selected_profile');
+  assert.equal(result.selectedProfile?.id, 'canva-default');
+  assert.equal(result.tab?.success, true);
+
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    [
+      'GET /api/service/access-plan',
+      'POST /api/service/profiles/canva-default',
+      'POST /api/service/monitors/canvacli-canva-profile-readiness',
+      'GET /api/service/access-plan',
+      'POST /api/service/monitors/run-due',
+      'GET /api/service/access-plan',
+      'POST /api/service/request',
+    ],
+  );
+}
+
 async function testManualSeedingReadinessSummary() {
   const calls = [];
   const fetch = createMockFetch({
@@ -422,9 +479,12 @@ function createMockFetch({
   readinessState = 'ready',
   readinessRecommendedAction = 'request_tab_by_login_identity',
   dueMonitorRecommended = false,
+  dueMonitorRecommendedOnAccessPlan = 1,
+  selectRegisteredProfile = false,
   rejectRegistration = false,
 }) {
   let accessPlanCount = 0;
+  let registeredProfile = null;
   return async (url, init = {}) => {
     const parsed = new URL(String(url));
     const method = init.method || 'GET';
@@ -432,7 +492,11 @@ function createMockFetch({
 
     if (method === 'GET' && parsed.pathname === '/api/service/access-plan') {
       accessPlanCount += 1;
-      const selectedProfile = profiles[0] ?? null;
+      const selectedProfile = profiles[0] ?? (selectRegisteredProfile ? registeredProfile : null);
+      const shouldRecommendDueMonitor =
+        dueMonitorRecommended &&
+        accessPlanCount === dueMonitorRecommendedOnAccessPlan &&
+        Boolean(selectedProfile);
       const targetReadiness = selectedProfile
         ? [
             {
@@ -493,7 +557,7 @@ function createMockFetch({
         challenges: [],
         decision: {
           recommendedAction:
-            dueMonitorRecommended && accessPlanCount === 1 && selectedProfile
+            shouldRecommendDueMonitor
               ? 'run_due_profile_readiness_monitor'
               : readinessState === 'needs_manual_seeding' && selectedProfile
               ? readinessRecommendedAction
@@ -501,14 +565,11 @@ function createMockFetch({
                 ? 'use_selected_profile'
                 : 'register_managed_profile_or_request_throwaway_browser',
           monitorRunDue: {
-            available: dueMonitorRecommended && accessPlanCount === 1 && Boolean(selectedProfile),
-            recommendedBeforeUse: dueMonitorRecommended && accessPlanCount === 1 && Boolean(selectedProfile),
-            monitorIds:
-              dueMonitorRecommended && accessPlanCount === 1 && selectedProfile
-                ? ['canvacli-canva-profile-readiness']
-                : [],
+            available: shouldRecommendDueMonitor,
+            recommendedBeforeUse: shouldRecommendDueMonitor,
+            monitorIds: shouldRecommendDueMonitor ? ['canvacli-canva-profile-readiness'] : [],
             neverCheckedMonitorIds: [],
-            targetServiceIds: dueMonitorRecommended && accessPlanCount === 1 && selectedProfile ? ['canva'] : [],
+            targetServiceIds: shouldRecommendDueMonitor ? ['canva'] : [],
             http: { method: 'POST', route: '/api/service/monitors/run-due' },
             mcp: { tool: 'service_monitors_run_due' },
             client: {
@@ -569,12 +630,13 @@ function createMockFetch({
         return jsonResponse({ error: 'profile registration should not be called' }, { status: 500 });
       }
       const requestedProfile = JSON.parse(String(init.body));
+      registeredProfile = {
+        id: 'canva-default',
+        ...requestedProfile,
+      };
       return serviceResponse({
         upserted: true,
-        profile: {
-          id: 'canva-default',
-          ...requestedProfile,
-        },
+        profile: registeredProfile,
       });
     }
 
