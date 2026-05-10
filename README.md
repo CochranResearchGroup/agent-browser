@@ -1743,7 +1743,7 @@ target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.
 It also includes `postSeedingProbe`, a copyable post-close verification recipe
 with the `verify-seeding` CLI command, freshness HTTP and MCP write path,
-`verifyServiceProfileSeeding()` helper, and
+`runServiceAccessPlanPostSeedingProbe()` and `verifyServiceProfileSeeding()` helpers, and
 `examples/service-client/post-seeding-probe.mjs` command. It also includes
 `serviceRequest`, a copyable service-owned tab request recipe for
 `POST /api/service/request`, MCP `service_request`, and
@@ -1925,7 +1925,9 @@ that proves an existing managed profile is selected without registering a new
 one. The `post-seeding-probe.mjs` example covers the next step after the
 operator closes the detached seeding browser: open a service-owned verification
 tab, collect bounded URL and title evidence, and persist that evidence with
-`verifyServiceProfileSeeding()`. Run
+`verifyServiceProfileSeeding()`. Software clients that already have an access
+plan can call `runServiceAccessPlanPostSeedingProbe()` to run the discovered
+`decision.postSeedingProbe` recipe directly. Run
 `pnpm test:service-client-post-seeding-probe-live` to validate that recipe
 against an isolated daemon and temporary profile. Run `pnpm test:service-access-plan-no-launch` when changing the access-plan
 surface; it verifies HTTP `/api/service/access-plan`, MCP

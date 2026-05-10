@@ -948,6 +948,33 @@ export interface ServiceAccessPlanPostSeedingProbe {
   [key: string]: unknown;
 }
 
+export interface ServiceAccessPlanPostSeedingProbeRunOptions extends ServiceObservabilityHttpOptions {
+  accessPlan: ServiceAccessPlanResponse;
+  url?: string;
+  expectedUrlIncludes?: string;
+  expectedTitleIncludes?: string;
+  freshnessExpiresAt?: string | null;
+  readinessEvidence?: string;
+  jobTimeoutMs?: number;
+}
+
+export interface ServiceAccessPlanPostSeedingProbeRunResult {
+  recipe: ServiceAccessPlanPostSeedingProbe;
+  lookup: ServiceProfileLookupResponse;
+  tab: Record<string, unknown>;
+  observed: {
+    url: string;
+    title: string;
+  };
+  checks: {
+    fresh: boolean;
+    passed: string[];
+    failed: string[];
+  };
+  freshness: ServiceProfileUpsertResponse;
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanMonitorFindings {
   profileReadinessAttentionRequired: boolean;
   profileReadinessIncidentIds: string[];
@@ -1234,6 +1261,8 @@ export declare function upsertServiceProfileReadinessMonitor(options: ServicePro
 export declare function updateServiceProfileFreshness(options: ServiceProfileFreshnessUpdateOptions): Promise<ServiceProfileUpsertResponse>;
 /** Record the result of a bounded post-close seeding auth probe. */
 export declare function verifyServiceProfileSeeding(options: ServiceProfileFreshnessUpdateOptions): Promise<ServiceProfileUpsertResponse>;
+/** Run the post-close seeding verification recipe advertised by an access plan. */
+export declare function runServiceAccessPlanPostSeedingProbe(options: ServiceAccessPlanPostSeedingProbeRunOptions): Promise<ServiceAccessPlanPostSeedingProbeRunResult>;
 export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;
 export declare function upsertServiceSession(options: ServiceSessionMutationOptions): Promise<ServiceSessionUpsertResponse>;
 export declare function deleteServiceSession(options: ServiceIdOptions): Promise<ServiceSessionDeleteResponse>;

@@ -250,6 +250,11 @@ bounded service requests, evaluates optional expectations, then calls
 `fresh` or `verification_pending`. Before launching the tab, it performs a
 no-launch profile lookup and refuses to verify the profile if the broker would
 select a different profile for the requested identity.
+Software clients that already called `getServiceAccessPlan()` can use
+`runServiceAccessPlanPostSeedingProbe()` from
+`@agent-browser/client/service-observability` to run the discovered
+`decision.postSeedingProbe` recipe directly, rather than manually copying the
+profile ID, target identity, tab request, and freshness fields.
 
 Dry-run the probe plan without launching Chrome:
 

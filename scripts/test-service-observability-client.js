@@ -22,6 +22,7 @@ import {
   resumeServiceMonitor,
   resetServiceMonitorFailures,
   runDueServiceMonitors,
+  runServiceAccessPlanPostSeedingProbe,
   summarizeServiceProfileReadiness,
   triageServiceMonitor,
   updateServiceProfileFreshness,
@@ -1458,7 +1459,146 @@ async function main() {
     updateAuthenticatedServiceIds: true,
   });
 
+  const accessPlanProbe = createFetchRecorder((url, init, calls) => {
+    const parsed = new URL(url);
+    const body = init.body ? JSON.parse(String(init.body)) : null;
+    if (parsed.pathname === '/api/service/profiles/lookup') {
+      return {
+        success: true,
+        data: {
+          selectedProfile: {
+            id: 'journal-google',
+            targetServiceIds: ['google'],
+            authenticatedServiceIds: ['google'],
+          },
+          selectedProfileMatch: {
+            reason: 'authenticated_target',
+            matchedField: 'authenticatedServiceIds',
+            matchedIdentity: 'google',
+          },
+        },
+      };
+    }
+    if (parsed.pathname === '/api/service/request') {
+      if (body.action === 'tab_new') {
+        return { success: true, data: { index: 0, url: 'https://myaccount.google.com/' } };
+      }
+      if (body.action === 'url') {
+        return { success: true, data: { url: 'https://myaccount.google.com/' } };
+      }
+      if (body.action === 'title') {
+        return { success: true, data: { title: 'Google Account' } };
+      }
+    }
+    if (parsed.pathname === '/api/service/profiles/journal-google/freshness') {
+      return {
+        success: true,
+        data: {
+          id: 'journal-google',
+          upserted: true,
+          profile: calls.at(-1)?.body,
+        },
+      };
+    }
+    throw new Error(`Unexpected post-seeding probe request: ${init.method || 'GET'} ${parsed.pathname}`);
+  });
+  const accessPlanProbeResult = await runServiceAccessPlanPostSeedingProbe({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: accessPlanProbe.fetch,
+    accessPlan: serviceAccessPlan(),
+    expectedUrlIncludes: 'myaccount.google.com',
+    expectedTitleIncludes: 'Google Account',
+  });
+  assert.equal(accessPlanProbeResult.checks.fresh, true);
+  assert.deepEqual(
+    accessPlanProbe.calls.map((call) => `${call.init.method || 'GET'} ${new URL(call.url).pathname}`),
+    [
+      'GET /api/service/profiles/lookup',
+      'POST /api/service/request',
+      'POST /api/service/request',
+      'POST /api/service/request',
+      'POST /api/service/profiles/journal-google/freshness',
+    ],
+  );
+  assert.equal(accessPlanProbe.calls[1].body.action, 'tab_new');
+  assert.equal(accessPlanProbe.calls[1].body.params.url, 'https://myaccount.google.com/');
+  assert.equal(accessPlanProbe.calls[4].body.readinessState, 'fresh');
+  assert.match(accessPlanProbe.calls[4].body.readinessEvidence, /^post_seeding_auth_probe_passed:/);
+
+  const accessPlanProbeMismatch = createFetchRecorder((url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/api/service/profiles/lookup') {
+      return {
+        success: true,
+        data: {
+          selectedProfile: {
+            id: 'personal-google',
+          },
+        },
+      };
+    }
+    throw new Error(`Unexpected mismatch request: ${parsed.pathname}`);
+  });
+  await assert.rejects(
+    () =>
+      runServiceAccessPlanPostSeedingProbe({
+        baseUrl: 'http://127.0.0.1:4849',
+        fetch: accessPlanProbeMismatch.fetch,
+        accessPlan: serviceAccessPlan(),
+      }),
+    /broker selected personal-google/,
+  );
+  assert.equal(accessPlanProbeMismatch.calls.length, 1);
+
   console.log('Service observability client helper tests passed');
+}
+
+function serviceAccessPlan() {
+  return {
+    query: {
+      serviceName: 'JournalDownloader',
+      agentName: 'codex',
+      taskName: 'verifyGoogle',
+      targetServiceIds: ['google'],
+    },
+    sitePolicy: {
+      originPattern: 'https://myaccount.google.com/',
+    },
+    decision: {
+      postSeedingProbe: {
+        available: true,
+        recommendedAfterClose: true,
+        profileId: 'journal-google',
+        targetServiceId: 'google',
+        targetServiceIds: ['google'],
+        boundedChecks: ['broker_selected_profile_matches_profile_id', 'url_read', 'title_read'],
+        http: {
+          method: 'POST',
+          route: '/api/service/profiles/journal-google/freshness',
+          routeTemplate: '/api/service/profiles/<id>/freshness',
+        },
+        mcp: {
+          tool: 'service_profile_freshness_update',
+        },
+        client: {
+          package: '@agent-browser/client/service-observability',
+          helper: 'verifyServiceProfileSeeding',
+        },
+        serviceClientExample: {
+          package: 'agent-browser-service-client-example',
+          script: 'examples/service-client/post-seeding-probe.mjs',
+          command:
+            'pnpm --filter agent-browser-service-client-example exec node examples/service-client/post-seeding-probe.mjs --base-url http://127.0.0.1:<stream-port> --profile-id journal-google --target-service-id google',
+        },
+        cli: {
+          command:
+            'agent-browser service profiles journal-google verify-seeding google --state fresh --evidence <probe-evidence>',
+        },
+        requestFields: ['profileId', 'targetServiceId', 'readinessState'],
+        notes: ['Run only after detached CDP-free seeding has closed.'],
+      },
+    },
+  };
 }
 
 main().catch((err) => {

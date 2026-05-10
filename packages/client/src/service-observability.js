@@ -1,5 +1,7 @@
 // @ts-check
 
+import { postServiceRequest, requestServiceTab } from './service-request.js';
+
 export {
   SERVICE_BROWSER_HEALTH_STATES,
   SERVICE_EVENT_KINDS,
@@ -78,6 +80,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionOptions} ServiceProfileAcquisitionOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionResult} ServiceProfileAcquisitionResult
  * @typedef {import('./service-observability.generated.js').ServiceProfileFreshnessUpdateOptions} ServiceProfileFreshnessUpdateOptions
+ * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunOptions} ServiceAccessPlanPostSeedingProbeRunOptions
+ * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunResult} ServiceAccessPlanPostSeedingProbeRunResult
  * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyOptions} ServiceRemediesApplyOptions
  * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyResponse} ServiceRemediesApplyResponse
  */
@@ -659,6 +663,147 @@ export function verifyServiceProfileSeeding({
   });
 }
 
+/**
+ * Run the bounded post-close seeding verification recipe advertised by an
+ * access plan.
+ *
+ * @param {ServiceAccessPlanPostSeedingProbeRunOptions} options
+ * @returns {Promise<ServiceAccessPlanPostSeedingProbeRunResult>}
+ */
+export async function runServiceAccessPlanPostSeedingProbe({
+  accessPlan,
+  baseUrl,
+  fetch = globalThis.fetch,
+  signal,
+  url,
+  expectedUrlIncludes,
+  expectedTitleIncludes,
+  freshnessExpiresAt,
+  readinessEvidence,
+  jobTimeoutMs = 30000,
+}) {
+  const recipe = accessPlanPostSeedingProbe(accessPlan);
+  if (recipe.available !== true) {
+    throw new Error('access plan postSeedingProbe is not available');
+  }
+  const profileId = recipe.profileId;
+  const targetServiceId = recipe.targetServiceId ?? recipe.targetServiceIds?.[0];
+  if (typeof profileId !== 'string' || profileId.length === 0) {
+    throw new Error('access plan postSeedingProbe is missing profileId');
+  }
+  if (typeof targetServiceId !== 'string' || targetServiceId.length === 0) {
+    throw new Error('access plan postSeedingProbe is missing targetServiceId');
+  }
+
+  const serviceName = stringOrUndefined(
+    nestedString(accessPlan, ['query', 'serviceName']) ?? nestedString(recipe, ['query', 'serviceName']),
+  );
+  const agentName = stringOrUndefined(
+    nestedString(accessPlan, ['query', 'agentName']) ?? nestedString(recipe, ['query', 'agentName']),
+  );
+  const taskName = stringOrUndefined(
+    nestedString(accessPlan, ['query', 'taskName']) ?? nestedString(recipe, ['query', 'taskName']),
+  );
+  const probeUrl = url ?? accessPlanProbeUrl(accessPlan);
+  if (!probeUrl) {
+    throw new Error('runServiceAccessPlanPostSeedingProbe requires url or an access-plan site policy URL');
+  }
+  const requestContext = optionalRequestContext({
+    serviceName,
+    agentName,
+    taskName,
+  });
+
+  const lookup = await lookupServiceProfile({
+    baseUrl,
+    fetch,
+    signal,
+    serviceName,
+    targetServiceId,
+    readinessProfileId: profileId,
+  });
+  const selectedProfileId = lookup?.selectedProfile?.id;
+  if (selectedProfileId !== profileId) {
+    throw new Error(
+      `Post-seeding probe refused to verify ${profileId}: broker selected ${selectedProfileId || 'no profile'}.`,
+    );
+  }
+
+  const tab = await requestServiceTab({
+    baseUrl,
+    fetch,
+    signal,
+    ...requestContext,
+    targetServiceId,
+    loginId: targetServiceId,
+    url: probeUrl,
+    jobTimeoutMs,
+  });
+  const urlResult = await postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: {
+      ...requestContext,
+      targetServiceId,
+      loginId: targetServiceId,
+      action: 'url',
+      jobTimeoutMs,
+    },
+  });
+  const titleResult = await postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: {
+      ...requestContext,
+      targetServiceId,
+      loginId: targetServiceId,
+      action: 'title',
+      jobTimeoutMs,
+    },
+  });
+
+  const observedUrl = stringData(urlResult.data, 'url');
+  const observedTitle = stringData(titleResult.data, 'title');
+  const checks = evaluatePostSeedingProbeChecks({
+    observedUrl,
+    observedTitle,
+    expectedUrlIncludes,
+    expectedTitleIncludes,
+  });
+  const readinessState = checks.fresh ? 'fresh' : 'stale';
+  const evidence =
+    readinessEvidence ??
+    (checks.fresh
+      ? `post_seeding_auth_probe_passed:${checks.passed.join(',') || 'service_tab_opened'}`
+      : `post_seeding_auth_probe_failed:${checks.failed.join(',') || 'bounded_probe_failed'}`);
+  const freshness = await verifyServiceProfileSeeding({
+    baseUrl,
+    fetch,
+    signal,
+    id: profileId,
+    targetServiceId,
+    loginId: targetServiceId,
+    readinessState,
+    readinessEvidence: evidence,
+    lastVerifiedAt: new Date().toISOString(),
+    freshnessExpiresAt,
+  });
+
+  return {
+    recipe,
+    lookup,
+    tab,
+    observed: {
+      url: observedUrl,
+      title: observedTitle,
+    },
+    checks,
+    freshness,
+  };
+}
+
 function serviceLoginProfileTargetReadiness({
   targets,
   loginId,
@@ -731,6 +876,100 @@ function serviceLoginProfileSeedingSetupScopes(targetServiceId) {
     return ['signin', 'chrome_sync', 'passkeys', 'browser_plugins'];
   }
   return ['signin'];
+}
+
+function accessPlanPostSeedingProbe(accessPlan) {
+  assertPlainObject(accessPlan, 'service access plan');
+  const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
+  assertPlainObject(decision, 'service access plan decision');
+  const recipe = /** @type {Record<string, unknown>} */ (decision).postSeedingProbe;
+  assertPlainObject(recipe, 'service access plan decision.postSeedingProbe');
+  return /** @type {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbe} */ (recipe);
+}
+
+function accessPlanProbeUrl(accessPlan) {
+  const explicitUrl = nestedString(accessPlan, ['decision', 'postSeedingProbe', 'url']);
+  if (isHttpUrl(explicitUrl)) {
+    return explicitUrl;
+  }
+  const sitePolicyUrl = nestedString(accessPlan, ['sitePolicy', 'originPattern']);
+  if (isHttpUrl(sitePolicyUrl)) {
+    return sitePolicyUrl;
+  }
+  const handoffUrl = nestedString(accessPlan, ['seedingHandoff', 'url']);
+  if (isHttpUrl(handoffUrl)) {
+    return handoffUrl;
+  }
+  return undefined;
+}
+
+function isHttpUrl(value) {
+  return typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'));
+}
+
+function nestedString(value, path) {
+  let current = value;
+  for (const segment of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return undefined;
+    }
+    current = /** @type {Record<string, unknown>} */ (current)[segment];
+  }
+  return typeof current === 'string' ? current : undefined;
+}
+
+function stringOrUndefined(value) {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function optionalRequestContext({ serviceName, agentName, taskName }) {
+  return {
+    ...(serviceName ? { serviceName } : {}),
+    ...(agentName ? { agentName } : {}),
+    ...(taskName ? { taskName } : {}),
+  };
+}
+
+function evaluatePostSeedingProbeChecks({ observedUrl, observedTitle, expectedUrlIncludes, expectedTitleIncludes }) {
+  const passed = [];
+  const failed = [];
+  if (observedUrl) {
+    passed.push('url_read');
+  } else {
+    failed.push('url_missing');
+  }
+  if (observedTitle) {
+    passed.push('title_read');
+  } else {
+    failed.push('title_missing');
+  }
+  if (expectedUrlIncludes) {
+    if (observedUrl.includes(expectedUrlIncludes)) {
+      passed.push('expected_url');
+    } else {
+      failed.push('expected_url');
+    }
+  }
+  if (expectedTitleIncludes) {
+    if (observedTitle.includes(expectedTitleIncludes)) {
+      passed.push('expected_title');
+    } else {
+      failed.push('expected_title');
+    }
+  }
+  return {
+    fresh: failed.length === 0,
+    passed,
+    failed,
+  };
+}
+
+function stringData(data, field) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return '';
+  }
+  const value = /** @type {Record<string, unknown>} */ (data)[field];
+  return typeof value === 'string' ? value : '';
 }
 
 function serviceProfileReadinessMonitorId(serviceName, targetId) {
@@ -1102,6 +1341,12 @@ function appendQuery(url, query) {
 function assertServiceId(id, helperName) {
   if (typeof id !== 'string' || id.length === 0) {
     throw new TypeError(`${helperName} requires an id string`);
+  }
+}
+
+function assertPlainObject(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${label} must be an object`);
   }
 }
 
