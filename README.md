@@ -1776,8 +1776,11 @@ launch, waiting for close, declared complete, closed but unverified, verified
 fresh, failed, or abandoned states. Non-attachable `runtime login` records the
 seeding browser PID when the runtime profile maps to a known manual-seeding
 target, and later runtime or service reads mark the handoff closed but
-unverified once that PID exits. A desktop popup is an optional notification
-provider, not the primary control plane.
+unverified once that PID exits. After a bounded post-close auth probe,
+`updateServiceProfileFreshness()` advances the matching handoff to
+`verification_pending` for inconclusive or non-fresh evidence, or `fresh` when
+the probe reports usable authenticated state. A desktop popup is an optional
+notification provider, not the primary control plane.
 When no local site policy exists, agent-browser applies shipped defaults for
 Google, Gmail, and Microsoft login identities. Local persisted or configured
 policies with the same IDs override those defaults. `sitePolicySource` reports
@@ -1816,7 +1819,10 @@ rows for matching target identities.
 For an already registered profile, use `updateServiceProfileFreshness()` instead:
 it posts to the service-side freshness mutation endpoint, which merges the new
 readiness row under the serialized service-state mutator, preserves unrelated profile fields, and updates
-`authenticatedServiceIds` so stale or blocked targets stop looking fresh.
+`authenticatedServiceIds` so stale or blocked targets stop looking fresh. When
+the target has a closed but unverified seeding handoff, the same update records
+the post-close probe result by moving that lifecycle to `verification_pending`
+or `fresh`.
 
 ```ts
 import { requestServiceTab } from '@agent-browser/client/service-request';

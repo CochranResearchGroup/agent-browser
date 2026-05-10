@@ -300,6 +300,9 @@ a profile has multiple target identities.
 `POST /api/service/profiles/<id>/freshness` and MCP
 `service_profile_freshness_update` reuse the profile upsert response envelope
 after merging bounded-probe freshness evidence into one persisted profile.
+When a matching seeding handoff is already closed but unverified, the same
+freshness update records the post-close probe result by moving the handoff to
+`verification_pending` or `fresh`.
 `POST /api/service/profiles/<id>/seeding-handoff` and
 `updateServiceProfileSeedingHandoff()` persist CDP-free seeding lifecycle
 updates through the same serialized service-state mutator. Non-attachable

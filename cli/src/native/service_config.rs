@@ -309,24 +309,24 @@ pub fn update_profile_freshness(
                 .to_string(),
         );
     }
-    let Some(profile) = state.profiles.get_mut(id) else {
-        return Err(format!("profile '{id}' does not exist"));
-    };
-
     let login_id = update.login_id_for_row();
     let last_verified_at = update.last_verified_at.clone().unwrap_or_else(now_rfc3339);
-    for target in &targets {
-        if !profile
-            .target_service_ids
-            .iter()
-            .any(|existing| existing == target)
-        {
-            profile.target_service_ids.push(target.clone());
-        }
-        let manual_seeding_required =
-            update.readiness_state == ProfileReadinessState::NeedsManualSeeding;
-        let row =
-            ProfileTargetReadiness {
+    let updated_profile = {
+        let Some(profile) = state.profiles.get_mut(id) else {
+            return Err(format!("profile '{id}' does not exist"));
+        };
+
+        for target in &targets {
+            if !profile
+                .target_service_ids
+                .iter()
+                .any(|existing| existing == target)
+            {
+                profile.target_service_ids.push(target.clone());
+            }
+            let manual_seeding_required =
+                update.readiness_state == ProfileReadinessState::NeedsManualSeeding;
+            let row = ProfileTargetReadiness {
                 target_service_id: target.clone(),
                 login_id: login_id.clone(),
                 state: update.readiness_state,
@@ -354,44 +354,84 @@ pub fn update_profile_freshness(
                 last_verified_at: Some(last_verified_at.clone()),
                 freshness_expires_at: update.freshness_expires_at.clone(),
             };
-        if let Some(existing) = profile
-            .target_readiness
-            .iter_mut()
-            .find(|row| row.target_service_id == *target)
-        {
-            *existing = row;
-        } else {
-            profile.target_readiness.push(row);
-        }
-    }
-
-    if update.should_update_authenticated_service_ids() {
-        for target in &targets {
-            if matches!(
-                update.readiness_state,
-                ProfileReadinessState::Fresh | ProfileReadinessState::SeededUnknownFreshness
-            ) {
-                if !profile
-                    .authenticated_service_ids
-                    .iter()
-                    .any(|existing| existing == target)
-                {
-                    profile.authenticated_service_ids.push(target.clone());
-                }
+            if let Some(existing) = profile
+                .target_readiness
+                .iter_mut()
+                .find(|row| row.target_service_id == *target)
+            {
+                *existing = row;
             } else {
-                profile
-                    .authenticated_service_ids
-                    .retain(|existing| existing != target);
+                profile.target_readiness.push(row);
             }
         }
-    }
 
-    validate_profile_policy(profile)?;
+        if update.should_update_authenticated_service_ids() {
+            for target in &targets {
+                if matches!(
+                    update.readiness_state,
+                    ProfileReadinessState::Fresh | ProfileReadinessState::SeededUnknownFreshness
+                ) {
+                    if !profile
+                        .authenticated_service_ids
+                        .iter()
+                        .any(|existing| existing == target)
+                    {
+                        profile.authenticated_service_ids.push(target.clone());
+                    }
+                } else {
+                    profile
+                        .authenticated_service_ids
+                        .retain(|existing| existing != target);
+                }
+            }
+        }
+
+        validate_profile_policy(profile)?;
+        profile.clone()
+    };
+
+    advance_profile_seeding_handoffs_after_freshness(state, id, &targets, update.readiness_state);
     state
         .entity_sources
         .profiles
         .insert(id.to_string(), ServiceEntitySource::PersistedState);
-    Ok(profile.clone())
+    Ok(updated_profile)
+}
+
+fn advance_profile_seeding_handoffs_after_freshness(
+    state: &mut ServiceState,
+    profile_id: &str,
+    target_service_ids: &[String],
+    readiness_state: ProfileReadinessState,
+) -> usize {
+    let next_state = match readiness_state {
+        ProfileReadinessState::Fresh | ProfileReadinessState::SeededUnknownFreshness => {
+            ProfileSeedingHandoffState::Fresh
+        }
+        _ => ProfileSeedingHandoffState::VerificationPending,
+    };
+    let mut updated = 0;
+    let updated_at = now_rfc3339();
+    for target_service_id in target_service_ids {
+        let handoff_id = profile_seeding_handoff_id(profile_id, target_service_id);
+        let Some(record) = state.profile_seeding_handoffs.get_mut(&handoff_id) else {
+            continue;
+        };
+        if !matches!(
+            record.state,
+            ProfileSeedingHandoffState::SeedingClosedUnverified
+                | ProfileSeedingHandoffState::VerificationPending
+        ) {
+            continue;
+        }
+        if record.state == next_state {
+            continue;
+        }
+        record.state = next_state;
+        record.updated_at = Some(updated_at.clone());
+        updated += 1;
+    }
+    updated
 }
 
 fn inferred_target_service_from_url(url: &str) -> Option<String> {
@@ -1081,6 +1121,80 @@ mod tests {
             ProfileSeedingHandoffState::SeedingClosedUnverified
         );
         assert!(refreshed.closed_at.is_some());
+    }
+
+    #[test]
+    fn profile_freshness_update_advances_closed_seeding_handoff() {
+        let mut state = ServiceState::default();
+        upsert_profile(
+            &mut state,
+            "google-work",
+            json!({
+                "name": "Google Work",
+                "allocation": "per_service",
+                "keyring": "basic_password_store",
+                "persistent": true,
+                "targetServiceIds": ["google"],
+                "targetReadiness": [{
+                    "targetServiceId": "google",
+                    "loginId": "google",
+                    "state": "needs_manual_seeding",
+                    "manualSeedingRequired": true
+                }]
+            }),
+        )
+        .unwrap();
+        state.profile_seeding_handoffs.insert(
+            "google-work:google".to_string(),
+            ProfileSeedingHandoffRecord {
+                id: "google-work:google".to_string(),
+                profile_id: "google-work".to_string(),
+                target_service_id: "google".to_string(),
+                state: ProfileSeedingHandoffState::SeedingClosedUnverified,
+                closed_at: Some("2026-05-10T12:00:00Z".to_string()),
+                ..ProfileSeedingHandoffRecord::default()
+            },
+        );
+
+        update_profile_freshness(
+            &mut state,
+            "google-work",
+            serde_json::from_value(json!({
+                "loginId": "google",
+                "readinessState": "stale",
+                "readinessEvidence": "post_seeding_auth_probe_missing_cookie",
+                "lastVerifiedAt": "2026-05-10T12:05:00Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            state.profile_seeding_handoffs["google-work:google"].state,
+            ProfileSeedingHandoffState::VerificationPending
+        );
+
+        update_profile_freshness(
+            &mut state,
+            "google-work",
+            serde_json::from_value(json!({
+                "loginId": "google",
+                "readinessState": "fresh",
+                "readinessEvidence": "post_seeding_auth_probe_cookie_present",
+                "lastVerifiedAt": "2026-05-10T12:10:00Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            state.profile_seeding_handoffs["google-work:google"].state,
+            ProfileSeedingHandoffState::Fresh
+        );
+        assert_eq!(
+            state.profiles["google-work"].authenticated_service_ids,
+            vec!["google".to_string()]
+        );
     }
 
     #[test]

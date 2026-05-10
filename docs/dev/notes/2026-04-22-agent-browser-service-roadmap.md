@@ -184,6 +184,39 @@ Recommended modes:
 
 Direct CDP should remain available. It should not be the only mode.
 
+## CDP-Free Operating Mode
+
+Some authorized sites are sensitive enough that they do not merely reject
+automation commands over CDP; they may fail to load or degrade behavior when a
+Chrome remote debugging port is enabled at all. Canva is the current example
+to keep in mind.
+
+The service roadmap needs a CDP-free operating mode distinct from the Google
+first-login seeding flow. In this mode, agent-browser should launch and manage
+a headed browser without a DevTools port, retain authoritative process,
+profile, lease, task, and operator-intervention state, and expose every safe
+control surface that does not require CDP. Early CDP-free support can be
+limited to launch, profile ownership, process health, live viewing when
+available through non-CDP mechanisms, operator handoff, and lifecycle
+tracking.
+
+Future work should add CDP-free automation incrementally through OS-level or
+browser-window-level controls such as real keyboard input, real mouse input,
+window focus, screenshots, OCR or vision, and remote headed viewing. These
+capabilities should be selected by `SitePolicy` and access-plan decisions, for
+example `requiresCdpFree: true` or an equivalent launch-posture field, rather
+than by ad hoc client behavior.
+
+Open TODOs:
+
+- model CDP-free as a launch and interaction posture in site policy and access
+  plans
+- retain browser process health and profile lease state without a CDP endpoint
+- expose a minimal API/MCP contract for CDP-free sessions that clearly marks
+  which commands are unavailable
+- add non-CDP observation and control primitives later, starting with headed
+  screenshots or remote viewing, then real mouse and keyboard input
+
 ## Authentication And 2FA Providers
 
 Authentication should be provider-based.
