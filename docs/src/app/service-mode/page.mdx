@@ -245,7 +245,7 @@ Configured service profiles and sessions can describe ownership, lease behavior,
 
 Software clients that register recurring managed login profiles should also add a retained freshness monitor for the same target identity. Use <code>upsertServiceProfileReadinessMonitor()</code> from <code>@agent-browser/client/service-observability</code> or write a monitor with target <code>&#123; "profile_readiness": "acs" &#125;</code> through <code>POST /api/service/monitors/&lt;id&gt;</code>. The monitor is no-launch: it checks retained <code>targetReadiness</code>, marks expired fresh rows stale, removes the expired target from <code>authenticatedServiceIds</code>, and lets access-plan <code>monitorFindings</code> warn callers before they request a tab.
 
-The generic <code>examples/service-client/service-request-trace.mjs</code> workflow demonstrates this path for non-Canva clients. Pass <code>--register-profile-id</code> with <code>--register-readiness-monitor</code> to register a recurring service-owned profile, add the freshness monitor, request the access plan, and submit the planned tab request through the service queue.
+The generic <code>examples/service-client/service-request-trace.mjs</code> workflow demonstrates this path for non-Canva clients. Pass <code>--register-profile-id</code> with <code>--register-readiness-monitor</code> when a recurring service-owned profile may be needed. The example asks for the access plan first, registers the fallback profile only when no profile is selected, adds the freshness monitor for that fallback profile, refreshes the access plan, and submits the planned tab request through the service queue.
 
 ## Browser health and recovery
 

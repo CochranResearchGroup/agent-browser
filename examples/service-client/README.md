@@ -51,10 +51,11 @@ viewport, and console result fields, trace counts, and the latest retained jobs
 so software projects can confirm that the planning, request, and trace metadata
 are connected.
 
-For a recurring service-owned profile, pass `--register-readiness-monitor`
-with `--register-profile-id`. The script registers the managed profile, adds a
-`profile_readiness` monitor for the same login identity, asks for the no-launch
-access plan, and then submits the planned tab request. That is the default
+For a recurring service-owned profile, pass `--register-profile-id` with
+`--register-readiness-monitor`. The script first asks for the no-launch access
+plan. It registers the managed profile and adds a `profile_readiness` monitor
+only when agent-browser reports no selected profile, then asks for a refreshed
+access plan before submitting the planned tab request. That is the default
 integration pattern for non-Canva clients: request by identity, let
 agent-browser own profile coordination, and let monitor findings warn when
 retained freshness has expired.

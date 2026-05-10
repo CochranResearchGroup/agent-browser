@@ -172,16 +172,16 @@ try {
     `example service tab request failed: ${JSON.stringify(output.commandResult)}`,
   );
   assert(
-    output.profileRegistration?.upserted === true &&
-      output.profileRegistration?.profile?.id === profileId &&
-      output.profileRegistration?.profile?.authenticatedServiceIds?.includes(targetServiceId),
-    `example did not register login profile: ${JSON.stringify(output.profileRegistration)}`,
+    output.initialAccessPlan?.selectedProfile?.id === profileId,
+    `example did not ask broker for the existing profile before fallback registration: ${JSON.stringify(output.initialAccessPlan)}`,
   );
   assert(
-    output.profileReadinessMonitor?.upserted === true &&
-      output.profileReadinessMonitor?.monitor?.target?.profile_readiness === targetServiceId &&
-      output.profileReadinessMonitor?.monitor?.intervalMs === 900000,
-    `example did not register profile-readiness monitor: ${JSON.stringify(output.profileReadinessMonitor)}`,
+    output.profileRegistration === null,
+    `example registered a profile even though the broker selected one: ${JSON.stringify(output.profileRegistration)}`,
+  );
+  assert(
+    output.profileReadinessMonitor === null,
+    `example registered a monitor even though no fallback profile was created: ${JSON.stringify(output.profileReadinessMonitor)}`,
   );
   assert(
     output.accessPlan?.decision?.serviceRequest?.request?.action === 'tab_new' &&

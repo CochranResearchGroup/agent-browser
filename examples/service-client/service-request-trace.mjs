@@ -87,6 +87,7 @@ export async function runServiceWorkflow({
       profileSelection: {
         requestedIdentity: loginId || siteId,
         preferredProfileFields: ['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds'],
+        registrationPolicy: 'only register after getServiceAccessPlan reports no selected profile',
       },
       profileRegistration: registerProfileId
         ? buildLoginProfileRegistration({
@@ -115,18 +116,27 @@ export async function runServiceWorkflow({
     throw new Error('Missing baseUrl. Pass --base-url http://127.0.0.1:<stream-port>.');
   }
 
-  const profileRegistration = registerProfileId
-    ? await registerServiceLoginProfile({
-        baseUrl,
-        ...buildLoginProfileRegistration({
-          id: registerProfileId,
-          serviceName,
-          loginId,
-          siteId,
-          userDataDir: profileUserDataDir,
-        }),
-      })
-    : null;
+  const initialAccessPlan = await getServiceAccessPlan({
+    baseUrl,
+    serviceName,
+    agentName,
+    taskName,
+    siteId,
+    loginId,
+  });
+  const profileRegistration =
+    !initialAccessPlan.selectedProfile && registerProfileId
+      ? await registerServiceLoginProfile({
+          baseUrl,
+          ...buildLoginProfileRegistration({
+            id: registerProfileId,
+            serviceName,
+            loginId,
+            siteId,
+            userDataDir: profileUserDataDir,
+          }),
+        })
+      : null;
   const profileReadinessMonitor =
     profileRegistration && registerReadinessMonitor
       ? await upsertServiceProfileReadinessMonitor({
@@ -140,14 +150,16 @@ export async function runServiceWorkflow({
           }),
         })
       : null;
-  const accessPlan = await getServiceAccessPlan({
-    baseUrl,
-    serviceName,
-    agentName,
-    taskName,
-    siteId,
-    loginId,
-  });
+  const accessPlan = profileRegistration
+    ? await getServiceAccessPlan({
+        baseUrl,
+        serviceName,
+        agentName,
+        taskName,
+        siteId,
+        loginId,
+      })
+    : initialAccessPlan;
   const commandResult = await requestServiceTab({
     baseUrl,
     accessPlan,
@@ -213,6 +225,7 @@ export async function runServiceWorkflow({
 
   return {
     dryRun: false,
+    initialAccessPlan,
     profileRegistration,
     profileReadinessMonitor,
     accessPlan,
