@@ -468,6 +468,8 @@ Run `pnpm test:service-site-policy-sources-no-launch` to validate that HTTP `GET
 
 Run `pnpm test:service-client-example` after changing service-client examples,
 including `post-seeding-probe.mjs`.
+Run `pnpm test:service-client-post-seeding-probe-live` when live validation is
+needed for that recipe; it uses an isolated daemon and temporary profile.
 
 Use `agent-browser service status --watch` or `agent-browser service watch` for a polling operator view of worker health, browser health, queue depth, profile lease wait pressure, and reconciliation status. Add `--interval <ms>` to set the poll interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 

@@ -263,6 +263,12 @@ Validate the no-launch mock path:
 pnpm test:service-client-example
 ```
 
+Validate the same recipe against an isolated live daemon and temporary profile:
+
+```bash
+pnpm test:service-client-post-seeding-probe-live
+```
+
 Run it against a live service when a stream port is available:
 
 ```bash

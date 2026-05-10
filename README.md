@@ -1921,7 +1921,9 @@ that proves an existing managed profile is selected without registering a new
 one. The `post-seeding-probe.mjs` example covers the next step after the
 operator closes the detached seeding browser: open a service-owned verification
 tab, collect bounded URL and title evidence, and persist that evidence with
-`verifyServiceProfileSeeding()`. Run `pnpm test:service-access-plan-no-launch` when changing the access-plan
+`verifyServiceProfileSeeding()`. Run
+`pnpm test:service-client-post-seeding-probe-live` to validate that recipe
+against an isolated daemon and temporary profile. Run `pnpm test:service-access-plan-no-launch` when changing the access-plan
 surface; it verifies HTTP `/api/service/access-plan`, MCP
 `agent-browser://access-plan`, and `getServiceAccessPlan()` agree on the same
 seeded no-launch recommendation, including caller label warnings, without
