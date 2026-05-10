@@ -2,6 +2,7 @@
 
 This example shows the software-client workflow for agent-browser service mode:
 
+- acquire a broker-selected profile with `acquireServiceLoginProfile`
 - register or refresh a login profile with `registerServiceLoginProfile`
 - add a retained profile-readiness monitor with `upsertServiceProfileReadinessMonitor`
 - ask agent-browser for an access plan with `getServiceAccessPlan`
@@ -113,42 +114,29 @@ one call: it calls HTTP `GET /api/service/profiles/lookup`, lets agent-browser
 apply the authoritative selector, and returns the selected profile, reason,
 readiness, and readiness summary. `getServiceProfileForIdentity()` remains as
 the older descriptive alias for the same route.
-Prefer `getServiceAccessPlan()` when the client is deciding whether to register
-or seed a managed profile. It calls HTTP `GET /api/service/access-plan` and adds
-the site policy, providers, retained challenges, and service-owned decision to
-the profile lookup and readiness fields.
+Prefer `acquireServiceLoginProfile()` when the client is deciding whether to
+register or seed a managed profile. It calls `getServiceAccessPlan()` first,
+registers the fallback profile only when no profile is selected, optionally
+adds the standard retained profile-readiness monitor, then returns the refreshed
+access plan for the tab request.
 
 ```js
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
-  getServiceAccessPlan,
-  registerServiceLoginProfile,
-  upsertServiceProfileReadinessMonitor,
+  acquireServiceLoginProfile,
 } from '@agent-browser/client/service-observability';
 
-const accessPlan = await getServiceAccessPlan({
+const { accessPlan } = await acquireServiceLoginProfile({
   baseUrl: 'http://127.0.0.1:4849',
   serviceName: 'CanvaCLI',
   agentName: 'canva-cli-agent',
   taskName: 'openCanvaWorkspace',
   loginId: 'canva',
   targetServiceId: 'canva',
+  registerProfileId: 'canva-default',
+  registerAuthenticated: false,
+  registerReadinessMonitor: true,
 });
-
-if (!accessPlan.selectedProfile) {
-  await registerServiceLoginProfile({
-    baseUrl: 'http://127.0.0.1:4849',
-    id: 'canva-default',
-    serviceName: 'CanvaCLI',
-    loginId: 'canva',
-    authenticated: false,
-  });
-  await upsertServiceProfileReadinessMonitor({
-    baseUrl: 'http://127.0.0.1:4849',
-    serviceName: 'CanvaCLI',
-    loginId: 'canva',
-  });
-}
 
 await requestServiceTab({
   baseUrl: 'http://127.0.0.1:4849',

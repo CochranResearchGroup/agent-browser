@@ -892,6 +892,35 @@ export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOp
   challengeId?: string;
 }
 
+export interface ServiceProfileAcquisitionOptions extends ServiceAccessPlanOptions {
+  /** Optional fallback profile ID to register when the access plan has no selected profile. */
+  registerProfileId?: string;
+  /** Optional user-data directory for the fallback profile registration. */
+  profileUserDataDir?: string;
+  /** Whether fallback registration should mark requested targets authenticated. Defaults to registerServiceLoginProfile behavior. */
+  registerAuthenticated?: boolean;
+  /** Add the standard retained profile-readiness monitor after fallback registration. */
+  registerReadinessMonitor?: boolean;
+  /** Optional monitor ID for the retained profile-readiness monitor. */
+  readinessMonitorId?: string;
+  /** Optional monitor interval in milliseconds. */
+  readinessMonitorIntervalMs?: number;
+  /** Optional display name for fallback profile registration. */
+  profileName?: string;
+  /** Additional profile fields to merge into fallback profile registration. */
+  profile?: Record<string, unknown>;
+}
+
+export interface ServiceProfileAcquisitionResult {
+  initialAccessPlan: ServiceAccessPlanResponse;
+  accessPlan: ServiceAccessPlanResponse;
+  selectedProfile: ServiceProfileRecord | null;
+  profileRegistration: ServiceProfileUpsertResponse | null;
+  profileReadinessMonitor: ServiceMonitorUpsertResponse | null;
+  registered: boolean;
+  monitorRegistered: boolean;
+}
+
 export interface ServiceProfileLookupQuery {
   serviceName: string | null;
   targetServiceIds: string[];
@@ -1056,6 +1085,8 @@ export declare function getServiceProfileForIdentity(options: ServiceProfileIden
 export declare function lookupServiceProfile(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
 /** Ask agent-browser for the no-launch profile, policy, provider, challenge, and readiness recommendation. */
 export declare function getServiceAccessPlan(options: ServiceAccessPlanOptions): Promise<ServiceAccessPlanResponse>;
+/** Broker-first helper that access-plans, optionally registers a fallback profile, optionally adds a readiness monitor, and returns the refreshed recommendation. */
+export declare function acquireServiceLoginProfile(options: ServiceProfileAcquisitionOptions): Promise<ServiceProfileAcquisitionResult>;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;

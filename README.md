@@ -1711,7 +1711,7 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 `getServiceProfileAllocation`, `getServiceProfileReadiness`,
 `summarizeServiceProfileReadiness`, `findServiceProfileForIdentity`,
 `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`,
-`postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
+`acquireServiceLoginProfile`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 including optional freshness fields such as `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`,
@@ -1732,6 +1732,11 @@ summary, matching site policy, relevant providers and challenges, and the
 service-owned recommended action before a browser launch. Readiness summaries
 and decisions are scoped to the requested target identities, so an unrelated
 stale or unseeded login on the same profile does not block the requested site.
+When a software client may need a recurring fallback profile, prefer
+`acquireServiceLoginProfile()` so the client asks for this plan first,
+registers only if no profile is selected, optionally adds the retained
+profile-readiness monitor, and uses the refreshed access plan for the tab
+request.
 The decision includes `freshnessUpdate`, which names the selected profile,
 target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.
@@ -1802,38 +1807,24 @@ readiness row under the serialized service-state mutator, preserves unrelated pr
 ```ts
 import { requestServiceTab } from '@agent-browser/client/service-request';
 import {
-  getServiceAccessPlan,
-  registerServiceLoginProfile,
-  upsertServiceProfileReadinessMonitor,
+  acquireServiceLoginProfile,
 } from '@agent-browser/client/service-observability';
 
 const baseUrl = `http://127.0.0.1:${streamPort}`;
 const serviceName = 'CanvaCLI';
 const loginId = 'canva';
 
-const accessPlan = await getServiceAccessPlan({
+const { accessPlan } = await acquireServiceLoginProfile({
   baseUrl,
   serviceName,
   agentName: 'canva-cli-agent',
   taskName: 'openCanvaWorkspace',
   loginId,
   targetServiceId: loginId,
+  registerProfileId: 'canva-default',
+  registerAuthenticated: false,
+  registerReadinessMonitor: true,
 });
-
-if (!accessPlan.selectedProfile) {
-  await registerServiceLoginProfile({
-    baseUrl,
-    id: 'canva-default',
-    serviceName,
-    loginId,
-    authenticated: false,
-  });
-  await upsertServiceProfileReadinessMonitor({
-    baseUrl,
-    serviceName,
-    loginId,
-  });
-}
 
 const tab = await requestServiceTab({
   baseUrl,
@@ -1870,10 +1861,10 @@ example contract plus the example dry-run modes.
 The main `service-request-trace.mjs` example is the generic integration path
 for non-Canva software clients: pass `--register-profile-id` and
 `--register-readiness-monitor` when the service needs a recurring managed
-profile, then let agent-browser get the access plan first, register the
-profile only when no selected profile exists, add the retained freshness
-monitor for that fallback profile, refresh the access plan, and submit the
-planned tab request.
+profile. The example uses `acquireServiceLoginProfile()` to ask for the access
+plan first, register the profile only when no selected profile exists, add the
+retained freshness monitor for that fallback profile, refresh the access plan,
+and submit the planned tab request.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that uses the no-launch profile planning surfaces to
 ask agent-browser for an access plan, inspect readiness and the service-owned

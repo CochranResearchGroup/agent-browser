@@ -3,11 +3,9 @@
 
 import { createServiceRequest, postServiceRequest, requestServiceTab } from '@agent-browser/client/service-request';
 import {
+  acquireServiceLoginProfile,
   cancelServiceJob,
-  getServiceAccessPlan,
   getServiceTrace,
-  registerServiceLoginProfile,
-  upsertServiceProfileReadinessMonitor,
 } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://example.com';
@@ -89,7 +87,8 @@ export async function runServiceWorkflow({
       profileSelection: {
         requestedIdentity: loginId || siteId,
         preferredProfileFields: ['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds'],
-        registrationPolicy: 'only register after getServiceAccessPlan reports no selected profile',
+        helper: 'acquireServiceLoginProfile',
+        registrationPolicy: 'only register fallback profile after the access plan reports no selected profile',
       },
       profileRegistration: registerProfileId
         ? buildLoginProfileRegistration({
@@ -118,7 +117,7 @@ export async function runServiceWorkflow({
     throw new Error('Missing baseUrl. Pass --base-url http://127.0.0.1:<stream-port>.');
   }
 
-  const initialAccessPlan = await getServiceAccessPlan({
+  const profileAcquisition = await acquireServiceLoginProfile({
     baseUrl,
     fetch,
     serviceName,
@@ -126,46 +125,14 @@ export async function runServiceWorkflow({
     taskName,
     siteId,
     loginId,
+    registerProfileId,
+    profileName: registerProfileId ? `${serviceName} ${loginId || siteId} profile` : undefined,
+    profileUserDataDir,
+    registerReadinessMonitor,
+    readinessMonitorId,
+    readinessMonitorIntervalMs,
   });
-  const profileRegistration =
-    !initialAccessPlan.selectedProfile && registerProfileId
-      ? await registerServiceLoginProfile({
-          baseUrl,
-          fetch,
-          ...buildLoginProfileRegistration({
-            id: registerProfileId,
-            serviceName,
-            loginId,
-            siteId,
-            userDataDir: profileUserDataDir,
-          }),
-        })
-      : null;
-  const profileReadinessMonitor =
-    profileRegistration && registerReadinessMonitor
-      ? await upsertServiceProfileReadinessMonitor({
-          baseUrl,
-          fetch,
-          ...buildProfileReadinessMonitor({
-            id: readinessMonitorId,
-            serviceName,
-            loginId,
-            siteId,
-            intervalMs: readinessMonitorIntervalMs,
-          }),
-        })
-      : null;
-  const accessPlan = profileRegistration
-    ? await getServiceAccessPlan({
-        baseUrl,
-        fetch,
-        serviceName,
-        agentName,
-        taskName,
-        siteId,
-        loginId,
-      })
-    : initialAccessPlan;
+  const { initialAccessPlan, profileRegistration, profileReadinessMonitor, accessPlan } = profileAcquisition;
   const commandResult = await requestServiceTab({
     baseUrl,
     fetch,
@@ -238,6 +205,7 @@ export async function runServiceWorkflow({
   return {
     dryRun: false,
     initialAccessPlan,
+    profileAcquisition,
     profileRegistration,
     profileReadinessMonitor,
     accessPlan,

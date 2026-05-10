@@ -73,6 +73,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileLookupResponse} ServiceProfileLookupResponse
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanOptions} ServiceAccessPlanOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanResponse} ServiceAccessPlanResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionOptions} ServiceProfileAcquisitionOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionResult} ServiceProfileAcquisitionResult
  * @typedef {import('./service-observability.generated.js').ServiceProfileFreshnessUpdateOptions} ServiceProfileFreshnessUpdateOptions
  * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyOptions} ServiceRemediesApplyOptions
  * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyResponse} ServiceRemediesApplyResponse
@@ -276,6 +278,71 @@ export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, c
     },
     '/api/service/access-plan',
   );
+}
+
+/**
+ * Acquire a managed login profile recommendation through the service broker.
+ *
+ * The helper asks for an access plan first, registers the fallback profile only
+ * when agent-browser has no selected profile, optionally installs the standard
+ * profile-readiness monitor, then refreshes the access plan so callers can pass
+ * the final broker-owned recommendation to requestServiceTab().
+ *
+ * @param {ServiceProfileAcquisitionOptions} options
+ * @returns {Promise<ServiceProfileAcquisitionResult>}
+ */
+export async function acquireServiceLoginProfile({
+  registerProfileId,
+  profileUserDataDir,
+  registerAuthenticated,
+  registerReadinessMonitor = false,
+  readinessMonitorId,
+  readinessMonitorIntervalMs,
+  profileName,
+  profile,
+  ...accessPlanOptions
+}) {
+  const initialAccessPlan = await getServiceAccessPlan(accessPlanOptions);
+  const profileRegistration =
+    !initialAccessPlan.selectedProfile && registerProfileId
+      ? await registerServiceLoginProfile({
+          ...accessPlanOptions,
+          id: registerProfileId,
+          serviceName: accessPlanOptions.serviceName,
+          loginId: accessPlanOptions.loginId,
+          siteId: accessPlanOptions.siteId,
+          targetServiceId: accessPlanOptions.targetServiceId,
+          targetServiceIds: accessPlanOptions.targetServiceIds,
+          userDataDir: profileUserDataDir,
+          ...(registerAuthenticated === undefined ? {} : { authenticated: registerAuthenticated }),
+          ...(profileName === undefined ? {} : { name: profileName }),
+          ...(profile === undefined ? {} : { profile }),
+        })
+      : null;
+  const profileReadinessMonitor =
+    profileRegistration && registerReadinessMonitor
+      ? await upsertServiceProfileReadinessMonitor({
+          ...accessPlanOptions,
+          id: readinessMonitorId,
+          serviceName: accessPlanOptions.serviceName,
+          loginId: accessPlanOptions.loginId,
+          siteId: accessPlanOptions.siteId,
+          targetServiceId: accessPlanOptions.targetServiceId,
+          targetServiceIds: accessPlanOptions.targetServiceIds,
+          intervalMs: readinessMonitorIntervalMs,
+        })
+      : null;
+  const accessPlan = profileRegistration ? await getServiceAccessPlan(accessPlanOptions) : initialAccessPlan;
+
+  return {
+    initialAccessPlan,
+    accessPlan,
+    selectedProfile: accessPlan.selectedProfile ?? null,
+    profileRegistration,
+    profileReadinessMonitor,
+    registered: profileRegistration !== null,
+    monitorRegistered: profileReadinessMonitor !== null,
+  };
 }
 
 /**

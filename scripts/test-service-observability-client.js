@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  acquireServiceLoginProfile,
   applyServiceRemedies,
   findServiceProfileForIdentity,
   deleteServiceMonitor,
@@ -809,6 +810,249 @@ async function main() {
     targetServiceIds: [],
     recommendedActions: [],
   });
+
+  const existingAcquisition = createFetchRecorder({
+    success: true,
+    data: {
+      query: {
+        serviceName: 'JournalDownloader',
+        targetServiceIds: ['acs'],
+        readinessProfileId: null,
+      },
+      selectedProfile: {
+        id: 'journal-existing',
+        name: 'JournalDownloader ACS',
+        targetServiceIds: ['acs'],
+        authenticatedServiceIds: ['acs'],
+        sharedServiceIds: ['JournalDownloader'],
+      },
+      selectedProfileMatch: {
+        profileId: 'journal-existing',
+        reason: 'authenticated_target',
+        matchedField: 'authenticatedServiceIds',
+        matchedIdentity: 'acs',
+      },
+      selectedProfileSource: 'config',
+      readiness: null,
+      readinessSummary: {
+        needsManualSeeding: false,
+        manualSeedingRequired: false,
+        targetServiceIds: [],
+        recommendedActions: [],
+      },
+      monitorFindings: {
+        profileReadinessAttentionRequired: false,
+        profileReadinessIncidentIds: [],
+        profileReadinessMonitorIds: [],
+        profileReadinessResults: [],
+        targetServiceIds: [],
+      },
+      sitePolicy: null,
+      sitePolicySource: null,
+      providers: [],
+      challenges: [],
+      decision: {
+        recommendedAction: 'use_selected_profile',
+        browserHost: 'local_headed',
+        interactionMode: 'human_like_input',
+        challengePolicy: 'avoid_first',
+        profileId: 'journal-existing',
+        manualActionRequired: false,
+        manualSeedingRequired: false,
+        monitorAttentionRequired: false,
+        providerIds: [],
+        challengeIds: [],
+        reasons: ['profile_selected'],
+      },
+    },
+  });
+  const existingAcquisitionResult = await acquireServiceLoginProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: existingAcquisition.fetch,
+    serviceName: 'JournalDownloader',
+    agentName: 'agent-a',
+    taskName: 'probeACSwebsite',
+    loginId: 'acs',
+    registerProfileId: 'journal-fallback',
+    registerReadinessMonitor: true,
+  });
+  assert.equal(existingAcquisition.calls.length, 1);
+  assert.equal(existingAcquisition.calls[0].url, 'http://127.0.0.1:4849/api/service/access-plan?serviceName=JournalDownloader&agentName=agent-a&taskName=probeACSwebsite&loginId=acs');
+  assert.equal(existingAcquisitionResult.selectedProfile?.id, 'journal-existing');
+  assert.equal(existingAcquisitionResult.profileRegistration, null);
+  assert.equal(existingAcquisitionResult.profileReadinessMonitor, null);
+  assert.equal(existingAcquisitionResult.registered, false);
+  assert.equal(existingAcquisitionResult.monitorRegistered, false);
+  assert.equal(existingAcquisitionResult.accessPlan, existingAcquisitionResult.initialAccessPlan);
+
+  const fallbackAcquisition = createFetchRecorder((_url, _init, calls) => {
+    if (calls.length === 1) {
+      return {
+        success: true,
+        data: {
+          query: {
+            serviceName: 'JournalDownloader',
+            targetServiceIds: ['acs'],
+            readinessProfileId: null,
+          },
+          selectedProfile: null,
+          selectedProfileMatch: null,
+          selectedProfileSource: null,
+          readiness: null,
+          readinessSummary: {
+            needsManualSeeding: false,
+            manualSeedingRequired: false,
+            targetServiceIds: [],
+            recommendedActions: [],
+          },
+          monitorFindings: {
+            profileReadinessAttentionRequired: false,
+            profileReadinessIncidentIds: [],
+            profileReadinessMonitorIds: [],
+            profileReadinessResults: [],
+            targetServiceIds: [],
+          },
+          sitePolicy: null,
+          sitePolicySource: null,
+          providers: [],
+          challenges: [],
+          decision: {
+            recommendedAction: 'register_profile',
+            browserHost: null,
+            interactionMode: null,
+            challengePolicy: null,
+            profileId: null,
+            manualActionRequired: false,
+            manualSeedingRequired: false,
+            monitorAttentionRequired: false,
+            providerIds: [],
+            challengeIds: [],
+            reasons: ['no_matching_profile'],
+          },
+        },
+      };
+    }
+    if (calls.length === 2) {
+      return {
+        success: true,
+        data: {
+          id: 'journal-fallback',
+          upserted: true,
+          profile: calls.at(-1)?.body,
+        },
+      };
+    }
+    if (calls.length === 3) {
+      return {
+        success: true,
+        data: {
+          id: 'journal-acs-readiness',
+          upserted: true,
+          monitor: calls.at(-1)?.body,
+        },
+      };
+    }
+    return {
+      success: true,
+      data: {
+        query: {
+          serviceName: 'JournalDownloader',
+          targetServiceIds: ['acs'],
+          readinessProfileId: null,
+        },
+        selectedProfile: {
+          id: 'journal-fallback',
+          name: 'Journal ACS fallback',
+          targetServiceIds: ['acs'],
+          authenticatedServiceIds: [],
+          sharedServiceIds: ['JournalDownloader'],
+        },
+        selectedProfileMatch: {
+          profileId: 'journal-fallback',
+          reason: 'target_match',
+          matchedField: 'targetServiceIds',
+          matchedIdentity: 'acs',
+        },
+        selectedProfileSource: 'persisted_state',
+        readiness: null,
+        readinessSummary: {
+          needsManualSeeding: false,
+          manualSeedingRequired: false,
+          targetServiceIds: [],
+          recommendedActions: [],
+        },
+        monitorFindings: {
+          profileReadinessAttentionRequired: false,
+          profileReadinessIncidentIds: [],
+          profileReadinessMonitorIds: [],
+          profileReadinessResults: [],
+          targetServiceIds: [],
+        },
+        sitePolicy: null,
+        sitePolicySource: null,
+        providers: [],
+        challenges: [],
+        decision: {
+          recommendedAction: 'use_selected_profile',
+          browserHost: 'local_headed',
+          interactionMode: 'human_like_input',
+          challengePolicy: 'avoid_first',
+          profileId: 'journal-fallback',
+          manualActionRequired: false,
+          manualSeedingRequired: false,
+          monitorAttentionRequired: false,
+          providerIds: [],
+          challengeIds: [],
+          reasons: ['profile_selected'],
+        },
+      },
+    };
+  });
+  const fallbackAcquisitionResult = await acquireServiceLoginProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: fallbackAcquisition.fetch,
+    serviceName: 'JournalDownloader',
+    agentName: 'agent-a',
+    taskName: 'probeACSwebsite',
+    loginId: 'acs',
+    registerProfileId: 'journal-fallback',
+    profileName: 'Journal ACS fallback',
+    profileUserDataDir: '/tmp/journal-fallback',
+    registerAuthenticated: false,
+    registerReadinessMonitor: true,
+    readinessMonitorId: 'journal-acs-readiness',
+    readinessMonitorIntervalMs: 60000,
+  });
+  assert.equal(fallbackAcquisition.calls.length, 4);
+  assert.equal(fallbackAcquisition.calls[0].init.method, 'GET');
+  assert.equal(fallbackAcquisition.calls[1].url, 'http://127.0.0.1:4849/api/service/profiles/journal-fallback');
+  assert.equal(fallbackAcquisition.calls[1].init.method, 'POST');
+  assert.deepEqual(fallbackAcquisition.calls[1].body, {
+    name: 'Journal ACS fallback',
+    allocation: 'per_service',
+    keyring: 'basic_password_store',
+    persistent: true,
+    targetServiceIds: ['acs'],
+    authenticatedServiceIds: [],
+    sharedServiceIds: ['JournalDownloader'],
+    userDataDir: '/tmp/journal-fallback',
+  });
+  assert.equal(fallbackAcquisition.calls[2].url, 'http://127.0.0.1:4849/api/service/monitors/journal-acs-readiness');
+  assert.equal(fallbackAcquisition.calls[2].init.method, 'POST');
+  assert.deepEqual(fallbackAcquisition.calls[2].body, {
+    name: 'JournalDownloader acs profile readiness',
+    target: { profile_readiness: 'acs' },
+    intervalMs: 60000,
+    state: 'active',
+  });
+  assert.equal(fallbackAcquisition.calls[3].init.method, 'GET');
+  assert.equal(fallbackAcquisitionResult.initialAccessPlan.selectedProfile, null);
+  assert.equal(fallbackAcquisitionResult.accessPlan.selectedProfile?.id, 'journal-fallback');
+  assert.equal(fallbackAcquisitionResult.selectedProfile?.id, 'journal-fallback');
+  assert.equal(fallbackAcquisitionResult.profileRegistration?.id, 'journal-fallback');
+  assert.equal(fallbackAcquisitionResult.profileReadinessMonitor?.id, 'journal-acs-readiness');
+  assert.equal(fallbackAcquisitionResult.registered, true);
+  assert.equal(fallbackAcquisitionResult.monitorRegistered, true);
 
   const trace = createFetchRecorder({
     success: true,
