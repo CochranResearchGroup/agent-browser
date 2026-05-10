@@ -175,9 +175,9 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "client": {
                     "package": "@agent-browser/client/service-observability",
-                    "helpers": ["getServiceProfileSeedingHandoff"],
+                    "helpers": ["getServiceProfileSeedingHandoff", "updateServiceProfileSeedingHandoff"],
                 },
-                "responseFields": ["command", "operatorSteps", "warnings"],
+                "responseFields": ["command", "lifecycle", "operatorIntervention", "operatorSteps", "warnings"],
             },
             "serviceProfileLookupResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,

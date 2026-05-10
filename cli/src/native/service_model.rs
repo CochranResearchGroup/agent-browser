@@ -135,6 +135,18 @@ pub const SERVICE_PROFILE_READINESS_VALUES: [&str; 6] = [
 ];
 pub const SERVICE_PROFILE_SEEDING_MODE_VALUES: [&str; 3] =
     ["not_required", "detached_headed_no_cdp", "attachable_ok"];
+pub const SERVICE_PROFILE_SEEDING_HANDOFF_STATE_VALUES: [&str; 10] = [
+    "not_required",
+    "needs_manual_seeding",
+    "seeding_launched_detached",
+    "seeding_waiting_for_close",
+    "completion_declared_waiting_for_close",
+    "seeding_closed_unverified",
+    "verification_pending",
+    "fresh",
+    "failed",
+    "abandoned",
+];
 pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
     "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
 ];
@@ -1649,6 +1661,7 @@ pub struct ServiceState {
     pub site_policies: BTreeMap<String, SitePolicy>,
     pub providers: BTreeMap<String, ServiceProvider>,
     pub challenges: BTreeMap<String, Challenge>,
+    pub profile_seeding_handoffs: BTreeMap<String, ProfileSeedingHandoffRecord>,
     #[serde(skip)]
     pub entity_sources: ServiceEntitySources,
 }
@@ -2212,6 +2225,21 @@ pub fn service_profile_seeding_handoff(
         .or_else(|| profile.target_readiness.first())
         .ok_or_else(|| format!("Profile has no target readiness rows: {profile_id}"))?;
     let target = readiness.target_service_id.as_str();
+    let lifecycle = service_state
+        .profile_seeding_handoffs
+        .get(&profile_seeding_handoff_id(profile_id, target))
+        .cloned()
+        .unwrap_or_else(|| ProfileSeedingHandoffRecord {
+            id: profile_seeding_handoff_id(profile_id, target),
+            profile_id: profile_id.to_string(),
+            target_service_id: target.to_string(),
+            state: if readiness.manual_seeding_required {
+                ProfileSeedingHandoffState::NeedsManualSeeding
+            } else {
+                ProfileSeedingHandoffState::NotRequired
+            },
+            ..ProfileSeedingHandoffRecord::default()
+        });
     let policy = service_state.site_policies.get(target);
     let url = policy
         .map(|policy| policy.origin_pattern.as_str())
@@ -2228,26 +2256,14 @@ pub fn service_profile_seeding_handoff(
     if readiness.preferred_keyring != Some(ProfileKeyringPolicy::BasicPasswordStore) {
         warnings.push("Consider basic_password_store for managed profiles so OS keyring modals do not block unattended workflows.".to_string());
     }
-    let intervention_state = if readiness.manual_seeding_required {
-        "needs_manual_seeding"
-    } else {
-        "not_required"
-    };
-    let intervention_severity = if readiness.manual_seeding_required {
-        "action_required"
-    } else {
-        "info"
-    };
-    let intervention_title = if readiness.manual_seeding_required {
-        format!("Seed profile {profile_id} for {target}")
-    } else {
+    let intervention_severity = lifecycle.state.intervention_severity();
+    let intervention_title = if lifecycle.state == ProfileSeedingHandoffState::NotRequired {
         format!("Profile {profile_id} does not require seeding for {target}")
-    };
-    let intervention_message = if readiness.manual_seeding_required {
-        "Launch the detached headed browser, complete setup, close Chrome, then let agent-browser verify freshness after CDP is allowed again."
     } else {
-        "No CDP-free profile seeding action is required for this target."
+        format!("Seed profile {profile_id} for {target}")
     };
+    let intervention_message = lifecycle.state.intervention_message();
+    let blocks_profile_lease = lifecycle.state.blocks_profile_lease();
 
     Ok(serde_json::json!({
         "profileId": profile_id,
@@ -2262,6 +2278,7 @@ pub fn service_profile_seeding_handoff(
         "recommendedAction": readiness.recommended_action.clone(),
         "url": url,
         "command": command,
+        "lifecycle": lifecycle,
         "operatorSteps": [
             "Run the command exactly as shown.",
             "Complete sign-in and any requested sync, passkey, or browser plugin setup in the headed browser.",
@@ -2269,7 +2286,7 @@ pub fn service_profile_seeding_handoff(
             "Request future tabs through service-owned agent-browser automation so CDP attaches only after seeding."
         ],
         "operatorIntervention": {
-            "state": intervention_state,
+            "state": lifecycle.state,
             "severity": intervention_severity,
             "title": intervention_title,
             "message": intervention_message,
@@ -2277,7 +2294,7 @@ pub fn service_profile_seeding_handoff(
             "defaultChannels": ["api", "mcp", "dashboard"],
             "optionalChannels": ["desktop", "webhook", "agent"],
             "desktopPopupPolicy": "optional_policy_controlled",
-            "blocksProfileLease": readiness.manual_seeding_required,
+            "blocksProfileLease": blocks_profile_lease,
             "completionSignals": [
                 "seeding_browser_closed",
                 "operator_or_agent_declared_complete",
@@ -3176,6 +3193,98 @@ pub struct ProfileTargetReadiness {
     pub setup_scopes: Vec<String>,
     pub last_verified_at: Option<String>,
     pub freshness_expires_at: Option<String>,
+}
+
+/// Persisted lifecycle for a CDP-free profile seeding handoff.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ProfileSeedingHandoffRecord {
+    pub id: String,
+    pub profile_id: String,
+    pub target_service_id: String,
+    pub state: ProfileSeedingHandoffState,
+    pub pid: Option<u32>,
+    pub started_at: Option<String>,
+    pub expires_at: Option<String>,
+    pub last_prompted_at: Option<String>,
+    pub declared_complete_at: Option<String>,
+    pub closed_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub actor: Option<String>,
+    pub note: Option<String>,
+}
+
+/// Lifecycle state for CDP-free profile seeding handoffs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileSeedingHandoffState {
+    NotRequired,
+    #[default]
+    NeedsManualSeeding,
+    SeedingLaunchedDetached,
+    SeedingWaitingForClose,
+    CompletionDeclaredWaitingForClose,
+    SeedingClosedUnverified,
+    VerificationPending,
+    Fresh,
+    Failed,
+    Abandoned,
+}
+
+impl ProfileSeedingHandoffState {
+    pub fn intervention_severity(self) -> &'static str {
+        match self {
+            Self::NotRequired | Self::Fresh => "info",
+            Self::SeedingLaunchedDetached
+            | Self::SeedingClosedUnverified
+            | Self::VerificationPending => "attention",
+            Self::NeedsManualSeeding
+            | Self::SeedingWaitingForClose
+            | Self::CompletionDeclaredWaitingForClose => "action_required",
+            Self::Failed | Self::Abandoned => "danger",
+        }
+    }
+
+    pub fn intervention_message(self) -> &'static str {
+        match self {
+            Self::NotRequired => "No CDP-free profile seeding action is required for this target.",
+            Self::NeedsManualSeeding => {
+                "Launch the detached headed browser, complete setup, close Chrome, then let agent-browser verify freshness after CDP is allowed again."
+            }
+            Self::SeedingLaunchedDetached => {
+                "The detached seeding browser has been launched. Complete setup in Chrome, then close that browser."
+            }
+            Self::SeedingWaitingForClose => {
+                "The seeding browser is still open. Finish setup, close Chrome, extend the handoff, or abandon it."
+            }
+            Self::CompletionDeclaredWaitingForClose => {
+                "Completion was declared, but Chrome still appears open. Close the seeding browser before attachable automation resumes."
+            }
+            Self::SeedingClosedUnverified => {
+                "The seeding browser is closed, but authentication freshness has not been verified."
+            }
+            Self::VerificationPending => {
+                "The profile is ready for a bounded post-seeding auth probe."
+            }
+            Self::Fresh => "The profile has fresh authenticated evidence for this target.",
+            Self::Failed => "The seeding handoff failed. Review the operator note and retry or abandon.",
+            Self::Abandoned => "The seeding handoff was abandoned. Start a new handoff before authenticated work.",
+        }
+    }
+
+    pub fn blocks_profile_lease(self) -> bool {
+        matches!(
+            self,
+            Self::NeedsManualSeeding
+                | Self::SeedingLaunchedDetached
+                | Self::SeedingWaitingForClose
+                | Self::CompletionDeclaredWaitingForClose
+        )
+    }
+}
+
+pub fn profile_seeding_handoff_id(profile_id: &str, target_service_id: &str) -> String {
+    format!("{profile_id}:{target_service_id}")
 }
 
 /// Browser launch posture required while a target profile is being seeded.
@@ -6051,6 +6160,8 @@ mod tests {
             handoff["operatorIntervention"]["defaultChannels"],
             serde_json::json!(["api", "mcp", "dashboard"])
         );
+        assert_eq!(handoff["lifecycle"]["state"], "needs_manual_seeding");
+        assert_eq!(handoff["lifecycle"]["id"], "google-new:google");
         assert!(handoff["operatorIntervention"]["actions"]
             .as_array()
             .unwrap()
@@ -6061,6 +6172,47 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("--attachable"));
+    }
+
+    #[test]
+    fn service_profile_seeding_handoff_uses_persisted_lifecycle_state() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-new".to_string(),
+                BrowserProfile {
+                    id: "google-new".to_string(),
+                    name: "Google New".to_string(),
+                    target_service_ids: vec!["google".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            profile_seeding_handoffs: BTreeMap::from([(
+                "google-new:google".to_string(),
+                ProfileSeedingHandoffRecord {
+                    id: "google-new:google".to_string(),
+                    profile_id: "google-new".to_string(),
+                    target_service_id: "google".to_string(),
+                    state: ProfileSeedingHandoffState::SeedingClosedUnverified,
+                    pid: Some(1234),
+                    closed_at: Some("2026-05-10T12:00:00Z".to_string()),
+                    ..ProfileSeedingHandoffRecord::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        state.refresh_profile_readiness();
+
+        let handoff =
+            service_profile_seeding_handoff(&state, "google-new", Some("google")).unwrap();
+
+        assert_eq!(
+            handoff["operatorIntervention"]["state"],
+            "seeding_closed_unverified"
+        );
+        assert_eq!(handoff["operatorIntervention"]["severity"], "attention");
+        assert_eq!(handoff["operatorIntervention"]["blocksProfileLease"], false);
+        assert_eq!(handoff["lifecycle"]["pid"], 1234);
+        assert_eq!(handoff["lifecycle"]["closedAt"], "2026-05-10T12:00:00Z");
     }
 
     #[test]

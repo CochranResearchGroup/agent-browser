@@ -47,6 +47,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileReadinessResponse} ServiceProfileReadinessResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffOptions} ServiceProfileSeedingHandoffOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffResponse} ServiceProfileSeedingHandoffResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffUpdateOptions} ServiceProfileSeedingHandoffUpdateOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffUpdateResponse} ServiceProfileSeedingHandoffUpdateResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileMutationOptions} ServiceProfileMutationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileUpsertResponse} ServiceProfileUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceProviderDeleteResponse} ServiceProviderDeleteResponse
@@ -137,6 +139,41 @@ export function getServiceProfileSeedingHandoff({ id, targetServiceId, ...option
     },
     `/api/service/profiles/${encodeURIComponent(id)}/seeding-handoff`,
   );
+}
+
+/**
+ * Persist lifecycle state for a CDP-free profile seeding handoff.
+ *
+ * @param {ServiceProfileSeedingHandoffUpdateOptions} options
+ * @returns {Promise<ServiceProfileSeedingHandoffUpdateResponse>}
+ */
+export function updateServiceProfileSeedingHandoff({
+  id,
+  targetServiceId,
+  state,
+  pid,
+  startedAt,
+  expiresAt,
+  lastPromptedAt,
+  declaredCompleteAt,
+  closedAt,
+  actor,
+  note,
+  ...options
+}) {
+  assertServiceId(id, 'updateServiceProfileSeedingHandoff');
+  return servicePost(options, `/api/service/profiles/${encodeURIComponent(id)}/seeding-handoff`, {
+    targetServiceId,
+    state,
+    pid,
+    startedAt,
+    expiresAt,
+    lastPromptedAt,
+    declaredCompleteAt,
+    closedAt,
+    actor,
+    note,
+  });
 }
 
 /**

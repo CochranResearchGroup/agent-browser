@@ -240,6 +240,19 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some(profile_id) = service_profile_seeding_handoff_id(path) {
+            let cmd = match service_profile_seeding_handoff_update_command(profile_id, body_str) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(profile_id) = service_profile_id(path) {
             let cmd = match service_profile_upsert_command(profile_id, body_str) {
                 Ok(cmd) => cmd,
@@ -1759,6 +1772,19 @@ fn service_profile_freshness_command(profile_id: &str, body: &str) -> Result<Val
     }))
 }
 
+fn service_profile_seeding_handoff_update_command(
+    profile_id: &str,
+    body: &str,
+) -> Result<Value, String> {
+    let handoff = parse_service_config_body(body, "profile seeding handoff")?;
+    Ok(json!({
+        "id": format!("http-service-profile-seeding-handoff-{}", uuid::Uuid::new_v4()),
+        "action": "service_profile_seeding_handoff_update",
+        "profileId": profile_id,
+        "handoff": handoff,
+    }))
+}
+
 fn service_profile_delete_command(profile_id: &str) -> Value {
     json!({
         "id": format!("http-service-profile-delete-{}", uuid::Uuid::new_v4()),
@@ -3121,6 +3147,16 @@ mod tests {
             service_monitors_run_due_command()["action"],
             "service_monitors_run_due"
         );
+        let handoff = service_profile_seeding_handoff_update_command(
+            "journal-downloader",
+            r#"{"targetServiceId":"google","state":"seeding_launched_detached","pid":1234}"#,
+        )
+        .unwrap();
+        assert_eq!(handoff["action"], "service_profile_seeding_handoff_update");
+        assert_eq!(handoff["profileId"], "journal-downloader");
+        assert_eq!(handoff["handoff"]["targetServiceId"], "google");
+        assert_eq!(handoff["handoff"]["state"], "seeding_launched_detached");
+        assert_eq!(handoff["handoff"]["pid"], 1234);
         assert_eq!(
             service_monitor_action_id(
                 "/api/service/monitors/google-login-freshness/pause",

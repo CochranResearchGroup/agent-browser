@@ -25,6 +25,7 @@ import {
   summarizeServiceProfileReadiness,
   triageServiceMonitor,
   updateServiceProfileFreshness,
+  updateServiceProfileSeedingHandoff,
   upsertServiceMonitor,
 } from '../packages/client/src/service-observability.js';
 
@@ -512,6 +513,21 @@ async function main() {
       recommendedAction: 'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
       url: 'https://accounts.google.com',
       command: 'agent-browser --runtime-profile work runtime login https://accounts.google.com',
+      lifecycle: {
+        id: 'work:google',
+        profileId: 'work',
+        targetServiceId: 'google',
+        state: 'needs_manual_seeding',
+        pid: null,
+        startedAt: null,
+        expiresAt: null,
+        lastPromptedAt: null,
+        declaredCompleteAt: null,
+        closedAt: null,
+        updatedAt: null,
+        actor: null,
+        note: null,
+      },
       operatorSteps: ['Run the command exactly as shown.'],
       operatorIntervention: {
         state: 'needs_manual_seeding',
@@ -559,6 +575,78 @@ async function main() {
   assert.equal(handoffResult.operatorIntervention.desktopPopupPolicy, 'optional_policy_controlled');
   assert.equal(handoffResult.operatorIntervention.blocksProfileLease, true);
   assert.equal(handoffResult.operatorIntervention.actions[0].id, 'run_detached_seeding_command');
+  assert.equal(handoffResult.lifecycle.state, 'needs_manual_seeding');
+
+  const handoffUpdate = createFetchRecorder({
+    success: true,
+    data: {
+      id: 'work:google',
+      profileId: 'work',
+      targetServiceId: 'google',
+      handoff: {
+        id: 'work:google',
+        profileId: 'work',
+        targetServiceId: 'google',
+        state: 'seeding_launched_detached',
+        pid: 1234,
+        startedAt: '2026-05-10T12:00:00Z',
+        expiresAt: '2026-05-10T12:30:00Z',
+        lastPromptedAt: null,
+        declaredCompleteAt: null,
+        closedAt: null,
+        updatedAt: '2026-05-10T12:01:00Z',
+        actor: 'operator',
+        note: 'manual seeding started',
+      },
+      seedingHandoff: {
+        ...handoffResult,
+        lifecycle: {
+          ...handoffResult.lifecycle,
+          state: 'seeding_launched_detached',
+          pid: 1234,
+          startedAt: '2026-05-10T12:00:00Z',
+          expiresAt: '2026-05-10T12:30:00Z',
+          updatedAt: '2026-05-10T12:01:00Z',
+          actor: 'operator',
+          note: 'manual seeding started',
+        },
+        operatorIntervention: {
+          ...handoffResult.operatorIntervention,
+          state: 'seeding_launched_detached',
+          severity: 'attention',
+        },
+      },
+      updated: true,
+    },
+  });
+  const handoffUpdateResult = await updateServiceProfileSeedingHandoff({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: handoffUpdate.fetch,
+    id: 'work',
+    targetServiceId: 'google',
+    state: 'seeding_launched_detached',
+    pid: 1234,
+    startedAt: '2026-05-10T12:00:00Z',
+    expiresAt: '2026-05-10T12:30:00Z',
+    actor: 'operator',
+    note: 'manual seeding started',
+  });
+  assert.equal(
+    handoffUpdate.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/work/seeding-handoff',
+  );
+  assert.equal(handoffUpdate.calls[0].init.method, 'POST');
+  assert.deepEqual(handoffUpdate.calls[0].body, {
+    targetServiceId: 'google',
+    state: 'seeding_launched_detached',
+    pid: 1234,
+    startedAt: '2026-05-10T12:00:00Z',
+    expiresAt: '2026-05-10T12:30:00Z',
+    actor: 'operator',
+    note: 'manual seeding started',
+  });
+  assert.equal(handoffUpdateResult.handoff.state, 'seeding_launched_detached');
+  assert.equal(handoffUpdateResult.seedingHandoff.operatorIntervention.severity, 'attention');
 
   const profileMatches = [
     {

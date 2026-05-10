@@ -183,6 +183,12 @@ try {
     `serviceProfileSeedingHandoffResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(
+      'updateServiceProfileSeedingHandoff',
+    ),
+    `serviceProfileSeedingHandoffResponse update helper mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileLookupResponse?.schemaId ===
       'https://agent-browser.local/contracts/service-profile-lookup-response.v1.schema.json',
     `serviceProfileLookupResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
@@ -232,6 +238,12 @@ try {
       'getServiceProfileSeedingHandoff',
     ),
     `service client could not discover getServiceProfileSeedingHandoff helper: ${JSON.stringify(clientContracts.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(
+      'updateServiceProfileSeedingHandoff',
+    ),
+    `service client could not discover updateServiceProfileSeedingHandoff helper: ${JSON.stringify(clientContracts.contracts?.serviceProfileSeedingHandoffResponse)}`,
   );
   assert(
     JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===

@@ -291,12 +291,18 @@ operator-ready handoff returned by HTTP
 `GET /api/service/profiles/<id>/seeding-handoff`. The handoff is derived from
 `targetReadiness` and includes the exact detached `runtime login` command,
 setup URL, seeding mode, keyring preference, setup scopes, operator steps, and
-warnings. Use `targetServiceId`, `siteId`, or `loginId` query parameters when a
-profile has multiple target identities.
+warnings. It also includes the persisted lifecycle record that drives
+`operatorIntervention.state` after the detached browser is launched, waiting
+for close, declared complete, closed but unverified, verified fresh, failed, or
+abandoned. Use `targetServiceId`, `siteId`, or `loginId` query parameters when
+a profile has multiple target identities.
 
 `POST /api/service/profiles/<id>/freshness` and MCP
 `service_profile_freshness_update` reuse the profile upsert response envelope
 after merging bounded-probe freshness evidence into one persisted profile.
+`POST /api/service/profiles/<id>/seeding-handoff` and
+`updateServiceProfileSeedingHandoff()` persist CDP-free seeding lifecycle
+updates through the same serialized service-state mutator.
 
 `service-profile-lookup-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/lookup` when a software

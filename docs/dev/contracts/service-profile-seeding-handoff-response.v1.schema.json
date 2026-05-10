@@ -17,6 +17,7 @@
     "recommendedAction",
     "url",
     "command",
+    "lifecycle",
     "operatorSteps",
     "operatorIntervention",
     "warnings"
@@ -70,6 +71,9 @@
     "command": {
       "type": "string"
     },
+    "lifecycle": {
+      "$ref": "#/$defs/profileSeedingHandoffLifecycle"
+    },
     "operatorSteps": {
       "type": "array",
       "items": {
@@ -87,6 +91,82 @@
     }
   },
   "$defs": {
+    "profileSeedingHandoffLifecycle": {
+      "type": "object",
+      "required": [
+        "id",
+        "profileId",
+        "targetServiceId",
+        "state",
+        "pid",
+        "startedAt",
+        "expiresAt",
+        "lastPromptedAt",
+        "declaredCompleteAt",
+        "closedAt",
+        "updatedAt",
+        "actor",
+        "note"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "targetServiceId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/profileSeedingHandoffState"
+        },
+        "pid": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "startedAt": {
+          "type": ["string", "null"]
+        },
+        "expiresAt": {
+          "type": ["string", "null"]
+        },
+        "lastPromptedAt": {
+          "type": ["string", "null"]
+        },
+        "declaredCompleteAt": {
+          "type": ["string", "null"]
+        },
+        "closedAt": {
+          "type": ["string", "null"]
+        },
+        "updatedAt": {
+          "type": ["string", "null"]
+        },
+        "actor": {
+          "type": ["string", "null"]
+        },
+        "note": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "profileSeedingHandoffState": {
+      "type": "string",
+      "enum": [
+        "not_required",
+        "needs_manual_seeding",
+        "seeding_launched_detached",
+        "seeding_waiting_for_close",
+        "completion_declared_waiting_for_close",
+        "seeding_closed_unverified",
+        "verification_pending",
+        "fresh",
+        "failed",
+        "abandoned"
+      ]
+    },
     "operatorIntervention": {
       "description": "Machine-readable operator feedback contract for profile seeding. UI, desktop, webhook, and agent notifiers should render this state instead of inventing independent workflow rules.",
       "type": "object",
@@ -105,19 +185,7 @@
       ],
       "properties": {
         "state": {
-          "type": "string",
-          "enum": [
-            "not_required",
-            "needs_manual_seeding",
-            "seeding_launched_detached",
-            "seeding_waiting_for_close",
-            "completion_declared_waiting_for_close",
-            "seeding_closed_unverified",
-            "verification_pending",
-            "fresh",
-            "failed",
-            "abandoned"
-          ]
+          "$ref": "#/$defs/profileSeedingHandoffState"
         },
         "severity": {
           "type": "string",

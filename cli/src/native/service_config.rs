@@ -7,9 +7,11 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::service_model::{
-    BrowserProfile, BrowserSession, MonitorState, ProfileAllocationPolicy, ProfileKeyringPolicy,
-    ProfileReadinessState, ProfileSeedingMode, ProfileTargetReadiness, ServiceActor,
-    ServiceEntitySource, ServiceProvider, ServiceState, SiteMonitor, SitePolicy,
+    profile_seeding_handoff_id, BrowserProfile, BrowserSession, MonitorState,
+    ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileReadinessState,
+    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
+    ProfileTargetReadiness, ServiceActor, ServiceEntitySource, ServiceProvider, ServiceState,
+    SiteMonitor, SitePolicy,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -85,6 +87,21 @@ pub struct ProfileFreshnessUpdate {
     pub last_verified_at: Option<String>,
     pub freshness_expires_at: Option<String>,
     pub update_authenticated_service_ids: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ProfileSeedingHandoffUpdate {
+    pub target_service_id: Option<String>,
+    pub state: Option<ProfileSeedingHandoffState>,
+    pub pid: Option<u32>,
+    pub started_at: Option<String>,
+    pub expires_at: Option<String>,
+    pub last_prompted_at: Option<String>,
+    pub declared_complete_at: Option<String>,
+    pub closed_at: Option<String>,
+    pub actor: Option<String>,
+    pub note: Option<String>,
 }
 
 fn default_freshness_readiness_state() -> ProfileReadinessState {
@@ -371,6 +388,68 @@ pub fn update_profile_freshness(
     Ok(profile.clone())
 }
 
+/// Upsert one persisted CDP-free profile seeding handoff lifecycle record.
+pub fn update_profile_seeding_handoff(
+    state: &mut ServiceState,
+    profile_id: &str,
+    update: ProfileSeedingHandoffUpdate,
+) -> Result<ProfileSeedingHandoffRecord, String> {
+    validate_entity_id(profile_id, "profile")?;
+    if !state.profiles.contains_key(profile_id) {
+        return Err(format!("profile '{profile_id}' does not exist"));
+    }
+    let target_service_id = update
+        .target_service_id
+        .as_deref()
+        .and_then(|value| {
+            let trimmed = value.trim();
+            (!trimmed.is_empty()).then_some(trimmed.to_string())
+        })
+        .ok_or_else(|| "profile seeding handoff update requires targetServiceId".to_string())?;
+    let id = profile_seeding_handoff_id(profile_id, &target_service_id);
+    let updated_at = now_rfc3339();
+    let record = state
+        .profile_seeding_handoffs
+        .entry(id.clone())
+        .or_insert_with(|| ProfileSeedingHandoffRecord {
+            id: id.clone(),
+            profile_id: profile_id.to_string(),
+            target_service_id: target_service_id.clone(),
+            ..ProfileSeedingHandoffRecord::default()
+        });
+    record.profile_id = profile_id.to_string();
+    record.target_service_id = target_service_id;
+    if let Some(lifecycle_state) = update.state {
+        record.state = lifecycle_state;
+    }
+    if update.pid.is_some() {
+        record.pid = update.pid;
+    }
+    if update.started_at.is_some() {
+        record.started_at = update.started_at;
+    }
+    if update.expires_at.is_some() {
+        record.expires_at = update.expires_at;
+    }
+    if update.last_prompted_at.is_some() {
+        record.last_prompted_at = update.last_prompted_at;
+    }
+    if update.declared_complete_at.is_some() {
+        record.declared_complete_at = update.declared_complete_at;
+    }
+    if update.closed_at.is_some() {
+        record.closed_at = update.closed_at;
+    }
+    if update.actor.is_some() {
+        record.actor = update.actor;
+    }
+    if update.note.is_some() {
+        record.note = update.note;
+    }
+    record.updated_at = Some(updated_at);
+    Ok(record.clone())
+}
+
 /// Delete one service profile record from persisted service state.
 pub fn delete_profile(
     state: &mut ServiceState,
@@ -489,6 +568,17 @@ pub fn update_persisted_profile_freshness(id: &str, body: Value) -> Result<Brows
     update_profile_freshness_in_repository(&repository, id, update)
 }
 
+/// Update one persisted profile seeding handoff under the serialized state mutator.
+pub fn update_persisted_profile_seeding_handoff(
+    id: &str,
+    body: Value,
+) -> Result<ProfileSeedingHandoffRecord, String> {
+    let update = serde_json::from_value::<ProfileSeedingHandoffUpdate>(body)
+        .map_err(|err| format!("Invalid profile seeding handoff update: {err}"))?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    update_profile_seeding_handoff_in_repository(&repository, id, update)
+}
+
 /// Delete one persisted profile record under the serialized state mutator.
 pub fn delete_persisted_profile(id: &str) -> Result<Option<BrowserProfile>, String> {
     let repository = LockedServiceStateRepository::default_json()?;
@@ -572,6 +662,14 @@ pub fn update_profile_freshness_in_repository(
     update: ProfileFreshnessUpdate,
 ) -> Result<BrowserProfile, String> {
     repository.mutate(|state| update_profile_freshness(state, id, update))
+}
+
+pub fn update_profile_seeding_handoff_in_repository(
+    repository: &impl ServiceStateRepository,
+    id: &str,
+    update: ProfileSeedingHandoffUpdate,
+) -> Result<ProfileSeedingHandoffRecord, String> {
+    repository.mutate(|state| update_profile_seeding_handoff(state, id, update))
 }
 
 pub fn delete_profile_in_repository(

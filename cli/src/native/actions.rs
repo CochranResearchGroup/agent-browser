@@ -43,9 +43,9 @@ use super::service_activity::service_incident_activity_response;
 use super::service_config::{
     delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
     delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
-    update_persisted_monitor_state, update_persisted_profile_freshness, upsert_persisted_monitor,
-    upsert_persisted_profile, upsert_persisted_provider, upsert_persisted_session,
-    upsert_persisted_site_policy,
+    update_persisted_monitor_state, update_persisted_profile_freshness,
+    update_persisted_profile_seeding_handoff, upsert_persisted_monitor, upsert_persisted_profile,
+    upsert_persisted_provider, upsert_persisted_session, upsert_persisted_site_policy,
 };
 use super::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
@@ -215,6 +215,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_remedies_apply"
             | "service_profile_upsert"
             | "service_profile_freshness_update"
+            | "service_profile_seeding_handoff_update"
             | "service_profile_delete"
             | "service_session_upsert"
             | "service_session_delete"
@@ -2465,6 +2466,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
         "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
         "service_profile_freshness_update" => handle_service_profile_freshness_update(cmd).await,
+        "service_profile_seeding_handoff_update" => {
+            handle_service_profile_seeding_handoff_update(cmd).await
+        }
         "service_profile_delete" => handle_service_profile_delete(cmd).await,
         "service_session_upsert" => handle_service_session_upsert(cmd).await,
         "service_session_delete" => handle_service_session_delete(cmd).await,
@@ -6877,6 +6881,32 @@ async fn handle_service_profile_freshness_update(cmd: &Value) -> Result<Value, S
     }))
 }
 
+async fn handle_service_profile_seeding_handoff_update(cmd: &Value) -> Result<Value, String> {
+    let profile_id = required_service_config_id(cmd, "profileId")?;
+    let body = cmd
+        .get("handoff")
+        .cloned()
+        .ok_or("Missing profile seeding handoff")?;
+    let handoff = update_persisted_profile_seeding_handoff(profile_id, body)?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    let mut service_state = repository.load_snapshot()?;
+    service_state.refresh_profile_readiness();
+    let response = service_profile_seeding_handoff(
+        &service_state,
+        profile_id,
+        Some(handoff.target_service_id.as_str()),
+    )?;
+
+    Ok(json!({
+        "id": handoff.id,
+        "profileId": profile_id,
+        "targetServiceId": handoff.target_service_id,
+        "handoff": handoff,
+        "seedingHandoff": response,
+        "updated": true,
+    }))
+}
+
 async fn handle_service_profile_delete(cmd: &Value) -> Result<Value, String> {
     let profile_id = required_service_config_id(cmd, "profileId")?;
     let removed = delete_persisted_profile(profile_id)?;
@@ -10471,6 +10501,7 @@ mod tests {
         assert_service_status_response_contract, assert_service_trace_activity_record_contract,
         assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
         service_job_naming_warning_values, BrowserProcess, BrowserProfile, BrowserSession,
+        ProfileSeedingHandoffState,
     };
     use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -13596,6 +13627,38 @@ mod tests {
         assert_eq!(
             freshness["data"]["profile"]["authenticatedServiceIds"][0],
             "google"
+        );
+
+        let handoff = execute_command(
+            &json!({
+                "action": "service_profile_seeding_handoff_update",
+                "id": "svc-profile-seeding-handoff-1",
+                "profileId": "journal-downloader",
+                "handoff": {
+                    "targetServiceId": "google",
+                    "state": "seeding_launched_detached",
+                    "pid": 1234,
+                    "startedAt": "2026-05-10T12:00:00Z",
+                    "expiresAt": "2026-05-10T12:30:00Z",
+                    "actor": "operator",
+                    "note": "manual seeding started"
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(handoff["success"], true);
+        assert_eq!(
+            handoff["data"]["handoff"]["id"],
+            "journal-downloader:google"
+        );
+        assert_eq!(
+            handoff["data"]["seedingHandoff"]["operatorIntervention"]["state"],
+            "seeding_launched_detached"
+        );
+        assert_eq!(
+            store.load().unwrap().profile_seeding_handoffs["journal-downloader:google"].state,
+            ProfileSeedingHandoffState::SeedingLaunchedDetached
         );
 
         let upsert_session = execute_command(

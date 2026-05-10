@@ -386,25 +386,45 @@ export interface ServiceProfileSeedingHandoffResponse {
   recommendedAction: string;
   url: string;
   command: string;
+  lifecycle: ServiceProfileSeedingHandoffLifecycle;
   operatorSteps: string[];
   operatorIntervention: ServiceProfileSeedingOperatorIntervention;
   warnings: string[];
   [key: string]: unknown;
 }
 
+export type ServiceProfileSeedingHandoffState =
+  | 'not_required'
+  | 'needs_manual_seeding'
+  | 'seeding_launched_detached'
+  | 'seeding_waiting_for_close'
+  | 'completion_declared_waiting_for_close'
+  | 'seeding_closed_unverified'
+  | 'verification_pending'
+  | 'fresh'
+  | 'failed'
+  | 'abandoned'
+  | string;
+
+export interface ServiceProfileSeedingHandoffLifecycle {
+  id: string;
+  profileId: string;
+  targetServiceId: string;
+  state: ServiceProfileSeedingHandoffState;
+  pid: number | null;
+  startedAt: string | null;
+  expiresAt: string | null;
+  lastPromptedAt: string | null;
+  declaredCompleteAt: string | null;
+  closedAt: string | null;
+  updatedAt: string | null;
+  actor: string | null;
+  note: string | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceProfileSeedingOperatorIntervention {
-  state:
-    | 'not_required'
-    | 'needs_manual_seeding'
-    | 'seeding_launched_detached'
-    | 'seeding_waiting_for_close'
-    | 'completion_declared_waiting_for_close'
-    | 'seeding_closed_unverified'
-    | 'verification_pending'
-    | 'fresh'
-    | 'failed'
-    | 'abandoned'
-    | string;
+  state: ServiceProfileSeedingHandoffState;
   severity: 'info' | 'attention' | 'action_required' | 'danger' | string;
   title: string;
   message: string;
@@ -432,6 +452,28 @@ export interface ServiceProfileSeedingOperatorAction {
 
 export interface ServiceProfileSeedingHandoffOptions extends ServiceIdOptions {
   targetServiceId?: string;
+}
+
+export interface ServiceProfileSeedingHandoffUpdateOptions extends ServiceProfileSeedingHandoffOptions {
+  state?: ServiceProfileSeedingHandoffState;
+  pid?: number;
+  startedAt?: string;
+  expiresAt?: string;
+  lastPromptedAt?: string;
+  declaredCompleteAt?: string;
+  closedAt?: string;
+  actor?: string;
+  note?: string;
+}
+
+export interface ServiceProfileSeedingHandoffUpdateResponse {
+  id: string;
+  profileId: string;
+  targetServiceId: string;
+  handoff: ServiceProfileSeedingHandoffLifecycle;
+  seedingHandoff: ServiceProfileSeedingHandoffResponse;
+  updated: boolean;
+  [key: string]: unknown;
 }
 
 export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {
@@ -1116,6 +1158,8 @@ export declare function getServiceProfileAllocation(options: ServiceIdOptions): 
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
 /** Read the operator-ready detached profile seeding handoff for one profile. */
 export declare function getServiceProfileSeedingHandoff(options: ServiceProfileSeedingHandoffOptions): Promise<ServiceProfileSeedingHandoffResponse>;
+/** Persist lifecycle state for a CDP-free profile seeding handoff. */
+export declare function updateServiceProfileSeedingHandoff(options: ServiceProfileSeedingHandoffUpdateOptions): Promise<ServiceProfileSeedingHandoffUpdateResponse>;
 export declare function summarizeServiceProfileReadiness(readiness?: ServiceProfileReadinessResponse | null): ServiceProfileReadinessSummary;
 export declare function findServiceProfileForIdentity(profiles: ServiceProfileRecord[] | undefined | null, options: ServiceProfileIdentityMatchOptions): ServiceProfileIdentityMatchResult;
 /** Older descriptive alias for lookupServiceProfile. */
