@@ -148,6 +148,23 @@ try {
       `readiness state mismatch: ${JSON.stringify(readiness)}`,
     );
 
+    const allocationUri = `agent-browser://profiles/${profileId}/allocation`;
+    const allocation = parseMcpJsonResource(
+      await mcp.send('resources/read', { uri: allocationUri }),
+      allocationUri,
+      'MCP profile allocation resource',
+    );
+
+    assert(allocation.profileId === profileId, `allocation profile mismatch: ${JSON.stringify(allocation)}`);
+    assert(
+      allocation.profileAllocation?.profileId === profileId,
+      `allocation row profile mismatch: ${JSON.stringify(allocation)}`,
+    );
+    assert(
+      allocation.profileAllocation?.targetReadiness?.[0]?.state === 'needs_manual_seeding',
+      `allocation readiness mismatch: ${JSON.stringify(allocation)}`,
+    );
+
     const uri = `agent-browser://profiles/${profileId}/seeding-handoff?targetServiceId=${targetServiceId}`;
     const handoff = parseMcpJsonResource(
       await mcp.send('resources/read', { uri }),

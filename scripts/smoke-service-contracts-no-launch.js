@@ -132,6 +132,17 @@ try {
     `serviceProfileAllocationResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileAllocationResponse?.mcp?.resourceTemplate ===
+      'agent-browser://profiles/{profile_id}/allocation',
+    `serviceProfileAllocationResponse MCP resource template mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceProfileAllocationResponse?.client?.helpers?.includes(
+      'getServiceProfileAllocation',
+    ),
+    `serviceProfileAllocationResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileReadinessResponse?.schemaId ===
       'https://agent-browser.local/contracts/service-profile-readiness-response.v1.schema.json',
     `serviceProfileReadinessResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
@@ -252,6 +263,11 @@ try {
     clientContracts.contracts?.serviceProfileReadinessResponse?.mcp?.resourceTemplate ===
       'agent-browser://profiles/{profile_id}/readiness',
     `service client could not discover readiness MCP resource template: ${JSON.stringify(clientContracts.contracts?.serviceProfileReadinessResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceProfileAllocationResponse?.mcp?.resourceTemplate ===
+      'agent-browser://profiles/{profile_id}/allocation',
+    `service client could not discover allocation MCP resource template: ${JSON.stringify(clientContracts.contracts?.serviceProfileAllocationResponse)}`,
   );
   assert(
     clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(

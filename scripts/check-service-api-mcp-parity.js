@@ -419,13 +419,11 @@ const serviceResourceSurface = [
       'agent-browser://profiles/{profile_id}/readiness',
     ],
   },
-];
-
-const serviceHttpOnlySurface = [
   {
-    method: 'GET',
+    resource: 'agent-browser://profiles/{profile_id}/allocation',
     route: '/api/service/profiles/<id>/allocation',
     docsNeedles: [
+      'agent-browser://profiles/{profile_id}/allocation',
       '/api/service/profiles/<profile-id>/allocation',
       '/api/service/profiles/<id>/allocation',
       '/api/service/profiles/&lt;id&gt;/allocation',
@@ -445,8 +443,12 @@ const serviceHttpOnlySurface = [
     contractNeedles: [
       'service-profile-allocation-response.v1.schema.json',
       'GET /api/service/profiles/<id>/allocation',
+      'agent-browser://profiles/{profile_id}/allocation',
     ],
   },
+];
+
+const serviceHttpOnlySurface = [
   {
     method: 'GET',
     route: '/api/service/profiles/lookup',

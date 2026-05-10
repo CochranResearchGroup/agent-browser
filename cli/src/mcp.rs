@@ -35,6 +35,7 @@ const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
 const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}";
+const PROFILE_ALLOCATION_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/allocation";
 const PROFILE_READINESS_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/readiness";
 const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
@@ -239,6 +240,12 @@ fn service_mcp_resource_templates() -> Vec<Value> {
             "description": "No-launch target-readiness rows for one service profile"
         }),
         json!({
+            "uriTemplate": PROFILE_ALLOCATION_TEMPLATE,
+            "name": "Service profile allocation",
+            "mimeType": "application/json",
+            "description": "No-launch lease, holder, conflict, and readiness state for one service profile"
+        }),
+        json!({
             "uriTemplate": PROFILE_SEEDING_HANDOFF_TEMPLATE,
             "name": "Service profile seeding handoff",
             "mimeType": "application/json",
@@ -360,6 +367,15 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
                     "profileId": profile.id.clone(),
                     "targetReadiness": profile.target_readiness.clone(),
                     "count": profile.target_readiness.len(),
+                })
+            } else if let Some(profile_id) = profile_allocation_resource_id(uri) {
+                let allocation = service_profile_allocations(&state)
+                    .into_iter()
+                    .find(|allocation| allocation.profile_id == profile_id)
+                    .ok_or_else(|| format!("Profile allocation not found: {profile_id}"))?;
+                json!({
+                    "profileId": allocation.profile_id.clone(),
+                    "profileAllocation": allocation,
                 })
             } else if let Some((profile_id, target_service_id)) =
                 profile_seeding_handoff_resource(uri)
@@ -8594,6 +8610,14 @@ fn profile_readiness_resource_id(uri: &str) -> Option<String> {
     Some(urlencoding::decode(profile_id).ok()?.into_owned())
 }
 
+fn profile_allocation_resource_id(uri: &str) -> Option<String> {
+    let profile_id = uri
+        .strip_prefix("agent-browser://profiles/")?
+        .strip_suffix("/allocation")
+        .filter(|id| !id.is_empty() && !id.contains('/'))?;
+    Some(urlencoding::decode(profile_id).ok()?.into_owned())
+}
+
 fn profile_seeding_handoff_resource(uri: &str) -> Option<(String, Option<String>)> {
     let rest = uri.strip_prefix("agent-browser://profiles/")?;
     let (path, query) = match rest.split_once('?') {
@@ -8676,6 +8700,10 @@ mod tests {
         );
         assert_eq!(
             response["data"]["resourceTemplates"][3]["uriTemplate"],
+            PROFILE_ALLOCATION_TEMPLATE
+        );
+        assert_eq!(
+            response["data"]["resourceTemplates"][4]["uriTemplate"],
             PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
     }
@@ -8736,6 +8764,22 @@ mod tests {
         );
         assert_eq!(
             profile_readiness_resource_id("agent-browser://profiles/google-work/seeding-handoff"),
+            None
+        );
+    }
+
+    #[test]
+    fn profile_allocation_resource_id_maps_uri() {
+        assert_eq!(
+            profile_allocation_resource_id("agent-browser://profiles/google-work/allocation"),
+            Some("google-work".to_string())
+        );
+        assert_eq!(
+            profile_allocation_resource_id("agent-browser://profiles/google%20work/allocation"),
+            Some("google work".to_string())
+        );
+        assert_eq!(
+            profile_allocation_resource_id("agent-browser://profiles/google-work/readiness"),
             None
         );
     }
@@ -8819,6 +8863,10 @@ mod tests {
         );
         assert_eq!(
             response["result"]["resourceTemplates"][3]["uriTemplate"],
+            PROFILE_ALLOCATION_TEMPLATE
+        );
+        assert_eq!(
+            response["result"]["resourceTemplates"][4]["uriTemplate"],
             PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
     }
@@ -12439,6 +12487,61 @@ mod tests {
             resource["contents"]["targetReadiness"][0]["state"],
             "needs_manual_seeding"
         );
+    }
+
+    #[test]
+    fn read_profile_allocation_resource_returns_profile_allocation() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            assert_service_profile_allocation_contract, BrowserProfile, ProfileAllocationPolicy,
+            ProfileReadinessState, ProfileTargetReadiness,
+        };
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "google-work".to_string(),
+                BrowserProfile {
+                    id: "google-work".to_string(),
+                    name: "Google Work".to_string(),
+                    allocation: ProfileAllocationPolicy::PerService,
+                    target_service_ids: vec!["google".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "google".to_string(),
+                        state: ProfileReadinessState::NeedsManualSeeding,
+                        manual_seeding_required: true,
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(
+            "agent-browser://profiles/google-work/allocation",
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(
+            resource["uri"],
+            "agent-browser://profiles/google-work/allocation"
+        );
+        assert_eq!(resource["contents"]["profileId"], "google-work");
+        assert_eq!(
+            resource["contents"]["profileAllocation"]["profileId"],
+            "google-work"
+        );
+        assert_eq!(
+            resource["contents"]["profileAllocation"]["allocation"],
+            "per_service"
+        );
+        assert_eq!(
+            resource["contents"]["profileAllocation"]["targetReadiness"][0]["state"],
+            "needs_manual_seeding"
+        );
+        assert_service_profile_allocation_contract(&resource["contents"]["profileAllocation"]);
     }
 
     #[test]

@@ -55,7 +55,8 @@ HTTP `GET /api/service/contracts` and MCP `agent-browser://contracts` expose
 runtime compatibility metadata for these contract IDs, their shared `v1`
 version, route and tool names, and the supported service request action list.
 The HTTP contracts metadata also advertises `serviceProfileAllocationResponse`
-for the HTTP-only `GET /api/service/profiles/<id>/allocation` route,
+for `GET /api/service/profiles/<id>/allocation` and MCP
+`agent-browser://profiles/{profile_id}/allocation`,
 `serviceProfileReadinessResponse` for `GET /api/service/profiles/<id>/readiness`
 and MCP `agent-browser://profiles/{profile_id}/readiness`, and
 `serviceProfileLookupResponse` for `GET /api/service/profiles/lookup`, plus
@@ -277,9 +278,9 @@ pause/resume/reset routes, MCP `service_monitor_pause`,
 client helpers.
 
 `service-profile-allocation-response.v1.schema.json` describes the response
-envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` when a
-software client needs one derived profile allocation row without fetching the
-full profile collection.
+envelope returned by HTTP `GET /api/service/profiles/<id>/allocation` and MCP
+`agent-browser://profiles/{profile_id}/allocation` when a caller needs one
+derived profile allocation row without fetching the full profile collection.
 
 `service-profile-readiness-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/<id>/readiness` and MCP
