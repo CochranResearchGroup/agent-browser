@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dry-run": "node service-request-trace.mjs --dry-run",
-    "managed-profile-dry-run": "node managed-profile-flow.mjs --dry-run"
+    "managed-profile-dry-run": "node managed-profile-flow.mjs --dry-run",
+    "post-seeding-probe-dry-run": "node post-seeding-probe.mjs --dry-run"
   },
   "dependencies": {
     "@agent-browser/client": "workspace:*"

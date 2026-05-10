@@ -240,6 +240,42 @@ The script calls `updateServiceProfileFreshness()`, which posts to
 `POST /api/service/profiles/<id>/freshness` so the service serializes the merge
 and updates `authenticatedServiceIds` consistently.
 
+## Post-Seeding Probe Recipe
+
+Use `post-seeding-probe.mjs` after an operator has completed detached CDP-free
+profile seeding and closed the seeding browser. The recipe opens a
+service-owned tab for the seeded identity, reads the current URL and title with
+bounded service requests, evaluates optional expectations, then calls
+`verifyServiceProfileSeeding()` so the matching closed handoff moves to
+`fresh` or `verification_pending`. Before launching the tab, it performs a
+no-launch profile lookup and refuses to verify the profile if the broker would
+select a different profile for the requested identity.
+
+Dry-run the probe plan without launching Chrome:
+
+```bash
+pnpm --filter agent-browser-service-client-example post-seeding-probe-dry-run
+```
+
+Validate the no-launch mock path:
+
+```bash
+pnpm test:service-client-example
+```
+
+Run it against a live service when a stream port is available:
+
+```bash
+pnpm --filter agent-browser-service-client-example exec node post-seeding-probe.mjs \
+  --base-url http://127.0.0.1:<stream-port> \
+  --profile-id google-work \
+  --login-id google \
+  --target-service-id google \
+  --url https://myaccount.google.com/ \
+  --expected-url-includes myaccount.google.com \
+  --expected-title-includes "Google Account"
+```
+
 Pass `--cancel-job-id <job-id>` when your software already knows a queued job
 that should be cancelled. The script calls `cancelServiceJob` and prints the
 cancellation result alongside the tab request and trace output. Use

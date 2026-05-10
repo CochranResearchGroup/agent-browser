@@ -110,6 +110,14 @@ already know which profile you are evaluating. Register a new managed login
 profile only when agent-browser has no suitable profile, readiness reports
 `needs_manual_seeding`, the operator wants a separate account lane, or the
 client is explicitly bringing its own profile.
+After detached manual seeding closes, verify the profile through the service
+control plane rather than editing profile JSON. Use
+`agent-browser service profiles <profile-id> verify-seeding <target-service-id> --state fresh --evidence <probe-evidence>`
+for an operator write, or use the `examples/service-client/post-seeding-probe.mjs`
+recipe when a software client should confirm the broker-selected profile,
+request one service-owned tab, read URL and title through queued service
+requests, evaluate bounded expectations, and call
+`verifyServiceProfileSeeding()`.
 
 When automating a site that requires login, choose the approach that fits:
 
@@ -457,6 +465,9 @@ For release or pre-release checks that touch service mode, validate the public c
 With `profileLeasePolicy: "wait"`, the control-plane scheduler keeps the blocked request queued while it polls for profile release, so the worker can continue dispatching unrelated service requests.
 
 Run `pnpm test:service-site-policy-sources-no-launch` to validate that HTTP `GET /api/service/site-policies`, MCP `agent-browser://site-policies`, and `getServiceSitePolicies()` report config, persisted-state, and built-in site-policy source metadata without launching Chrome. Run `pnpm test:service-collections-live` to validate that CLI, HTTP, and MCP expose matching service-owned profile, session, browser, tab, monitor, site-policy, provider, and challenge collections for one live runtime-profile session.
+
+Run `pnpm test:service-client-example` after changing service-client examples,
+including `post-seeding-probe.mjs`.
 
 Use `agent-browser service status --watch` or `agent-browser service watch` for a polling operator view of worker health, browser health, queue depth, profile lease wait pressure, and reconciliation status. Add `--interval <ms>` to set the poll interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 

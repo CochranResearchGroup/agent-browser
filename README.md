@@ -1787,6 +1787,15 @@ Operators can record that probe result without hand-building JSON:
 agent-browser service profiles google-work verify-seeding google --state fresh --evidence post_seeding_auth_probe_cookie_present
 ```
 
+Software clients can use the copyable `examples/service-client/post-seeding-probe.mjs`
+recipe for the same post-close path. It requests one queued service-owned tab
+for the seeded identity, reads URL and title through bounded service requests,
+checks optional expected URL or title fragments, then calls
+`verifyServiceProfileSeeding()` so the closed handoff becomes `fresh` or
+`verification_pending` through the serialized service-state mutator. It first
+performs a no-launch profile lookup and refuses the run when the broker-selected
+profile does not match the profile being verified.
+
 When no local site policy exists, agent-browser applies shipped defaults for
 Google, Gmail, and Microsoft login identities. Local persisted or configured
 policies with the same IDs override those defaults. `sitePolicySource` reports
@@ -1909,7 +1918,10 @@ recommended actions, and `seedingHandoff` when readiness says an operator must
 seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke
 that proves an existing managed profile is selected without registering a new
-one. Run `pnpm test:service-access-plan-no-launch` when changing the access-plan
+one. The `post-seeding-probe.mjs` example covers the next step after the
+operator closes the detached seeding browser: open a service-owned verification
+tab, collect bounded URL and title evidence, and persist that evidence with
+`verifyServiceProfileSeeding()`. Run `pnpm test:service-access-plan-no-launch` when changing the access-plan
 surface; it verifies HTTP `/api/service/access-plan`, MCP
 `agent-browser://access-plan`, and `getServiceAccessPlan()` agree on the same
 seeded no-launch recommendation, including caller label warnings, without
