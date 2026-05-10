@@ -301,6 +301,7 @@
         "challengeStrategy",
         "challengeIds",
         "freshnessUpdate",
+        "postSeedingProbe",
         "serviceRequest",
         "namingWarnings",
         "hasNamingWarning",
@@ -686,6 +687,138 @@
               "items": {
                 "type": "string"
               }
+            }
+          },
+          "additionalProperties": true
+        },
+        "postSeedingProbe": {
+          "type": "object",
+          "required": [
+            "available",
+            "recommendedAfterClose",
+            "profileId",
+            "targetServiceId",
+            "targetServiceIds",
+            "boundedChecks",
+            "http",
+            "mcp",
+            "client",
+            "serviceClientExample",
+            "cli",
+            "requestFields",
+            "notes"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "recommendedAfterClose": {
+              "type": "boolean"
+            },
+            "profileId": {
+              "type": ["string", "null"]
+            },
+            "targetServiceId": {
+              "type": ["string", "null"]
+            },
+            "targetServiceIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "boundedChecks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "http": {
+              "type": "object",
+              "required": ["method", "route", "routeTemplate"],
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "enum": ["POST"]
+                },
+                "route": {
+                  "type": ["string", "null"]
+                },
+                "routeTemplate": {
+                  "type": "string",
+                  "enum": ["/api/service/profiles/<id>/freshness"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "mcp": {
+              "type": "object",
+              "required": ["tool"],
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "enum": ["service_profile_freshness_update"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "client": {
+              "type": "object",
+              "required": ["package", "helper"],
+              "properties": {
+                "package": {
+                  "type": "string",
+                  "enum": ["@agent-browser/client/service-observability"]
+                },
+                "helper": {
+                  "type": "string",
+                  "enum": ["verifyServiceProfileSeeding"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "serviceClientExample": {
+              "type": "object",
+              "required": ["package", "script", "command"],
+              "properties": {
+                "package": {
+                  "type": "string",
+                  "enum": ["agent-browser-service-client-example"]
+                },
+                "script": {
+                  "type": "string",
+                  "enum": ["examples/service-client/post-seeding-probe.mjs"]
+                },
+                "command": {
+                  "type": ["string", "null"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "cli": {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "type": ["string", "null"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "requestFields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "query": {
+              "type": "object"
             }
           },
           "additionalProperties": true

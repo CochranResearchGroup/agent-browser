@@ -1741,8 +1741,12 @@ request.
 The decision includes `freshnessUpdate`, which names the selected profile,
 target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.
-It also includes `serviceRequest`, a copyable service-owned tab request recipe
-for `POST /api/service/request`, MCP `service_request`, and
+It also includes `postSeedingProbe`, a copyable post-close verification recipe
+with the `verify-seeding` CLI command, freshness HTTP and MCP write path,
+`verifyServiceProfileSeeding()` helper, and
+`examples/service-client/post-seeding-probe.mjs` command. It also includes
+`serviceRequest`, a copyable service-owned tab request recipe for
+`POST /api/service/request`, MCP `service_request`, and
 `requestServiceTab()`. `serviceRequest.available` is true when the planned tab
 request can be queued immediately. When manual seeding or challenge work must
 finish first, `recommendedAfterManualAction` tells clients to reuse the same

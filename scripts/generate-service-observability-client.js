@@ -959,6 +959,49 @@ export interface ServiceAccessPlanServiceRequest {
   [key: string]: unknown;
 }
 
+export interface ServiceAccessPlanPostSeedingProbe {
+  /** True when a selected managed profile and target identity are available for post-close verification. */
+  available: boolean;
+  /** True when this plan recommends running the probe after detached seeding browser close. */
+  recommendedAfterClose: boolean;
+  /** Selected managed profile ID to verify, or null when no profile was selected. */
+  profileId: string | null;
+  /** Primary target identity to verify, or null when no target was requested. */
+  targetServiceId: string | null;
+  /** Target identities the probe evidence should describe. */
+  targetServiceIds: string[];
+  /** Bounded checks the recipe performs before writing freshness. */
+  boundedChecks: string[];
+  http: {
+    method: 'POST';
+    route: string | null;
+    routeTemplate: '/api/service/profiles/<id>/freshness';
+    [key: string]: unknown;
+  };
+  mcp: {
+    tool: 'service_profile_freshness_update';
+    [key: string]: unknown;
+  };
+  client: {
+    package: '@agent-browser/client/service-observability';
+    helper: 'verifyServiceProfileSeeding';
+    [key: string]: unknown;
+  };
+  serviceClientExample: {
+    package: 'agent-browser-service-client-example';
+    script: 'examples/service-client/post-seeding-probe.mjs';
+    command: string | null;
+    [key: string]: unknown;
+  };
+  cli: {
+    command: string | null;
+    [key: string]: unknown;
+  };
+  requestFields: string[];
+  notes: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanMonitorFindings {
   profileReadinessAttentionRequired: boolean;
   profileReadinessIncidentIds: string[];
@@ -980,6 +1023,7 @@ export interface ServiceAccessPlanDecision {
   providerIds: string[];
   challengeIds: string[];
   freshnessUpdate: ServiceAccessPlanFreshnessUpdate;
+  postSeedingProbe: ServiceAccessPlanPostSeedingProbe;
   serviceRequest: ServiceAccessPlanServiceRequest;
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;

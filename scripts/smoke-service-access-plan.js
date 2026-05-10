@@ -368,6 +368,36 @@ function assertAccessPlan(data, label) {
     `${label} freshness update client helper mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.decision?.postSeedingProbe?.available === true,
+    `${label} post-seeding probe availability mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.postSeedingProbe?.recommendedAfterClose === true,
+    `${label} post-seeding probe recommendation mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.postSeedingProbe?.profileId === profileId,
+    `${label} post-seeding probe profile mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.postSeedingProbe?.targetServiceId === targetServiceId,
+    `${label} post-seeding probe target mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.postSeedingProbe?.client?.helper === 'verifyServiceProfileSeeding',
+    `${label} post-seeding probe client helper mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.postSeedingProbe?.serviceClientExample?.script ===
+      'examples/service-client/post-seeding-probe.mjs',
+    `${label} post-seeding probe example mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.postSeedingProbe?.cli?.command ===
+      `agent-browser service profiles ${profileId} verify-seeding ${targetServiceId} --state fresh --evidence <probe-evidence>`,
+    `${label} post-seeding probe CLI mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     data?.decision?.serviceRequest?.available === false,
     `${label} service request availability mismatch: ${JSON.stringify(data)}`,
   );
@@ -496,6 +526,10 @@ function assertMonitoredAccessPlan(data, label) {
   assert(
     data?.decision?.freshnessUpdate?.recommendedAfterProbe === true,
     `${label} freshness update recommendation mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.postSeedingProbe?.recommendedAfterClose === true,
+    `${label} post-seeding probe recommendation mismatch: ${JSON.stringify(data)}`,
   );
 }
 

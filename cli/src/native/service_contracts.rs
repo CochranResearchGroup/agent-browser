@@ -206,8 +206,9 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "client": {
                     "package": "@agent-browser/client/service-observability",
-                    "helpers": ["getServiceAccessPlan"],
+                    "helpers": ["getServiceAccessPlan", "verifyServiceProfileSeeding"],
                 },
+                "responseFields": ["decision.freshnessUpdate", "decision.postSeedingProbe", "decision.serviceRequest"],
             },
             "serviceMonitorRunDueResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,

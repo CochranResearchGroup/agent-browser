@@ -497,6 +497,12 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         manual_seeding_required,
         manual_action_required,
     );
+    let post_seeding_probe = post_seeding_probe_decision(
+        input.request,
+        selected_profile,
+        target_service_ids,
+        manual_seeding_required || readiness_profile_needs_probe(readiness, target_service_ids),
+    );
 
     json!({
         "recommendedAction": recommended_action,
@@ -517,10 +523,91 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "challengeStrategy": provider_decision.challenge_strategy,
         "challengeIds": challenges.iter().map(|challenge| challenge.id.clone()).collect::<Vec<_>>(),
         "freshnessUpdate": freshness_update,
+        "postSeedingProbe": post_seeding_probe,
         "serviceRequest": service_request,
         "namingWarnings": naming_warnings,
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
+    })
+}
+
+/// Describe the bounded post-close profile seeding verification recipe.
+fn post_seeding_probe_decision(
+    request: &ServiceAccessPlanRequest,
+    selected_profile: Option<&BrowserProfile>,
+    target_service_ids: &[String],
+    recommended_after_close: bool,
+) -> Value {
+    let profile_id = selected_profile.map(|profile| profile.id.clone());
+    let target_service_id = target_service_ids.first().cloned();
+    let available = profile_id.is_some() && target_service_id.is_some();
+    let helper = "verifyServiceProfileSeeding";
+    let example_script = "examples/service-client/post-seeding-probe.mjs";
+    let cli_command = match (profile_id.as_ref(), target_service_id.as_ref()) {
+        (Some(profile_id), Some(target_service_id)) => Some(format!(
+            "agent-browser service profiles {profile_id} verify-seeding {target_service_id} --state fresh --evidence <probe-evidence>"
+        )),
+        _ => None,
+    };
+    let example_command = match (profile_id.as_ref(), target_service_id.as_ref()) {
+        (Some(profile_id), Some(target_service_id)) => Some(format!(
+            "pnpm --filter agent-browser-service-client-example exec node {example_script} --base-url http://127.0.0.1:<stream-port> --profile-id {profile_id} --target-service-id {target_service_id}"
+        )),
+        _ => None,
+    };
+
+    json!({
+        "available": available,
+        "recommendedAfterClose": recommended_after_close && available,
+        "profileId": profile_id,
+        "targetServiceId": target_service_id,
+        "targetServiceIds": target_service_ids,
+        "boundedChecks": [
+            "broker_selected_profile_matches_profile_id",
+            "url_read",
+            "title_read",
+            "optional_expected_url_fragment",
+            "optional_expected_title_fragment",
+        ],
+        "http": {
+            "method": "POST",
+            "route": profile_id
+                .as_ref()
+                .map(|profile_id| format!("/api/service/profiles/{profile_id}/freshness")),
+            "routeTemplate": "/api/service/profiles/<id>/freshness",
+        },
+        "mcp": {
+            "tool": "service_profile_freshness_update",
+        },
+        "client": {
+            "package": "@agent-browser/client/service-observability",
+            "helper": helper,
+        },
+        "serviceClientExample": {
+            "package": "agent-browser-service-client-example",
+            "script": example_script,
+            "command": example_command,
+        },
+        "cli": {
+            "command": cli_command,
+        },
+        "requestFields": [
+            "profileId",
+            "targetServiceId",
+            "readinessState",
+            "readinessEvidence",
+            "lastVerifiedAt",
+            "freshnessExpiresAt",
+        ],
+        "notes": [
+            "Run only after detached CDP-free seeding has closed.",
+            "The probe must verify the same broker-selected profile before recording freshness.",
+        ],
+        "query": {
+            "serviceName": request.service_name.as_ref(),
+            "agentName": request.agent_name.as_ref(),
+            "taskName": request.task_name.as_ref(),
+        },
     })
 }
 
@@ -1285,6 +1372,39 @@ mod tests {
         assert_eq!(
             plan["decision"]["freshnessUpdate"]["client"]["helper"],
             "updateServiceProfileFreshness"
+        );
+        assert_eq!(plan["decision"]["postSeedingProbe"]["available"], true);
+        assert_eq!(
+            plan["decision"]["postSeedingProbe"]["recommendedAfterClose"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["postSeedingProbe"]["profileId"],
+            "google-work"
+        );
+        assert_eq!(
+            plan["decision"]["postSeedingProbe"]["targetServiceId"],
+            "google"
+        );
+        assert_eq!(
+            plan["decision"]["postSeedingProbe"]["http"]["route"],
+            "/api/service/profiles/google-work/freshness"
+        );
+        assert_eq!(
+            plan["decision"]["postSeedingProbe"]["mcp"]["tool"],
+            "service_profile_freshness_update"
+        );
+        assert_eq!(
+            plan["decision"]["postSeedingProbe"]["client"]["helper"],
+            "verifyServiceProfileSeeding"
+        );
+        assert_eq!(
+            plan["decision"]["postSeedingProbe"]["serviceClientExample"]["script"],
+            "examples/service-client/post-seeding-probe.mjs"
+        );
+        assert_eq!(
+            plan["decision"]["postSeedingProbe"]["cli"]["command"],
+            "agent-browser service profiles google-work verify-seeding google --state fresh --evidence <probe-evidence>"
         );
         assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
         assert_eq!(
