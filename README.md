@@ -1948,8 +1948,10 @@ Its output includes `profileAcquisitionSummary`,
 and `seedingHandoff` when readiness says an operator must seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke
 that proves an existing managed profile is selected without registering a new
-one and can run due monitors before browser work. The `post-seeding-probe.mjs`
-example covers the next step after the
+one and can run due monitors before browser work. Run
+`pnpm test:service-client-managed-profile-flow-live` when you need a live
+isolated daemon and browser smoke for that same due-monitor path. The
+`post-seeding-probe.mjs` example covers the next step after the
 operator closes the detached seeding browser: open a service-owned verification
 tab, collect bounded URL and title evidence, and persist that evidence with
 `verifyServiceProfileSeeding()`. Software clients that already have an access

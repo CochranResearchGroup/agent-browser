@@ -175,6 +175,12 @@ Validate the existing-profile path without launching Chrome or a daemon:
 pnpm test:service-client-managed-profile-flow
 ```
 
+Validate the due-monitor path against an isolated daemon and browser session:
+
+```bash
+pnpm test:service-client-managed-profile-flow-live
+```
+
 Run it against a live service when you have a stream port:
 
 ```bash

@@ -39,6 +39,7 @@
     "test:service-client-example": "node scripts/test-service-client-example.js && node scripts/test-service-client-post-seeding-probe.js && pnpm --filter agent-browser-service-client-example dry-run && pnpm --filter agent-browser-service-client-example managed-profile-dry-run && pnpm --filter agent-browser-service-client-example post-seeding-probe-dry-run",
     "test:service-client-managed-profile-example": "pnpm --filter agent-browser-service-client-example managed-profile-dry-run",
     "test:service-client-example-live": "node scripts/smoke-service-client-example.js",
+    "test:service-client-managed-profile-flow-live": "node scripts/smoke-service-client-managed-profile-flow.js",
     "test:service-client-post-seeding-probe-live": "node scripts/smoke-service-client-post-seeding-probe.js",
     "test:mcp-stdio": "node scripts/smoke-mcp-stdio.js",
     "test:mcp-live": "node scripts/smoke-mcp-live.js",
