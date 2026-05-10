@@ -177,6 +177,11 @@ try {
     `serviceProfileSeedingHandoffResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.mcp?.tool ===
+      'service_profile_seeding_handoff_update',
+    `serviceProfileSeedingHandoffResponse MCP tool mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(
       'getServiceProfileSeedingHandoff',
     ),
@@ -244,6 +249,11 @@ try {
       'updateServiceProfileSeedingHandoff',
     ),
     `service client could not discover updateServiceProfileSeedingHandoff helper: ${JSON.stringify(clientContracts.contracts?.serviceProfileSeedingHandoffResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.mcp?.tool ===
+      'service_profile_seeding_handoff_update',
+    `service client could not discover seeding handoff MCP tool: ${JSON.stringify(clientContracts.contracts?.serviceProfileSeedingHandoffResponse)}`,
   );
   assert(
     JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===

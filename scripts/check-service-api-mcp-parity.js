@@ -155,6 +155,28 @@ const serviceSurface = [
     ],
   },
   {
+    tool: 'service_profile_seeding_handoff_update',
+    method: 'POST',
+    route: '/api/service/profiles/<id>/seeding-handoff',
+    docsNeedles: [
+      '/api/service/profiles/<profile-id>/seeding-handoff',
+      '/api/service/profiles/<id>/seeding-handoff',
+      '/api/service/profiles/&lt;id&gt;/seeding-handoff',
+    ],
+    httpNeedles: [
+      'service_profile_seeding_handoff_id(path)',
+      'service_profile_seeding_handoff_update_command(profile_id, body_str)',
+    ],
+    clientNeedles: [
+      'updateServiceProfileSeedingHandoff',
+      '/api/service/profiles/${encodeURIComponent(id)}/seeding-handoff',
+    ],
+    contractNeedles: [
+      'SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME',
+      'service-profile-seeding-handoff-response.v1.schema.json',
+    ],
+  },
+  {
     tool: 'service_profile_delete',
     method: 'DELETE',
     route: '/api/service/profiles/<id>',

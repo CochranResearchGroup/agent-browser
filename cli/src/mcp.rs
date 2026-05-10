@@ -9,7 +9,7 @@ use crate::native::service_access::{
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_ACCESS_PLAN_MCP_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
-    SERVICE_REQUEST_ACTIONS,
+    SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
 };
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
@@ -952,6 +952,76 @@ fn service_mcp_tools() -> Vec<Value> {
                     }
                 },
                 "required": ["id"]
+            }
+        }),
+        json!({
+            "name": SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
+            "title": "Update profile seeding handoff",
+            "description": "Persist detached profile-seeding lifecycle state through the same service worker path as HTTP POST /api/service/profiles/<id>/seeding-handoff.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Profile id whose seeding handoff lifecycle should be updated."
+                    },
+                    "targetServiceId": {
+                        "type": "string",
+                        "description": "Target service or login identity for the handoff."
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": ["not_required", "needs_manual_seeding", "seeding_launched_detached", "seeding_waiting_for_close", "seeding_closed_unverified", "verification_pending", "fresh", "failed", "abandoned"],
+                        "description": "Lifecycle state to persist."
+                    },
+                    "pid": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Detached seeding browser process id when known."
+                    },
+                    "startedAt": {
+                        "type": "string",
+                        "description": "Optional RFC 3339 detached seeding start timestamp."
+                    },
+                    "expiresAt": {
+                        "type": "string",
+                        "description": "Optional RFC 3339 handoff expiry timestamp."
+                    },
+                    "lastPromptedAt": {
+                        "type": "string",
+                        "description": "Optional RFC 3339 timestamp for the last operator prompt."
+                    },
+                    "declaredCompleteAt": {
+                        "type": "string",
+                        "description": "Optional RFC 3339 timestamp when an operator or agent declared seeding complete."
+                    },
+                    "closedAt": {
+                        "type": "string",
+                        "description": "Optional RFC 3339 timestamp when the detached seeding browser was observed closed."
+                    },
+                    "actor": {
+                        "type": "string",
+                        "description": "Operator, agent, or service recording the lifecycle change."
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Short lifecycle note."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["id", "targetServiceId"]
             }
         }),
         json!({
@@ -3960,6 +4030,9 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_profile_freshness_update" => {
             call_service_profile_freshness_update(arguments, session)
         }
+        "service_profile_seeding_handoff_update" => {
+            call_service_profile_seeding_handoff_update(arguments, session)
+        }
         "service_profile_delete" => call_service_profile_delete(arguments, session),
         "service_session_upsert" => call_service_session_upsert(arguments, session),
         "service_session_delete" => call_service_session_delete(arguments, session),
@@ -4391,6 +4464,33 @@ fn call_service_profile_freshness_update(
         service_profile_freshness_command(id, &freshness, service_name, agent_name, task_name);
 
     send_queued_tool_command("service_profile_freshness_update", session, trace, command)
+}
+
+fn call_service_profile_seeding_handoff_update(
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let id = required_string_argument(arguments, "id")?;
+    let _target_service_id = required_string_argument(arguments, "targetServiceId")?;
+    let handoff = service_profile_seeding_handoff_arguments(arguments)?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_profile_seeding_handoff_update_command(
+        id,
+        &handoff,
+        service_name,
+        agent_name,
+        task_name,
+    );
+
+    send_queued_tool_command(
+        SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
+        session,
+        trace,
+        command,
+    )
 }
 
 fn call_service_profile_delete(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -5988,6 +6088,48 @@ fn service_profile_freshness_command(
         "action": "service_profile_freshness_update",
         "profileId": profile_id,
         "freshness": freshness,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_profile_seeding_handoff_arguments(arguments: &Value) -> Result<Value, JsonRpcError> {
+    let mut handoff = serde_json::Map::new();
+    for key in [
+        "targetServiceId",
+        "state",
+        "startedAt",
+        "expiresAt",
+        "lastPromptedAt",
+        "declaredCompleteAt",
+        "closedAt",
+        "actor",
+        "note",
+    ] {
+        if let Some(value) = arguments.get(key) {
+            handoff.insert(key.to_string(), value.clone());
+        }
+    }
+    if let Some(pid) = optional_positive_u64_argument(arguments, "pid")? {
+        let pid = u32::try_from(pid)
+            .map_err(|_| JsonRpcError::invalid_params("pid must fit in a 32-bit process id"))?;
+        handoff.insert("pid".to_string(), json!(pid));
+    }
+    Ok(Value::Object(handoff))
+}
+
+fn service_profile_seeding_handoff_update_command(
+    profile_id: &str,
+    handoff: &Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-profile-seeding-handoff-{}", uuid::Uuid::new_v4()),
+        "action": "service_profile_seeding_handoff_update",
+        "profileId": profile_id,
+        "handoff": handoff,
     });
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
@@ -8690,6 +8832,21 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
+            .any(
+                |tool| tool["name"] == "service_profile_seeding_handoff_update"
+                    && tool["inputSchema"]["required"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&json!("targetServiceId"))
+                    && tool["inputSchema"]["properties"]["state"]["enum"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&json!("seeding_closed_unverified"))
+            ));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["name"] == "service_session_upsert"));
         assert!(response["result"]["tools"]
             .as_array()
@@ -10505,6 +10662,39 @@ mod tests {
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
         assert_eq!(command["taskName"], "probeGoogleLogin");
+    }
+
+    #[test]
+    fn service_profile_seeding_handoff_command_builds_mutation_command() {
+        let handoff = service_profile_seeding_handoff_arguments(&json!({
+            "id": "journal-google",
+            "targetServiceId": "google",
+            "state": "seeding_closed_unverified",
+            "pid": 1234,
+            "closedAt": "2026-05-10T12:30:00Z",
+            "actor": "operator",
+            "note": "Chrome closed after sign-in",
+            "serviceName": "JournalDownloader"
+        }))
+        .unwrap();
+        let command = service_profile_seeding_handoff_update_command(
+            "journal-google",
+            &handoff,
+            Some("JournalDownloader"),
+            Some("agent-a"),
+            Some("seedGoogle"),
+        );
+
+        assert_eq!(command["action"], "service_profile_seeding_handoff_update");
+        assert_eq!(command["profileId"], "journal-google");
+        assert_eq!(command["handoff"]["targetServiceId"], "google");
+        assert_eq!(command["handoff"]["state"], "seeding_closed_unverified");
+        assert_eq!(command["handoff"]["pid"], 1234);
+        assert_eq!(command["handoff"]["closedAt"], "2026-05-10T12:30:00Z");
+        assert!(command["handoff"].get("serviceName").is_none());
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert_eq!(command["agentName"], "agent-a");
+        assert_eq!(command["taskName"], "seedGoogle");
     }
 
     #[test]
