@@ -1865,7 +1865,8 @@ choice, profile lease waiting, browser reuse, and queued control requests.
 See `examples/service-client/` for a copyable workflow that asks for an access
 plan, requests a service tab with `requestServiceTab`, reads the matching trace,
 and can demonstrate known queued-job cancellation with `cancelServiceJob`. Run
-`pnpm test:service-client-example` to validate the example in dry-run mode.
+`pnpm test:service-client-example` to validate the no-launch broker-first
+example contract plus the example dry-run modes.
 The main `service-request-trace.mjs` example is the generic integration path
 for non-Canva software clients: pass `--register-profile-id` and
 `--register-readiness-monitor` when the service needs a recurring managed

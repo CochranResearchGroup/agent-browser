@@ -30,6 +30,7 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   readinessMonitorId?: string;
  *   readinessMonitorIntervalMs?: number;
  *   cancelJobId?: string;
+ *   fetch?: typeof globalThis.fetch;
  *   dryRun?: boolean;
  * }} WorkflowOptions
  */
@@ -74,6 +75,7 @@ export async function runServiceWorkflow({
   readinessMonitorId,
   readinessMonitorIntervalMs,
   cancelJobId,
+  fetch = globalThis.fetch,
   dryRun = false,
 } = {}) {
   const request = buildServiceTabRequest({ url, serviceName, agentName, taskName, siteId, loginId });
@@ -118,6 +120,7 @@ export async function runServiceWorkflow({
 
   const initialAccessPlan = await getServiceAccessPlan({
     baseUrl,
+    fetch,
     serviceName,
     agentName,
     taskName,
@@ -128,6 +131,7 @@ export async function runServiceWorkflow({
     !initialAccessPlan.selectedProfile && registerProfileId
       ? await registerServiceLoginProfile({
           baseUrl,
+          fetch,
           ...buildLoginProfileRegistration({
             id: registerProfileId,
             serviceName,
@@ -141,6 +145,7 @@ export async function runServiceWorkflow({
     profileRegistration && registerReadinessMonitor
       ? await upsertServiceProfileReadinessMonitor({
           baseUrl,
+          fetch,
           ...buildProfileReadinessMonitor({
             id: readinessMonitorId,
             serviceName,
@@ -153,6 +158,7 @@ export async function runServiceWorkflow({
   const accessPlan = profileRegistration
     ? await getServiceAccessPlan({
         baseUrl,
+        fetch,
         serviceName,
         agentName,
         taskName,
@@ -162,12 +168,14 @@ export async function runServiceWorkflow({
     : initialAccessPlan;
   const commandResult = await requestServiceTab({
     baseUrl,
+    fetch,
     accessPlan,
     url,
     jobTimeoutMs: 30000,
   });
   const titleResult = await postServiceRequest({
     baseUrl,
+    fetch,
     request: createServiceRequest({
       serviceName,
       agentName,
@@ -180,6 +188,7 @@ export async function runServiceWorkflow({
   });
   const waitResult = await postServiceRequest({
     baseUrl,
+    fetch,
     request: createServiceRequest({
       serviceName,
       agentName,
@@ -193,6 +202,7 @@ export async function runServiceWorkflow({
   });
   const viewportResult = await postServiceRequest({
     baseUrl,
+    fetch,
     request: createServiceRequest({
       serviceName,
       agentName,
@@ -206,6 +216,7 @@ export async function runServiceWorkflow({
   });
   const consoleResult = await postServiceRequest({
     baseUrl,
+    fetch,
     request: createServiceRequest({
       serviceName,
       agentName,
@@ -216,9 +227,10 @@ export async function runServiceWorkflow({
       jobTimeoutMs: 30000,
     }),
   });
-  const cancelResult = cancelJobId ? await cancelServiceJob({ baseUrl, jobId: cancelJobId }) : null;
+  const cancelResult = cancelJobId ? await cancelServiceJob({ baseUrl, fetch, jobId: cancelJobId }) : null;
   const trace = await getServiceTrace({
     baseUrl,
+    fetch,
     query: { serviceName, agentName, taskName, limit: 50 },
   });
   const consoleMessageCount = countConsoleMessages(consoleResult.data);
