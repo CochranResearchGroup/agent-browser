@@ -13,6 +13,7 @@ const profileId = 'journal-example';
 await testSkipsRegistrationWhenBrokerSelectsProfile();
 await testRegistersFallbackOnlyAfterAccessPlanMiss();
 await testRunsDueMonitorAndShowsRefreshedRecommendation();
+await testRegistersFallbackThenRunsDueMonitor();
 
 console.log('Service client example no-launch broker tests passed');
 
@@ -172,14 +173,76 @@ async function testRunsDueMonitorAndShowsRefreshedRecommendation() {
   ]);
 }
 
+async function testRegistersFallbackThenRunsDueMonitor() {
+  const calls = [];
+  const fetch = createBrokerFirstFetch({
+    calls,
+    initialSelectedProfile: null,
+    selectRegisteredProfile: true,
+    dueMonitorRecommended: true,
+    dueMonitorRecommendedOnAccessPlan: 2,
+  });
+
+  const result = await runServiceWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName,
+    agentName,
+    taskName,
+    siteId: loginId,
+    loginId,
+    registerProfileId: profileId,
+    profileUserDataDir: '/tmp/journal-example-profile',
+    registerReadinessMonitor: true,
+    readinessMonitorIntervalMs: 900000,
+    runDueReadinessMonitor: true,
+    url: 'https://example.com',
+  });
+
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: profileId,
+    registered: true,
+    monitorRegistered: true,
+    monitorRunDueRan: true,
+    initialRecommendedAction: 'register_managed_profile_or_request_throwaway_browser',
+    refreshedRecommendedAction: 'use_selected_profile',
+    monitorRunDueChecked: 1,
+    monitorRunDueFailed: 0,
+  });
+  assert.equal(result.profileRegistration?.upserted, true);
+  assert.equal(result.profileReadinessMonitor?.upserted, true);
+  assert.equal(result.monitorRunDue?.checked, 1);
+  assert.equal(result.accessPlan?.selectedProfile?.id, profileId);
+  assert.equal(result.accessPlan?.decision?.recommendedAction, 'use_selected_profile');
+  assert.equal(result.commandResult?.success, true);
+
+  assert.deepEqual(callSequence(calls), [
+    'GET /api/service/access-plan',
+    `POST /api/service/profiles/${profileId}`,
+    'POST /api/service/monitors/journaldownloader-example-profile-readiness',
+    'GET /api/service/access-plan',
+    'POST /api/service/monitors/run-due',
+    'GET /api/service/access-plan',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'GET /api/service/trace',
+  ]);
+}
+
 function createBrokerFirstFetch({
   calls,
   initialSelectedProfile,
   refreshedSelectedProfile = initialSelectedProfile,
   dueMonitorRecommended = false,
+  dueMonitorRecommendedOnAccessPlan = 1,
+  selectRegisteredProfile = false,
   failRegistration = false,
 }) {
   let accessPlanCount = 0;
+  let registeredProfile = null;
 
   return async (url, init = {}) => {
     const parsed = new URL(String(url));
@@ -188,10 +251,15 @@ function createBrokerFirstFetch({
 
     if (method === 'GET' && parsed.pathname === '/api/service/access-plan') {
       accessPlanCount += 1;
-      const selectedProfile = accessPlanCount === 1 ? initialSelectedProfile : refreshedSelectedProfile;
+      const selectedProfile =
+        accessPlanCount === 1
+          ? initialSelectedProfile
+          : selectRegisteredProfile
+            ? registeredProfile
+            : refreshedSelectedProfile;
       return serviceResponse(
         accessPlanResponse(selectedProfile, {
-          dueMonitorRecommended: dueMonitorRecommended && accessPlanCount === 1,
+          dueMonitorRecommended: dueMonitorRecommended && accessPlanCount === dueMonitorRecommendedOnAccessPlan,
         }),
       );
     }
@@ -210,12 +278,13 @@ function createBrokerFirstFetch({
         return jsonResponse({ error: 'profile registration should not be called' }, { status: 500 });
       }
       const requestedProfile = JSON.parse(String(init.body));
+      registeredProfile = {
+        id: profileId,
+        ...requestedProfile,
+      };
       return serviceResponse({
         upserted: true,
-        profile: {
-          id: profileId,
-          ...requestedProfile,
-        },
+        profile: registeredProfile,
       });
     }
 
