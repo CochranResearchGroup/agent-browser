@@ -178,6 +178,11 @@ try {
     `serviceProfileReadinessResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileReadinessResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceProfileLookupResponse?.mcp?.resourceTemplate ===
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
+    `serviceProfileLookupResponse MCP resource template mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.schemaId ===
       'https://agent-browser.local/contracts/service-profile-seeding-handoff-response.v1.schema.json',
     `serviceProfileSeedingHandoffResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
@@ -268,6 +273,11 @@ try {
     clientContracts.contracts?.serviceProfileAllocationResponse?.mcp?.resourceTemplate ===
       'agent-browser://profiles/{profile_id}/allocation',
     `service client could not discover allocation MCP resource template: ${JSON.stringify(clientContracts.contracts?.serviceProfileAllocationResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceProfileLookupResponse?.mcp?.resourceTemplate ===
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
+    `service client could not discover lookup MCP resource template: ${JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse)}`,
   );
   assert(
     clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(

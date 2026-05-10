@@ -20,6 +20,7 @@ use crate::native::service_model::{
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
+use crate::native::stream::service_profile_lookup_response_for_state;
 
 const BROWSERS_RESOURCE: &str = "agent-browser://browsers";
 const EVENTS_RESOURCE: &str = "agent-browser://events";
@@ -35,6 +36,8 @@ const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
 const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}";
+const PROFILE_LOOKUP_RESOURCE: &str = "agent-browser://profiles/lookup";
+const PROFILE_LOOKUP_TEMPLATE: &str = "agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}";
 const PROFILE_ALLOCATION_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/allocation";
 const PROFILE_READINESS_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/readiness";
 const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
@@ -234,6 +237,12 @@ fn service_mcp_resource_templates() -> Vec<Value> {
             "description": "Canonical service-owned chronological activity timeline for one incident"
         }),
         json!({
+            "uriTemplate": PROFILE_LOOKUP_TEMPLATE,
+            "name": "Service profile lookup",
+            "mimeType": "application/json",
+            "description": "No-launch profile selector by service and target identity"
+        }),
+        json!({
             "uriTemplate": PROFILE_READINESS_TEMPLATE,
             "name": "Service profile readiness",
             "mimeType": "application/json",
@@ -358,6 +367,8 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
         _ => {
             if let Some(incident_id) = incident_activity_resource_id(uri) {
                 service_incident_activity_response(&state, incident_id)?
+            } else if let Some(query) = profile_lookup_resource_query(uri) {
+                service_profile_lookup_response_for_state(query, &state)?
             } else if let Some(profile_id) = profile_readiness_resource_id(uri) {
                 let profile = state
                     .profiles
@@ -8602,6 +8613,15 @@ fn access_plan_resource_query(uri: &str) -> Option<Vec<(String, String)>> {
     )
 }
 
+fn profile_lookup_resource_query(uri: &str) -> Option<Option<&str>> {
+    if uri == PROFILE_LOOKUP_RESOURCE {
+        return Some(None);
+    }
+    uri.strip_prefix(PROFILE_LOOKUP_RESOURCE)
+        .and_then(|rest| rest.strip_prefix('?'))
+        .map(Some)
+}
+
 fn profile_readiness_resource_id(uri: &str) -> Option<String> {
     let profile_id = uri
         .strip_prefix("agent-browser://profiles/")?
@@ -8696,14 +8716,18 @@ mod tests {
         );
         assert_eq!(
             response["data"]["resourceTemplates"][2]["uriTemplate"],
-            PROFILE_READINESS_TEMPLATE
+            PROFILE_LOOKUP_TEMPLATE
         );
         assert_eq!(
             response["data"]["resourceTemplates"][3]["uriTemplate"],
-            PROFILE_ALLOCATION_TEMPLATE
+            PROFILE_READINESS_TEMPLATE
         );
         assert_eq!(
             response["data"]["resourceTemplates"][4]["uriTemplate"],
+            PROFILE_ALLOCATION_TEMPLATE
+        );
+        assert_eq!(
+            response["data"]["resourceTemplates"][5]["uriTemplate"],
             PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
     }
@@ -8785,6 +8809,24 @@ mod tests {
     }
 
     #[test]
+    fn profile_lookup_resource_query_maps_uri() {
+        assert_eq!(
+            profile_lookup_resource_query("agent-browser://profiles/lookup"),
+            Some(None)
+        );
+        assert_eq!(
+            profile_lookup_resource_query(
+                "agent-browser://profiles/lookup?serviceName=JournalDownloader&loginId=acs"
+            ),
+            Some(Some("serviceName=JournalDownloader&loginId=acs"))
+        );
+        assert_eq!(
+            profile_lookup_resource_query("agent-browser://profiles/google-work/readiness"),
+            None
+        );
+    }
+
+    #[test]
     fn initialize_returns_read_only_resource_capability() {
         let response = handle_jsonrpc_line(
             r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
@@ -8859,14 +8901,18 @@ mod tests {
         );
         assert_eq!(
             response["result"]["resourceTemplates"][2]["uriTemplate"],
-            PROFILE_READINESS_TEMPLATE
+            PROFILE_LOOKUP_TEMPLATE
         );
         assert_eq!(
             response["result"]["resourceTemplates"][3]["uriTemplate"],
-            PROFILE_ALLOCATION_TEMPLATE
+            PROFILE_READINESS_TEMPLATE
         );
         assert_eq!(
             response["result"]["resourceTemplates"][4]["uriTemplate"],
+            PROFILE_ALLOCATION_TEMPLATE
+        );
+        assert_eq!(
+            response["result"]["resourceTemplates"][5]["uriTemplate"],
             PROFILE_SEEDING_HANDOFF_TEMPLATE
         );
     }
@@ -12542,6 +12588,80 @@ mod tests {
             "needs_manual_seeding"
         );
         assert_service_profile_allocation_contract(&resource["contents"]["profileAllocation"]);
+    }
+
+    #[test]
+    fn read_profile_lookup_resource_returns_profile_selection() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            BrowserProfile, ProfileReadinessState, ProfileTargetReadiness,
+        };
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([
+                (
+                    "target-only".to_string(),
+                    BrowserProfile {
+                        id: "target-only".to_string(),
+                        name: "Target-only ACS profile".to_string(),
+                        target_service_ids: vec!["acs".to_string()],
+                        shared_service_ids: vec!["JournalDownloader".to_string()],
+                        ..BrowserProfile::default()
+                    },
+                ),
+                (
+                    "authenticated".to_string(),
+                    BrowserProfile {
+                        id: "authenticated".to_string(),
+                        name: "Authenticated ACS profile".to_string(),
+                        target_service_ids: vec!["acs".to_string()],
+                        authenticated_service_ids: vec!["acs".to_string()],
+                        shared_service_ids: vec!["JournalDownloader".to_string()],
+                        target_readiness: vec![ProfileTargetReadiness {
+                            target_service_id: "acs".to_string(),
+                            state: ProfileReadinessState::Fresh,
+                            evidence: "seeded smoke fixture".to_string(),
+                            recommended_action: "use_profile".to_string(),
+                            ..ProfileTargetReadiness::default()
+                        }],
+                        ..BrowserProfile::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let resource = read_service_mcp_resource_from_state(
+            "agent-browser://profiles/lookup?service-name=JournalDownloader&login-id=acs",
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(
+            resource["uri"],
+            "agent-browser://profiles/lookup?service-name=JournalDownloader&login-id=acs"
+        );
+        assert_eq!(
+            resource["contents"]["query"]["serviceName"],
+            "JournalDownloader"
+        );
+        assert_eq!(
+            resource["contents"]["selectedProfile"]["id"],
+            "authenticated"
+        );
+        assert_eq!(
+            resource["contents"]["selectedProfileMatch"]["reason"],
+            "authenticated_target"
+        );
+        assert_eq!(
+            resource["contents"]["readiness"]["profileId"],
+            "authenticated"
+        );
+        assert_eq!(
+            resource["contents"]["readinessSummary"]["needsManualSeeding"],
+            false
+        );
     }
 
     #[test]

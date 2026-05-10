@@ -59,7 +59,9 @@ for `GET /api/service/profiles/<id>/allocation` and MCP
 `agent-browser://profiles/{profile_id}/allocation`,
 `serviceProfileReadinessResponse` for `GET /api/service/profiles/<id>/readiness`
 and MCP `agent-browser://profiles/{profile_id}/readiness`, and
-`serviceProfileLookupResponse` for `GET /api/service/profiles/lookup`, plus
+`serviceProfileLookupResponse` for `GET /api/service/profiles/lookup` and MCP
+`agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}`,
+plus
 `serviceAccessPlanResponse` for `GET /api/service/access-plan` and MCP
 `agent-browser://access-plan`.
 Readiness, lookup, and access-plan metadata also names the
@@ -317,10 +319,11 @@ to a known manual-seeding target, and later runtime or service reads mark the
 handoff closed but unverified once that PID exits.
 
 `service-profile-lookup-response.v1.schema.json` describes the response
-envelope returned by HTTP `GET /api/service/profiles/lookup` when a software
-client wants agent-browser to apply the authoritative service profile selector
-for a service name plus site or login identity without fetching the full
-profile collection. `selectedProfileMatch` includes `matchedField` and
+envelope returned by HTTP `GET /api/service/profiles/lookup` and MCP
+`agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}`
+when a caller wants agent-browser to apply the authoritative service profile
+selector for a service name plus site or login identity without fetching the
+full profile collection. `selectedProfileMatch` includes `matchedField` and
 `matchedIdentity` so clients can explain whether the match came from
 `authenticatedServiceIds`, `targetServiceIds`, or `sharedServiceIds`. When
 `readinessSummary.manualSeedingRequired` is true, `seedingHandoff` contains the

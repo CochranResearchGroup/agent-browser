@@ -446,13 +446,11 @@ const serviceResourceSurface = [
       'agent-browser://profiles/{profile_id}/allocation',
     ],
   },
-];
-
-const serviceHttpOnlySurface = [
   {
-    method: 'GET',
+    resource: 'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
     route: '/api/service/profiles/lookup',
     docsNeedles: [
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
       '/api/service/profiles/lookup',
       'getServiceProfileForIdentity',
     ],
@@ -470,9 +468,12 @@ const serviceHttpOnlySurface = [
     contractNeedles: [
       'service-profile-lookup-response.v1.schema.json',
       'GET /api/service/profiles/lookup',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
     ],
   },
 ];
+
+const serviceHttpOnlySurface = [];
 
 for (const entry of browserSurface) {
   expectIncludes(files.mcp, entry.tool, `MCP source exposes ${entry.tool}`);

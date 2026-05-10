@@ -1448,7 +1448,7 @@ fn service_access_plan_response_for_state(
     Ok(service_access_plan_for_state(service_state, request))
 }
 
-fn service_profile_lookup_response_for_state(
+pub(crate) fn service_profile_lookup_response_for_state(
     query: Option<&str>,
     service_state: &ServiceState,
 ) -> Result<Value, String> {

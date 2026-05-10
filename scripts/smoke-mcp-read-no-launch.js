@@ -165,6 +165,26 @@ try {
       `allocation readiness mismatch: ${JSON.stringify(allocation)}`,
     );
 
+    const lookupUri = `agent-browser://profiles/lookup?serviceName=McpReadSmoke&loginId=${targetServiceId}`;
+    const lookup = parseMcpJsonResource(
+      await mcp.send('resources/read', { uri: lookupUri }),
+      lookupUri,
+      'MCP profile lookup resource',
+    );
+
+    assert(
+      lookup.selectedProfile?.id === profileId,
+      `lookup selected profile mismatch: ${JSON.stringify(lookup)}`,
+    );
+    assert(
+      lookup.selectedProfileMatch?.reason === 'target_match',
+      `lookup match reason mismatch: ${JSON.stringify(lookup)}`,
+    );
+    assert(
+      lookup.readiness?.profileId === profileId,
+      `lookup readiness profile mismatch: ${JSON.stringify(lookup)}`,
+    );
+
     const uri = `agent-browser://profiles/${profileId}/seeding-handoff?targetServiceId=${targetServiceId}`;
     const handoff = parseMcpJsonResource(
       await mcp.send('resources/read', { uri }),
