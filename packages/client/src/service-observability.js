@@ -327,8 +327,9 @@ export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, c
  *
  * The helper asks for an access plan first, registers the fallback profile only
  * when agent-browser has no selected profile, optionally installs the standard
- * profile-readiness monitor, then refreshes the access plan so callers can pass
- * the final broker-owned recommendation to requestServiceTab().
+ * profile-readiness monitor, optionally runs due monitors recommended by the
+ * plan, then refreshes the access plan so callers can pass the final
+ * broker-owned recommendation to requestServiceTab().
  *
  * @param {ServiceProfileAcquisitionOptions} options
  * @returns {Promise<ServiceProfileAcquisitionResult>}
@@ -338,6 +339,7 @@ export async function acquireServiceLoginProfile({
   profileUserDataDir,
   registerAuthenticated,
   registerReadinessMonitor = false,
+  runDueReadinessMonitor = false,
   readinessMonitorId,
   readinessMonitorIntervalMs,
   profileName,
@@ -374,7 +376,17 @@ export async function acquireServiceLoginProfile({
           intervalMs: readinessMonitorIntervalMs,
         })
       : null;
-  const accessPlan = profileRegistration ? await getServiceAccessPlan(accessPlanOptions) : initialAccessPlan;
+  let accessPlan = profileRegistration ? await getServiceAccessPlan(accessPlanOptions) : initialAccessPlan;
+  const monitorRunDue =
+    runDueReadinessMonitor && accessPlan?.decision?.monitorRunDue?.recommendedBeforeUse === true
+      ? await runServiceAccessPlanMonitorRunDue({
+          ...accessPlanOptions,
+          accessPlan,
+        })
+      : null;
+  if (monitorRunDue) {
+    accessPlan = await getServiceAccessPlan(accessPlanOptions);
+  }
 
   return {
     initialAccessPlan,
@@ -382,8 +394,10 @@ export async function acquireServiceLoginProfile({
     selectedProfile: accessPlan.selectedProfile ?? null,
     profileRegistration,
     profileReadinessMonitor,
+    monitorRunDue,
     registered: profileRegistration !== null,
     monitorRegistered: profileReadinessMonitor !== null,
+    monitorRunDueRan: monitorRunDue !== null,
   };
 }
 

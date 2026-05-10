@@ -25,6 +25,7 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   registerProfileId?: string;
  *   profileUserDataDir?: string;
  *   registerReadinessMonitor?: boolean;
+ *   runDueReadinessMonitor?: boolean;
  *   readinessMonitorId?: string;
  *   readinessMonitorIntervalMs?: number;
  *   cancelJobId?: string;
@@ -70,6 +71,7 @@ export async function runServiceWorkflow({
   registerProfileId,
   profileUserDataDir,
   registerReadinessMonitor = false,
+  runDueReadinessMonitor = false,
   readinessMonitorId,
   readinessMonitorIntervalMs,
   cancelJobId,
@@ -89,6 +91,9 @@ export async function runServiceWorkflow({
         preferredProfileFields: ['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds'],
         helper: 'acquireServiceLoginProfile',
         registrationPolicy: 'only register fallback profile after the access plan reports no selected profile',
+        monitorPolicy: runDueReadinessMonitor
+          ? 'run access-plan-recommended due profile-readiness monitors before returning the final plan'
+          : 'inspect access-plan monitorRunDue before relying on retained profile freshness',
       },
       profileRegistration: registerProfileId
         ? buildLoginProfileRegistration({
@@ -129,10 +134,12 @@ export async function runServiceWorkflow({
     profileName: registerProfileId ? `${serviceName} ${loginId || siteId} profile` : undefined,
     profileUserDataDir,
     registerReadinessMonitor,
+    runDueReadinessMonitor,
     readinessMonitorId,
     readinessMonitorIntervalMs,
   });
-  const { initialAccessPlan, profileRegistration, profileReadinessMonitor, accessPlan } = profileAcquisition;
+  const { initialAccessPlan, profileRegistration, profileReadinessMonitor, monitorRunDue, accessPlan } =
+    profileAcquisition;
   const commandResult = await requestServiceTab({
     baseUrl,
     fetch,
@@ -208,6 +215,7 @@ export async function runServiceWorkflow({
     profileAcquisition,
     profileRegistration,
     profileReadinessMonitor,
+    monitorRunDue,
     accessPlan,
     commandResult,
     commandResultData: {
@@ -307,6 +315,7 @@ function parseArgs(args) {
     registerProfileId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_PROFILE_ID,
     profileUserDataDir: nodeProcess.env.AGENT_BROWSER_EXAMPLE_PROFILE_USER_DATA_DIR,
     registerReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_READINESS_MONITOR === '1',
+    runDueReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_RUN_DUE_READINESS_MONITOR === '1',
     readinessMonitorId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_ID,
     readinessMonitorIntervalMs: numberEnv(nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_INTERVAL_MS),
     cancelJobId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_CANCEL_JOB_ID,
@@ -337,6 +346,8 @@ function parseArgs(args) {
       parsed.profileUserDataDir = requiredValue(args, ++index, arg);
     } else if (arg === '--register-readiness-monitor') {
       parsed.registerReadinessMonitor = true;
+    } else if (arg === '--run-due-readiness-monitor') {
+      parsed.runDueReadinessMonitor = true;
     } else if (arg === '--readiness-monitor-id') {
       parsed.readinessMonitorId = requiredValue(args, ++index, arg);
     } else if (arg === '--readiness-monitor-interval-ms') {

@@ -1023,9 +1023,207 @@ async function main() {
   assert.equal(existingAcquisitionResult.selectedProfile?.id, 'journal-existing');
   assert.equal(existingAcquisitionResult.profileRegistration, null);
   assert.equal(existingAcquisitionResult.profileReadinessMonitor, null);
+  assert.equal(existingAcquisitionResult.monitorRunDue, null);
   assert.equal(existingAcquisitionResult.registered, false);
   assert.equal(existingAcquisitionResult.monitorRegistered, false);
+  assert.equal(existingAcquisitionResult.monitorRunDueRan, false);
   assert.equal(existingAcquisitionResult.accessPlan, existingAcquisitionResult.initialAccessPlan);
+
+  const dueMonitorAcquisition = createFetchRecorder((_url, _init, calls) => {
+    if (calls.length === 1) {
+      return {
+        success: true,
+        data: {
+          query: {
+            serviceName: 'JournalDownloader',
+            targetServiceIds: ['acs'],
+            readinessProfileId: null,
+          },
+          selectedProfile: {
+            id: 'journal-existing',
+            name: 'JournalDownloader ACS',
+            targetServiceIds: ['acs'],
+            authenticatedServiceIds: ['acs'],
+            sharedServiceIds: ['JournalDownloader'],
+          },
+          selectedProfileMatch: {
+            profileId: 'journal-existing',
+            reason: 'authenticated_target',
+            matchedField: 'authenticatedServiceIds',
+            matchedIdentity: 'acs',
+          },
+          selectedProfileSource: 'config',
+          readiness: null,
+          readinessSummary: {
+            needsManualSeeding: false,
+            manualSeedingRequired: false,
+            targetServiceIds: [],
+            recommendedActions: [],
+          },
+          monitorFindings: {
+            profileReadinessAttentionRequired: false,
+            profileReadinessProbeDue: true,
+            profileReadinessIncidentIds: [],
+            profileReadinessMonitorIds: [],
+            profileReadinessDueMonitorIds: ['acs-freshness'],
+            profileReadinessNeverCheckedMonitorIds: ['acs-freshness'],
+            profileReadinessResults: [],
+            targetServiceIds: [],
+            dueTargetServiceIds: ['acs'],
+          },
+          sitePolicy: null,
+          sitePolicySource: null,
+          providers: [],
+          challenges: [],
+          decision: {
+            recommendedAction: 'run_due_profile_readiness_monitor',
+            browserHost: 'local_headed',
+            interactionMode: 'human_like_input',
+            challengePolicy: 'avoid_first',
+            profileId: 'journal-existing',
+            manualActionRequired: false,
+            manualSeedingRequired: false,
+            monitorAttentionRequired: false,
+            monitorProbeDue: true,
+            monitorRunDue: {
+              available: true,
+              recommendedBeforeUse: true,
+              monitorIds: ['acs-freshness'],
+              neverCheckedMonitorIds: ['acs-freshness'],
+              targetServiceIds: ['acs'],
+              http: { method: 'POST', route: '/api/service/monitors/run-due' },
+              mcp: { tool: 'service_monitors_run_due' },
+              client: {
+                package: '@agent-browser/client/service-observability',
+                helper: 'runServiceAccessPlanMonitorRunDue',
+              },
+              fallbackClient: {
+                package: '@agent-browser/client/service-observability',
+                helper: 'runDueServiceMonitors',
+              },
+              cli: { command: 'agent-browser service monitors run-due' },
+              requestFields: [],
+              notes: [],
+            },
+            providerIds: [],
+            challengeIds: [],
+            reasons: ['profile_readiness_probe_due'],
+          },
+        },
+      };
+    }
+    if (calls.length === 2) {
+      return {
+        success: true,
+        data: {
+          checked: 1,
+          failed: 0,
+          monitors: [{ id: 'acs-freshness' }],
+        },
+      };
+    }
+    return {
+      success: true,
+      data: {
+        query: {
+          serviceName: 'JournalDownloader',
+          targetServiceIds: ['acs'],
+          readinessProfileId: null,
+        },
+        selectedProfile: {
+          id: 'journal-existing',
+          name: 'JournalDownloader ACS',
+          targetServiceIds: ['acs'],
+          authenticatedServiceIds: ['acs'],
+          sharedServiceIds: ['JournalDownloader'],
+        },
+        selectedProfileMatch: {
+          profileId: 'journal-existing',
+          reason: 'authenticated_target',
+          matchedField: 'authenticatedServiceIds',
+          matchedIdentity: 'acs',
+        },
+        selectedProfileSource: 'config',
+        readiness: null,
+        readinessSummary: {
+          needsManualSeeding: false,
+          manualSeedingRequired: false,
+          targetServiceIds: [],
+          recommendedActions: [],
+        },
+        monitorFindings: {
+          profileReadinessAttentionRequired: false,
+          profileReadinessProbeDue: false,
+          profileReadinessIncidentIds: [],
+          profileReadinessMonitorIds: [],
+          profileReadinessDueMonitorIds: [],
+          profileReadinessNeverCheckedMonitorIds: [],
+          profileReadinessResults: [],
+          targetServiceIds: [],
+          dueTargetServiceIds: [],
+        },
+        sitePolicy: null,
+        sitePolicySource: null,
+        providers: [],
+        challenges: [],
+        decision: {
+          recommendedAction: 'use_selected_profile',
+          browserHost: 'local_headed',
+          interactionMode: 'human_like_input',
+          challengePolicy: 'avoid_first',
+          profileId: 'journal-existing',
+          manualActionRequired: false,
+          manualSeedingRequired: false,
+          monitorAttentionRequired: false,
+          monitorProbeDue: false,
+          monitorRunDue: {
+            available: false,
+            recommendedBeforeUse: false,
+            monitorIds: [],
+            neverCheckedMonitorIds: [],
+            targetServiceIds: [],
+            http: { method: 'POST', route: '/api/service/monitors/run-due' },
+            mcp: { tool: 'service_monitors_run_due' },
+            client: {
+              package: '@agent-browser/client/service-observability',
+              helper: 'runServiceAccessPlanMonitorRunDue',
+            },
+            fallbackClient: {
+              package: '@agent-browser/client/service-observability',
+              helper: 'runDueServiceMonitors',
+            },
+            cli: { command: 'agent-browser service monitors run-due' },
+            requestFields: [],
+            notes: [],
+          },
+          providerIds: [],
+          challengeIds: [],
+          reasons: ['profile_selected'],
+        },
+      },
+    };
+  });
+  const dueMonitorAcquisitionResult = await acquireServiceLoginProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: dueMonitorAcquisition.fetch,
+    serviceName: 'JournalDownloader',
+    agentName: 'agent-a',
+    taskName: 'probeACSwebsite',
+    loginId: 'acs',
+    runDueReadinessMonitor: true,
+  });
+  assert.equal(dueMonitorAcquisition.calls.length, 3);
+  assert.equal(dueMonitorAcquisition.calls[0].init.method, 'GET');
+  assert.equal(
+    dueMonitorAcquisition.calls[1].url,
+    'http://127.0.0.1:4849/api/service/monitors/run-due',
+  );
+  assert.equal(dueMonitorAcquisition.calls[1].init.method, 'POST');
+  assert.equal(dueMonitorAcquisition.calls[2].init.method, 'GET');
+  assert.equal(dueMonitorAcquisitionResult.monitorRunDue?.checked, 1);
+  assert.equal(dueMonitorAcquisitionResult.monitorRunDueRan, true);
+  assert.equal(dueMonitorAcquisitionResult.accessPlan.decision?.monitorProbeDue, false);
+  assert.equal(dueMonitorAcquisitionResult.selectedProfile?.id, 'journal-existing');
 
   const fallbackAcquisition = createFetchRecorder((_url, _init, calls) => {
     if (calls.length === 1) {
@@ -1193,8 +1391,10 @@ async function main() {
   assert.equal(fallbackAcquisitionResult.selectedProfile?.id, 'journal-fallback');
   assert.equal(fallbackAcquisitionResult.profileRegistration?.id, 'journal-fallback');
   assert.equal(fallbackAcquisitionResult.profileReadinessMonitor?.id, 'journal-acs-readiness');
+  assert.equal(fallbackAcquisitionResult.monitorRunDue, null);
   assert.equal(fallbackAcquisitionResult.registered, true);
   assert.equal(fallbackAcquisitionResult.monitorRegistered, true);
+  assert.equal(fallbackAcquisitionResult.monitorRunDueRan, false);
 
   const trace = createFetchRecorder({
     success: true,

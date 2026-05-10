@@ -1156,6 +1156,8 @@ export interface ServiceProfileAcquisitionOptions extends ServiceAccessPlanOptio
   registerAuthenticated?: boolean;
   /** Add the standard retained profile-readiness monitor after fallback registration. */
   registerReadinessMonitor?: boolean;
+  /** Run access-plan-recommended due profile-readiness monitors before returning the final plan. */
+  runDueReadinessMonitor?: boolean;
   /** Optional monitor ID for the retained profile-readiness monitor. */
   readinessMonitorId?: string;
   /** Optional monitor interval in milliseconds. */
@@ -1172,8 +1174,10 @@ export interface ServiceProfileAcquisitionResult {
   selectedProfile: ServiceProfileRecord | null;
   profileRegistration: ServiceProfileUpsertResponse | null;
   profileReadinessMonitor: ServiceMonitorUpsertResponse | null;
+  monitorRunDue: ServiceMonitorRunDueResponse | null;
   registered: boolean;
   monitorRegistered: boolean;
+  monitorRunDueRan: boolean;
 }
 
 export interface ServiceProfileLookupQuery {

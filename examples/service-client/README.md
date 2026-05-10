@@ -136,6 +136,7 @@ const { accessPlan } = await acquireServiceLoginProfile({
   registerProfileId: 'canva-default',
   registerAuthenticated: false,
   registerReadinessMonitor: true,
+  runDueReadinessMonitor: true,
 });
 
 await requestServiceTab({
