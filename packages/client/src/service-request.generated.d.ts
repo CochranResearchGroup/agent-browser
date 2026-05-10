@@ -88,6 +88,9 @@ export interface ServiceRequest {
   loginIds?: string[];
   jobTimeoutMs?: number;
   profileLeaseWaitTimeoutMs?: number;
+  blockedByManualAction?: boolean;
+  manualSeedingRequired?: boolean;
+  allowManualAction?: boolean;
 }
 
 export type ServiceRequestForAction<TAction extends ServiceRequestAction> =
@@ -550,6 +553,7 @@ export declare const SERVICE_REQUEST_REQUIRED_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_ARRAY_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_INTEGER_FIELDS: readonly string[];
+export declare const SERVICE_REQUEST_BOOLEAN_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_MCP_TOOL_NAME: "service_request";
 
 export declare function createServiceRequest<TRequest extends ServiceRequest>(input: TRequest): TRequest;

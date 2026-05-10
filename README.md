@@ -1684,7 +1684,11 @@ software clients can queue the planned tab request without manually unpacking
 When an access plan reports `manualSeedingRequired` with `seedingHandoff`,
 these helpers throw before posting `/api/service/request` unless the caller
 explicitly passes `allowManualAction: true`; show the handoff to the operator
-and retry the same identity request after seeding instead. When adding or
+and retry the same identity request after seeding instead. The copied
+`decision.serviceRequest.request` also carries `blockedByManualAction` and
+`manualSeedingRequired` markers for this state, and direct HTTP or MCP
+submissions carrying both markers are rejected unless they also include
+`allowManualAction: true`. When adding or
 removing service request actions, update the Rust
 `SERVICE_REQUEST_ACTIONS` list, the JSON schema enum, MCP `service_request`,
 HTTP `/api/service/request`, and generated client files together; run
@@ -1738,7 +1742,11 @@ request can be queued immediately. When manual seeding or challenge work must
 finish first, `recommendedAfterManualAction` tells clients to reuse the same
 identity request after the operator completes that step. The service request
 client refuses to post an access-plan-backed tab request while manual profile
-seeding is still required unless `allowManualAction: true` is supplied.
+seeding is still required unless `allowManualAction: true` is supplied. Raw
+HTTP and MCP callers get the same protection when they submit the copied
+`serviceRequest.request`, because requests marked with both
+`blockedByManualAction` and `manualSeedingRequired` require the same explicit
+override.
 Access-plan responses echo `agentName` and `taskName` in `query` and report
 `namingWarnings` plus `hasNamingWarning` in both `query` and `decision` when
 the caller omits `serviceName`, `agentName`, or `taskName`.
@@ -1841,7 +1849,9 @@ If `accessPlan.readinessSummary.needsManualSeeding` is true, show the returned
 actions to the operator before expecting authenticated automation to succeed
 for the requested identity. `requestServiceTab({ accessPlan })` refuses this
 state by default, so clients should retry the same identity request after
-seeding or pass `allowManualAction: true` only for an intentional override. Use
+seeding or pass `allowManualAction: true` only for an intentional override. The
+same marker fields are accepted in raw HTTP and MCP requests only with that
+override, preventing hand-built callers from bypassing the access-plan guard. Use
 `lookupServiceProfile()` only when the caller needs the narrower profile-only
 selector response; it also includes `seedingHandoff` when profile readiness
 requires manual seeding.

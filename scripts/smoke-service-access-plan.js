@@ -388,6 +388,14 @@ function assertAccessPlan(data, label) {
     `${label} service request body lease policy mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.decision?.serviceRequest?.request?.blockedByManualAction === true,
+    `${label} service request body manual block marker mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.request?.manualSeedingRequired === true,
+    `${label} service request body manual seeding marker mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     data?.decision?.serviceRequest?.http?.route === '/api/service/request',
     `${label} service request HTTP route mismatch: ${JSON.stringify(data)}`,
   );

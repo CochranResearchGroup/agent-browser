@@ -573,6 +573,18 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minimum": 1,
                         "description": "Maximum time to wait for profileLeasePolicy=wait before failing the request."
                     },
+                    "blockedByManualAction": {
+                        "type": "boolean",
+                        "description": "Access-plan marker indicating this request should wait for a manual operator step before it is queued."
+                    },
+                    "manualSeedingRequired": {
+                        "type": "boolean",
+                        "description": "Access-plan marker indicating manual profile seeding is required before this request should launch."
+                    },
+                    "allowManualAction": {
+                        "type": "boolean",
+                        "description": "Explicit override allowing a request marked blockedByManualAction and manualSeedingRequired to be submitted anyway."
+                    },
                     "serviceName": {
                         "type": "string",
                         "description": "Calling service name, for example JournalDownloader."
@@ -4503,6 +4515,7 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
             action
         )));
     }
+    reject_blocked_manual_service_request(arguments)?;
     let params = optional_object_argument(arguments, "params")?;
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
@@ -4520,6 +4533,24 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
     }
     context.apply_target_profile_hints(&mut command);
     Ok((trace, command))
+}
+
+fn reject_blocked_manual_service_request(arguments: &Value) -> Result<(), JsonRpcError> {
+    if arguments
+        .get("blockedByManualAction")
+        .and_then(Value::as_bool)
+        == Some(true)
+        && arguments
+            .get("manualSeedingRequired")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && arguments.get("allowManualAction").and_then(Value::as_bool) != Some(true)
+    {
+        return Err(JsonRpcError::invalid_params(
+            "service_request is blocked by manual profile seeding; complete seeding or set allowManualAction=true to override",
+        ));
+    }
+    Ok(())
 }
 
 fn call_service_request(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -10357,6 +10388,9 @@ mod tests {
             service_request["inputSchema"]["properties"]["action"]["enum"],
             json!(SERVICE_REQUEST_ACTIONS)
         );
+        assert!(service_request["inputSchema"]["properties"]["blockedByManualAction"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["manualSeedingRequired"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["allowManualAction"].is_object());
 
         for action in SERVICE_REQUEST_ACTIONS {
             let (_, command) = service_request_command(&json!({
@@ -10372,6 +10406,41 @@ mod tests {
                 .as_str()
                 .is_some_and(|id| id.starts_with("mcp-service-request-")));
         }
+    }
+
+    #[test]
+    fn service_request_command_rejects_blocked_manual_seeding_without_override() {
+        let err = service_request_command(&json!({
+            "action": "tab_new",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "seedThenProbeGoogle",
+            "blockedByManualAction": true,
+            "manualSeedingRequired": true
+        }))
+        .expect_err("blocked manual seeding requests should require an override");
+
+        assert!(format!("{err:?}").contains("manual profile seeding"));
+    }
+
+    #[test]
+    fn service_request_command_accepts_blocked_manual_seeding_with_override() {
+        let (_, command) = service_request_command(&json!({
+            "action": "tab_new",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "seedThenProbeGoogle",
+            "blockedByManualAction": true,
+            "manualSeedingRequired": true,
+            "allowManualAction": true
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "tab_new");
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert!(command["blockedByManualAction"].is_null());
+        assert!(command["manualSeedingRequired"].is_null());
+        assert!(command["allowManualAction"].is_null());
     }
 
     #[test]

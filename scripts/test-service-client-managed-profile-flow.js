@@ -442,6 +442,12 @@ function createMockFetch({
               targetServiceId: 'canva',
               profileLeasePolicy: 'wait',
               action: 'tab_new',
+              ...(readinessState === 'needs_manual_seeding' && Boolean(selectedProfile)
+                ? {
+                    blockedByManualAction: true,
+                    manualSeedingRequired: true,
+                  }
+                : {}),
             },
           },
           browserHost: null,

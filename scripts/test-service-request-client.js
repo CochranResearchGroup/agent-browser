@@ -158,6 +158,14 @@ async function main() {
       }),
     /service request loginIds must be an array of strings/,
   );
+  assert.throws(
+    () =>
+      createServiceRequest({
+        action: 'tab_new',
+        allowManualAction: 'true',
+      }),
+    /service request allowManualAction must be a boolean/,
+  );
 
   const request = createServiceRequest({
     serviceName: 'JournalDownloader',
@@ -256,6 +264,8 @@ async function main() {
           targetServiceIds: ['google'],
           profileLeasePolicy: 'wait',
           action: 'tab_new',
+          blockedByManualAction: true,
+          manualSeedingRequired: true,
         },
       },
     },
@@ -297,6 +307,9 @@ async function main() {
       targetServiceIds: ['google'],
       profileLeasePolicy: 'wait',
       action: 'tab_new',
+      blockedByManualAction: true,
+      manualSeedingRequired: true,
+      allowManualAction: true,
       params: {
         url: 'https://accounts.google.com',
       },
@@ -407,6 +420,30 @@ async function main() {
     /requires manual profile seeding/,
   );
   assert.equal(blockedTabRecorder.calls.length, 0);
+
+  const overrideTabRecorder = createFetchRecorder({ success: true, data: { jobId: 'job-manual-override' } });
+  const overrideTabResponse = await requestServiceTab({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: overrideTabRecorder.fetch,
+    accessPlan: manualSeedingAccessPlan,
+    allowManualAction: true,
+    url: 'https://accounts.google.com',
+  });
+  assert.deepEqual(overrideTabResponse, { success: true, data: { jobId: 'job-manual-override' } });
+  assert.deepEqual(overrideTabRecorder.calls[0].body, {
+    serviceName: 'JournalDownloader',
+    agentName: 'article-probe-agent',
+    taskName: 'seedThenProbeGoogle',
+    targetServiceIds: ['google'],
+    profileLeasePolicy: 'wait',
+    action: 'tab_new',
+    blockedByManualAction: true,
+    manualSeedingRequired: true,
+    allowManualAction: true,
+    params: {
+      url: 'https://accounts.google.com',
+    },
+  });
 
   const accessPlanWorkflow = createAccessPlanToServiceRequestFetchRecorder();
   const observedAccessPlan = await getServiceAccessPlan({

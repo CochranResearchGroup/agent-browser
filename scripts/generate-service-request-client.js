@@ -29,6 +29,9 @@ const stringArrayFields = Object.entries(requestSchema.properties)
 const integerFields = Object.entries(requestSchema.properties)
   .filter(([, property]) => property.type === 'integer')
   .map(([name]) => name);
+const booleanFields = Object.entries(requestSchema.properties)
+  .filter(([, property]) => property.type === 'boolean')
+  .map(([name]) => name);
 const requiredFields = requestSchema.required;
 const mcpToolName = mcpToolCallSchema.properties.name.const;
 
@@ -60,6 +63,8 @@ export const SERVICE_REQUEST_STRING_ARRAY_FIELDS = ${json(stringArrayFields)};
 
 export const SERVICE_REQUEST_INTEGER_FIELDS = ${json(integerFields)};
 
+export const SERVICE_REQUEST_BOOLEAN_FIELDS = ${json(booleanFields)};
+
 export const SERVICE_REQUEST_MCP_TOOL_NAME = ${json(mcpToolName)};
 `;
 }
@@ -72,6 +77,7 @@ function renderGeneratedTypes() {
     .join('\n');
   const stringArrayFieldLines = stringArrayFields.map((field) => `  ${field}?: string[];`).join('\n');
   const integerFieldLines = integerFields.map((field) => `  ${field}?: number;`).join('\n');
+  const booleanFieldLines = booleanFields.map((field) => `  ${field}?: boolean;`).join('\n');
 
   return `${generatedHeader('ts')}export type ServiceRequestAction =
 ${actionUnion};
@@ -82,6 +88,7 @@ export interface ServiceRequest {
 ${stringFieldLines}
 ${stringArrayFieldLines}
 ${integerFieldLines}
+${booleanFieldLines}
 }
 
 export type ServiceRequestForAction<TAction extends ServiceRequestAction> =
@@ -544,6 +551,7 @@ export declare const SERVICE_REQUEST_REQUIRED_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_ARRAY_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_INTEGER_FIELDS: readonly string[];
+export declare const SERVICE_REQUEST_BOOLEAN_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_MCP_TOOL_NAME: ${JSON.stringify(mcpToolName)};
 
 export declare function createServiceRequest<TRequest extends ServiceRequest>(input: TRequest): TRequest;

@@ -1240,6 +1240,11 @@ fn service_request_command(body: &str) -> Result<Value, String> {
             action
         ));
     }
+    reject_blocked_manual_service_request(
+        request.get("blockedByManualAction"),
+        request.get("manualSeedingRequired"),
+        request.get("allowManualAction"),
+    )?;
     let mut command = json!({
         "id": format!("http-service-request-{}-{}", action, uuid::Uuid::new_v4()),
         "action": action,
@@ -1277,6 +1282,23 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         }
     }
     Ok(command)
+}
+
+fn reject_blocked_manual_service_request(
+    blocked_by_manual_action: Option<&Value>,
+    manual_seeding_required: Option<&Value>,
+    allow_manual_action: Option<&Value>,
+) -> Result<(), String> {
+    if blocked_by_manual_action.and_then(Value::as_bool) == Some(true)
+        && manual_seeding_required.and_then(Value::as_bool) == Some(true)
+        && allow_manual_action.and_then(Value::as_bool) != Some(true)
+    {
+        return Err(
+            "service request is blocked by manual profile seeding; complete seeding or set allowManualAction=true to override"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 fn parse_query_bool(name: &str, value: &str) -> Result<bool, String> {
@@ -3257,6 +3279,30 @@ mod tests {
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["profileLeasePolicy"], "wait");
         assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
+    }
+
+    #[test]
+    fn service_request_command_rejects_blocked_manual_seeding_without_override() {
+        let err = service_request_command(
+            r##"{"action":"tab_new","serviceName":"JournalDownloader","agentName":"codex","taskName":"seedThenProbeGoogle","blockedByManualAction":true,"manualSeedingRequired":true}"##,
+        )
+        .expect_err("blocked manual seeding requests should require an override");
+
+        assert!(err.contains("manual profile seeding"));
+    }
+
+    #[test]
+    fn service_request_command_accepts_blocked_manual_seeding_with_override() {
+        let command = service_request_command(
+            r##"{"action":"tab_new","serviceName":"JournalDownloader","agentName":"codex","taskName":"seedThenProbeGoogle","blockedByManualAction":true,"manualSeedingRequired":true,"allowManualAction":true}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "tab_new");
+        assert_eq!(command["serviceName"], "JournalDownloader");
+        assert!(command["blockedByManualAction"].is_null());
+        assert!(command["manualSeedingRequired"].is_null());
+        assert!(command["allowManualAction"].is_null());
     }
 
     #[test]

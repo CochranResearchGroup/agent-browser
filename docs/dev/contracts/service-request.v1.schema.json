@@ -103,6 +103,18 @@
       "minimum": 1,
       "description": "Maximum time to wait for profileLeasePolicy=wait before failing the service request."
     },
+    "blockedByManualAction": {
+      "type": "boolean",
+      "description": "Planner marker copied from an access-plan serviceRequest when the planned request must wait for a manual operator step."
+    },
+    "manualSeedingRequired": {
+      "type": "boolean",
+      "description": "Planner marker copied from an access-plan serviceRequest when profile seeding must be completed before this request should launch."
+    },
+    "allowManualAction": {
+      "type": "boolean",
+      "description": "Explicit override allowing a request marked blockedByManualAction and manualSeedingRequired to be submitted anyway."
+    },
     "serviceName": {
       "type": "string",
       "description": "Calling service name, for example JournalDownloader."

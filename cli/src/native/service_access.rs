@@ -494,6 +494,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         input.request,
         selected_profile,
         policy_denies || denied_challenge,
+        manual_seeding_required,
         manual_action_required,
     );
 
@@ -528,6 +529,7 @@ fn service_request_decision(
     request: &ServiceAccessPlanRequest,
     selected_profile: Option<&BrowserProfile>,
     denied: bool,
+    manual_seeding_required: bool,
     manual_action_required: bool,
 ) -> Value {
     let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
@@ -550,6 +552,12 @@ fn service_request_decision(
             "targetServiceIds".to_string(),
             json!(request.target_service_ids),
         );
+    }
+    if manual_action_required {
+        service_request.insert("blockedByManualAction".to_string(), json!(true));
+    }
+    if manual_seeding_required {
+        service_request.insert("manualSeedingRequired".to_string(), json!(true));
     }
     service_request.insert("profileLeasePolicy".to_string(), json!("wait"));
 
@@ -1315,6 +1323,14 @@ mod tests {
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["profileLeasePolicy"],
             "wait"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["blockedByManualAction"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["manualSeedingRequired"],
+            true
         );
         assert_eq!(
             plan["decision"]["serviceRequest"]["http"]["route"],
