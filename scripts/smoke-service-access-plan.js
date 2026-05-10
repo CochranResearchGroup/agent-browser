@@ -336,6 +336,10 @@ function assertAccessPlan(data, label) {
     `${label} monitor probe due flag mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.decision?.monitorRunDue?.available === false,
+    `${label} monitor run-due recipe mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     data?.decision?.providerIds?.includes(providerId),
     `${label} provider IDs mismatch: ${JSON.stringify(data)}`,
   );
@@ -530,6 +534,10 @@ function assertMonitoredAccessPlan(data, label) {
   assert(
     data?.decision?.monitorProbeDue === false,
     `${label} monitor probe due flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.available === false,
+    `${label} monitor run-due recipe mismatch: ${JSON.stringify(data)}`,
   );
   assert(
     data?.decision?.recommendedAction === 'probe_target_auth_or_reseed_if_needed',

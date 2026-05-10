@@ -1029,6 +1029,49 @@ export interface ServiceAccessPlanPostSeedingProbeRunResult {
   [key: string]: unknown;
 }
 
+export interface ServiceAccessPlanMonitorRunDue {
+  /** True when the access plan found matching due active monitors. */
+  available: boolean;
+  /** True when this plan recommends running due monitors before using the selected profile. */
+  recommendedBeforeUse: boolean;
+  /** Matching due monitor IDs from monitorFindings. */
+  monitorIds: string[];
+  /** Matching due monitor IDs that have never been checked. */
+  neverCheckedMonitorIds: string[];
+  /** Target identities covered by the due monitor set. */
+  targetServiceIds: string[];
+  http: {
+    method: 'POST';
+    route: '/api/service/monitors/run-due';
+    [key: string]: unknown;
+  };
+  mcp: {
+    tool: 'service_monitors_run_due';
+    [key: string]: unknown;
+  };
+  client: {
+    package: '@agent-browser/client/service-observability';
+    helper: 'runServiceAccessPlanMonitorRunDue';
+    [key: string]: unknown;
+  };
+  fallbackClient: {
+    package: '@agent-browser/client/service-observability';
+    helper: 'runDueServiceMonitors';
+    [key: string]: unknown;
+  };
+  cli: {
+    command: 'agent-browser service monitors run-due';
+    [key: string]: unknown;
+  };
+  requestFields: string[];
+  notes: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanMonitorRunDueOptions extends ServiceObservabilityHttpOptions {
+  accessPlan: ServiceAccessPlanResponse;
+}
+
 export interface ServiceAccessPlanMonitorFindings {
   profileReadinessAttentionRequired: boolean;
   profileReadinessProbeDue: boolean;
@@ -1056,6 +1099,7 @@ export interface ServiceAccessPlanDecision {
   challengeIds: string[];
   freshnessUpdate: ServiceAccessPlanFreshnessUpdate;
   postSeedingProbe: ServiceAccessPlanPostSeedingProbe;
+  monitorRunDue: ServiceAccessPlanMonitorRunDue;
   serviceRequest: ServiceAccessPlanServiceRequest;
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
@@ -1316,6 +1360,8 @@ export declare function updateServiceProfileFreshness(options: ServiceProfileFre
 export declare function verifyServiceProfileSeeding(options: ServiceProfileFreshnessUpdateOptions): Promise<ServiceProfileUpsertResponse>;
 /** Run the post-close seeding verification recipe advertised by an access plan. */
 export declare function runServiceAccessPlanPostSeedingProbe(options: ServiceAccessPlanPostSeedingProbeRunOptions): Promise<ServiceAccessPlanPostSeedingProbeRunResult>;
+/** Run the due-monitor recipe advertised by an access plan. */
+export declare function runServiceAccessPlanMonitorRunDue(options: ServiceAccessPlanMonitorRunDueOptions): Promise<ServiceMonitorRunDueResponse>;
 export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;
 export declare function upsertServiceSession(options: ServiceSessionMutationOptions): Promise<ServiceSessionUpsertResponse>;
 export declare function deleteServiceSession(options: ServiceIdOptions): Promise<ServiceSessionDeleteResponse>;

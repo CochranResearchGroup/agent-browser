@@ -22,6 +22,7 @@ import {
   resumeServiceMonitor,
   resetServiceMonitorFailures,
   runDueServiceMonitors,
+  runServiceAccessPlanMonitorRunDue,
   runServiceAccessPlanPostSeedingProbe,
   summarizeServiceProfileReadiness,
   triageServiceMonitor,
@@ -322,6 +323,26 @@ async function main() {
   );
   assert.equal(monitorRunDue.calls[0].init.method, 'POST');
   assert.equal(monitorRunDueResult.failed, 1);
+
+  const accessPlanMonitorRunDue = createFetchRecorder({
+    success: true,
+    data: {
+      checked: 1,
+      failed: 0,
+      monitors: [{ id: 'google-login-freshness' }],
+    },
+  });
+  const accessPlanMonitorRunDueResult = await runServiceAccessPlanMonitorRunDue({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: accessPlanMonitorRunDue.fetch,
+    accessPlan: serviceAccessPlanWithDueMonitor(),
+  });
+  assert.equal(
+    accessPlanMonitorRunDue.calls[0].url,
+    'http://127.0.0.1:4849/api/service/monitors/run-due',
+  );
+  assert.equal(accessPlanMonitorRunDue.calls[0].init.method, 'POST');
+  assert.equal(accessPlanMonitorRunDueResult.checked, 1);
 
   const remediesApply = createFetchRecorder({
     success: true,
@@ -1596,6 +1617,46 @@ function serviceAccessPlan() {
         },
         requestFields: ['profileId', 'targetServiceId', 'readinessState'],
         notes: ['Run only after detached CDP-free seeding has closed.'],
+      },
+    },
+  };
+}
+
+function serviceAccessPlanWithDueMonitor() {
+  return {
+    query: {
+      serviceName: 'JournalDownloader',
+      agentName: 'codex',
+      taskName: 'verifyGoogle',
+      targetServiceIds: ['google'],
+    },
+    decision: {
+      monitorRunDue: {
+        available: true,
+        recommendedBeforeUse: true,
+        monitorIds: ['google-login-freshness'],
+        neverCheckedMonitorIds: ['google-login-freshness'],
+        targetServiceIds: ['google'],
+        http: {
+          method: 'POST',
+          route: '/api/service/monitors/run-due',
+        },
+        mcp: {
+          tool: 'service_monitors_run_due',
+        },
+        client: {
+          package: '@agent-browser/client/service-observability',
+          helper: 'runServiceAccessPlanMonitorRunDue',
+        },
+        fallbackClient: {
+          package: '@agent-browser/client/service-observability',
+          helper: 'runDueServiceMonitors',
+        },
+        cli: {
+          command: 'agent-browser service monitors run-due',
+        },
+        requestFields: [],
+        notes: ['Runs all due active monitors through the service worker queue.'],
       },
     },
   };

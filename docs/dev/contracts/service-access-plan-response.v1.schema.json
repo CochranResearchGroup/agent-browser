@@ -319,6 +319,7 @@
         "manualActionRequired",
         "manualSeedingRequired",
         "monitorAttentionRequired",
+        "monitorProbeDue",
         "providerIds",
         "authProviderIds",
         "challengeProviderIds",
@@ -327,6 +328,7 @@
         "challengeIds",
         "freshnessUpdate",
         "postSeedingProbe",
+        "monitorRunDue",
         "serviceRequest",
         "namingWarnings",
         "hasNamingWarning",
@@ -715,6 +717,132 @@
               "items": {
                 "type": "string"
               }
+            }
+          },
+          "additionalProperties": true
+        },
+        "monitorRunDue": {
+          "type": "object",
+          "required": [
+            "available",
+            "recommendedBeforeUse",
+            "monitorIds",
+            "neverCheckedMonitorIds",
+            "targetServiceIds",
+            "http",
+            "mcp",
+            "client",
+            "fallbackClient",
+            "cli",
+            "requestFields",
+            "notes"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "recommendedBeforeUse": {
+              "type": "boolean"
+            },
+            "monitorIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "neverCheckedMonitorIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "targetServiceIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "http": {
+              "type": "object",
+              "required": ["method", "route"],
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "enum": ["POST"]
+                },
+                "route": {
+                  "type": "string",
+                  "enum": ["/api/service/monitors/run-due"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "mcp": {
+              "type": "object",
+              "required": ["tool"],
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "enum": ["service_monitors_run_due"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "client": {
+              "type": "object",
+              "required": ["package", "helper"],
+              "properties": {
+                "package": {
+                  "type": "string",
+                  "enum": ["@agent-browser/client/service-observability"]
+                },
+                "helper": {
+                  "type": "string",
+                  "enum": ["runServiceAccessPlanMonitorRunDue"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "fallbackClient": {
+              "type": "object",
+              "required": ["package", "helper"],
+              "properties": {
+                "package": {
+                  "type": "string",
+                  "enum": ["@agent-browser/client/service-observability"]
+                },
+                "helper": {
+                  "type": "string",
+                  "enum": ["runDueServiceMonitors"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "cli": {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "enum": ["agent-browser service monitors run-due"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "requestFields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "query": {
+              "type": "object"
             }
           },
           "additionalProperties": true

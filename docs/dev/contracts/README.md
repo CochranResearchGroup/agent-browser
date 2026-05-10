@@ -83,7 +83,10 @@ matching active profile-readiness monitors that are due or never checked through
 `profileReadinessNeverCheckedMonitorIds`, and `dueTargetServiceIds`; those
 findings set `decision.monitorProbeDue` and recommend
 `run_due_profile_readiness_monitor` before the caller relies on retained
-freshness. Lookup and access-plan
+freshness. `decision.monitorRunDue` is the copyable recipe for that action,
+covering HTTP `POST /api/service/monitors/run-due`, MCP
+`service_monitors_run_due`, CLI `agent-browser service monitors run-due`, and
+`runServiceAccessPlanMonitorRunDue()`. Lookup and access-plan
 responses also include `seedingHandoff` when readiness requires manual profile
 seeding, so clients can show the detached runtime-login command without making
 a second profile-specific call. The seeding handoff response includes
@@ -407,11 +410,14 @@ selected site policy, enabled providers, retained challenges, optional
 manual-action flags, selected profile ID, provider IDs, challenge IDs, stable
 reason strings, and `freshnessUpdate` instructions that identify the serialized
 profile freshness write path for bounded auth probes. The same decision
-includes `serviceRequest`, a copyable queued tab-request recipe for HTTP
-`POST /api/service/request`, MCP `service_request`, and the
-`requestServiceTab()` client helper. It reports whether the request can be sent
-immediately or should be reused after manual seeding, challenge approval, or
-provider work completes.
+includes `monitorRunDue`, a copyable due-monitor recipe for HTTP
+`POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`,
+CLI `agent-browser service monitors run-due`, and
+`runServiceAccessPlanMonitorRunDue()`. It also includes `serviceRequest`, a
+copyable queued tab-request recipe for HTTP `POST /api/service/request`, MCP
+`service_request`, and the `requestServiceTab()` client helper. It reports
+whether the request can be sent immediately or should be reused after manual
+seeding, challenge approval, or provider work completes.
 
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:

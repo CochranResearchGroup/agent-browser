@@ -511,6 +511,8 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         target_service_ids,
         manual_seeding_required || readiness_profile_needs_probe(readiness, target_service_ids),
     );
+    let monitor_run_due =
+        monitor_run_due_decision(input.request, monitor_findings, profile_readiness_probe_due);
 
     json!({
         "recommendedAction": recommended_action,
@@ -533,11 +535,84 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "challengeIds": challenges.iter().map(|challenge| challenge.id.clone()).collect::<Vec<_>>(),
         "freshnessUpdate": freshness_update,
         "postSeedingProbe": post_seeding_probe,
+        "monitorRunDue": monitor_run_due,
         "serviceRequest": service_request,
         "namingWarnings": naming_warnings,
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
     })
+}
+
+/// Describe the queued service-owned monitor execution path for due monitors.
+fn monitor_run_due_decision(
+    request: &ServiceAccessPlanRequest,
+    monitor_findings: &Value,
+    recommended_before_use: bool,
+) -> Value {
+    let due_monitor_ids = string_array_from_value(
+        monitor_findings
+            .get("profileReadinessDueMonitorIds")
+            .unwrap_or(&Value::Null),
+    );
+    let never_checked_monitor_ids = string_array_from_value(
+        monitor_findings
+            .get("profileReadinessNeverCheckedMonitorIds")
+            .unwrap_or(&Value::Null),
+    );
+    let due_target_service_ids = string_array_from_value(
+        monitor_findings
+            .get("dueTargetServiceIds")
+            .unwrap_or(&Value::Null),
+    );
+    let available = !due_monitor_ids.is_empty();
+
+    json!({
+        "available": available,
+        "recommendedBeforeUse": recommended_before_use && available,
+        "monitorIds": due_monitor_ids,
+        "neverCheckedMonitorIds": never_checked_monitor_ids,
+        "targetServiceIds": due_target_service_ids,
+        "http": {
+            "method": "POST",
+            "route": "/api/service/monitors/run-due",
+        },
+        "mcp": {
+            "tool": "service_monitors_run_due",
+        },
+        "client": {
+            "package": "@agent-browser/client/service-observability",
+            "helper": "runServiceAccessPlanMonitorRunDue",
+        },
+        "fallbackClient": {
+            "package": "@agent-browser/client/service-observability",
+            "helper": "runDueServiceMonitors",
+        },
+        "cli": {
+            "command": "agent-browser service monitors run-due",
+        },
+        "requestFields": [],
+        "notes": [
+            "Runs all due active monitors through the service worker queue.",
+            "Inspect monitorIds after completion to confirm the requested target freshness changed as expected.",
+        ],
+        "query": {
+            "serviceName": request.service_name.as_ref(),
+            "agentName": request.agent_name.as_ref(),
+            "taskName": request.task_name.as_ref(),
+        },
+    })
+}
+
+fn string_array_from_value(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(ToString::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Describe the bounded post-close profile seeding verification recipe.
@@ -1473,6 +1548,23 @@ mod tests {
             plan["decision"]["postSeedingProbe"]["cli"]["command"],
             "agent-browser service profiles google-work verify-seeding google --state fresh --evidence <probe-evidence>"
         );
+        assert_eq!(plan["decision"]["monitorRunDue"]["available"], false);
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["recommendedBeforeUse"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["http"]["route"],
+            "/api/service/monitors/run-due"
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["mcp"]["tool"],
+            "service_monitors_run_due"
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["client"]["helper"],
+            "runServiceAccessPlanMonitorRunDue"
+        );
         assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
         assert_eq!(
             plan["decision"]["serviceRequest"]["recommendedAfterManualAction"],
@@ -1712,6 +1804,43 @@ mod tests {
         assert_eq!(
             plan["decision"]["recommendedAction"],
             "run_due_profile_readiness_monitor"
+        );
+        assert_eq!(plan["decision"]["monitorRunDue"]["available"], true);
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["recommendedBeforeUse"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["monitorIds"],
+            json!(["acs-freshness"])
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["neverCheckedMonitorIds"],
+            json!(["acs-freshness"])
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["targetServiceIds"],
+            json!(["acs"])
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["http"]["route"],
+            "/api/service/monitors/run-due"
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["mcp"]["tool"],
+            "service_monitors_run_due"
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["client"]["helper"],
+            "runServiceAccessPlanMonitorRunDue"
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["fallbackClient"]["helper"],
+            "runDueServiceMonitors"
+        );
+        assert_eq!(
+            plan["decision"]["monitorRunDue"]["cli"]["command"],
+            "agent-browser service monitors run-due"
         );
         assert!(plan["decision"]["reasons"]
             .as_array()

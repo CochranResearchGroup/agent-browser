@@ -82,6 +82,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileFreshnessUpdateOptions} ServiceProfileFreshnessUpdateOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunOptions} ServiceAccessPlanPostSeedingProbeRunOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunResult} ServiceAccessPlanPostSeedingProbeRunResult
+ * @typedef {import('./service-observability.generated.js').ServiceAccessPlanMonitorRunDueOptions} ServiceAccessPlanMonitorRunDueOptions
  * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyOptions} ServiceRemediesApplyOptions
  * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyResponse} ServiceRemediesApplyResponse
  */
@@ -437,6 +438,20 @@ export function getServiceMonitors(options) {
  */
 export function runDueServiceMonitors(options) {
   return servicePost(options, '/api/service/monitors/run-due');
+}
+
+/**
+ * Run the due-monitor recipe advertised by an access plan.
+ *
+ * @param {ServiceAccessPlanMonitorRunDueOptions} options
+ * @returns {Promise<ServiceMonitorRunDueResponse>}
+ */
+export function runServiceAccessPlanMonitorRunDue({ accessPlan, ...options }) {
+  const recipe = accessPlanMonitorRunDue(accessPlan);
+  if (recipe.available !== true) {
+    throw new Error('access plan monitorRunDue is not available');
+  }
+  return runDueServiceMonitors(options);
 }
 
 /**
@@ -885,6 +900,15 @@ function accessPlanPostSeedingProbe(accessPlan) {
   const recipe = /** @type {Record<string, unknown>} */ (decision).postSeedingProbe;
   assertPlainObject(recipe, 'service access plan decision.postSeedingProbe');
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbe} */ (recipe);
+}
+
+function accessPlanMonitorRunDue(accessPlan) {
+  assertPlainObject(accessPlan, 'service access plan');
+  const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
+  assertPlainObject(decision, 'service access plan decision');
+  const recipe = /** @type {Record<string, unknown>} */ (decision).monitorRunDue;
+  assertPlainObject(recipe, 'service access plan decision.monitorRunDue');
+  return /** @type {import('./service-observability.generated.js').ServiceAccessPlanMonitorRunDue} */ (recipe);
 }
 
 function accessPlanProbeUrl(accessPlan) {
