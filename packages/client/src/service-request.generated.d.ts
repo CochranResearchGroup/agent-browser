@@ -91,6 +91,8 @@ export interface ServiceRequest {
   blockedByManualAction?: boolean;
   manualSeedingRequired?: boolean;
   allowManualAction?: boolean;
+  requiresCdpFree?: boolean;
+  cdpAttachmentAllowed?: boolean;
 }
 
 export type ServiceRequestForAction<TAction extends ServiceRequestAction> =

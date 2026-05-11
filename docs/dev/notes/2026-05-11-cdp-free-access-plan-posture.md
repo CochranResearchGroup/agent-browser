@@ -21,7 +21,9 @@ Local configured or persisted policies with the same ID still override built-in 
 
 ## Current Boundary
 
-This slice is a no-launch planning contract. It does not yet implement non-CDP observation or control. When `requiresCdpFree` is true, clients should avoid DevTools attachment and treat CDP-backed commands as unavailable unless a later service capability explicitly says otherwise.
+This initial slice is a no-launch planning contract. It does not yet implement non-CDP observation or control. When `requiresCdpFree` is true, clients should avoid DevTools attachment and treat CDP-backed commands as unavailable unless a later service capability explicitly says otherwise.
+
+The follow-up enforcement slice copies `requiresCdpFree` and `cdpAttachmentAllowed` into `decision.serviceRequest.request`. HTTP `POST /api/service/request`, MCP `service_request`, and the generated service-request client reject requests with `requiresCdpFree: true` and `cdpAttachmentAllowed: false`, so a normal queued tab request cannot accidentally open a DevTools-attached browser for a CDP-sensitive site.
 
 ## Validation
 

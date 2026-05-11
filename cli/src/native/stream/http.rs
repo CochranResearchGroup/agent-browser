@@ -1259,6 +1259,10 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         request.get("manualSeedingRequired"),
         request.get("allowManualAction"),
     )?;
+    reject_cdp_free_service_request(
+        request.get("requiresCdpFree"),
+        request.get("cdpAttachmentAllowed"),
+    )?;
     let mut command = json!({
         "id": format!("http-service-request-{}-{}", action, uuid::Uuid::new_v4()),
         "action": action,
@@ -1309,6 +1313,21 @@ fn reject_blocked_manual_service_request(
     {
         return Err(
             "service request is blocked by manual profile seeding; complete seeding or set allowManualAction=true to override"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn reject_cdp_free_service_request(
+    requires_cdp_free: Option<&Value>,
+    cdp_attachment_allowed: Option<&Value>,
+) -> Result<(), String> {
+    if requires_cdp_free.and_then(Value::as_bool) == Some(true)
+        && cdp_attachment_allowed.and_then(Value::as_bool) != Some(true)
+    {
+        return Err(
+            "service request requires CDP-free browser operation; non-CDP service request execution is not implemented yet"
                 .to_string(),
         );
     }
@@ -3342,6 +3361,16 @@ mod tests {
         assert!(command["blockedByManualAction"].is_null());
         assert!(command["manualSeedingRequired"].is_null());
         assert!(command["allowManualAction"].is_null());
+    }
+
+    #[test]
+    fn service_request_command_rejects_cdp_free_without_non_cdp_execution() {
+        let err = service_request_command(
+            r##"{"action":"tab_new","serviceName":"CanvaCLI","agentName":"codex","taskName":"openCanva","targetServiceId":"canva","requiresCdpFree":true,"cdpAttachmentAllowed":false}"##,
+        )
+        .expect_err("CDP-free requests should not queue CDP-backed execution");
+
+        assert!(err.contains("CDP-free browser operation"));
     }
 
     #[test]

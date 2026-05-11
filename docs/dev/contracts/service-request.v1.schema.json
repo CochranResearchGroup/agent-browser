@@ -115,6 +115,14 @@
       "type": "boolean",
       "description": "Explicit override allowing a request marked blockedByManualAction and manualSeedingRequired to be submitted anyway."
     },
+    "requiresCdpFree": {
+      "type": "boolean",
+      "description": "Planner marker copied from an access-plan serviceRequest when the selected site policy requires browser operation without a DevTools/CDP attachment."
+    },
+    "cdpAttachmentAllowed": {
+      "type": "boolean",
+      "description": "Planner marker copied from an access-plan serviceRequest. False means the current service request surface must not queue a CDP-backed launch."
+    },
     "serviceName": {
       "type": "string",
       "description": "Calling service name, for example JournalDownloader."

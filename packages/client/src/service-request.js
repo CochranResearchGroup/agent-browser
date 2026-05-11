@@ -195,6 +195,11 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
       `service access plan requires manual profile seeding before tab request${typeof command === 'string' ? `: ${command}` : ''}`,
     );
   }
+  if (accessPlanRequiresCdpFree(decisionRecord)) {
+    throw new Error(
+      'service access plan requires CDP-free browser operation; non-CDP service request execution is not implemented yet',
+    );
+  }
   const serviceRequest = decisionRecord.serviceRequest;
   assertPlainObject(serviceRequest, 'service access plan serviceRequest');
   const serviceRequestRecord = /** @type {Record<string, unknown>} */ (serviceRequest);
@@ -224,6 +229,27 @@ function accessPlanRequiresManualSeeding(accessPlan, decision) {
     decision.manualSeedingRequired === true ||
     (summaryRequiresSeeding && accessPlan.seedingHandoff !== null && accessPlan.seedingHandoff !== undefined)
   );
+}
+
+/**
+ * @param {Record<string, unknown>} decision
+ */
+function accessPlanRequiresCdpFree(decision) {
+  const launchPosture = decision.launchPosture;
+  const postureRequiresCdpFree =
+    launchPosture &&
+    typeof launchPosture === 'object' &&
+    !Array.isArray(launchPosture) &&
+    /** @type {Record<string, unknown>} */ (launchPosture).requiresCdpFree === true &&
+    /** @type {Record<string, unknown>} */ (launchPosture).cdpAttachmentAllowed !== true;
+  const serviceRequest = decision.serviceRequest;
+  const serviceRequestRequiresCdpFree =
+    serviceRequest &&
+    typeof serviceRequest === 'object' &&
+    !Array.isArray(serviceRequest) &&
+    /** @type {Record<string, unknown>} */ (serviceRequest).requiresCdpFree === true &&
+    /** @type {Record<string, unknown>} */ (serviceRequest).cdpAttachmentAllowed !== true;
+  return postureRequiresCdpFree || serviceRequestRequiresCdpFree;
 }
 
 /**

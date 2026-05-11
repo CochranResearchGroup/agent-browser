@@ -675,8 +675,25 @@ function assertDueAccessPlan(data, label) {
     `${label} monitor run-due CLI mismatch: ${JSON.stringify(data)}`,
   );
   assert(
-    data?.decision?.serviceRequest?.available === true,
+    data?.decision?.serviceRequest?.available === false,
     `${label} service request availability mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.blockedByCdpFree === true,
+    `${label} service request CDP-free block mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.requiresCdpFree === true,
+    `${label} service request CDP-free requirement mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.cdpAttachmentAllowed === false,
+    `${label} service request CDP attachment flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.request?.requiresCdpFree === true &&
+      data.decision.serviceRequest.request.cdpAttachmentAllowed === false,
+    `${label} service request body CDP-free markers mismatch: ${JSON.stringify(data)}`,
   );
 }
 

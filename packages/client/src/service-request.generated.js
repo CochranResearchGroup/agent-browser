@@ -103,7 +103,9 @@ export const SERVICE_REQUEST_INTEGER_FIELDS = [
 export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
   "blockedByManualAction",
   "manualSeedingRequired",
-  "allowManualAction"
+  "allowManualAction",
+  "requiresCdpFree",
+  "cdpAttachmentAllowed"
 ];
 
 export const SERVICE_REQUEST_MCP_TOOL_NAME = "service_request";

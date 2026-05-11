@@ -642,6 +642,14 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "boolean",
                         "description": "Explicit override allowing a request marked blockedByManualAction and manualSeedingRequired to be submitted anyway."
                     },
+                    "requiresCdpFree": {
+                        "type": "boolean",
+                        "description": "Access-plan marker indicating this request requires browser operation without a DevTools/CDP attachment."
+                    },
+                    "cdpAttachmentAllowed": {
+                        "type": "boolean",
+                        "description": "Access-plan marker indicating whether the current request may use CDP-backed execution."
+                    },
                     "serviceName": {
                         "type": "string",
                         "description": "Calling service name, for example JournalDownloader."
@@ -4673,6 +4681,7 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
         )));
     }
     reject_blocked_manual_service_request(arguments)?;
+    reject_cdp_free_service_request(arguments)?;
     let params = optional_object_argument(arguments, "params")?;
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
@@ -4705,6 +4714,20 @@ fn reject_blocked_manual_service_request(arguments: &Value) -> Result<(), JsonRp
     {
         return Err(JsonRpcError::invalid_params(
             "service_request is blocked by manual profile seeding; complete seeding or set allowManualAction=true to override",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_cdp_free_service_request(arguments: &Value) -> Result<(), JsonRpcError> {
+    if arguments.get("requiresCdpFree").and_then(Value::as_bool) == Some(true)
+        && arguments
+            .get("cdpAttachmentAllowed")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        return Err(JsonRpcError::invalid_params(
+            "service_request requires CDP-free browser operation; non-CDP service request execution is not implemented yet",
         ));
     }
     Ok(())
@@ -10774,6 +10797,8 @@ mod tests {
         assert!(service_request["inputSchema"]["properties"]["blockedByManualAction"].is_object());
         assert!(service_request["inputSchema"]["properties"]["manualSeedingRequired"].is_object());
         assert!(service_request["inputSchema"]["properties"]["allowManualAction"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["requiresCdpFree"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["cdpAttachmentAllowed"].is_object());
 
         for action in SERVICE_REQUEST_ACTIONS {
             let (_, command) = service_request_command(&json!({
@@ -10824,6 +10849,22 @@ mod tests {
         assert!(command["blockedByManualAction"].is_null());
         assert!(command["manualSeedingRequired"].is_null());
         assert!(command["allowManualAction"].is_null());
+    }
+
+    #[test]
+    fn service_request_command_rejects_cdp_free_without_non_cdp_execution() {
+        let err = service_request_command(&json!({
+            "action": "tab_new",
+            "serviceName": "CanvaCLI",
+            "agentName": "agent-a",
+            "taskName": "openCanva",
+            "targetServiceId": "canva",
+            "requiresCdpFree": true,
+            "cdpAttachmentAllowed": false
+        }))
+        .expect_err("CDP-free requests should not queue CDP-backed execution");
+
+        assert!(format!("{err:?}").contains("CDP-free browser operation"));
     }
 
     #[test]

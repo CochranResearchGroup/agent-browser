@@ -504,6 +504,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         policy_denies || denied_challenge,
         manual_seeding_required,
         manual_action_required,
+        &launch_posture.value,
     );
     let post_seeding_probe = post_seeding_probe_decision(
         input.request,
@@ -702,11 +703,22 @@ fn service_request_decision(
     denied: bool,
     manual_seeding_required: bool,
     manual_action_required: bool,
+    launch_posture: &Value,
 ) -> Value {
     let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
-    let available = selected_profile_id.is_some() && !denied && !manual_action_required;
+    let requires_cdp_free = launch_posture
+        .get("requiresCdpFree")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let cdp_attachment_allowed = launch_posture
+        .get("cdpAttachmentAllowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(!requires_cdp_free);
+    let blocked_by_cdp_free = requires_cdp_free && !cdp_attachment_allowed;
+    let available =
+        selected_profile_id.is_some() && !denied && !manual_action_required && !blocked_by_cdp_free;
     let recommended_after_manual_action =
-        selected_profile_id.is_some() && !denied && manual_action_required;
+        selected_profile_id.is_some() && !denied && manual_action_required && !blocked_by_cdp_free;
     let mut service_request = Map::new();
     service_request.insert("action".to_string(), json!("tab_new"));
     if let Some(service_name) = request.service_name.as_ref() {
@@ -730,13 +742,23 @@ fn service_request_decision(
     if manual_seeding_required {
         service_request.insert("manualSeedingRequired".to_string(), json!(true));
     }
+    if requires_cdp_free {
+        service_request.insert("requiresCdpFree".to_string(), json!(true));
+    }
+    service_request.insert(
+        "cdpAttachmentAllowed".to_string(),
+        json!(cdp_attachment_allowed),
+    );
     service_request.insert("profileLeasePolicy".to_string(), json!("wait"));
 
     json!({
         "available": available,
         "recommendedAfterManualAction": recommended_after_manual_action,
         "blockedByManualAction": manual_action_required,
+        "blockedByCdpFree": blocked_by_cdp_free,
         "blockedByPolicy": denied,
+        "requiresCdpFree": requires_cdp_free,
+        "cdpAttachmentAllowed": cdp_attachment_allowed,
         "action": "tab_new",
         "selectedProfileId": selected_profile_id,
         "profileLeasePolicy": "wait",
@@ -758,6 +780,8 @@ fn service_request_decision(
             "taskName",
             "targetServiceIds",
             "profileLeasePolicy",
+            "requiresCdpFree",
+            "cdpAttachmentAllowed",
             "url",
             "params",
         ],
@@ -2337,6 +2361,21 @@ mod tests {
         assert_eq!(plan["sitePolicySource"]["source"], "builtin");
         assert_eq!(plan["sitePolicy"]["requiresCdpFree"], true);
         assert_eq!(plan["decision"]["browserHost"], "local_headed");
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+        assert_eq!(plan["decision"]["serviceRequest"]["blockedByCdpFree"], true);
+        assert_eq!(plan["decision"]["serviceRequest"]["requiresCdpFree"], true);
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["cdpAttachmentAllowed"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["requiresCdpFree"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["cdpAttachmentAllowed"],
+            false
+        );
         assert_eq!(plan["decision"]["launchPosture"]["requiresCdpFree"], true);
         assert_eq!(
             plan["decision"]["launchPosture"]["cdpAttachmentAllowed"],

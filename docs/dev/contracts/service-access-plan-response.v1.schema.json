@@ -615,7 +615,10 @@
             "available",
             "recommendedAfterManualAction",
             "blockedByManualAction",
+            "blockedByCdpFree",
             "blockedByPolicy",
+            "requiresCdpFree",
+            "cdpAttachmentAllowed",
             "action",
             "selectedProfileId",
             "profileLeasePolicy",
@@ -635,7 +638,16 @@
             "blockedByManualAction": {
               "type": "boolean"
             },
+            "blockedByCdpFree": {
+              "type": "boolean"
+            },
             "blockedByPolicy": {
+              "type": "boolean"
+            },
+            "requiresCdpFree": {
+              "type": "boolean"
+            },
+            "cdpAttachmentAllowed": {
               "type": "boolean"
             },
             "action": {
@@ -675,6 +687,12 @@
                 "profileLeasePolicy": {
                   "type": "string",
                   "enum": ["wait"]
+                },
+                "requiresCdpFree": {
+                  "type": "boolean"
+                },
+                "cdpAttachmentAllowed": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": true

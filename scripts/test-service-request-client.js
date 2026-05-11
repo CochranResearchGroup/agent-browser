@@ -270,6 +270,30 @@ async function main() {
       },
     },
   };
+  const cdpFreeAccessPlan = {
+    decision: {
+      launchPosture: {
+        requiresCdpFree: true,
+        cdpAttachmentAllowed: false,
+      },
+      serviceRequest: {
+        available: false,
+        blockedByCdpFree: true,
+        requiresCdpFree: true,
+        cdpAttachmentAllowed: false,
+        request: {
+          serviceName: 'CanvaCLI',
+          agentName: 'article-probe-agent',
+          taskName: 'openCanva',
+          targetServiceIds: ['canva'],
+          profileLeasePolicy: 'wait',
+          action: 'tab_new',
+          requiresCdpFree: true,
+          cdpAttachmentAllowed: false,
+        },
+      },
+    },
+  };
   assert.deepEqual(
     createServiceTabRequestFromAccessPlan(accessPlan, {
       url: 'https://example.com/planned',
@@ -294,6 +318,13 @@ async function main() {
         url: 'https://accounts.google.com',
       }),
     /requires manual profile seeding.*agent-browser --runtime-profile google-work runtime login https:\/\/accounts.google.com/,
+  );
+  assert.throws(
+    () =>
+      createServiceTabRequestFromAccessPlan(cdpFreeAccessPlan, {
+        url: 'https://www.canva.com/',
+      }),
+    /requires CDP-free browser operation/,
   );
   assert.deepEqual(
     createServiceTabRequestFromAccessPlan(manualSeedingAccessPlan, {
