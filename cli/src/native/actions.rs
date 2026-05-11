@@ -22,7 +22,7 @@ use super::browser::{
     should_track_target, BrowserManager, BrowserShutdownOutcome, ProcessExitObservation, WaitUntil,
 };
 use super::cancellation::CancellationToken;
-use super::cdp::chrome::{launch_chrome_detached, LaunchOptions};
+use super::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
 use super::cdp::client::CdpClient;
 use super::cdp::types::{
     AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
@@ -507,6 +507,12 @@ fn close_behavior_for_launched_browser(
 
 fn service_browser_id(session_id: &str) -> String {
     format!("session:{}", session_id)
+}
+
+struct CdpFreeLaunchPlan {
+    launch_options: LaunchOptions,
+    metadata: ServiceLaunchMetadata,
+    url: Option<String>,
 }
 
 impl ServiceLaunchMetadata {
@@ -3287,6 +3293,30 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
 }
 
 async fn handle_cdp_free_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let plan = build_cdp_free_launch_plan(cmd)?;
+    ensure_service_profile_lease_available(&plan.metadata, &state.session_id, cmd).await?;
+    validate_cdp_free_launch_plan(&plan)?;
+
+    let launch = launch_chrome_detached(&plan.launch_options)?;
+    persist_service_browser_record(
+        &state.session_id,
+        ServiceBrowserHost::LocalHeaded,
+        ServiceBrowserHealth::Ready,
+        Some(launch.pid),
+        None,
+        None,
+        Some(plan.metadata),
+    );
+
+    Ok(cdp_free_launch_response(
+        state,
+        &plan.launch_options,
+        &launch,
+        plan.url,
+    ))
+}
+
+fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> {
     let url = optional_command_string(cmd, "url");
     if url.as_deref().is_some_and(|value| value.starts_with('-')) {
         return Err("cdp_free_launch url must not start with '-'".to_string());
@@ -3385,28 +3415,32 @@ async fn handle_cdp_free_launch(cmd: &Value, state: &mut DaemonState) -> Result<
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
     let metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
-    ensure_service_profile_lease_available(&metadata, &state.session_id, cmd).await?;
+
+    Ok(CdpFreeLaunchPlan {
+        launch_options,
+        metadata,
+        url,
+    })
+}
+
+fn validate_cdp_free_launch_plan(plan: &CdpFreeLaunchPlan) -> Result<(), String> {
     super::browser::validate_launch_options(
-        launch_options.extensions.as_deref(),
+        plan.launch_options.extensions.as_deref(),
         false,
-        launch_options.profile.as_deref(),
+        plan.launch_options.profile.as_deref(),
         None,
-        launch_options.allow_file_access,
-        launch_options.executable_path.as_deref(),
-    )?;
+        plan.launch_options.allow_file_access,
+        plan.launch_options.executable_path.as_deref(),
+    )
+}
 
-    let launch = launch_chrome_detached(&launch_options)?;
-    persist_service_browser_record(
-        &state.session_id,
-        ServiceBrowserHost::LocalHeaded,
-        ServiceBrowserHealth::Ready,
-        Some(launch.pid),
-        None,
-        None,
-        Some(metadata),
-    );
-
-    Ok(json!({
+fn cdp_free_launch_response(
+    state: &DaemonState,
+    launch_options: &LaunchOptions,
+    launch: &ManualChromeLaunch,
+    url: Option<String>,
+) -> Value {
+    json!({
         "launched": true,
         "cdpFree": true,
         "cdpAttachmentAllowed": false,
@@ -3430,7 +3464,7 @@ async fn handle_cdp_free_launch(cmd: &Value, state: &mut DaemonState) -> Result<
             "screenshot",
             "dom_interaction",
         ],
-    }))
+    })
 }
 
 async fn launch_ios(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
@@ -10792,6 +10826,103 @@ mod tests {
         assert!(selected.is_none());
         assert_eq!(options.profile.as_deref(), Some("/tmp/explicit-profile"));
         assert!(options.runtime_profile.is_none());
+    }
+
+    #[test]
+    fn test_cdp_free_launch_plan_is_no_devtools_headed_lifecycle_only() {
+        let cmd = json!({
+            "serviceName": "CanvaCLI",
+            "agentName": "canva-cli-agent",
+            "taskName": "openCanvaWorkspace",
+            "targetServiceId": "canva",
+            "runtimeProfile": "canva-default",
+            "url": "https://www.canva.com/",
+            "args": ["--window-size=960,720"],
+            "requiresCdpFree": true,
+            "cdpAttachmentAllowed": false
+        });
+
+        let plan = build_cdp_free_launch_plan(&cmd).expect("plan should parse without launching");
+
+        assert!(!plan.launch_options.headless);
+        assert!(!plan.launch_options.attachable);
+        assert!(plan.launch_options.manual_login);
+        assert_eq!(
+            plan.launch_options.runtime_profile.as_deref(),
+            Some("canva-default")
+        );
+        assert_eq!(plan.url.as_deref(), Some("https://www.canva.com/"));
+        assert_eq!(
+            plan.launch_options.args,
+            vec![
+                "--window-size=960,720".to_string(),
+                "https://www.canva.com/".to_string()
+            ]
+        );
+        assert_eq!(plan.metadata.profile_id.as_deref(), Some("canva-default"));
+        assert_eq!(plan.metadata.service_name.as_deref(), Some("CanvaCLI"));
+        assert_eq!(plan.metadata.agent_name.as_deref(), Some("canva-cli-agent"));
+        assert_eq!(
+            plan.metadata.task_name.as_deref(),
+            Some("openCanvaWorkspace")
+        );
+        assert!(plan.metadata.persistent_profile);
+    }
+
+    #[test]
+    fn test_cdp_free_launch_response_reports_unsupported_cdp_operations() {
+        let mut state = DaemonState::new();
+        state.session_id = "cdp-free-session".to_string();
+        let launch_options = LaunchOptions {
+            runtime_profile: Some("canva-default".to_string()),
+            headless: false,
+            manual_login: true,
+            attachable: false,
+            ..LaunchOptions::default()
+        };
+        let launch = ManualChromeLaunch {
+            pid: 4242,
+            user_data_dir: PathBuf::from("/tmp/canva-default"),
+            runtime_profile: Some("canva-default".to_string()),
+            devtools_port: None,
+        };
+
+        let response = cdp_free_launch_response(
+            &state,
+            &launch_options,
+            &launch,
+            Some("https://www.canva.com/".to_string()),
+        );
+
+        assert_eq!(response["launched"], true);
+        assert_eq!(response["cdpFree"], true);
+        assert_eq!(response["cdpAttachmentAllowed"], false);
+        assert_eq!(response["browserId"], "session:cdp-free-session");
+        assert_eq!(response["browserPid"], 4242);
+        assert_eq!(response["profileId"], "canva-default");
+        assert_eq!(response["runtimeProfile"], "canva-default");
+        assert_eq!(response["url"], "https://www.canva.com/");
+        assert_eq!(response["supportedOperations"][0], "process_lifecycle");
+        assert!(response["unsupportedOperations"]
+            .as_array()
+            .expect("unsupported operations should be an array")
+            .iter()
+            .any(|operation| operation == "cdp_commands"));
+        assert!(launch.devtools_port.is_none());
+    }
+
+    #[test]
+    fn test_cdp_free_launch_plan_rejects_dash_prefixed_url() {
+        let result = build_cdp_free_launch_plan(&json!({
+            "action": "cdp_free_launch",
+            "url": "--remote-debugging-port=9222"
+        }));
+        let err = match result {
+            Ok(_) => panic!("dash-prefixed url should be rejected"),
+            Err(err) => err,
+        };
+
+        assert!(err.contains("url must not start"));
     }
 
     #[test]
