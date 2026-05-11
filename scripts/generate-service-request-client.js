@@ -561,6 +561,19 @@ export interface ServiceTabRequestHttpOptions extends ServiceTabRequestOptions {
   signal?: AbortSignal;
 }
 
+export interface ServiceCdpFreeLaunchRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  accessPlan?: ServiceTabAccessPlan;
+  allowManualAction?: boolean;
+  url?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceCdpFreeLaunchRequestHttpOptions extends ServiceCdpFreeLaunchRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export declare const SERVICE_REQUEST_ACTIONS: readonly ServiceRequestAction[];
 export declare const SERVICE_REQUEST_REQUIRED_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_FIELDS: readonly string[];
@@ -579,7 +592,13 @@ export declare function createServiceTabRequestFromAccessPlan(
   accessPlan: ServiceTabAccessPlan,
   input?: Omit<ServiceTabRequestOptions, "accessPlan">,
 ): ServiceRequestForAction<"tab_new">;
+export declare function createServiceCdpFreeLaunchRequest(
+  input: ServiceCdpFreeLaunchRequestOptions,
+): ServiceRequestForAction<"cdp_free_launch">;
 export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<ServiceRequestResponse<ServiceTabNewData>>;
+export declare function requestServiceCdpFreeLaunch(
+  options: ServiceCdpFreeLaunchRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceCdpFreeLaunchData>>;
 `;
 }
 

@@ -16,6 +16,8 @@ const actionSet = new Set(SERVICE_REQUEST_ACTIONS);
  * @typedef {import('./service-request.generated.js').ServiceRequestHttpOptions} ServiceRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRequestResponse} ServiceRequestResponse
  * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
+ * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestHttpOptions} ServiceCdpFreeLaunchRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestOptions} ServiceCdpFreeLaunchRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestHttpOptions} ServiceTabRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestOptions} ServiceTabRequestOptions
  */
@@ -136,6 +138,44 @@ export function createServiceTabRequestFromAccessPlan(accessPlan, input = {}) {
 }
 
 /**
+ * Builds a headed no-DevTools launch request for CDP-sensitive services.
+ *
+ * @param {ServiceCdpFreeLaunchRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceCdpFreeLaunchRequest(input) {
+  assertPlainObject(input, 'CDP-free launch request');
+  const { accessPlan, allowManualAction, url, params, ...request } = input;
+  if (url !== undefined && typeof url !== 'string') {
+    throw new TypeError('CDP-free launch request url must be a string');
+  }
+  if (allowManualAction !== undefined && typeof allowManualAction !== 'boolean') {
+    throw new TypeError('CDP-free launch request allowManualAction must be a boolean');
+  }
+  if (params !== undefined) {
+    assertPlainObject(params, 'CDP-free launch request params');
+  }
+  const plannedRequest =
+    accessPlan !== undefined ? accessPlanServiceCdpFreeLaunchRequest(accessPlan, { allowManualAction }) : {};
+
+  const launchParams = { ...(params ?? {}) };
+  if (url !== undefined) {
+    launchParams.url = url;
+  }
+
+  return createServiceRequest({
+    ...plannedRequest,
+    ...request,
+    action: 'cdp_free_launch',
+    requiresCdpFree: true,
+    cdpAttachmentAllowed: false,
+    ...(accessPlan !== undefined && allowManualAction === true ? { allowManualAction: true } : {}),
+    ...(url !== undefined ? { url } : {}),
+    ...(Object.keys(launchParams).length > 0 ? { params: launchParams } : {}),
+  });
+}
+
+/**
  * @param {ServiceRequestHttpOptions} options
  * @returns {Promise<ServiceRequestResponse>}
  */
@@ -175,6 +215,19 @@ export async function requestServiceTab({ baseUrl, fetch = globalThis.fetch, sig
 }
 
 /**
+ * @param {ServiceCdpFreeLaunchRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceCdpFreeLaunch({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceCdpFreeLaunchRequest(request),
+  });
+}
+
+/**
  * @param {Record<string, unknown>} accessPlan
  * @param {{ allowManualAction?: boolean }} options
  * @returns {Record<string, unknown>}
@@ -197,7 +250,7 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
   }
   if (accessPlanRequiresCdpFree(decisionRecord)) {
     throw new Error(
-      'service access plan requires CDP-free browser operation; non-CDP service request execution is not implemented yet',
+      'service access plan requires CDP-free browser operation; use createServiceCdpFreeLaunchRequest for lifecycle-only launch tracking',
     );
   }
   const serviceRequest = decisionRecord.serviceRequest;
@@ -212,6 +265,43 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
 
   const { action: _action, ...tabRequest } = requestRecord;
   return tabRequest;
+}
+
+/**
+ * @param {Record<string, unknown>} accessPlan
+ * @param {{ allowManualAction?: boolean }} options
+ * @returns {Record<string, unknown>}
+ */
+function accessPlanServiceCdpFreeLaunchRequest(accessPlan, options = {}) {
+  assertPlainObject(accessPlan, 'service access plan');
+  const accessPlanRecord = /** @type {Record<string, unknown>} */ (accessPlan);
+  const decision = accessPlanRecord.decision;
+  assertPlainObject(decision, 'service access plan decision');
+  const decisionRecord = /** @type {Record<string, unknown>} */ (decision);
+  if (!options.allowManualAction && accessPlanRequiresManualSeeding(accessPlanRecord, decisionRecord)) {
+    const handoff = accessPlanRecord.seedingHandoff;
+    const command =
+      handoff && typeof handoff === 'object' && !Array.isArray(handoff)
+        ? /** @type {Record<string, unknown>} */ (handoff).command
+        : undefined;
+    throw new Error(
+      `service access plan requires manual profile seeding before CDP-free launch${typeof command === 'string' ? `: ${command}` : ''}`,
+    );
+  }
+  if (!accessPlanRequiresCdpFree(decisionRecord)) {
+    throw new Error('service access plan does not require CDP-free browser operation');
+  }
+  const serviceRequest = decisionRecord.serviceRequest;
+  assertPlainObject(serviceRequest, 'service access plan serviceRequest');
+  const serviceRequestRecord = /** @type {Record<string, unknown>} */ (serviceRequest);
+  const request = serviceRequestRecord.request;
+  assertPlainObject(request, 'service access plan serviceRequest.request');
+  const requestRecord = /** @type {Record<string, unknown>} */ (request);
+  const { action: _action, params: requestParams, ...launchRequest } = requestRecord;
+  if (requestParams && typeof requestParams === 'object' && !Array.isArray(requestParams)) {
+    launchRequest.params = { .../** @type {Record<string, unknown>} */ (requestParams) };
+  }
+  return launchRequest;
 }
 
 /**

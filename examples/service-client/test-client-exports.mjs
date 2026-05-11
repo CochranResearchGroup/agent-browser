@@ -3,10 +3,12 @@
 import assert from 'node:assert/strict';
 
 import {
+  createServiceCdpFreeLaunchRequest,
   createServiceRequest,
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
   postServiceRequest,
+  requestServiceCdpFreeLaunch,
   requestServiceTab,
 } from '@agent-browser/client/service-request';
 import {
@@ -29,9 +31,11 @@ import {
 } from '@agent-browser/client/service-observability';
 
 assert.equal(typeof createServiceRequest, 'function');
+assert.equal(typeof createServiceCdpFreeLaunchRequest, 'function');
 assert.equal(typeof createServiceRequestMcpToolCall, 'function');
 assert.equal(typeof createServiceTabRequest, 'function');
 assert.equal(typeof postServiceRequest, 'function');
+assert.equal(typeof requestServiceCdpFreeLaunch, 'function');
 assert.equal(typeof requestServiceTab, 'function');
 assert.equal(typeof cancelServiceJob, 'function');
 assert.equal(typeof createServiceProfileReadinessMonitor, 'function');

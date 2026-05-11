@@ -4,11 +4,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
+  createServiceCdpFreeLaunchRequest,
   createServiceRequest,
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
   createServiceTabRequestFromAccessPlan,
   postServiceRequest,
+  requestServiceCdpFreeLaunch,
   requestServiceTab,
 } from '../packages/client/src/service-request.js';
 import { getServiceAccessPlan } from '../packages/client/src/service-observability.js';
@@ -353,7 +355,37 @@ async function main() {
       createServiceTabRequestFromAccessPlan(cdpFreeAccessPlan, {
         url: 'https://www.canva.com/',
       }),
-    /requires CDP-free browser operation/,
+    /requires CDP-free browser operation.*createServiceCdpFreeLaunchRequest/,
+  );
+  assert.deepEqual(
+    createServiceCdpFreeLaunchRequest({
+      accessPlan: cdpFreeAccessPlan,
+      url: 'https://www.canva.com/',
+      jobTimeoutMs: 60_000,
+    }),
+    {
+      serviceName: 'CanvaCLI',
+      agentName: 'article-probe-agent',
+      taskName: 'openCanva',
+      targetServiceIds: ['canva'],
+      profileLeasePolicy: 'wait',
+      requiresCdpFree: true,
+      cdpAttachmentAllowed: false,
+      action: 'cdp_free_launch',
+      url: 'https://www.canva.com/',
+      params: {
+        url: 'https://www.canva.com/',
+      },
+      jobTimeoutMs: 60_000,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceCdpFreeLaunchRequest({
+        accessPlan,
+        url: 'https://example.com/',
+      }),
+    /does not require CDP-free browser operation/,
   );
   assert.deepEqual(
     createServiceTabRequestFromAccessPlan(manualSeedingAccessPlan, {
@@ -445,6 +477,40 @@ async function main() {
     action: 'tab_new',
     params: {
       url: 'https://example.com/new',
+    },
+  });
+  const cdpFreeLaunchRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      launched: true,
+      cdpFree: true,
+      cdpAttachmentAllowed: false,
+      browserId: 'session:canva',
+      browserPid: 4242,
+      userDataDir: '/tmp/canva',
+      supportedOperations: ['process_lifecycle', 'profile_lease', 'service_state'],
+      unsupportedOperations: ['cdp_commands', 'snapshot', 'screenshot', 'dom_interaction'],
+    },
+  });
+  const cdpFreeLaunchResponse = await requestServiceCdpFreeLaunch({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: cdpFreeLaunchRecorder.fetch,
+    accessPlan: cdpFreeAccessPlan,
+    url: 'https://www.canva.com/',
+  });
+  assert.equal(cdpFreeLaunchResponse.data.cdpFree, true);
+  assert.deepEqual(cdpFreeLaunchRecorder.calls[0].body, {
+    serviceName: 'CanvaCLI',
+    agentName: 'article-probe-agent',
+    taskName: 'openCanva',
+    targetServiceIds: ['canva'],
+    profileLeasePolicy: 'wait',
+    requiresCdpFree: true,
+    cdpAttachmentAllowed: false,
+    action: 'cdp_free_launch',
+    url: 'https://www.canva.com/',
+    params: {
+      url: 'https://www.canva.com/',
     },
   });
   const plannedTabRecorder = createFetchRecorder({ success: true, data: { jobId: 'job-planned-tab' } });
