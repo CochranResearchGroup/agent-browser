@@ -17,6 +17,12 @@ export const SERVICE_JOB_PRIORITIES = [
   "lifecycle"
 ];
 
+export const SERVICE_JOB_CONTROL_PLANE_MODES = [
+  "cdp",
+  "cdp_free",
+  "service"
+];
+
 export const SERVICE_NAMING_WARNINGS = [
   "missing_service_name",
   "missing_agent_name",

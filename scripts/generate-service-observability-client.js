@@ -48,6 +48,11 @@ const generatedTypesPath = path.join(repoRoot, 'packages/client/src/service-obse
 const constants = {
   SERVICE_JOB_STATES: enumValues(schemas.job, ['properties', 'state', 'enum']),
   SERVICE_JOB_PRIORITIES: enumValues(schemas.job, ['properties', 'priority', 'enum']),
+  SERVICE_JOB_CONTROL_PLANE_MODES: enumValues(schemas.job, [
+    'properties',
+    'controlPlaneMode',
+    'enum',
+  ]),
   SERVICE_NAMING_WARNINGS: enumValues(schemas.job, [
     'properties',
     'namingWarnings',
@@ -117,6 +122,7 @@ function renderGeneratedJs() {
 function renderGeneratedTypes() {
   return `${generatedHeader()}${stringUnionType('ServiceJobState', constants.SERVICE_JOB_STATES)}
 ${stringUnionType('ServiceJobPriority', constants.SERVICE_JOB_PRIORITIES)}
+${stringUnionType('ServiceJobControlPlaneMode', constants.SERVICE_JOB_CONTROL_PLANE_MODES)}
 ${stringUnionType('ServiceNamingWarning', constants.SERVICE_NAMING_WARNINGS)}
 ${stringUnionType('ServiceIncidentState', constants.SERVICE_INCIDENT_STATES)}
 ${stringUnionType('ServiceIncidentSeverity', constants.SERVICE_INCIDENT_SEVERITIES)}
@@ -137,6 +143,8 @@ export interface ServiceJobRecord {
   targetServiceIds: string[];
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
+  controlPlaneMode: ServiceJobControlPlaneMode;
+  lifecycleOnly: boolean;
   target: unknown;
   owner: unknown;
   state: ServiceJobState;
@@ -773,6 +781,8 @@ export interface ServiceTraceSummaryContext {
   activityCount: number;
   targetIdentityCount: number;
   targetServiceIds: string[];
+  controlPlaneModes: ServiceJobControlPlaneMode[];
+  lifecycleOnlyJobCount: number;
   latestTimestamp: string | null;
   [key: string]: unknown;
 }

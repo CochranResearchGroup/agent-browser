@@ -183,6 +183,8 @@ struct TraceContextSummary {
     incident_count: usize,
     activity_count: usize,
     target_service_ids: Vec<String>,
+    control_plane_modes: Vec<String>,
+    lifecycle_only_job_count: usize,
     latest_timestamp: Option<String>,
 }
 
@@ -240,6 +242,10 @@ fn service_trace_summary(
         let summary = contexts.entry(key).or_default();
         summary.job_count += 1;
         merge_job_target_service_ids(&mut summary.target_service_ids, job);
+        merge_control_plane_mode(&mut summary.control_plane_modes, job);
+        if job.lifecycle_only {
+            summary.lifecycle_only_job_count += 1;
+        }
         update_latest_timestamp(
             &mut summary.latest_timestamp,
             service_job_latest_timestamp(job),
@@ -313,6 +319,8 @@ fn service_trace_summary(
                 "activityCount": summary.activity_count,
                 "targetIdentityCount": summary.target_service_ids.len(),
                 "targetServiceIds": summary.target_service_ids,
+                "controlPlaneModes": summary.control_plane_modes,
+                "lifecycleOnlyJobCount": summary.lifecycle_only_job_count,
                 "latestTimestamp": summary.latest_timestamp,
             })
         })
@@ -364,6 +372,18 @@ fn merge_optional_target_service_id(target_service_ids: &mut Vec<String>, value:
     };
     if !target_service_ids.iter().any(|existing| existing == value) {
         target_service_ids.push(value.to_string());
+    }
+}
+
+fn merge_control_plane_mode(control_plane_modes: &mut Vec<String>, job: &ServiceJob) {
+    let Ok(value) = serde_json::to_value(job.control_plane_mode) else {
+        return;
+    };
+    let Some(mode) = value.as_str().filter(|mode| !mode.is_empty()) else {
+        return;
+    };
+    if !control_plane_modes.iter().any(|existing| existing == mode) {
+        control_plane_modes.push(mode.to_string());
     }
 }
 

@@ -20,10 +20,10 @@ use super::service_jobs::{
 };
 use super::service_model::{
     service_profile_allocations, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, BrowserProcess, ControlPlaneSnapshot, JobPriority, JobState,
-    JobTarget, ServiceActor, ServiceEvent, ServiceEventKind, ServiceJob, ServiceState,
-    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    BrowserHost as ServiceBrowserHost, BrowserProcess, ControlPlaneSnapshot, JobControlPlaneMode,
+    JobPriority, JobState, JobTarget, ServiceActor, ServiceEvent, ServiceEventKind, ServiceJob,
+    ServiceState, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 use super::service_monitors::{
     persisted_due_monitor_work_pending, SERVICE_MONITORS_RUN_DUE_ACTION,
@@ -531,6 +531,8 @@ fn persist_service_job_queued(request: &ControlRequest) {
         target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
+        control_plane_mode: service_job_control_plane_mode(request),
+        lifecycle_only: service_job_lifecycle_only(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Queued,
@@ -559,6 +561,8 @@ fn persist_service_job_waiting_profile_lease(
         target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
+        control_plane_mode: service_job_control_plane_mode(request),
+        lifecycle_only: service_job_lifecycle_only(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::WaitingProfileLease,
@@ -695,6 +699,8 @@ fn persist_service_job_running(request: &ControlRequest) {
         target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
+        control_plane_mode: service_job_control_plane_mode(request),
+        lifecycle_only: service_job_lifecycle_only(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Running,
@@ -732,6 +738,8 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
+        control_plane_mode: service_job_control_plane_mode(request),
+        lifecycle_only: service_job_lifecycle_only(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: if success {
@@ -767,6 +775,8 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
+        control_plane_mode: service_job_control_plane_mode(request),
+        lifecycle_only: service_job_lifecycle_only(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::TimedOut,
@@ -797,6 +807,8 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
         target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
+        control_plane_mode: service_job_control_plane_mode(request),
+        lifecycle_only: service_job_lifecycle_only(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Cancelled,
@@ -827,6 +839,8 @@ fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) 
         target_service_ids: service_job_target_service_ids(request),
         naming_warnings: request.naming_warnings.clone(),
         has_naming_warning: !request.naming_warnings.is_empty(),
+        control_plane_mode: service_job_control_plane_mode(request),
+        lifecycle_only: service_job_lifecycle_only(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Failed,
@@ -910,6 +924,31 @@ fn service_job_priority(priority: ControlPriority) -> JobPriority {
         ControlPriority::Normal => JobPriority::Normal,
         ControlPriority::Lifecycle => JobPriority::Lifecycle,
     }
+}
+
+fn service_job_control_plane_mode(request: &ControlRequest) -> JobControlPlaneMode {
+    if request.action == "cdp_free_launch"
+        || request
+            .command
+            .get("requiresCdpFree")
+            .and_then(Value::as_bool)
+            == Some(true)
+    {
+        JobControlPlaneMode::CdpFree
+    } else if request.priority == ControlPriority::Lifecycle
+        || request.action.starts_with("service_")
+    {
+        JobControlPlaneMode::Service
+    } else {
+        JobControlPlaneMode::Cdp
+    }
+}
+
+fn service_job_lifecycle_only(request: &ControlRequest) -> bool {
+    matches!(
+        service_job_control_plane_mode(request),
+        JobControlPlaneMode::CdpFree | JobControlPlaneMode::Service
+    )
 }
 
 fn service_job_optional_command_string(request: &ControlRequest, name: &str) -> Option<String> {
@@ -1423,6 +1462,8 @@ mod tests {
             ]
         );
         assert!(job.has_naming_warning);
+        assert_eq!(job.control_plane_mode, JobControlPlaneMode::Cdp);
+        assert!(!job.lifecycle_only);
         assert!(job.submitted_at.is_some());
         assert!(job.started_at.is_some());
         assert!(job.completed_at.is_some());
@@ -1461,6 +1502,64 @@ mod tests {
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn service_job_control_plane_mode_marks_cdp_free_lifecycle_requests() {
+        let cdp_free = control_request_for_mode_test(json!({
+            "action": "cdp_free_launch",
+            "requiresCdpFree": true
+        }));
+        assert_eq!(
+            service_job_control_plane_mode(&cdp_free),
+            JobControlPlaneMode::CdpFree
+        );
+        assert!(service_job_lifecycle_only(&cdp_free));
+
+        let service = control_request_for_mode_test(json!({
+            "action": "service_trace"
+        }));
+        assert_eq!(
+            service_job_control_plane_mode(&service),
+            JobControlPlaneMode::Service
+        );
+        assert!(service_job_lifecycle_only(&service));
+
+        let cdp = control_request_for_mode_test(json!({
+            "action": "navigate"
+        }));
+        assert_eq!(
+            service_job_control_plane_mode(&cdp),
+            JobControlPlaneMode::Cdp
+        );
+        assert!(!service_job_lifecycle_only(&cdp));
+    }
+
+    fn control_request_for_mode_test(command: Value) -> ControlRequest {
+        let (response_tx, _response_rx) = oneshot::channel();
+        ControlRequest {
+            id: "mode-test".to_string(),
+            job_id: "mode-test".to_string(),
+            action: command
+                .get("action")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string(),
+            service_name: Some("test-service".to_string()),
+            agent_name: Some("test-agent".to_string()),
+            task_name: Some("test-task".to_string()),
+            naming_warnings: Vec::new(),
+            command,
+            priority: ControlPriority::Normal,
+            timeout_ms: None,
+            cancellation: RunningJobCancel::new(),
+            submitted_at_wall: current_timestamp(),
+            profile_lease_wait_started_at: None,
+            profile_lease_wait_profile_id: None,
+            profile_lease_wait_conflict_session_ids: Vec::new(),
+            profile_lease_wait_retry_after_ms: None,
+            response_tx,
+        }
     }
 
     #[tokio::test]

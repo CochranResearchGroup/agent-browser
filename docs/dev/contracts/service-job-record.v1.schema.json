@@ -12,6 +12,8 @@
     "taskName",
     "namingWarnings",
     "hasNamingWarning",
+    "controlPlaneMode",
+    "lifecycleOnly",
     "target",
     "owner",
     "state",
@@ -73,6 +75,19 @@
     "hasNamingWarning": {
       "type": "boolean",
       "description": "True when namingWarnings is non-empty."
+    },
+    "controlPlaneMode": {
+      "type": "string",
+      "enum": [
+        "cdp",
+        "cdp_free",
+        "service"
+      ],
+      "description": "Control-plane attachment posture required for this job."
+    },
+    "lifecycleOnly": {
+      "type": "boolean",
+      "description": "True when the job manages browser, profile, monitor, or service lifecycle rather than a CDP-backed tab interaction."
     },
     "target": {
       "oneOf": [

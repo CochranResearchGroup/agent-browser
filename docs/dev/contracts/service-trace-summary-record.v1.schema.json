@@ -128,6 +128,8 @@
           "activityCount",
           "targetIdentityCount",
           "targetServiceIds",
+          "controlPlaneModes",
+          "lifecycleOnlyJobCount",
           "latestTimestamp"
         ],
         "properties": {
@@ -192,6 +194,24 @@
               "type": "string"
             },
             "uniqueItems": true
+          },
+          "controlPlaneModes": {
+            "type": "array",
+            "description": "Control-plane modes observed on retained jobs in this trace context.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cdp",
+                "cdp_free",
+                "service"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "lifecycleOnlyJobCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of lifecycle-only retained jobs in this trace context."
           },
           "latestTimestamp": {
             "type": ["string", "null"],

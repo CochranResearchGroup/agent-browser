@@ -254,6 +254,7 @@ pub const SERVICE_JOB_STATE_VALUES: [&str; 7] = [
     "timed_out",
 ];
 pub const SERVICE_JOB_PRIORITY_VALUES: [&str; 3] = ["low", "normal", "lifecycle"];
+pub const SERVICE_JOB_CONTROL_PLANE_MODE_VALUES: [&str; 3] = ["cdp", "cdp_free", "service"];
 
 #[cfg(test)]
 fn assert_record_fields(
@@ -1104,6 +1105,8 @@ pub fn assert_service_jobs_response_contract(value: &serde_json::Value) {
                 "taskName",
                 "namingWarnings",
                 "hasNamingWarning",
+                "controlPlaneMode",
+                "lifecycleOnly",
                 "target",
                 "owner",
                 "state",
@@ -1121,6 +1124,8 @@ pub fn assert_service_jobs_response_contract(value: &serde_json::Value) {
                 "task_name",
                 "naming_warnings",
                 "has_naming_warning",
+                "control_plane_mode",
+                "lifecycle_only",
                 "submitted_at",
                 "started_at",
                 "completed_at",
@@ -1129,8 +1134,11 @@ pub fn assert_service_jobs_response_contract(value: &serde_json::Value) {
         );
         assert!(SERVICE_JOB_STATE_VALUES.contains(&job["state"].as_str().unwrap()));
         assert!(SERVICE_JOB_PRIORITY_VALUES.contains(&job["priority"].as_str().unwrap()));
+        assert!(SERVICE_JOB_CONTROL_PLANE_MODE_VALUES
+            .contains(&job["controlPlaneMode"].as_str().unwrap()));
         assert!(job["namingWarnings"].is_array());
         assert!(job["hasNamingWarning"].is_boolean());
+        assert!(job["lifecycleOnly"].is_boolean());
     }
     if let Some(job) = value.get("job") {
         assert!(
@@ -1157,6 +1165,8 @@ pub fn assert_service_job_record_contract(value: &serde_json::Value) {
             "targetServiceIds",
             "namingWarnings",
             "hasNamingWarning",
+            "controlPlaneMode",
+            "lifecycleOnly",
             "target",
             "owner",
             "state",
@@ -1178,6 +1188,8 @@ pub fn assert_service_job_record_contract(value: &serde_json::Value) {
             "target_service_ids",
             "naming_warnings",
             "has_naming_warning",
+            "control_plane_mode",
+            "lifecycle_only",
             "submitted_at",
             "started_at",
             "completed_at",
@@ -1186,8 +1198,11 @@ pub fn assert_service_job_record_contract(value: &serde_json::Value) {
     );
     assert!(SERVICE_JOB_STATE_VALUES.contains(&value["state"].as_str().unwrap()));
     assert!(SERVICE_JOB_PRIORITY_VALUES.contains(&value["priority"].as_str().unwrap()));
+    assert!(SERVICE_JOB_CONTROL_PLANE_MODE_VALUES
+        .contains(&value["controlPlaneMode"].as_str().unwrap()));
     assert!(value["namingWarnings"].is_array());
     assert!(value["hasNamingWarning"].is_boolean());
+    assert!(value["lifecycleOnly"].is_boolean());
 }
 
 #[cfg(test)]
@@ -3532,6 +3547,12 @@ pub struct ServiceJob {
     pub naming_warnings: Vec<String>,
     /// True when `naming_warnings` is non-empty.
     pub has_naming_warning: bool,
+    /// Control-plane mode required for this job. CDP-free jobs launch or manage
+    /// browsers without attaching a DevTools endpoint.
+    pub control_plane_mode: JobControlPlaneMode,
+    /// True when this job manages process or profile lifecycle rather than a
+    /// CDP-backed tab interaction.
+    pub lifecycle_only: bool,
     pub target: JobTarget,
     pub owner: ServiceActor,
     pub state: JobState,
@@ -3558,6 +3579,8 @@ impl Default for ServiceJob {
             target_service_ids: Vec::new(),
             naming_warnings: Vec::new(),
             has_naming_warning: false,
+            control_plane_mode: JobControlPlaneMode::Cdp,
+            lifecycle_only: false,
             target: JobTarget::Service,
             owner: ServiceActor::System,
             state: JobState::Queued,
@@ -3948,6 +3971,16 @@ pub enum JobPriority {
     Lifecycle,
 }
 
+/// Control-plane attachment posture for a service job.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JobControlPlaneMode {
+    #[default]
+    Cdp,
+    CdpFree,
+    Service,
+}
+
 /// Monitor target variants.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -4093,6 +4126,10 @@ mod tests {
             schema["properties"]["targetServiceIds"]["description"],
             "Normalized target-service, site, and login identity hints used for profile selection."
         );
+        assert_eq!(
+            schema["properties"]["controlPlaneMode"]["enum"],
+            json!(SERVICE_JOB_CONTROL_PLANE_MODE_VALUES.to_vec())
+        );
         for field in [
             "id",
             "action",
@@ -4101,6 +4138,8 @@ mod tests {
             "taskName",
             "namingWarnings",
             "hasNamingWarning",
+            "controlPlaneMode",
+            "lifecycleOnly",
         ] {
             assert!(schema["required"]
                 .as_array()
@@ -4683,6 +4722,8 @@ mod tests {
             "targetServiceIds": [],
             "namingWarnings": [],
             "hasNamingWarning": false,
+            "controlPlaneMode": "cdp",
+            "lifecycleOnly": false,
             "target": {"browser": "browser-1"},
             "owner": null,
             "state": "failed",
@@ -5361,6 +5402,11 @@ mod tests {
             summary_schema["properties"]["contexts"]["items"]["properties"]["namingWarnings"]
                 ["items"]["enum"],
             json!(SERVICE_JOB_NAMING_WARNING_VALUES.to_vec())
+        );
+        assert_eq!(
+            summary_schema["properties"]["contexts"]["items"]["properties"]["controlPlaneModes"]
+                ["items"]["enum"],
+            json!(SERVICE_JOB_CONTROL_PLANE_MODE_VALUES.to_vec())
         );
         assert_eq!(
             activity_schema["properties"]["source"]["enum"],

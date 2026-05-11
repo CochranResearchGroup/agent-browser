@@ -160,6 +160,17 @@ export function assertServiceTraceSummarySchemaRecord(summary, schema, label) {
       context.targetIdentityCount === context.targetServiceIds.length,
       `${contextLabel} targetIdentityCount mismatch: ${JSON.stringify(context)}`,
     );
+    assert(Array.isArray(context.controlPlaneModes), `${contextLabel} missing controlPlaneModes array`);
+    for (const mode of context.controlPlaneModes) {
+      assert(
+        contextSchema.properties.controlPlaneModes.items.enum.includes(mode),
+        `${contextLabel} control plane mode is outside schema enum: ${mode}`,
+      );
+    }
+    assert(
+      Number.isInteger(context.lifecycleOnlyJobCount),
+      `${contextLabel} missing lifecycleOnlyJobCount integer`,
+    );
     assert(typeof context.hasNamingWarning === 'boolean', `${contextLabel} missing hasNamingWarning boolean`);
   }
 }
@@ -469,6 +480,8 @@ export function assertServiceJobSchemaRecord(job, schema, label) {
       'target_service_ids',
       'naming_warnings',
       'has_naming_warning',
+      'control_plane_mode',
+      'lifecycle_only',
       'submitted_at',
       'started_at',
       'completed_at',
@@ -478,6 +491,10 @@ export function assertServiceJobSchemaRecord(job, schema, label) {
   );
   assert(schemaEnum(schema, 'state').includes(job.state), `${label} state is outside schema enum`);
   assert(schemaEnum(schema, 'priority').includes(job.priority), `${label} priority is outside schema enum`);
+  assert(
+    schemaEnum(schema, 'controlPlaneMode').includes(job.controlPlaneMode),
+    `${label} controlPlaneMode is outside schema enum`,
+  );
   assert(Array.isArray(job.namingWarnings), `${label} missing namingWarnings array`);
   for (const warning of job.namingWarnings) {
     assert(
@@ -486,6 +503,7 @@ export function assertServiceJobSchemaRecord(job, schema, label) {
     );
   }
   assert(typeof job.hasNamingWarning === 'boolean', `${label} missing hasNamingWarning boolean`);
+  assert(typeof job.lifecycleOnly === 'boolean', `${label} missing lifecycleOnly boolean`);
 }
 
 export function assertServiceIncidentSchemaRecord(incident, schema, label) {

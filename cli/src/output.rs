@@ -553,6 +553,21 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
                 } else {
                     format!(" targets={targets}")
                 };
+                let control_modes = value_string_list(context, "controlPlaneModes");
+                let control_text = if control_modes == "none" {
+                    String::new()
+                } else {
+                    format!(" control={control_modes}")
+                };
+                let lifecycle_only_jobs = context
+                    .get("lifecycleOnlyJobCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let lifecycle_text = if lifecycle_only_jobs == 0 {
+                    String::new()
+                } else {
+                    format!(" lifecycleOnlyJobs={lifecycle_only_jobs}")
+                };
                 let events = context
                     .get("eventCount")
                     .and_then(|value| value.as_u64())
@@ -583,7 +598,7 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
                     })
                     .unwrap_or_default();
                 lines.push(format!(
-                    "  context{service}{agent}{task}{browser}{profile}{session}{target_text}{warning} events={events} jobs={jobs} incidents={incidents} activity={activity}"
+                    "  context{service}{agent}{task}{browser}{profile}{session}{target_text}{control_text}{lifecycle_text}{warning} events={events} jobs={jobs} incidents={incidents} activity={activity}"
                 ));
             }
         }
@@ -827,7 +842,23 @@ fn format_service_job_line(job: &serde_json::Value) -> String {
         .filter(|warnings| !warnings.is_empty())
         .map(|warnings| format!(" namingWarnings={}", warnings.join(",")))
         .unwrap_or_default();
-    format!("{timestamp} {state} action={action} id={id}{naming_warnings}{error}")
+    let control_plane_mode = job
+        .get("controlPlaneMode")
+        .and_then(|value| value.as_str())
+        .map(|mode| format!(" control={mode}"))
+        .unwrap_or_default();
+    let lifecycle_only = job
+        .get("lifecycleOnly")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let lifecycle = if lifecycle_only {
+        " lifecycleOnly=yes"
+    } else {
+        ""
+    };
+    format!(
+        "{timestamp} {state} action={action} id={id}{control_plane_mode}{lifecycle}{naming_warnings}{error}"
+    )
 }
 
 fn value_str<'a>(value: &'a serde_json::Value, key: &str, fallback: &'a str) -> &'a str {
@@ -4212,7 +4243,7 @@ Notes:
   - Incident filters match incident state, severity, escalation, operator handling state, latest kind, browser ID, related profile ID, related session ID, related service name, related agent name, related task name, and RFC 3339 timestamps before applying --limit.
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
-  - Trace returns related events, jobs, incidents, normalized activity, profile lease wait summaries, and compact service, agent, task, browser, profile, and session ownership in one response.
+  - Trace returns related events, jobs, incidents, normalized activity, profile lease wait summaries, and compact service, agent, task, browser, profile, session, target identity, control-plane mode, and lifecycle-only ownership in one response.
   - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, failureClass, processExitCause for process exits, retry-budget details, and recovery policy source metadata.
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
@@ -4338,7 +4369,7 @@ Notes:
   - Profile mutations reject caller_supplied profiles without userDataDir and per_service profiles with more than one sharedServiceIds entry.
   - Session mutations infer owner from agentName, then serviceName, when owner is omitted; profileId must reference a persisted profile, and profile sharedServiceIds allow-lists are enforced.
   - MCP tool calls should include serviceName, agentName, and taskName when available for multi-agent traceability.
-  - Service jobs persist serviceName, agentName, and taskName when commands provide them.
+  - Service jobs persist serviceName, agentName, taskName, controlPlaneMode, and lifecycleOnly when commands provide enough context.
   - Service job and access-plan namingWarnings values are missing_service_name, missing_agent_name, and missing_task_name. hasNamingWarning is true when namingWarnings is non-empty.
   - HTTP /api/service/jobs, HTTP /api/service/jobs/<id>, and MCP agent-browser://jobs job records follow docs/dev/contracts/service-job-record.v1.schema.json.
   - CLI and HTTP service_jobs response envelopes follow docs/dev/contracts/service-jobs-response.v1.schema.json.
@@ -5633,7 +5664,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Site policies: 1\n  google origin=https://accounts.google.com source=config overrideable=no host=local_headed interaction=human_like_input challenge=avoid_first manual_login=yes profile_required=yes"
+            "Site policies: 1\n  google origin=https://accounts.google.com source=config overrideable=no host=local_headed cdp_free=no interaction=human_like_input challenge=avoid_first manual_login=yes profile_required=yes"
         );
     }
 
@@ -5689,6 +5720,8 @@ mod tests {
                 "action": "navigate",
                 "state": "queued",
                 "submittedAt": "2026-04-25T00:00:00Z",
+                "controlPlaneMode": "cdp_free",
+                "lifecycleOnly": true,
                 "hasNamingWarning": true,
                 "namingWarnings": ["missing_agent_name"]
             }]
@@ -5698,7 +5731,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "2026-04-25T00:00:00Z queued action=navigate id=job-1 namingWarnings=missing_agent_name"
+            "2026-04-25T00:00:00Z queued action=navigate id=job-1 control=cdp_free lifecycleOnly=yes namingWarnings=missing_agent_name"
         );
     }
 
@@ -5757,6 +5790,8 @@ mod tests {
                     "activityCount": 1,
                     "targetIdentityCount": 2,
                     "targetServiceIds": ["acs", "google"],
+                    "controlPlaneModes": ["cdp", "cdp_free"],
+                    "lifecycleOnlyJobCount": 1,
                     "hasNamingWarning": false,
                     "namingWarnings": [],
                     "latestTimestamp": "2026-04-25T00:00:00Z"
@@ -5829,7 +5864,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google events=1 jobs=1 incidents=1 activity=1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google control=cdp,cdp_free lifecycleOnlyJobs=1 events=1 jobs=1 incidents=1 activity=1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 

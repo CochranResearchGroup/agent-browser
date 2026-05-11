@@ -15,6 +15,11 @@ export type ServiceJobPriority =
   | "normal"
   | "lifecycle";
 
+export type ServiceJobControlPlaneMode =
+  | "cdp"
+  | "cdp_free"
+  | "service";
+
 export type ServiceNamingWarning =
   | "missing_service_name"
   | "missing_agent_name"
@@ -83,6 +88,8 @@ export interface ServiceJobRecord {
   targetServiceIds: string[];
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
+  controlPlaneMode: ServiceJobControlPlaneMode;
+  lifecycleOnly: boolean;
   target: unknown;
   owner: unknown;
   state: ServiceJobState;
@@ -719,6 +726,8 @@ export interface ServiceTraceSummaryContext {
   activityCount: number;
   targetIdentityCount: number;
   targetServiceIds: string[];
+  controlPlaneModes: ServiceJobControlPlaneMode[];
+  lifecycleOnlyJobCount: number;
   latestTimestamp: string | null;
   [key: string]: unknown;
 }
@@ -1266,6 +1275,7 @@ export interface ServiceIncidentActivityOptions extends ServiceObservabilityHttp
 
 export declare const SERVICE_JOB_STATES: readonly string[];
 export declare const SERVICE_JOB_PRIORITIES: readonly string[];
+export declare const SERVICE_JOB_CONTROL_PLANE_MODES: readonly string[];
 export declare const SERVICE_NAMING_WARNINGS: readonly string[];
 export declare const SERVICE_INCIDENT_STATES: readonly string[];
 export declare const SERVICE_INCIDENT_SEVERITIES: readonly string[];
