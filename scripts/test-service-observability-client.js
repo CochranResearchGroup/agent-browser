@@ -344,6 +344,25 @@ async function main() {
   assert.equal(accessPlanMonitorRunDue.calls[0].init.method, 'POST');
   assert.equal(accessPlanMonitorRunDueResult.checked, 1);
 
+  const unavailableAccessPlanMonitorRunDue = createFetchRecorder({
+    success: true,
+    data: {
+      checked: 1,
+      failed: 0,
+      monitors: [{ id: 'google-login-freshness' }],
+    },
+  });
+  assert.throws(
+    () =>
+      runServiceAccessPlanMonitorRunDue({
+        baseUrl: 'http://127.0.0.1:4849',
+        fetch: unavailableAccessPlanMonitorRunDue.fetch,
+        accessPlan: serviceAccessPlanWithoutDueMonitor(),
+      }),
+    /access plan monitorRunDue is not available/,
+  );
+  assert.equal(unavailableAccessPlanMonitorRunDue.calls.length, 0);
+
   const remediesApply = createFetchRecorder({
     success: true,
     data: {
@@ -1857,6 +1876,26 @@ function serviceAccessPlanWithDueMonitor() {
         },
         requestFields: [],
         notes: ['Runs all due active monitors through the service worker queue.'],
+      },
+    },
+  };
+}
+
+function serviceAccessPlanWithoutDueMonitor() {
+  return {
+    query: {
+      serviceName: 'JournalDownloader',
+      agentName: 'codex',
+      taskName: 'verifyGoogle',
+      targetServiceIds: ['google'],
+    },
+    decision: {
+      monitorRunDue: {
+        available: false,
+        recommendedBeforeUse: false,
+        monitorIds: [],
+        neverCheckedMonitorIds: [],
+        targetServiceIds: [],
       },
     },
   };
