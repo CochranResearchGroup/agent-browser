@@ -1202,6 +1202,7 @@ fn format_service_site_policy_line(
     let host = value_str(policy, "browserHost", "default");
     let interaction = value_str(policy, "interactionMode", "unknown");
     let challenge = value_str(policy, "challengePolicy", "unknown");
+    let cdp_free = value_bool_label(policy, "requiresCdpFree");
     let manual_login = value_bool_label(policy, "manualLoginPreferred");
     let profile_required = value_bool_label(policy, "profileRequired");
     let source_record = source;
@@ -1216,7 +1217,7 @@ fn format_service_site_policy_line(
         .unwrap_or("unknown");
 
     format!(
-        "{id} origin={origin} source={source} overrideable={overrideable} host={host} interaction={interaction} challenge={challenge} manual_login={manual_login} profile_required={profile_required}"
+        "{id} origin={origin} source={source} overrideable={overrideable} host={host} cdp_free={cdp_free} interaction={interaction} challenge={challenge} manual_login={manual_login} profile_required={profile_required}"
     )
 }
 
@@ -4224,7 +4225,7 @@ Notes:
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
   - Text service monitors focuses monitor identity, target, interval, state, last health timestamps, and failure counts, including profile_readiness:<targetServiceId> freshness monitors.
-  - Text service site-policies focuses origin, source, overrideability, host, interaction, challenge, login, and profile-required policy fields.
+  - Text service site-policies focuses origin, source, overrideability, host, CDP-free requirement, interaction, challenge, login, and profile-required policy fields.
   - Text service providers focuses provider identity, kind, enabled state, config reference, and capabilities.
   - Text service challenges focuses detected challenge kind, state, tab, provider, policy decision, human approval, and result.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
@@ -4319,7 +4320,7 @@ Notes:
   - HTTP GET /api/service/profiles/<id>/readiness and MCP agent-browser://profiles/{profile_id}/readiness return one profile's no-launch targetReadiness rows for software clients and agents that do not need allocation details.
   - HTTP GET /api/service/profiles/<id>/allocation and MCP agent-browser://profiles/{profile_id}/allocation return one profile's lease, holder, conflict, recommended-action, and readiness state without fetching the full profile collection.
   - HTTP GET /api/service/profiles/<id>/seeding-handoff and MCP agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId} return the exact detached runtime-login command, setup URL, operator steps, and warnings derived from one profile's targetReadiness rows. HTTP POST /api/service/profiles/<id>/seeding-handoff and MCP service_profile_seeding_handoff_update persist lifecycle changes through the same service worker.
-  - HTTP GET /api/service/access-plan accepts serviceName, agentName, taskName, targetServiceId, siteId, loginId, or their array aliases, then returns the no-launch service-owned profile, policy, provider, challenge, readiness, seedingHandoff, monitorFindings, caller-label warning, and recommendation payload. Matching active profile_readiness monitors that are due or never checked set monitorFindings.profileReadinessProbeDue and decision.monitorProbeDue, fill decision.monitorRunDue with HTTP, MCP, CLI, and service-client instructions, and recommend run_due_profile_readiness_monitor before relying on retained freshness. Access-plan-backed tab requests marked blockedByManualAction and manualSeedingRequired are refused by the service request client, HTTP POST /api/service/request, and MCP service_request unless allowManualAction is explicitly true.
+  - HTTP GET /api/service/access-plan accepts serviceName, agentName, taskName, targetServiceId, siteId, loginId, or their array aliases, then returns the no-launch service-owned profile, policy, provider, challenge, readiness, seedingHandoff, monitorFindings, caller-label warning, and recommendation payload. decision.launchPosture includes requiresCdpFree and cdpAttachmentAllowed so agents and software clients can avoid DevTools attachment for bot-sensitive sites. Matching active profile_readiness monitors that are due or never checked set monitorFindings.profileReadinessProbeDue and decision.monitorProbeDue, fill decision.monitorRunDue with HTTP, MCP, CLI, and service-client instructions, and recommend run_due_profile_readiness_monitor before relying on retained freshness. Access-plan-backed tab requests marked blockedByManualAction and manualSeedingRequired are refused by the service request client, HTTP POST /api/service/request, and MCP service_request unless allowManualAction is explicitly true.
   - The guarded service read surface has MCP resource parity; agents should usually start with agent-browser://access-plan{?...} and use narrower profile lookup, readiness, allocation, or seeding-handoff resources only when the full recommendation is not needed.
   - browser_navigate, browser_back, browser_forward, browser_reload, browser_tab_*, browser_set_content, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_*, browser_storage_*, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_*, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, and browser_clipboard provide typed schemas for common navigation, tab, page-content, request-inspection, session-shaping, observability, artifact, file-transfer, HAR, routing, cookie, and storage workflows.
   - browser_command queues remaining HTTP-parity actions with params copied into the queued daemon command when a typed browser_* tool is not yet available.

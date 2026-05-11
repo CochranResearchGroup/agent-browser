@@ -641,6 +641,7 @@ pub fn assert_service_site_policy_record_contract(value: &serde_json::Value) {
             "browserHost",
             "viewStream",
             "controlInput",
+            "requiresCdpFree",
             "interactionMode",
             "rateLimit",
             "manualLoginPreferred",
@@ -655,6 +656,7 @@ pub fn assert_service_site_policy_record_contract(value: &serde_json::Value) {
             "browser_host",
             "view_stream",
             "control_input",
+            "requires_cdp_free",
             "interaction_mode",
             "rate_limit",
             "manual_login_preferred",
@@ -2347,6 +2349,29 @@ fn default_seeding_url(target_service_id: &str) -> &'static str {
 fn builtin_site_policies() -> Vec<SitePolicy> {
     vec![
         SitePolicy {
+            id: "canva".to_string(),
+            origin_pattern: "https://www.canva.com".to_string(),
+            browser_host: Some(BrowserHost::LocalHeaded),
+            requires_cdp_free: true,
+            interaction_mode: InteractionMode::HumanLikeInput,
+            rate_limit: RateLimitPolicy {
+                min_action_delay_ms: Some(700),
+                jitter_ms: Some(600),
+                cooldown_ms: Some(3_000),
+                max_parallel_sessions: Some(1),
+                retry_budget: Some(1),
+            },
+            manual_login_preferred: true,
+            profile_required: true,
+            challenge_policy: ChallengePolicy::ManualOnly,
+            allowed_challenge_providers: vec!["manual".to_string()],
+            notes: Some(
+                "Canva can reject sessions when a DevTools port is attached; prefer headed Chrome without CDP."
+                    .to_string(),
+            ),
+            ..SitePolicy::default()
+        },
+        SitePolicy {
             id: "google".to_string(),
             origin_pattern: "https://accounts.google.com".to_string(),
             browser_host: Some(BrowserHost::LocalHeaded),
@@ -3589,6 +3614,8 @@ pub struct SitePolicy {
     pub browser_host: Option<BrowserHost>,
     pub view_stream: Option<ViewStreamProvider>,
     pub control_input: Option<ControlInputProvider>,
+    /// True when this site should launch without a DevTools/CDP attachment.
+    pub requires_cdp_free: bool,
     pub interaction_mode: InteractionMode,
     pub rate_limit: RateLimitPolicy,
     pub manual_login_preferred: bool,
@@ -3607,6 +3634,7 @@ impl Default for SitePolicy {
             browser_host: None,
             view_stream: None,
             control_input: None,
+            requires_cdp_free: false,
             interaction_mode: InteractionMode::CdpDirect,
             rate_limit: RateLimitPolicy::default(),
             manual_login_preferred: false,
@@ -4018,6 +4046,7 @@ mod tests {
             browser_host: Some(BrowserHost::DockerHeaded),
             view_stream: Some(ViewStreamProvider::VirtualDisplayWebrtc),
             control_input: Some(ControlInputProvider::WebrtcInput),
+            requires_cdp_free: true,
             interaction_mode: InteractionMode::HumanLikeInput,
             rate_limit: RateLimitPolicy {
                 min_action_delay_ms: Some(250),
@@ -4038,6 +4067,7 @@ mod tests {
         assert_eq!(value["browserHost"], "docker_headed");
         assert_eq!(value["viewStream"], "virtual_display_webrtc");
         assert_eq!(value["controlInput"], "webrtc_input");
+        assert_eq!(value["requiresCdpFree"], true);
         assert_eq!(value["interactionMode"], "human_like_input");
         assert_eq!(value["rateLimit"]["minActionDelayMs"], 250);
         assert_eq!(value["challengePolicy"], "avoid_first");
@@ -4795,6 +4825,7 @@ mod tests {
             "browserHost": null,
             "viewStream": null,
             "controlInput": null,
+            "requiresCdpFree": false,
             "interactionMode": "human_like_input",
             "rateLimit": {},
             "manualLoginPreferred": true,
@@ -6027,6 +6058,11 @@ mod tests {
             state.site_policies["microsoft"].origin_pattern,
             "https://login.microsoftonline.com"
         );
+        assert_eq!(
+            state.site_policies["canva"].origin_pattern,
+            "https://www.canva.com"
+        );
+        assert!(state.site_policies["canva"].requires_cdp_free);
         assert_eq!(
             state.site_policies["microsoft"].interaction_mode,
             InteractionMode::HumanLikeInput

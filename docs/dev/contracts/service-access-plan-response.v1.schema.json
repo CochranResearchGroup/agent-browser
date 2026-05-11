@@ -356,6 +356,8 @@
             "source",
             "headed",
             "remoteViewRecommended",
+            "requiresCdpFree",
+            "cdpAttachmentAllowed",
             "detachedFirstLoginRequired",
             "attachableAfterSeeding",
             "rationale"
@@ -380,6 +382,12 @@
               "type": "boolean"
             },
             "remoteViewRecommended": {
+              "type": "boolean"
+            },
+            "requiresCdpFree": {
+              "type": "boolean"
+            },
+            "cdpAttachmentAllowed": {
               "type": "boolean"
             },
             "detachedFirstLoginRequired": {

@@ -830,8 +830,12 @@ fn launch_posture_decision(
         browser_host,
         BrowserHost::DockerHeaded | BrowserHost::RemoteHeaded | BrowserHost::CloudProvider
     );
-    let attachable_after_seeding =
-        !manual_seeding_required || !matches!(browser_host, BrowserHost::AttachedExisting);
+    let requires_cdp_free = site_policy
+        .map(|policy| policy.requires_cdp_free)
+        .unwrap_or(false);
+    let cdp_attachment_allowed = !requires_cdp_free && !manual_seeding_required;
+    let attachable_after_seeding = cdp_attachment_allowed
+        || (!requires_cdp_free && !matches!(browser_host, BrowserHost::AttachedExisting));
     let mut rationale = Vec::new();
 
     if headed {
@@ -844,6 +848,13 @@ fn launch_posture_decision(
     }
     if manual_seeding_required {
         rationale.push("detached_first_login_required");
+    }
+    if requires_cdp_free {
+        rationale.push("site_policy_requires_cdp_free");
+    } else if cdp_attachment_allowed {
+        rationale.push("cdp_attachment_allowed");
+    } else {
+        rationale.push("cdp_attachment_blocked_until_manual_action_complete");
     }
     match source {
         "site_policy" => rationale.push("browser_host_from_site_policy"),
@@ -858,6 +869,8 @@ fn launch_posture_decision(
             "source": source,
             "headed": headed,
             "remoteViewRecommended": remote_view_recommended,
+            "requiresCdpFree": requires_cdp_free,
+            "cdpAttachmentAllowed": cdp_attachment_allowed,
             "detachedFirstLoginRequired": manual_seeding_required,
             "attachableAfterSeeding": attachable_after_seeding,
             "rationale": rationale,
@@ -1476,6 +1489,11 @@ mod tests {
         assert_eq!(plan["decision"]["browserHost"], "local_headed");
         assert_eq!(plan["decision"]["launchPosture"]["source"], "site_policy");
         assert_eq!(plan["decision"]["launchPosture"]["headed"], true);
+        assert_eq!(plan["decision"]["launchPosture"]["requiresCdpFree"], false);
+        assert_eq!(
+            plan["decision"]["launchPosture"]["cdpAttachmentAllowed"],
+            false
+        );
         assert_eq!(
             plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
             true
@@ -2236,6 +2254,10 @@ mod tests {
             true
         );
         assert_eq!(
+            plan["decision"]["launchPosture"]["cdpAttachmentAllowed"],
+            true
+        );
+        assert_eq!(
             plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
             false
         );
@@ -2276,6 +2298,7 @@ mod tests {
         assert_eq!(plan["decision"]["browserHost"], "local_headed");
         assert_eq!(plan["decision"]["interactionRisk"], "manual");
         assert_eq!(plan["decision"]["pacing"]["singleSessionRecommended"], true);
+        assert_eq!(plan["decision"]["launchPosture"]["requiresCdpFree"], false);
         assert_eq!(
             plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
             true
@@ -2283,6 +2306,53 @@ mod tests {
         assert_eq!(
             plan["decision"]["recommendedAction"],
             "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
+        );
+    }
+
+    #[test]
+    fn service_access_plan_uses_builtin_cdp_free_canva_policy() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "canva-work".to_string(),
+                BrowserProfile {
+                    id: "canva-work".to_string(),
+                    name: "Canva Work".to_string(),
+                    target_service_ids: vec!["canva".to_string()],
+                    authenticated_service_ids: vec!["canva".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["canva".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["sitePolicy"]["id"], "canva");
+        assert_eq!(plan["sitePolicySource"]["source"], "builtin");
+        assert_eq!(plan["sitePolicy"]["requiresCdpFree"], true);
+        assert_eq!(plan["decision"]["browserHost"], "local_headed");
+        assert_eq!(plan["decision"]["launchPosture"]["requiresCdpFree"], true);
+        assert_eq!(
+            plan["decision"]["launchPosture"]["cdpAttachmentAllowed"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["attachableAfterSeeding"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["rationale"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|reason| reason == "site_policy_requires_cdp_free"),
+            true
         );
     }
 

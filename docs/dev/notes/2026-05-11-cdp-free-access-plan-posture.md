@@ -1,0 +1,35 @@
+# CDP-Free Access-Plan Posture
+
+## Context
+
+The service roadmap calls out sites that are sensitive to Chrome DevTools Protocol attachment. Canva is the current concrete example: some sessions can fail before the page loads when a remote debugging port is present.
+
+## Decision
+
+Site policies now include `requiresCdpFree`. Access-plan responses expose that policy through `decision.launchPosture.requiresCdpFree` and `decision.launchPosture.cdpAttachmentAllowed` so agents, MCP clients, and software clients can decide before launching Chrome or requesting a tab.
+
+The built-in Canva site policy defaults to:
+
+- `browserHost: "local_headed"`
+- `requiresCdpFree: true`
+- `interactionMode: "human_like_input"`
+- `manualLoginPreferred: true`
+- `profileRequired: true`
+- `challengePolicy: "manual_only"`
+
+Local configured or persisted policies with the same ID still override built-in defaults.
+
+## Current Boundary
+
+This slice is a no-launch planning contract. It does not yet implement non-CDP observation or control. When `requiresCdpFree` is true, clients should avoid DevTools attachment and treat CDP-backed commands as unavailable unless a later service capability explicitly says otherwise.
+
+## Validation
+
+Run the focused no-launch checks for access-plan and site-policy source parity, plus Rust contract tests, after changing this surface:
+
+```bash
+pnpm test:service-access-plan-no-launch
+pnpm test:service-site-policy-sources-no-launch
+cargo test --manifest-path cli/Cargo.toml service_access -- --test-threads=1
+cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1
+```

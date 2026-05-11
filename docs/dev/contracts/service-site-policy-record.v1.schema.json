@@ -10,6 +10,7 @@
     "browserHost",
     "viewStream",
     "controlInput",
+    "requiresCdpFree",
     "interactionMode",
     "rateLimit",
     "manualLoginPreferred",
@@ -76,6 +77,10 @@
           "type": "null"
         }
       ]
+    },
+    "requiresCdpFree": {
+      "type": "boolean",
+      "description": "True when this site's browser sessions should launch and remain without a DevTools/CDP attachment."
     },
     "interactionMode": {
       "type": "string",

@@ -1779,7 +1779,11 @@ so clients can explain headed, human-like, jittered, or single-session behavior
 before creating browser pressure. The `launchPosture` block resolves the
 browser host from site policy, profile default, or the service default, and
 explains whether the plan is headed, remote-view capable, or requires detached
-first-login seeding.
+first-login seeding. It also reports `requiresCdpFree` and
+`cdpAttachmentAllowed`, so agents and software clients can avoid opening a
+DevTools port for bot-sensitive sites. The shipped Canva site policy requires
+CDP-free headed Chrome by default because some Canva sessions can fail before
+the page loads when DevTools is attached.
 When manual seeding is required, `seedingHandoff.operatorIntervention` is the
 canonical user-feedback contract. It carries the intervention state, severity,
 default channels for API, MCP, and dashboard clients, optional desktop,
@@ -1812,7 +1816,7 @@ performs a no-launch profile lookup and refuses the run when the broker-selected
 profile does not match the profile being verified.
 
 When no local site policy exists, agent-browser applies shipped defaults for
-Google, Gmail, and Microsoft login identities. Local persisted or configured
+Canva, Google, Gmail, and Microsoft login identities. Local persisted or configured
 policies with the same IDs override those defaults. `sitePolicySource` reports
 whether the selected policy came from config, persisted state, or a built-in default, how
 it matched the request, and whether it is overrideable.
