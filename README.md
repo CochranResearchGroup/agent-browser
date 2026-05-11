@@ -1950,7 +1950,8 @@ ask agent-browser for an access plan, inspect readiness and the service-owned
 decision, register a managed login profile only when agent-browser has no
 suitable one, optionally run access-plan-recommended due profile-readiness
 monitors with `--run-due-readiness-monitor`, refresh the access plan, and pass
-the final response to `requestServiceTab()`. It can also post bounded
+the final response to `requestServiceTab()` or `requestServiceCdpFreeLaunch()`
+when the selected site policy requires CDP-free operation. It can also post bounded
 auth-probe evidence through `updateServiceProfileFreshness()` for an existing
 managed profile. When the recipe registers a profile, it can
 also call `upsertServiceProfileReadinessMonitor()` so the service periodically

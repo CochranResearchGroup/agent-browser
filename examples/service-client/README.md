@@ -230,9 +230,11 @@ instructions itself.
 for dashboards, agents, desktop notifications, webhooks, and software clients:
 render its severity, channels, completion signals, and actions rather than
 inventing separate seeding rules. The managed profile flow skips
-`requestServiceTab()` while manual seeding is required. The lower-level tab
-helper also throws before posting `/api/service/request` unless the caller
-explicitly passes `allowManualAction: true`.
+`requestServiceTab()` while manual seeding is required and switches to
+`requestServiceCdpFreeLaunch()` when the access plan requires CDP-free
+operation. The lower-level tab helper also throws before posting
+`/api/service/request` unless the caller explicitly passes
+`allowManualAction: true`.
 Use `updateServiceProfileSeedingHandoff()` when the operator, dashboard, or
 supervising agent needs to record detached launch, waiting for close, declared
 complete, closed but unverified, verified fresh, failed, or abandoned states.

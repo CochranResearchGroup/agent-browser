@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // @ts-check
 
-import { requestServiceTab } from '@agent-browser/client/service-request';
+import {
+  requestServiceCdpFreeLaunch,
+  requestServiceTab,
+} from '@agent-browser/client/service-request';
 import {
   getServiceAccessPlan,
   registerServiceLoginProfile,
@@ -84,7 +87,7 @@ export function buildManagedProfilePlan({
       'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
       'register a managed profile only when agent-browser has no suitable one',
       'optionally run due profile-readiness monitors when access-plan recommends it',
-      'refresh the access plan before passing it to requestServiceTab',
+      'refresh the access plan before requesting a tab or CDP-free launch',
       'seed the profile manually when readiness reports needs_manual_seeding',
     ],
     profileInspection: {
@@ -105,7 +108,7 @@ export function buildManagedProfilePlan({
         }
       : null,
     tabRequest: {
-      helper: 'requestServiceTab',
+      helper: 'requestServiceTab or requestServiceCdpFreeLaunch',
       accessPlan: 'getServiceAccessPlan response',
       overrides: ['url', 'jobTimeoutMs'],
       url,
@@ -309,6 +312,7 @@ export async function runManagedProfileWorkflow({
   const manualSeedingRequired =
     accessPlan.readinessSummary?.manualSeedingRequired === true ||
     accessPlan.decision?.manualSeedingRequired === true;
+  const cdpFreeRequired = accessPlanRequiresCdpFree(accessPlan);
   const tab = manualSeedingRequired
     ? {
         success: false,
@@ -316,6 +320,17 @@ export async function runManagedProfileWorkflow({
         reason: 'manual_seeding_required',
         seedingHandoff: accessPlan.seedingHandoff ?? null,
       }
+    : cdpFreeRequired
+      ? {
+          ...(await requestServiceCdpFreeLaunch({
+            baseUrl,
+            fetch,
+            accessPlan,
+            url,
+            jobTimeoutMs: 30000,
+          })),
+          mode: 'cdp_free_launch',
+        }
     : await requestServiceTab({
         baseUrl,
         fetch,
@@ -351,6 +366,25 @@ export async function runManagedProfileWorkflow({
     profileFreshnessUpdate,
     tab,
   };
+}
+
+/**
+ * @param {Record<string, any>} accessPlan
+ */
+function accessPlanRequiresCdpFree(accessPlan) {
+  const launchPosture = accessPlan.decision?.launchPosture;
+  const postureRequiresCdpFree =
+    launchPosture &&
+    typeof launchPosture === 'object' &&
+    launchPosture.requiresCdpFree === true &&
+    launchPosture.cdpAttachmentAllowed !== true;
+  const serviceRequest = accessPlan.decision?.serviceRequest;
+  const serviceRequestRequiresCdpFree =
+    serviceRequest &&
+    typeof serviceRequest === 'object' &&
+    serviceRequest.requiresCdpFree === true &&
+    serviceRequest.cdpAttachmentAllowed !== true;
+  return Boolean(postureRequiresCdpFree || serviceRequestRequiresCdpFree);
 }
 
 function summarizeProfileAcquisition({

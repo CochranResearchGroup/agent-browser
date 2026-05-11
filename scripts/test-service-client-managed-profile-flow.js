@@ -17,6 +17,7 @@ const profile = {
 };
 
 await testExistingProfileSelection();
+await testExistingProfileCdpFreeLaunch();
 await testExistingProfileFreshnessUpdate();
 await testExistingProfileDueMonitorRun();
 await testMissingProfileRegistration();
@@ -79,6 +80,53 @@ async function testExistingProfileSelection() {
     calls.map((call) => `${call.method} ${call.path}`),
     ['GET /api/service/access-plan', 'POST /api/service/request'],
   );
+}
+
+async function testExistingProfileCdpFreeLaunch() {
+  const calls = [];
+  const fetch = createMockFetch({
+    profiles: [profile],
+    calls,
+    cdpFreeRequired: true,
+    rejectRegistration: true,
+  });
+
+  const result = await runManagedProfileWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    readinessProfileId: 'canva-default',
+    registerProfileId: 'canva-default',
+    url: 'https://www.canva.com/',
+  });
+
+  assert.equal(result.dryRun, false);
+  assert.equal(result.selectedProfile?.id, 'canva-default');
+  assert.equal(result.accessPlan?.decision?.launchPosture?.requiresCdpFree, true);
+  assert.equal(result.tab?.success, true);
+  assert.equal(result.tab?.mode, 'cdp_free_launch');
+  assert.equal(result.tab?.data?.cdpFree, true);
+  assert.deepEqual(result.tab?.data?.unsupportedOperations, [
+    'cdp_commands',
+    'snapshot',
+    'screenshot',
+    'dom_interaction',
+  ]);
+
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    ['GET /api/service/access-plan', 'POST /api/service/request'],
+  );
+  const serviceRequest = JSON.parse(String(calls[1].body));
+  assert.equal(serviceRequest.action, 'cdp_free_launch');
+  assert.equal(serviceRequest.requiresCdpFree, true);
+  assert.equal(serviceRequest.cdpAttachmentAllowed, false);
+  assert.equal(serviceRequest.url, 'https://www.canva.com/');
+  assert.equal(serviceRequest.params.url, 'https://www.canva.com/');
 }
 
 async function testExistingProfileFreshnessUpdate() {
@@ -410,7 +458,7 @@ async function testIdentityFirstGuidanceDrift() {
   });
 
   assert.equal(plan.profileInspection.helper, 'getServiceAccessPlan');
-  assert.equal(plan.tabRequest.helper, 'requestServiceTab');
+  assert.equal(plan.tabRequest.helper, 'requestServiceTab or requestServiceCdpFreeLaunch');
   assert.equal(plan.tabRequest.accessPlan, 'getServiceAccessPlan response');
   assert.deepEqual(plan.tabRequest.overrides, ['url', 'jobTimeoutMs']);
   assert.deepEqual(plan.decisionOrder.slice(0, 4), [
@@ -478,6 +526,7 @@ function createMockFetch({
   calls,
   readinessState = 'ready',
   readinessRecommendedAction = 'request_tab_by_login_identity',
+  cdpFreeRequired = false,
   dueMonitorRecommended = false,
   dueMonitorRecommendedOnAccessPlan = 1,
   selectRegisteredProfile = false,
@@ -585,8 +634,11 @@ function createMockFetch({
             notes: [],
           },
           serviceRequest: {
-            available: !(readinessState === 'needs_manual_seeding' && Boolean(selectedProfile)),
+            available: !(readinessState === 'needs_manual_seeding' && Boolean(selectedProfile)) && !cdpFreeRequired,
             blockedByManualAction: readinessState === 'needs_manual_seeding' && Boolean(selectedProfile),
+            blockedByCdpFree: cdpFreeRequired,
+            requiresCdpFree: cdpFreeRequired,
+            cdpAttachmentAllowed: cdpFreeRequired ? false : true,
             request: {
               serviceName: 'CanvaCLI',
               agentName: 'canva-cli-agent',
@@ -595,6 +647,12 @@ function createMockFetch({
               targetServiceId: 'canva',
               profileLeasePolicy: 'wait',
               action: 'tab_new',
+              ...(cdpFreeRequired
+                ? {
+                    requiresCdpFree: true,
+                    cdpAttachmentAllowed: false,
+                  }
+                : {}),
               ...(readinessState === 'needs_manual_seeding' && Boolean(selectedProfile)
                 ? {
                     blockedByManualAction: true,
@@ -602,6 +660,11 @@ function createMockFetch({
                   }
                 : {}),
             },
+          },
+          launchPosture: {
+            browserHost: 'local_headed',
+            requiresCdpFree: cdpFreeRequired,
+            cdpAttachmentAllowed: !cdpFreeRequired,
           },
           browserHost: null,
           interactionMode: null,
@@ -686,6 +749,23 @@ function createMockFetch({
       assert.equal(request.loginId, 'canva');
       assert.equal(request.targetServiceId, 'canva');
       assert.equal(request.profileLeasePolicy, 'wait');
+      if (request.action === 'cdp_free_launch') {
+        assert.equal(request.requiresCdpFree, true);
+        assert.equal(request.cdpAttachmentAllowed, false);
+        return jsonResponse({
+          success: true,
+          data: {
+            launched: true,
+            cdpFree: true,
+            cdpAttachmentAllowed: false,
+            browserId: 'session:canva-cli-agent',
+            browserPid: 4242,
+            userDataDir: '/tmp/canva-default',
+            supportedOperations: ['process_lifecycle', 'profile_lease', 'service_state'],
+            unsupportedOperations: ['cdp_commands', 'snapshot', 'screenshot', 'dom_interaction'],
+          },
+        });
+      }
       return jsonResponse({
         success: true,
         data: {
