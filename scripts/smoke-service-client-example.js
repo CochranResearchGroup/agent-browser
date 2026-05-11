@@ -200,6 +200,14 @@ try {
       job.taskName === taskName,
   );
   assert(latestJob, `example trace did not include the succeeded named job: ${JSON.stringify(output.latestJobs)}`);
+  assert(
+    latestJob.controlPlaneMode === 'cdp',
+    `example trace did not surface job controlPlaneMode: ${JSON.stringify(latestJob)}`,
+  );
+  assert(
+    latestJob.lifecycleOnly === false,
+    `example trace did not surface job lifecycleOnly=false: ${JSON.stringify(latestJob)}`,
+  );
 
   await cleanup();
   console.log('Service client example live smoke passed');

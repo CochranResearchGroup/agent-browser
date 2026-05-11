@@ -345,6 +345,8 @@ function createBrokerFirstFetch({
             serviceName,
             agentName,
             taskName,
+            controlPlaneMode: 'cdp',
+            lifecycleOnly: false,
           },
         ],
       });

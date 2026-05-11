@@ -1941,9 +1941,10 @@ plan first, register the profile only when no selected profile exists, add the
 retained freshness monitor for that fallback profile, optionally run due
 profile-readiness monitors, refresh the access plan, and submit the planned tab
 request. Its output includes `profileAcquisitionSummary.monitorRunDueRan`,
-`initialRecommendedAction`, and `refreshedRecommendedAction` so callers can see
-whether access-plan freshness work changed the recommendation before browser
-control begins.
+`initialRecommendedAction`, `refreshedRecommendedAction`, and latest trace job
+`controlPlaneMode` plus `lifecycleOnly` values so callers can see whether
+access-plan freshness work changed the recommendation before browser control
+begins and whether the retained job was CDP-backed or lifecycle-only.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that uses the no-launch profile planning surfaces to
 ask agent-browser for an access plan, inspect readiness and the service-owned

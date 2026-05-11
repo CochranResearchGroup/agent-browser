@@ -121,7 +121,8 @@ adds the standard retained profile-readiness monitor, optionally runs due
 readiness monitors when `runDueReadinessMonitor` is true, then returns the
 refreshed access plan for the tab request. The generic example output includes
 `profileAcquisitionSummary` with `monitorRunDueRan`, initial recommendation,
-and refreshed recommendation fields for operator inspection.
+refreshed recommendation fields, and latest trace job `controlPlaneMode` plus
+`lifecycleOnly` values for operator inspection.
 
 ```js
 import { requestServiceTab } from '@agent-browser/client/service-request';

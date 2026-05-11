@@ -247,6 +247,8 @@ export async function runServiceWorkflow({
       serviceName: job.serviceName,
       agentName: job.agentName,
       taskName: job.taskName,
+      controlPlaneMode: job.controlPlaneMode ?? null,
+      lifecycleOnly: job.lifecycleOnly ?? false,
     })),
   };
 }
