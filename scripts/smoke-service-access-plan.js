@@ -34,6 +34,9 @@ const challengeId = `access-plan-challenge-${process.pid}`;
 const monitoredTargetServiceId = 'acs';
 const monitoredProfileId = `access-plan-acs-${process.pid}`;
 const monitoredMonitorId = `access-plan-acs-freshness-${process.pid}`;
+const dueTargetServiceId = 'canva';
+const dueProfileId = `access-plan-canva-${process.pid}`;
+const dueMonitorId = `access-plan-canva-freshness-${process.pid}`;
 
 async function cleanup() {
   try {
@@ -87,12 +90,45 @@ function seedServiceState() {
             ],
             persistent: true,
           },
+          [dueProfileId]: {
+            id: dueProfileId,
+            name: 'Access-plan Canva profile',
+            userDataDir: join(tempHome, 'canva-profile-user-data'),
+            targetServiceIds: [dueTargetServiceId],
+            authenticatedServiceIds: [dueTargetServiceId],
+            sharedServiceIds: [serviceName],
+            targetReadiness: [
+              {
+                targetServiceId: dueTargetServiceId,
+                loginId: dueTargetServiceId,
+                state: 'fresh',
+                manualSeedingRequired: false,
+                evidence: 'auth_probe_cookie_present',
+                recommendedAction: 'use_profile',
+                lastVerifiedAt: '2026-05-01T00:00:00Z',
+                freshnessExpiresAt: '2999-05-01T00:00:01Z',
+              },
+            ],
+            persistent: true,
+          },
         },
         monitors: {
           [monitoredMonitorId]: {
             id: monitoredMonitorId,
             name: 'ACS profile readiness',
             target: { profile_readiness: monitoredTargetServiceId },
+            intervalMs: 60000,
+            state: 'active',
+            lastCheckedAt: null,
+            lastSucceededAt: null,
+            lastFailedAt: null,
+            lastResult: null,
+            consecutiveFailures: 0,
+          },
+          [dueMonitorId]: {
+            id: dueMonitorId,
+            name: 'Canva profile readiness',
+            target: { profile_readiness: dueTargetServiceId },
             intervalMs: 60000,
             state: 'active',
             lastCheckedAt: null,
@@ -151,11 +187,15 @@ async function runDueMonitors() {
   ]);
   const payload = parseJsonOutput(result.stdout, 'service monitors run-due');
   assert(payload.success === true, `service monitors run-due failed: ${result.stdout}${result.stderr}`);
-  assert(payload.data?.checked === 1, `service monitors run-due checked mismatch: ${JSON.stringify(payload)}`);
+  assert(payload.data?.checked === 2, `service monitors run-due checked mismatch: ${JSON.stringify(payload)}`);
   assert(payload.data?.failed === 1, `service monitors run-due failed count mismatch: ${JSON.stringify(payload)}`);
   assert(
     payload.data?.monitorIds?.includes(monitoredMonitorId),
     `service monitors run-due missing monitor ID: ${JSON.stringify(payload)}`,
+  );
+  assert(
+    payload.data?.monitorIds?.includes(dueMonitorId),
+    `service monitors run-due missing due monitor ID: ${JSON.stringify(payload)}`,
   );
 }
 
@@ -557,6 +597,114 @@ function assertMonitoredAccessPlan(data, label) {
   );
 }
 
+function assertDueAccessPlan(data, label) {
+  assert(data?.query?.serviceName === serviceName, `${label} serviceName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.agentName === agentName, `${label} agentName mismatch: ${JSON.stringify(data)}`);
+  assert(data?.query?.taskName === taskName, `${label} taskName mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.query?.targetServiceIds?.includes(dueTargetServiceId),
+    `${label} targetServiceIds mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(data?.selectedProfile?.id === dueProfileId, `${label} selected profile mismatch: ${JSON.stringify(data)}`);
+  assert(
+    data?.monitorFindings?.profileReadinessAttentionRequired === false,
+    `${label} monitor attention mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.profileReadinessProbeDue === true,
+    `${label} monitor probe due mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.profileReadinessDueMonitorIds?.includes(dueMonitorId),
+    `${label} due monitor IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.profileReadinessNeverCheckedMonitorIds?.includes(dueMonitorId),
+    `${label} never-checked monitor IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.monitorFindings?.dueTargetServiceIds?.includes(dueTargetServiceId),
+    `${label} due target IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.recommendedAction === 'run_due_profile_readiness_monitor',
+    `${label} recommended action mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorProbeDue === true,
+    `${label} monitor probe due flag mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.available === true,
+    `${label} monitor run-due availability mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.recommendedBeforeUse === true,
+    `${label} monitor run-due recommendation mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.monitorIds?.includes(dueMonitorId),
+    `${label} monitor run-due monitor IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.neverCheckedMonitorIds?.includes(dueMonitorId),
+    `${label} monitor run-due never-checked IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.targetServiceIds?.includes(dueTargetServiceId),
+    `${label} monitor run-due target IDs mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.http?.route === '/api/service/monitors/run-due',
+    `${label} monitor run-due HTTP route mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.mcp?.tool === 'service_monitors_run_due',
+    `${label} monitor run-due MCP tool mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.client?.helper === 'runServiceAccessPlanMonitorRunDue',
+    `${label} monitor run-due client helper mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.fallbackClient?.helper === 'runDueServiceMonitors',
+    `${label} monitor run-due fallback helper mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.monitorRunDue?.cli?.command === 'agent-browser service monitors run-due',
+    `${label} monitor run-due CLI mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.available === true,
+    `${label} service request availability mismatch: ${JSON.stringify(data)}`,
+  );
+}
+
+function assertMonitorRunDueParity(expected, actual, label) {
+  assert(
+    JSON.stringify(actual?.decision?.monitorRunDue) === JSON.stringify(expected?.decision?.monitorRunDue),
+    `${label} monitorRunDue parity mismatch: ${JSON.stringify({
+      expected: expected?.decision?.monitorRunDue,
+      actual: actual?.decision?.monitorRunDue,
+    })}`,
+  );
+  assert(
+    JSON.stringify(actual?.monitorFindings?.profileReadinessDueMonitorIds) ===
+      JSON.stringify(expected?.monitorFindings?.profileReadinessDueMonitorIds),
+    `${label} due monitor ID parity mismatch: ${JSON.stringify({
+      expected: expected?.monitorFindings,
+      actual: actual?.monitorFindings,
+    })}`,
+  );
+  assert(
+    actual?.decision?.recommendedAction === expected?.decision?.recommendedAction,
+    `${label} recommended action parity mismatch: ${JSON.stringify({
+      expected: expected?.decision?.recommendedAction,
+      actual: actual?.decision?.recommendedAction,
+    })}`,
+  );
+}
+
 function assertAnonymousAccessPlan(data, label) {
   assert(data?.query?.serviceName === null, `${label} anonymous serviceName mismatch: ${JSON.stringify(data)}`);
   assert(data?.query?.agentName === null, `${label} anonymous agentName mismatch: ${JSON.stringify(data)}`);
@@ -596,6 +744,44 @@ function assertNoBrowserLaunchState() {
 try {
   seedServiceState();
   const port = await enableStream();
+
+  const dueQuery =
+    `service-name=${encodeURIComponent(serviceName)}` +
+    `&agent-name=${encodeURIComponent(agentName)}` +
+    `&task-name=${encodeURIComponent(taskName)}` +
+    `&login-id=${encodeURIComponent(dueTargetServiceId)}` +
+    '&challenge-id=none';
+
+  const dueHttpPlan = await httpJson(port, 'GET', `/api/service/access-plan?${dueQuery}`);
+  assert(dueHttpPlan.success === true, `HTTP due access plan failed: ${JSON.stringify(dueHttpPlan)}`);
+  assertDueAccessPlan(dueHttpPlan.data, 'HTTP due access plan');
+
+  const dueMcpResult = await runCli(context, [
+    '--json',
+    '--session',
+    session,
+    'mcp',
+    'read',
+    `agent-browser://access-plan?${dueQuery}`,
+  ]);
+  const dueMcpPlan = readResourceContents(
+    parseJsonOutput(dueMcpResult.stdout, 'mcp due access plan resource'),
+    'due access plan',
+  );
+  assertDueAccessPlan(dueMcpPlan, 'MCP due access plan');
+  assertMonitorRunDueParity(dueHttpPlan.data, dueMcpPlan, 'HTTP/MCP due access plan');
+
+  const dueClientPlan = await getServiceAccessPlan({
+    baseUrl: `http://127.0.0.1:${port}`,
+    serviceName,
+    agentName,
+    taskName,
+    loginId: dueTargetServiceId,
+    challengeId: 'none',
+  });
+  assertDueAccessPlan(dueClientPlan, 'client due access plan');
+  assertMonitorRunDueParity(dueHttpPlan.data, dueClientPlan, 'HTTP/client due access plan');
+
   await runDueMonitors();
   const query =
     `service-name=${encodeURIComponent(serviceName)}` +
