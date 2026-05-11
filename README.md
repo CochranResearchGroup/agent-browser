@@ -1697,9 +1697,11 @@ submissions carrying both markers are rejected unless they also include
 `allowManualAction: true`. When an access plan requires CDP-free browser
 operation, the same helpers throw because the current service request path is
 CDP-backed. Direct HTTP or MCP submissions carrying `requiresCdpFree: true`
-with `cdpAttachmentAllowed: false` are also rejected, so a normal queued tab
-request cannot accidentally open a DevTools-attached browser for a
-CDP-sensitive site. When adding or
+with `cdpAttachmentAllowed: false` are also rejected for ordinary browser
+commands, so a normal queued tab request cannot accidentally open a
+DevTools-attached browser for a CDP-sensitive site. Use the explicit
+`cdp_free_launch` service request action when the intended behavior is only to
+launch and track a headed no-DevTools browser. When adding or
 removing service request actions, update the Rust
 `SERVICE_REQUEST_ACTIONS` list, the JSON schema enum, MCP `service_request`,
 HTTP `/api/service/request`, and generated client files together; run
@@ -1773,9 +1775,12 @@ HTTP and MCP callers get the same protection when they submit the copied
 `serviceRequest.request`, because requests marked with both
 `blockedByManualAction` and `manualSeedingRequired` require the same explicit
 override.
-When the copied request carries `requiresCdpFree: true` and
+When the copied tab request carries `requiresCdpFree: true` and
 `cdpAttachmentAllowed: false`, the HTTP, MCP, and service-client request paths
-refuse the request until a non-CDP execution surface exists.
+refuse that CDP-backed tab request. The first non-CDP service action is
+`cdp_free_launch`, which starts a headed Chrome process without DevTools,
+records the browser PID, profile, session ownership, and lease state, and
+returns unsupported CDP operations explicitly.
 Access-plan responses echo `agentName` and `taskName` in `query` and report
 `namingWarnings` plus `hasNamingWarning` in both `query` and `decision` when
 the caller omits `serviceName`, `agentName`, or `taskName`.

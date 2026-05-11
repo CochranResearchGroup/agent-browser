@@ -4681,7 +4681,7 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
         )));
     }
     reject_blocked_manual_service_request(arguments)?;
-    reject_cdp_free_service_request(arguments)?;
+    reject_cdp_free_service_request(action, arguments)?;
     let params = optional_object_argument(arguments, "params")?;
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
@@ -4719,7 +4719,10 @@ fn reject_blocked_manual_service_request(arguments: &Value) -> Result<(), JsonRp
     Ok(())
 }
 
-fn reject_cdp_free_service_request(arguments: &Value) -> Result<(), JsonRpcError> {
+fn reject_cdp_free_service_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
+    if action == "cdp_free_launch" {
+        return Ok(());
+    }
     if arguments.get("requiresCdpFree").and_then(Value::as_bool) == Some(true)
         && arguments
             .get("cdpAttachmentAllowed")
@@ -10865,6 +10868,28 @@ mod tests {
         .expect_err("CDP-free requests should not queue CDP-backed execution");
 
         assert!(format!("{err:?}").contains("CDP-free browser operation"));
+    }
+
+    #[test]
+    fn service_request_command_accepts_cdp_free_launch() {
+        let (_, command) = service_request_command(&json!({
+            "action": "cdp_free_launch",
+            "serviceName": "CanvaCLI",
+            "agentName": "agent-a",
+            "taskName": "openCanva",
+            "targetServiceId": "canva",
+            "requiresCdpFree": true,
+            "cdpAttachmentAllowed": false,
+            "params": {
+                "url": "https://www.canva.com/"
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "cdp_free_launch");
+        assert_eq!(command["serviceName"], "CanvaCLI");
+        assert_eq!(command["targetServiceId"], "canva");
+        assert_eq!(command["url"], "https://www.canva.com/");
     }
 
     #[test]

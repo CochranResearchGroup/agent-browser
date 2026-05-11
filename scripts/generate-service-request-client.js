@@ -111,6 +111,20 @@ export interface ServiceNavigateData {
   title?: string;
 }
 
+export interface ServiceCdpFreeLaunchData {
+  launched: true;
+  cdpFree: true;
+  cdpAttachmentAllowed: false;
+  browserId: string;
+  browserPid: number;
+  profileId?: string | null;
+  runtimeProfile?: string | null;
+  userDataDir: string;
+  url?: string | null;
+  supportedOperations: string[];
+  unsupportedOperations: string[];
+}
+
 export interface ServiceTabNewData {
   index: number;
   url: string;
@@ -436,6 +450,7 @@ export interface ServiceRequestsData {
 
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
+  cdp_free_launch: ServiceCdpFreeLaunchData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;

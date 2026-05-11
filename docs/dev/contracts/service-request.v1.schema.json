@@ -12,6 +12,7 @@
       "type": "string",
       "enum": [
         "navigate",
+        "cdp_free_launch",
         "back",
         "forward",
         "reload",
@@ -78,7 +79,7 @@
         "focus",
         "clear"
       ],
-      "description": "Underlying browser-control action to queue through the service worker."
+      "description": "Underlying browser-control action to queue through the service worker. cdp_free_launch starts a headed browser without DevTools and records service-owned lifecycle metadata."
     },
     "params": {
       "type": "object",

@@ -200,6 +200,35 @@ async function main() {
     profileLeaseWaitTimeoutMs: 5_000,
   });
 
+  const cdpFreeLaunchRequest = createServiceRequest({
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    action: 'cdp_free_launch',
+    requiresCdpFree: true,
+    cdpAttachmentAllowed: false,
+    params: {
+      url: 'https://www.canva.com/',
+    },
+    jobTimeoutMs: 30_000,
+  });
+  assert.deepEqual(cdpFreeLaunchRequest, {
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    action: 'cdp_free_launch',
+    requiresCdpFree: true,
+    cdpAttachmentAllowed: false,
+    params: {
+      url: 'https://www.canva.com/',
+    },
+    jobTimeoutMs: 30_000,
+  });
+
   const mcpToolCall = createServiceRequestMcpToolCall(request);
   assert.deepEqual(mcpToolCall, {
     name: 'service_request',

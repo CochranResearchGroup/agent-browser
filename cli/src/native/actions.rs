@@ -22,7 +22,7 @@ use super::browser::{
     should_track_target, BrowserManager, BrowserShutdownOutcome, ProcessExitObservation, WaitUntil,
 };
 use super::cancellation::CancellationToken;
-use super::cdp::chrome::LaunchOptions;
+use super::cdp::chrome::{launch_chrome_detached, LaunchOptions};
 use super::cdp::client::CdpClient;
 use super::cdp::types::{
     AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
@@ -189,6 +189,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
     matches!(
         action,
         "" | "launch"
+            | "cdp_free_launch"
             | "close"
             | "har_stop"
             | "credentials_set"
@@ -2356,6 +2357,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
 
     let result = match action {
         "launch" => handle_launch(cmd, state).await,
+        "cdp_free_launch" => handle_cdp_free_launch(cmd, state).await,
         "navigate" => handle_navigate(cmd, state).await,
         "url" => handle_url(state).await,
         "browser_pid" => handle_browser_pid(state),
@@ -3282,6 +3284,153 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     }
 
     Ok(json!({ "launched": true }))
+}
+
+async fn handle_cdp_free_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let url = optional_command_string(cmd, "url");
+    if url.as_deref().is_some_and(|value| value.starts_with('-')) {
+        return Err("cdp_free_launch url must not start with '-'".to_string());
+    }
+
+    let extensions: Option<Vec<String>> = cmd
+        .get("extensions")
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_string))
+                .collect()
+        });
+    let mut args = cmd
+        .get("args")
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if let Some(url) = url.as_ref() {
+        args.push(url.clone());
+    }
+
+    let mut launch_options = LaunchOptions {
+        headless: false,
+        executable_path: cmd
+            .get("executablePath")
+            .and_then(|value| value.as_str())
+            .map(str::to_string)
+            .or_else(|| env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok()),
+        proxy: cmd.get("proxy").and_then(|value| {
+            value.as_str().map(str::to_string).or_else(|| {
+                value
+                    .get("server")
+                    .and_then(|server| server.as_str())
+                    .map(str::to_string)
+            })
+        }),
+        proxy_bypass: cmd
+            .get("proxy")
+            .and_then(|value| value.get("bypass"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        proxy_username: cmd
+            .get("proxy")
+            .and_then(|value| value.get("username"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string)
+            .or_else(|| env::var("AGENT_BROWSER_PROXY_USERNAME").ok()),
+        proxy_password: cmd
+            .get("proxy")
+            .and_then(|value| value.get("password"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string)
+            .or_else(|| env::var("AGENT_BROWSER_PROXY_PASSWORD").ok()),
+        profile: launch_profile_from_sources(cmd),
+        runtime_profile: cmd
+            .get("runtimeProfile")
+            .and_then(|value| value.as_str())
+            .map(str::to_string)
+            .or_else(runtime_profile_from_env),
+        allow_file_access: cmd
+            .get("allowFileAccess")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false),
+        args,
+        extensions,
+        storage_state: None,
+        user_agent: cmd
+            .get("userAgent")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        ignore_https_errors: cmd
+            .get("ignoreHTTPSErrors")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false),
+        color_scheme: cmd
+            .get("colorScheme")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        download_path: cmd
+            .get("downloadPath")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        viewport_size: None,
+        use_real_keychain: use_real_keychain_from_env(),
+        keychain_password: keychain_password_from_env(),
+        manual_login: true,
+        attachable: false,
+    };
+    let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
+    let metadata =
+        ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
+    ensure_service_profile_lease_available(&metadata, &state.session_id, cmd).await?;
+    super::browser::validate_launch_options(
+        launch_options.extensions.as_deref(),
+        false,
+        launch_options.profile.as_deref(),
+        None,
+        launch_options.allow_file_access,
+        launch_options.executable_path.as_deref(),
+    )?;
+
+    let launch = launch_chrome_detached(&launch_options)?;
+    persist_service_browser_record(
+        &state.session_id,
+        ServiceBrowserHost::LocalHeaded,
+        ServiceBrowserHealth::Ready,
+        Some(launch.pid),
+        None,
+        None,
+        Some(metadata),
+    );
+
+    Ok(json!({
+        "launched": true,
+        "cdpFree": true,
+        "cdpAttachmentAllowed": false,
+        "browserId": service_browser_id(&state.session_id),
+        "browserPid": launch.pid,
+        "profileId": service_profile_id(
+            launch_options.profile.as_deref(),
+            launch_options.runtime_profile.as_deref(),
+        ),
+        "runtimeProfile": launch.runtime_profile,
+        "userDataDir": launch.user_data_dir,
+        "url": url,
+        "supportedOperations": [
+            "process_lifecycle",
+            "profile_lease",
+            "service_state",
+        ],
+        "unsupportedOperations": [
+            "cdp_commands",
+            "snapshot",
+            "screenshot",
+            "dom_interaction",
+        ],
+    }))
 }
 
 async fn launch_ios(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {

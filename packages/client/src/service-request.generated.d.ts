@@ -3,6 +3,7 @@
 
 export type ServiceRequestAction =
   | "navigate"
+  | "cdp_free_launch"
   | "back"
   | "forward"
   | "reload"
@@ -113,6 +114,20 @@ export interface ServiceRequestHttpOptions<TRequest extends ServiceRequest = Ser
 export interface ServiceNavigateData {
   url: string;
   title?: string;
+}
+
+export interface ServiceCdpFreeLaunchData {
+  launched: true;
+  cdpFree: true;
+  cdpAttachmentAllowed: false;
+  browserId: string;
+  browserPid: number;
+  profileId?: string | null;
+  runtimeProfile?: string | null;
+  userDataDir: string;
+  url?: string | null;
+  supportedOperations: string[];
+  unsupportedOperations: string[];
 }
 
 export interface ServiceTabNewData {
@@ -440,6 +455,7 @@ export interface ServiceRequestsData {
 
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
+  cdp_free_launch: ServiceCdpFreeLaunchData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;

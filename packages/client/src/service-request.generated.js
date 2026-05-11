@@ -3,6 +3,7 @@
 
 export const SERVICE_REQUEST_ACTIONS = [
   "navigate",
+  "cdp_free_launch",
   "back",
   "forward",
   "reload",
