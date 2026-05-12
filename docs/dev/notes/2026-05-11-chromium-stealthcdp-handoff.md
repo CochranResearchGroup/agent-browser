@@ -278,3 +278,212 @@ pnpm test:service-site-policy-sources-no-launch
 cargo test --manifest-path cli/Cargo.toml service_access -- --test-threads=1
 cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1
 ```
+
+## 2026-05-12 Crash Trace Handoff
+
+This section is for the `chromium-stealthcdp` patch agent. The observed symptom
+is a headed Canva smoke where the page initially loads, then a follow-up CDP
+read fails with connection refused on the recorded DevTools port. The first run
+looked like a browser exit:
+
+- Session: `canva-stealth-smoke`
+- Runtime profile: `canva-preview`
+- Profile directory:
+  `/home/ecochran76/.agent-browser/runtime-profiles/canva-preview/user-data`
+- Browser binary:
+  `/home/ecochran76/workspace.local/chromium/src/out/Default/chrome`
+- Browser version: `Chromium 150.0.7835.0`
+- Chromium source branch: `ec/chromium-stealthcdp`
+- Chromium patch commit:
+  `24ecda02e9 Make navigator.webdriver non-advertising`
+
+### Original Service Evidence
+
+Persisted service events for `session:canva-stealth-smoke` show this sequence:
+
+- `2026-05-12T18:28:32.856991586Z`: health changed from `not_started` to
+  `ready`.
+- `2026-05-12T18:28:32.857086485Z`: launch metadata recorded PID `427283`,
+  host `local_headed`, profile `canva-preview`, CDP endpoint
+  `ws://127.0.0.1:37961/devtools/browser/e7383fb7-eecc-4033-83aa-fba13b59ac97`.
+- `2026-05-12T18:28:54.972217296Z`: Canva page target opened with title
+  `Canva: Visual Suite for Everyone` at `https://www.canva.com/`.
+- Immediate `runtime status` reported `Browser alive: true` and
+  `DevTools reachable: true`.
+- The next `eval` failed with connection refused against port `37961`.
+- `2026-05-12T18:29:28.402645664Z`: health changed from `ready` to
+  `process_exited` with `failureClass=browser_process_exited`,
+  `processExitCause=unexpected_process_exit`, and error
+  `Recorded browser PID 427283 is no longer running`.
+
+Crash artifacts were sparse. The profile contained
+`CrashpadMetrics-active.pma`, but no `*.dmp` file or `chrome_debug.log` was
+found under the profile during this investigation.
+
+### Direct Chrome Controls
+
+Two direct controls were run with the same patched Chromium binary, same
+`canva-preview` profile, same Canva URL, `--remote-debugging-port=0`,
+`--password-store=basic`, and `--use-mock-keychain`.
+
+The first direct control had no display and is not the target crash. It exited
+after one second with status `1` and:
+
+```text
+ERROR:ui/ozone/platform/x11/ozone_platform_x11.cc:257] Missing X server or $DISPLAY
+ERROR:ui/aura/env.cc:246] The platform failed to initialize.  Exiting.
+```
+
+Artifacts:
+
+```text
+/tmp/chromium-stealthcdp-canva-crash-1778611853/
+```
+
+The second direct control used `xvfb-run -a -s '-screen 0 1280x800x24'`. It
+stayed alive for 75 seconds, served `/json/version`, and exposed a Canva page
+target plus extension and service-worker targets. It was terminated by the test
+harness, not by Chromium:
+
+```text
+DevTools port: 37939
+Browser: Chrome/150.0.7835.0
+Canva target: Canva: Visual Suite for Everyone, https://www.canva.com/
+Exit status: 143 after harness SIGTERM
+```
+
+Artifacts:
+
+```text
+/tmp/chromium-stealthcdp-canva-xvfb-1778611966/
+```
+
+The third direct control used `DISPLAY=:0.0`, matching agent-browser's headed
+fallback when no `DISPLAY` is set in the agent shell. It stayed alive for 20
+seconds, served `/json/version`, exposed the Canva target, and exited cleanly
+after harness termination:
+
+```text
+DevTools port: 36785
+Browser: Chrome/150.0.7835.0
+Canva target: Canva: Visual Suite for Everyone, https://www.canva.com/
+Exit status: 0 after polite harness termination
+```
+
+Artifacts:
+
+```text
+/tmp/chromium-stealthcdp-canva-display0-1778612141/
+```
+
+Important privacy note: the verbose Chromium logs can include request headers
+and cookies. Do not paste raw `stdout.log` contents into tickets or memory.
+Use local inspection or sanitized excerpts only.
+
+### Agent-Browser Repro Retry
+
+A fresh agent-browser service-path retry used:
+
+```bash
+AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+AGENT_BROWSER_SOCKET_DIR=/tmp/agent-browser-canva-repro-1778612199/socket
+AGENT_BROWSER_SESSION=canva-stealth-smoke-repro
+cargo run --manifest-path cli/Cargo.toml -- \
+  --runtime-profile canva-preview --headed open https://www.canva.com/
+```
+
+Result:
+
+- `open` loaded `Canva: Visual Suite for Everyone`.
+- Immediate `runtime status` showed PID `525847`, port `37027`,
+  `Browser alive: true`, and `DevTools reachable: true`.
+- After 20 seconds, `runtime status` still showed PID `525847`, port `37027`,
+  `Browser alive: true`, and `DevTools reachable: true`.
+- The follow-up `eval navigator.webdriver` failed with connection refused on
+  `/json/version`, `/json/list`, and the browser WebSocket URL for port
+  `37027`.
+- `service browsers` still showed
+  `session:canva-stealth-smoke-repro health=ready profile=canva-preview
+  pid=525847`.
+- The explicit `close` command then moved the session to `not_started` as
+  `operator_requested_close`.
+
+Artifacts:
+
+```text
+/tmp/agent-browser-canva-repro-1778612199/agent-browser.log
+```
+
+This retry did not reproduce the same durable `process_exited` health
+transition before close. It did reproduce the user-visible CDP connection
+refusal after a previously reachable status probe.
+
+### Service-State Oddity
+
+During the repro, persisted service state also had:
+
+```text
+session:default health=ready host=local_headless profile=canva-preview pid=302687
+```
+
+But process inspection of PID `302687` showed it was actually launched with:
+
+```text
+--user-data-dir=/home/ecochran76/.agent-browser/runtime-profiles/default/user-data
+```
+
+That means at least one service-state record had stale or incorrect
+`profileId` metadata. This is probably an agent-browser state reconciliation
+bug rather than a Chromium crash, but it matters because the original crash
+event also reported `profileLeaseConflictSessionIds=["default"]`.
+
+### Current Interpretation
+
+The `navigator.webdriver` patch alone is unlikely to be the direct crash cause.
+The same patched browser and same profile can load Canva and stay alive under
+both `xvfb-run` and `DISPLAY=:0.0` direct controls. The failure currently looks
+like one of these:
+
+- An agent-browser service or runtime-state race where a follow-up command reads
+  a stale DevTools port after the browser or daemon state changed.
+- A stale profile-lock or stale `DevToolsActivePort` interaction around repeated
+  headed launches. The probes removed stale `Singleton*` files and
+  `DevToolsActivePort` when the recorded PID was dead.
+- A service-state reconciliation bug, proven by `session:default` claiming
+  `profile=canva-preview` while its live process used the default profile.
+- A site or extension induced browser exit that is intermittent, since the
+  direct controls loaded Canva and the service retry survived at least
+  20 seconds before the `eval` connection refusal.
+
+### Requested Chromium-Patch-Agent Work
+
+Please trace from the Chromium side with symbols and process diagnostics, but
+start by trying to reproduce the service-path failure rather than assuming the
+patch is crashing Blink:
+
+1. Re-run the agent-browser service repro with Chromium logging enabled in the
+   launched browser process. The current agent-browser automation path pipes
+   Chrome stderr but does not persist it to a stable artifact for this handoff.
+2. Compare the same flags and profile under direct `DISPLAY=:0.0` and
+   agent-browser launch. If direct stays alive while agent-browser loses CDP,
+   trace process lifetime and DevToolsActivePort writes around the agent-browser
+   daemon.
+3. Capture minidumps by configuring Crashpad or a local dump directory. Current
+   evidence found only `CrashpadMetrics-active.pma`, not an actionable dump.
+4. Test with extensions disabled on a copied `canva-preview` profile. The live
+   targets include several extension service workers, including
+   `fpeoodllldobpkbkabpblcfaogecpndd`,
+   `hdokiejnpimakedhajhdlcegeplioahd`, and
+   `lcfdefmogcogicollfebhgjiiakbjdje`.
+5. Test with stock Chrome or unpatched Chromium using the same profile and
+   flags. If stock also loses the DevTools port, this is outside the
+   `navigator.webdriver` patch.
+6. Inspect why the build prints `WebKit-Version` with an all-zero revision in
+   `/json/version`. This may be harmless local-build metadata, but it is worth
+   ruling out because the patch build is intended to be the preferred
+   agent-browser engine.
+
+Recommended next step: instrument agent-browser's Chrome launch path to write a
+per-launch browser stderr log and record child exit status as soon as the child
+can be reaped. Without that, Chromium-side tracing has to reconstruct too much
+from service-state symptoms and transient DevTools refusal.
