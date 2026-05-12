@@ -1264,6 +1264,10 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         request.get("requiresCdpFree"),
         request.get("cdpAttachmentAllowed"),
     )?;
+    reject_stale_monitor_service_request(
+        request.get("monitorRunDueSummary"),
+        request.get("allowMonitorFreshnessRisk"),
+    )?;
     let mut command = json!({
         "id": format!("http-service-request-{}-{}", action, uuid::Uuid::new_v4()),
         "action": action,
@@ -1320,6 +1324,68 @@ fn reject_blocked_manual_service_request(
         );
     }
     Ok(())
+}
+
+fn reject_stale_monitor_service_request(
+    monitor_run_due_summary: Option<&Value>,
+    allow_monitor_freshness_risk: Option<&Value>,
+) -> Result<(), String> {
+    // Keep copied access-plan recipes safe even when callers bypass the JS helpers.
+    let Some(summary) = monitor_run_due_summary else {
+        return Ok(());
+    };
+    if summary.is_null() || allow_monitor_freshness_risk.and_then(Value::as_bool) == Some(true) {
+        return Ok(());
+    }
+    let Some(summary) = summary.as_object() else {
+        return Err("service request monitorRunDueSummary must be a JSON object".to_string());
+    };
+
+    let expired_target_service_ids =
+        service_request_summary_string_array(summary.get("expiredTargetServiceIds"));
+    if !expired_target_service_ids.is_empty() {
+        return Err(format!(
+            "service monitor run-due found expired profile freshness before service request: {}",
+            expired_target_service_ids.join(",")
+        ));
+    }
+
+    let unverified_target_service_ids =
+        service_request_summary_string_array(summary.get("unverifiedTargetServiceIds"));
+    if !unverified_target_service_ids.is_empty() {
+        return Err(format!(
+            "service monitor run-due could not verify profile freshness before service request: {}",
+            unverified_target_service_ids.join(",")
+        ));
+    }
+
+    let matched = summary.get("matched").and_then(Value::as_u64).unwrap_or(0);
+    let failed = summary.get("failed").and_then(Value::as_bool) == Some(true);
+    let recommended_action = summary
+        .get("recommendedAction")
+        .and_then(Value::as_str)
+        .unwrap_or("inspect_monitor_results");
+    if matched == 0 || (failed && recommended_action != "use_selected_profile") {
+        return Err(format!(
+            "service monitor run-due requires inspection before service request: {}",
+            recommended_action
+        ));
+    }
+
+    Ok(())
+}
+
+fn service_request_summary_string_array(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn reject_cdp_free_service_request(
@@ -3378,6 +3444,49 @@ mod tests {
         .expect_err("CDP-free requests should not queue CDP-backed execution");
 
         assert!(err.contains("CDP-free browser operation"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_expired_monitor_summary_without_override() {
+        let err = service_request_command(
+            r##"{"action":"tab_new","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","targetServiceId":"acs","monitorRunDueSummary":{"targetServiceIds":["acs"],"matched":1,"expiredTargetServiceIds":["acs"],"unverifiedTargetServiceIds":[],"failed":true,"recommendedAction":"probe_target_auth_or_reseed_if_needed"}}"##,
+        )
+        .expect_err("expired monitor freshness should block copied raw requests");
+
+        assert!(err.contains("expired profile freshness"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unverified_monitor_summary_without_override() {
+        let err = service_request_command(
+            r##"{"action":"tab_new","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","targetServiceId":"acs","monitorRunDueSummary":{"targetServiceIds":["acs"],"matched":1,"expiredTargetServiceIds":[],"unverifiedTargetServiceIds":["acs"],"failed":true,"recommendedAction":"verify_or_seed_profile_before_authenticated_work"}}"##,
+        )
+        .expect_err("unverified monitor freshness should block copied raw requests");
+
+        assert!(err.contains("could not verify profile freshness"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_missing_monitor_evidence_without_override() {
+        let err = service_request_command(
+            r##"{"action":"tab_new","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","targetServiceId":"acs","monitorRunDueSummary":{"targetServiceIds":["acs"],"matched":0,"expiredTargetServiceIds":[],"unverifiedTargetServiceIds":[],"failed":false,"recommendedAction":"inspect_monitor_results"}}"##,
+        )
+        .expect_err("missing monitor evidence should block copied raw requests");
+
+        assert!(err.contains("requires inspection"));
+    }
+
+    #[test]
+    fn service_request_command_accepts_monitor_summary_with_override() {
+        let command = service_request_command(
+            r##"{"action":"tab_new","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","targetServiceId":"acs","monitorRunDueSummary":{"targetServiceIds":["acs"],"matched":1,"expiredTargetServiceIds":["acs"],"unverifiedTargetServiceIds":[],"failed":true,"recommendedAction":"probe_target_auth_or_reseed_if_needed"},"allowMonitorFreshnessRisk":true}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "tab_new");
+        assert_eq!(command["targetServiceId"], "acs");
+        assert!(command["monitorRunDueSummary"].is_null());
+        assert!(command["allowMonitorFreshnessRisk"].is_null());
     }
 
     #[test]

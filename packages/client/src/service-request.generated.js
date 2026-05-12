@@ -105,8 +105,13 @@ export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
   "blockedByManualAction",
   "manualSeedingRequired",
   "allowManualAction",
+  "allowMonitorFreshnessRisk",
   "requiresCdpFree",
   "cdpAttachmentAllowed"
+];
+
+export const SERVICE_REQUEST_OBJECT_FIELDS = [
+  "monitorRunDueSummary"
 ];
 
 export const SERVICE_REQUEST_MCP_TOOL_NAME = "service_request";

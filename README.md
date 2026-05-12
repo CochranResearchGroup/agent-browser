@@ -1788,6 +1788,10 @@ When a client has run due profile-readiness monitors, pass
 browser work if the requested target is expired, still unverified, or has no
 matching monitor evidence. Use `allowMonitorFreshnessRisk: true` only when the
 caller intentionally accepts stale-auth risk.
+Raw HTTP and MCP service requests get the same freshness guard when they submit
+`monitorRunDueSummary`; requests are rejected for expired, unverified, or
+missing target freshness evidence unless `allowMonitorFreshnessRisk: true` is
+supplied.
 When the copied tab request carries `requiresCdpFree: true` and
 `cdpAttachmentAllowed: false`, the HTTP, MCP, and service-client request paths
 refuse that CDP-backed tab request. The first non-CDP service action is

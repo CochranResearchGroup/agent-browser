@@ -116,6 +116,15 @@
       "type": "boolean",
       "description": "Explicit override allowing a request marked blockedByManualAction and manualSeedingRequired to be submitted anyway."
     },
+    "monitorRunDueSummary": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional summary copied from a just-run service monitors run-due check. Raw HTTP and MCP requests are rejected when this summary reports expired, unverified, or missing target freshness evidence unless allowMonitorFreshnessRisk is true."
+    },
+    "allowMonitorFreshnessRisk": {
+      "type": "boolean",
+      "description": "Explicit override allowing a raw service request to proceed even when monitorRunDueSummary reports stale, unverified, or missing target freshness evidence."
+    },
     "requiresCdpFree": {
       "type": "boolean",
       "description": "Planner marker copied from an access-plan serviceRequest when the selected site policy requires browser operation without a DevTools/CDP attachment."

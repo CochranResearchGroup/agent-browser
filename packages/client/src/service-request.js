@@ -5,6 +5,7 @@ import {
   SERVICE_REQUEST_BOOLEAN_FIELDS,
   SERVICE_REQUEST_INTEGER_FIELDS,
   SERVICE_REQUEST_MCP_TOOL_NAME,
+  SERVICE_REQUEST_OBJECT_FIELDS,
   SERVICE_REQUEST_STRING_ARRAY_FIELDS,
   SERVICE_REQUEST_STRING_FIELDS,
 } from './service-request.generated.js';
@@ -27,6 +28,7 @@ export {
   SERVICE_REQUEST_BOOLEAN_FIELDS,
   SERVICE_REQUEST_INTEGER_FIELDS,
   SERVICE_REQUEST_MCP_TOOL_NAME,
+  SERVICE_REQUEST_OBJECT_FIELDS,
   SERVICE_REQUEST_STRING_ARRAY_FIELDS,
   SERVICE_REQUEST_STRING_FIELDS,
 } from './service-request.generated.js';
@@ -55,6 +57,11 @@ export function createServiceRequest(input) {
   for (const field of SERVICE_REQUEST_BOOLEAN_FIELDS) {
     if (Object.hasOwn(input, field) && typeof record[field] !== 'boolean') {
       throw new TypeError(`service request ${field} must be a boolean`);
+    }
+  }
+  for (const field of SERVICE_REQUEST_OBJECT_FIELDS) {
+    if (Object.hasOwn(input, field)) {
+      assertPlainObject(record[field], `service request ${field}`);
     }
   }
   for (const field of SERVICE_REQUEST_STRING_FIELDS) {

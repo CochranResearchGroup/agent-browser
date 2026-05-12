@@ -92,8 +92,10 @@ export interface ServiceRequest {
   blockedByManualAction?: boolean;
   manualSeedingRequired?: boolean;
   allowManualAction?: boolean;
+  allowMonitorFreshnessRisk?: boolean;
   requiresCdpFree?: boolean;
   cdpAttachmentAllowed?: boolean;
+  monitorRunDueSummary?: Record<string, unknown>;
 }
 
 export type ServiceRequestForAction<TAction extends ServiceRequestAction> =
@@ -605,6 +607,7 @@ export declare const SERVICE_REQUEST_STRING_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_ARRAY_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_INTEGER_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_BOOLEAN_FIELDS: readonly string[];
+export declare const SERVICE_REQUEST_OBJECT_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_MCP_TOOL_NAME: "service_request";
 
 export declare function createServiceRequest<TRequest extends ServiceRequest>(input: TRequest): TRequest;

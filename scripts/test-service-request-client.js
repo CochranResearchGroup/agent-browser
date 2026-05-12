@@ -168,6 +168,14 @@ async function main() {
       }),
     /service request allowManualAction must be a boolean/,
   );
+  assert.throws(
+    () =>
+      createServiceRequest({
+        action: 'tab_new',
+        monitorRunDueSummary: 'stale',
+      }),
+    /service request monitorRunDueSummary must be an object/,
+  );
 
   const request = createServiceRequest({
     serviceName: 'JournalDownloader',
@@ -184,6 +192,14 @@ async function main() {
     jobTimeoutMs: 30_000,
     profileLeasePolicy: 'wait',
     profileLeaseWaitTimeoutMs: 5_000,
+    monitorRunDueSummary: {
+      targetServiceIds: ['acs'],
+      matched: 1,
+      expiredTargetServiceIds: [],
+      unverifiedTargetServiceIds: [],
+      failed: false,
+      recommendedAction: 'use_selected_profile',
+    },
   });
   assert.deepEqual(request, {
     serviceName: 'JournalDownloader',
@@ -200,6 +216,14 @@ async function main() {
     jobTimeoutMs: 30_000,
     profileLeasePolicy: 'wait',
     profileLeaseWaitTimeoutMs: 5_000,
+    monitorRunDueSummary: {
+      targetServiceIds: ['acs'],
+      matched: 1,
+      expiredTargetServiceIds: [],
+      unverifiedTargetServiceIds: [],
+      failed: false,
+      recommendedAction: 'use_selected_profile',
+    },
   });
 
   const cdpFreeLaunchRequest = createServiceRequest({
