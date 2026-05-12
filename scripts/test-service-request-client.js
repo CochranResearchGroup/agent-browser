@@ -351,6 +351,14 @@ async function main() {
   };
   assert.deepEqual(
     createServiceTabRequestFromAccessPlan(accessPlan, {
+      monitorRunDueSummary: {
+        targetServiceIds: ['acs'],
+        matched: 1,
+        expiredTargetServiceIds: [],
+        unverifiedTargetServiceIds: [],
+        failed: false,
+        recommendedAction: 'use_selected_profile',
+      },
       url: 'https://example.com/planned',
       jobTimeoutMs: 60_000,
     }),
@@ -361,6 +369,14 @@ async function main() {
       targetServiceIds: ['acs'],
       profileLeasePolicy: 'wait',
       action: 'tab_new',
+      monitorRunDueSummary: {
+        targetServiceIds: ['acs'],
+        matched: 1,
+        expiredTargetServiceIds: [],
+        unverifiedTargetServiceIds: [],
+        failed: false,
+        recommendedAction: 'use_selected_profile',
+      },
       params: {
         url: 'https://example.com/planned',
       },
@@ -438,9 +454,26 @@ async function main() {
         recommendedAction: 'probe_target_auth_or_reseed_if_needed',
       },
       url: 'https://example.com/planned',
-    }).params,
+    }),
     {
-      url: 'https://example.com/planned',
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'plannedProbeACSwebsite',
+      targetServiceIds: ['acs'],
+      profileLeasePolicy: 'wait',
+      action: 'tab_new',
+      allowMonitorFreshnessRisk: true,
+      monitorRunDueSummary: {
+        targetServiceIds: ['acs'],
+        matched: 1,
+        expiredTargetServiceIds: ['acs'],
+        unverifiedTargetServiceIds: [],
+        failed: true,
+        recommendedAction: 'probe_target_auth_or_reseed_if_needed',
+      },
+      params: {
+        url: 'https://example.com/planned',
+      },
     },
   );
   assert.deepEqual(
@@ -472,6 +505,29 @@ async function main() {
         url: 'https://example.com/',
       }),
     /does not require CDP-free browser operation/,
+  );
+  assert.deepEqual(
+    createServiceCdpFreeLaunchRequest({
+      accessPlan: cdpFreeAccessPlan,
+      allowMonitorFreshnessRisk: true,
+      monitorRunDueSummary: {
+        targetServiceIds: ['canva'],
+        matched: 1,
+        expiredTargetServiceIds: [],
+        unverifiedTargetServiceIds: ['canva'],
+        failed: true,
+        recommendedAction: 'verify_or_seed_profile_before_authenticated_work',
+      },
+      url: 'https://www.canva.com/',
+    }).monitorRunDueSummary,
+    {
+      targetServiceIds: ['canva'],
+      matched: 1,
+      expiredTargetServiceIds: [],
+      unverifiedTargetServiceIds: ['canva'],
+      failed: true,
+      recommendedAction: 'verify_or_seed_profile_before_authenticated_work',
+    },
   );
   assert.throws(
     () =>

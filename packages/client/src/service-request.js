@@ -138,6 +138,8 @@ export function createServiceTabRequest(input) {
     ...request,
     action: 'tab_new',
     ...(accessPlan !== undefined && allowManualAction === true ? { allowManualAction: true } : {}),
+    ...(monitorRunDueSummary !== undefined && monitorRunDueSummary !== null ? { monitorRunDueSummary } : {}),
+    ...(allowMonitorFreshnessRisk === true ? { allowMonitorFreshnessRisk: true } : {}),
     ...(Object.keys(tabParams).length > 0 ? { params: tabParams } : {}),
   });
 }
@@ -193,6 +195,8 @@ export function createServiceCdpFreeLaunchRequest(input) {
     requiresCdpFree: true,
     cdpAttachmentAllowed: false,
     ...(accessPlan !== undefined && allowManualAction === true ? { allowManualAction: true } : {}),
+    ...(monitorRunDueSummary !== undefined && monitorRunDueSummary !== null ? { monitorRunDueSummary } : {}),
+    ...(allowMonitorFreshnessRisk === true ? { allowMonitorFreshnessRisk: true } : {}),
     ...(url !== undefined ? { url } : {}),
     ...(Object.keys(launchParams).length > 0 ? { params: launchParams } : {}),
   });

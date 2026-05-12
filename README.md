@@ -1786,8 +1786,10 @@ When a client has run due profile-readiness monitors, pass
 `runServiceAccessPlanMonitorRunDue().accessPlanSummary` into
 `requestServiceTab()` or `requestServiceCdpFreeLaunch()`. The helpers refuse
 browser work if the requested target is expired, still unverified, or has no
-matching monitor evidence. Use `allowMonitorFreshnessRisk: true` only when the
-caller intentionally accepts stale-auth risk.
+matching monitor evidence, and they preserve the summary in the submitted
+service request so the HTTP or MCP guard can enforce the same decision. Use
+`allowMonitorFreshnessRisk: true` only when the caller intentionally accepts
+stale-auth risk.
 Raw HTTP and MCP service requests get the same freshness guard when they submit
 `monitorRunDueSummary`; requests are rejected for expired, unverified, or
 missing target freshness evidence unless `allowMonitorFreshnessRisk: true` is
