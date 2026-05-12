@@ -188,6 +188,42 @@ Current posture:
 - Do not treat this patch as proof that all Canva-class anti-bot checks are
   solved.
 
+## 2026-05-12 Headed Canva Managed-Profile Probe
+
+After the CI fix for the `browserBuild` output test, ran a headed Canva probe
+against the existing managed `canva-preview` profile with:
+
+```bash
+AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+AGENT_BROWSER_SOCKET_DIR=/tmp/agent-browser-canva-stealth-smoke-1778607622
+AGENT_BROWSER_SESSION=canva-stealth-smoke
+cargo run --manifest-path cli/Cargo.toml -- \
+  --runtime-profile canva-preview --headed open https://www.canva.com
+```
+
+Result:
+
+- The patched Chromium executable reported `Chromium 150.0.7835.0`.
+- The managed `canva-preview` profile uses
+  `/home/ecochran76/.agent-browser/runtime-profiles/canva-preview/user-data`.
+- The isolated headed launch initially loaded Canva with title
+  `Canva: Visual Suite for Everyone` at `https://www.canva.com/`.
+- The follow-up CDP read failed with connection refused on the recorded
+  DevTools port.
+- Process inspection showed the browser PID was already gone.
+- A subsequent `runtime status` reported `Browser alive: false` with no
+  targets.
+
+Interpretation:
+
+- Headed stealth CDP with the existing Canva managed profile is not yet stable
+  enough to call Canva-ready.
+- The result strengthens the need for browser-health reconciliation to classify
+  immediate post-navigation process exit as a browser crash or degraded browser
+  condition, rather than leaving operators to infer it from a refused CDP port.
+- Canva should continue to prefer `cdp_free_headed` until a CDP-backed headed
+  smoke can both load the page and survive queued follow-up reads.
+
 ## Service-Mode Notes
 
 This patchset should not change the service policy semantics for sites that
