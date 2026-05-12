@@ -1781,6 +1781,13 @@ HTTP and MCP callers get the same protection when they submit the copied
 `serviceRequest.request`, because requests marked with both
 `blockedByManualAction` and `manualSeedingRequired` require the same explicit
 override.
+When a client has run due profile-readiness monitors, pass
+`monitorRunDueSummary` from `acquireServiceLoginProfile()` or
+`runServiceAccessPlanMonitorRunDue().accessPlanSummary` into
+`requestServiceTab()` or `requestServiceCdpFreeLaunch()`. The helpers refuse
+browser work if the requested target is expired, still unverified, or has no
+matching monitor evidence. Use `allowMonitorFreshnessRisk: true` only when the
+caller intentionally accepts stale-auth risk.
 When the copied tab request carries `requiresCdpFree: true` and
 `cdpAttachmentAllowed: false`, the HTTP, MCP, and service-client request paths
 refuse that CDP-backed tab request. The first non-CDP service action is

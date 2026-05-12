@@ -145,6 +145,7 @@ export async function runServiceWorkflow({
     baseUrl,
     fetch,
     accessPlan,
+    monitorRunDueSummary: profileAcquisition.monitorRunDueSummary,
     url,
     jobTimeoutMs: 30000,
   });

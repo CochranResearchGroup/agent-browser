@@ -548,9 +548,27 @@ export interface ServiceTabAccessPlan {
   [key: string]: unknown;
 }
 
+export interface ServiceMonitorRunDueSummary {
+  targetServiceIds?: string[];
+  matched?: number;
+  monitorIds?: string[];
+  resultStates?: string[];
+  staleProfileIds?: string[];
+  freshTargetServiceIds?: string[];
+  expiredTargetServiceIds?: string[];
+  unverifiedTargetServiceIds?: string[];
+  succeeded?: boolean;
+  failed?: boolean;
+  recommendedAction?: string;
+  matchingResults?: unknown[];
+  [key: string]: unknown;
+}
+
 export interface ServiceTabRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
   accessPlan?: ServiceTabAccessPlan;
   allowManualAction?: boolean;
+  allowMonitorFreshnessRisk?: boolean;
+  monitorRunDueSummary?: ServiceMonitorRunDueSummary;
   url?: string;
   params?: Record<string, unknown>;
 }
@@ -564,6 +582,8 @@ export interface ServiceTabRequestHttpOptions extends ServiceTabRequestOptions {
 export interface ServiceCdpFreeLaunchRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
   accessPlan?: ServiceTabAccessPlan;
   allowManualAction?: boolean;
+  allowMonitorFreshnessRisk?: boolean;
+  monitorRunDueSummary?: ServiceMonitorRunDueSummary;
   url?: string;
   params?: Record<string, unknown>;
 }

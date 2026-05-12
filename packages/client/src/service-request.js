@@ -100,16 +100,24 @@ export function createServiceRequestMcpToolCall(input) {
  */
 export function createServiceTabRequest(input) {
   assertPlainObject(input, 'service tab request');
-  const { accessPlan, allowManualAction, url, params, ...request } = input;
+  const { accessPlan, allowManualAction, allowMonitorFreshnessRisk, monitorRunDueSummary, url, params, ...request } =
+    input;
   if (url !== undefined && typeof url !== 'string') {
     throw new TypeError('service tab request url must be a string');
   }
   if (allowManualAction !== undefined && typeof allowManualAction !== 'boolean') {
     throw new TypeError('service tab request allowManualAction must be a boolean');
   }
+  if (allowMonitorFreshnessRisk !== undefined && typeof allowMonitorFreshnessRisk !== 'boolean') {
+    throw new TypeError('service tab request allowMonitorFreshnessRisk must be a boolean');
+  }
   if (params !== undefined) {
     assertPlainObject(params, 'service tab request params');
   }
+  assertMonitorRunDueSummarySafe(monitorRunDueSummary, {
+    allowMonitorFreshnessRisk,
+    actionLabel: 'tab request',
+  });
   const plannedRequest =
     accessPlan !== undefined ? accessPlanServiceTabRequest(accessPlan, { allowManualAction }) : {};
 
@@ -145,16 +153,24 @@ export function createServiceTabRequestFromAccessPlan(accessPlan, input = {}) {
  */
 export function createServiceCdpFreeLaunchRequest(input) {
   assertPlainObject(input, 'CDP-free launch request');
-  const { accessPlan, allowManualAction, url, params, ...request } = input;
+  const { accessPlan, allowManualAction, allowMonitorFreshnessRisk, monitorRunDueSummary, url, params, ...request } =
+    input;
   if (url !== undefined && typeof url !== 'string') {
     throw new TypeError('CDP-free launch request url must be a string');
   }
   if (allowManualAction !== undefined && typeof allowManualAction !== 'boolean') {
     throw new TypeError('CDP-free launch request allowManualAction must be a boolean');
   }
+  if (allowMonitorFreshnessRisk !== undefined && typeof allowMonitorFreshnessRisk !== 'boolean') {
+    throw new TypeError('CDP-free launch request allowMonitorFreshnessRisk must be a boolean');
+  }
   if (params !== undefined) {
     assertPlainObject(params, 'CDP-free launch request params');
   }
+  assertMonitorRunDueSummarySafe(monitorRunDueSummary, {
+    allowMonitorFreshnessRisk,
+    actionLabel: 'CDP-free launch',
+  });
   const plannedRequest =
     accessPlan !== undefined ? accessPlanServiceCdpFreeLaunchRequest(accessPlan, { allowManualAction }) : {};
 
@@ -340,6 +356,46 @@ function accessPlanRequiresCdpFree(decision) {
     /** @type {Record<string, unknown>} */ (serviceRequest).requiresCdpFree === true &&
     /** @type {Record<string, unknown>} */ (serviceRequest).cdpAttachmentAllowed !== true;
   return postureRequiresCdpFree || serviceRequestRequiresCdpFree;
+}
+
+/**
+ * @param {unknown} summary
+ * @param {{ allowMonitorFreshnessRisk?: boolean, actionLabel: string }} options
+ */
+function assertMonitorRunDueSummarySafe(summary, options) {
+  if (summary === undefined || summary === null || options.allowMonitorFreshnessRisk === true) {
+    return;
+  }
+  assertPlainObject(summary, 'monitor run-due summary');
+  const record = /** @type {Record<string, unknown>} */ (summary);
+  const expiredTargetServiceIds = stringArray(record.expiredTargetServiceIds);
+  const unverifiedTargetServiceIds = stringArray(record.unverifiedTargetServiceIds);
+  const recommendedAction =
+    typeof record.recommendedAction === 'string' ? record.recommendedAction : 'inspect_monitor_results';
+  const matched = typeof record.matched === 'number' ? record.matched : 0;
+  const failed = record.failed === true;
+  if (expiredTargetServiceIds.length > 0) {
+    throw new Error(
+      `service monitor run-due found expired profile freshness before ${options.actionLabel}: ${expiredTargetServiceIds.join(',')}`,
+    );
+  }
+  if (unverifiedTargetServiceIds.length > 0) {
+    throw new Error(
+      `service monitor run-due could not verify profile freshness before ${options.actionLabel}: ${unverifiedTargetServiceIds.join(',')}`,
+    );
+  }
+  if (matched === 0 || (failed && recommendedAction !== 'use_selected_profile')) {
+    throw new Error(
+      `service monitor run-due requires inspection before ${options.actionLabel}: ${recommendedAction}`,
+    );
+  }
+}
+
+/**
+ * @param {unknown} value
+ */
+function stringArray(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
 }
 
 /**

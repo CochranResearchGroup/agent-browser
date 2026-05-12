@@ -326,6 +326,7 @@ export async function runManagedProfileWorkflow({
             baseUrl,
             fetch,
             accessPlan,
+            monitorRunDueSummary: monitorRunDue?.accessPlanSummary,
             url,
             jobTimeoutMs: 30000,
           })),
@@ -335,6 +336,7 @@ export async function runManagedProfileWorkflow({
         baseUrl,
         fetch,
         accessPlan,
+        monitorRunDueSummary: monitorRunDue?.accessPlanSummary,
         url,
         jobTimeoutMs: 30000,
       });

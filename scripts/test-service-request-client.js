@@ -357,6 +357,68 @@ async function main() {
       }),
     /requires CDP-free browser operation.*createServiceCdpFreeLaunchRequest/,
   );
+  assert.throws(
+    () =>
+      createServiceTabRequestFromAccessPlan(accessPlan, {
+        monitorRunDueSummary: {
+          targetServiceIds: ['acs'],
+          matched: 1,
+          expiredTargetServiceIds: ['acs'],
+          unverifiedTargetServiceIds: [],
+          failed: true,
+          recommendedAction: 'probe_target_auth_or_reseed_if_needed',
+        },
+        url: 'https://example.com/planned',
+      }),
+    /expired profile freshness before tab request: acs/,
+  );
+  assert.throws(
+    () =>
+      createServiceTabRequestFromAccessPlan(accessPlan, {
+        monitorRunDueSummary: {
+          targetServiceIds: ['acs'],
+          matched: 1,
+          expiredTargetServiceIds: [],
+          unverifiedTargetServiceIds: ['acs'],
+          failed: true,
+          recommendedAction: 'verify_or_seed_profile_before_authenticated_work',
+        },
+        url: 'https://example.com/planned',
+      }),
+    /could not verify profile freshness before tab request: acs/,
+  );
+  assert.throws(
+    () =>
+      createServiceTabRequestFromAccessPlan(accessPlan, {
+        monitorRunDueSummary: {
+          targetServiceIds: ['acs'],
+          matched: 0,
+          expiredTargetServiceIds: [],
+          unverifiedTargetServiceIds: [],
+          failed: false,
+          recommendedAction: 'inspect_monitor_results',
+        },
+        url: 'https://example.com/planned',
+      }),
+    /requires inspection before tab request: inspect_monitor_results/,
+  );
+  assert.deepEqual(
+    createServiceTabRequestFromAccessPlan(accessPlan, {
+      allowMonitorFreshnessRisk: true,
+      monitorRunDueSummary: {
+        targetServiceIds: ['acs'],
+        matched: 1,
+        expiredTargetServiceIds: ['acs'],
+        unverifiedTargetServiceIds: [],
+        failed: true,
+        recommendedAction: 'probe_target_auth_or_reseed_if_needed',
+      },
+      url: 'https://example.com/planned',
+    }).params,
+    {
+      url: 'https://example.com/planned',
+    },
+  );
   assert.deepEqual(
     createServiceCdpFreeLaunchRequest({
       accessPlan: cdpFreeAccessPlan,
@@ -386,6 +448,22 @@ async function main() {
         url: 'https://example.com/',
       }),
     /does not require CDP-free browser operation/,
+  );
+  assert.throws(
+    () =>
+      createServiceCdpFreeLaunchRequest({
+        accessPlan: cdpFreeAccessPlan,
+        monitorRunDueSummary: {
+          targetServiceIds: ['canva'],
+          matched: 1,
+          expiredTargetServiceIds: [],
+          unverifiedTargetServiceIds: ['canva'],
+          failed: true,
+          recommendedAction: 'verify_or_seed_profile_before_authenticated_work',
+        },
+        url: 'https://www.canva.com/',
+      }),
+    /could not verify profile freshness before CDP-free launch: canva/,
   );
   assert.deepEqual(
     createServiceTabRequestFromAccessPlan(manualSeedingAccessPlan, {
