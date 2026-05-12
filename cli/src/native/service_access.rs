@@ -10,11 +10,12 @@ use serde_json::{json, Map, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    builtin_site_policy, service_profile_seeding_handoff, BrowserHost, BrowserProfile, Challenge,
-    ChallengeKind, ChallengePolicy, ChallengeState, InteractionMode, ProfileSelectionReason,
-    ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState,
-    ServiceProvider, ServiceState, SitePolicy, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    builtin_site_policy, service_profile_seeding_handoff, BrowserBuild, BrowserHost,
+    BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState, InteractionMode,
+    ProfileSelectionReason, ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation,
+    ServiceIncidentState, ServiceProvider, ServiceState, SitePolicy,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -857,6 +858,8 @@ fn launch_posture_decision(
     let requires_cdp_free = site_policy
         .map(|policy| policy.requires_cdp_free)
         .unwrap_or(false);
+    let (browser_build, browser_build_source) =
+        browser_build_decision(site_policy, requires_cdp_free);
     let cdp_attachment_allowed = !requires_cdp_free && !manual_seeding_required;
     let attachable_after_seeding = cdp_attachment_allowed
         || (!requires_cdp_free && !matches!(browser_host, BrowserHost::AttachedExisting));
@@ -880,6 +883,11 @@ fn launch_posture_decision(
     } else {
         rationale.push("cdp_attachment_blocked_until_manual_action_complete");
     }
+    match browser_build {
+        BrowserBuild::StockChrome => rationale.push("browser_build_stock_chrome"),
+        BrowserBuild::StealthcdpChromium => rationale.push("browser_build_stealthcdp_chromium"),
+        BrowserBuild::CdpFreeHeaded => rationale.push("browser_build_cdp_free_headed"),
+    }
     match source {
         "site_policy" => rationale.push("browser_host_from_site_policy"),
         "profile_default" => rationale.push("browser_host_from_profile_default"),
@@ -890,6 +898,8 @@ fn launch_posture_decision(
         browser_host,
         value: json!({
             "browserHost": browser_host,
+            "browserBuild": browser_build,
+            "browserBuildSource": browser_build_source,
             "source": source,
             "headed": headed,
             "remoteViewRecommended": remote_view_recommended,
@@ -900,6 +910,19 @@ fn launch_posture_decision(
             "rationale": rationale,
         }),
     }
+}
+
+fn browser_build_decision(
+    site_policy: Option<&SitePolicy>,
+    requires_cdp_free: bool,
+) -> (BrowserBuild, &'static str) {
+    if requires_cdp_free {
+        return (BrowserBuild::CdpFreeHeaded, "requires_cdp_free");
+    }
+    if let Some(browser_build) = site_policy.and_then(|policy| policy.browser_build) {
+        return (browser_build, "site_policy");
+    }
+    (BrowserBuild::StockChrome, "service_default")
 }
 
 #[derive(Debug, Default)]
@@ -1512,6 +1535,14 @@ mod tests {
         assert_eq!(plan["decision"]["challengeStrategy"], "manual_only");
         assert_eq!(plan["decision"]["browserHost"], "local_headed");
         assert_eq!(plan["decision"]["launchPosture"]["source"], "site_policy");
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuild"],
+            "stock_chrome"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSource"],
+            "service_default"
+        );
         assert_eq!(plan["decision"]["launchPosture"]["headed"], true);
         assert_eq!(plan["decision"]["launchPosture"]["requiresCdpFree"], false);
         assert_eq!(
@@ -2360,6 +2391,7 @@ mod tests {
         assert_eq!(plan["sitePolicy"]["id"], "canva");
         assert_eq!(plan["sitePolicySource"]["source"], "builtin");
         assert_eq!(plan["sitePolicy"]["requiresCdpFree"], true);
+        assert_eq!(plan["sitePolicy"]["browserBuild"], "cdp_free_headed");
         assert_eq!(plan["decision"]["browserHost"], "local_headed");
         assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
         assert_eq!(plan["decision"]["serviceRequest"]["blockedByCdpFree"], true);
@@ -2377,6 +2409,14 @@ mod tests {
             false
         );
         assert_eq!(plan["decision"]["launchPosture"]["requiresCdpFree"], true);
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuild"],
+            "cdp_free_headed"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSource"],
+            "requires_cdp_free"
+        );
         assert_eq!(
             plan["decision"]["launchPosture"]["cdpAttachmentAllowed"],
             false

@@ -1813,11 +1813,12 @@ so clients can explain headed, human-like, jittered, or single-session behavior
 before creating browser pressure. The `launchPosture` block resolves the
 browser host from site policy, profile default, or the service default, and
 explains whether the plan is headed, remote-view capable, or requires detached
-first-login seeding. It also reports `requiresCdpFree` and
-`cdpAttachmentAllowed`, so agents and software clients can avoid opening a
-DevTools port for bot-sensitive sites. The shipped Canva site policy requires
-CDP-free headed Chrome by default because some Canva sessions can fail before
-the page loads when DevTools is attached.
+first-login seeding. It also reports `browserBuild`, `browserBuildSource`,
+`requiresCdpFree`, and `cdpAttachmentAllowed`, so agents and software clients
+can distinguish stock Chrome, stealth CDP Chromium, and CDP-free headed posture
+before opening a browser. The shipped Canva site policy recommends
+`cdp_free_headed` by default because some Canva sessions can fail before the
+page loads when DevTools is attached.
 When manual seeding is required, `seedingHandoff.operatorIntervention` is the
 canonical user-feedback contract. It carries the intervention state, severity,
 default channels for API, MCP, and dashboard clients, optional desktop,

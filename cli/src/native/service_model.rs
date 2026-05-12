@@ -46,6 +46,8 @@ pub const SERVICE_BROWSER_HOST_VALUES: [&str; 6] = [
     "cloud_provider",
     "attached_existing",
 ];
+pub const SERVICE_BROWSER_BUILD_VALUES: [&str; 3] =
+    ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"];
 
 /// In-memory provenance for service entities after persisted state, config, and
 /// shipped defaults are layered. This is intentionally not serialized.
@@ -640,6 +642,7 @@ pub fn assert_service_site_policy_record_contract(value: &serde_json::Value) {
             "id",
             "originPattern",
             "browserHost",
+            "browserBuild",
             "viewStream",
             "controlInput",
             "requiresCdpFree",
@@ -655,6 +658,7 @@ pub fn assert_service_site_policy_record_contract(value: &serde_json::Value) {
         &[
             "origin_pattern",
             "browser_host",
+            "browser_build",
             "view_stream",
             "control_input",
             "requires_cdp_free",
@@ -669,6 +673,9 @@ pub fn assert_service_site_policy_record_contract(value: &serde_json::Value) {
     );
     if let Some(host) = value["browserHost"].as_str() {
         assert!(SERVICE_BROWSER_HOST_VALUES.contains(&host));
+    }
+    if let Some(build) = value["browserBuild"].as_str() {
+        assert!(SERVICE_BROWSER_BUILD_VALUES.contains(&build));
     }
     if let Some(provider) = value["viewStream"].as_str() {
         assert!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.contains(&provider));
@@ -2367,6 +2374,7 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             id: "canva".to_string(),
             origin_pattern: "https://www.canva.com".to_string(),
             browser_host: Some(BrowserHost::LocalHeaded),
+            browser_build: Some(BrowserBuild::CdpFreeHeaded),
             requires_cdp_free: true,
             interaction_mode: InteractionMode::HumanLikeInput,
             rate_limit: RateLimitPolicy {
@@ -2390,6 +2398,7 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             id: "google".to_string(),
             origin_pattern: "https://accounts.google.com".to_string(),
             browser_host: Some(BrowserHost::LocalHeaded),
+            browser_build: Some(BrowserBuild::StockChrome),
             interaction_mode: InteractionMode::HumanLikeInput,
             rate_limit: RateLimitPolicy {
                 min_action_delay_ms: Some(500),
@@ -2412,6 +2421,7 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             id: "gmail".to_string(),
             origin_pattern: "https://mail.google.com".to_string(),
             browser_host: Some(BrowserHost::LocalHeaded),
+            browser_build: Some(BrowserBuild::StockChrome),
             interaction_mode: InteractionMode::HumanLikeInput,
             rate_limit: RateLimitPolicy {
                 min_action_delay_ms: Some(500),
@@ -2434,6 +2444,7 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             id: "microsoft".to_string(),
             origin_pattern: "https://login.microsoftonline.com".to_string(),
             browser_host: Some(BrowserHost::LocalHeaded),
+            browser_build: Some(BrowserBuild::StockChrome),
             interaction_mode: InteractionMode::HumanLikeInput,
             rate_limit: RateLimitPolicy {
                 min_action_delay_ms: Some(450),
@@ -3635,6 +3646,8 @@ pub struct SitePolicy {
     pub id: String,
     pub origin_pattern: String,
     pub browser_host: Option<BrowserHost>,
+    /// Optional browser build or engine variant preference for this site.
+    pub browser_build: Option<BrowserBuild>,
     pub view_stream: Option<ViewStreamProvider>,
     pub control_input: Option<ControlInputProvider>,
     /// True when this site should launch without a DevTools/CDP attachment.
@@ -3655,6 +3668,7 @@ impl Default for SitePolicy {
             id: String::new(),
             origin_pattern: String::new(),
             browser_host: None,
+            browser_build: None,
             view_stream: None,
             control_input: None,
             requires_cdp_free: false,
@@ -3759,6 +3773,15 @@ pub enum BrowserHost {
     RemoteHeaded,
     CloudProvider,
     AttachedExisting,
+}
+
+/// Browser build or engine variant preference for a site policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserBuild {
+    StockChrome,
+    StealthcdpChromium,
+    CdpFreeHeaded,
 }
 
 /// Browser process health as seen by the service.
@@ -4077,6 +4100,7 @@ mod tests {
             id: "google".to_string(),
             origin_pattern: "https://accounts.google.com".to_string(),
             browser_host: Some(BrowserHost::DockerHeaded),
+            browser_build: Some(BrowserBuild::StealthcdpChromium),
             view_stream: Some(ViewStreamProvider::VirtualDisplayWebrtc),
             control_input: Some(ControlInputProvider::WebrtcInput),
             requires_cdp_free: true,
@@ -4098,6 +4122,7 @@ mod tests {
 
         let value = serde_json::to_value(policy).unwrap();
         assert_eq!(value["browserHost"], "docker_headed");
+        assert_eq!(value["browserBuild"], "stealthcdp_chromium");
         assert_eq!(value["viewStream"], "virtual_display_webrtc");
         assert_eq!(value["controlInput"], "webrtc_input");
         assert_eq!(value["requiresCdpFree"], true);
@@ -4379,6 +4404,10 @@ mod tests {
             json!(SERVICE_BROWSER_HOST_VALUES.to_vec())
         );
         assert_eq!(
+            site_policy_schema["properties"]["browserBuild"]["oneOf"][0]["enum"],
+            json!(SERVICE_BROWSER_BUILD_VALUES.to_vec())
+        );
+        assert_eq!(
             site_policy_schema["properties"]["viewStream"]["oneOf"][0]["enum"],
             json!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.to_vec())
         );
@@ -4517,6 +4546,7 @@ mod tests {
             id: "google".to_string(),
             origin_pattern: "https://accounts.google.com".to_string(),
             browser_host: Some(BrowserHost::DockerHeaded),
+            browser_build: Some(BrowserBuild::StockChrome),
             view_stream: Some(ViewStreamProvider::ChromeTabWebrtc),
             control_input: Some(ControlInputProvider::WebrtcInput),
             interaction_mode: InteractionMode::HumanLikeInput,
@@ -4864,6 +4894,7 @@ mod tests {
             "id": "google",
             "originPattern": "https://accounts.google.com",
             "browserHost": null,
+            "browserBuild": null,
             "viewStream": null,
             "controlInput": null,
             "requiresCdpFree": false,

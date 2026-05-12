@@ -8,6 +8,7 @@
     "id",
     "originPattern",
     "browserHost",
+    "browserBuild",
     "viewStream",
     "controlInput",
     "requiresCdpFree",
@@ -44,6 +45,22 @@
           "type": "null"
         }
       ]
+    },
+    "browserBuild": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "stock_chrome",
+            "stealthcdp_chromium",
+            "cdp_free_headed"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional preferred browser build or engine variant for this site's access posture."
     },
     "viewStream": {
       "oneOf": [

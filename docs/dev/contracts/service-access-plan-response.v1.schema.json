@@ -353,6 +353,8 @@
           "type": "object",
           "required": [
             "browserHost",
+            "browserBuild",
+            "browserBuildSource",
             "source",
             "headed",
             "remoteViewRecommended",
@@ -373,6 +375,18 @@
                 "cloud_provider",
                 "attached_existing"
               ]
+            },
+            "browserBuild": {
+              "type": "string",
+              "enum": [
+                "stock_chrome",
+                "stealthcdp_chromium",
+                "cdp_free_headed"
+              ]
+            },
+            "browserBuildSource": {
+              "type": "string",
+              "enum": ["site_policy", "requires_cdp_free", "service_default"]
             },
             "source": {
               "type": "string",
