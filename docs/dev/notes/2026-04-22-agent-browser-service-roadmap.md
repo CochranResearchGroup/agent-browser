@@ -217,6 +217,29 @@ Open TODOs:
 - add non-CDP observation and control primitives later, starting with headed
   screenshots or remote viewing, then real mouse and keyboard input
 
+## Browser Build And Engine Variants
+
+Site policy should eventually distinguish browser build choice from browser
+lifecycle. The current `chromium-stealthcdp` patchset is an engine choice that
+can use the existing custom executable path while agent-browser still owns the
+process lifecycle, CDP connection, queue, profile lease, and service state.
+
+The first vocabulary should be descriptive and internal:
+
+- `stock_chrome`: normal Chrome or Chromium
+- `stealthcdp_chromium`: patched Chromium for CDP-backed sessions where
+  `navigator.webdriver` self-reporting should be suppressed
+- `cdp_free_headed`: headed browser without a DevTools endpoint for sites where
+  CDP presence itself is risky
+
+Chromium patches should stay narrow. They are appropriate for browser-internal
+self-reporting that agent-browser cannot coherently manage from outside the
+browser process. Site-specific posture, profile selection, pacing, input mode,
+challenge handling, and operator intervention belong in agent-browser policy.
+
+See `docs/dev/notes/2026-05-12-browser-build-policy-boundary.md` for the
+current patch request criteria and validation expectations.
+
 ## Authentication And 2FA Providers
 
 Authentication should be provider-based.
