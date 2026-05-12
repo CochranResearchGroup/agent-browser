@@ -147,6 +147,47 @@ Expected proof:
   `navigator.webdriver` result.
 - `navigator.webdriver` remains `false` in headless CDP mode.
 
+## 2026-05-12 Live Validation
+
+The patched Chromium binary was available at:
+
+```text
+/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+```
+
+Added and ran the focused ignored E2E smoke:
+
+```bash
+AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome \
+cargo test --manifest-path cli/Cargo.toml \
+  e2e_chromium_stealthcdp_navigator_webdriver_false \
+  -- --ignored --test-threads=1 --nocapture
+```
+
+Result:
+
+- passed
+- launched the patched executable through agent-browser in headless CDP mode
+- evaluated `navigator.webdriver` as `false`
+- confirmed CDP-backed page reads still work by taking a snapshot from the
+  same session
+
+An isolated fresh-profile Canva probe with the same patched executable also
+confirmed `navigator.webdriver === false`, but the page still returned Canva's
+`Just a moment...` challenge. That means the Chromium patch works for the
+explicit webdriver signal, but it is not enough evidence to make Canva prefer
+CDP-backed stealth mode over `cdp_free_headed`.
+
+Current posture:
+
+- `stealthcdp_chromium` is validated for the explicit `navigator.webdriver`
+  signal.
+- `cdp_free_headed` should remain the built-in Canva recommendation until a
+  headed or authenticated-profile Canva smoke proves CDP-backed stealth mode
+  loads reliably.
+- Do not treat this patch as proof that all Canva-class anti-bot checks are
+  solved.
+
 ## Service-Mode Notes
 
 This patchset should not change the service policy semantics for sites that

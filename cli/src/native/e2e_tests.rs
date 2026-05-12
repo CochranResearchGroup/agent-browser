@@ -582,6 +582,79 @@ async fn e2e_lightpanda_auto_launch_can_open_page() {
     assert_eq!(get_data(&resp)["closed"], true);
 }
 
+#[tokio::test]
+#[ignore]
+async fn e2e_chromium_stealthcdp_navigator_webdriver_false() {
+    if std::env::var("AGENT_BROWSER_EXECUTABLE_PATH")
+        .ok()
+        .filter(|path| !path.is_empty())
+        .is_none()
+    {
+        return;
+    }
+
+    let guard = EnvGuard::new(&["AGENT_BROWSER_SESSION"]);
+    let (profile_dir, profile) = e2e_temp_profile("stealthcdp-webdriver");
+    guard.set("AGENT_BROWSER_SESSION", "e2e-stealthcdp-webdriver");
+
+    let mut state = DaemonState::new();
+
+    let resp = execute_command(
+        &json!({
+            "id": "1",
+            "action": "launch",
+            "headless": true,
+            "profile": profile.as_str()
+        }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    let resp = execute_command(
+        &json!({
+            "id": "2",
+            "action": "navigate",
+            "url": "data:text/html,<title>Stealth CDP</title><h1>Stealth CDP</h1>"
+        }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    let resp = execute_command(
+        &json!({
+            "id": "3",
+            "action": "evaluate",
+            "script": "navigator.webdriver"
+        }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+    assert_eq!(
+        get_data(&resp)["result"],
+        false,
+        "stealth CDP Chromium should not advertise navigator.webdriver: {}",
+        resp
+    );
+
+    let resp = execute_command(&json!({ "id": "4", "action": "snapshot" }), &mut state).await;
+    assert_success(&resp);
+    assert!(
+        get_data(&resp)["snapshot"]
+            .as_str()
+            .is_some_and(|snapshot| snapshot.contains("Stealth CDP")),
+        "snapshot should prove the patched executable still supports CDP-backed page reads: {}",
+        resp
+    );
+
+    let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
+    assert_success(&resp);
+
+    let _ = std::fs::remove_dir_all(&profile_dir);
+}
+
 // ---------------------------------------------------------------------------
 // Runtime stream lifecycle
 // ---------------------------------------------------------------------------
