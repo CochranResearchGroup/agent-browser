@@ -559,3 +559,80 @@ Profile-family correction:
   `/home/ecochran76/.agent-browser/runtime-profiles/canva-stealthcdp-chromium/user-data`.
   A smoke launch with patched Chromium reached `about:blank`, and a forced
   stock-Chrome executable attempt was refused by the browser-family guard.
+
+## 2026-05-12 Blank Chromium-Owned Canva Rerun
+
+Reran the headed Canva service-path probe using the blank Chromium-owned
+runtime profile instead of the previously seeded Chrome-owned `canva-preview`
+profile:
+
+```text
+AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+AGENT_BROWSER_SOCKET_DIR=/tmp/agent-browser-canva-blank-chromium-1778621560/socket
+AGENT_BROWSER_SESSION=canva-stealthcdp-blank-1778621560
+./cli/target/debug/agent-browser --runtime-profile canva-stealthcdp-chromium --headed open https://www.canva.com/
+```
+
+Preflight confirmed:
+
+- Runtime profile: `canva-stealthcdp-chromium`
+- Browser family: `chromium`
+- User data directory:
+  `/home/ecochran76/.agent-browser/runtime-profiles/canva-stealthcdp-chromium/user-data`
+- Browser PID before launch: none
+
+Result:
+
+- `open` loaded `Canva: Visual Suite for Everyone` at
+  `https://www.canva.com/`.
+- Immediate runtime status showed PID `983080`, port `37015`,
+  `Browser alive: true`, and `DevTools reachable: true`.
+- After 20 seconds the same PID and port were still alive and DevTools was
+  still reachable.
+- A follow-up `get title` failed with
+  `Cannot use profile with cdp_url (profile requires local browser launch)`.
+- A follow-up `get url` returned `about:blank`, after agent-browser had
+  recorded a replacement launch, PID `984841`, port `38437`.
+- After another 60 seconds, PID `984841` was still alive and DevTools was
+  still reachable with the Canva target present.
+- A second `get title` failed with the same `profile with cdp_url` error.
+- `eval navigator.webdriver` returned `false`, but it recorded another
+  replacement launch, PID `988521`, port `38361`.
+- Explicit `close` then removed the managed runtime state. Final runtime status
+  showed no browser PID and no targets.
+
+Artifacts:
+
+```text
+/tmp/agent-browser-canva-blank-chromium-1778621560/repro.log
+/home/ecochran76/.agent-browser/tmp/chrome-launches/chrome-983080-1778621561142.stderr.log
+/home/ecochran76/.agent-browser/tmp/chrome-launches/chrome-984841-1778621590352.stderr.log
+/home/ecochran76/.agent-browser/tmp/chrome-launches/chrome-988521-1778621654282.stderr.log
+```
+
+The Chrome stderr logs showed normal DevTools startup plus expected local
+environment noise such as missing Vulkan validation layers, missing UPower
+DBus service, and `waitpid` no-child messages. They did not show a symbolized
+Chromium crash.
+
+Interpretation:
+
+- The blank Chromium-owned profile did not reproduce the original
+  post-navigation Chromium crash signature. Patched Chromium loaded Canva and
+  stayed process-alive with reachable DevTools across the bounded probe.
+- The active failure in this rerun is agent-browser managed-runtime reattach
+  behavior. Follow-up CLI commands against a live runtime profile are starting
+  or reconnecting daemon state in a way that treats the live DevTools port as
+  `cdp_url` while also carrying profile intent, then loses the original Canva
+  page context.
+- The `navigator.webdriver` patch remains effective in this path because the
+  follow-up evaluation returned `false`.
+- Service trace recorded launch stderr paths on each launch event, but no
+  incident or degraded health event was emitted for the failed managed-runtime
+  follow-up reads.
+
+Recommended next step: fix agent-browser's managed runtime attach path so
+follow-up commands against a live runtime profile reuse the existing browser
+deterministically without launching replacement browsers, without creating a
+fresh `about:blank` active tab, and without surfacing the misleading
+`profile with cdp_url` validation error.
