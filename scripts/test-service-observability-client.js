@@ -24,6 +24,7 @@ import {
   runDueServiceMonitors,
   runServiceAccessPlanMonitorRunDue,
   runServiceAccessPlanPostSeedingProbe,
+  summarizeServiceAccessPlanMonitorRunDue,
   summarizeServiceProfileReadiness,
   triageServiceMonitor,
   updateServiceProfileFreshness,
@@ -335,13 +336,31 @@ async function main() {
   assert.equal(monitorRunDueResult.failed, 1);
   assert.equal(monitorRunDueResult.results[0].monitorId, 'google-login-freshness');
   assert.deepEqual(monitorRunDueResult.results[0].staleProfileIds, ['journal-google']);
+  const monitorRunDueSummary = summarizeServiceAccessPlanMonitorRunDue({
+    accessPlan: serviceAccessPlanWithDueMonitor(),
+    monitorRunDue: monitorRunDueResult,
+  });
+  assert.equal(monitorRunDueSummary.recommendedAction, 'probe_target_auth_or_reseed_if_needed');
+  assert.deepEqual(monitorRunDueSummary.expiredTargetServiceIds, ['google']);
+  assert.deepEqual(monitorRunDueSummary.staleProfileIds, ['journal-google']);
 
   const accessPlanMonitorRunDue = createFetchRecorder({
     success: true,
     data: {
       checked: 1,
+      succeeded: 1,
       failed: 0,
-      monitors: [{ id: 'google-login-freshness' }],
+      monitorIds: ['google-login-freshness'],
+      results: [
+        {
+          monitorId: 'google-login-freshness',
+          checkedAt: '2026-05-07T00:00:00Z',
+          success: true,
+          result: 'profile_readiness_fresh',
+          target: { profile_readiness: 'google' },
+          staleProfileIds: [],
+        },
+      ],
     },
   });
   const accessPlanMonitorRunDueResult = await runServiceAccessPlanMonitorRunDue({
@@ -355,6 +374,8 @@ async function main() {
   );
   assert.equal(accessPlanMonitorRunDue.calls[0].init.method, 'POST');
   assert.equal(accessPlanMonitorRunDueResult.checked, 1);
+  assert.equal(accessPlanMonitorRunDueResult.accessPlanSummary?.recommendedAction, 'use_selected_profile');
+  assert.deepEqual(accessPlanMonitorRunDueResult.accessPlanSummary?.freshTargetServiceIds, ['google']);
 
   const unavailableAccessPlanMonitorRunDue = createFetchRecorder({
     success: true,
@@ -1148,8 +1169,19 @@ async function main() {
         success: true,
         data: {
           checked: 1,
+          succeeded: 1,
           failed: 0,
-          monitors: [{ id: 'acs-freshness' }],
+          monitorIds: ['acs-freshness'],
+          results: [
+            {
+              monitorId: 'acs-freshness',
+              checkedAt: '2026-05-07T00:00:00Z',
+              success: true,
+              result: 'profile_readiness_fresh',
+              target: { profile_readiness: 'acs' },
+              staleProfileIds: [],
+            },
+          ],
         },
       };
     }
@@ -1253,6 +1285,8 @@ async function main() {
   assert.equal(dueMonitorAcquisition.calls[2].init.method, 'GET');
   assert.equal(dueMonitorAcquisitionResult.monitorRunDue?.checked, 1);
   assert.equal(dueMonitorAcquisitionResult.monitorRunDueRan, true);
+  assert.equal(dueMonitorAcquisitionResult.monitorRunDueSummary?.recommendedAction, 'use_selected_profile');
+  assert.deepEqual(dueMonitorAcquisitionResult.monitorRunDueSummary?.freshTargetServiceIds, ['acs']);
   assert.equal(dueMonitorAcquisitionResult.accessPlan.decision?.monitorProbeDue, false);
   assert.equal(dueMonitorAcquisitionResult.selectedProfile?.id, 'journal-existing');
 

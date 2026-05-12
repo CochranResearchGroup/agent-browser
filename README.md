@@ -1728,7 +1728,7 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 `getServiceProfileSeedingHandoff`, `updateServiceProfileSeedingHandoff`,
 `summarizeServiceProfileReadiness`, `findServiceProfileForIdentity`,
 `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`,
-`acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
+`summarizeServiceAccessPlanMonitorRunDue`, `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 including optional freshness fields such as `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`,
@@ -1753,8 +1753,9 @@ When a software client may need a recurring fallback profile, prefer
 `acquireServiceLoginProfile()` so the client asks for this plan first,
 registers only if no profile is selected, optionally adds the retained
 profile-readiness monitor, optionally runs due profile-readiness monitors when
-`decision.monitorRunDue.recommendedBeforeUse` is true, and uses the refreshed
-access plan for the tab request.
+`decision.monitorRunDue.recommendedBeforeUse` is true, returns
+`monitorRunDueSummary` with the target freshness outcome, and uses the
+refreshed access plan for the tab request.
 The decision includes `freshnessUpdate`, which names the selected profile,
 target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.
@@ -1765,7 +1766,9 @@ with the `verify-seeding` CLI command, freshness HTTP and MCP write path,
 `monitorRunDue`, a copyable due-monitor recipe for `POST
 /api/service/monitors/run-due`, MCP `service_monitors_run_due`, CLI
 `agent-browser service monitors run-due`, and
-`runServiceAccessPlanMonitorRunDue()`. It also includes
+`runServiceAccessPlanMonitorRunDue()`. That helper returns the raw monitor
+run response plus `accessPlanSummary`, which maps per-monitor results back to
+the requested targets. It also includes
 `serviceRequest`, a copyable service-owned tab request recipe for
 `POST /api/service/request`, MCP `service_request`, and
 `requestServiceTab()`. `serviceRequest.available` is true when the planned tab
@@ -1941,7 +1944,8 @@ plan first, register the profile only when no selected profile exists, add the
 retained freshness monitor for that fallback profile, optionally run due
 profile-readiness monitors, refresh the access plan, and submit the planned tab
 request. Its output includes `profileAcquisitionSummary.monitorRunDueRan`,
-`initialRecommendedAction`, `refreshedRecommendedAction`, and latest trace job
+`initialRecommendedAction`, `refreshedRecommendedAction`, monitor-run target
+freshness summary fields, and latest trace job
 `controlPlaneMode` plus `lifecycleOnly` values so callers can see whether
 access-plan freshness work changed the recommendation before browser control
 begins and whether the retained job was CDP-backed or lifecycle-only.
@@ -1966,7 +1970,8 @@ decision recommends `run_due_profile_readiness_monitor` and includes
 `decision.monitorRunDue`, a copyable HTTP, MCP, CLI, and
 `runServiceAccessPlanMonitorRunDue()` recipe for running due monitors through
 the serialized service worker before trusting the profile for authenticated
-work.
+work. The helper summarizes whether the requested target is fresh, expired, or
+still unverified from the returned per-monitor results.
 Its output includes `profileAcquisitionSummary`,
 `readinessSummary.needsManualSeeding`, target service IDs, recommended actions,
 and `seedingHandoff` when readiness says an operator must seed the profile. Run

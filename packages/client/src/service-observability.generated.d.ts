@@ -606,6 +606,7 @@ export interface ServiceMonitorRunDueResponse {
   failed: number;
   monitorIds: string[];
   results: ServiceMonitorRunDueResult[];
+  accessPlanSummary?: ServiceAccessPlanMonitorRunDueSummary;
   [key: string]: unknown;
 }
 
@@ -1038,6 +1039,27 @@ export interface ServiceAccessPlanMonitorRunDueOptions extends ServiceObservabil
   accessPlan: ServiceAccessPlanResponse;
 }
 
+export interface ServiceAccessPlanMonitorRunDueSummary {
+  targetServiceIds: string[];
+  matched: number;
+  monitorIds: string[];
+  resultStates: string[];
+  staleProfileIds: string[];
+  freshTargetServiceIds: string[];
+  expiredTargetServiceIds: string[];
+  unverifiedTargetServiceIds: string[];
+  succeeded: boolean;
+  failed: boolean;
+  recommendedAction:
+    | 'use_selected_profile'
+    | 'probe_target_auth_or_reseed_if_needed'
+    | 'verify_or_seed_profile_before_authenticated_work'
+    | 'inspect_monitor_results'
+    | string;
+  matchingResults: ServiceMonitorRunDueResult[];
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanMonitorFindings {
   profileReadinessAttentionRequired: boolean;
   profileReadinessProbeDue: boolean;
@@ -1141,6 +1163,7 @@ export interface ServiceProfileAcquisitionResult {
   profileRegistration: ServiceProfileUpsertResponse | null;
   profileReadinessMonitor: ServiceMonitorUpsertResponse | null;
   monitorRunDue: ServiceMonitorRunDueResponse | null;
+  monitorRunDueSummary: ServiceAccessPlanMonitorRunDueSummary | null;
   registered: boolean;
   monitorRegistered: boolean;
   monitorRunDueRan: boolean;
@@ -1321,6 +1344,11 @@ export declare function getServiceTabs(options: ServiceQueryOptions): Promise<Se
 export declare function getServiceMonitors(options: ServiceMonitorQueryOptions): Promise<ServiceMonitorsResponse>;
 /** Ask the service to run due active monitor checks immediately. */
 export declare function runDueServiceMonitors(options: ServiceObservabilityHttpOptions): Promise<ServiceMonitorRunDueResponse>;
+/** Summarize monitor run results for the target identities advertised by an access plan. */
+export declare function summarizeServiceAccessPlanMonitorRunDue(options: {
+  accessPlan: ServiceAccessPlanResponse;
+  monitorRunDue: ServiceMonitorRunDueResponse;
+}): ServiceAccessPlanMonitorRunDueSummary;
 export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;

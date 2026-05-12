@@ -67,6 +67,9 @@ async function testExistingProfileSelection() {
     refreshedRecommendedAction: 'use_selected_profile',
     monitorRunDueChecked: null,
     monitorRunDueFailed: null,
+    monitorRunDueRecommendedAction: null,
+    monitorRunDueFreshTargetServiceIds: [],
+    monitorRunDueStaleProfileIds: [],
   });
   assert.equal(result.tab?.success, true);
   assert.equal(result.tab?.data?.url, 'https://www.canva.com/');
@@ -221,6 +224,9 @@ async function testExistingProfileDueMonitorRun() {
     refreshedRecommendedAction: 'use_selected_profile',
     monitorRunDueChecked: 1,
     monitorRunDueFailed: 0,
+    monitorRunDueRecommendedAction: 'use_selected_profile',
+    monitorRunDueFreshTargetServiceIds: ['canva'],
+    monitorRunDueStaleProfileIds: [],
   });
   assert.equal(result.monitorRunDue?.checked, 1);
   assert.equal(result.tab?.success, true);
@@ -377,6 +383,9 @@ async function testMissingProfileRegistrationThenDueMonitorRun() {
     refreshedRecommendedAction: 'use_selected_profile',
     monitorRunDueChecked: 1,
     monitorRunDueFailed: 0,
+    monitorRunDueRecommendedAction: 'use_selected_profile',
+    monitorRunDueFreshTargetServiceIds: ['canva'],
+    monitorRunDueStaleProfileIds: [],
   });
   assert.equal(result.profileRegistration?.upserted, true);
   assert.equal(result.profileReadinessMonitor?.upserted, true);

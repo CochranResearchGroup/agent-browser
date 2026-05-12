@@ -404,6 +404,9 @@ function summarizeProfileAcquisition({
     refreshedRecommendedAction: accessPlan?.decision?.recommendedAction ?? null,
     monitorRunDueChecked: monitorRunDue?.checked ?? null,
     monitorRunDueFailed: monitorRunDue?.failed ?? null,
+    monitorRunDueRecommendedAction: monitorRunDue?.accessPlanSummary?.recommendedAction ?? null,
+    monitorRunDueFreshTargetServiceIds: monitorRunDue?.accessPlanSummary?.freshTargetServiceIds ?? [],
+    monitorRunDueStaleProfileIds: monitorRunDue?.accessPlanSummary?.staleProfileIds ?? [],
   };
 }
 

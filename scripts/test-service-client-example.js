@@ -52,6 +52,9 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
     refreshedRecommendedAction: 'use_selected_profile',
     monitorRunDueChecked: null,
     monitorRunDueFailed: null,
+    monitorRunDueRecommendedAction: null,
+    monitorRunDueFreshTargetServiceIds: [],
+    monitorRunDueStaleProfileIds: [],
   });
   assert.equal(result.commandResult?.success, true);
   assert.deepEqual(callSequence(calls), [
@@ -106,6 +109,9 @@ async function testRegistersFallbackOnlyAfterAccessPlanMiss() {
     refreshedRecommendedAction: 'use_selected_profile',
     monitorRunDueChecked: null,
     monitorRunDueFailed: null,
+    monitorRunDueRecommendedAction: null,
+    monitorRunDueFreshTargetServiceIds: [],
+    monitorRunDueStaleProfileIds: [],
   });
   assert.equal(result.commandResult?.success, true);
 
@@ -158,6 +164,9 @@ async function testRunsDueMonitorAndShowsRefreshedRecommendation() {
     refreshedRecommendedAction: 'use_selected_profile',
     monitorRunDueChecked: 1,
     monitorRunDueFailed: 0,
+    monitorRunDueRecommendedAction: 'use_selected_profile',
+    monitorRunDueFreshTargetServiceIds: [loginId],
+    monitorRunDueStaleProfileIds: [],
   });
   assert.equal(result.monitorRunDue?.checked, 1);
   assert.deepEqual(callSequence(calls), [
@@ -208,6 +217,9 @@ async function testRegistersFallbackThenRunsDueMonitor() {
     refreshedRecommendedAction: 'use_selected_profile',
     monitorRunDueChecked: 1,
     monitorRunDueFailed: 0,
+    monitorRunDueRecommendedAction: 'use_selected_profile',
+    monitorRunDueFreshTargetServiceIds: [loginId],
+    monitorRunDueStaleProfileIds: [],
   });
   assert.equal(result.profileRegistration?.upserted, true);
   assert.equal(result.profileReadinessMonitor?.upserted, true);
@@ -276,7 +288,7 @@ function createBrokerFirstFetch({
             checkedAt: '2026-05-10T00:00:00Z',
             success: true,
             result: 'profile_readiness_fresh',
-            target: { profile_readiness: 'acs' },
+            target: { profile_readiness: loginId },
             staleProfileIds: [],
           },
         ],

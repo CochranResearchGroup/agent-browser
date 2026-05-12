@@ -83,6 +83,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunOptions} ServiceAccessPlanPostSeedingProbeRunOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunResult} ServiceAccessPlanPostSeedingProbeRunResult
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanMonitorRunDueOptions} ServiceAccessPlanMonitorRunDueOptions
+ * @typedef {import('./service-observability.generated.js').ServiceAccessPlanMonitorRunDueSummary} ServiceAccessPlanMonitorRunDueSummary
  * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyOptions} ServiceRemediesApplyOptions
  * @typedef {import('./service-observability.generated.js').ServiceRemediesApplyResponse} ServiceRemediesApplyResponse
  */
@@ -387,6 +388,12 @@ export async function acquireServiceLoginProfile({
   if (monitorRunDue) {
     accessPlan = await getServiceAccessPlan(accessPlanOptions);
   }
+  const monitorRunDueSummary = monitorRunDue
+    ? summarizeServiceAccessPlanMonitorRunDue({
+        accessPlan,
+        monitorRunDue,
+      })
+    : null;
 
   return {
     initialAccessPlan,
@@ -395,6 +402,7 @@ export async function acquireServiceLoginProfile({
     profileRegistration,
     profileReadinessMonitor,
     monitorRunDue,
+    monitorRunDueSummary,
     registered: profileRegistration !== null,
     monitorRegistered: profileReadinessMonitor !== null,
     monitorRunDueRan: monitorRunDue !== null,
@@ -455,6 +463,64 @@ export function runDueServiceMonitors(options) {
 }
 
 /**
+ * Summarize monitor run results for the target identities advertised by an access plan.
+ *
+ * @param {{ accessPlan: ServiceAccessPlanResponse, monitorRunDue: ServiceMonitorRunDueResponse }} options
+ * @returns {ServiceAccessPlanMonitorRunDueSummary}
+ */
+export function summarizeServiceAccessPlanMonitorRunDue({ accessPlan, monitorRunDue }) {
+  const recipe = accessPlanMonitorRunDue(accessPlan);
+  const targetServiceIds = uniqueStrings([
+    ...(Array.isArray(recipe.targetServiceIds) ? recipe.targetServiceIds : []),
+    ...(Array.isArray(accessPlan?.query?.targetServiceIds) ? accessPlan.query.targetServiceIds : []),
+  ]);
+  const targetSet = new Set(targetServiceIds);
+  const recipeMonitorIds = new Set(Array.isArray(recipe.monitorIds) ? recipe.monitorIds : []);
+  const results = Array.isArray(monitorRunDue?.results) ? monitorRunDue.results : [];
+  const matchingResults = results.filter((result) => {
+    const targetServiceId = profileReadinessTargetServiceId(result?.target);
+    return (
+      (targetServiceId !== null && (targetSet.size === 0 || targetSet.has(targetServiceId))) ||
+      recipeMonitorIds.has(String(result?.monitorId ?? ''))
+    );
+  });
+  const resultStates = uniqueStrings(matchingResults.map((result) => result?.result));
+  const staleProfileIds = uniqueStrings(
+    matchingResults.flatMap((result) => (Array.isArray(result?.staleProfileIds) ? result.staleProfileIds : [])),
+  );
+  const freshTargetServiceIds = targetServiceIdsWithResult(matchingResults, 'profile_readiness_fresh');
+  const expiredTargetServiceIds = targetServiceIdsWithResult(matchingResults, 'profile_readiness_expired');
+  const unverifiedTargetServiceIds = targetServiceIdsWithAnyResult(matchingResults, [
+    'profile_readiness_not_fresh',
+    'profile_readiness_missing',
+  ]);
+  const failed = matchingResults.some((result) => result?.success === false);
+  const succeeded = matchingResults.length > 0 && matchingResults.every((result) => result?.success === true);
+  const recommendedAction = monitorRunDueRecommendedAction({
+    matchingResults,
+    failed,
+    succeeded,
+    expiredTargetServiceIds,
+    unverifiedTargetServiceIds,
+  });
+
+  return {
+    targetServiceIds,
+    matched: matchingResults.length,
+    monitorIds: uniqueStrings(matchingResults.map((result) => result?.monitorId)),
+    resultStates,
+    staleProfileIds,
+    freshTargetServiceIds,
+    expiredTargetServiceIds,
+    unverifiedTargetServiceIds,
+    succeeded,
+    failed,
+    recommendedAction,
+    matchingResults,
+  };
+}
+
+/**
  * Run the due-monitor recipe advertised by an access plan.
  *
  * @param {ServiceAccessPlanMonitorRunDueOptions} options
@@ -465,7 +531,10 @@ export function runServiceAccessPlanMonitorRunDue({ accessPlan, ...options }) {
   if (recipe.available !== true) {
     throw new Error('access plan monitorRunDue is not available');
   }
-  return runDueServiceMonitors(options);
+  return runDueServiceMonitors(options).then((monitorRunDue) => ({
+    ...monitorRunDue,
+    accessPlanSummary: summarizeServiceAccessPlanMonitorRunDue({ accessPlan, monitorRunDue }),
+  }));
 }
 
 /**
@@ -923,6 +992,52 @@ function accessPlanMonitorRunDue(accessPlan) {
   const recipe = /** @type {Record<string, unknown>} */ (decision).monitorRunDue;
   assertPlainObject(recipe, 'service access plan decision.monitorRunDue');
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanMonitorRunDue} */ (recipe);
+}
+
+function profileReadinessTargetServiceId(target) {
+  if (!target || typeof target !== 'object') {
+    return null;
+  }
+  const value = /** @type {Record<string, unknown>} */ (target).profile_readiness;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function targetServiceIdsWithResult(results, resultState) {
+  return targetServiceIdsWithAnyResult(results, [resultState]);
+}
+
+function targetServiceIdsWithAnyResult(results, resultStates) {
+  const resultStateSet = new Set(resultStates);
+  return uniqueStrings(
+    results
+      .filter((result) => resultStateSet.has(String(result?.result ?? '')))
+      .map((result) => profileReadinessTargetServiceId(result?.target)),
+  );
+}
+
+function monitorRunDueRecommendedAction({
+  matchingResults,
+  failed,
+  succeeded,
+  expiredTargetServiceIds,
+  unverifiedTargetServiceIds,
+}) {
+  if (matchingResults.length === 0) {
+    return 'inspect_monitor_results';
+  }
+  if (expiredTargetServiceIds.length > 0) {
+    return 'probe_target_auth_or_reseed_if_needed';
+  }
+  if (unverifiedTargetServiceIds.length > 0) {
+    return 'verify_or_seed_profile_before_authenticated_work';
+  }
+  if (succeeded) {
+    return 'use_selected_profile';
+  }
+  if (failed) {
+    return 'inspect_monitor_results';
+  }
+  return 'use_selected_profile';
 }
 
 function accessPlanProbeUrl(accessPlan) {

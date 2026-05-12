@@ -263,6 +263,9 @@ function summarizeProfileAcquisition(profileAcquisition) {
     refreshedRecommendedAction: profileAcquisition.accessPlan?.decision?.recommendedAction ?? null,
     monitorRunDueChecked: profileAcquisition.monitorRunDue?.checked ?? null,
     monitorRunDueFailed: profileAcquisition.monitorRunDue?.failed ?? null,
+    monitorRunDueRecommendedAction: profileAcquisition.monitorRunDueSummary?.recommendedAction ?? null,
+    monitorRunDueFreshTargetServiceIds: profileAcquisition.monitorRunDueSummary?.freshTargetServiceIds ?? [],
+    monitorRunDueStaleProfileIds: profileAcquisition.monitorRunDueSummary?.staleProfileIds ?? [],
   };
 }
 
