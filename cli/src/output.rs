@@ -5724,7 +5724,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Site policies: 1\n  google origin=https://accounts.google.com source=config overrideable=no host=local_headed cdp_free=no interaction=human_like_input challenge=avoid_first manual_login=yes profile_required=yes"
+            "Site policies: 1\n  google origin=https://accounts.google.com source=config overrideable=no host=local_headed build=default cdp_free=no interaction=human_like_input challenge=avoid_first manual_login=yes profile_required=yes"
         );
     }
 
