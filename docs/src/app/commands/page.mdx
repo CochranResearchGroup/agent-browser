@@ -685,7 +685,8 @@ agent-browser session list            # List active sessions
 ```bash
 agent-browser profiles               # List available Chrome profiles
 agent-browser profiles --json        # List profiles as JSON
-agent-browser runtime create work --set-default          # Register a named runtime profile
+agent-browser runtime create work --browser-family chrome --set-default # Register a named runtime profile
+agent-browser runtime create canva-stealthcdp-chromium --browser-family chromium # Blank profile for patched Chromium
 agent-browser runtime login https://accounts.google.com  # Manual login on the default runtime profile
 agent-browser runtime login https://example.com --attachable # Manual login with DevTools left on for later attach, not for Google sign-in
 agent-browser --runtime-profile work --leave-open open https://app.example.com  # Detach on close and leave the managed runtime browser running
@@ -703,6 +704,9 @@ with detached <code>runtime login</code>, close Chrome, then relaunch the same
 profile with <code>--attachable</code> for automation.
 Use <code>--leave-open</code> when you want <code>close</code> to detach from a
 managed runtime-profile browser instead of shutting it down.
+Runtime profiles can declare <code>browserFamily</code>. agent-browser refuses
+to launch a marked profile with a different resolved browser family unless the
+operator sets <code>AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true</code>.
 If a runtime profile is locked by a live browser PID and the task needs
 existing login state, inspect <code>service status</code> or
 <code>runtime status</code>, then reuse the managed browser through

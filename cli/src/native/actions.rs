@@ -381,6 +381,7 @@ fn launch_hash(opts: &LaunchOptions) -> u64 {
     opts.user_agent.hash(&mut h);
     opts.allow_file_access.hash(&mut h);
     opts.runtime_profile.hash(&mut h);
+    opts.expected_browser_family.hash(&mut h);
     opts.use_real_keychain.hash(&mut h);
     opts.keychain_password.hash(&mut h);
     opts.manual_login.hash(&mut h);
@@ -735,6 +736,10 @@ fn service_profile_lease_metadata_for_command(command: &Value) -> Option<Service
             .and_then(|value| value.as_str())
             .map(str::to_string)
             .or_else(runtime_profile_from_env),
+        expected_browser_family: command
+            .get("runtimeProfileBrowserFamily")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
         use_real_keychain: use_real_keychain_from_env(),
         ..LaunchOptions::default()
     };
@@ -2866,6 +2871,7 @@ fn launch_options_from_env() -> LaunchOptions {
         proxy_password: env::var("AGENT_BROWSER_PROXY_PASSWORD").ok(),
         profile: env::var("AGENT_BROWSER_PROFILE").ok(),
         runtime_profile: runtime_profile_from_env(),
+        expected_browser_family: None,
         allow_file_access: env::var("AGENT_BROWSER_ALLOW_FILE_ACCESS")
             .map(|v| v == "1" || v == "true")
             .unwrap_or(false),
@@ -2982,6 +2988,10 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .or_else(runtime_profile_from_env),
+        expected_browser_family: cmd
+            .get("runtimeProfileBrowserFamily")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
         allow_file_access: cmd
             .get("allowFileAccess")
             .and_then(|v| v.as_bool())
@@ -3402,6 +3412,10 @@ fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> 
             .and_then(|value| value.as_str())
             .map(str::to_string)
             .or_else(runtime_profile_from_env),
+        expected_browser_family: cmd
+            .get("runtimeProfileBrowserFamily")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
         allow_file_access: cmd
             .get("allowFileAccess")
             .and_then(|value| value.as_bool())

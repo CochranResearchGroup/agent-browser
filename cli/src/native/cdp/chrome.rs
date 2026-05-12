@@ -309,6 +309,7 @@ pub struct LaunchOptions {
     pub proxy_password: Option<String>,
     pub profile: Option<String>,
     pub runtime_profile: Option<String>,
+    pub expected_browser_family: Option<String>,
     pub args: Vec<String>,
     pub allow_file_access: bool,
     pub extensions: Option<Vec<String>>,
@@ -346,6 +347,7 @@ impl Default for LaunchOptions {
             proxy_password: None,
             profile: None,
             runtime_profile: None,
+            expected_browser_family: None,
             args: Vec::new(),
             allow_file_access: false,
             extensions: None,
@@ -635,6 +637,7 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
             )
         })?,
     };
+    validate_profile_browser_family(options, &chrome_path)?;
 
     let max_attempts = 3;
     let mut last_err = String::new();
@@ -692,6 +695,7 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
             )
         })?,
     };
+    validate_profile_browser_family(options, &chrome_path)?;
 
     unlock_macos_keychain(options.keychain_password.as_deref())?;
     let linux_keyring_env = unlock_linux_keyring(options.keychain_password.as_deref())?;
@@ -987,6 +991,57 @@ fn try_launch_chrome(
 
 fn ws_debug_port(ws_url: &str) -> Option<u16> {
     url::Url::parse(ws_url).ok()?.port_or_known_default()
+}
+
+fn env_bool(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| {
+        !matches!(
+            value.to_ascii_lowercase().as_str(),
+            "0" | "false" | "no" | ""
+        )
+    })
+}
+
+fn browser_family_for_executable(path: &Path) -> &'static str {
+    let value = path.to_string_lossy().to_ascii_lowercase();
+    if value.contains("chromium") {
+        "chromium"
+    } else if value.contains("brave") {
+        "brave"
+    } else if value.contains("edge") || value.contains("msedge") {
+        "edge"
+    } else if value.contains("google-chrome")
+        || value.contains("chrome-for-testing")
+        || value.ends_with("/chrome")
+        || value.ends_with("\\chrome.exe")
+    {
+        "chrome"
+    } else {
+        "unknown"
+    }
+}
+
+fn validate_profile_browser_family(
+    options: &LaunchOptions,
+    chrome_path: &Path,
+) -> Result<(), String> {
+    let Some(runtime_profile) = options.runtime_profile.as_deref() else {
+        return Ok(());
+    };
+    let Some(expected) = options.expected_browser_family.as_deref() else {
+        return Ok(());
+    };
+    let actual = browser_family_for_executable(chrome_path);
+    if expected == "unknown" || actual == "unknown" || expected == actual {
+        return Ok(());
+    }
+    if env_bool("AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH") {
+        return Ok(());
+    }
+    Err(format!(
+        "Runtime profile '{}' is marked for browser family '{}' but this launch resolved '{}'. Start with a blank profile for the requested browser family or set AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true to force the unsafe mix.",
+        runtime_profile, expected, actual
+    ))
 }
 
 fn chrome_stderr_log_path(pid: u32) -> Option<PathBuf> {
@@ -1936,6 +1991,43 @@ mod tests {
     fn test_read_devtools_active_port_missing() {
         let result = read_devtools_active_port(Path::new("/nonexistent"));
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_runtime_profile_browser_family_mismatch_requires_override() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH"]);
+        guard.remove("AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH");
+        let options = LaunchOptions {
+            runtime_profile: Some("canva-stealthcdp".to_string()),
+            expected_browser_family: Some("chrome".to_string()),
+            ..LaunchOptions::default()
+        };
+
+        let err = validate_profile_browser_family(
+            &options,
+            Path::new("/home/user/workspace.local/chromium/src/out/Default/chrome"),
+        )
+        .unwrap_err();
+
+        assert!(err.contains("marked for browser family 'chrome'"));
+        assert!(err.contains("AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true"));
+    }
+
+    #[test]
+    fn test_runtime_profile_browser_family_override_allows_mismatch() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH"]);
+        guard.set("AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH", "true");
+        let options = LaunchOptions {
+            runtime_profile: Some("canva-stealthcdp".to_string()),
+            expected_browser_family: Some("chrome".to_string()),
+            ..LaunchOptions::default()
+        };
+
+        validate_profile_browser_family(
+            &options,
+            Path::new("/home/user/workspace.local/chromium/src/out/Default/chrome"),
+        )
+        .unwrap();
     }
 
     #[test]

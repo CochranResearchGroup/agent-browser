@@ -37,6 +37,7 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
   "runtimeProfiles": {
     "work": {
       "userDataDir": "~/.agent-browser/runtime-profiles/work/user-data",
+      "browserFamily": "chrome",
       "launch": {
         "headed": true,
         "leaveOpen": true,
@@ -83,7 +84,7 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
 
 Runtime profiles are the preferred way to define durable managed browser lanes.
 Today agent-browser applies the selected runtime profile's `userDataDir`,
-launch defaults, auth session name, and service login hints. A service with
+browser family, launch defaults, auth session name, and service login hints. A service with
 `manualLoginPreferred` emits an advisory warning when navigation targets known
 login hosts for that service. Use this to tell agents to prefer
 detached <code>runtime login</code> for services such as Google. Use the
@@ -94,6 +95,15 @@ managed runtime-profile browser instead of shutting it down. Set
 <code>preferences.defaultViewport</code> to a <code>WIDTHxHEIGHT</code> value,
 such as <code>960x640</code>, when a runtime profile should resize the browser
 content area after launch and before the requested command runs.
+
+Set <code>runtimeProfiles.&lt;name&gt;.browserFamily</code> to <code>chrome</code>,
+<code>chromium</code>, <code>brave</code>, <code>edge</code>, or
+<code>unknown</code> to bind a managed profile to the browser family that
+created it. agent-browser refuses a different resolved browser family by
+default because Chrome and Chromium profile directories are not safe to
+mix-and-match. Start with a blank profile for a new browser family. Operators
+can force an intentional mismatch with
+<code>AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true</code>.
 
 The <code>service.profiles</code> and <code>service.sessions</code> maps define
 service control-plane metadata for profile allocation, keyring posture, caller
@@ -130,6 +140,7 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>debug</code></td><td><code>--debug</code></td><td>boolean</td></tr>
     <tr><td><code>defaultRuntimeProfile</code></td><td><code>--runtime-profile</code> fallback</td><td>string</td></tr>
     <tr><td><code>runtimeProfiles</code></td><td>managed runtime-profile map</td><td>object</td></tr>
+    <tr><td><code>runtimeProfiles.&lt;name&gt;.browserFamily</code></td><td>Expected browser family for the managed profile. Values: <code>chrome</code>, <code>chromium</code>, <code>brave</code>, <code>edge</code>, or <code>unknown</code>.</td><td>string</td></tr>
     <tr><td><code>leaveOpen</code></td><td><code>--leave-open</code></td><td>boolean</td></tr>
     <tr><td><code>session</code></td><td><code>--session</code></td><td>string</td></tr>
     <tr><td><code>runtimeProfile</code></td><td><code>--runtime-profile</code></td><td>string</td></tr>
@@ -262,6 +273,7 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_EXTENSIONS</code></td><td>Comma-separated browser extension paths. Extensions work in both headed and headless mode.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_HEADED</code></td><td>Show browser window instead of running headless (<code>1</code> to enable).</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_RUNTIME_PROFILE</code></td><td>Managed runtime profile name used for persistent browser state.</td><td><code>default</code></td></tr>
+    <tr><td><code>AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH</code></td><td>Allow an operator-forced runtime profile launch when the configured profile browser family does not match the resolved browser executable family.</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_STREAM_PORT</code></td><td>Override the WebSocket streaming port. By default, an OS-assigned port is used. Set this to bind to a specific port (e.g., <code>9223</code>).</td><td>OS-assigned</td></tr>
     <tr><td><code>AGENT_BROWSER_IDLE_TIMEOUT_MS</code></td><td>Auto-shutdown the daemon after N ms of inactivity (no commands received). Useful for ephemeral environments.</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS</code></td><td>Override the persisted service browser-health reconciliation interval in milliseconds. Set <code>0</code> to disable the daemon background loop.</td><td><code>60000</code></td></tr>

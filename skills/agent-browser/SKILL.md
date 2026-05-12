@@ -71,8 +71,8 @@ When the default runtime profile is locked by a live browser PID, do not treat a
 
 Runtime profiles can also be declared in `agent-browser.json` via
 `defaultRuntimeProfile` and `runtimeProfiles.<name>`. Today that config can
-drive `userDataDir`, launch defaults, auth session naming, and service login
-hints. If navigation returns a warning for a service with
+drive `userDataDir`, browser family, launch defaults, auth session naming, and
+service login hints. If navigation returns a warning for a service with
 `manualLoginPreferred`, switch to `runtime login` for detached manual sign-in,
 then relaunch the same runtime profile for automation. Use
 `runtime login <url> --attachable` followed by `runtime attach` only for sites
@@ -81,11 +81,17 @@ where DevTools during manual login is known to be accepted. Treat
 content size, for example `960x640`. Set `runtimeProfiles.<name>.launch.leaveOpen` or pass
 `--leave-open` when you want `close` to detach from a managed runtime-profile
 browser instead of shutting it down.
+Set `runtimeProfiles.<name>.browserFamily` to `chrome`, `chromium`, `brave`,
+`edge`, or `unknown`. Do not attach patched Chromium to a Chrome-owned profile
+or otherwise mix browser families unless the operator explicitly forces it with
+`AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true`. Start with a blank managed
+profile for a new browser family.
 
 To create and track a managed profile explicitly, use:
 
 ```bash
-agent-browser runtime create work --set-default
+agent-browser runtime create work --browser-family chrome --set-default
+agent-browser runtime create canva-stealthcdp-chromium --browser-family chromium
 ```
 
 When automating a site that requires login, prefer intent-based service use

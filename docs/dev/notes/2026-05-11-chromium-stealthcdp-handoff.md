@@ -543,3 +543,19 @@ Additional agent-browser finding:
 - Follow-up implementation now includes `browserStderrLogPath` on
   `browser_launch_recorded` details as well as failure events, so future traces
   can point to the launch artifact even when the failure transition is missed.
+
+Profile-family correction:
+
+- The repro used the seeded `canva-preview` profile, which was originally a
+  Chrome-owned runtime profile. That is not a safe default for patched Chromium.
+- Future Chromium repros should start from a blank Chromium-owned runtime
+  profile, for example
+  `agent-browser runtime create canva-stealthcdp-chromium --browser-family chromium`.
+- agent-browser now supports `runtimeProfiles.<name>.browserFamily` and refuses
+  mismatched Chrome/Chromium profile use by default. The explicit operator
+  escape hatch is `AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true`.
+- Created the blank local runtime profile
+  `canva-stealthcdp-chromium` at
+  `/home/ecochran76/.agent-browser/runtime-profiles/canva-stealthcdp-chromium/user-data`.
+  A smoke launch with patched Chromium reached `about:blank`, and a forced
+  stock-Chrome executable attempt was refused by the browser-family guard.

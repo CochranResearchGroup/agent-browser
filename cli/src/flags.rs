@@ -216,6 +216,7 @@ pub struct RuntimeProfilePreferencesConfig {
 #[serde(default, rename_all = "camelCase")]
 pub struct RuntimeProfileConfig {
     pub user_data_dir: Option<String>,
+    pub browser_family: Option<String>,
     pub launch: Option<RuntimeProfileLaunchConfig>,
     pub auth: Option<RuntimeProfileAuthConfig>,
     pub services: Option<HashMap<String, RuntimeProfileServiceConfig>>,
@@ -472,6 +473,7 @@ fn merge_runtime_profile_config(
 ) -> RuntimeProfileConfig {
     RuntimeProfileConfig {
         user_data_dir: overlay.user_data_dir.or(base.user_data_dir),
+        browser_family: overlay.browser_family.or(base.browser_family),
         launch: match (base.launch, overlay.launch) {
             (None, None) => None,
             (Some(cfg), None) | (None, Some(cfg)) => Some(cfg),
@@ -707,6 +709,7 @@ pub fn upsert_runtime_profile_in_user_config(
     runtime_profile_name: &str,
     user_data_dir: Option<&str>,
     set_default: bool,
+    browser_family: Option<&str>,
 ) -> Result<PathBuf, String> {
     let path = user_config_path()?;
     let mut root = match fs::read_to_string(&path) {
@@ -768,6 +771,16 @@ pub fn upsert_runtime_profile_in_user_config(
             .insert(
                 "userDataDir".to_string(),
                 Value::String(user_data_dir.to_string()),
+            );
+    }
+
+    if let Some(browser_family) = browser_family {
+        profile_entry
+            .as_object_mut()
+            .expect("profile entry must be object")
+            .insert(
+                "browserFamily".to_string(),
+                Value::String(browser_family.to_string()),
             );
     }
 
@@ -922,6 +935,7 @@ pub struct Flags {
     pub session: String,
     pub default_runtime_profile: Option<String>,
     pub configured_runtime_profiles: HashMap<String, Option<String>>,
+    pub configured_runtime_profile_browser_families: HashMap<String, String>,
     pub manual_login_preferred_services: Vec<String>,
     pub configured_service_state: ServiceState,
     pub service_state: ServiceState,
@@ -1007,6 +1021,21 @@ pub fn parse_flags(args: &[String]) -> Flags {
                 .collect::<HashMap<_, _>>()
         })
         .unwrap_or_default();
+    let configured_runtime_profile_browser_families = config
+        .runtime_profiles
+        .as_ref()
+        .map(|profiles| {
+            profiles
+                .iter()
+                .filter_map(|(name, profile)| {
+                    profile
+                        .browser_family
+                        .as_ref()
+                        .map(|family| (name.clone(), family.clone()))
+                })
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
     let configured_service_state = config.service_state_snapshot();
     let service_state = service_state_from_store(configured_service_state.clone());
@@ -1069,6 +1098,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
             .unwrap_or_else(|| "default".to_string()),
         default_runtime_profile,
         configured_runtime_profiles,
+        configured_runtime_profile_browser_families,
         manual_login_preferred_services,
         configured_service_state,
         service_state,
@@ -2372,8 +2402,13 @@ mod tests {
         let guard = EnvGuard::new(&["HOME"]);
         guard.set("HOME", temp_home.to_str().unwrap());
 
-        let path = upsert_runtime_profile_in_user_config("work", Some("/tmp/work-user-data"), true)
-            .unwrap();
+        let path = upsert_runtime_profile_in_user_config(
+            "work",
+            Some("/tmp/work-user-data"),
+            true,
+            Some("chromium"),
+        )
+        .unwrap();
         let raw = std::fs::read_to_string(&path).unwrap();
         let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
 
@@ -2381,6 +2416,10 @@ mod tests {
         assert_eq!(
             value["runtimeProfiles"]["work"]["userDataDir"],
             "/tmp/work-user-data"
+        );
+        assert_eq!(
+            value["runtimeProfiles"]["work"]["browserFamily"],
+            "chromium"
         );
     }
 

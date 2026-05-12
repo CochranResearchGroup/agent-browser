@@ -4635,7 +4635,7 @@ Examples:
 agent-browser runtime - Manage persistent runtime profiles
 
 Usage:
-  agent-browser runtime create [name] [--set-default]
+  agent-browser runtime create [name] [--browser-family <family>] [--set-default]
   agent-browser runtime list
   agent-browser runtime status [name]
   agent-browser runtime login [url] [--attachable]
@@ -4657,6 +4657,10 @@ Locked profiles:
   Normal launch commands automatically reuse a selected managed runtime
   browser only when agent-browser runtime state shows a live PID and a
   reachable DevTools port.
+  Runtime profiles can be marked with browserFamily values such as chrome or
+  chromium. agent-browser refuses a mismatched resolved browser family by
+  default. Set AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true only when an
+  operator intentionally accepts the unsafe profile mix.
 
 Global Options:
   --json                        Output as JSON
@@ -4666,10 +4670,12 @@ Global Options:
   --executable-path <path>      Custom browser executable
   --headed                      Ignored for runtime login; manual login is always headed
   --attachable                  Keep DevTools enabled for runtime login so a later runtime attach can bind to the live browser; avoid for initial Google sign-in, sync, passkey, or plugin setup
+  --browser-family <family>     Mark a created runtime profile as chrome, chromium, brave, edge, or unknown
   --set-default                 Set a created runtime profile as default in user config
 
 Examples:
-  agent-browser runtime create work --set-default
+  agent-browser runtime create work --browser-family chrome --set-default
+  agent-browser runtime create canva-stealthcdp-chromium --browser-family chromium
   agent-browser runtime list
   agent-browser runtime status
   agent-browser --runtime-profile work runtime status
@@ -5063,6 +5069,8 @@ Environment:
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM state encryption
   AGENT_BROWSER_STATE_EXPIRE_DAYS Auto-delete states older than N days (default: 30)
   AGENT_BROWSER_EXECUTABLE_PATH  Custom browser executable path
+  AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH
+                                 Force an unsafe launch when a runtime profile browserFamily does not match the resolved executable family
   AGENT_BROWSER_EXTENSIONS       Comma-separated browser extension paths
   AGENT_BROWSER_HEADED           Show browser window (not headless)
   AGENT_BROWSER_JSON             JSON output

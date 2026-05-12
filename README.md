@@ -487,6 +487,7 @@ stable per-profile defaults and service-specific login hints.
   "runtimeProfiles": {
     "work": {
       "userDataDir": "~/.agent-browser/runtime-profiles/work/user-data",
+      "browserFamily": "chrome",
       "launch": {
         "headed": true,
         "leaveOpen": true,
@@ -533,7 +534,7 @@ stable per-profile defaults and service-specific login hints.
 ```
 
 Today, agent-browser applies the selected runtime profile's `userDataDir`,
-launch settings, auth session name, and service login hints. A service with
+browser family, launch settings, auth session name, and service login hints. A service with
 `manualLoginPreferred` emits an advisory warning when navigation targets known
 login hosts for that service, so agents can switch to detached `runtime login`.
 Use the attachable manual-login flow only for sites where DevTools during login
@@ -542,6 +543,14 @@ is accepted. Set `launch.leaveOpen` or pass `--leave-open` when you want
 down. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
 `960x640`, when a runtime profile should resize the browser content area after
 launch and before the requested command runs.
+
+Set `runtimeProfiles.<name>.browserFamily` to `chrome`, `chromium`, `brave`,
+`edge`, or `unknown` to bind a managed profile to the browser family that
+created it. agent-browser refuses a different resolved browser family by
+default because Chrome and Chromium profile directories are not safe to
+mix-and-match. Start with a blank profile for a new browser family. Operators
+can force an intentional mismatch by setting
+`AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true`.
 
 The `service.profiles` and `service.sessions` maps define service control-plane
 metadata for profile allocation, keyring posture, caller ownership, profile
@@ -761,8 +770,11 @@ login identity and let agent-browser select, queue, or reuse the managed
 profile.
 
 ```bash
-# Create and register a dedicated runtime profile
-agent-browser runtime create work --set-default
+# Create and register a dedicated Chrome runtime profile
+agent-browser runtime create work --browser-family chrome --set-default
+
+# Create a blank profile for patched Chromium instead of reusing a Chrome profile
+agent-browser runtime create canva-stealthcdp-chromium --browser-family chromium
 
 # Manual login for a dedicated runtime profile
 agent-browser --runtime-profile work runtime login https://app.example.com/login
@@ -971,6 +983,10 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--headed` | Show browser window (not headless). On Unix, agent-browser defaults `DISPLAY` to `:0.0` if `DISPLAY` is unset (or `AGENT_BROWSER_HEADED` env) |
 | `--cdp <port\|url>` | Connect via Chrome DevTools Protocol (port or WebSocket URL) |
 | `--auto-connect` | Auto-discover and connect to running Chrome (or `AGENT_BROWSER_AUTO_CONNECT` env) |
+
+`AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true` is an operator override for
+runtime profiles with `browserFamily` set. Use it only when intentionally
+mixing a profile with a different resolved browser family.
 | `--color-scheme <scheme>` | Color scheme: `dark`, `light`, `no-preference` (or `AGENT_BROWSER_COLOR_SCHEME` env) |
 | `--download-path <path>` | Default download directory (or `AGENT_BROWSER_DOWNLOAD_PATH` env) |
 | `--content-boundaries` | Wrap page output in boundary markers for LLM safety (or `AGENT_BROWSER_CONTENT_BOUNDARIES` env) |

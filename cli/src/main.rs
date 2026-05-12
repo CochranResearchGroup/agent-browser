@@ -454,6 +454,26 @@ fn selected_runtime_name(clean: &[String], flags: &Flags, positional_index: usiz
         .unwrap_or_else(runtime_profile::default_runtime_profile_name)
 }
 
+fn runtime_create_browser_family(clean: &[String]) -> Option<String> {
+    clean
+        .iter()
+        .position(|arg| arg == "--browser-family")
+        .and_then(|index| clean.get(index + 1))
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty() && !value.starts_with("--"))
+        .map(str::to_string)
+}
+
+fn validate_browser_family(value: &str) -> Result<(), String> {
+    match value {
+        "chrome" | "chromium" | "brave" | "edge" | "unknown" => Ok(()),
+        _ => Err(format!(
+            "Invalid browser family '{}'. Expected chrome, chromium, brave, edge, or unknown",
+            value
+        )),
+    }
+}
+
 fn live_runtime_status_for_flags(flags: &Flags) -> Option<RuntimeStatus> {
     let runtime_name = flags.runtime_profile.as_ref()?;
     let configured_user_data_dir = flags
@@ -492,6 +512,17 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
             let profile_root = runtime_profile::runtime_profile_root(&runtime_name)
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
             let set_default = clean.iter().any(|arg| arg == "--set-default");
+            let browser_family = runtime_create_browser_family(clean);
+            if let Some(family) = browser_family.as_deref() {
+                if let Err(e) = validate_browser_family(family) {
+                    if flags.json {
+                        print_json_error(e);
+                    } else {
+                        eprintln!("{} {}", color::error_indicator(), e);
+                    }
+                    exit(1);
+                }
+            }
 
             if let Err(e) = fs::create_dir_all(&user_data_dir) {
                 let msg = format!(
@@ -524,6 +555,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 &runtime_name,
                 Some(&user_data_dir),
                 set_default,
+                browser_family.as_deref(),
             ) {
                 Ok(config_path) => {
                     if flags.json {
@@ -533,10 +565,11 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                             "userDataDir": user_data_dir,
                             "configPath": config_path.display().to_string(),
                             "default": set_default,
+                            "browserFamily": browser_family,
                         }));
                     } else {
                         println!(
-                            "Runtime profile created\nName: {}\nUser data dir: {}\nConfig: {}{}",
+                            "Runtime profile created\nName: {}\nUser data dir: {}\nConfig: {}{}{}",
                             runtime_name,
                             user_data_dir,
                             config_path.display(),
@@ -544,7 +577,11 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                                 "\nDefault runtime profile: true"
                             } else {
                                 ""
-                            }
+                            },
+                            browser_family
+                                .as_ref()
+                                .map(|family| format!("\nBrowser family: {}", family))
+                                .unwrap_or_default()
                         );
                     }
                 }
@@ -614,6 +651,12 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 proxy_password,
                 profile: flags.profile.clone(),
                 runtime_profile: flags.runtime_profile.clone(),
+                expected_browser_family: flags.runtime_profile.as_ref().and_then(|name| {
+                    flags
+                        .configured_runtime_profile_browser_families
+                        .get(name)
+                        .cloned()
+                }),
                 args: Vec::new(),
                 allow_file_access: flags.allow_file_access,
                 extensions: if flags.extensions.is_empty() {
@@ -1962,6 +2005,15 @@ fn main() {
         }
         if let Some(ref runtime_profile) = flags.runtime_profile {
             cmd_obj.insert("runtimeProfile".to_string(), json!(runtime_profile));
+            if let Some(browser_family) = flags
+                .configured_runtime_profile_browser_families
+                .get(runtime_profile)
+            {
+                cmd_obj.insert(
+                    "runtimeProfileBrowserFamily".to_string(),
+                    json!(browser_family),
+                );
+            }
         }
 
         // Add state path if specified
