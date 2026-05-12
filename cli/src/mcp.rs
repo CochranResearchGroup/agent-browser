@@ -12938,21 +12938,26 @@ mod tests {
         let resource =
             read_service_mcp_resource_from_state(SITE_POLICIES_RESOURCE, &state).unwrap();
 
-        assert_eq!(resource["contents"]["count"], 3);
-        assert_eq!(resource["contents"]["sitePolicies"][0]["id"], "gmail");
-        assert_eq!(resource["contents"]["sitePolicies"][1]["id"], "google");
-        assert_eq!(resource["contents"]["sitePolicies"][2]["id"], "microsoft");
-        assert_eq!(resource["contents"]["sitePolicySources"][0]["id"], "gmail");
+        assert_eq!(resource["contents"]["count"], 4);
+        assert_eq!(resource["contents"]["sitePolicies"][0]["id"], "canva");
+        assert_eq!(resource["contents"]["sitePolicies"][1]["id"], "gmail");
+        assert_eq!(resource["contents"]["sitePolicies"][2]["id"], "google");
+        assert_eq!(resource["contents"]["sitePolicies"][3]["id"], "microsoft");
+        assert_eq!(resource["contents"]["sitePolicySources"][0]["id"], "canva");
         assert_eq!(
             resource["contents"]["sitePolicySources"][0]["source"],
             "builtin"
         );
         assert_eq!(
             resource["contents"]["sitePolicySources"][1]["source"],
-            "persisted_state"
+            "builtin"
         );
         assert_eq!(
             resource["contents"]["sitePolicySources"][2]["source"],
+            "persisted_state"
+        );
+        assert_eq!(
+            resource["contents"]["sitePolicySources"][3]["source"],
             "persisted_state"
         );
         assert_service_site_policy_record_contract(&resource["contents"]["sitePolicies"][0]);

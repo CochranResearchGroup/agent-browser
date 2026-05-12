@@ -5032,6 +5032,8 @@ mod tests {
             "targetServiceIds": [],
             "namingWarnings": [],
             "hasNamingWarning": false,
+            "controlPlaneMode": "cdp",
+            "lifecycleOnly": false,
             "target": "browser",
             "owner": "agent",
             "state": "cancelled",
