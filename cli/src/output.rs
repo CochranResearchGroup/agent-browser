@@ -4644,7 +4644,7 @@ Usage:
 Commands:
   create [name]         Create a named runtime profile and persist it to user config
   list                  Show configured and on-disk runtime profiles
-  status [name]         Show PID, profile path, DevTools details, and targets
+  status [name]         Show PID, profile path, DevTools reachability, and targets
   login [url]           Launch a detached headed browser for manual sign-in
   attach [name]         Bind the current automation session to a runtime profile
 
@@ -4655,7 +4655,8 @@ Locked profiles:
   the intended runtime profile. Use `--profile <path>` only for separate
   browser identities or unauthenticated throwaway work.
   Normal launch commands automatically reuse a selected managed runtime
-  browser when agent-browser runtime state shows a live PID and DevTools port.
+  browser only when agent-browser runtime state shows a live PID and a
+  reachable DevTools port.
 
 Global Options:
   --json                        Output as JSON

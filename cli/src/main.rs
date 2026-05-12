@@ -355,6 +355,7 @@ fn print_runtime_status(status: &RuntimeStatus, json_mode: bool) {
     }
     if let Some(port) = status.devtools_port {
         println!("DevTools port: {}", port);
+        println!("DevTools reachable: {}", status.devtools_reachable);
     }
     if let Some(ref ws_url) = status.ws_url {
         println!("CDP URL: {}", ws_url);
@@ -461,7 +462,8 @@ fn live_runtime_status_for_flags(flags: &Flags) -> Option<RuntimeStatus> {
         .and_then(|path| path.as_deref())
         .map(std::path::Path::new);
     let status = runtime_status_with_user_data_dir(runtime_name, configured_user_data_dir).ok()?;
-    (status.browser_alive && status.devtools_port.is_some()).then_some(status)
+    (status.browser_alive && status.devtools_port.is_some() && status.devtools_reachable)
+        .then_some(status)
 }
 
 fn run_runtime_command(clean: &[String], flags: &Flags) {

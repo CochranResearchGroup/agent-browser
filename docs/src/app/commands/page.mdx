@@ -710,7 +710,9 @@ service/session control or attach to the intended runtime profile. Use
 <code>--profile &lt;path&gt;</code> only for separate browser identities or
 unauthenticated throwaway work.
 Normal launch commands automatically reuse a selected managed runtime browser
-when agent-browser runtime state shows a live PID and DevTools port.
+when agent-browser runtime state shows a live PID and reachable DevTools port.
+<code>runtime status</code> reports <code>DevTools reachable</code> so stale
+runtime-state ports are visible before an attach attempt.
 
 ## Dashboard
 

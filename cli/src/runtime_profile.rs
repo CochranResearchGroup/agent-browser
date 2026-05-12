@@ -54,6 +54,8 @@ pub struct RuntimeStatus {
     pub headed: Option<bool>,
     pub launch_mode: Option<String>,
     pub devtools_port: Option<u16>,
+    /// True only when the recorded DevTools port answers the runtime target probe.
+    pub devtools_reachable: bool,
     pub ws_url: Option<String>,
     pub targets: Vec<RuntimeTarget>,
 }
@@ -252,13 +254,9 @@ pub fn runtime_status_with_user_data_dir(
         .and_then(|s| s.devtools_port)
         .or_else(|| read_devtools_port(&user_data_dir));
     let devtools_port = browser_alive.then_some(detected_devtools_port).flatten();
-    let targets = if browser_alive {
-        devtools_port
-            .and_then(|port| fetch_runtime_targets(port).ok())
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    let target_probe = devtools_port.and_then(|port| fetch_runtime_targets(port).ok());
+    let devtools_reachable = target_probe.is_some();
+    let targets = target_probe.unwrap_or_default();
 
     Ok(RuntimeStatus {
         runtime_profile: runtime_profile.to_string(),
@@ -269,6 +267,7 @@ pub fn runtime_status_with_user_data_dir(
         headed: state.as_ref().map(|s| s.headed),
         launch_mode: state.as_ref().map(|s| s.launch_mode.clone()),
         devtools_port,
+        devtools_reachable,
         ws_url: state.and_then(|s| s.ws_url),
         targets,
     })
@@ -624,6 +623,38 @@ mod tests {
             status.user_data_dir,
             configured_user_data_dir.display().to_string()
         );
+    }
+
+    #[test]
+    fn test_runtime_status_marks_unreachable_devtools_port() {
+        let runtime_profile = format!(
+            "testunreachable{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        );
+        let user_data_dir = env::temp_dir().join(format!("{}-user-data", runtime_profile));
+        let _ = clear_runtime_state(&runtime_profile);
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.clone(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: std::process::id(),
+            headed: true,
+            launch_mode: "automation".to_string(),
+            devtools_port: Some(9),
+            ws_url: Some("ws://127.0.0.1:9/devtools/browser/stale".to_string()),
+        })
+        .unwrap();
+
+        let status = runtime_status_with_user_data_dir(&runtime_profile, None).unwrap();
+
+        assert!(status.browser_alive);
+        assert_eq!(status.devtools_port, Some(9));
+        assert!(!status.devtools_reachable);
+        assert!(status.targets.is_empty());
+
+        let _ = clear_runtime_state(&runtime_profile);
     }
 
     #[test]
