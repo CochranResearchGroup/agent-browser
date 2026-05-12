@@ -340,7 +340,9 @@ monitor collections support `state`, failed-only, and summary filters; MCP
 `service-monitor-run-due-response.v1.schema.json` describes the immediate
 run summary returned by CLI `agent-browser service monitors run-due`, HTTP
 `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, and
-`runDueServiceMonitors()`.
+`runDueServiceMonitors()`. The response includes aggregate counts and a
+per-monitor `results` list with target, outcome, result string, check
+timestamp, and stale profile IDs affected by profile-readiness expiry.
 `service-monitor-state-response.v1.schema.json` describes the state update
 response returned by CLI `service monitors pause <id>` and
 `service monitors resume <id>`, plus the reviewed-failure reset returned by
@@ -442,7 +444,9 @@ and provider writes. Monitor mutation paths are HTTP
 MCP `service_monitor_upsert` and `service_monitor_delete`; they persist monitor
 definitions for the scheduler.
 `service-monitor-run-due-response.v1.schema.json` covers the immediate due
-monitor run summary returned by CLI, HTTP, MCP, and the service client helper.
+monitor run summary returned by CLI, HTTP, MCP, and the service client helper,
+including per-monitor results and stale profile IDs from profile-readiness
+expiry.
 `service-monitor-state-response.v1.schema.json` covers pause/resume state
 updates that preserve retained health history.
 

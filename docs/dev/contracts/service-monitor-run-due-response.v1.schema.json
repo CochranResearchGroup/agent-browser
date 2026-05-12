@@ -4,7 +4,7 @@
   "title": "agent-browser service monitor run-due response",
   "type": "object",
   "additionalProperties": true,
-  "required": ["checked", "succeeded", "failed", "monitorIds"],
+  "required": ["checked", "succeeded", "failed", "monitorIds", "results"],
   "properties": {
     "checked": {
       "type": "integer",
@@ -22,6 +22,47 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "monitorId",
+          "checkedAt",
+          "success",
+          "result",
+          "target",
+          "staleProfileIds"
+        ],
+        "properties": {
+          "monitorId": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "result": {
+            "type": "string"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "staleProfileIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     }
   }

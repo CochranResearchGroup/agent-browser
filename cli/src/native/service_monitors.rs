@@ -24,6 +24,18 @@ pub struct MonitorRunSummary {
     pub succeeded: usize,
     pub failed: usize,
     pub monitor_ids: Vec<String>,
+    pub results: Vec<MonitorRunResultSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitorRunResultSummary {
+    pub monitor_id: String,
+    pub checked_at: String,
+    pub success: bool,
+    pub result: String,
+    pub target: MonitorTarget,
+    pub stale_profile_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -129,6 +141,7 @@ where
             succeeded: 0,
             failed: 0,
             monitor_ids: Vec::new(),
+            results: Vec::new(),
         });
     }
 
@@ -370,6 +383,17 @@ fn summarize_results(results: &[MonitorProbeResult]) -> MonitorRunSummary {
         monitor_ids: results
             .iter()
             .map(|result| result.monitor_id.clone())
+            .collect(),
+        results: results
+            .iter()
+            .map(|result| MonitorRunResultSummary {
+                monitor_id: result.monitor_id.clone(),
+                checked_at: result.checked_at.clone(),
+                success: result.success,
+                result: result.result.clone(),
+                target: result.target.clone(),
+                stale_profile_ids: result.stale_profile_ids.clone(),
+            })
             .collect(),
     }
 }
@@ -634,6 +658,10 @@ mod tests {
         assert_eq!(summary.checked, 1);
         assert_eq!(summary.succeeded, 1);
         assert_eq!(summary.failed, 0);
+        assert_eq!(summary.results.len(), 1);
+        assert_eq!(summary.results[0].monitor_id, "tab-heartbeat");
+        assert_eq!(summary.results[0].result, "tab_ready");
+        assert!(summary.results[0].success);
         let monitor = &state.monitors["tab-heartbeat"];
         assert_eq!(monitor.state, MonitorState::Active);
         assert_eq!(monitor.last_result.as_deref(), Some("tab_ready"));
@@ -678,6 +706,10 @@ mod tests {
 
         assert_eq!(summary.checked, 1);
         assert_eq!(summary.failed, 1);
+        assert_eq!(summary.results.len(), 1);
+        assert_eq!(summary.results[0].monitor_id, "policy-heartbeat");
+        assert_eq!(summary.results[0].result, "site_policy_missing");
+        assert!(!summary.results[0].success);
         let monitor = &state.monitors["policy-heartbeat"];
         assert_eq!(monitor.state, MonitorState::Faulted);
         assert_eq!(monitor.last_result.as_deref(), Some("site_policy_missing"));
@@ -751,6 +783,10 @@ mod tests {
 
         assert_eq!(summary.checked, 1);
         assert_eq!(summary.failed, 1);
+        assert_eq!(
+            summary.results[0].stale_profile_ids,
+            vec!["journal-acs".to_string()]
+        );
         let monitor = &state.monitors["acs-freshness"];
         assert_eq!(monitor.state, MonitorState::Faulted);
         assert_eq!(

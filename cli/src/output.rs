@@ -1442,10 +1442,51 @@ fn format_service_monitors_run_due_text(data: &serde_json::Value) -> Option<Stri
     } else {
         monitor_ids.join(",")
     };
+    let result_lines = data
+        .get("results")
+        .and_then(|value| value.as_array())
+        .map(|results| {
+            results
+                .iter()
+                .filter_map(|result| {
+                    let monitor_id = result.get("monitorId").and_then(|value| value.as_str())?;
+                    let outcome = if result.get("success").and_then(|value| value.as_bool())
+                        == Some(true)
+                    {
+                        "ok"
+                    } else {
+                        "failed"
+                    };
+                    let result_text = result
+                        .get("result")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("unknown");
+                    let stale_profiles = result
+                        .get("staleProfileIds")
+                        .and_then(|value| value.as_array())
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(|value| value.as_str())
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        })
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or_else(|| "none".to_string());
+                    Some(format!(
+                        "  {monitor_id} {outcome} result={result_text} stale_profiles={stale_profiles}"
+                    ))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
 
-    Some(format!(
-        "Monitor run: checked={checked} succeeded={succeeded} failed={failed}\nMonitor IDs: {ids}"
-    ))
+    let mut lines = vec![
+        format!("Monitor run: checked={checked} succeeded={succeeded} failed={failed}"),
+        format!("Monitor IDs: {ids}"),
+    ];
+    lines.extend(result_lines);
+    Some(lines.join("\n"))
 }
 
 fn format_service_monitor_state_text(data: &serde_json::Value) -> Option<String> {
@@ -4231,7 +4272,7 @@ Notes:
   - service incidents --summary groups the current filtered incident set by escalation, severity, and state with recommended next actions, browserIds, monitorIds, and remedyApplyCommand when a batch apply remedy is supported.
   - Failed service monitors use monitor_attention escalation and include monitorIds plus reset commands in summary groups.
   - Monitor filters match --state and --failed before rendering; --summary adds state, failure, repeated-failure, never-checked, and latest-failure totals.
-  - service monitors run-due checks due active monitors immediately and updates retained health fields plus monitor incidents through the same runner as the scheduler.
+  - service monitors run-due checks due active monitors immediately, returns per-monitor results, and updates retained health fields plus monitor incidents through the same runner as the scheduler.
   - profile_readiness monitor targets check retained no-launch target readiness, mark expired fresh rows stale, and remove the expired target from authenticatedServiceIds without launching Chrome.
   - Software clients can use upsertServiceProfileReadinessMonitor() for the standard profile_readiness monitor recipe when registering recurring managed login profiles.
   - service monitors pause and service monitors resume update only the retained monitor state, preserving health history for later triage.
@@ -5601,14 +5642,32 @@ mod tests {
             "checked": 2,
             "succeeded": 1,
             "failed": 1,
-            "monitorIds": ["google-login", "github-heartbeat"]
+            "monitorIds": ["google-login", "github-heartbeat"],
+            "results": [
+                {
+                    "monitorId": "google-login",
+                    "checkedAt": "2026-05-07T00:00:00Z",
+                    "success": false,
+                    "result": "profile_readiness_expired",
+                    "target": { "profile_readiness": "google" },
+                    "staleProfileIds": ["work-google"]
+                },
+                {
+                    "monitorId": "github-heartbeat",
+                    "checkedAt": "2026-05-07T00:00:00Z",
+                    "success": true,
+                    "result": "http_200",
+                    "target": { "url": "https://github.com/" },
+                    "staleProfileIds": []
+                }
+            ]
         });
 
         let rendered = format_service_monitors_run_due_text(&data).unwrap();
 
         assert_eq!(
             rendered,
-            "Monitor run: checked=2 succeeded=1 failed=1\nMonitor IDs: google-login,github-heartbeat"
+            "Monitor run: checked=2 succeeded=1 failed=1\nMonitor IDs: google-login,github-heartbeat\n  google-login failed result=profile_readiness_expired stale_profiles=work-google\n  github-heartbeat ok result=http_200 stale_profiles=none"
         );
     }
 

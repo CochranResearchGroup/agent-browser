@@ -7229,6 +7229,7 @@ async fn handle_service_monitors_run_due(_cmd: &Value) -> Result<Value, String> 
         "succeeded": summary.succeeded,
         "failed": summary.failed,
         "monitorIds": summary.monitor_ids,
+        "results": summary.results,
     }))
 }
 

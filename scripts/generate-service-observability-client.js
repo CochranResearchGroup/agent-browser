@@ -645,11 +645,22 @@ export interface ServiceMonitorDeleteResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceMonitorRunDueResult {
+  monitorId: string;
+  checkedAt: string;
+  success: boolean;
+  result: string;
+  target: Record<string, string>;
+  staleProfileIds: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceMonitorRunDueResponse {
   checked: number;
   succeeded: number;
   failed: number;
   monitorIds: string[];
+  results: ServiceMonitorRunDueResult[];
   [key: string]: unknown;
 }
 

@@ -685,6 +685,16 @@ function createMockFetch({
         succeeded: 1,
         failed: 0,
         monitorIds: ['canvacli-canva-profile-readiness'],
+        results: [
+          {
+            monitorId: 'canvacli-canva-profile-readiness',
+            checkedAt: '2026-05-10T00:00:00Z',
+            success: true,
+            result: 'profile_readiness_fresh',
+            target: { profile_readiness: 'canva' },
+            staleProfileIds: [],
+          },
+        ],
       });
     }
 

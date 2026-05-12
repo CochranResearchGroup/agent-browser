@@ -270,6 +270,16 @@ function createBrokerFirstFetch({
         succeeded: 1,
         failed: 0,
         monitorIds: ['journaldownloader-example-profile-readiness'],
+        results: [
+          {
+            monitorId: 'journaldownloader-example-profile-readiness',
+            checkedAt: '2026-05-10T00:00:00Z',
+            success: true,
+            result: 'profile_readiness_fresh',
+            target: { profile_readiness: 'acs' },
+            staleProfileIds: [],
+          },
+        ],
       });
     }
 

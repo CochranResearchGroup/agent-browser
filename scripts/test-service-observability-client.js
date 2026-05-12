@@ -311,6 +311,16 @@ async function main() {
       succeeded: 0,
       failed: 1,
       monitorIds: ['google-login-freshness'],
+      results: [
+        {
+          monitorId: 'google-login-freshness',
+          checkedAt: '2026-05-07T00:00:00Z',
+          success: false,
+          result: 'profile_readiness_expired',
+          target: { profile_readiness: 'google' },
+          staleProfileIds: ['journal-google'],
+        },
+      ],
     },
   });
   const monitorRunDueResult = await runDueServiceMonitors({
@@ -323,6 +333,8 @@ async function main() {
   );
   assert.equal(monitorRunDue.calls[0].init.method, 'POST');
   assert.equal(monitorRunDueResult.failed, 1);
+  assert.equal(monitorRunDueResult.results[0].monitorId, 'google-login-freshness');
+  assert.deepEqual(monitorRunDueResult.results[0].staleProfileIds, ['journal-google']);
 
   const accessPlanMonitorRunDue = createFetchRecorder({
     success: true,
