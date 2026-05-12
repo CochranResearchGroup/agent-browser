@@ -4286,7 +4286,7 @@ Notes:
   - Incident lookup returns the matching retained incident together with expanded related events and jobs.
   - Incident activity returns a normalized chronological timeline for one retained incident.
   - Trace returns related events, jobs, incidents, normalized activity, profile lease wait summaries, and compact service, agent, task, browser, profile, session, target identity, control-plane mode, and lifecycle-only ownership in one response.
-  - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, failureClass, processExitCause for process exits, retry-budget details, and recovery policy source metadata.
+  - Crash recovery traces expose browser_health_changed, browser_recovery_started, and browser_health_changed events in order, including structured reason, failureClass, processExitCause for process exits, browserStderrLogPath for locally owned Chrome crash evidence when captured, retry-budget details, and recovery policy source metadata.
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.

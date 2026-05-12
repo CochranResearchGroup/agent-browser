@@ -848,6 +848,13 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
     }
 
     if !mgr.is_connection_alive().await {
+        let mut details = json!({
+            "cdpProbe": "Browser.getVersion",
+            "cdpEndpoint": mgr.get_cdp_url(),
+        });
+        if let Some(path) = mgr.browser_stderr_log_path() {
+            details["browserStderrLogPath"] = json!(path.to_string_lossy().to_string());
+        }
         return BrowserStaleState {
             needs_launch: true,
             health: Some(ServiceBrowserHealth::CdpDisconnected),
@@ -856,10 +863,7 @@ async fn detect_browser_stale_state(state: &mut DaemonState) -> BrowserStaleStat
                 "Active browser CDP connection is not responding: {}",
                 mgr.get_cdp_url()
             )),
-            event_details: Some(json!({
-                "cdpProbe": "Browser.getVersion",
-                "cdpEndpoint": mgr.get_cdp_url(),
-            })),
+            event_details: Some(details),
         };
     }
 
@@ -886,6 +890,9 @@ fn process_exit_observation_details(exit: &ProcessExitObservation) -> Value {
     }
     if let Some(error) = exit.poll_error.as_deref() {
         details["processExitPollError"] = json!(error);
+    }
+    if let Some(path) = exit.stderr_log_path.as_deref() {
+        details["browserStderrLogPath"] = json!(path.to_string_lossy().to_string());
     }
     details
 }
@@ -15476,6 +15483,9 @@ mod tests {
             #[cfg(unix)]
             signal: Some(9),
             poll_error: None,
+            stderr_log_path: Some(PathBuf::from(
+                "/home/user/.agent-browser/tmp/chrome-launches/chrome-1234.stderr.log",
+            )),
         };
 
         let details = process_exit_observation_details(&observation);
@@ -15485,6 +15495,10 @@ mod tests {
         assert_eq!(details["processExitCode"], 137);
         #[cfg(unix)]
         assert_eq!(details["processExitSignal"], 9);
+        assert_eq!(
+            details["browserStderrLogPath"],
+            "/home/user/.agent-browser/tmp/chrome-launches/chrome-1234.stderr.log"
+        );
     }
 
     #[test]

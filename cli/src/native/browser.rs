@@ -284,6 +284,13 @@ impl BrowserProcess {
             BrowserProcess::Lightpanda(_) => None,
         }
     }
+
+    pub fn stderr_log_path(&self) -> Option<&Path> {
+        match self {
+            BrowserProcess::Chrome(p) => p.stderr_log_path(),
+            BrowserProcess::Lightpanda(_) => None,
+        }
+    }
 }
 
 pub struct BrowserManager {
@@ -1483,6 +1490,12 @@ impl BrowserManager {
         self.browser_process
             .as_ref()
             .and_then(|p| p.user_data_dir())
+    }
+
+    pub fn browser_stderr_log_path(&self) -> Option<&Path> {
+        self.browser_process
+            .as_ref()
+            .and_then(|p| p.stderr_log_path())
     }
 
     pub fn visited_origins(&self) -> &HashSet<String> {

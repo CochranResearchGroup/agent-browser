@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -13,6 +14,8 @@ use crate::runtime_profile::{
 };
 
 use super::discovery::discover_cdp_url;
+
+const MAX_CHROME_STDERR_LINES: usize = 80;
 
 fn set_private_dir_permissions(path: &Path) {
     #[cfg(unix)]
@@ -46,6 +49,8 @@ pub struct ChromeProcess {
     temp_user_data_dir: Option<PathBuf>,
     user_data_dir: PathBuf,
     runtime_profile: Option<String>,
+    stderr_log_path: Option<PathBuf>,
+    stderr_drainer: Option<std::thread::JoinHandle<()>>,
     /// On Unix, the process group ID used to kill the entire Chrome process tree.
     #[cfg(unix)]
     pgid: Option<i32>,
@@ -68,6 +73,43 @@ pub struct ProcessExitObservation {
     #[cfg(unix)]
     pub signal: Option<i32>,
     pub poll_error: Option<String>,
+    pub stderr_log_path: Option<PathBuf>,
+}
+
+#[derive(Clone, Default)]
+struct ChromeStderrLogBuffer {
+    stderr: Arc<Mutex<VecDeque<String>>>,
+}
+
+impl ChromeStderrLogBuffer {
+    fn push_stderr(&self, line: String) {
+        let mut guard = self
+            .stderr
+            .lock()
+            .expect("Chrome stderr log buffer poisoned");
+        if guard.len() >= MAX_CHROME_STDERR_LINES {
+            guard.pop_front();
+        }
+        guard.push_back(line);
+    }
+
+    fn snapshot_stderr(&self) -> Vec<String> {
+        self.stderr
+            .lock()
+            .expect("Chrome stderr log buffer poisoned")
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    fn devtools_ws_url(&self) -> Option<String> {
+        const PREFIX: &str = "DevTools listening on ";
+        self.stderr
+            .lock()
+            .expect("Chrome stderr log buffer poisoned")
+            .iter()
+            .find_map(|line| line.strip_prefix(PREFIX).map(|url| url.trim().to_string()))
+    }
 }
 
 impl ChromeProcess {
@@ -142,6 +184,12 @@ impl ChromeProcess {
         outcome
     }
 
+    fn join_stderr_drainer(&mut self) {
+        if let Some(handle) = self.stderr_drainer.take() {
+            let _ = handle.join();
+        }
+    }
+
     /// Returns the OS process ID of the Chrome child process.
     pub fn id(&self) -> u32 {
         self.child.id()
@@ -155,6 +203,10 @@ impl ChromeProcess {
         self.runtime_profile.as_deref()
     }
 
+    pub fn stderr_log_path(&self) -> Option<&Path> {
+        self.stderr_log_path.as_deref()
+    }
+
     /// Non-blocking check whether Chrome has exited and capture observable exit evidence.
     pub fn poll_exit(&mut self) -> Option<ProcessExitObservation> {
         let pid = self.child.id();
@@ -165,6 +217,7 @@ impl ChromeProcess {
                 #[cfg(unix)]
                 signal: status.signal(),
                 poll_error: None,
+                stderr_log_path: self.stderr_log_path.clone(),
             }),
             Ok(None) => None,
             Err(err) => Some(ProcessExitObservation {
@@ -173,6 +226,7 @@ impl ChromeProcess {
                 #[cfg(unix)]
                 signal: None,
                 poll_error: Some(err.to_string()),
+                stderr_log_path: self.stderr_log_path.clone(),
             }),
         }
     }
@@ -221,6 +275,7 @@ impl ChromeProcess {
 impl Drop for ChromeProcess {
     fn drop(&mut self) {
         self.kill();
+        self.join_stderr_drainer();
         if let Some(ref dir) = self.temp_user_data_dir {
             for attempt in 0..3 {
                 match std::fs::remove_dir_all(dir) {
@@ -848,35 +903,37 @@ fn try_launch_chrome(
         cleanup_temp_dir(&temp_user_data_dir);
         format!("Failed to launch Chrome at {:?}: {}", chrome_path, e)
     })?;
+    let requested_stderr_log_path = chrome_stderr_log_path(child.id());
+    let (stderr_logs, stderr_drainer, stderr_log_path) =
+        match start_chrome_stderr_drainer(&mut child, requested_stderr_log_path) {
+            Ok(drainer) => drainer,
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                cleanup_temp_dir(&temp_user_data_dir);
+                return Err(e);
+            }
+        };
 
     // Shared overall deadline so we don't double-wait (poll + stderr fallback).
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
 
-    // Primary path: use DevToolsActivePort written into user-data-dir.
-    // This is more reliable on Windows than scraping stderr for "DevTools listening on ...",
-    // which can be missing/empty depending on how Chrome is launched.
+    // Prefer DevToolsActivePort, but also watch the drained stderr buffer for
+    // platforms that only emit "DevTools listening on ...".
     let ws_url = if remote_debugging {
-        match wait_for_devtools_active_port(&mut child, &user_data_dir, deadline) {
+        match wait_for_devtools_endpoint(
+            &mut child,
+            &user_data_dir,
+            &stderr_logs,
+            stderr_log_path.as_deref(),
+            deadline,
+        ) {
             Ok(url) => url,
-            Err(primary_err) => {
-                // Fallback: scrape stderr (legacy behavior) for better diagnostics.
-                let stderr = child.stderr.take().ok_or_else(|| {
-                    let _ = child.kill();
-                    cleanup_temp_dir(&temp_user_data_dir);
-                    "Failed to capture Chrome stderr".to_string()
-                })?;
-                let reader = BufReader::new(stderr);
-                match wait_for_ws_url_until(reader, deadline) {
-                    Ok(url) => url,
-                    Err(fallback_err) => {
-                        let _ = child.kill();
-                        cleanup_temp_dir(&temp_user_data_dir);
-                        return Err(format!(
-                            "{}\n(also tried parsing stderr) {}",
-                            primary_err, fallback_err
-                        ));
-                    }
-                }
+            Err(err) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                cleanup_temp_dir(&temp_user_data_dir);
+                return Err(err);
             }
         }
     } else {
@@ -921,6 +978,8 @@ fn try_launch_chrome(
         temp_user_data_dir,
         user_data_dir,
         runtime_profile,
+        stderr_log_path,
+        stderr_drainer: Some(stderr_drainer),
         #[cfg(unix)]
         pgid,
     })
@@ -930,24 +989,124 @@ fn ws_debug_port(ws_url: &str) -> Option<u16> {
     url::Url::parse(ws_url).ok()?.port_or_known_default()
 }
 
+fn chrome_stderr_log_path(pid: u32) -> Option<PathBuf> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis();
+    let dir = dirs::home_dir()?
+        .join(".agent-browser")
+        .join("tmp")
+        .join("chrome-launches");
+    if std::fs::create_dir_all(&dir).is_err() {
+        return None;
+    }
+    Some(dir.join(format!("chrome-{}-{}.stderr.log", pid, timestamp)))
+}
+
+fn start_chrome_stderr_drainer(
+    child: &mut Child,
+    stderr_log_path: Option<PathBuf>,
+) -> Result<
+    (
+        ChromeStderrLogBuffer,
+        std::thread::JoinHandle<()>,
+        Option<PathBuf>,
+    ),
+    String,
+> {
+    let stderr = child.stderr.take().ok_or_else(|| {
+        let _ = child.kill();
+        "Failed to capture Chrome stderr".to_string()
+    })?;
+
+    let (log_file, actual_stderr_log_path) = match stderr_log_path {
+        Some(path) => match open_chrome_stderr_log(&path) {
+            Ok(file) => (Some(file), Some(path)),
+            Err(_) => (None, None),
+        },
+        None => (None, None),
+    };
+    let logs = ChromeStderrLogBuffer::default();
+    let drainer_logs = logs.clone();
+    let handle = std::thread::spawn(move || {
+        drain_chrome_stderr(stderr, log_file, move |line| drainer_logs.push_stderr(line));
+    });
+
+    Ok((logs, handle, actual_stderr_log_path))
+}
+
+fn open_chrome_stderr_log(path: &Path) -> std::io::Result<std::fs::File> {
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(file)
+}
+
+fn drain_chrome_stderr<R, F>(reader: R, mut log_file: Option<std::fs::File>, mut push: F)
+where
+    R: std::io::Read,
+    F: FnMut(String),
+{
+    for line in BufReader::new(reader).lines() {
+        match line {
+            Ok(line) => {
+                if let Some(file) = log_file.as_mut() {
+                    let _ = writeln!(file, "{}", line);
+                }
+                push(line);
+            }
+            Err(_) => break,
+        }
+    }
+}
+
 fn wait_for_devtools_active_port(
     child: &mut Child,
     user_data_dir: &Path,
+    deadline: std::time::Instant,
+) -> Result<String, String> {
+    wait_for_devtools_endpoint(
+        child,
+        user_data_dir,
+        &ChromeStderrLogBuffer::default(),
+        None,
+        deadline,
+    )
+}
+
+fn wait_for_devtools_endpoint(
+    child: &mut Child,
+    user_data_dir: &Path,
+    stderr_logs: &ChromeStderrLogBuffer,
+    stderr_log_path: Option<&Path>,
     deadline: std::time::Instant,
 ) -> Result<String, String> {
     let poll_interval = Duration::from_millis(50);
 
     while std::time::Instant::now() <= deadline {
         if let Ok(Some(status)) = child.try_wait() {
+            std::thread::sleep(Duration::from_millis(25));
             // Chrome exited before writing DevToolsActivePort -- report the
             // exit code so the caller can surface it alongside stderr output.
             let code = status
                 .code()
                 .map(|c| format!("{}", c))
                 .unwrap_or_else(|| "unknown".to_string());
-            return Err(format!(
-                "Chrome exited early (exit code: {}) without writing DevToolsActivePort",
-                code
+            return Err(chrome_launch_error(
+                &format!(
+                    "Chrome exited early (exit code: {}) without exposing DevTools",
+                    code
+                ),
+                &stderr_logs.snapshot_stderr(),
+                stderr_log_path,
             ));
         }
 
@@ -962,40 +1121,28 @@ fn wait_for_devtools_active_port(
             }
         }
 
+        if let Some(ws_url) = stderr_logs.devtools_ws_url() {
+            return Ok(ws_url);
+        }
+
         std::thread::sleep(poll_interval);
     }
 
-    Err("Timeout waiting for DevToolsActivePort".to_string())
-}
-
-fn wait_for_ws_url_until(
-    reader: BufReader<std::process::ChildStderr>,
-    deadline: std::time::Instant,
-) -> Result<String, String> {
-    let prefix = "DevTools listening on ";
-    let mut stderr_lines: Vec<String> = Vec::new();
-
-    for line in reader.lines() {
-        if std::time::Instant::now() > deadline {
-            return Err(chrome_launch_error(
-                "Timeout waiting for Chrome DevTools URL",
-                &stderr_lines,
-            ));
-        }
-        let line = line.map_err(|e| format!("Failed to read Chrome stderr: {}", e))?;
-        if let Some(url) = line.strip_prefix(prefix) {
-            return Ok(url.trim().to_string());
-        }
-        stderr_lines.push(line);
-    }
-
     Err(chrome_launch_error(
-        "Chrome exited before providing DevTools URL",
-        &stderr_lines,
+        "Timeout waiting for Chrome DevTools endpoint",
+        &stderr_logs.snapshot_stderr(),
+        stderr_log_path,
     ))
 }
 
-fn chrome_launch_error(message: &str, stderr_lines: &[String]) -> String {
+fn chrome_launch_error(
+    message: &str,
+    stderr_lines: &[String],
+    stderr_log_path: Option<&Path>,
+) -> String {
+    let log_hint = stderr_log_path
+        .map(|path| format!("\nChrome stderr log: {}", path.display()))
+        .unwrap_or_default();
     let relevant: Vec<&String> = stderr_lines
         .iter()
         .filter(|l| {
@@ -1014,14 +1161,16 @@ fn chrome_launch_error(message: &str, stderr_lines: &[String]) -> String {
     if relevant.is_empty() {
         if stderr_lines.is_empty() {
             return format!(
-                "{} (no stderr output from Chrome)\nHint: try passing --args \"--no-sandbox\" if Chrome crashes silently in your environment",
-                message
+                "{} (no stderr output from Chrome){}\nHint: try passing --args \"--no-sandbox\" if Chrome crashes silently in your environment",
+                message,
+                log_hint
             );
         }
         let last_lines: Vec<&String> = stderr_lines.iter().rev().take(5).collect();
         return format!(
-            "{}\nChrome stderr (last {} lines):\n  {}",
+            "{}{}\nChrome stderr (last {} lines):\n  {}",
             message,
+            log_hint,
             last_lines.len(),
             last_lines
                 .into_iter()
@@ -1042,8 +1191,9 @@ fn chrome_launch_error(message: &str, stderr_lines: &[String]) -> String {
     };
 
     format!(
-        "{}\nChrome stderr:\n  {}{}",
+        "{}{}\nChrome stderr:\n  {}{}",
         message,
+        log_hint,
         relevant
             .iter()
             .map(|s| s.as_str())
@@ -1796,7 +1946,7 @@ mod tests {
 
     #[test]
     fn test_chrome_launch_error_no_stderr() {
-        let msg = chrome_launch_error("Chrome exited", &[]);
+        let msg = chrome_launch_error("Chrome exited", &[], None);
         assert!(msg.contains("no stderr output"));
         assert!(msg.contains("Hint:"));
         assert!(msg.contains("--no-sandbox"));
@@ -1808,7 +1958,7 @@ mod tests {
             "some log line".to_string(),
             "Failed to move to new namespace: sandbox error".to_string(),
         ];
-        let msg = chrome_launch_error("Chrome exited", &lines);
+        let msg = chrome_launch_error("Chrome exited", &lines, None);
         assert!(msg.contains("sandbox error"));
         assert!(msg.contains("Hint:"));
         assert!(msg.contains("--no-sandbox"));
@@ -1817,8 +1967,15 @@ mod tests {
     #[test]
     fn test_chrome_launch_error_generic() {
         let lines = vec!["info line".to_string(), "another info line".to_string()];
-        let msg = chrome_launch_error("Chrome exited", &lines);
+        let msg = chrome_launch_error("Chrome exited", &lines, None);
         assert!(msg.contains("last 2 lines"));
+    }
+
+    #[test]
+    fn test_chrome_launch_error_includes_stderr_log_path() {
+        let path = PathBuf::from("/tmp/agent-browser/chrome.stderr.log");
+        let msg = chrome_launch_error("Chrome exited", &[], Some(&path));
+        assert!(msg.contains("Chrome stderr log: /tmp/agent-browser/chrome.stderr.log"));
     }
 
     #[test]
@@ -2155,6 +2312,8 @@ mod tests {
                 temp_user_data_dir: Some(dir.clone()),
                 user_data_dir: dir.clone(),
                 runtime_profile: None,
+                stderr_log_path: None,
+                stderr_drainer: None,
                 #[cfg(unix)]
                 pgid: None,
             };

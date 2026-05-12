@@ -487,3 +487,15 @@ Recommended next step: instrument agent-browser's Chrome launch path to write a
 per-launch browser stderr log and record child exit status as soon as the child
 can be reaped. Without that, Chromium-side tracing has to reconstruct too much
 from service-state symptoms and transient DevTools refusal.
+
+## 2026-05-12 Agent-Browser Diagnostic Follow-Up
+
+agent-browser now drains locally owned Chrome stderr into per-launch logs under
+`~/.agent-browser/tmp/chrome-launches/`. Launch failures include the log path in
+the error text, process-exit health events include `browserStderrLogPath` when
+available, and CDP-disconnect health events include the same path for locally
+owned Chrome processes.
+
+This does not prove the stealth Chromium crash root cause. It gives the
+Chromium patch agent a stable first artifact to request from future service-path
+repros before moving to minidumps or symbolized Chromium traces.
