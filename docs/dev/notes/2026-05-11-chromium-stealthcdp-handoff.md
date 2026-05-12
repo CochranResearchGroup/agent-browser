@@ -224,6 +224,44 @@ Interpretation:
 - Canva should continue to prefer `cdp_free_headed` until a CDP-backed headed
   smoke can both load the page and survive queued follow-up reads.
 
+### Post-Reachability-Gate Rerun
+
+After commit `321c13b` added `runtime status` `DevTools reachable` reporting
+and gated managed-runtime auto-attach on reachable DevTools, reran the same
+headed smoke with an isolated socket:
+
+```bash
+AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+AGENT_BROWSER_SOCKET_DIR=/tmp/agent-browser-canva-stealth-smoke-1778610500
+AGENT_BROWSER_SESSION=canva-stealth-smoke
+cargo run --manifest-path cli/Cargo.toml -- \
+  --runtime-profile canva-preview --headed open https://www.canva.com
+```
+
+Result:
+
+- `open` again loaded `Canva: Visual Suite for Everyone` at
+  `https://www.canva.com/`.
+- Immediate `runtime status` showed `Browser alive: true` and
+  `DevTools reachable: true`.
+- The follow-up `eval` still failed because the browser exited between the
+  status probe and the queued read.
+- A later `runtime status` showed `Browser alive: false`.
+- `service browsers` recorded `session:canva-stealth-smoke` as
+  `health=process_exited`, `failure=browser_process_exited`, and
+  `exit_cause=unexpected_process_exit` for PID `427283`.
+- `service events --kind browser_health_changed` recorded the transition from
+  `Ready` to `ProcessExited`.
+
+Interpretation:
+
+- The durable service health surface now classifies the Canva headed stealth
+  crash instead of leaving only a refused CDP port for operators to interpret.
+- The direct command error is still low-level CDP discovery text. A future UX
+  improvement should translate this race into an immediate browser
+  process-exited error when the daemon can observe the PID exit during command
+  dispatch.
+
 ## Service-Mode Notes
 
 This patchset should not change the service policy semantics for sites that
