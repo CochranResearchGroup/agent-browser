@@ -562,6 +562,7 @@ impl ServiceLaunchMetadata {
                     .is_some()
                     .then_some(ProfileSelectionReason::ExplicitProfile)
             }),
+            browser_stderr_log_path: None,
         }
     }
 }
@@ -622,11 +623,22 @@ fn persist_current_browser_health(
     health: ServiceBrowserHealth,
     metadata: Option<ServiceLaunchMetadata>,
 ) {
-    let (pid, cdp_endpoint) = state
+    let (pid, cdp_endpoint, browser_stderr_log_path) = state
         .browser
         .as_ref()
-        .map(|mgr| (mgr.browser_pid(), Some(mgr.get_cdp_url().to_string())))
-        .unwrap_or((None, None));
+        .map(|mgr| {
+            (
+                mgr.browser_pid(),
+                Some(mgr.get_cdp_url().to_string()),
+                mgr.browser_stderr_log_path()
+                    .map(|path| path.to_string_lossy().to_string()),
+            )
+        })
+        .unwrap_or((None, None, None));
+    let metadata = metadata.map(|mut metadata| {
+        metadata.browser_stderr_log_path = browser_stderr_log_path;
+        metadata
+    });
     persist_service_browser_record(
         &state.session_id,
         host,
@@ -14752,6 +14764,7 @@ mod tests {
                 task_name: Some("probe-acs-website".to_string()),
                 cleanup: SessionCleanupPolicy::Detach,
                 profile_selection_reason: Some(ProfileSelectionReason::ExplicitProfile),
+                browser_stderr_log_path: None,
             }),
         )
         .unwrap();

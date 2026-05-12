@@ -499,3 +499,47 @@ owned Chrome processes.
 This does not prove the stealth Chromium crash root cause. It gives the
 Chromium patch agent a stable first artifact to request from future service-path
 repros before moving to minidumps or symbolized Chromium traces.
+
+## 2026-05-12 Service-Path Rerun With Stderr Logs
+
+After rebuilding the repo-local `cli/target/debug/agent-browser` binary, reran
+the headed Canva service-path repro with:
+
+```text
+AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+AGENT_BROWSER_SOCKET_DIR=/tmp/agent-browser-canva-stderr-1778616778/socket
+AGENT_BROWSER_SESSION=canva-stealth-stderr-repro
+./cli/target/debug/agent-browser --runtime-profile canva-preview --headed open https://www.canva.com/
+```
+
+Result:
+
+- Canva loaded successfully at `https://www.canva.com/` with title
+  `Canva: Visual Suite for Everyone`.
+- Immediate and 20 second `runtime status` checks showed PID `788655`, port
+  `37653`, `Browser alive: true`, and `DevTools reachable: true`.
+- A later same-shape `get title` failed with connection refused for
+  `/json/version`, `/json/list`, and
+  `ws://127.0.0.1:37653/devtools/browser`.
+- A follow-up `eval navigator.webdriver` returned `false`, but it launched a
+  replacement headed browser, PID `791421`, port `38381`, against the same
+  profile and session.
+- The repro artifact is
+  `/tmp/agent-browser-canva-stderr-1778616778/repro.log`.
+- Chrome stderr artifacts were created:
+  `/home/ecochran76/.agent-browser/tmp/chrome-launches/chrome-788655-1778616778479.stderr.log`
+  and
+  `/home/ecochran76/.agent-browser/tmp/chrome-launches/chrome-791421-1778616809402.stderr.log`.
+- The stderr logs captured normal DevTools startup plus GPU command-buffer,
+  UPower DBus, new-tab profile-type, GCM deprecated endpoint, and `waitpid` no
+  child process messages. They did not show a symbolized Chromium crash.
+
+Additional agent-browser finding:
+
+- The `get title` CDP refusal did not append a `cdp_disconnected` health event
+  before the replacement launch. That means service trace could show the
+  successful launch and later replacement launch without a durable failure
+  transition in between.
+- Follow-up implementation now includes `browserStderrLogPath` on
+  `browser_launch_recorded` details as well as failure events, so future traces
+  can point to the launch artifact even when the failure transition is missed.

@@ -21,6 +21,7 @@ pub(crate) struct ServiceLaunchMetadata {
     pub(crate) task_name: Option<String>,
     pub(crate) cleanup: SessionCleanupPolicy,
     pub(crate) profile_selection_reason: Option<ProfileSelectionReason>,
+    pub(crate) browser_stderr_log_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -498,6 +499,7 @@ mod tests {
             task_name: Some("probe-acs-website".to_string()),
             cleanup: SessionCleanupPolicy::Detach,
             profile_selection_reason: Some(ProfileSelectionReason::ExplicitProfile),
+            browser_stderr_log_path: None,
         };
 
         upsert_service_profile_and_session(

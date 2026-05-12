@@ -447,7 +447,7 @@ pub fn persist_service_browser_record_in_repository(
         };
         let observation_details = browser_health_observation_details(&browser, None);
         apply_browser_health_observation(&mut browser, Some(&observation_details));
-        let metadata_changed = if let Some(metadata) = metadata {
+        let metadata_changed = if let Some(metadata) = metadata.as_ref() {
             let previous_profile = profile_id
                 .as_ref()
                 .and_then(|profile_id| service_state.profiles.get(profile_id).cloned());
@@ -456,7 +456,7 @@ pub fn persist_service_browser_record_in_repository(
                 service_state,
                 session_id,
                 profile_id.clone(),
-                &metadata,
+                metadata,
             );
             let current_profile = profile_id
                 .as_ref()
@@ -468,7 +468,13 @@ pub fn persist_service_browser_record_in_repository(
         };
         record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
         if metadata_changed {
-            record_browser_launch_recorded_event(service_state, &id, previous.as_ref(), &browser);
+            record_browser_launch_recorded_event(
+                service_state,
+                &id,
+                previous.as_ref(),
+                &browser,
+                metadata.as_ref(),
+            );
         }
         service_state.browsers.insert(id, browser);
         Ok(())
@@ -1407,6 +1413,7 @@ pub fn record_browser_launch_recorded_event(
     browser_id: &str,
     previous: Option<&BrowserProcess>,
     current: &BrowserProcess,
+    metadata: Option<&ServiceLaunchMetadata>,
 ) {
     let profile_selection_reason = current
         .active_session_ids
@@ -1424,25 +1431,29 @@ pub fn record_browser_launch_recorded_event(
         .and_then(|session_id| state.sessions.get(session_id))
         .map(|session| session.profile_lease_conflict_session_ids.clone())
         .unwrap_or_default();
+    let mut details = serde_json::json!({
+        "previousProfileId": previous.and_then(|browser| browser.profile_id.clone()),
+        "currentProfileId": current.profile_id,
+        "previousSessionIds": previous
+            .map(|browser| browser.active_session_ids.clone())
+            .unwrap_or_default(),
+        "currentSessionIds": current.active_session_ids,
+        "host": current.host,
+        "pid": current.pid,
+        "cdpEndpoint": current.cdp_endpoint,
+        "profileSelectionReason": profile_selection_reason,
+        "profileLeaseDisposition": profile_lease_disposition,
+        "profileLeaseConflictSessionIds": profile_lease_conflict_session_ids,
+    });
+    if let Some(path) = metadata.and_then(|metadata| metadata.browser_stderr_log_path.as_deref()) {
+        details["browserStderrLogPath"] = serde_json::json!(path);
+    }
     let mut event = ServiceEvent {
         kind: ServiceEventKind::BrowserLaunchRecorded,
         message: format!("Browser {} launch metadata recorded", browser_id),
         browser_id: Some(browser_id.to_string()),
         current_health: Some(current.health),
-        details: Some(serde_json::json!({
-            "previousProfileId": previous.and_then(|browser| browser.profile_id.clone()),
-            "currentProfileId": current.profile_id,
-            "previousSessionIds": previous
-                .map(|browser| browser.active_session_ids.clone())
-                .unwrap_or_default(),
-            "currentSessionIds": current.active_session_ids,
-            "host": current.host,
-            "pid": current.pid,
-            "cdpEndpoint": current.cdp_endpoint,
-            "profileSelectionReason": profile_selection_reason,
-            "profileLeaseDisposition": profile_lease_disposition,
-            "profileLeaseConflictSessionIds": profile_lease_conflict_session_ids,
-        })),
+        details: Some(details),
         ..new_service_event()
     };
     enrich_service_event_with_browser_context(&mut event, state, browser_id, current);
@@ -2064,7 +2075,19 @@ mod tests {
             ..BrowserProcess::default()
         };
 
-        record_browser_launch_recorded_event(&mut state, "browser-1", None, &browser);
+        let metadata = ServiceLaunchMetadata {
+            browser_stderr_log_path: Some(
+                "/home/user/.agent-browser/tmp/chrome-launches/chrome-123.stderr.log".to_string(),
+            ),
+            ..ServiceLaunchMetadata::default()
+        };
+        record_browser_launch_recorded_event(
+            &mut state,
+            "browser-1",
+            None,
+            &browser,
+            Some(&metadata),
+        );
 
         let event = state.events.first().unwrap();
         assert_eq!(event.kind, ServiceEventKind::BrowserLaunchRecorded);
@@ -2074,6 +2097,10 @@ mod tests {
         assert_eq!(event.service_name.as_deref(), Some("JournalDownloader"));
         assert_eq!(event.agent_name.as_deref(), Some("codex"));
         assert_eq!(event.task_name.as_deref(), Some("probeACSwebsite"));
+        assert_eq!(
+            event.details.as_ref().unwrap()["browserStderrLogPath"],
+            "/home/user/.agent-browser/tmp/chrome-launches/chrome-123.stderr.log"
+        );
     }
 
     #[test]
