@@ -405,11 +405,17 @@ fn runtime_profile_from_env() -> Option<String> {
     env::var("AGENT_BROWSER_RUNTIME_PROFILE").ok()
 }
 
-fn launch_profile_from_sources(cmd: &Value) -> Option<String> {
-    cmd.get("profile")
+fn launch_profile_from_sources(cmd: &Value, include_env_profile: bool) -> Option<String> {
+    let command_profile = cmd
+        .get("profile")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| env::var("AGENT_BROWSER_PROFILE").ok())
+        .map(|s| s.to_string());
+    if command_profile.is_some() {
+        return command_profile;
+    }
+    include_env_profile
+        .then(|| env::var("AGENT_BROWSER_PROFILE").ok())
+        .flatten()
 }
 
 fn target_service_ids_from_command(cmd: &Value) -> Vec<String> {
@@ -730,7 +736,7 @@ fn service_profile_lease_metadata_for_command(command: &Value) -> Option<Service
         return None;
     }
     let mut launch_options = LaunchOptions {
-        profile: launch_profile_from_sources(command),
+        profile: launch_profile_from_sources(command, true),
         runtime_profile: command
             .get("runtimeProfile")
             .and_then(|value| value.as_str())
@@ -2929,6 +2935,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         .get("autoConnect")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let has_cdp = cdp_url.is_some() || cdp_port.is_some();
     let leave_open = cmd
         .get("leaveOpen")
         .and_then(|v| v.as_bool())
@@ -2982,7 +2989,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             .and_then(|v| v.as_str())
             .map(String::from)
             .or_else(|| env::var("AGENT_BROWSER_PROXY_PASSWORD").ok()),
-        profile: launch_profile_from_sources(cmd),
+        profile: launch_profile_from_sources(cmd, !(runtime_attach_managed && has_cdp)),
         runtime_profile: cmd
             .get("runtimeProfile")
             .and_then(|v| v.as_str())
@@ -3036,17 +3043,40 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
 
     let new_hash = launch_hash(&launch_options);
 
+    super::browser::validate_launch_options(
+        launch_options.extensions.as_deref(),
+        has_cdp,
+        launch_options.profile.as_deref(),
+        storage_state,
+        launch_options.allow_file_access,
+        launch_options.executable_path.as_deref(),
+    )?;
+
     // Hash comparison and fast process-exit check are evaluated before the
     // async is_connection_alive to skip the expensive CDP liveness probe
     // when a relaunch is already certain.
     let needs_relaunch = if let Some(ref mut mgr) = state.browser {
         let is_external = cdp_url.is_some() || cdp_port.is_some() || auto_connect;
         let was_external = mgr.is_cdp_connection();
-        let hash_changed = !is_external && state.launch_hash != Some(new_hash);
-        is_external != was_external
-            || hash_changed
-            || mgr.has_process_exited()
-            || !mgr.is_connection_alive().await
+        let already_owns_managed_runtime = runtime_attach_managed
+            && is_external
+            && launch_options
+                .runtime_profile
+                .as_deref()
+                .is_some_and(|runtime| {
+                    mgr.runtime_profile_name() == Some(runtime)
+                        && runtime_profile_pid(Some(runtime))
+                            .is_none_or(|pid| mgr.browser_pid() == Some(pid))
+                });
+        if already_owns_managed_runtime {
+            false
+        } else {
+            let hash_changed = !is_external && state.launch_hash != Some(new_hash);
+            is_external != was_external
+                || hash_changed
+                || mgr.has_process_exited()
+                || !mgr.is_connection_alive().await
+        }
     } else {
         true
     };
@@ -3073,16 +3103,6 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         return Ok(json!({ "launched": true, "reused": true }));
     }
     state.ref_map.clear();
-
-    let has_cdp = cdp_url.is_some() || cdp_port.is_some();
-    super::browser::validate_launch_options(
-        launch_options.extensions.as_deref(),
-        has_cdp,
-        launch_options.profile.as_deref(),
-        storage_state,
-        launch_options.allow_file_access,
-        launch_options.executable_path.as_deref(),
-    )?;
 
     if let Some(url) = cdp_url {
         state.reset_input_state();
@@ -3406,7 +3426,7 @@ fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> 
             .and_then(|value| value.as_str())
             .map(str::to_string)
             .or_else(|| env::var("AGENT_BROWSER_PROXY_PASSWORD").ok()),
-        profile: launch_profile_from_sources(cmd),
+        profile: launch_profile_from_sources(cmd, true),
         runtime_profile: cmd
             .get("runtimeProfile")
             .and_then(|value| value.as_str())
@@ -15840,15 +15860,19 @@ mod tests {
         guard.set("AGENT_BROWSER_PROFILE", "/tmp/env-profile");
 
         assert_eq!(
-            launch_profile_from_sources(&json!({})).as_deref(),
+            launch_profile_from_sources(&json!({}), true).as_deref(),
             Some("/tmp/env-profile")
         );
         assert_eq!(
-            launch_profile_from_sources(&json!({ "profile": "/tmp/cmd-profile" })).as_deref(),
+            launch_profile_from_sources(&json!({ "profile": "/tmp/cmd-profile" }), true).as_deref(),
             Some("/tmp/cmd-profile")
+        );
+        assert_eq!(
+            launch_profile_from_sources(&json!({}), false).as_deref(),
+            None
         );
 
         guard.remove("AGENT_BROWSER_PROFILE");
-        assert_eq!(launch_profile_from_sources(&json!({})), None);
+        assert_eq!(launch_profile_from_sources(&json!({}), true), None);
     }
 }

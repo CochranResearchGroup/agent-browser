@@ -636,3 +636,47 @@ follow-up commands against a live runtime profile reuse the existing browser
 deterministically without launching replacement browsers, without creating a
 fresh `about:blank` active tab, and without surfacing the misleading
 `profile with cdp_url` validation error.
+
+## 2026-05-12 Managed Runtime Reattach Fix Validation
+
+After patching agent-browser's live managed-runtime attach path, rebuilt the
+repo-local debug binary and reran the same shape of headed Canva follow-up
+smoke:
+
+```text
+AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+AGENT_BROWSER_SOCKET_DIR=/tmp/agent-browser-managed-runtime-reattach-1778622188/socket
+AGENT_BROWSER_SESSION=managed-runtime-reattach-1778622188
+./cli/target/debug/agent-browser --runtime-profile canva-stealthcdp-chromium --headed open https://www.canva.com/
+```
+
+Result:
+
+- `open` loaded `Canva: Visual Suite for Everyone` at
+  `https://www.canva.com/`.
+- Runtime status after open showed PID `1016046`, port `38339`,
+  `Browser alive: true`, and `DevTools reachable: true`.
+- Follow-up `get title` returned `Canva: Visual Suite for Everyone`.
+- Follow-up `get url` returned `https://www.canva.com/`.
+- Follow-up `eval navigator.webdriver` returned `false`.
+- Runtime status after all follow-up commands still showed the same PID
+  `1016046`, same port `38339`, and the Canva target still active.
+- Service trace recorded a reused managed attach as `attached_existing` with
+  the same PID and stderr log path, not a replacement browser launch.
+- The previous misleading `Cannot use profile with cdp_url` error did not
+  recur.
+
+Artifact:
+
+```text
+/tmp/agent-browser-managed-runtime-reattach-1778622188/repro.log
+```
+
+Interpretation:
+
+- The defect was agent-browser state handling, not a Chromium-level crash.
+- Live runtime-profile follow-up commands must not forward the configured
+  profile user-data-dir as `AGENT_BROWSER_PROFILE` when attaching through CDP.
+- If the daemon already owns the same runtime-profile browser process, a live
+  managed attach request should reuse that browser instead of closing it and
+  reconnecting through the external-CDP path.

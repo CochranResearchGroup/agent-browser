@@ -486,6 +486,20 @@ fn live_runtime_status_for_flags(flags: &Flags) -> Option<RuntimeStatus> {
         .then_some(status)
 }
 
+fn daemon_profile_for_launch<'a>(
+    profile: Option<&'a str>,
+    live_runtime_status: Option<&RuntimeStatus>,
+) -> Option<&'a str> {
+    // A live managed runtime profile is reached by CDP. Forwarding its
+    // user-data-dir as AGENT_BROWSER_PROFILE makes the daemon validate an
+    // impossible "CDP attach plus local profile launch" combination.
+    if live_runtime_status.is_some() {
+        None
+    } else {
+        profile
+    }
+}
+
 fn run_runtime_command(clean: &[String], flags: &Flags) {
     match clean.get(1).map(|s| s.as_str()) {
         Some("create") => {
@@ -1603,7 +1617,7 @@ fn main() {
         proxy_password: proxy_password.as_deref(),
         ignore_https_errors: flags.ignore_https_errors,
         allow_file_access: flags.allow_file_access,
-        profile: flags.profile.as_deref(),
+        profile: daemon_profile_for_launch(flags.profile.as_deref(), live_runtime_status.as_ref()),
         state: flags.state.as_deref(),
         provider: flags.provider.as_deref(),
         device: flags.device.as_deref(),
@@ -2488,5 +2502,31 @@ mod tests {
         assert!(!command_skips_browser_launch_for_prestart(&json!({
             "action": "navigate"
         })));
+    }
+
+    #[test]
+    fn test_daemon_profile_for_launch_omits_profile_during_live_runtime_attach() {
+        let status = RuntimeStatus {
+            runtime_profile: "canva-stealthcdp-chromium".to_string(),
+            user_data_dir: "/tmp/profile".to_string(),
+            state_path: "/tmp/profile/runtime-state.json".to_string(),
+            browser_pid: Some(1234),
+            browser_alive: true,
+            headed: Some(true),
+            launch_mode: Some("automation".to_string()),
+            devtools_port: Some(9222),
+            devtools_reachable: true,
+            ws_url: Some("ws://127.0.0.1:9222/devtools/browser/test".to_string()),
+            targets: vec![],
+        };
+
+        assert_eq!(
+            daemon_profile_for_launch(Some("/tmp/profile"), None),
+            Some("/tmp/profile")
+        );
+        assert_eq!(
+            daemon_profile_for_launch(Some("/tmp/profile"), Some(&status)),
+            None
+        );
     }
 }
