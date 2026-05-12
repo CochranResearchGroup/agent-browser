@@ -81,12 +81,15 @@ export interface ServiceRequest {
   targetService?: string;
   siteId?: string;
   loginId?: string;
+  accountId?: string;
+  url?: string;
   profile?: string;
   runtimeProfile?: string;
   targetServiceIds?: string[];
   targetServices?: string[];
   siteIds?: string[];
   loginIds?: string[];
+  accountIds?: string[];
   jobTimeoutMs?: number;
   profileLeaseWaitTimeoutMs?: number;
   blockedByManualAction?: boolean;

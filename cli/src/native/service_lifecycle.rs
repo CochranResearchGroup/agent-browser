@@ -4,9 +4,9 @@
 //! model, while command parsing and browser process control remain in actions.
 
 use super::service_model::{
-    BrowserProfile, BrowserSession, LeaseState, ProfileAllocationPolicy, ProfileKeyringPolicy,
-    ProfileLeaseDisposition, ProfileSelectionReason, ServiceActor, ServiceState,
-    SessionCleanupPolicy,
+    service_site_policy_id_for_url, BrowserProfile, BrowserSession, LeaseState,
+    ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason,
+    ServiceActor, ServiceState, SessionCleanupPolicy,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -28,6 +28,8 @@ pub(crate) struct ServiceLaunchMetadata {
 pub(crate) struct ProfileSelectionRequest {
     pub(crate) service_name: Option<String>,
     pub(crate) target_service_ids: Vec<String>,
+    pub(crate) account_ids: Vec<String>,
+    pub(crate) target_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +67,9 @@ fn select_service_profile_for_request_id(
         .iter()
         .filter(|(_, profile)| profile_allows_service(profile, request.service_name.as_deref()))
         .filter_map(|(id, profile)| {
-            let rank = profile_selection_rank(profile, request);
+            let normalized_target_service_ids =
+                normalized_profile_request_targets(service_state, request);
+            let rank = profile_selection_rank(profile, request, &normalized_target_service_ids);
             rank.reason().map(|reason| (rank, id.clone(), reason))
         })
         .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
@@ -234,6 +238,7 @@ fn profile_allows_service(profile: &BrowserProfile, service_name: Option<&str>) 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 struct ProfileSelectionRank {
     authenticated_target_matches: usize,
+    account_matches: usize,
     target_matches: usize,
     caller_service_match: bool,
     persistent: bool,
@@ -243,6 +248,8 @@ impl ProfileSelectionRank {
     fn reason(self) -> Option<ProfileSelectionReason> {
         if self.authenticated_target_matches > 0 {
             Some(ProfileSelectionReason::AuthenticatedTarget)
+        } else if self.account_matches > 0 {
+            Some(ProfileSelectionReason::AccountMatch)
         } else if self.target_matches > 0 {
             Some(ProfileSelectionReason::TargetMatch)
         } else if self.caller_service_match {
@@ -256,9 +263,9 @@ impl ProfileSelectionRank {
 fn profile_selection_rank(
     profile: &BrowserProfile,
     request: &ProfileSelectionRequest,
+    target_service_ids: &[String],
 ) -> ProfileSelectionRank {
-    let authenticated_target_matches = request
-        .target_service_ids
+    let authenticated_target_matches = target_service_ids
         .iter()
         .filter(|target_service_id| {
             profile
@@ -267,14 +274,23 @@ fn profile_selection_rank(
                 .any(|candidate| candidate == *target_service_id)
         })
         .count();
-    let target_matches = request
-        .target_service_ids
+    let target_matches = target_service_ids
         .iter()
         .filter(|target_service_id| {
             profile
                 .target_service_ids
                 .iter()
                 .any(|candidate| candidate == *target_service_id)
+        })
+        .count();
+    let account_matches = request
+        .account_ids
+        .iter()
+        .filter(|account_id| {
+            profile
+                .account_ids
+                .iter()
+                .any(|candidate| candidate == *account_id)
         })
         .count();
     let caller_service_match = request.service_name.as_deref().is_some_and(|service_name| {
@@ -286,10 +302,26 @@ fn profile_selection_rank(
 
     ProfileSelectionRank {
         authenticated_target_matches,
+        account_matches,
         target_matches,
         caller_service_match,
         persistent: profile.persistent,
     }
+}
+
+fn normalized_profile_request_targets(
+    service_state: &ServiceState,
+    request: &ProfileSelectionRequest,
+) -> Vec<String> {
+    let mut target_service_ids = request.target_service_ids.clone();
+    if let Some(target_url) = request.target_url.as_deref() {
+        if let Some(site_policy_id) = service_site_policy_id_for_url(service_state, target_url) {
+            merge_unique(&mut target_service_ids, site_policy_id);
+        }
+    }
+    target_service_ids.sort();
+    target_service_ids.dedup();
+    target_service_ids
 }
 
 fn merge_unique(values: &mut Vec<String>, value: String) {
@@ -368,6 +400,8 @@ mod tests {
             &ProfileSelectionRequest {
                 service_name: Some("JournalDownloader".to_string()),
                 target_service_ids: vec!["acs".to_string()],
+                account_ids: Vec::new(),
+                target_url: None,
             },
         );
 
@@ -423,6 +457,8 @@ mod tests {
             &ProfileSelectionRequest {
                 service_name: Some("JournalDownloader".to_string()),
                 target_service_ids: broad_target_service_ids,
+                account_ids: Vec::new(),
+                target_url: None,
             },
         );
 
@@ -452,6 +488,8 @@ mod tests {
             &ProfileSelectionRequest {
                 service_name: Some("JournalDownloader".to_string()),
                 target_service_ids: vec!["acs".to_string()],
+                account_ids: Vec::new(),
+                target_url: None,
             },
         );
 
@@ -477,12 +515,83 @@ mod tests {
             &ProfileSelectionRequest {
                 service_name: Some("JournalDownloader".to_string()),
                 target_service_ids: Vec::new(),
+                account_ids: Vec::new(),
+                target_url: None,
             },
         );
 
         let selected = selected.expect("service allow-list fallback should be selected");
         assert_eq!(selected.profile_id, "service-profile");
         assert_eq!(selected.reason, ProfileSelectionReason::ServiceAllowList);
+    }
+
+    #[test]
+    fn test_select_service_profile_uses_account_match_before_target_match() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "target-only".to_string(),
+            BrowserProfile {
+                id: "target-only".to_string(),
+                name: "Target only".to_string(),
+                target_service_ids: vec!["google".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        service_state.profiles.insert(
+            "account".to_string(),
+            BrowserProfile {
+                id: "account".to_string(),
+                name: "Account".to_string(),
+                target_service_ids: vec!["google".to_string()],
+                account_ids: vec!["eric@example.com".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let selected = select_service_profile_for_request(
+            &service_state,
+            &ProfileSelectionRequest {
+                service_name: None,
+                target_service_ids: vec!["google".to_string()],
+                account_ids: vec!["eric@example.com".to_string()],
+                target_url: None,
+            },
+        )
+        .expect("account profile should be selected");
+
+        assert_eq!(selected.profile_id, "account");
+        assert_eq!(selected.reason, ProfileSelectionReason::AccountMatch);
+    }
+
+    #[test]
+    fn test_select_service_profile_derives_target_from_url_policy() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "canva".to_string(),
+            BrowserProfile {
+                id: "canva".to_string(),
+                name: "Canva".to_string(),
+                target_service_ids: vec!["canva".to_string()],
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let selected = select_service_profile_for_request(
+            &service_state,
+            &ProfileSelectionRequest {
+                service_name: None,
+                target_service_ids: Vec::new(),
+                account_ids: Vec::new(),
+                target_url: Some("https://www.canva.com/designs".to_string()),
+            },
+        )
+        .expect("URL should map through built-in Canva site policy");
+
+        assert_eq!(selected.profile_id, "canva");
+        assert_eq!(selected.reason, ProfileSelectionReason::TargetMatch);
     }
 
     #[test]

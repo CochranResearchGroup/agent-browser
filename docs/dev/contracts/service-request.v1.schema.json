@@ -189,6 +189,21 @@
       },
       "description": "Login identity aliases for targetServiceIds."
     },
+    "accountId": {
+      "type": "string",
+      "description": "Account identity hint for selecting among multiple profiles for the same target site."
+    },
+    "accountIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Account identity hints for selecting among multiple profiles for the same target site."
+    },
+    "url": {
+      "type": "string",
+      "description": "Target URL hint. When targetServiceId is omitted, agent-browser may derive a site policy or target service from this URL."
+    },
     "profile": {
       "type": "string",
       "description": "Explicit caller-supplied profile path for bring-your-own-profile requests."

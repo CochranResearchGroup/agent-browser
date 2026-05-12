@@ -179,7 +179,7 @@ try {
   );
   assert(
     contracts.data?.contracts?.serviceProfileLookupResponse?.mcp?.resourceTemplate ===
-      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}',
     `serviceProfileLookupResponse MCP resource template mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
   );
   assert(
@@ -249,7 +249,7 @@ try {
   );
   assert(
     JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===
-      JSON.stringify(['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds']),
+      JSON.stringify(['authenticatedServiceIds', 'accountIds', 'targetServiceIds', 'sharedServiceIds']),
     `serviceProfileLookupResponse selection order mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
   );
   assert(
@@ -276,7 +276,7 @@ try {
   );
   assert(
     clientContracts.contracts?.serviceProfileLookupResponse?.mcp?.resourceTemplate ===
-      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}',
     `service client could not discover lookup MCP resource template: ${JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse)}`,
   );
   assert(
@@ -303,7 +303,7 @@ try {
   );
   assert(
     JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse?.client?.selectionOrder) ===
-      JSON.stringify(['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds']),
+      JSON.stringify(['authenticatedServiceIds', 'accountIds', 'targetServiceIds', 'sharedServiceIds']),
     `service client could not discover profile lookup selection order: ${JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse)}`,
   );
   assert(

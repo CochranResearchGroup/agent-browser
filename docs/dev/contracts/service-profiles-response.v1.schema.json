@@ -72,6 +72,7 @@
         "keyring",
         "targetServiceIds",
         "authenticatedServiceIds",
+        "accountIds",
         "targetReadiness",
         "sharedServiceIds",
         "holderSessionIds",
@@ -108,6 +109,13 @@
           }
         },
         "authenticatedServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "accountIds": {
+          "description": "Account identities this profile is intended to satisfy within target sites.",
           "type": "array",
           "items": {
             "type": "string"

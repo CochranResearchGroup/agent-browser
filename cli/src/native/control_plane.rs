@@ -962,9 +962,12 @@ fn service_job_target_service_ids(request: &ControlRequest) -> Vec<String> {
         "targetService",
         "siteId",
         "loginId",
+        "accountId",
+        "account",
         "target_service_id",
         "site_id",
         "login_id",
+        "account_id",
     ] {
         if let Some(value) = request.command.get(key).and_then(|value| value.as_str()) {
             merge_service_job_target_service_id(&mut values, value);
@@ -975,9 +978,12 @@ fn service_job_target_service_ids(request: &ControlRequest) -> Vec<String> {
         "targetServices",
         "siteIds",
         "loginIds",
+        "accountIds",
+        "accounts",
         "target_service_ids",
         "site_ids",
         "login_ids",
+        "account_ids",
     ] {
         if let Some(raw_values) = request.command.get(key).and_then(|value| value.as_array()) {
             for value in raw_values.iter().filter_map(|value| value.as_str()) {

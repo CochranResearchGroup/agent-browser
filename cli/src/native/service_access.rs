@@ -10,12 +10,12 @@ use serde_json::{json, Map, Value};
 
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    builtin_site_policy, service_profile_seeding_handoff, BrowserBuild, BrowserHost,
-    BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState, InteractionMode,
-    ProfileSelectionReason, ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation,
-    ServiceIncidentState, ServiceProvider, ServiceState, SitePolicy,
-    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    builtin_site_policy, service_profile_seeding_handoff, service_site_policy_id_for_url,
+    BrowserBuild, BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy,
+    ChallengeState, InteractionMode, ProfileSelectionReason, ProviderCapability,
+    ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState, ServiceProvider,
+    ServiceState, SitePolicy, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -25,6 +25,8 @@ pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) agent_name: Option<String>,
     pub(crate) task_name: Option<String>,
     pub(crate) target_service_ids: Vec<String>,
+    pub(crate) account_ids: Vec<String>,
+    pub(crate) target_url: Option<String>,
     pub(crate) site_policy_id: Option<String>,
     pub(crate) challenge_id: Option<String>,
     pub(crate) readiness_profile_id: Option<String>,
@@ -35,6 +37,8 @@ impl ServiceAccessPlanRequest {
         ProfileSelectionRequest {
             service_name: self.service_name.clone(),
             target_service_ids: self.target_service_ids.clone(),
+            account_ids: self.account_ids.clone(),
+            target_url: self.target_url.clone(),
         }
     }
 }
@@ -62,6 +66,15 @@ pub(crate) fn parse_service_access_plan_query(
             | "loginIds" | "login_ids" | "login-ids" => {
                 append_identity_values(&mut request.target_service_ids, &value);
             }
+            "accountId" | "account_id" | "account-id" | "account" => {
+                append_identity_values(&mut request.account_ids, &value);
+            }
+            "accountIds" | "account_ids" | "account-ids" | "accounts" => {
+                append_identity_values(&mut request.account_ids, &value);
+            }
+            "url" | "targetUrl" | "target_url" | "target-url" => {
+                request.target_url = non_empty(value);
+            }
             "sitePolicyId" | "site_policy_id" | "site-policy-id" => {
                 request.site_policy_id = non_empty(value);
             }
@@ -83,18 +96,29 @@ pub(crate) fn parse_service_access_plan_query(
 
     request.target_service_ids.sort();
     request.target_service_ids.dedup();
+    request.account_ids.sort();
+    request.account_ids.dedup();
     Ok(request)
 }
 
 /// Build the read-only service access plan from already-loaded service state.
 pub(crate) fn service_access_plan_for_state(
     service_state: &ServiceState,
-    request: ServiceAccessPlanRequest,
+    mut request: ServiceAccessPlanRequest,
 ) -> Value {
     let original_state = service_state;
     let mut effective_state = original_state.clone();
     effective_state.refresh_profile_readiness();
     let service_state = &effective_state;
+    if let Some(site_policy_id) = request
+        .target_url
+        .as_deref()
+        .and_then(|url| service_site_policy_id_for_url(service_state, url))
+    {
+        request.target_service_ids.push(site_policy_id);
+        request.target_service_ids.sort();
+        request.target_service_ids.dedup();
+    }
     let profile_request = request.profile_selection_request();
     let selection = select_service_profile_for_request(service_state, &profile_request);
     let selected_profile = selection
@@ -145,6 +169,7 @@ pub(crate) fn service_access_plan_for_state(
     let decision = access_plan_decision(AccessPlanDecisionInput {
         request: &request,
         selected_profile: selected_profile.as_ref(),
+        service_state,
         site_policy: site_policy.as_ref(),
         challenges: &challenges,
         providers: &providers,
@@ -161,6 +186,8 @@ pub(crate) fn service_access_plan_for_state(
             "agentName": request.agent_name,
             "taskName": request.task_name,
             "targetServiceIds": request.target_service_ids,
+            "accountIds": request.account_ids,
+            "url": request.target_url,
             "sitePolicyId": request.site_policy_id,
             "challengeId": request.challenge_id,
             "readinessProfileId": request.readiness_profile_id,
@@ -299,6 +326,27 @@ fn select_site_policy(
         }
     }
 
+    if let Some(site_policy_id) = request
+        .target_url
+        .as_deref()
+        .and_then(|url| service_site_policy_id_for_url(service_state, url))
+    {
+        if let Some(site_policy) = service_state.site_policies.get(&site_policy_id) {
+            return Some(selected_source_for_state_policy(
+                service_state,
+                site_policy.clone(),
+                "target_url",
+            ));
+        }
+        if let Some(site_policy) = builtin_site_policy(&site_policy_id) {
+            return Some(SelectedSitePolicy {
+                policy: site_policy,
+                source: ServiceEntitySource::Builtin,
+                matched_by: "target_url",
+            });
+        }
+    }
+
     selected_profile.and_then(|profile| {
         profile.site_policy_ids.iter().find_map(|site_policy_id| {
             if let Some(policy) = service_state.site_policies.get(site_policy_id) {
@@ -368,6 +416,7 @@ fn select_providers(
 struct AccessPlanDecisionInput<'a> {
     request: &'a ServiceAccessPlanRequest,
     selected_profile: Option<&'a BrowserProfile>,
+    service_state: &'a ServiceState,
     site_policy: Option<&'a SitePolicy>,
     challenges: &'a [Challenge],
     providers: &'a [ServiceProvider],
@@ -380,6 +429,7 @@ struct AccessPlanDecisionInput<'a> {
 
 fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     let selected_profile = input.selected_profile;
+    let service_state = input.service_state;
     let site_policy = input.site_policy;
     let challenges = input.challenges;
     let providers = input.providers;
@@ -415,8 +465,12 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     let profile_required = site_policy.is_some_and(|site_policy| site_policy.profile_required);
     let provider_decision = provider_decision(selected_profile, site_policy, challenges, providers);
     let interaction_decision = interaction_decision(site_policy);
-    let launch_posture =
-        launch_posture_decision(selected_profile, site_policy, manual_seeding_required);
+    let launch_posture = launch_posture_decision(
+        service_state,
+        selected_profile,
+        site_policy,
+        manual_seeding_required,
+    );
     let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
     let freshness_update = freshness_update_decision(
         selected_profile,
@@ -737,6 +791,12 @@ fn service_request_decision(
             json!(request.target_service_ids),
         );
     }
+    if !request.account_ids.is_empty() {
+        service_request.insert("accountIds".to_string(), json!(request.account_ids));
+    }
+    if let Some(target_url) = request.target_url.as_ref() {
+        service_request.insert("url".to_string(), json!(target_url));
+    }
     if manual_action_required {
         service_request.insert("blockedByManualAction".to_string(), json!(true));
     }
@@ -780,6 +840,7 @@ fn service_request_decision(
             "agentName",
             "taskName",
             "targetServiceIds",
+            "accountIds",
             "profileLeasePolicy",
             "requiresCdpFree",
             "cdpAttachmentAllowed",
@@ -836,6 +897,7 @@ struct LaunchPostureDecision {
 }
 
 fn launch_posture_decision(
+    service_state: &ServiceState,
     selected_profile: Option<&BrowserProfile>,
     site_policy: Option<&SitePolicy>,
     manual_seeding_required: bool,
@@ -859,7 +921,7 @@ fn launch_posture_decision(
         .map(|policy| policy.requires_cdp_free)
         .unwrap_or(false);
     let (browser_build, browser_build_source) =
-        browser_build_decision(site_policy, requires_cdp_free);
+        browser_build_decision(service_state, site_policy, requires_cdp_free);
     let cdp_attachment_allowed = !requires_cdp_free && !manual_seeding_required;
     let attachable_after_seeding = cdp_attachment_allowed
         || (!requires_cdp_free && !matches!(browser_host, BrowserHost::AttachedExisting));
@@ -913,6 +975,7 @@ fn launch_posture_decision(
 }
 
 fn browser_build_decision(
+    service_state: &ServiceState,
     site_policy: Option<&SitePolicy>,
     requires_cdp_free: bool,
 ) -> (BrowserBuild, &'static str) {
@@ -921,6 +984,9 @@ fn browser_build_decision(
     }
     if let Some(browser_build) = site_policy.and_then(|policy| policy.browser_build) {
         return (browser_build, "site_policy");
+    }
+    if let Some(browser_build) = service_state.default_browser_build {
+        return (browser_build, "service_default");
     }
     (BrowserBuild::StockChrome, "service_default")
 }
@@ -1141,6 +1207,10 @@ fn service_profile_match_details(
                 &request.target_service_ids,
                 &profile.authenticated_service_ids,
             ),
+        ),
+        ProfileSelectionReason::AccountMatch => (
+            Some("accountIds"),
+            first_matching_identity(&request.account_ids, &profile.account_ids),
         ),
         ProfileSelectionReason::TargetMatch => (
             Some("targetServiceIds"),
@@ -1937,6 +2007,63 @@ mod tests {
         assert_eq!(request.agent_name.as_deref(), Some("codex"));
         assert_eq!(request.task_name.as_deref(), Some("probeACSwebsite"));
         assert_eq!(request.target_service_ids, vec!["acs".to_string()]);
+    }
+
+    #[test]
+    fn parse_service_access_plan_query_accepts_account_and_url_hints() {
+        let request = parse_service_access_plan_query(vec![
+            ("serviceName".to_string(), "CanvaCLI".to_string()),
+            ("accountId".to_string(), "eric@example.com".to_string()),
+            (
+                "url".to_string(),
+                "https://www.canva.com/designs".to_string(),
+            ),
+        ])
+        .unwrap();
+
+        assert_eq!(request.service_name.as_deref(), Some("CanvaCLI"));
+        assert_eq!(request.account_ids, vec!["eric@example.com".to_string()]);
+        assert_eq!(
+            request.target_url.as_deref(),
+            Some("https://www.canva.com/designs")
+        );
+    }
+
+    #[test]
+    fn service_access_plan_uses_url_derived_target_and_account_match() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "canva-work".to_string(),
+                BrowserProfile {
+                    id: "canva-work".to_string(),
+                    name: "Canva work".to_string(),
+                    target_service_ids: vec!["canva".to_string()],
+                    account_ids: vec!["eric@example.com".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("CanvaCLI".to_string()),
+                account_ids: vec!["eric@example.com".to_string()],
+                target_url: Some("https://www.canva.com/designs".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["query"]["targetServiceIds"], json!(["canva"]));
+        assert_eq!(plan["selectedProfile"]["id"], "canva-work");
+        assert_eq!(plan["selectedProfileMatch"]["reason"], "account_match");
+        assert_eq!(plan["selectedProfileMatch"]["matchedField"], "accountIds");
+        assert_eq!(plan["sitePolicy"]["id"], "canva");
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["url"],
+            "https://www.canva.com/designs"
+        );
     }
 
     #[test]

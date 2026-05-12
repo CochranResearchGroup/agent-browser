@@ -16,7 +16,7 @@
   "properties": {
     "query": {
       "type": "object",
-      "required": ["serviceName", "targetServiceIds", "readinessProfileId"],
+      "required": ["serviceName", "targetServiceIds", "accountIds", "url", "readinessProfileId"],
       "properties": {
         "serviceName": {
           "type": ["string", "null"]
@@ -26,6 +26,15 @@
           "items": {
             "type": "string"
           }
+        },
+        "accountIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "url": {
+          "type": ["string", "null"]
         },
         "readinessProfileId": {
           "type": ["string", "null"]
@@ -67,13 +76,13 @@
             },
             "reason": {
               "type": "string",
-              "enum": ["authenticated_target", "target_match", "service_allow_list"]
+              "enum": ["authenticated_target", "account_match", "target_match", "service_allow_list"]
             },
             "matchedField": {
               "oneOf": [
                 {
                   "type": "string",
-                  "enum": ["authenticatedServiceIds", "targetServiceIds", "sharedServiceIds"]
+                  "enum": ["authenticatedServiceIds", "accountIds", "targetServiceIds", "sharedServiceIds"]
                 },
                 {
                   "type": "null"

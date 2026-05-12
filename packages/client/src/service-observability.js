@@ -210,9 +210,11 @@ export function findServiceProfileForIdentity(profiles, options) {
     options?.loginId,
     options?.siteId,
     options?.targetServiceId,
+    options?.accountId,
     ...(options?.loginIds ?? []),
     ...(options?.siteIds ?? []),
     ...(options?.targetServiceIds ?? []),
+    ...(options?.accountIds ?? []),
   ]);
   const identitySet = new Set(identities);
   const serviceName = options?.serviceName;
@@ -226,6 +228,16 @@ export function findServiceProfileForIdentity(profiles, options) {
       reason: 'authenticated_target',
       matchedField: 'authenticatedServiceIds',
       matchedIdentity: firstMatchingProfileValue(authenticatedProfile, identitySet, 'authenticatedServiceIds'),
+    };
+  }
+
+  const accountProfile = candidates.find((profile) => profileMatchesAny(profile, identitySet, 'accountIds'));
+  if (accountProfile) {
+    return {
+      profile: accountProfile,
+      reason: 'account_match',
+      matchedField: 'accountIds',
+      matchedIdentity: firstMatchingProfileValue(accountProfile, identitySet, 'accountIds'),
     };
   }
 
@@ -274,9 +286,12 @@ export async function getServiceProfileForIdentity({ readinessProfileId, ...opti
         loginId: options.loginId,
         siteId: options.siteId,
         targetServiceId: options.targetServiceId,
+        accountId: options.accountId,
+        url: options.url,
         loginIds: options.loginIds?.join(','),
         siteIds: options.siteIds?.join(','),
         targetServiceIds: options.targetServiceIds?.join(','),
+        accountIds: options.accountIds?.join(','),
         readinessProfileId,
       },
     },
@@ -311,9 +326,12 @@ export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, c
         loginId: options.loginId,
         siteId: options.siteId,
         targetServiceId: options.targetServiceId,
+        accountId: options.accountId,
+        url: options.url,
         loginIds: options.loginIds?.join(','),
         siteIds: options.siteIds?.join(','),
         targetServiceIds: options.targetServiceIds?.join(','),
+        accountIds: options.accountIds?.join(','),
         readinessProfileId,
         sitePolicyId,
         challengeId,

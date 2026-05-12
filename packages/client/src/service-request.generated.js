@@ -85,6 +85,8 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "targetService",
   "siteId",
   "loginId",
+  "accountId",
+  "url",
   "profile",
   "runtimeProfile"
 ];
@@ -93,7 +95,8 @@ export const SERVICE_REQUEST_STRING_ARRAY_FIELDS = [
   "targetServiceIds",
   "targetServices",
   "siteIds",
-  "loginIds"
+  "loginIds",
+  "accountIds"
 ];
 
 export const SERVICE_REQUEST_INTEGER_FIELDS = [

@@ -21,8 +21,8 @@ use crate::native::service_lifecycle::{
 };
 use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
-    service_site_policy_sources, BrowserProfile, ProfileSelectionReason, ServiceEntitySource,
-    ServiceState,
+    service_site_policy_id_for_url, service_site_policy_sources, BrowserProfile,
+    ProfileSelectionReason, ServiceEntitySource, ServiceState,
 };
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
@@ -1299,6 +1299,9 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "siteIds",
         "loginId",
         "loginIds",
+        "accountId",
+        "accountIds",
+        "url",
         "profile",
         "runtimeProfile",
     ] {
@@ -1546,6 +1549,8 @@ pub(crate) fn service_profile_lookup_response_for_state(
 ) -> Result<Value, String> {
     let mut service_name = None;
     let mut target_service_ids = Vec::new();
+    let mut account_ids = Vec::new();
+    let mut target_url = None;
     let mut readiness_profile_id = None;
 
     for (key, value) in query_params(query) {
@@ -1560,6 +1565,15 @@ pub(crate) fn service_profile_lookup_response_for_state(
             | "target_services" | "target-services" | "siteIds" | "site_ids" | "site-ids"
             | "loginIds" | "login_ids" | "login-ids" => {
                 append_identity_values(&mut target_service_ids, &value);
+            }
+            "accountId" | "account_id" | "account-id" | "account" => {
+                append_identity_values(&mut account_ids, &value);
+            }
+            "accountIds" | "account_ids" | "account-ids" | "accounts" => {
+                append_identity_values(&mut account_ids, &value);
+            }
+            "url" | "targetUrl" | "target_url" | "target-url" => {
+                target_url = non_empty(value);
             }
             "readinessProfileId" | "readiness_profile_id" | "readiness-profile-id" => {
                 readiness_profile_id = non_empty(value);
@@ -1576,10 +1590,22 @@ pub(crate) fn service_profile_lookup_response_for_state(
 
     target_service_ids.sort();
     target_service_ids.dedup();
+    account_ids.sort();
+    account_ids.dedup();
+    if let Some(site_policy_id) = target_url
+        .as_deref()
+        .and_then(|url| service_site_policy_id_for_url(service_state, url))
+    {
+        target_service_ids.push(site_policy_id);
+        target_service_ids.sort();
+        target_service_ids.dedup();
+    }
 
     let request = ProfileSelectionRequest {
         service_name: service_name.clone(),
         target_service_ids: target_service_ids.clone(),
+        account_ids: account_ids.clone(),
+        target_url: target_url.clone(),
     };
     let selection = select_service_profile_for_request(service_state, &request);
     let selected_profile = selection
@@ -1613,6 +1639,8 @@ pub(crate) fn service_profile_lookup_response_for_state(
         "query": {
             "serviceName": service_name,
             "targetServiceIds": target_service_ids,
+            "accountIds": account_ids,
+            "url": target_url,
             "readinessProfileId": readiness_profile_id,
         },
         "selectedProfile": selected_profile.clone(),
@@ -1662,6 +1690,10 @@ fn service_profile_match_details(
                 &request.target_service_ids,
                 &profile.authenticated_service_ids,
             ),
+        ),
+        ProfileSelectionReason::AccountMatch => (
+            Some("accountIds"),
+            first_matching_identity(&request.account_ids, &profile.account_ids),
         ),
         ProfileSelectionReason::TargetMatch => (
             Some("targetServiceIds"),

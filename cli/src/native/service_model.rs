@@ -119,9 +119,10 @@ pub const SERVICE_LEASE_STATE_VALUES: [&str; 5] = [
 ];
 pub const SERVICE_SESSION_CLEANUP_VALUES: [&str; 4] =
     ["detach", "close_tabs", "close_browser", "release_only"];
-pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 4] = [
+pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 5] = [
     "explicit_profile",
     "authenticated_target",
+    "account_match",
     "target_match",
     "service_allow_list",
 ];
@@ -1686,6 +1687,7 @@ pub struct ServiceState {
     pub providers: BTreeMap<String, ServiceProvider>,
     pub challenges: BTreeMap<String, Challenge>,
     pub profile_seeding_handoffs: BTreeMap<String, ProfileSeedingHandoffRecord>,
+    pub default_browser_build: Option<BrowserBuild>,
     #[serde(skip)]
     pub entity_sources: ServiceEntitySources,
 }
@@ -1790,6 +1792,9 @@ impl ServiceState {
                 .insert(id, ServiceEntitySource::Config);
         }
         self.providers.extend(configured.providers);
+        if configured.default_browser_build.is_some() {
+            self.default_browser_build = configured.default_browser_build;
+        }
     }
 
     /// Add shipped site-policy defaults without overriding local policy.
@@ -1873,6 +1878,7 @@ pub struct ServiceProfileAllocation {
     pub keyring: ProfileKeyringPolicy,
     pub target_service_ids: Vec<String>,
     pub authenticated_service_ids: Vec<String>,
+    pub account_ids: Vec<String>,
     pub target_readiness: Vec<ProfileTargetReadiness>,
     pub shared_service_ids: Vec<String>,
     pub holder_session_ids: Vec<String>,
@@ -2028,6 +2034,9 @@ fn service_profile_allocation(
             .unwrap_or_default(),
         authenticated_service_ids: profile
             .map(|profile| sorted_strings(profile.authenticated_service_ids.iter()))
+            .unwrap_or_default(),
+        account_ids: profile
+            .map(|profile| sorted_strings(profile.account_ids.iter()))
             .unwrap_or_default(),
         target_readiness: profile
             .map(|profile| profile.target_readiness.clone())
@@ -2205,6 +2214,36 @@ pub(crate) fn builtin_site_policy(id: &str) -> Option<SitePolicy> {
     builtin_site_policies()
         .into_iter()
         .find(|policy| policy.id == id)
+}
+
+pub(crate) fn service_site_policy_id_for_url(
+    service_state: &ServiceState,
+    raw_url: &str,
+) -> Option<String> {
+    let origin = url_origin(raw_url)?;
+    let builtin_policies = builtin_site_policies();
+    service_state
+        .site_policies
+        .values()
+        .chain(builtin_policies.iter())
+        .find(|policy| {
+            let Some(policy_origin) = url_origin(&policy.origin_pattern) else {
+                return false;
+            };
+            !policy.id.is_empty() && origin == policy_origin
+        })
+        .map(|policy| policy.id.clone())
+}
+
+fn url_origin(raw_url: &str) -> Option<String> {
+    let parsed = url::Url::parse(raw_url).ok()?;
+    let scheme = parsed.scheme();
+    let host = parsed.host_str()?;
+    let port = parsed
+        .port()
+        .map(|port| format!(":{port}"))
+        .unwrap_or_default();
+    Some(format!("{scheme}://{host}{port}"))
 }
 
 pub fn service_site_policy_sources(service_state: &ServiceState) -> Vec<SitePolicySourceRecord> {
@@ -3212,6 +3251,9 @@ pub struct BrowserProfile {
     ///
     /// This is advisory until active auth probes can refresh it.
     pub authenticated_service_ids: Vec<String>,
+    /// Account identities this profile is intended to satisfy within target
+    /// sites, for example a tenant slug, email address, or username.
+    pub account_ids: Vec<String>,
     pub default_browser_host: Option<BrowserHost>,
     pub allocation: ProfileAllocationPolicy,
     pub keyring: ProfileKeyringPolicy,
@@ -3478,6 +3520,8 @@ pub enum ProfileSelectionReason {
     ExplicitProfile,
     /// Selected profile has authenticated state for a requested target service.
     AuthenticatedTarget,
+    /// Selected profile matches a requested account identity.
+    AccountMatch,
     /// Selected profile targets a requested site or identity provider.
     TargetMatch,
     /// Selected profile was chosen by caller service allow-list fallback.

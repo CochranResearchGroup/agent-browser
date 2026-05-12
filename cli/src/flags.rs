@@ -3,7 +3,8 @@ use crate::native::service_health::{
     BrowserRecoveryPolicyConfig, BrowserRecoveryPolicyValueSource,
 };
 use crate::native::service_model::{
-    BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SiteMonitor, SitePolicy,
+    BrowserBuild, BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SiteMonitor,
+    SitePolicy,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use serde::Deserialize;
@@ -237,6 +238,7 @@ pub struct ServiceConfig {
     pub recovery_retry_budget: Option<u64>,
     pub recovery_base_backoff_ms: Option<u64>,
     pub recovery_max_backoff_ms: Option<u64>,
+    pub default_browser_build: Option<BrowserBuild>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -299,6 +301,7 @@ impl Config {
             monitors: service.monitors.clone().unwrap_or_default(),
             site_policies: service.site_policies.clone().unwrap_or_default(),
             providers: service.providers.clone().unwrap_or_default(),
+            default_browser_build: service.default_browser_build,
             ..ServiceState::default()
         };
         state.mark_config_entity_sources();
@@ -463,6 +466,7 @@ fn merge_service_configs(
             recovery_max_backoff_ms: overlay
                 .recovery_max_backoff_ms
                 .or(base.recovery_max_backoff_ms),
+            default_browser_build: overlay.default_browser_build.or(base.default_browser_build),
         }),
     }
 }
@@ -1830,7 +1834,19 @@ mod tests {
 
     #[test]
     fn test_parse_executable_path_flag_no_value() {
-        let flags = parse_flags(&args("--executable-path"));
+        let config_path = std::env::temp_dir().join(format!(
+            "agent-browser-empty-config-{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&config_path, "{}").unwrap();
+        let flags = parse_flags(&args(&format!(
+            "--config {} --executable-path",
+            config_path.display()
+        )));
+        let _ = std::fs::remove_file(config_path);
         assert_eq!(flags.executable_path, None);
     }
 
@@ -2159,6 +2175,7 @@ mod tests {
                 recovery_retry_budget: Some(3),
                 recovery_base_backoff_ms: Some(1_000),
                 recovery_max_backoff_ms: Some(30_000),
+                default_browser_build: None,
             }),
             ..Config::default()
         };
@@ -2213,6 +2230,7 @@ mod tests {
                 recovery_retry_budget: Some(5),
                 recovery_base_backoff_ms: Some(500),
                 recovery_max_backoff_ms: Some(10_000),
+                default_browser_build: Some(BrowserBuild::StealthcdpChromium),
             }),
             ..Config::default()
         };
@@ -2575,6 +2593,7 @@ mod tests {
                 recovery_retry_budget: None,
                 recovery_base_backoff_ms: None,
                 recovery_max_backoff_ms: None,
+                default_browser_build: Some(BrowserBuild::StealthcdpChromium),
             }),
             ..Config::default()
         };

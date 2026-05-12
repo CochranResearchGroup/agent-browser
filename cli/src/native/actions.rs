@@ -458,6 +458,30 @@ fn merge_target_service_id(values: &mut Vec<String>, value: &str) {
     }
 }
 
+fn account_ids_from_command(cmd: &Value) -> Vec<String> {
+    let mut values = Vec::new();
+    for key in ["accountId", "account", "account_id", "account-id"] {
+        if let Some(value) = cmd.get(key).and_then(|value| value.as_str()) {
+            merge_target_service_id(&mut values, value);
+        }
+    }
+    for key in ["accountIds", "accounts", "account_ids", "account-ids"] {
+        if let Some(raw_values) = cmd.get(key).and_then(|value| value.as_array()) {
+            for value in raw_values.iter().filter_map(|value| value.as_str()) {
+                merge_target_service_id(&mut values, value);
+            }
+        }
+    }
+    values
+}
+
+fn target_url_from_command(cmd: &Value) -> Option<String> {
+    optional_command_string(cmd, "url").or_else(|| {
+        cmd.get("params")
+            .and_then(|params| optional_command_string(params, "url"))
+    })
+}
+
 fn apply_service_profile_selection(
     options: &mut LaunchOptions,
     cmd: &Value,
@@ -468,8 +492,14 @@ fn apply_service_profile_selection(
     let request = ProfileSelectionRequest {
         service_name: optional_command_string(cmd, "serviceName"),
         target_service_ids: target_service_ids_from_command(cmd),
+        account_ids: account_ids_from_command(cmd),
+        target_url: target_url_from_command(cmd),
     };
-    if request.service_name.is_none() && request.target_service_ids.is_empty() {
+    if request.service_name.is_none()
+        && request.target_service_ids.is_empty()
+        && request.account_ids.is_empty()
+        && request.target_url.is_none()
+    {
         return None;
     }
     let repository = LockedServiceStateRepository::default_json().ok()?;

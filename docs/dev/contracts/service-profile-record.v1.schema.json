@@ -11,6 +11,7 @@
     "sitePolicyIds",
     "targetServiceIds",
     "authenticatedServiceIds",
+    "accountIds",
     "defaultBrowserHost",
     "allocation",
     "keyring",
@@ -44,6 +45,13 @@
       }
     },
     "authenticatedServiceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "accountIds": {
+      "description": "Account identities this profile is intended to satisfy within target sites, for example a tenant slug, email address, or username.",
       "type": "array",
       "items": {
         "type": "string"

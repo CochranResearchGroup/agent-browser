@@ -107,6 +107,10 @@ export interface ServiceProfileRecord {
   id: string;
   name: string;
   userDataDir: string | null;
+  targetServiceIds: string[];
+  authenticatedServiceIds: string[];
+  accountIds: string[];
+  sharedServiceIds: string[];
   targetReadiness: ServiceProfileTargetReadiness[];
   [key: string]: unknown;
 }
@@ -149,6 +153,7 @@ export interface ServiceProfileAllocation {
   keyring: string;
   targetServiceIds: string[];
   authenticatedServiceIds: string[];
+  accountIds: string[];
   targetReadiness: ServiceProfileTargetReadiness[];
   sharedServiceIds: string[];
   holderSessionIds: string[];
@@ -180,7 +185,7 @@ export interface ServiceSessionRecord {
   agentName: string | null;
   taskName: string | null;
   profileId: string | null;
-  profileSelectionReason: 'explicit_profile' | 'authenticated_target' | 'target_match' | 'service_allow_list' | null;
+  profileSelectionReason: 'explicit_profile' | 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | null;
   profileLeaseDisposition: 'new_browser' | 'reused_browser' | 'active_lease_conflict' | null;
   profileLeaseConflictSessionIds: string[];
   [key: string]: unknown;
@@ -1104,18 +1109,24 @@ export interface ServiceProfileIdentityMatchOptions {
   siteId?: string;
   /** Desired target site or identity provider, for example "google", "microsoft", or "canva". */
   targetServiceId?: string;
+  /** Desired account identity within a target site, for example an email address, tenant slug, or username. */
+  accountId?: string;
+  /** Target URL used to derive a site policy and target-service identity when possible. */
+  url?: string;
   /** Additional desired login identities. */
   loginIds?: string[];
   /** Additional desired site identities. */
   siteIds?: string[];
   /** Additional desired target site or identity-provider IDs. */
   targetServiceIds?: string[];
+  /** Additional desired account identities. */
+  accountIds?: string[];
 }
 
 export interface ServiceProfileIdentityMatchResult {
   profile: ServiceProfileRecord | null;
-  reason: 'authenticated_target' | 'target_match' | 'service_allow_list' | null;
-  matchedField: 'authenticatedServiceIds' | 'targetServiceIds' | 'sharedServiceIds' | null;
+  reason: 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | null;
+  matchedField: 'authenticatedServiceIds' | 'accountIds' | 'targetServiceIds' | 'sharedServiceIds' | null;
   matchedIdentity: string | null;
 }
 
@@ -1172,6 +1183,8 @@ export interface ServiceProfileAcquisitionResult {
 export interface ServiceProfileLookupQuery {
   serviceName: string | null;
   targetServiceIds: string[];
+  accountIds: string[];
+  url: string | null;
   readinessProfileId: string | null;
   [key: string]: unknown;
 }
@@ -1179,8 +1192,8 @@ export interface ServiceProfileLookupQuery {
 export interface ServiceProfileLookupMatch {
   profileId: string;
   profile: ServiceProfileRecord;
-  reason: 'authenticated_target' | 'target_match' | 'service_allow_list';
-  matchedField: 'authenticatedServiceIds' | 'targetServiceIds' | 'sharedServiceIds' | null;
+  reason: 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list';
+  matchedField: 'authenticatedServiceIds' | 'accountIds' | 'targetServiceIds' | 'sharedServiceIds' | null;
   matchedIdentity: string | null;
   [key: string]: unknown;
 }

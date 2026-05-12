@@ -318,7 +318,7 @@ const serviceResourceSurface = [
     route: '/api/service/access-plan',
     docsNeedles: [
       '/api/service/access-plan',
-      'agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,sitePolicyId,challengeId,readinessProfileId}',
+      'agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId}',
     ],
     httpNeedles: [
       'path == "/api/service/access-plan"',
@@ -447,10 +447,10 @@ const serviceResourceSurface = [
     ],
   },
   {
-    resource: 'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
+    resource: 'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}',
     route: '/api/service/profiles/lookup',
     docsNeedles: [
-      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}',
       '/api/service/profiles/lookup',
       'getServiceProfileForIdentity',
     ],
@@ -468,7 +468,7 @@ const serviceResourceSurface = [
     contractNeedles: [
       'service-profile-lookup-response.v1.schema.json',
       'GET /api/service/profiles/lookup',
-      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,readinessProfileId}',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}',
     ],
   },
 ];

@@ -88,7 +88,7 @@ export async function runServiceWorkflow({
       accessPlanQuery: { serviceName, agentName, taskName, siteId, loginId },
       profileSelection: {
         requestedIdentity: loginId || siteId,
-        preferredProfileFields: ['authenticatedServiceIds', 'targetServiceIds', 'sharedServiceIds'],
+        preferredProfileFields: ['authenticatedServiceIds', 'accountIds', 'targetServiceIds', 'sharedServiceIds'],
         helper: 'acquireServiceLoginProfile',
         registrationPolicy: 'only register fallback profile after the access plan reports no selected profile',
         monitorPolicy: runDueReadinessMonitor
