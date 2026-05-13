@@ -61,6 +61,26 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
         "manifestPath": "/opt/agent-browser/chromium-stealthcdp/current/manifest.json"
       }
     },
+    "browserCapabilityRegistry": {
+      "browserHosts": [
+        {
+          "id": "local-linux",
+          "name": "Local Linux desktop",
+          "hostKind": "local",
+          "operatingSystem": "linux",
+          "displaySupport": "x11",
+          "remoteViewSupport": false,
+          "reachable": true,
+          "lifecycleOwner": "agent_browser",
+          "tags": ["default"]
+        }
+      ],
+      "browserExecutables": [],
+      "browserCapabilities": [],
+      "profileCompatibility": [],
+      "browserPreferenceBindings": [],
+      "validationEvidence": []
+    },
     "reconcileIntervalMs": 60000,
     "jobTimeoutMs": 120000,
     "profiles": {
@@ -141,6 +161,13 @@ target, account, and target-site matches still win first; browser build then
 breaks ties and can select a generic default profile for new identities. Use a
 <code>stock_chrome</code> profile with target and account IDs for sites that
 only work correctly in Google Chrome.
+<code>service.browserCapabilityRegistry</code> carries draft browser host,
+executable, capability, profile compatibility, preference binding, and
+validation evidence records into
+<code>service_state.browserCapabilityRegistry</code> for
+<code>agent-browser service status --json</code> and
+<code>GET /api/service/status</code>. The registry is advisory in this release
+and does not affect profile selection or browser routing yet.
 Use <code>agent-browser install doctor</code> after upgrading the user-scoped
 command or changing browser build manifests. It does not launch Chrome. The
 doctor checks the command on <code>PATH</code>, the running executable, the pnpm
@@ -186,6 +213,7 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>service.defaultBrowserBuild</code></td><td>Service launch posture label. Use <code>stealthcdp_chromium</code> with <code>executablePath</code>, <code>AGENT_BROWSER_EXECUTABLE_PATH</code>, or <code>service.browserBuildManifests.stealthcdp_chromium.manifestPath</code> for the patched Chromium build.</td><td>string</td></tr>
     <tr><td><code>service.profiles.&lt;id&gt;.browserBuild</code></td><td>Profile-level browser build preference. Values: <code>stock_chrome</code>, <code>stealthcdp_chromium</code>, or <code>cdp_free_headed</code>.</td><td>string</td></tr>
     <tr><td><code>service.browserBuildManifests.&lt;build&gt;.manifestPath</code></td><td>Promoted browser artifact manifest used to resolve the executable and report artifact metadata in service status.</td><td>string</td></tr>
+    <tr><td><code>service.browserCapabilityRegistry</code></td><td>Draft advisory registry for browser hosts, executables, capabilities, profile compatibility, preference bindings, and validation evidence exposed under service status.</td><td>object</td></tr>
     <tr><td><code>extensions</code></td><td><code>--extension</code></td><td>string[]</td></tr>
     <tr><td><code>profile</code></td><td><code>--profile</code></td><td>string</td></tr>
     <tr><td><code>state</code></td><td><code>--state</code></td><td>string</td></tr>

@@ -5,6 +5,7 @@
 //! conservative so future clients can depend on stable field names.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME: &str = "missing_service_name";
@@ -1705,6 +1706,35 @@ pub fn assert_service_incident_activity_response_contract(value: &serde_json::Va
     }
 }
 
+/// Draft browser capability registry carried by service config and service state.
+///
+/// The nested record arrays intentionally stay JSON-shaped while the registry
+/// contract is still evolving. Runtime routing must not depend on these records
+/// until the registry graduates from advisory state to authoritative policy.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct BrowserCapabilityRegistry {
+    pub browser_hosts: Vec<Value>,
+    pub browser_executables: Vec<Value>,
+    pub browser_capabilities: Vec<Value>,
+    pub profile_compatibility: Vec<Value>,
+    pub browser_preference_bindings: Vec<Value>,
+    pub validation_evidence: Vec<Value>,
+    pub generated_at: Option<String>,
+}
+
+impl BrowserCapabilityRegistry {
+    pub fn is_empty(&self) -> bool {
+        self.browser_hosts.is_empty()
+            && self.browser_executables.is_empty()
+            && self.browser_capabilities.is_empty()
+            && self.profile_compatibility.is_empty()
+            && self.browser_preference_bindings.is_empty()
+            && self.validation_evidence.is_empty()
+            && self.generated_at.is_none()
+    }
+}
+
 /// Top-level snapshot of the browser service control plane.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -1723,6 +1753,8 @@ pub struct ServiceState {
     pub providers: BTreeMap<String, ServiceProvider>,
     pub challenges: BTreeMap<String, Challenge>,
     pub profile_seeding_handoffs: BTreeMap<String, ProfileSeedingHandoffRecord>,
+    #[serde(default, skip_serializing_if = "BrowserCapabilityRegistry::is_empty")]
+    pub browser_capability_registry: BrowserCapabilityRegistry,
     pub default_browser_build: Option<BrowserBuild>,
     #[serde(skip)]
     pub entity_sources: ServiceEntitySources,
@@ -1828,6 +1860,9 @@ impl ServiceState {
                 .insert(id, ServiceEntitySource::Config);
         }
         self.providers.extend(configured.providers);
+        if !configured.browser_capability_registry.is_empty() {
+            self.browser_capability_registry = configured.browser_capability_registry;
+        }
         if configured.default_browser_build.is_some() {
             self.default_browser_build = configured.default_browser_build;
         }
@@ -5836,6 +5871,48 @@ mod tests {
                     ..ServiceJob::default()
                 },
             )]),
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_hosts: vec![json!({
+                    "id": "local-linux",
+                    "name": "Local Linux desktop",
+                    "hostKind": "local",
+                    "operatingSystem": "linux",
+                    "displaySupport": "x11",
+                    "remoteViewSupport": false,
+                    "reachable": true,
+                    "lifecycleOwner": "agent_browser",
+                    "tags": ["default"]
+                })],
+                browser_executables: vec![json!({
+                    "id": "stealthcdp-current",
+                    "hostId": "local-linux",
+                    "browserFamily": "chromium",
+                    "vendor": "chromium",
+                    "channel": "custom",
+                    "buildLabel": "stealthcdp_chromium",
+                    "executablePath": "/opt/agent-browser/chromium-stealthcdp/chrome",
+                    "source": "manifest",
+                    "version": "136.0.0.0",
+                    "tags": ["preferred"]
+                })],
+                browser_capabilities: vec![json!({
+                    "id": "stealthcdp-current:local-linux",
+                    "hostId": "local-linux",
+                    "executableId": "stealthcdp-current",
+                    "cdpSupported": true,
+                    "cdpFreeLaunchSupported": true,
+                    "extensionsSupported": true,
+                    "passkeysSupported": true,
+                    "headedSupported": true,
+                    "headlessSupported": true,
+                    "streamingSupported": false,
+                    "profileLockBehavior": "exclusive_process",
+                    "keyringBehavior": "basic_password_store_preferred",
+                    "knownLimits": []
+                })],
+                generated_at: Some("2026-05-13T00:00:00Z".to_string()),
+                ..BrowserCapabilityRegistry::default()
+            },
             ..ServiceState::default()
         };
 
@@ -5902,6 +5979,14 @@ mod tests {
         assert_eq!(
             decoded.jobs["job-1"].task_name.as_deref(),
             Some("probeACSwebsite")
+        );
+        assert_eq!(
+            decoded.browser_capability_registry.browser_hosts[0]["hostKind"],
+            "local"
+        );
+        assert_eq!(
+            decoded.browser_capability_registry.browser_executables[0]["buildLabel"],
+            "stealthcdp_chromium"
         );
     }
 
@@ -6200,6 +6285,13 @@ mod tests {
                     ..ServiceProvider::default()
                 },
             )]),
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_hosts: vec![json!({
+                    "id": "configured-host",
+                    "name": "Configured browser host"
+                })],
+                ..BrowserCapabilityRegistry::default()
+            },
             ..ServiceState::default()
         };
 
@@ -6218,6 +6310,10 @@ mod tests {
         assert_eq!(
             persisted.providers["manual"].display_name,
             "Dashboard approval"
+        );
+        assert_eq!(
+            persisted.browser_capability_registry.browser_hosts[0]["id"],
+            "configured-host"
         );
     }
 

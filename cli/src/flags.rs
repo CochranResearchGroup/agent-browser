@@ -3,8 +3,8 @@ use crate::native::service_health::{
     BrowserRecoveryPolicyConfig, BrowserRecoveryPolicyValueSource,
 };
 use crate::native::service_model::{
-    BrowserBuild, BrowserProfile, BrowserSession, ServiceProvider, ServiceState, SiteMonitor,
-    SitePolicy,
+    BrowserBuild, BrowserCapabilityRegistry, BrowserProfile, BrowserSession, ServiceProvider,
+    ServiceState, SiteMonitor, SitePolicy,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use serde::Deserialize;
@@ -239,6 +239,7 @@ pub struct ServiceConfig {
     pub monitors: Option<BTreeMap<String, SiteMonitor>>,
     pub site_policies: Option<BTreeMap<String, SitePolicy>>,
     pub providers: Option<BTreeMap<String, ServiceProvider>>,
+    pub browser_capability_registry: Option<BrowserCapabilityRegistry>,
     pub reconcile_interval_ms: Option<u64>,
     pub job_timeout_ms: Option<u64>,
     pub monitor_interval_ms: Option<u64>,
@@ -309,6 +310,10 @@ impl Config {
             monitors: service.monitors.clone().unwrap_or_default(),
             site_policies: service.site_policies.clone().unwrap_or_default(),
             providers: service.providers.clone().unwrap_or_default(),
+            browser_capability_registry: service
+                .browser_capability_registry
+                .clone()
+                .unwrap_or_default(),
             default_browser_build: service.default_browser_build,
             ..ServiceState::default()
         };
@@ -464,6 +469,9 @@ fn merge_service_configs(
             monitors: merge_service_model_maps(base.monitors, overlay.monitors),
             site_policies: merge_service_model_maps(base.site_policies, overlay.site_policies),
             providers: merge_service_model_maps(base.providers, overlay.providers),
+            browser_capability_registry: overlay
+                .browser_capability_registry
+                .or(base.browser_capability_registry),
             reconcile_interval_ms: overlay.reconcile_interval_ms.or(base.reconcile_interval_ms),
             job_timeout_ms: overlay.job_timeout_ms.or(base.job_timeout_ms),
             monitor_interval_ms: overlay.monitor_interval_ms.or(base.monitor_interval_ms),
@@ -2528,6 +2536,34 @@ mod tests {
     }
 
     #[test]
+    fn test_config_deserializes_browser_capability_registry() {
+        let json = r#"{
+            "service": {
+                "browserCapabilityRegistry": {
+                    "browserHosts": [{"id": "local-linux", "name": "Local Linux desktop"}],
+                    "browserExecutables": [],
+                    "browserCapabilities": [],
+                    "profileCompatibility": [],
+                    "browserPreferenceBindings": [],
+                    "validationEvidence": [],
+                    "generatedAt": "2026-05-13T00:00:00Z"
+                }
+            }
+        }"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        let state = config.service_state_snapshot();
+
+        assert_eq!(
+            state.browser_capability_registry.browser_hosts[0]["id"],
+            "local-linux"
+        );
+        assert_eq!(
+            state.browser_capability_registry.generated_at.as_deref(),
+            Some("2026-05-13T00:00:00Z")
+        );
+    }
+
+    #[test]
     fn test_config_merge_project_overrides_user() {
         let user = Config {
             runtime_profiles: Some(HashMap::from([(
@@ -2568,6 +2604,7 @@ mod tests {
                         ..ServiceProvider::default()
                     },
                 )])),
+                browser_capability_registry: None,
                 reconcile_interval_ms: Some(60_000),
                 job_timeout_ms: Some(120_000),
                 monitor_interval_ms: Some(60_000),
@@ -2624,6 +2661,21 @@ mod tests {
                     ),
                 ])),
                 providers: None,
+                browser_capability_registry: Some(BrowserCapabilityRegistry {
+                    browser_hosts: vec![json!({
+                        "id": "local-linux",
+                        "name": "Local Linux desktop",
+                        "hostKind": "local",
+                        "operatingSystem": "linux",
+                        "displaySupport": "x11",
+                        "remoteViewSupport": false,
+                        "reachable": true,
+                        "lifecycleOwner": "agent_browser",
+                        "tags": ["default"]
+                    })],
+                    generated_at: Some("2026-05-13T00:00:00Z".to_string()),
+                    ..BrowserCapabilityRegistry::default()
+                }),
                 reconcile_interval_ms: Some(30_000),
                 job_timeout_ms: Some(90_000),
                 monitor_interval_ms: Some(45_000),
@@ -2677,6 +2729,13 @@ mod tests {
         assert_eq!(service.recovery_retry_budget, Some(5));
         assert_eq!(service.recovery_base_backoff_ms, Some(500));
         assert_eq!(service.recovery_max_backoff_ms, Some(10_000));
+        assert_eq!(
+            service
+                .browser_capability_registry
+                .as_ref()
+                .and_then(|registry| registry.generated_at.as_deref()),
+            Some("2026-05-13T00:00:00Z")
+        );
     }
 
     #[test]
@@ -2993,6 +3052,22 @@ mod tests {
                         ..ServiceProvider::default()
                     },
                 )])),
+                browser_capability_registry: Some(BrowserCapabilityRegistry {
+                    browser_executables: vec![json!({
+                        "id": "stealthcdp-current",
+                        "hostId": "local-linux",
+                        "browserFamily": "chromium",
+                        "vendor": "chromium",
+                        "channel": "custom",
+                        "buildLabel": "stealthcdp_chromium",
+                        "executablePath": "/opt/agent-browser/chromium-stealthcdp/chrome",
+                        "source": "manifest",
+                        "version": "136.0.0.0",
+                        "tags": ["preferred"]
+                    })],
+                    generated_at: Some("2026-05-13T00:00:00Z".to_string()),
+                    ..BrowserCapabilityRegistry::default()
+                }),
                 reconcile_interval_ms: Some(45_000),
                 job_timeout_ms: Some(120_000),
                 monitor_interval_ms: Some(60_000),
@@ -3026,6 +3101,10 @@ mod tests {
             "Google login freshness"
         );
         assert_eq!(state.providers["manual"].display_name, "Dashboard approval");
+        assert_eq!(
+            state.browser_capability_registry.browser_executables[0]["buildLabel"],
+            "stealthcdp_chromium"
+        );
         assert!(state.browsers.is_empty());
     }
 

@@ -106,6 +106,18 @@ access-plan resource for agent-facing profile selection because it combines the
 selected profile, readiness, policy, providers, retained challenges, monitor
 findings, and the service-owned decision before the caller requests a tab.
 
+## Browser Capability Registry Draft
+
+`service-browser-capability-registry.v1.schema.json` describes the advisory
+browser capability registry that service config may carry as
+`service.browserCapabilityRegistry`. The merged service state exposes configured
+records under `service_state.browserCapabilityRegistry` in CLI
+`agent-browser service status --json`, HTTP `GET /api/service/status`, and
+state-bearing MCP/HTTP payloads that serialize the service state. This is a
+no-launch inventory and evidence surface for browser hosts, executables,
+capabilities, profile compatibility, preference bindings, and validation
+evidence. It is not yet authoritative routing policy.
+
 <table>
   <thead>
     <tr>

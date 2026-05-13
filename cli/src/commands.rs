@@ -5305,6 +5305,11 @@ mod tests {
                 ..crate::native::service_model::SitePolicy::default()
             },
         );
+        flags.service_state.browser_capability_registry =
+            crate::native::service_model::BrowserCapabilityRegistry {
+                browser_hosts: vec![json!({"id": "local-linux"})],
+                ..crate::native::service_model::BrowserCapabilityRegistry::default()
+            };
 
         let cmd = parse_command(&args("service status"), &flags).unwrap();
 
@@ -5316,6 +5321,10 @@ mod tests {
         assert_eq!(
             cmd["serviceState"]["sitePolicies"]["google"]["manualLoginPreferred"],
             true
+        );
+        assert_eq!(
+            cmd["serviceState"]["browserCapabilityRegistry"]["browserHosts"][0]["id"],
+            "local-linux"
         );
         assert_eq!(cmd["launchConfig"]["stealthCdpChromiumRequired"], false);
         assert!(cmd["launchConfig"]["warnings"]

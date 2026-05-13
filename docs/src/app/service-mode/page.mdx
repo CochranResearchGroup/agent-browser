@@ -41,6 +41,12 @@ agent-browser service jobs --limit 20
 agent-browser service reconcile
 ```
 
+Configured <code>service.browserCapabilityRegistry</code> records appear under
+<code>service_state.browserCapabilityRegistry</code> in service status JSON.
+Use this advisory no-launch view to inspect browser hosts, executables,
+capabilities, profile compatibility, preference bindings, and validation
+evidence before the scheduler consumes the registry for routing.
+
 Use the HTTP API when another program owns the workflow lifecycle:
 
 ```bash

@@ -1668,6 +1668,25 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
         }
     }
 
+    if let Some(registry) = service_state.get("browserCapabilityRegistry") {
+        let count = |field: &str| {
+            registry
+                .get(field)
+                .and_then(|value| value.as_array())
+                .map(|items| items.len())
+                .unwrap_or(0)
+        };
+        lines.push(format!(
+            "Browser capability registry: hosts={} executables={} capabilities={} profile_compatibility={} preference_bindings={} validation_evidence={}",
+            count("browserHosts"),
+            count("browserExecutables"),
+            count("browserCapabilities"),
+            count("profileCompatibility"),
+            count("browserPreferenceBindings"),
+            count("validationEvidence")
+        ));
+    }
+
     lines.push(format!("Profiles: {}", profiles.len()));
 
     if profiles.is_empty() {
@@ -4388,6 +4407,7 @@ Notes:
   - Service-scoped launches reject active exclusive profile conflicts by default before browser start; set profileLeasePolicy=wait and profileLeaseWaitTimeoutMs to keep the job queued while polling for release, leaving the worker available for other commands. Same-session retained browser reuse remains allowed.
   - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning. When no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
   - Service profiles can set browserBuild to stock_chrome, stealthcdp_chromium, or cdp_free_headed. Exact authenticated target, account, and target-site matches win first; browserBuild then breaks ties and can select a generic default profile for new identities.
+  - service.browserCapabilityRegistry carries draft browser host, executable, capability, profile compatibility, preference binding, and validation evidence arrays into service_state.browserCapabilityRegistry for no-launch status consumers. The registry is advisory in this release and does not change profile or browser routing yet.
   - Commands should include serviceName, agentName, and taskName when available for traceability.
   - Configured profiles, sessions, site policies, and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 

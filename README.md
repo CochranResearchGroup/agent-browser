@@ -1113,6 +1113,26 @@ Create an `agent-browser.json` file to set persistent defaults instead of repeat
         "manifestPath": "/opt/agent-browser/chromium-stealthcdp/current/manifest.json"
       }
     },
+    "browserCapabilityRegistry": {
+      "browserHosts": [
+        {
+          "id": "local-linux",
+          "name": "Local Linux desktop",
+          "hostKind": "local",
+          "operatingSystem": "linux",
+          "displaySupport": "x11",
+          "remoteViewSupport": false,
+          "reachable": true,
+          "lifecycleOwner": "agent_browser",
+          "tags": ["default"]
+        }
+      ],
+      "browserExecutables": [],
+      "browserCapabilities": [],
+      "profileCompatibility": [],
+      "browserPreferenceBindings": [],
+      "validationEvidence": []
+    },
     "reconcileIntervalMs": 60000,
     "monitorIntervalMs": 60000,
     "jobTimeoutMs": 120000,
@@ -1154,6 +1174,8 @@ Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned la
 `stealthcdp_chromium` is worthwhile for the default service posture because it keeps the CDP control plane available while reducing the obvious automation signal exposed by ordinary DevTools-attached Chromium. It is not a captcha bypass and it does not replace site policy, pacing, or manual seeding rules, but it gives bot-sensitive sites a better baseline than stock headless Chrome when CDP-backed control is still acceptable.
 
 Profile records can set `browserBuild` to `stealthcdp_chromium`, `stock_chrome`, or `cdp_free_headed`. The selector still prefers exact authenticated target, account, and target-site matches first, then uses browser build as a deterministic tie-breaker and as a fallback for generic default profiles. Callers can pass `browserBuild` to `GET /api/service/profiles/lookup`, `GET /api/service/access-plan`, MCP resource queries, or `POST /api/service/request` when a site or account needs a specific browser. For example, if `OnlyWorksOnChrome.com/myuserID` only works in real Chrome, register that service profile with `browserBuild: "stock_chrome"`, the target site ID, and the account ID; later requests for the same identity or with `browserBuild: "stock_chrome"` route to the Chrome-native profile even when stealth CDP Chromium is the global default.
+
+`service.browserCapabilityRegistry` is a draft no-launch registry for browser hosts, executables, capabilities, profile compatibility, preference bindings, and validation evidence. Configured records are exposed in `service_state.browserCapabilityRegistry` from `agent-browser service status --json` and `GET /api/service/status` so dashboards, agents, and software clients can inspect the service's browser inventory and evidence without launching Chrome. The registry is advisory for now and does not change profile selection or browser routing until the scheduler consumes it in a later release.
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
