@@ -1,0 +1,200 @@
+{
+  "generatedAt": "2026-05-13T13:30:00Z",
+  "browserHosts": [
+    {
+      "id": "linux-local",
+      "name": "Local Linux workstation",
+      "hostKind": "local",
+      "operatingSystem": "linux",
+      "displaySupport": "x11",
+      "remoteViewSupport": true,
+      "reachable": true,
+      "lifecycleOwner": "agent_browser",
+      "health": "ready",
+      "lastCheckedAt": "2026-05-13T13:30:00Z",
+      "tags": ["default-host", "local"]
+    },
+    {
+      "id": "windows-desktop-1",
+      "name": "Future Windows Chrome host",
+      "hostKind": "windows_remote",
+      "operatingSystem": "windows",
+      "displaySupport": "windows_desktop",
+      "remoteViewSupport": true,
+      "reachable": false,
+      "lifecycleOwner": "agent_browser",
+      "health": "unknown",
+      "lastCheckedAt": null,
+      "tags": ["future", "windows", "chrome-native"]
+    }
+  ],
+  "browserExecutables": [
+    {
+      "id": "linux-stealthcdp-current",
+      "hostId": "linux-local",
+      "browserFamily": "chromium",
+      "vendor": "custom",
+      "channel": "custom",
+      "buildLabel": "stealthcdp_chromium",
+      "executablePath": "/opt/agent-browser/chromium-stealthcdp/current/chrome-linux/chrome",
+      "source": "manifest",
+      "manifestPath": "/opt/agent-browser/chromium-stealthcdp/current/manifest.json",
+      "version": null,
+      "patchsetId": "chromium-stealthcdp-navigator-webdriver",
+      "fresh": true,
+      "lastCheckedAt": "2026-05-13T13:30:00Z",
+      "tags": ["preferred-default", "cdp-backed", "patched"]
+    },
+    {
+      "id": "windows-chrome-stable",
+      "hostId": "windows-desktop-1",
+      "browserFamily": "chrome",
+      "vendor": "google",
+      "channel": "stable",
+      "buildLabel": "stock_chrome",
+      "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "source": "system",
+      "manifestPath": null,
+      "version": null,
+      "patchsetId": null,
+      "fresh": null,
+      "lastCheckedAt": null,
+      "tags": ["future", "stock-chrome", "windows"]
+    }
+  ],
+  "browserCapabilities": [
+    {
+      "id": "linux-stealthcdp-capability",
+      "hostId": "linux-local",
+      "executableId": "linux-stealthcdp-current",
+      "cdpSupported": true,
+      "cdpFreeLaunchSupported": true,
+      "extensionsSupported": true,
+      "passkeysSupported": false,
+      "headedSupported": true,
+      "headlessSupported": true,
+      "streamingSupported": true,
+      "profileLockBehavior": "exclusive_user_data_dir",
+      "keyringBehavior": "basic_password_store",
+      "knownLimits": [
+        "Google first sign-in should still be seeded without a CDP attachment",
+        "Some Canva-class sites may still require cdp_free_headed posture"
+      ]
+    },
+    {
+      "id": "windows-chrome-capability",
+      "hostId": "windows-desktop-1",
+      "executableId": "windows-chrome-stable",
+      "cdpSupported": true,
+      "cdpFreeLaunchSupported": true,
+      "extensionsSupported": true,
+      "passkeysSupported": true,
+      "headedSupported": true,
+      "headlessSupported": true,
+      "streamingSupported": false,
+      "profileLockBehavior": "exclusive_user_data_dir",
+      "keyringBehavior": "real_os_keychain",
+      "knownLimits": [
+        "Remote Windows host inventory is future work",
+        "Windows profile compatibility must be proven before reuse"
+      ]
+    }
+  ],
+  "profileCompatibility": [
+    {
+      "id": "stealthcdp-default-on-linux-stealthcdp",
+      "profileId": "stealthcdp-default",
+      "hostId": "linux-local",
+      "executableId": "linux-stealthcdp-current",
+      "compatible": true,
+      "requiresOperatorOverride": false,
+      "reason": "same_browser_family",
+      "notes": "Default managed Chromium profile for new website and account identities."
+    },
+    {
+      "id": "chrome-native-profile-on-windows-chrome",
+      "profileId": "only-works-on-chrome-myuser",
+      "hostId": "windows-desktop-1",
+      "executableId": "windows-chrome-stable",
+      "compatible": true,
+      "requiresOperatorOverride": false,
+      "reason": "same_vendor_and_major_version",
+      "notes": "Future Chrome-native profile lane for a site/account that only works reliably in stock Chrome."
+    },
+    {
+      "id": "chrome-native-profile-on-linux-stealthcdp",
+      "profileId": "only-works-on-chrome-myuser",
+      "hostId": "linux-local",
+      "executableId": "linux-stealthcdp-current",
+      "compatible": false,
+      "requiresOperatorOverride": true,
+      "reason": "browser_family_mismatch",
+      "notes": "Do not silently attach a Chrome-native profile to patched Chromium."
+    }
+  ],
+  "browserPreferenceBindings": [
+    {
+      "id": "default-new-identities-use-stealthcdp",
+      "scope": "global",
+      "targetServiceIds": [],
+      "accountIds": [],
+      "serviceNames": [],
+      "taskNames": [],
+      "preferredHostId": "linux-local",
+      "preferredExecutableId": "linux-stealthcdp-current",
+      "preferredCapabilityId": "linux-stealthcdp-capability",
+      "browserBuild": "stealthcdp_chromium",
+      "priority": 10,
+      "reason": "Preferred default for fresh service-owned profiles when a ready stealth CDP Chromium artifact is available."
+    },
+    {
+      "id": "only-works-on-chrome-myuser-primary",
+      "scope": "account",
+      "targetServiceIds": ["only-works-on-chrome"],
+      "accountIds": ["myuserID"],
+      "serviceNames": [],
+      "taskNames": [],
+      "preferredHostId": "windows-desktop-1",
+      "preferredExecutableId": "windows-chrome-stable",
+      "preferredCapabilityId": "windows-chrome-capability",
+      "browserBuild": "stock_chrome",
+      "priority": 100,
+      "reason": "Future explicit primary routing for a site/account identity that only works reliably in Chrome-native posture."
+    }
+  ],
+  "validationEvidence": [
+    {
+      "id": "linux-stealthcdp-launch-smoke",
+      "hostId": "linux-local",
+      "executableId": "linux-stealthcdp-current",
+      "capabilityId": "linux-stealthcdp-capability",
+      "kind": "launch",
+      "state": "passed",
+      "checkedAt": "2026-05-13T13:30:00Z",
+      "evidence": "Illustrative sample: patched Chromium launches and remains controllable through CDP.",
+      "artifactPath": null
+    },
+    {
+      "id": "linux-stealthcdp-cdp-attach-smoke",
+      "hostId": "linux-local",
+      "executableId": "linux-stealthcdp-current",
+      "capabilityId": "linux-stealthcdp-capability",
+      "kind": "cdp_attach",
+      "state": "passed",
+      "checkedAt": "2026-05-13T13:30:00Z",
+      "evidence": "Illustrative sample: navigator.webdriver stays non-advertising while CDP-backed control remains available.",
+      "artifactPath": null
+    },
+    {
+      "id": "windows-chrome-inventory-smoke",
+      "hostId": "windows-desktop-1",
+      "executableId": "windows-chrome-stable",
+      "capabilityId": "windows-chrome-capability",
+      "kind": "launch",
+      "state": "unknown",
+      "checkedAt": null,
+      "evidence": "Future Windows host inventory has not been implemented.",
+      "artifactPath": null
+    }
+  ]
+}

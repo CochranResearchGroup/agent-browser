@@ -207,6 +207,11 @@ Do not generate client code or runtime metadata from this draft until a later
 implementation slice wires the registry into service state and no-launch
 access-plan responses.
 
+`examples/browser-capability-registry.sample.json` shows the intended shape for
+a local Linux `stealthcdp_chromium` default plus a future Windows
+`stock_chrome` primary binding for one site/account identity. The sample is
+illustrative and should not be read as live host inventory.
+
 ## Service Incident Record v1
 
 `service-incident-record.v1.schema.json` describes grouped service incident
