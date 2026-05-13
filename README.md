@@ -63,6 +63,10 @@ executable or manifest.
 
 Before creating a release, maintainers can validate the release workflow without side effects by manually running the `Release` GitHub Actions workflow with `dry_run` set to `true`. The dry run builds all platform binaries, verifies the expected artifacts, and skips GitHub release creation.
 
+After installing or replacing a release candidate binary locally, run
+`agent-browser install doctor`. Treat any nonzero result as an install drift or
+custom browser readiness issue before calling the candidate validated.
+
 ### Updating
 
 Upgrade to the latest version:

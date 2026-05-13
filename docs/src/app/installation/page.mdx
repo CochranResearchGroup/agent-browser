@@ -59,6 +59,18 @@ doctor checks the command on <code>PATH</code>, the running executable, the pnpm
 global package binary when pnpm is available, the current workspace binary when
 run from a checkout, and launch readiness for configured custom browser builds.
 
+## Maintainer release validation
+
+Before creating a release, maintainers can manually run the <code>Release</code>
+GitHub Actions workflow with <code>dry_run</code> set to <code>true</code>. The
+dry run builds all platform binaries, verifies expected artifacts, and skips
+GitHub release creation.
+
+After installing or replacing a release candidate binary locally, run
+<code>agent-browser install doctor</code>. Treat any nonzero result as an
+install drift or custom browser readiness issue before calling the candidate
+validated.
+
 ## Custom browser
 
 Use a custom browser executable instead of bundled Chromium:

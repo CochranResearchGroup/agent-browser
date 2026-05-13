@@ -45,11 +45,14 @@ To prepare a release:
 3. Run `pnpm version:sync` to update `cli/Cargo.toml`, `cli/Cargo.lock`, and `packages/dashboard/package.json`
 4. Write the changelog entry in `CHANGELOG.md` at the top, under a new `## <version>` heading, wrapped in `<!-- release:start -->` and `<!-- release:end -->` markers. Remove the `<!-- release:start -->` and `<!-- release:end -->` markers from the previous release entry so only the new release has markers.
 5. Add a matching entry to `docs/src/app/changelog/page.mdx` at the top (below the `# Changelog` heading)
-6. Open a PR and merge to `main`
+6. Validate the user-scoped install/update surface with `agent-browser install doctor` after installing or replacing the release candidate binary
+7. Open a PR and merge to `main`
 
 When the PR merges, CI checks whether the matching GitHub release tag already exists. If the tag is missing, it builds all 7 platform binaries and creates the GitHub release automatically. The GitHub release body is extracted from the content between the `<!-- release:start -->` and `<!-- release:end -->` markers in `CHANGELOG.md`. npm is not an authoritative release target for this fork.
 
 To validate the release workflow without creating a release, run the `Release` workflow manually from GitHub Actions with `dry_run` set to `true`. This builds the release binaries, verifies all expected artifacts, and skips GitHub release creation.
+
+After installing a built release candidate locally, run `agent-browser install doctor`. Treat any nonzero result as an install drift or browser-build readiness issue before calling the release candidate validated.
 
 ### Writing the changelog
 
