@@ -12,7 +12,9 @@ small companion patchset repository:
 - Chromium source branch: `ec/chromium-stealthcdp`
 - Base revision: `d421c3af8268e2e6227b7fe4461183e69b64bc61`
 - Active Chromium patch commit: `24ecda02e9 Make navigator.webdriver non-advertising`
-- Patchset repo commit: `4add95c Drop browser UI patch from website privacy queue`
+- Patchset repo commit: `3676a75 Add promoted artifact freshness check`
+- Promoted executable:
+  `/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp/current/chrome-linux/chrome`
 
 The current exported patch queue contains one patch:
 
@@ -44,23 +46,28 @@ are acceptable for this objective.
 
 ## Agent-Browser Integration Posture
 
-Use the patched Chromium executable through the existing custom executable
-surface:
+Use the promoted patched Chromium executable through the existing custom
+executable surface:
 
 ```bash
-AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome agent-browser open https://example.com
+AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp/current/chrome-linux/chrome agent-browser open https://example.com
 ```
 
 or:
 
 ```bash
-agent-browser --executable-path /home/ecochran76/workspace.local/chromium/src/out/Default/chrome open https://example.com
+agent-browser --executable-path /home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp/current/chrome-linux/chrome open https://example.com
 ```
 
 Do not add a separate browser lifecycle path just for this patchset. Agent
 browser should continue to own browser process lifecycle, CDP connections,
 streaming, and service-owned serialized control. The patched Chromium binary is
 only an engine choice.
+
+Do not use `/home/ecochran76/workspace.local/chromium/src/out/Default/chrome`
+as the long-running agent-browser contract. That path is a build product. Use
+the promoted `current` artifact path above so the binary has a manifest,
+patchset revision, Chromium revision, patch checksums, and smoke-test record.
 
 ## What This Does Not Prove
 
@@ -102,7 +109,7 @@ Run live tests with an isolated home and profile so the patched Chromium smoke
 does not mutate the default runtime profile:
 
 ```bash
-export AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+export AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp/current/chrome-linux/chrome
 export AGENT_BROWSER_HOME="$(mktemp -d)"
 ```
 
@@ -680,3 +687,90 @@ Interpretation:
 - If the daemon already owns the same runtime-profile browser process, a live
   managed attach request should reuse that browser instead of closing it and
   reconnecting through the external-CDP path.
+
+## 2026-05-13 Promoted Artifact Handoff
+
+The Chromium patchset now has promotion and freshness tooling. Treat the
+promoted artifact as the current agent-browser engine contract:
+
+```text
+/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp/current/chrome-linux/chrome
+```
+
+Do not use the build-tree binary as the long-running contract:
+
+```text
+/home/ecochran76/workspace.local/chromium/src/out/Default/chrome
+```
+
+That path can be rebuilt, replaced, or become stale without a manifest. The
+promoted artifact contains:
+
+- `manifest.json`
+- `smoke.json`
+- patch copies
+- `patches.sha256`
+- a stable `current` symlink
+
+Current promoted artifact:
+
+```text
+/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp/150.0.7835.0+stealthcdp.3676a7503929
+```
+
+Current patchset repo commit:
+
+```text
+3676a7503929fc2ff1ce0227c03c48aeaa4b1bae
+```
+
+Current Chromium patch commit:
+
+```text
+24ecda02e97db6fa730a7ccf8747776a4d21e4b9
+```
+
+Before using the promoted binary for long-running managed-browser sessions,
+run the freshness check:
+
+```bash
+cd /home/ecochran76/workspace.local/chromium/chromium-stealthcdp
+scripts/check-freshness.sh \
+  --src ../src \
+  --artifact ../artifacts/chromium-stealthcdp/current
+```
+
+Expected result:
+
+```text
+"fresh": true
+```
+
+Use this executable path in agent-browser:
+
+```bash
+export AGENT_BROWSER_EXECUTABLE_PATH=/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp/current/chrome-linux/chrome
+```
+
+Then run the existing focused proof before treating the engine as ready for
+agent-browser automation:
+
+```bash
+cd /home/ecochran76/workspace.local/agent-browser
+cargo test --manifest-path cli/Cargo.toml \
+  e2e_chromium_stealthcdp_navigator_webdriver_false \
+  -- --ignored --test-threads=1 --nocapture
+```
+
+For managed-profile paths, rerun the Canva reattach shape from the previous
+section with `AGENT_BROWSER_EXECUTABLE_PATH` set to the promoted artifact. The
+expected result is unchanged:
+
+- the browser PID and DevTools port stay stable across follow-up commands
+- `get title` and `get url` reuse the existing Canva tab
+- `eval navigator.webdriver` returns `false`
+- service trace records attach reuse, not replacement browser launch
+
+If the freshness check fails, do not silently fall back to `src/out/Default`.
+Return to the Chromium patchset repo, rebuild or re-promote there, and only
+then update this handoff.
