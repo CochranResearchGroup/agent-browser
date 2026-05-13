@@ -173,6 +173,40 @@ and returns the generated response types, including `getServiceContracts` for
 the runtime compatibility metadata endpoint and `getServiceMonitors` for the
 retained monitor collection.
 
+## Draft Browser Capability Registry v1
+
+`service-browser-capability-registry.v1.schema.json` is a draft no-runtime
+contract for future browser inventory and routing. It is not yet exposed by
+HTTP, MCP, CLI, generated clients, or service state.
+
+The draft separates current access-plan browser posture labels from future
+executable placement. Current posture labels such as `stock_chrome`,
+`stealthcdp_chromium`, and `cdp_free_headed` continue to describe what a site
+or account needs. Future registry records will describe which host,
+executable, capability, profile compatibility rule, and preference binding can
+satisfy that posture.
+
+The draft record groups are:
+
+- `browserHosts`: local, Windows-hosted, Docker, cloud, or attached browser
+  owners
+- `browserExecutables`: system installs, configured paths, promoted artifacts,
+  or attached browser identities
+- `browserCapabilities`: CDP, CDP-free launch, extension, passkey, headed,
+  headless, streaming, profile-lock, and keyring behavior
+- `profileCompatibility`: rules that prevent accidental profile reuse across
+  incompatible browser families, vendors, operating systems, keyrings, or
+  extension postures
+- `browserPreferenceBindings`: future primary-browser routing for a site,
+  account identity, service, or task
+- `validationEvidence`: retained smoke evidence for launch, CDP attach,
+  CDP-free launch, extension availability, profile reuse, streaming, and
+  site-specific reliability
+
+Do not generate client code or runtime metadata from this draft until a later
+implementation slice wires the registry into service state and no-launch
+access-plan responses.
+
 ## Service Incident Record v1
 
 `service-incident-record.v1.schema.json` describes grouped service incident

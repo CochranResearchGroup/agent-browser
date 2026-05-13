@@ -1,0 +1,433 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-browser-capability-registry.v1.schema.json",
+  "title": "agent-browser service browser capability registry draft",
+  "description": "Draft no-runtime contract for future service-owned browser host, executable, capability, profile compatibility, preference binding, and validation evidence records.",
+  "type": "object",
+  "required": [
+    "browserHosts",
+    "browserExecutables",
+    "browserCapabilities",
+    "profileCompatibility",
+    "browserPreferenceBindings",
+    "validationEvidence"
+  ],
+  "properties": {
+    "browserHosts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/browserHost"
+      }
+    },
+    "browserExecutables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/browserExecutable"
+      }
+    },
+    "browserCapabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/browserCapability"
+      }
+    },
+    "profileCompatibility": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profileCompatibility"
+      }
+    },
+    "browserPreferenceBindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/browserPreferenceBinding"
+      }
+    },
+    "validationEvidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/browserValidationEvidence"
+      }
+    },
+    "generatedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "browserHost": {
+      "description": "Machine, container host, desktop session, Windows host, or remote service that can own browser processes.",
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "hostKind",
+        "operatingSystem",
+        "displaySupport",
+        "remoteViewSupport",
+        "reachable",
+        "lifecycleOwner",
+        "tags"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "hostKind": {
+          "type": "string",
+          "enum": ["local", "windows_remote", "docker", "cloud", "attached_existing"]
+        },
+        "operatingSystem": {
+          "type": "string",
+          "enum": ["linux", "windows", "macos", "container_linux", "unknown"]
+        },
+        "displaySupport": {
+          "type": "string",
+          "enum": ["none", "x11", "wayland", "windows_desktop", "vnc", "webrtc", "unknown"]
+        },
+        "remoteViewSupport": {
+          "type": "boolean"
+        },
+        "reachable": {
+          "type": "boolean"
+        },
+        "lifecycleOwner": {
+          "type": "string",
+          "enum": ["agent_browser", "operator", "external_service", "unknown"]
+        },
+        "health": {
+          "type": ["string", "null"],
+          "enum": ["ready", "degraded", "unreachable", "faulted", "unknown", null]
+        },
+        "lastCheckedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "browserExecutable": {
+      "description": "Launchable browser install or promoted artifact available on a browser host.",
+      "type": "object",
+      "required": [
+        "id",
+        "hostId",
+        "browserFamily",
+        "vendor",
+        "channel",
+        "buildLabel",
+        "executablePath",
+        "source",
+        "version",
+        "tags"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "hostId": {
+          "type": "string"
+        },
+        "browserFamily": {
+          "type": "string",
+          "enum": ["chrome", "chromium", "edge", "brave", "unknown"]
+        },
+        "vendor": {
+          "type": "string",
+          "enum": ["google", "chromium", "microsoft", "brave", "custom", "unknown"]
+        },
+        "channel": {
+          "type": "string",
+          "enum": ["stable", "beta", "dev", "canary", "custom", "unknown"]
+        },
+        "buildLabel": {
+          "description": "Current browser posture label compatible with service access-plan browserBuild decisions.",
+          "type": "string",
+          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", "custom"]
+        },
+        "executablePath": {
+          "type": ["string", "null"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["system", "config", "env", "manifest", "installed_bundle", "attached_existing", "unknown"]
+        },
+        "manifestPath": {
+          "type": ["string", "null"]
+        },
+        "version": {
+          "type": ["string", "null"]
+        },
+        "patchsetId": {
+          "type": ["string", "null"]
+        },
+        "fresh": {
+          "type": ["boolean", "null"]
+        },
+        "lastCheckedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "browserCapability": {
+      "description": "Normalized capabilities for one executable on one host.",
+      "type": "object",
+      "required": [
+        "id",
+        "hostId",
+        "executableId",
+        "cdpSupported",
+        "cdpFreeLaunchSupported",
+        "extensionsSupported",
+        "passkeysSupported",
+        "headedSupported",
+        "headlessSupported",
+        "streamingSupported",
+        "profileLockBehavior",
+        "keyringBehavior",
+        "knownLimits"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "hostId": {
+          "type": "string"
+        },
+        "executableId": {
+          "type": "string"
+        },
+        "cdpSupported": {
+          "type": "boolean"
+        },
+        "cdpFreeLaunchSupported": {
+          "type": "boolean"
+        },
+        "extensionsSupported": {
+          "type": "boolean"
+        },
+        "passkeysSupported": {
+          "type": "boolean"
+        },
+        "headedSupported": {
+          "type": "boolean"
+        },
+        "headlessSupported": {
+          "type": "boolean"
+        },
+        "streamingSupported": {
+          "type": "boolean"
+        },
+        "profileLockBehavior": {
+          "type": "string",
+          "enum": ["exclusive_user_data_dir", "shared_attachable", "unknown"]
+        },
+        "keyringBehavior": {
+          "type": "string",
+          "enum": ["basic_password_store", "real_os_keychain", "managed_vault", "unknown"]
+        },
+        "knownLimits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "profileCompatibility": {
+      "description": "Policy that says whether a profile family can be used with a host and executable family.",
+      "type": "object",
+      "required": [
+        "id",
+        "profileId",
+        "hostId",
+        "executableId",
+        "compatible",
+        "requiresOperatorOverride",
+        "reason"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "hostId": {
+          "type": "string"
+        },
+        "executableId": {
+          "type": "string"
+        },
+        "compatible": {
+          "type": "boolean"
+        },
+        "requiresOperatorOverride": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "same_browser_family",
+            "same_vendor_and_major_version",
+            "explicit_operator_override",
+            "browser_family_mismatch",
+            "os_keyring_mismatch",
+            "extension_posture_mismatch",
+            "unknown"
+          ]
+        },
+        "notes": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "browserPreferenceBinding": {
+      "description": "Routing preference that marks a site, account, service, or task as primary on a capability or executable.",
+      "type": "object",
+      "required": [
+        "id",
+        "scope",
+        "targetServiceIds",
+        "accountIds",
+        "serviceNames",
+        "taskNames",
+        "preferredHostId",
+        "preferredExecutableId",
+        "preferredCapabilityId",
+        "browserBuild",
+        "priority",
+        "reason"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["site", "account", "service", "task", "global"]
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "accountIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "serviceNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "taskNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preferredHostId": {
+          "type": ["string", "null"]
+        },
+        "preferredExecutableId": {
+          "type": ["string", "null"]
+        },
+        "preferredCapabilityId": {
+          "type": ["string", "null"]
+        },
+        "browserBuild": {
+          "type": ["string", "null"],
+          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", "custom", null]
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "browserValidationEvidence": {
+      "description": "Retained smoke or operator evidence for one browser capability.",
+      "type": "object",
+      "required": [
+        "id",
+        "hostId",
+        "executableId",
+        "capabilityId",
+        "kind",
+        "state",
+        "checkedAt",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "hostId": {
+          "type": "string"
+        },
+        "executableId": {
+          "type": "string"
+        },
+        "capabilityId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "launch",
+            "cdp_attach",
+            "cdp_free_launch",
+            "extension_available",
+            "profile_reuse",
+            "streaming",
+            "site_reliability"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": ["unknown", "passed", "failed", "stale"]
+        },
+        "checkedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "evidence": {
+          "type": ["string", "null"]
+        },
+        "artifactPath": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

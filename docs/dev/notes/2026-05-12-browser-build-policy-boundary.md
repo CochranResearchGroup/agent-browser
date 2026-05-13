@@ -95,6 +95,11 @@ inventory exists.
 The future registry should describe concrete browser hosts and executables
 before access policy assigns a site or account identity to them.
 
+The first draft contract is
+`docs/dev/contracts/service-browser-capability-registry.v1.schema.json`.
+It is intentionally not wired into runtime state, HTTP, MCP, CLI, or generated
+clients yet.
+
 Suggested durable records:
 
 - `BrowserHost`: machine or service that can own browser processes, with host
