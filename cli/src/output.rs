@@ -4109,14 +4109,18 @@ Examples:
 agent-browser install - Install browser binaries
 
 Usage: agent-browser install [--with-deps]
+       agent-browser install doctor [--json]
 
 Downloads and installs browser binaries required for automation.
 
 Options:
   -d, --with-deps      Also install system dependencies (Linux only)
+  --json               Output install doctor results as JSON
 
 Examples:
   agent-browser install
+  agent-browser install doctor
+  agent-browser install doctor --json
   agent-browser install --with-deps
 "##
         }
@@ -4954,6 +4958,7 @@ Dashboard:
 
 Setup:
   install                    Install browser binaries
+  install doctor             Check user-scoped install drift and launch readiness
   install --with-deps        Also install system dependencies (Linux)
   upgrade                    Upgrade to the latest version
   dashboard start            Start the observability dashboard

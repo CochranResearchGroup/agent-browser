@@ -11,6 +11,7 @@ curl -L -o ~/.local/bin/agent-browser \
   https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
 chmod +x ~/.local/bin/agent-browser
 agent-browser install  # Download Chrome from Chrome for Testing (first time)
+agent-browser install doctor  # Check binary drift and launch readiness
 ```
 
 This is the fastest option. Commands run through the native Rust CLI directly
@@ -51,6 +52,12 @@ agent-browser upgrade
 For this fork, prefer replacing the binary from the latest GitHub release. The
 legacy `upgrade` command may still know about upstream package-manager installs,
 but those channels are not authoritative here.
+
+Run <code>agent-browser install doctor</code> after replacing the user-scoped
+binary or changing a custom browser manifest. It does not launch Chrome. The
+doctor checks the command on <code>PATH</code>, the running executable, the pnpm
+global package binary when pnpm is available, the current workspace binary when
+run from a checkout, and launch readiness for configured custom browser builds.
 
 ## Custom browser
 

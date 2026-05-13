@@ -128,6 +128,11 @@ launching.
 <code>launchConfig</code> diagnostic with the resolved executable path,
 executable source, artifact metadata, file existence, and warnings when the
 selected custom build is not ready.
+Use <code>agent-browser install doctor</code> after upgrading the user-scoped
+command or changing browser build manifests. It does not launch Chrome. The
+doctor checks the command on <code>PATH</code>, the running executable, the pnpm
+global package binary when pnpm is available, the current workspace binary when
+run from a checkout, and this same <code>launchConfig</code> readiness view.
 Current browser launch behavior still comes from <code>runtimeProfiles</code>,
 <code>--runtime-profile</code>, <code>--profile</code>, and existing launch
 flags. Launches that select a runtime profile or custom profile path bind the

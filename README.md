@@ -15,6 +15,7 @@ curl -L -o ~/.local/bin/agent-browser \
   https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
 chmod +x ~/.local/bin/agent-browser
 agent-browser install  # Download Chrome from Chrome for Testing (first time only)
+agent-browser install doctor  # Check user-scoped binary drift and launch readiness
 ```
 
 npm, Homebrew, and Cargo are not authoritative release channels for this fork.
@@ -39,6 +40,24 @@ On Linux, install system dependencies:
 ```bash
 agent-browser install --with-deps
 ```
+
+### Install Doctor
+
+Use `agent-browser install doctor` after upgrading a user-scoped install or
+changing custom browser manifests. It does not launch Chrome. It checks the
+`agent-browser` command on `PATH`, the running executable, the pnpm global
+package binary when pnpm is available, the current workspace binary when run
+from a checkout, and the no-launch `launchConfig` readiness view.
+
+```bash
+agent-browser install doctor
+agent-browser install doctor --json
+```
+
+The doctor reports drift when the command on `PATH` does not match the pnpm
+global package binary or the current workspace binary, and it reports launch
+readiness problems when `stealthcdp_chromium` is selected without a ready
+executable or manifest.
 
 ### Maintainer Release Validation
 
@@ -398,6 +417,7 @@ agent-browser reload                  # Reload page
 
 ```bash
 agent-browser install                 # Download Chrome from Chrome for Testing (Google's official automation channel)
+agent-browser install doctor          # Check user-scoped binary drift and launch readiness
 agent-browser install --with-deps     # Also install system deps (Linux)
 agent-browser upgrade                 # Upgrade agent-browser to the latest version
 ```

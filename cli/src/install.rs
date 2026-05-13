@@ -1,6 +1,8 @@
 use crate::color;
+use crate::flags::{launch_config_status, Flags};
+use serde_json::json;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Stdio};
 
@@ -506,6 +508,318 @@ pub fn run_install(with_deps: bool) {
     }
 }
 
+/// Inspect the user-scoped command and package binaries without launching a browser.
+pub fn run_install_doctor(flags: &Flags) {
+    let report = install_doctor_report(flags);
+    if flags.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).unwrap_or_else(|_| {
+                r#"{"success":false,"error":"Failed to serialize install doctor report"}"#
+                    .to_string()
+            })
+        );
+        if !report
+            .get("success")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+        {
+            exit(1);
+        }
+        return;
+    }
+
+    let success = report
+        .get("success")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let indicator = if success {
+        color::success_indicator()
+    } else {
+        color::warning_indicator()
+    };
+    println!("{indicator} agent-browser install doctor");
+    print_doctor_field("version", report.pointer("/data/version"));
+    print_doctor_field("path command", report.pointer("/data/pathCommand/path"));
+    print_doctor_field(
+        "current executable",
+        report.pointer("/data/currentExecutable/path"),
+    );
+    print_doctor_field(
+        "pnpm package binary",
+        report.pointer("/data/pnpmPackageBinary/path"),
+    );
+    print_doctor_field(
+        "workspace binary",
+        report.pointer("/data/workspaceBinary/path"),
+    );
+    print_doctor_field(
+        "launch config source",
+        report.pointer("/data/launchConfig/executablePathSource"),
+    );
+    print_doctor_field(
+        "launch config ready",
+        report.pointer("/data/launchConfig/stealthCdpChromiumReady"),
+    );
+    print_doctor_field(
+        "launch executable",
+        report.pointer("/data/launchConfig/executablePath"),
+    );
+
+    let issues = report
+        .pointer("/data/issues")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if issues.is_empty() {
+        println!("No install drift detected.");
+    } else {
+        println!("Issues:");
+        for issue in issues {
+            let code = issue
+                .get("code")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown");
+            let message = issue
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            println!("  - {code}: {message}");
+        }
+        exit(1);
+    }
+}
+
+fn print_doctor_field(label: &str, value: Option<&serde_json::Value>) {
+    let rendered = match value {
+        Some(value) if value.is_string() => value.as_str().unwrap_or("").to_string(),
+        Some(value) if value.is_boolean() => value.as_bool().unwrap_or(false).to_string(),
+        Some(value) if !value.is_null() => value.to_string(),
+        _ => "not found".to_string(),
+    };
+    println!("{label}: {rendered}");
+}
+
+fn install_doctor_report(flags: &Flags) -> serde_json::Value {
+    let current_executable = binary_fingerprint(std::env::current_exe().ok());
+    let path_command = binary_fingerprint(find_path_command(command_name()));
+    let pnpm_package_binary = binary_fingerprint(find_pnpm_package_binary());
+    let workspace_binary = binary_fingerprint(find_workspace_binary());
+    let launch_config = launch_config_status(flags);
+    let issues = install_doctor_issues(
+        &current_executable,
+        &path_command,
+        &pnpm_package_binary,
+        &workspace_binary,
+        &launch_config,
+    );
+
+    json!({
+        "success": issues.is_empty(),
+        "data": {
+            "version": env!("CARGO_PKG_VERSION"),
+            "currentExecutable": current_executable,
+            "pathCommand": path_command,
+            "pnpmPackageBinary": pnpm_package_binary,
+            "workspaceBinary": workspace_binary,
+            "launchConfig": launch_config,
+            "issues": issues,
+        }
+    })
+}
+
+fn install_doctor_issues(
+    current_executable: &serde_json::Value,
+    path_command: &serde_json::Value,
+    pnpm_package_binary: &serde_json::Value,
+    workspace_binary: &serde_json::Value,
+    launch_config: &serde_json::Value,
+) -> Vec<serde_json::Value> {
+    let mut issues = Vec::new();
+
+    if path_command
+        .get("path")
+        .and_then(|value| value.as_str())
+        .is_none()
+    {
+        issues.push(json!({
+            "code": "path_command_missing",
+            "message": "agent-browser was not found on PATH"
+        }));
+    }
+
+    if let (Some(current_hash), Some(path_hash)) = (
+        current_executable
+            .get("sha256")
+            .and_then(|value| value.as_str()),
+        path_command.get("sha256").and_then(|value| value.as_str()),
+    ) {
+        if current_hash != path_hash {
+            issues.push(json!({
+                "code": "current_executable_path_command_mismatch",
+                "message": "the running executable does not match the agent-browser command on PATH"
+            }));
+        }
+    }
+
+    if let (Some(path_hash), Some(package_hash)) = (
+        path_command.get("sha256").and_then(|value| value.as_str()),
+        pnpm_package_binary
+            .get("sha256")
+            .and_then(|value| value.as_str()),
+    ) {
+        if path_hash != package_hash {
+            issues.push(json!({
+                "code": "path_command_pnpm_binary_mismatch",
+                "message": "the agent-browser command on PATH does not match the pnpm global package binary"
+            }));
+        }
+    }
+
+    if let (Some(path_hash), Some(workspace_hash)) = (
+        path_command.get("sha256").and_then(|value| value.as_str()),
+        workspace_binary
+            .get("sha256")
+            .and_then(|value| value.as_str()),
+    ) {
+        if path_hash != workspace_hash {
+            issues.push(json!({
+                "code": "path_command_workspace_binary_mismatch",
+                "message": "the agent-browser command on PATH does not match the binary in the current workspace"
+            }));
+        }
+    }
+
+    let stealth_required = launch_config
+        .get("stealthCdpChromiumRequired")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let stealth_ready = launch_config
+        .get("stealthCdpChromiumReady")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if stealth_required && !stealth_ready {
+        issues.push(json!({
+            "code": "launch_config_not_ready",
+            "message": "configured stealthcdp_chromium launch posture is not ready"
+        }));
+    }
+
+    issues
+}
+
+fn binary_fingerprint(path: Option<PathBuf>) -> serde_json::Value {
+    let Some(path) = path else {
+        return json!({
+            "path": null,
+            "exists": false,
+            "sha256": null,
+            "sizeBytes": null,
+        });
+    };
+    let canonical_path = path.canonicalize().unwrap_or(path.clone());
+    let metadata = fs::metadata(&path);
+    let sha256 = file_sha256(&path).ok();
+    json!({
+        "path": path.display().to_string(),
+        "canonicalPath": canonical_path.display().to_string(),
+        "exists": metadata.is_ok(),
+        "sha256": sha256,
+        "sizeBytes": metadata.ok().map(|metadata| metadata.len()),
+    })
+}
+
+fn file_sha256(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+
+    let mut file =
+        fs::File::open(path).map_err(|err| format!("failed to open {}: {err}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn command_name() -> &'static str {
+    if cfg!(windows) {
+        "agent-browser.exe"
+    } else {
+        "agent-browser"
+    }
+}
+
+fn native_binary_name() -> Option<&'static str> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => Some("agent-browser-linux-x64"),
+        ("linux", "aarch64") => Some("agent-browser-linux-arm64"),
+        ("macos", "x86_64") => Some("agent-browser-darwin-x64"),
+        ("macos", "aarch64") => Some("agent-browser-darwin-arm64"),
+        ("windows", "x86_64") => Some("agent-browser-win32-x64.exe"),
+        ("windows", "aarch64") => Some("agent-browser-win32-arm64.exe"),
+        _ => None,
+    }
+}
+
+fn find_path_command(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&paths) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        #[cfg(windows)]
+        {
+            if !name.ends_with(".exe") {
+                let candidate = dir.join(format!("{name}.exe"));
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn find_pnpm_package_binary() -> Option<PathBuf> {
+    let binary_name = native_binary_name()?;
+    if let Ok(root) = std::env::var("AGENT_BROWSER_INSTALL_DOCTOR_PNPM_ROOT") {
+        return Some(
+            PathBuf::from(root)
+                .join("agent-browser")
+                .join("bin")
+                .join(binary_name),
+        );
+    }
+    let output = Command::new("pnpm").args(["root", "-g"]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if root.is_empty() {
+        return None;
+    }
+    Some(
+        PathBuf::from(root)
+            .join("agent-browser")
+            .join("bin")
+            .join(binary_name),
+    )
+}
+
+fn find_workspace_binary() -> Option<PathBuf> {
+    let binary_name = native_binary_name()?;
+    let candidate = std::env::current_dir().ok()?.join("bin").join(binary_name);
+    candidate.is_file().then_some(candidate)
+}
+
 fn report_install_status(status: io::Result<std::process::ExitStatus>) {
     match status {
         Ok(s) if s.success() => {
@@ -813,6 +1127,69 @@ mod tests {
         let request = String::from_utf8_lossy(&buf[..n]).to_string();
         s.write_all(response).await.unwrap();
         request
+    }
+
+    fn fingerprint(path: Option<&str>, sha256: Option<&str>) -> serde_json::Value {
+        json!({
+            "path": path,
+            "exists": path.is_some(),
+            "sha256": sha256,
+            "sizeBytes": 1,
+        })
+    }
+
+    fn issue_codes(issues: Vec<serde_json::Value>) -> Vec<String> {
+        issues
+            .into_iter()
+            .filter_map(|issue| {
+                issue
+                    .get("code")
+                    .and_then(|value| value.as_str())
+                    .map(ToString::to_string)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn install_doctor_flags_path_and_pnpm_binary_mismatch() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let issues = install_doctor_issues(
+            &fingerprint(Some("/current/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/path/agent-browser"), Some("bbb")),
+            &fingerprint(Some("/pnpm/agent-browser"), Some("ccc")),
+            &fingerprint(None, None),
+            &launch_config,
+        );
+
+        assert_eq!(
+            issue_codes(issues),
+            vec![
+                "current_executable_path_command_mismatch",
+                "path_command_pnpm_binary_mismatch"
+            ]
+        );
+    }
+
+    #[test]
+    fn install_doctor_flags_launch_config_not_ready() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": true,
+            "stealthCdpChromiumReady": false,
+        });
+
+        let issues = install_doctor_issues(
+            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
+            &launch_config,
+        );
+
+        assert_eq!(issue_codes(issues), vec!["launch_config_not_ready"]);
     }
 
     #[tokio::test]
