@@ -34,7 +34,6 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
 ```json
 {
   "defaultRuntimeProfile": "work",
-  "executablePath": "/opt/agent-browser/chromium-stealthcdp/chrome",
   "runtimeProfiles": {
     "work": {
       "userDataDir": "~/.agent-browser/runtime-profiles/work/user-data",
@@ -57,6 +56,11 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
   },
   "service": {
     "defaultBrowserBuild": "stealthcdp_chromium",
+    "browserBuildManifests": {
+      "stealthcdp_chromium": {
+        "manifestPath": "/opt/agent-browser/chromium-stealthcdp/current/manifest.json"
+      }
+    },
     "reconcileIntervalMs": 60000,
     "jobTimeoutMs": 120000,
     "profiles": {
@@ -113,13 +117,17 @@ ownership, profile binding, lease state, and cleanup policy. These records are
 exposed through service status, MCP resources, and the HTTP service APIs.
 Set <code>service.defaultBrowserBuild</code> to
 <code>stealthcdp_chromium</code> only when service-owned launches should prefer
-the patched Chromium posture. The build label does not locate the browser
-binary by itself. Provide the current binary location with
-<code>executablePath</code> or <code>AGENT_BROWSER_EXECUTABLE_PATH</code>.
+the patched Chromium posture. Provide the current binary location with
+<code>executablePath</code>, <code>AGENT_BROWSER_EXECUTABLE_PATH</code>, or
+<code>service.browserBuildManifests.stealthcdp_chromium.manifestPath</code>.
+A manifest path points at a promoted artifact <code>manifest.json</code>, and
+agent-browser resolves the executable relative to that manifest before
+launching.
 <code>agent-browser service status</code> and
 <code>GET /api/service/status</code> include a no-launch
-<code>launchConfig</code> diagnostic with the resolved executable path, file
-existence, and warnings when the selected custom build is not ready.
+<code>launchConfig</code> diagnostic with the resolved executable path,
+executable source, artifact metadata, file existence, and warnings when the
+selected custom build is not ready.
 Current browser launch behavior still comes from <code>runtimeProfiles</code>,
 <code>--runtime-profile</code>, <code>--profile</code>, and existing launch
 flags. Launches that select a runtime profile or custom profile path bind the
@@ -157,7 +165,8 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>runtimeProfile</code></td><td><code>--runtime-profile</code></td><td>string</td></tr>
     <tr><td><code>sessionName</code></td><td><code>--session-name</code></td><td>string</td></tr>
     <tr><td><code>executablePath</code></td><td><code>--executable-path</code></td><td>string</td></tr>
-    <tr><td><code>service.defaultBrowserBuild</code></td><td>Service launch posture label. Use <code>stealthcdp_chromium</code> with <code>executablePath</code> or <code>AGENT_BROWSER_EXECUTABLE_PATH</code> for the patched Chromium build.</td><td>string</td></tr>
+    <tr><td><code>service.defaultBrowserBuild</code></td><td>Service launch posture label. Use <code>stealthcdp_chromium</code> with <code>executablePath</code>, <code>AGENT_BROWSER_EXECUTABLE_PATH</code>, or <code>service.browserBuildManifests.stealthcdp_chromium.manifestPath</code> for the patched Chromium build.</td><td>string</td></tr>
+    <tr><td><code>service.browserBuildManifests.&lt;build&gt;.manifestPath</code></td><td>Promoted browser artifact manifest used to resolve the executable and report artifact metadata in service status.</td><td>string</td></tr>
     <tr><td><code>extensions</code></td><td><code>--extension</code></td><td>string[]</td></tr>
     <tr><td><code>profile</code></td><td><code>--profile</code></td><td>string</td></tr>
     <tr><td><code>state</code></td><td><code>--state</code></td><td>string</td></tr>
@@ -283,7 +292,8 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_STATE_EXPIRE_DAYS</code></td><td>Auto-delete saved session states older than N days.</td><td><code>30</code></td></tr>
     <tr><td><code>AGENT_BROWSER_ENCRYPTION_KEY</code></td><td>64-char hex key for AES-256-GCM session encryption.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_EXTENSIONS</code></td><td>Comma-separated browser extension paths. Extensions work in both headed and headless mode.</td><td>(none)</td></tr>
-    <tr><td><code>AGENT_BROWSER_EXECUTABLE_PATH</code></td><td>Custom browser executable path. Use this or <code>executablePath</code> when <code>service.defaultBrowserBuild</code> is <code>stealthcdp_chromium</code>.</td><td>(auto-discovered browser)</td></tr>
+    <tr><td><code>AGENT_BROWSER_EXECUTABLE_PATH</code></td><td>Custom browser executable path. Overrides config and manifest-resolved executable paths.</td><td>(auto-discovered browser)</td></tr>
+    <tr><td><code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH</code></td><td>Promoted <code>stealthcdp_chromium</code> artifact manifest used to resolve the executable path when no explicit executable path is set.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_HEADED</code></td><td>Show browser window instead of running headless (<code>1</code> to enable).</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_RUNTIME_PROFILE</code></td><td>Managed runtime profile name used for persistent browser state.</td><td><code>default</code></td></tr>
     <tr><td><code>AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH</code></td><td>Allow an operator-forced runtime profile launch when the configured profile browser family does not match the resolved browser executable family.</td><td>(disabled)</td></tr>

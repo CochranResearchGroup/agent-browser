@@ -1678,7 +1678,9 @@ mod tests {
                     "stealthCdpChromiumRequired": false,
                     "stealthCdpChromiumReady": true,
                     "executablePath": null,
+                    "executablePathSource": null,
                     "executablePathExists": null,
+                    "browserBuildManifests": {},
                     "warnings": []
                 }),
             )

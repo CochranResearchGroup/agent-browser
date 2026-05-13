@@ -12141,7 +12141,9 @@ mod tests {
                 "stealthCdpChromiumRequired": true,
                 "stealthCdpChromiumReady": false,
                 "executablePath": null,
+                "executablePathSource": null,
                 "executablePathExists": null,
+                "browserBuildManifests": {},
                 "warnings": [{
                     "code": "stealthcdp_executable_missing",
                     "severity": "warning",

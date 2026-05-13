@@ -58,7 +58,9 @@
         "stealthCdpChromiumRequired",
         "stealthCdpChromiumReady",
         "executablePath",
+        "executablePathSource",
         "executablePathExists",
+        "browserBuildManifests",
         "warnings"
       ],
       "properties": {
@@ -76,11 +78,42 @@
         },
         "executablePath": {
           "type": ["string", "null"],
-          "description": "Resolved executablePath from config or AGENT_BROWSER_EXECUTABLE_PATH."
+          "description": "Resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or a browser build manifest."
+        },
+        "executablePathSource": {
+          "type": ["string", "null"],
+          "description": "Source of the resolved executablePath: env, config, manifest, or null when auto-discovery remains in use."
         },
         "executablePathExists": {
           "type": ["boolean", "null"],
           "description": "Whether the resolved executablePath exists as a file. Null means no explicit executable path is configured."
+        },
+        "browserBuildManifests": {
+          "type": "object",
+          "description": "Resolved browser-build manifest diagnostics keyed by browser build id, such as stealthcdp_chromium.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "manifestPath": { "type": ["string", "null"] },
+              "manifestExists": { "type": "boolean" },
+              "manifestValid": { "type": "boolean" },
+              "ready": { "type": "boolean" },
+              "artifactDir": { "type": ["string", "null"] },
+              "artifactName": { "type": ["string", "null"] },
+              "schema": { "type": ["string", "null"] },
+              "chromeVersion": { "type": ["string", "null"] },
+              "chromiumSha": { "type": ["string", "null"] },
+              "patchsetSha": { "type": ["string", "null"] },
+              "executablePath": { "type": ["string", "null"] },
+              "executablePathExists": { "type": "boolean" },
+              "executableSha256": { "type": ["string", "null"] },
+              "smokePath": { "type": ["string", "null"] },
+              "smokeSuccess": { "type": ["boolean", "null"] },
+              "navigatorWebdriver": { "type": ["string", "null"] },
+              "warnings": { "type": "array" }
+            },
+            "additionalProperties": true
+          }
         },
         "warnings": {
           "type": "array",

@@ -1615,6 +1615,10 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
             .get("executablePath")
             .and_then(|value| value.as_str())
             .unwrap_or("auto");
+        let executable_source = launch_config
+            .get("executablePathSource")
+            .and_then(|value| value.as_str())
+            .unwrap_or("auto");
         let executable_exists = match launch_config
             .get("executablePathExists")
             .and_then(|value| value.as_bool())
@@ -1632,8 +1636,26 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
             None => "unknown",
         };
         lines.push(format!(
-            "Launch config: browser_build={default_build} executable={executable_path} executable_exists={executable_exists} stealthcdp_ready={stealth_ready}"
+            "Launch config: browser_build={default_build} executable={executable_path} executable_source={executable_source} executable_exists={executable_exists} stealthcdp_ready={stealth_ready}"
         ));
+        if let Some(manifests) = launch_config
+            .get("browserBuildManifests")
+            .and_then(|value| value.as_object())
+        {
+            for (build, manifest) in manifests {
+                let ready = match manifest.get("ready").and_then(|value| value.as_bool()) {
+                    Some(true) => "yes",
+                    Some(false) => "no",
+                    None => "unknown",
+                };
+                let manifest_path = value_str(manifest, "manifestPath", "none");
+                let artifact = value_str(manifest, "artifactName", "unknown");
+                let version = value_str(manifest, "chromeVersion", "unknown");
+                lines.push(format!(
+                    "  manifest {build}: ready={ready} artifact={artifact} version={version} path={manifest_path}"
+                ));
+            }
+        }
         if let Some(warnings) = launch_config
             .get("warnings")
             .and_then(|value| value.as_array())
@@ -4360,7 +4382,7 @@ Notes:
   - pnpm test:service-shutdown-health-live validates the polite-shutdown failure remedy against live service state.
   - Runtime profile and custom profile launches populate linked service profile and session records, including profileSelectionReason, profileLeaseDisposition, and profileLeaseConflictSessionIds when known.
   - Service-scoped launches reject active exclusive profile conflicts by default before browser start; set profileLeasePolicy=wait and profileLeaseWaitTimeoutMs to keep the job queued while polling for release, leaving the worker available for other commands. Same-session retained browser reuse remains allowed.
-  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath or AGENT_BROWSER_EXECUTABLE_PATH. If stealthcdp_chromium is selected but no executable path exists, status reports a warning.
+  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning.
   - Commands should include serviceName, agentName, and taskName when available for traceability.
   - Configured profiles, sessions, site policies, and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 
@@ -5025,7 +5047,7 @@ Configuration:
     --headed false     (disables "headed": true from config)
 
   Extensions from user and project configs are merged (not replaced).
-  Set service.defaultBrowserBuild to stealthcdp_chromium only after executablePath or AGENT_BROWSER_EXECUTABLE_PATH points at the patched Chromium binary.
+  Set service.defaultBrowserBuild to stealthcdp_chromium only after executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.stealthcdp_chromium.manifestPath points at the patched Chromium artifact.
 
   Runtime profiles can also be declared in config:
     {{
@@ -5456,7 +5478,9 @@ mod tests {
                 "stealthCdpChromiumRequired": true,
                 "stealthCdpChromiumReady": false,
                 "executablePath": "/missing/chrome",
+                "executablePathSource": "config",
                 "executablePathExists": false,
+                "browserBuildManifests": {},
                 "warnings": [{
                     "code": "stealthcdp_executable_not_found",
                     "message": "stealthcdp_chromium is selected, but the configured executable path does not exist"
@@ -5470,7 +5494,7 @@ mod tests {
             rendered.contains("Service: worker=idle browser=ready queue=1/64 waiting_profile_leases=2 browsers=1 tabs=0")
         );
         assert!(rendered.contains(
-            "Launch config: browser_build=stealthcdp_chromium executable=/missing/chrome executable_exists=no stealthcdp_ready=no"
+            "Launch config: browser_build=stealthcdp_chromium executable=/missing/chrome executable_source=config executable_exists=no stealthcdp_ready=no"
         ));
         assert!(rendered.contains(
             "warning stealthcdp_executable_not_found: stealthcdp_chromium is selected, but the configured executable path does not exist"

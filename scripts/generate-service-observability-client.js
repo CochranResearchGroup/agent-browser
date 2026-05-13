@@ -395,7 +395,28 @@ export interface ServiceStatusResponse {
     stealthCdpChromiumRequired: boolean;
     stealthCdpChromiumReady: boolean;
     executablePath: string | null;
+    executablePathSource?: string | null;
     executablePathExists: boolean | null;
+    browserBuildManifests?: Record<string, {
+      manifestPath?: string | null;
+      manifestExists?: boolean;
+      manifestValid?: boolean;
+      ready?: boolean;
+      artifactDir?: string | null;
+      artifactName?: string | null;
+      schema?: string | null;
+      chromeVersion?: string | null;
+      chromiumSha?: string | null;
+      patchsetSha?: string | null;
+      executablePath?: string | null;
+      executablePathExists?: boolean;
+      executableSha256?: string | null;
+      smokePath?: string | null;
+      smokeSuccess?: boolean | null;
+      navigatorWebdriver?: string | null;
+      warnings?: Array<{ code?: string; severity?: string; message?: string; [key: string]: unknown }>;
+      [key: string]: unknown;
+    }>;
     warnings: Array<{ code: string; severity: string; message: string; [key: string]: unknown }>;
     [key: string]: unknown;
   };

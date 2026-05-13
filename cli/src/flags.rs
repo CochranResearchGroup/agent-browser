@@ -226,6 +226,13 @@ pub struct RuntimeProfileConfig {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
+pub struct BrowserBuildManifestConfig {
+    #[serde(alias = "path")]
+    pub manifest_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
 pub struct ServiceConfig {
     pub profiles: Option<BTreeMap<String, BrowserProfile>>,
     pub sessions: Option<BTreeMap<String, BrowserSession>>,
@@ -239,6 +246,7 @@ pub struct ServiceConfig {
     pub recovery_base_backoff_ms: Option<u64>,
     pub recovery_max_backoff_ms: Option<u64>,
     pub default_browser_build: Option<BrowserBuild>,
+    pub browser_build_manifests: Option<BTreeMap<String, BrowserBuildManifestConfig>>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -467,6 +475,10 @@ fn merge_service_configs(
                 .recovery_max_backoff_ms
                 .or(base.recovery_max_backoff_ms),
             default_browser_build: overlay.default_browser_build.or(base.default_browser_build),
+            browser_build_manifests: merge_service_model_maps(
+                base.browser_build_manifests,
+                overlay.browser_build_manifests,
+            ),
         }),
     }
 }
@@ -542,6 +554,222 @@ fn merge_runtime_profile_config(
             }),
         },
     }
+}
+
+fn expand_config_path(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(path)
+}
+
+fn browser_build_manifest_configs_from_sources(
+    config: &Config,
+) -> BTreeMap<String, BrowserBuildManifestConfig> {
+    let mut manifests = config
+        .service
+        .as_ref()
+        .and_then(|service| service.browser_build_manifests.clone())
+        .unwrap_or_default();
+    if let Ok(path) = env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH") {
+        manifests.insert(
+            "stealthcdp_chromium".to_string(),
+            BrowserBuildManifestConfig {
+                manifest_path: Some(path),
+            },
+        );
+    }
+    manifests
+}
+
+fn value_string(value: &Value, pointer: &str) -> Option<String> {
+    value
+        .pointer(pointer)
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string())
+}
+
+fn resolve_browser_build_manifests(
+    manifests: &BTreeMap<String, BrowserBuildManifestConfig>,
+) -> BTreeMap<String, Value> {
+    manifests
+        .iter()
+        .map(|(build, config)| resolve_browser_build_manifest(build, config))
+        .collect()
+}
+
+fn resolve_browser_build_manifest(
+    build: &str,
+    config: &BrowserBuildManifestConfig,
+) -> (String, Value) {
+    let Some(raw_manifest_path) = config.manifest_path.as_deref() else {
+        return (
+            build.to_string(),
+            json!({
+                "manifestPath": null,
+                "manifestExists": false,
+                "manifestValid": false,
+                "ready": false,
+                "warnings": [{
+                    "code": "browser_build_manifest_path_missing",
+                    "severity": "warning",
+                    "message": "browser build manifest is configured without manifestPath"
+                }]
+            }),
+        );
+    };
+
+    let manifest_path = expand_config_path(raw_manifest_path);
+    if !manifest_path.is_file() {
+        return (
+            build.to_string(),
+            json!({
+                "manifestPath": manifest_path.display().to_string(),
+                "manifestExists": false,
+                "manifestValid": false,
+                "ready": false,
+                "warnings": [{
+                    "code": "browser_build_manifest_missing",
+                    "severity": "warning",
+                    "message": "browser build manifest path does not exist"
+                }]
+            }),
+        );
+    }
+
+    let manifest_text = match fs::read_to_string(&manifest_path) {
+        Ok(text) => text,
+        Err(err) => {
+            return (
+                build.to_string(),
+                json!({
+                    "manifestPath": manifest_path.display().to_string(),
+                    "manifestExists": true,
+                    "manifestValid": false,
+                    "ready": false,
+                    "warnings": [{
+                        "code": "browser_build_manifest_unreadable",
+                        "severity": "warning",
+                        "message": format!("browser build manifest could not be read: {err}")
+                    }]
+                }),
+            );
+        }
+    };
+
+    let manifest = match serde_json::from_str::<Value>(&manifest_text) {
+        Ok(value) => value,
+        Err(err) => {
+            return (
+                build.to_string(),
+                json!({
+                    "manifestPath": manifest_path.display().to_string(),
+                    "manifestExists": true,
+                    "manifestValid": false,
+                    "ready": false,
+                    "warnings": [{
+                        "code": "browser_build_manifest_invalid_json",
+                        "severity": "warning",
+                        "message": format!("browser build manifest is not valid JSON: {err}")
+                    }]
+                }),
+            );
+        }
+    };
+
+    let artifact_dir = manifest_path
+        .parent()
+        .map(|path| path.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let executable_relative = value_string(&manifest, "/executable/relativePath");
+    let executable_path = executable_relative
+        .as_ref()
+        .map(|relative| artifact_dir.join(relative));
+    let executable_exists = executable_path.as_ref().is_some_and(|path| path.is_file());
+    let smoke_relative = value_string(&manifest, "/smoke/relativePath");
+    let smoke_path = smoke_relative
+        .as_ref()
+        .map(|relative| artifact_dir.join(relative));
+    let smoke_value = smoke_path
+        .as_ref()
+        .and_then(|path| fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    let smoke_success = smoke_value
+        .as_ref()
+        .and_then(|value| value.get("success"))
+        .and_then(|value| value.as_bool());
+    let navigator_webdriver = smoke_value
+        .as_ref()
+        .and_then(|value| value.pointer("/checks/navigatorWebdriver"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string());
+
+    let mut warnings = Vec::new();
+    let schema = value_string(&manifest, "/schema");
+    if schema.as_deref() != Some("chromium-stealthcdp.artifact.v1") {
+        warnings.push(json!({
+            "code": "browser_build_manifest_schema_unsupported",
+            "severity": "warning",
+            "message": "browser build manifest schema is unsupported"
+        }));
+    }
+    if executable_relative.is_none() {
+        warnings.push(json!({
+            "code": "browser_build_manifest_executable_missing",
+            "severity": "warning",
+            "message": "browser build manifest does not provide executable.relativePath"
+        }));
+    } else if !executable_exists {
+        warnings.push(json!({
+            "code": "browser_build_manifest_executable_not_found",
+            "severity": "warning",
+            "message": "browser build manifest executable path does not exist"
+        }));
+    }
+    if smoke_success != Some(true) || navigator_webdriver.as_deref() != Some("false") {
+        warnings.push(json!({
+            "code": "browser_build_manifest_smoke_not_fresh",
+            "severity": "warning",
+            "message": "browser build manifest smoke does not prove success with navigator.webdriver=false"
+        }));
+    }
+
+    let ready = warnings.is_empty();
+    (
+        build.to_string(),
+        json!({
+            "manifestPath": manifest_path.display().to_string(),
+            "manifestExists": true,
+            "manifestValid": true,
+            "ready": ready,
+            "artifactDir": artifact_dir.display().to_string(),
+            "artifactName": value_string(&manifest, "/artifactName"),
+            "schema": schema,
+            "chromeVersion": value_string(&manifest, "/chromeVersion"),
+            "chromiumSha": value_string(&manifest, "/chromium/sourceSha"),
+            "patchsetSha": value_string(&manifest, "/patchset/repoSha"),
+            "executablePath": executable_path.map(|path| path.display().to_string()),
+            "executablePathExists": executable_exists,
+            "executableSha256": value_string(&manifest, "/executable/sha256"),
+            "smokePath": smoke_path.map(|path| path.display().to_string()),
+            "smokeSuccess": smoke_success,
+            "navigatorWebdriver": navigator_webdriver,
+            "warnings": warnings
+        }),
+    )
+}
+
+fn manifest_executable_path(
+    manifest_status: &BTreeMap<String, Value>,
+    build: &str,
+) -> Option<String> {
+    manifest_status
+        .get(build)
+        .and_then(|status| status.get("executablePath"))
+        .and_then(|path| path.as_str())
+        .map(|path| path.to_string())
 }
 
 fn selected_runtime_profile_from_sources(args: &[String], config: &Config) -> Option<String> {
@@ -952,9 +1180,11 @@ pub struct Flags {
     pub service_recovery_retry_budget_source: BrowserRecoveryPolicyValueSource,
     pub service_recovery_base_backoff_ms_source: BrowserRecoveryPolicyValueSource,
     pub service_recovery_max_backoff_ms_source: BrowserRecoveryPolicyValueSource,
+    pub browser_build_manifest_status: BTreeMap<String, Value>,
     pub runtime_profile: Option<String>,
     pub headers: Option<String>,
     pub executable_path: Option<String>,
+    pub executable_path_source: Option<String>,
     pub cdp: Option<String>,
     pub extensions: Vec<String>,
     pub profile: Option<String>,
@@ -1022,13 +1252,19 @@ pub fn launch_config_status(flags: &Flags) -> Value {
         .executable_path
         .as_ref()
         .map(|path| Path::new(path).is_file());
+    let stealth_manifest = flags
+        .browser_build_manifest_status
+        .get("stealthcdp_chromium");
+    let stealth_manifest_ready = stealth_manifest
+        .and_then(|status| status.get("ready"))
+        .and_then(|value| value.as_bool());
 
     let mut warnings = Vec::new();
     if stealth_cdp_chromium_required && flags.executable_path.is_none() {
         warnings.push(json!({
             "code": "stealthcdp_executable_missing",
             "severity": "warning",
-            "message": "stealthcdp_chromium is selected, but no executablePath or AGENT_BROWSER_EXECUTABLE_PATH is configured"
+            "message": "stealthcdp_chromium is selected, but no executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or browser build manifest executable is configured"
         }));
     } else if stealth_cdp_chromium_required && executable_path_exists == Some(false) {
         warnings.push(json!({
@@ -1037,13 +1273,25 @@ pub fn launch_config_status(flags: &Flags) -> Value {
             "message": "stealthcdp_chromium is selected, but the configured executable path does not exist"
         }));
     }
+    if stealth_cdp_chromium_required && stealth_manifest_ready == Some(false) {
+        warnings.push(json!({
+            "code": "stealthcdp_manifest_not_ready",
+            "severity": "warning",
+            "message": "stealthcdp_chromium manifest is configured but not ready"
+        }));
+    }
+
+    let stealth_ready = !stealth_cdp_chromium_required
+        || (executable_path_exists == Some(true) && stealth_manifest_ready.unwrap_or(true));
 
     json!({
         "defaultBrowserBuild": default_browser_build,
         "stealthCdpChromiumRequired": stealth_cdp_chromium_required,
-        "stealthCdpChromiumReady": !stealth_cdp_chromium_required || executable_path_exists == Some(true),
+        "stealthCdpChromiumReady": stealth_ready,
         "executablePath": flags.executable_path.clone(),
+        "executablePathSource": flags.executable_path_source.clone(),
         "executablePathExists": executable_path_exists,
+        "browserBuildManifests": flags.browser_build_manifest_status.clone(),
         "warnings": warnings
     })
 }
@@ -1114,6 +1362,26 @@ pub fn parse_flags(args: &[String]) -> Flags {
                 .and_then(|service| service.recovery_max_backoff_ms),
             recovery_defaults.max_backoff_ms,
         );
+    let browser_build_manifest_configs = browser_build_manifest_configs_from_sources(&config);
+    let browser_build_manifest_status =
+        resolve_browser_build_manifests(&browser_build_manifest_configs);
+    let env_executable_path = env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok();
+    let config_executable_path = config.executable_path.clone();
+    let manifest_executable_path =
+        manifest_executable_path(&browser_build_manifest_status, "stealthcdp_chromium");
+    let executable_path = env_executable_path
+        .clone()
+        .or(config_executable_path.clone())
+        .or(manifest_executable_path.clone());
+    let executable_path_source = if env_executable_path.is_some() {
+        Some("env".to_string())
+    } else if config_executable_path.is_some() {
+        Some("config".to_string())
+    } else if manifest_executable_path.is_some() {
+        Some("manifest".to_string())
+    } else {
+        None
+    };
 
     let extensions_env = env::var("AGENT_BROWSER_EXTENSIONS")
         .ok()
@@ -1155,13 +1423,13 @@ pub fn parse_flags(args: &[String]) -> Flags {
         service_recovery_retry_budget_source,
         service_recovery_base_backoff_ms_source,
         service_recovery_max_backoff_ms_source,
+        browser_build_manifest_status,
         runtime_profile: env::var("AGENT_BROWSER_RUNTIME_PROFILE")
             .ok()
             .or(config.runtime_profile),
         headers: config.headers,
-        executable_path: env::var("AGENT_BROWSER_EXECUTABLE_PATH")
-            .ok()
-            .or(config.executable_path),
+        executable_path,
+        executable_path_source,
         cdp: config.cdp,
         extensions,
         profile: env::var("AGENT_BROWSER_PROFILE").ok().or(config.profile),
@@ -1891,6 +2159,86 @@ mod tests {
     }
 
     #[test]
+    fn test_manifest_resolves_stealthcdp_executable_path() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-build-manifest-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let home = dir.join("home");
+        let artifact = dir.join("artifact");
+        let chrome_dir = artifact.join("chrome-linux");
+        fs::create_dir_all(&chrome_dir).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        let chrome_path = chrome_dir.join("chrome");
+        fs::write(&chrome_path, "chrome").unwrap();
+        let smoke_path = artifact.join("smoke.json");
+        fs::write(
+            &smoke_path,
+            r#"{"success":true,"checks":{"navigatorWebdriver":"false"}}"#,
+        )
+        .unwrap();
+        let manifest_path = artifact.join("manifest.json");
+        fs::write(
+            &manifest_path,
+            r#"{
+              "schema": "chromium-stealthcdp.artifact.v1",
+              "artifactName": "150.0.7835.0+stealthcdp.test",
+              "chromeVersion": "Chromium 150.0.7835.0",
+              "chromium": { "sourceSha": "chromium-sha" },
+              "patchset": { "repoSha": "patchset-sha" },
+              "executable": { "relativePath": "chrome-linux/chrome", "sha256": "unused" },
+              "smoke": { "relativePath": "smoke.json", "sha256": "unused" }
+            }"#,
+        )
+        .unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(
+            &config_path,
+            format!(
+                r#"{{
+                  "service": {{
+                    "defaultBrowserBuild": "stealthcdp_chromium",
+                    "browserBuildManifests": {{
+                      "stealthcdp_chromium": {{ "manifestPath": "{}" }}
+                    }}
+                  }}
+                }}"#,
+                manifest_path.display()
+            ),
+        )
+        .unwrap();
+
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_EXECUTABLE_PATH",
+            "AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH",
+            "HOME",
+        ]);
+        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+        guard.remove("AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH");
+        guard.set("HOME", home.to_str().unwrap());
+
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
+        let launch_config = launch_config_status(&flags);
+
+        assert_eq!(flags.executable_path.as_deref(), chrome_path.to_str());
+        assert_eq!(flags.executable_path_source.as_deref(), Some("manifest"));
+        assert_eq!(launch_config["stealthCdpChromiumReady"], true);
+        assert_eq!(launch_config["executablePathSource"], "manifest");
+        assert_eq!(
+            launch_config["browserBuildManifests"]["stealthcdp_chromium"]["patchsetSha"],
+            "patchset-sha"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn test_clean_args_removes_executable_path() {
         let cleaned = clean_args(&args(
             "--executable-path /path/to/chromium open example.com",
@@ -2216,6 +2564,7 @@ mod tests {
                 recovery_base_backoff_ms: Some(1_000),
                 recovery_max_backoff_ms: Some(30_000),
                 default_browser_build: None,
+                browser_build_manifests: None,
             }),
             ..Config::default()
         };
@@ -2271,6 +2620,12 @@ mod tests {
                 recovery_base_backoff_ms: Some(500),
                 recovery_max_backoff_ms: Some(10_000),
                 default_browser_build: Some(BrowserBuild::StealthcdpChromium),
+                browser_build_manifests: Some(BTreeMap::from([(
+                    "stealthcdp_chromium".to_string(),
+                    BrowserBuildManifestConfig {
+                        manifest_path: Some("/project/manifest.json".to_string()),
+                    },
+                )])),
             }),
             ..Config::default()
         };
@@ -2634,6 +2989,7 @@ mod tests {
                 recovery_base_backoff_ms: None,
                 recovery_max_backoff_ms: None,
                 default_browser_build: Some(BrowserBuild::StealthcdpChromium),
+                browser_build_manifests: None,
             }),
             ..Config::default()
         };

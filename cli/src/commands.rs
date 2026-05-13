@@ -3745,6 +3745,7 @@ mod tests {
                 crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
             service_recovery_max_backoff_ms_source:
                 crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
+            browser_build_manifest_status: std::collections::BTreeMap::new(),
             runtime_profile: None,
             json: false,
             headed: false,
@@ -3752,6 +3753,7 @@ mod tests {
             debug: false,
             headers: None,
             executable_path: None,
+            executable_path_source: None,
             extensions: Vec::new(),
             cdp: None,
             profile: None,

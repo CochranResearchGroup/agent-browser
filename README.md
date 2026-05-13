@@ -1081,6 +1081,12 @@ Create an `agent-browser.json` file to set persistent defaults instead of repeat
   "profile": "./browser-data",
   "userAgent": "my-agent/1.0",
   "service": {
+    "defaultBrowserBuild": "stealthcdp_chromium",
+    "browserBuildManifests": {
+      "stealthcdp_chromium": {
+        "manifestPath": "/opt/agent-browser/chromium-stealthcdp/current/manifest.json"
+      }
+    },
     "reconcileIntervalMs": 60000,
     "monitorIntervalMs": 60000,
     "jobTimeoutMs": 120000,
@@ -1106,7 +1112,7 @@ AGENT_BROWSER_CONFIG=./ci-config.json agent-browser open example.com
 
 All options from the table above can be set in the config file using camelCase keys (e.g., `--executable-path` becomes `"executablePath"`, `--proxy-bypass` becomes `"proxyBypass"`). Unknown keys are ignored for forward compatibility.
 
-Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned launches should prefer the patched Chromium posture, but still provide the actual binary through `executablePath` or `AGENT_BROWSER_EXECUTABLE_PATH`. The build label does not locate Chromium by itself. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, resolved executable path, file-existence check, and warnings when `stealthcdp_chromium` is selected without a usable binary. This is intentionally compatible with a future packaged custom-build manifest: until a manifest resolver exists, the executable path remains the authoritative location.
+Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned launches should prefer the patched Chromium posture. Provide the binary through `executablePath`, `AGENT_BROWSER_EXECUTABLE_PATH`, or `service.browserBuildManifests.stealthcdp_chromium.manifestPath`. A manifest path points at a promoted artifact `manifest.json`; agent-browser resolves the executable relative to that manifest and reports artifact metadata from the same source. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, executable source, resolved executable path, manifest metadata, file-existence check, and warnings when `stealthcdp_chromium` is selected without a usable binary or ready manifest.
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
