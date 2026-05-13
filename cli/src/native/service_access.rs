@@ -33,6 +33,7 @@ pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) challenge_id: Option<String>,
     pub(crate) readiness_profile_id: Option<String>,
     pub(crate) browser_build: Option<BrowserBuild>,
+    pub(crate) browser_build_explicit: bool,
 }
 
 impl ServiceAccessPlanRequest {
@@ -90,6 +91,7 @@ pub(crate) fn parse_service_access_plan_query(
             }
             "browserBuild" | "browser_build" | "browser-build" => {
                 request.browser_build = parse_browser_build(&value)?;
+                request.browser_build_explicit = request.browser_build.is_some();
             }
             "" => {}
             _ => {
@@ -194,6 +196,7 @@ pub(crate) fn service_access_plan_for_state(
         readiness_summary: &readiness_summary,
         monitor_findings: &monitor_findings,
         naming_warnings: &naming_warnings,
+        browser_capability_evidence: &browser_capability_evidence,
     });
 
     json!({
@@ -442,6 +445,16 @@ fn browser_capability_evidence_for_access_plan(
         browser_build_for_evidence(service_state, request, selected_profile, site_policy);
     let browser_build_label = browser_build.map(browser_build_label);
     let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
+    let selected_preference_binding =
+        preferred_registry_binding_for_access_request(registry, request, browser_build_label);
+    let registry_routing_applied = selected_preference_binding.is_some()
+        && !request.browser_build_explicit
+        && site_policy
+            .and_then(|policy| policy.browser_build)
+            .is_none()
+        && selected_profile
+            .and_then(|profile| profile.browser_build)
+            .is_none();
 
     let matching_preference_bindings = registry
         .browser_preference_bindings
@@ -533,11 +546,17 @@ fn browser_capability_evidence_for_access_plan(
 
     json!({
         "advisory": true,
-        "routingApplied": false,
+        "routingApplied": registry_routing_applied,
+        "routingScope": if registry_routing_applied {
+            "access_plan_recommendation"
+        } else {
+            "none"
+        },
         "source": "service.browserCapabilityRegistry",
         "browserBuild": browser_build,
         "browserBuildLabel": browser_build_label,
         "selectedProfileId": selected_profile_id,
+        "selectedPreferenceBinding": selected_preference_binding,
         "targetServiceIds": request.target_service_ids.clone(),
         "accountIds": request.account_ids.clone(),
         "serviceName": request.service_name.clone(),
@@ -558,8 +577,8 @@ fn browser_capability_evidence_for_access_plan(
             "validationEvidence": matching_validation_evidence.len(),
         },
         "notes": [
-            "Advisory registry evidence is exposed for operator and client inspection only.",
-            "Profile selection and browser routing do not consume this registry yet.",
+            "Registry preference bindings can influence access-plan browser build recommendations when no explicit, site-policy, or profile browser build has already won.",
+            "The scheduler and browser launch path still consume the copied access-plan request; this registry is not a direct launch router yet.",
         ],
     })
 }
@@ -604,6 +623,55 @@ fn preference_binding_matches_access_request(
             .task_name
             .as_ref()
             .is_some_and(|task_name| array_field_contains(binding, "taskNames", task_name))
+}
+
+fn preferred_registry_binding_for_access_request(
+    registry: &super::service_model::BrowserCapabilityRegistry,
+    request: &ServiceAccessPlanRequest,
+    browser_build_label: Option<&str>,
+) -> Option<Value> {
+    registry
+        .browser_preference_bindings
+        .iter()
+        .filter(|binding| {
+            preference_binding_matches_access_request(binding, request, browser_build_label)
+        })
+        .max_by(|left, right| {
+            preference_binding_rank(left, request).cmp(&preference_binding_rank(right, request))
+        })
+        .cloned()
+}
+
+fn preference_binding_rank(
+    binding: &Value,
+    request: &ServiceAccessPlanRequest,
+) -> (i64, i64, String) {
+    let priority = binding
+        .get("priority")
+        .and_then(Value::as_i64)
+        .unwrap_or_default();
+    let specificity = i64::from(array_field_intersects(
+        binding,
+        "accountIds",
+        &request.account_ids,
+    )) * 16
+        + i64::from(array_field_intersects(
+            binding,
+            "targetServiceIds",
+            &request.target_service_ids,
+        )) * 8
+        + i64::from(request.service_name.as_ref().is_some_and(|service_name| {
+            array_field_contains(binding, "serviceNames", service_name)
+        })) * 4
+        + i64::from(
+            request
+                .task_name
+                .as_ref()
+                .is_some_and(|task_name| array_field_contains(binding, "taskNames", task_name)),
+        ) * 2
+        + i64::from(string_field(binding, "scope").as_deref() != Some("global"));
+    let id = string_field(binding, "id").unwrap_or_default();
+    (priority, specificity, id)
 }
 
 fn string_field(value: &Value, field: &str) -> Option<String> {
@@ -651,9 +719,11 @@ struct AccessPlanDecisionInput<'a> {
     readiness_summary: &'a Value,
     monitor_findings: &'a Value,
     naming_warnings: &'a [&'static str],
+    browser_capability_evidence: &'a Value,
 }
 
 fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
+    let request = input.request;
     let selected_profile = input.selected_profile;
     let service_state = input.service_state;
     let site_policy = input.site_policy;
@@ -664,6 +734,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     let readiness_summary = input.readiness_summary;
     let monitor_findings = input.monitor_findings;
     let naming_warnings = input.naming_warnings;
+    let browser_capability_evidence = input.browser_capability_evidence;
     let mut reasons = Vec::new();
     let manual_seeding_required =
         readiness_summary["manualSeedingRequired"].as_bool() == Some(true);
@@ -692,10 +763,12 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     let provider_decision = provider_decision(selected_profile, site_policy, challenges, providers);
     let interaction_decision = interaction_decision(site_policy);
     let launch_posture = launch_posture_decision(
+        request,
         service_state,
         selected_profile,
         site_policy,
         manual_seeding_required,
+        browser_capability_evidence,
     );
     let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
     let freshness_update = freshness_update_decision(
@@ -1127,10 +1200,12 @@ struct LaunchPostureDecision {
 }
 
 fn launch_posture_decision(
+    request: &ServiceAccessPlanRequest,
     service_state: &ServiceState,
     selected_profile: Option<&BrowserProfile>,
     site_policy: Option<&SitePolicy>,
     manual_seeding_required: bool,
+    browser_capability_evidence: &Value,
 ) -> LaunchPostureDecision {
     let (browser_host, source) =
         if let Some(browser_host) = site_policy.and_then(|policy| policy.browser_host) {
@@ -1151,10 +1226,12 @@ fn launch_posture_decision(
         .map(|policy| policy.requires_cdp_free)
         .unwrap_or(false);
     let (browser_build, browser_build_source) = browser_build_decision(
+        request,
         service_state,
         selected_profile,
         site_policy,
         requires_cdp_free,
+        browser_capability_evidence,
     );
     let cdp_attachment_allowed = !requires_cdp_free && !manual_seeding_required;
     let attachable_after_seeding = cdp_attachment_allowed
@@ -1184,6 +1261,12 @@ fn launch_posture_decision(
         BrowserBuild::StealthcdpChromium => rationale.push("browser_build_stealthcdp_chromium"),
         BrowserBuild::CdpFreeHeaded => rationale.push("browser_build_cdp_free_headed"),
     }
+    if browser_build_source == "browser_preference_binding" {
+        rationale.push("browser_build_from_browser_preference_binding");
+    }
+    if browser_build_source == "request" {
+        rationale.push("browser_build_from_request");
+    }
     match source {
         "site_policy" => rationale.push("browser_host_from_site_policy"),
         "profile_default" => rationale.push("browser_host_from_profile_default"),
@@ -1209,13 +1292,20 @@ fn launch_posture_decision(
 }
 
 fn browser_build_decision(
+    request: &ServiceAccessPlanRequest,
     service_state: &ServiceState,
     selected_profile: Option<&BrowserProfile>,
     site_policy: Option<&SitePolicy>,
     requires_cdp_free: bool,
+    browser_capability_evidence: &Value,
 ) -> (BrowserBuild, &'static str) {
     if requires_cdp_free {
         return (BrowserBuild::CdpFreeHeaded, "requires_cdp_free");
+    }
+    if request.browser_build_explicit {
+        if let Some(browser_build) = request.browser_build {
+            return (browser_build, "request");
+        }
     }
     if let Some(browser_build) = site_policy.and_then(|policy| policy.browser_build) {
         return (browser_build, "site_policy");
@@ -1223,10 +1313,24 @@ fn browser_build_decision(
     if let Some(browser_build) = selected_profile.and_then(|profile| profile.browser_build) {
         return (browser_build, "profile_default");
     }
+    if let Some(browser_build) =
+        browser_build_from_selected_preference_binding(browser_capability_evidence)
+    {
+        return (browser_build, "browser_preference_binding");
+    }
     if let Some(browser_build) = service_state.default_browser_build {
         return (browser_build, "service_default");
     }
     (BrowserBuild::StockChrome, "service_default")
+}
+
+fn browser_build_from_selected_preference_binding(
+    browser_capability_evidence: &Value,
+) -> Option<BrowserBuild> {
+    browser_capability_evidence
+        .get("selectedPreferenceBinding")
+        .and_then(|binding| string_field(binding, "browserBuild"))
+        .and_then(|label| BrowserBuild::parse_label(&label))
 }
 
 #[derive(Debug, Default)]
@@ -1536,7 +1640,14 @@ fn browser_build_for_access_request(
             return Some(browser_build);
         }
     }
-    service_state.default_browser_build
+    preferred_registry_binding_for_access_request(
+        &service_state.browser_capability_registry,
+        request,
+        None,
+    )
+    .and_then(|binding| string_field(&binding, "browserBuild"))
+    .and_then(|label| BrowserBuild::parse_label(&label))
+    .or(service_state.default_browser_build)
 }
 
 fn non_empty(value: String) -> Option<String> {
@@ -2631,6 +2742,155 @@ mod tests {
         assert_eq!(
             plan["browserCapabilityEvidence"]["counts"]["browserExecutables"],
             1
+        );
+    }
+
+    #[test]
+    fn service_access_plan_applies_browser_preference_binding_to_recommendation() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "only-works-profile".to_string(),
+                BrowserProfile {
+                    id: "only-works-profile".to_string(),
+                    name: "Only works profile".to_string(),
+                    target_service_ids: vec!["only-works-on-chrome".to_string()],
+                    account_ids: vec!["myuser".to_string()],
+                    authenticated_service_ids: vec!["only-works-on-chrome".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_hosts: vec![json!({"id": "windows-desktop-1", "name": "Windows desktop"})],
+                browser_executables: vec![json!({
+                    "id": "windows-chrome-stable",
+                    "hostId": "windows-desktop-1",
+                    "buildLabel": "stock_chrome"
+                })],
+                browser_capabilities: vec![json!({
+                    "id": "windows-chrome-capability",
+                    "hostId": "windows-desktop-1",
+                    "executableId": "windows-chrome-stable",
+                    "cdpSupported": true
+                })],
+                browser_preference_bindings: vec![
+                    json!({
+                        "id": "default-new-identities-use-stealthcdp",
+                        "scope": "global",
+                        "browserBuild": "stealthcdp_chromium",
+                        "priority": 10
+                    }),
+                    json!({
+                        "id": "only-works-on-chrome-myuser-primary",
+                        "scope": "account",
+                        "targetServiceIds": ["only-works-on-chrome"],
+                        "accountIds": ["myuser"],
+                        "preferredHostId": "windows-desktop-1",
+                        "preferredExecutableId": "windows-chrome-stable",
+                        "preferredCapabilityId": "windows-chrome-capability",
+                        "browserBuild": "stock_chrome",
+                        "priority": 100,
+                        "reason": "site_requires_stock_chrome"
+                    }),
+                ],
+                validation_evidence: vec![json!({
+                    "id": "windows-chrome-smoke",
+                    "hostId": "windows-desktop-1",
+                    "executableId": "windows-chrome-stable",
+                    "capabilityId": "windows-chrome-capability",
+                    "state": "passed"
+                })],
+                ..BrowserCapabilityRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("Downloader".to_string()),
+                target_service_ids: vec!["only-works-on-chrome".to_string()],
+                account_ids: vec!["myuser".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["selectedProfile"]["id"], "only-works-profile");
+        assert_eq!(plan["query"]["browserBuild"], "stock_chrome");
+        assert_eq!(plan["browserCapabilityEvidence"]["routingApplied"], true);
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["routingScope"],
+            "access_plan_recommendation"
+        );
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["selectedPreferenceBinding"]["id"],
+            "only-works-on-chrome-myuser-primary"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuild"],
+            "stock_chrome"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSource"],
+            "browser_preference_binding"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["browserBuild"],
+            "stock_chrome"
+        );
+    }
+
+    #[test]
+    fn service_access_plan_explicit_browser_build_wins_over_preference_binding() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "only-works-profile".to_string(),
+                BrowserProfile {
+                    id: "only-works-profile".to_string(),
+                    name: "Only works profile".to_string(),
+                    target_service_ids: vec!["only-works-on-chrome".to_string()],
+                    account_ids: vec!["myuser".to_string()],
+                    authenticated_service_ids: vec!["only-works-on-chrome".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_preference_bindings: vec![json!({
+                    "id": "only-works-on-chrome-myuser-primary",
+                    "scope": "account",
+                    "targetServiceIds": ["only-works-on-chrome"],
+                    "accountIds": ["myuser"],
+                    "browserBuild": "stealthcdp_chromium",
+                    "priority": 100
+                })],
+                ..BrowserCapabilityRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["only-works-on-chrome".to_string()],
+                account_ids: vec!["myuser".to_string()],
+                browser_build: Some(BrowserBuild::StockChrome),
+                browser_build_explicit: true,
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["query"]["browserBuild"], "stock_chrome");
+        assert_eq!(plan["browserCapabilityEvidence"]["routingApplied"], false);
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuild"],
+            "stock_chrome"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSource"],
+            "request"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["browserBuild"],
+            "stock_chrome"
         );
     }
 

@@ -78,8 +78,11 @@ enabled providers, retained challenges, advisory browser capability registry
 evidence, and the service-owned decision before requesting browser control.
 Access-plan `browserCapabilityEvidence` is filtered to the planned browser
 build, selected profile, target identities, account identities, and caller
-labels. It is explicitly advisory and reports `routingApplied: false`; profile
-selection and browser routing do not consume that registry yet. Access-plan
+labels. It remains advisory, but preference bindings can set the access-plan
+browser build recommendation when no explicit request, site policy, or profile
+browser build has already won. In that case it reports `routingApplied: true`
+with `routingScope: "access_plan_recommendation"`. Scheduler launch routing
+does not consume the registry directly yet. Access-plan
 `monitorFindings` reports active
 `profile_readiness` monitor incidents for the requested target identities, and
 `decision.monitorAttentionRequired` mirrors whether those findings need
@@ -233,9 +236,11 @@ The draft record groups are:
   CDP-free launch, extension availability, profile reuse, streaming, and
   site-specific reliability
 
-Do not make scheduler, profile-selection, or access-plan routing decisions from
-this draft until a later implementation slice graduates the registry from
-advisory inventory to authoritative policy.
+Do not make scheduler launch-routing decisions from this draft until a later
+implementation slice graduates the registry from advisory inventory to
+authoritative launch policy. Access-plan recommendation code may consume
+`browserPreferenceBindings` for browser build selection when no explicit
+request, site policy, or profile browser build has already won.
 
 `examples/browser-capability-registry.sample.json` shows the intended shape for
 a local Linux `stealthcdp_chromium` default plus a future Windows

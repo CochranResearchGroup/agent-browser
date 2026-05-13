@@ -1311,11 +1311,13 @@ export interface ServiceSitePolicySource {
 
 export interface ServiceAccessPlanBrowserCapabilityEvidence {
   advisory: true;
-  routingApplied: false;
+  routingApplied: boolean;
+  routingScope: 'none' | 'access_plan_recommendation';
   source: 'service.browserCapabilityRegistry';
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | null;
   browserBuildLabel: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | null;
   selectedProfileId: string | null;
+  selectedPreferenceBinding: Record<string, unknown> | null;
   targetServiceIds: string[];
   accountIds: string[];
   serviceName: string | null;

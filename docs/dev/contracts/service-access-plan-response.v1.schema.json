@@ -330,15 +330,17 @@
       }
     },
     "browserCapabilityEvidence": {
-      "description": "Advisory browser capability registry evidence relevant to this access-plan request. This field is read-only context for operators, agents, and software clients; scheduler routing and profile selection do not consume it yet.",
+      "description": "Advisory browser capability registry evidence relevant to this access-plan request. Preference bindings can influence the access-plan browser build recommendation when no explicit, site-policy, or profile browser build has already won; scheduler launch routing does not consume the registry directly yet.",
       "type": "object",
       "required": [
         "advisory",
         "routingApplied",
+        "routingScope",
         "source",
         "browserBuild",
         "browserBuildLabel",
         "selectedProfileId",
+        "selectedPreferenceBinding",
         "targetServiceIds",
         "accountIds",
         "serviceName",
@@ -359,8 +361,11 @@
           "const": true
         },
         "routingApplied": {
-          "type": "boolean",
-          "const": false
+          "type": "boolean"
+        },
+        "routingScope": {
+          "type": "string",
+          "enum": ["none", "access_plan_recommendation"]
         },
         "source": {
           "type": "string",
@@ -383,6 +388,16 @@
         },
         "selectedProfileId": {
           "type": ["string", "null"]
+        },
+        "selectedPreferenceBinding": {
+          "oneOf": [
+            {
+              "$ref": "service-browser-capability-registry.v1.schema.json#/$defs/browserPreferenceBinding"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "targetServiceIds": {
           "type": "array",
@@ -570,7 +585,14 @@
             },
             "browserBuildSource": {
               "type": "string",
-              "enum": ["site_policy", "requires_cdp_free", "service_default"]
+              "enum": [
+                "request",
+                "site_policy",
+                "profile_default",
+                "browser_preference_binding",
+                "requires_cdp_free",
+                "service_default"
+              ]
             },
             "source": {
               "type": "string",
