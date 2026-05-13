@@ -68,6 +68,7 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
         "name": "Work",
         "allocation": "per_service",
         "keyring": "basic_password_store",
+        "browserBuild": "stealthcdp_chromium",
         "sharedServiceIds": ["JournalDownloader"],
         "manualLoginPreferred": true
       }
@@ -117,7 +118,9 @@ ownership, profile binding, lease state, and cleanup policy. These records are
 exposed through service status, MCP resources, and the HTTP service APIs.
 Set <code>service.defaultBrowserBuild</code> to
 <code>stealthcdp_chromium</code> only when service-owned launches should prefer
-the patched Chromium posture. Provide the current binary location with
+the patched Chromium posture. If no explicit default is configured and a ready
+<code>stealthcdp_chromium</code> manifest is available, fresh installs prefer
+that build automatically. Provide the current binary location with
 <code>executablePath</code>, <code>AGENT_BROWSER_EXECUTABLE_PATH</code>, or
 <code>service.browserBuildManifests.stealthcdp_chromium.manifestPath</code>.
 A manifest path points at a promoted artifact <code>manifest.json</code>, and
@@ -128,6 +131,16 @@ launching.
 <code>launchConfig</code> diagnostic with the resolved executable path,
 executable source, artifact metadata, file existence, and warnings when the
 selected custom build is not ready.
+The patched build is useful because it keeps CDP-backed service control while
+reducing the obvious automation signal exposed by ordinary DevTools-attached
+Chromium. It is not a captcha bypass, but it is a better default for
+bot-sensitive sites that still tolerate CDP-backed control.
+Profiles can set <code>browserBuild</code> to <code>stealthcdp_chromium</code>,
+<code>stock_chrome</code>, or <code>cdp_free_headed</code>. Exact authenticated
+target, account, and target-site matches still win first; browser build then
+breaks ties and can select a generic default profile for new identities. Use a
+<code>stock_chrome</code> profile with target and account IDs for sites that
+only work correctly in Google Chrome.
 Use <code>agent-browser install doctor</code> after upgrading the user-scoped
 command or changing browser build manifests. It does not launch Chrome. The
 doctor checks the command on <code>PATH</code>, the running executable, the pnpm
@@ -171,6 +184,7 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>sessionName</code></td><td><code>--session-name</code></td><td>string</td></tr>
     <tr><td><code>executablePath</code></td><td><code>--executable-path</code></td><td>string</td></tr>
     <tr><td><code>service.defaultBrowserBuild</code></td><td>Service launch posture label. Use <code>stealthcdp_chromium</code> with <code>executablePath</code>, <code>AGENT_BROWSER_EXECUTABLE_PATH</code>, or <code>service.browserBuildManifests.stealthcdp_chromium.manifestPath</code> for the patched Chromium build.</td><td>string</td></tr>
+    <tr><td><code>service.profiles.&lt;id&gt;.browserBuild</code></td><td>Profile-level browser build preference. Values: <code>stock_chrome</code>, <code>stealthcdp_chromium</code>, or <code>cdp_free_headed</code>.</td><td>string</td></tr>
     <tr><td><code>service.browserBuildManifests.&lt;build&gt;.manifestPath</code></td><td>Promoted browser artifact manifest used to resolve the executable and report artifact metadata in service status.</td><td>string</td></tr>
     <tr><td><code>extensions</code></td><td><code>--extension</code></td><td>string[]</td></tr>
     <tr><td><code>profile</code></td><td><code>--profile</code></td><td>string</td></tr>

@@ -29,7 +29,7 @@ pub const SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME: &str =
 pub const SERVICE_PROFILE_ALLOCATION_MCP_RESOURCE_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/allocation";
 pub const SERVICE_PROFILE_LOOKUP_MCP_RESOURCE_TEMPLATE: &str =
-    "agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}";
+    "agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}";
 pub const SERVICE_PROFILE_READINESS_MCP_RESOURCE_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/readiness";
 pub const SERVICE_PROFILE_SEEDING_HANDOFF_MCP_RESOURCE_TEMPLATE: &str =
@@ -218,7 +218,7 @@ pub fn service_contracts_metadata() -> Value {
                 "client": {
                     "package": "@agent-browser/client/service-observability",
                     "helpers": ["lookupServiceProfile", "getServiceProfileForIdentity"],
-                    "selectionOrder": ["authenticatedServiceIds", "accountIds", "targetServiceIds", "sharedServiceIds"],
+                    "selectionOrder": ["authenticatedServiceIds", "accountIds", "targetServiceIds", "sharedServiceIds", "browserBuild"],
                 },
             },
             "serviceAccessPlanResponse": {

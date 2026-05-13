@@ -107,6 +107,7 @@ export interface ServiceProfileRecord {
   id: string;
   name: string;
   userDataDir: string | null;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
   targetServiceIds: string[];
   authenticatedServiceIds: string[];
   accountIds: string[];
@@ -151,6 +152,7 @@ export interface ServiceProfileAllocation {
   profileName: string;
   allocation: string;
   keyring: string;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
   targetServiceIds: string[];
   authenticatedServiceIds: string[];
   accountIds: string[];
@@ -185,7 +187,7 @@ export interface ServiceSessionRecord {
   agentName: string | null;
   taskName: string | null;
   profileId: string | null;
-  profileSelectionReason: 'explicit_profile' | 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | null;
+  profileSelectionReason: 'explicit_profile' | 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | 'browser_build_default' | null;
   profileLeaseDisposition: 'new_browser' | 'reused_browser' | 'active_lease_conflict' | null;
   profileLeaseConflictSessionIds: string[];
   [key: string]: unknown;
@@ -843,6 +845,7 @@ export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabi
   name?: string;
   allocation?: string;
   keyring?: string;
+  browserBuild?: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
   persistent?: boolean;
   authenticated?: boolean;
   userDataDir?: string;
@@ -1141,6 +1144,8 @@ export interface ServiceProfileIdentityMatchOptions {
   targetServiceId?: string;
   /** Desired account identity within a target site, for example an email address, tenant slug, or username. */
   accountId?: string;
+  /** Optional browser-build preference for profile selection and launch routing. */
+  browserBuild?: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
   /** Target URL used to derive a site policy and target-service identity when possible. */
   url?: string;
   /** Additional desired login identities. */
@@ -1155,8 +1160,8 @@ export interface ServiceProfileIdentityMatchOptions {
 
 export interface ServiceProfileIdentityMatchResult {
   profile: ServiceProfileRecord | null;
-  reason: 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | null;
-  matchedField: 'authenticatedServiceIds' | 'accountIds' | 'targetServiceIds' | 'sharedServiceIds' | null;
+  reason: 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | 'browser_build_default' | null;
+  matchedField: 'authenticatedServiceIds' | 'accountIds' | 'targetServiceIds' | 'sharedServiceIds' | 'browserBuild' | null;
   matchedIdentity: string | null;
 }
 
@@ -1216,14 +1221,15 @@ export interface ServiceProfileLookupQuery {
   accountIds: string[];
   url: string | null;
   readinessProfileId: string | null;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
   [key: string]: unknown;
 }
 
 export interface ServiceProfileLookupMatch {
   profileId: string;
   profile: ServiceProfileRecord;
-  reason: 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list';
-  matchedField: 'authenticatedServiceIds' | 'accountIds' | 'targetServiceIds' | 'sharedServiceIds' | null;
+  reason: 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | 'browser_build_default';
+  matchedField: 'authenticatedServiceIds' | 'accountIds' | 'targetServiceIds' | 'sharedServiceIds' | 'browserBuild' | null;
   matchedIdentity: string | null;
   [key: string]: unknown;
 }

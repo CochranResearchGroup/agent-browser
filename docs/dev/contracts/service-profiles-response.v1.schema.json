@@ -70,6 +70,7 @@
         "profileName",
         "allocation",
         "keyring",
+        "browserBuild",
         "targetServiceIds",
         "authenticatedServiceIds",
         "accountIds",
@@ -101,6 +102,17 @@
         },
         "keyring": {
           "type": "string"
+        },
+        "browserBuild": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "targetServiceIds": {
           "type": "array",

@@ -218,50 +218,28 @@ export function findServiceProfileForIdentity(profiles, options) {
   ]);
   const identitySet = new Set(identities);
   const serviceName = options?.serviceName;
+  const browserBuild = options?.browserBuild;
 
-  const authenticatedProfile = candidates.find((profile) =>
-    profileMatchesAny(profile, identitySet, 'authenticatedServiceIds'),
-  );
-  if (authenticatedProfile) {
-    return {
-      profile: authenticatedProfile,
-      reason: 'authenticated_target',
-      matchedField: 'authenticatedServiceIds',
-      matchedIdentity: firstMatchingProfileValue(authenticatedProfile, identitySet, 'authenticatedServiceIds'),
-    };
-  }
+  const rankedProfile = candidates
+    .map((profile, index) => ({
+      profile,
+      index,
+      rank: profileIdentityRank(profile, {
+        identitySet,
+        serviceName,
+        browserBuild,
+      }),
+    }))
+    .filter((candidate) => candidate.rank.reason !== null)
+    .sort((left, right) => compareProfileIdentityRank(right.rank, left.rank) || left.index - right.index)[0];
 
-  const accountProfile = candidates.find((profile) => profileMatchesAny(profile, identitySet, 'accountIds'));
-  if (accountProfile) {
-    return {
-      profile: accountProfile,
-      reason: 'account_match',
-      matchedField: 'accountIds',
-      matchedIdentity: firstMatchingProfileValue(accountProfile, identitySet, 'accountIds'),
-    };
-  }
-
-  const targetProfile = candidates.find((profile) => profileMatchesAny(profile, identitySet, 'targetServiceIds'));
-  if (targetProfile) {
-    return {
-      profile: targetProfile,
-      reason: 'target_match',
-      matchedField: 'targetServiceIds',
-      matchedIdentity: firstMatchingProfileValue(targetProfile, identitySet, 'targetServiceIds'),
-    };
-  }
-
-  const serviceProfile =
-    typeof serviceName === 'string' && serviceName.length > 0
-      ? candidates.find((profile) => profileMatchesAny(profile, new Set([serviceName]), 'sharedServiceIds'))
-      : null;
-  if (serviceProfile) {
-    return {
-      profile: serviceProfile,
-      reason: 'service_allow_list',
-      matchedField: 'sharedServiceIds',
-      matchedIdentity: serviceName,
-    };
+  if (rankedProfile) {
+    return /** @type {ServiceProfileIdentityMatchResult} */ ({
+      profile: rankedProfile.profile,
+      reason: rankedProfile.rank.reason,
+      matchedField: rankedProfile.rank.matchedField,
+      matchedIdentity: rankedProfile.rank.matchedIdentity,
+    });
   }
 
   return {
@@ -287,6 +265,7 @@ export async function getServiceProfileForIdentity({ readinessProfileId, ...opti
         siteId: options.siteId,
         targetServiceId: options.targetServiceId,
         accountId: options.accountId,
+        browserBuild: options.browserBuild,
         url: options.url,
         loginIds: options.loginIds?.join(','),
         siteIds: options.siteIds?.join(','),
@@ -327,6 +306,7 @@ export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, c
         siteId: options.siteId,
         targetServiceId: options.targetServiceId,
         accountId: options.accountId,
+        browserBuild: options.browserBuild,
         url: options.url,
         loginIds: options.loginIds?.join(','),
         siteIds: options.siteIds?.join(','),
@@ -617,6 +597,7 @@ export function registerServiceLoginProfile({
   name,
   allocation = 'per_service',
   keyring = 'basic_password_store',
+  browserBuild,
   persistent = true,
   authenticated = true,
   userDataDir,
@@ -660,6 +641,7 @@ export function registerServiceLoginProfile({
       name: name ?? id,
       allocation,
       keyring,
+      ...(browserBuild === undefined ? {} : { browserBuild }),
       persistent,
       targetServiceIds: targets,
       authenticatedServiceIds: authenticatedTargets,
@@ -1528,6 +1510,87 @@ function assertPlainObject(value, label) {
  */
 function profileMatchesAny(profile, identities, field) {
   return firstMatchingProfileValue(profile, identities, field) !== null;
+}
+
+/**
+ * @param {unknown} profile
+ * @param {{ identitySet: Set<string>, serviceName?: string, browserBuild?: string }} request
+ */
+function profileIdentityRank(profile, request) {
+  const authenticatedMatch = firstMatchingProfileValue(profile, request.identitySet, 'authenticatedServiceIds');
+  const accountMatch = firstMatchingProfileValue(profile, request.identitySet, 'accountIds');
+  const targetMatch = firstMatchingProfileValue(profile, request.identitySet, 'targetServiceIds');
+  const serviceMatch =
+    typeof request.serviceName === 'string' && request.serviceName.length > 0
+      ? firstMatchingProfileValue(profile, new Set([request.serviceName]), 'sharedServiceIds')
+      : null;
+  const browserBuildMatch =
+    typeof request.browserBuild === 'string' &&
+    request.browserBuild.length > 0 &&
+    profile !== null &&
+    typeof profile === 'object' &&
+    /** @type {Record<string, unknown>} */ (profile).browserBuild === request.browserBuild;
+  const browserBuildDefault =
+    browserBuildMatch &&
+    profileArrayFieldLength(profile, 'targetServiceIds') === 0 &&
+    profileArrayFieldLength(profile, 'authenticatedServiceIds') === 0 &&
+    profileArrayFieldLength(profile, 'accountIds') === 0 &&
+    profileArrayFieldLength(profile, 'sitePolicyIds') === 0;
+  const persistent =
+    profile !== null && typeof profile === 'object' && /** @type {Record<string, unknown>} */ (profile).persistent === true;
+
+  return {
+    authenticated: authenticatedMatch === null ? 0 : 1,
+    account: accountMatch === null ? 0 : 1,
+    target: targetMatch === null ? 0 : 1,
+    service: serviceMatch === null ? 0 : 1,
+    browserBuild: browserBuildMatch ? 1 : 0,
+    browserBuildDefault: browserBuildDefault ? 1 : 0,
+    persistent: persistent ? 1 : 0,
+    reason:
+      authenticatedMatch !== null
+        ? 'authenticated_target'
+        : accountMatch !== null
+          ? 'account_match'
+          : targetMatch !== null
+            ? 'target_match'
+            : serviceMatch !== null
+              ? 'service_allow_list'
+              : browserBuildDefault
+                ? 'browser_build_default'
+                : null,
+    matchedField:
+      authenticatedMatch !== null
+        ? 'authenticatedServiceIds'
+        : accountMatch !== null
+          ? 'accountIds'
+          : targetMatch !== null
+            ? 'targetServiceIds'
+            : serviceMatch !== null
+              ? 'sharedServiceIds'
+              : browserBuildDefault
+                ? 'browserBuild'
+                : null,
+    matchedIdentity: authenticatedMatch ?? accountMatch ?? targetMatch ?? serviceMatch ?? request.browserBuild ?? null,
+  };
+}
+
+function compareProfileIdentityRank(left, right) {
+  for (const field of ['authenticated', 'account', 'target', 'service', 'browserBuild', 'browserBuildDefault', 'persistent']) {
+    const diff = left[field] - right[field];
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
+
+function profileArrayFieldLength(profile, field) {
+  if (!profile || typeof profile !== 'object') {
+    return 0;
+  }
+  const value = /** @type {Record<string, unknown>} */ (profile)[field];
+  return Array.isArray(value) ? value.length : 0;
 }
 
 /**

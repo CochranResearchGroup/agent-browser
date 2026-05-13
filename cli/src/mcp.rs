@@ -35,9 +35,9 @@ const CHALLENGES_RESOURCE: &str = "agent-browser://challenges";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
-const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId}";
+const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}";
 const PROFILE_LOOKUP_RESOURCE: &str = "agent-browser://profiles/lookup";
-const PROFILE_LOOKUP_TEMPLATE: &str = "agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}";
+const PROFILE_LOOKUP_TEMPLATE: &str = "agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}";
 const PROFILE_ALLOCATION_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/allocation";
 const PROFILE_READINESS_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/readiness";
 const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
@@ -649,6 +649,11 @@ fn service_mcp_tools() -> Vec<Value> {
                     "cdpAttachmentAllowed": {
                         "type": "boolean",
                         "description": "Access-plan marker indicating whether the current request may use CDP-backed execution."
+                    },
+                    "browserBuild": {
+                        "type": "string",
+                        "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+                        "description": "Optional browser-build preference for profile selection and launch routing."
                     },
                     "serviceName": {
                         "type": "string",
@@ -2345,6 +2350,14 @@ fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
             "type": "integer",
             "minimum": 1,
             "description": "Maximum time to wait for profileLeasePolicy=wait before failing the request."
+        }),
+    );
+    properties.insert(
+        "browserBuild".to_string(),
+        json!({
+            "type": "string",
+            "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+            "description": "Optional browser-build preference for profile selection and launch routing."
         }),
     );
     properties.insert(

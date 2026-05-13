@@ -30,6 +30,7 @@ pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) site_policy_id: Option<String>,
     pub(crate) challenge_id: Option<String>,
     pub(crate) readiness_profile_id: Option<String>,
+    pub(crate) browser_build: Option<BrowserBuild>,
 }
 
 impl ServiceAccessPlanRequest {
@@ -39,6 +40,7 @@ impl ServiceAccessPlanRequest {
             target_service_ids: self.target_service_ids.clone(),
             account_ids: self.account_ids.clone(),
             target_url: self.target_url.clone(),
+            browser_build: self.browser_build,
         }
     }
 }
@@ -84,6 +86,9 @@ pub(crate) fn parse_service_access_plan_query(
             "readinessProfileId" | "readiness_profile_id" | "readiness-profile-id" => {
                 request.readiness_profile_id = non_empty(value);
             }
+            "browserBuild" | "browser_build" | "browser-build" => {
+                request.browser_build = parse_browser_build(&value)?;
+            }
             "" => {}
             _ => {
                 return Err(format!(
@@ -118,6 +123,9 @@ pub(crate) fn service_access_plan_for_state(
         request.target_service_ids.push(site_policy_id);
         request.target_service_ids.sort();
         request.target_service_ids.dedup();
+    }
+    if request.browser_build.is_none() {
+        request.browser_build = browser_build_for_access_request(service_state, &request);
     }
     let profile_request = request.profile_selection_request();
     let selection = select_service_profile_for_request(service_state, &profile_request);
@@ -191,6 +199,7 @@ pub(crate) fn service_access_plan_for_state(
             "sitePolicyId": request.site_policy_id,
             "challengeId": request.challenge_id,
             "readinessProfileId": request.readiness_profile_id,
+            "browserBuild": request.browser_build,
             "namingWarnings": naming_warnings,
             "hasNamingWarning": has_naming_warning,
         },
@@ -797,6 +806,9 @@ fn service_request_decision(
     if let Some(target_url) = request.target_url.as_ref() {
         service_request.insert("url".to_string(), json!(target_url));
     }
+    if let Some(browser_build) = launch_posture.get("browserBuild") {
+        service_request.insert("browserBuild".to_string(), browser_build.clone());
+    }
     if manual_action_required {
         service_request.insert("blockedByManualAction".to_string(), json!(true));
     }
@@ -841,6 +853,7 @@ fn service_request_decision(
             "taskName",
             "targetServiceIds",
             "accountIds",
+            "browserBuild",
             "profileLeasePolicy",
             "requiresCdpFree",
             "cdpAttachmentAllowed",
@@ -920,8 +933,12 @@ fn launch_posture_decision(
     let requires_cdp_free = site_policy
         .map(|policy| policy.requires_cdp_free)
         .unwrap_or(false);
-    let (browser_build, browser_build_source) =
-        browser_build_decision(service_state, site_policy, requires_cdp_free);
+    let (browser_build, browser_build_source) = browser_build_decision(
+        service_state,
+        selected_profile,
+        site_policy,
+        requires_cdp_free,
+    );
     let cdp_attachment_allowed = !requires_cdp_free && !manual_seeding_required;
     let attachable_after_seeding = cdp_attachment_allowed
         || (!requires_cdp_free && !matches!(browser_host, BrowserHost::AttachedExisting));
@@ -976,6 +993,7 @@ fn launch_posture_decision(
 
 fn browser_build_decision(
     service_state: &ServiceState,
+    selected_profile: Option<&BrowserProfile>,
     site_policy: Option<&SitePolicy>,
     requires_cdp_free: bool,
 ) -> (BrowserBuild, &'static str) {
@@ -984,6 +1002,9 @@ fn browser_build_decision(
     }
     if let Some(browser_build) = site_policy.and_then(|policy| policy.browser_build) {
         return (browser_build, "site_policy");
+    }
+    if let Some(browser_build) = selected_profile.and_then(|profile| profile.browser_build) {
+        return (browser_build, "profile_default");
     }
     if let Some(browser_build) = service_state.default_browser_build {
         return (browser_build, "service_default");
@@ -1229,6 +1250,15 @@ fn service_profile_match_details(
                 })
                 .cloned(),
         ),
+        ProfileSelectionReason::BrowserBuildDefault => (
+            Some("browserBuild"),
+            request.browser_build.map(|browser_build| {
+                serde_json::to_value(browser_build)
+                    .ok()
+                    .and_then(|value| value.as_str().map(ToString::to_string))
+                    .unwrap_or_default()
+            }),
+        ),
         ProfileSelectionReason::ExplicitProfile => (None, None),
     }
 }
@@ -1246,6 +1276,50 @@ fn append_identity_values(target_service_ids: &mut Vec<String>, value: &str) {
             target_service_ids.push(item);
         }
     }
+}
+
+fn parse_browser_build(value: &str) -> Result<Option<BrowserBuild>, String> {
+    let Some(value) = non_empty(value.to_string()) else {
+        return Ok(None);
+    };
+    BrowserBuild::parse_label(&value)
+        .map(Some)
+        .ok_or_else(|| format!("Unknown browserBuild value: {}", value))
+}
+
+fn browser_build_for_access_request(
+    service_state: &ServiceState,
+    request: &ServiceAccessPlanRequest,
+) -> Option<BrowserBuild> {
+    if let Some(site_policy_id) = request.site_policy_id.as_deref() {
+        if let Some(browser_build) = service_state
+            .site_policies
+            .get(site_policy_id)
+            .and_then(|policy| policy.browser_build)
+        {
+            return Some(browser_build);
+        }
+        if let Some(browser_build) =
+            builtin_site_policy(site_policy_id).and_then(|policy| policy.browser_build)
+        {
+            return Some(browser_build);
+        }
+    }
+    for target_service_id in &request.target_service_ids {
+        if let Some(browser_build) = service_state
+            .site_policies
+            .get(target_service_id)
+            .and_then(|policy| policy.browser_build)
+        {
+            return Some(browser_build);
+        }
+        if let Some(browser_build) =
+            builtin_site_policy(target_service_id).and_then(|policy| policy.browser_build)
+        {
+            return Some(browser_build);
+        }
+    }
+    service_state.default_browser_build
 }
 
 fn non_empty(value: String) -> Option<String> {

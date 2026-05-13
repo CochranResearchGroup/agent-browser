@@ -410,7 +410,9 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
             "sitePolicyIds",
             "targetServiceIds",
             "authenticatedServiceIds",
+            "accountIds",
             "defaultBrowserHost",
+            "browserBuild",
             "allocation",
             "keyring",
             "sharedServiceIds",
@@ -425,7 +427,9 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
             "site_policy_ids",
             "target_service_ids",
             "authenticated_service_ids",
+            "account_ids",
             "default_browser_host",
+            "browser_build",
             "shared_service_ids",
             "credential_provider_ids",
             "manual_login_preferred",
@@ -435,11 +439,15 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
     if let Some(host) = value["defaultBrowserHost"].as_str() {
         assert!(SERVICE_BROWSER_HOST_VALUES.contains(&host));
     }
+    if let Some(build) = value["browserBuild"].as_str() {
+        assert!(SERVICE_BROWSER_BUILD_VALUES.contains(&build));
+    }
     assert!(SERVICE_PROFILE_ALLOCATION_VALUES.contains(&value["allocation"].as_str().unwrap()));
     assert!(SERVICE_PROFILE_KEYRING_VALUES.contains(&value["keyring"].as_str().unwrap()));
     assert!(value["sitePolicyIds"].is_array());
     assert!(value["targetServiceIds"].is_array());
     assert!(value["authenticatedServiceIds"].is_array());
+    assert!(value["accountIds"].is_array());
     assert!(value["sharedServiceIds"].is_array());
     assert!(value["credentialProviderIds"].is_array());
     assert!(value["targetReadiness"].is_array());
@@ -1585,8 +1593,10 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
             "profileName",
             "allocation",
             "keyring",
+            "browserBuild",
             "targetServiceIds",
             "authenticatedServiceIds",
+            "accountIds",
             "targetReadiness",
             "sharedServiceIds",
             "holderSessionIds",
@@ -1606,8 +1616,10 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
         &[
             "profile_id",
             "profile_name",
+            "browser_build",
             "target_service_ids",
             "authenticated_service_ids",
+            "account_ids",
             "target_readiness",
             "shared_service_ids",
             "holder_session_ids",
@@ -1627,8 +1639,12 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
     );
     assert!(SERVICE_PROFILE_ALLOCATION_VALUES.contains(&value["allocation"].as_str().unwrap()));
     assert!(SERVICE_PROFILE_KEYRING_VALUES.contains(&value["keyring"].as_str().unwrap()));
+    if let Some(build) = value["browserBuild"].as_str() {
+        assert!(SERVICE_BROWSER_BUILD_VALUES.contains(&build));
+    }
     assert!(value["targetServiceIds"].is_array());
     assert!(value["authenticatedServiceIds"].is_array());
+    assert!(value["accountIds"].is_array());
     assert!(value["targetReadiness"].is_array());
     for readiness in value["targetReadiness"].as_array().unwrap() {
         assert_service_profile_readiness_contract(readiness);
@@ -1896,6 +1912,7 @@ pub struct ServiceProfileAllocation {
     pub profile_name: String,
     pub allocation: ProfileAllocationPolicy,
     pub keyring: ProfileKeyringPolicy,
+    pub browser_build: Option<BrowserBuild>,
     pub target_service_ids: Vec<String>,
     pub authenticated_service_ids: Vec<String>,
     pub account_ids: Vec<String>,
@@ -2049,6 +2066,7 @@ fn service_profile_allocation(
             .map(|profile| profile.allocation)
             .unwrap_or_default(),
         keyring: profile.map(|profile| profile.keyring).unwrap_or_default(),
+        browser_build: profile.and_then(|profile| profile.browser_build),
         target_service_ids: profile
             .map(|profile| sorted_strings(profile.target_service_ids.iter()))
             .unwrap_or_default(),
@@ -3275,6 +3293,9 @@ pub struct BrowserProfile {
     /// sites, for example a tenant slug, email address, or username.
     pub account_ids: Vec<String>,
     pub default_browser_host: Option<BrowserHost>,
+    /// Preferred browser build for this profile. This lets service routing keep
+    /// Chrome-native and patched-Chromium identities in separate lanes.
+    pub browser_build: Option<BrowserBuild>,
     pub allocation: ProfileAllocationPolicy,
     pub keyring: ProfileKeyringPolicy,
     pub shared_service_ids: Vec<String>,
@@ -3546,6 +3567,8 @@ pub enum ProfileSelectionReason {
     TargetMatch,
     /// Selected profile was chosen by caller service allow-list fallback.
     ServiceAllowList,
+    /// Selected profile was a generic default for the requested browser build.
+    BrowserBuildDefault,
 }
 
 /// Current lease relationship between a session and its selected profile.
@@ -3846,6 +3869,25 @@ pub enum BrowserBuild {
     StockChrome,
     StealthcdpChromium,
     CdpFreeHeaded,
+}
+
+impl BrowserBuild {
+    pub fn parse_label(value: &str) -> Option<Self> {
+        match value.trim() {
+            "stock_chrome" | "stock-chrome" | "chrome" | "google_chrome" | "google-chrome" => {
+                Some(Self::StockChrome)
+            }
+            "stealthcdp_chromium"
+            | "stealthcdp-chromium"
+            | "stealth_chromium"
+            | "stealth-chromium"
+            | "chromium-stealthcdp" => Some(Self::StealthcdpChromium),
+            "cdp_free_headed" | "cdp-free-headed" | "cdp_free" | "cdp-free" => {
+                Some(Self::CdpFreeHeaded)
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Browser process health as seen by the service.
@@ -4509,7 +4551,9 @@ mod tests {
             &[
                 "id",
                 "name",
+                "accountIds",
                 "defaultBrowserHost",
+                "browserBuild",
                 "allocation",
                 "keyring",
                 "targetReadiness",
@@ -4927,7 +4971,9 @@ mod tests {
             "sitePolicyIds": [],
             "targetServiceIds": ["acs"],
             "authenticatedServiceIds": [],
+            "accountIds": [],
             "defaultBrowserHost": null,
+            "browserBuild": null,
             "allocation": "per_service",
             "keyring": "basic_password_store",
             "sharedServiceIds": [],

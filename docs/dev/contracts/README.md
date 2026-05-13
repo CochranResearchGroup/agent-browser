@@ -60,7 +60,7 @@ for `GET /api/service/profiles/<id>/allocation` and MCP
 `serviceProfileReadinessResponse` for `GET /api/service/profiles/<id>/readiness`
 and MCP `agent-browser://profiles/{profile_id}/readiness`, and
 `serviceProfileLookupResponse` for `GET /api/service/profiles/lookup` and MCP
-`agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}`,
+`agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}`,
 plus
 `serviceAccessPlanResponse` for `GET /api/service/access-plan` and MCP
 `agent-browser://access-plan`.
@@ -122,12 +122,12 @@ findings, and the service-owned decision before the caller requests a tab.
     </tr>
     <tr>
       <td><code>GET /api/service/access-plan</code></td>
-      <td><code>agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId}</code></td>
+      <td><code>agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}</code></td>
       <td>Preferred no-launch selector and recommendation payload</td>
     </tr>
     <tr>
       <td><code>GET /api/service/profiles/lookup</code></td>
-      <td><code>agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}</code></td>
+      <td><code>agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}</code></td>
       <td>Narrow profile selector when the caller does not need the full access plan</td>
     </tr>
     <tr>
@@ -393,20 +393,20 @@ handoff closed but unverified once that PID exits.
 
 `service-profile-lookup-response.v1.schema.json` describes the response
 envelope returned by HTTP `GET /api/service/profiles/lookup` and MCP
-`agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}`
+`agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}`
 when a caller wants agent-browser to apply the authoritative service profile
 selector for a service name plus site, login, account, or URL identity without fetching the
 full profile collection. `selectedProfileMatch` includes `matchedField` and
 `matchedIdentity` so clients can explain whether the match came from
-`authenticatedServiceIds`, `accountIds`, `targetServiceIds`, or
-`sharedServiceIds`. When
+`authenticatedServiceIds`, `accountIds`, `targetServiceIds`,
+`sharedServiceIds`, or `browserBuild`. When
 `readinessSummary.manualSeedingRequired` is true, `seedingHandoff` contains the
 same operator-ready command and warnings as the explicit profile seeding
 handoff endpoint.
 
 `service-access-plan-response.v1.schema.json` describes the response envelope
 returned by HTTP `GET /api/service/access-plan` and MCP
-`agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId}`.
+`agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}`.
 It is a read-only, no-launch planning surface. The response includes the same
 profile selector metadata and readiness summary as profile lookup, then adds the
 selected site policy, enabled providers, retained challenges, optional

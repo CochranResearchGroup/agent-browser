@@ -318,7 +318,7 @@ const serviceResourceSurface = [
     route: '/api/service/access-plan',
     docsNeedles: [
       '/api/service/access-plan',
-      'agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId}',
+      'agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}',
     ],
     httpNeedles: [
       'path == "/api/service/access-plan"',
@@ -447,10 +447,10 @@ const serviceResourceSurface = [
     ],
   },
   {
-    resource: 'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}',
+    resource: 'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}',
     route: '/api/service/profiles/lookup',
     docsNeedles: [
-      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}',
       '/api/service/profiles/lookup',
       'getServiceProfileForIdentity',
     ],
@@ -468,7 +468,7 @@ const serviceResourceSurface = [
     contractNeedles: [
       'service-profile-lookup-response.v1.schema.json',
       'GET /api/service/profiles/lookup',
-      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}',
     ],
   },
 ];

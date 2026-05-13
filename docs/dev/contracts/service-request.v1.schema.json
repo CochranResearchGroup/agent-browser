@@ -133,6 +133,11 @@
       "type": "boolean",
       "description": "Planner marker copied from an access-plan serviceRequest. False means the current service request surface must not queue a CDP-backed launch."
     },
+    "browserBuild": {
+      "type": "string",
+      "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+      "description": "Optional browser-build preference for profile selection and launch routing."
+    },
     "serviceName": {
       "type": "string",
       "description": "Calling service name, for example JournalDownloader."

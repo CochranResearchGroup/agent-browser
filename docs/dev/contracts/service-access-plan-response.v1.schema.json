@@ -32,6 +32,7 @@
         "sitePolicyId",
         "challengeId",
         "readinessProfileId",
+        "browserBuild",
         "namingWarnings",
         "hasNamingWarning"
       ],
@@ -68,6 +69,17 @@
         },
         "readinessProfileId": {
           "type": ["string", "null"]
+        },
+        "browserBuild": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "namingWarnings": {
           "type": "array",
@@ -116,13 +128,13 @@
             },
             "reason": {
               "type": "string",
-              "enum": ["authenticated_target", "account_match", "target_match", "service_allow_list"]
+              "enum": ["authenticated_target", "account_match", "target_match", "service_allow_list", "browser_build_default"]
             },
             "matchedField": {
               "oneOf": [
                 {
                   "type": "string",
-                  "enum": ["authenticatedServiceIds", "accountIds", "targetServiceIds", "sharedServiceIds"]
+                  "enum": ["authenticatedServiceIds", "accountIds", "targetServiceIds", "sharedServiceIds", "browserBuild"]
                 },
                 {
                   "type": "null"

@@ -13,6 +13,7 @@
     "authenticatedServiceIds",
     "accountIds",
     "defaultBrowserHost",
+    "browserBuild",
     "allocation",
     "keyring",
     "sharedServiceIds",
@@ -69,6 +70,18 @@
             "cloud_provider",
             "attached_existing"
           ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "browserBuild": {
+      "description": "Preferred browser build for this profile, or null when the service default should decide.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
         },
         {
           "type": "null"

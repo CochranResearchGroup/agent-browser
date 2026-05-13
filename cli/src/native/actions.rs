@@ -67,7 +67,7 @@ use super::service_lifecycle::{
 };
 use super::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
-    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
+    BrowserBuild, BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
     JobState as ServiceJobState, MonitorState, ProfileKeyringPolicy, ProfileLeaseDisposition,
     ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy,
 };
@@ -482,6 +482,17 @@ fn target_url_from_command(cmd: &Value) -> Option<String> {
     })
 }
 
+fn browser_build_from_command(cmd: &Value) -> Option<BrowserBuild> {
+    for key in ["browserBuild", "browser_build", "browser-build"] {
+        if let Some(value) = cmd.get(key).and_then(|value| value.as_str()) {
+            if let Some(browser_build) = BrowserBuild::parse_label(value) {
+                return Some(browser_build);
+            }
+        }
+    }
+    cmd.get("params").and_then(browser_build_from_command)
+}
+
 fn apply_service_profile_selection(
     options: &mut LaunchOptions,
     cmd: &Value,
@@ -494,11 +505,13 @@ fn apply_service_profile_selection(
         target_service_ids: target_service_ids_from_command(cmd),
         account_ids: account_ids_from_command(cmd),
         target_url: target_url_from_command(cmd),
+        browser_build: browser_build_from_command(cmd),
     };
     if request.service_name.is_none()
         && request.target_service_ids.is_empty()
         && request.account_ids.is_empty()
         && request.target_url.is_none()
+        && request.browser_build.is_none()
     {
         return None;
     }
@@ -516,6 +529,11 @@ fn apply_service_profile_selection(
         .filter(|value| !value.is_empty())
     {
         options.profile = Some(user_data_dir.to_string());
+    }
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && cmd.get("executablePath").is_none()
+    {
+        options.executable_path = None;
     }
     Some(selection.reason)
 }

@@ -4,7 +4,7 @@
 //! model, while command parsing and browser process control remain in actions.
 
 use super::service_model::{
-    service_site_policy_id_for_url, BrowserProfile, BrowserSession, LeaseState,
+    service_site_policy_id_for_url, BrowserBuild, BrowserProfile, BrowserSession, LeaseState,
     ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason,
     ServiceActor, ServiceState, SessionCleanupPolicy,
 };
@@ -30,6 +30,7 @@ pub(crate) struct ProfileSelectionRequest {
     pub(crate) target_service_ids: Vec<String>,
     pub(crate) account_ids: Vec<String>,
     pub(crate) target_url: Option<String>,
+    pub(crate) browser_build: Option<BrowserBuild>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,14 +63,18 @@ fn select_service_profile_for_request_id(
     service_state: &ServiceState,
     request: &ProfileSelectionRequest,
 ) -> Option<(String, ProfileSelectionReason)> {
+    let effective_request = effective_profile_selection_request(service_state, request);
+    let normalized_target_service_ids =
+        normalized_profile_request_targets(service_state, &effective_request);
     service_state
         .profiles
         .iter()
-        .filter(|(_, profile)| profile_allows_service(profile, request.service_name.as_deref()))
+        .filter(|(_, profile)| {
+            profile_allows_service(profile, effective_request.service_name.as_deref())
+        })
         .filter_map(|(id, profile)| {
-            let normalized_target_service_ids =
-                normalized_profile_request_targets(service_state, request);
-            let rank = profile_selection_rank(profile, request, &normalized_target_service_ids);
+            let rank =
+                profile_selection_rank(profile, &effective_request, &normalized_target_service_ids);
             rank.reason().map(|reason| (rank, id.clone(), reason))
         })
         .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
@@ -241,6 +246,8 @@ struct ProfileSelectionRank {
     account_matches: usize,
     target_matches: usize,
     caller_service_match: bool,
+    browser_build_match: bool,
+    browser_build_default: bool,
     persistent: bool,
 }
 
@@ -254,6 +261,8 @@ impl ProfileSelectionRank {
             Some(ProfileSelectionReason::TargetMatch)
         } else if self.caller_service_match {
             Some(ProfileSelectionReason::ServiceAllowList)
+        } else if self.browser_build_default {
+            Some(ProfileSelectionReason::BrowserBuildDefault)
         } else {
             None
         }
@@ -299,14 +308,62 @@ fn profile_selection_rank(
             .iter()
             .any(|allowed| allowed == service_name)
     });
+    let browser_build_match = request
+        .browser_build
+        .is_some_and(|browser_build| profile.browser_build == Some(browser_build));
+    let browser_build_default = browser_build_match
+        && profile.target_service_ids.is_empty()
+        && profile.authenticated_service_ids.is_empty()
+        && profile.account_ids.is_empty()
+        && profile.site_policy_ids.is_empty();
 
     ProfileSelectionRank {
         authenticated_target_matches,
         account_matches,
         target_matches,
         caller_service_match,
+        browser_build_match,
+        browser_build_default,
         persistent: profile.persistent,
     }
+}
+
+fn effective_profile_selection_request(
+    service_state: &ServiceState,
+    request: &ProfileSelectionRequest,
+) -> ProfileSelectionRequest {
+    let mut request = request.clone();
+    if request.browser_build.is_none() {
+        request.browser_build = browser_build_for_profile_request(service_state, &request);
+    }
+    request
+}
+
+fn browser_build_for_profile_request(
+    service_state: &ServiceState,
+    request: &ProfileSelectionRequest,
+) -> Option<BrowserBuild> {
+    if let Some(target_url) = request.target_url.as_deref() {
+        if let Some(site_policy_id) = service_site_policy_id_for_url(service_state, target_url) {
+            if let Some(browser_build) = service_state
+                .site_policies
+                .get(&site_policy_id)
+                .and_then(|policy| policy.browser_build)
+            {
+                return Some(browser_build);
+            }
+        }
+    }
+    for target_service_id in &request.target_service_ids {
+        if let Some(browser_build) = service_state
+            .site_policies
+            .get(target_service_id)
+            .and_then(|policy| policy.browser_build)
+        {
+            return Some(browser_build);
+        }
+    }
+    service_state.default_browser_build
 }
 
 fn normalized_profile_request_targets(
@@ -402,6 +459,7 @@ mod tests {
                 target_service_ids: vec!["acs".to_string()],
                 account_ids: Vec::new(),
                 target_url: None,
+                browser_build: None,
             },
         );
 
@@ -459,6 +517,7 @@ mod tests {
                 target_service_ids: broad_target_service_ids,
                 account_ids: Vec::new(),
                 target_url: None,
+                browser_build: None,
             },
         );
 
@@ -490,6 +549,7 @@ mod tests {
                 target_service_ids: vec!["acs".to_string()],
                 account_ids: Vec::new(),
                 target_url: None,
+                browser_build: None,
             },
         );
 
@@ -517,6 +577,7 @@ mod tests {
                 target_service_ids: Vec::new(),
                 account_ids: Vec::new(),
                 target_url: None,
+                browser_build: None,
             },
         );
 
@@ -557,6 +618,7 @@ mod tests {
                 target_service_ids: vec!["google".to_string()],
                 account_ids: vec!["eric@example.com".to_string()],
                 target_url: None,
+                browser_build: None,
             },
         )
         .expect("account profile should be selected");
@@ -586,12 +648,90 @@ mod tests {
                 target_service_ids: Vec::new(),
                 account_ids: Vec::new(),
                 target_url: Some("https://www.canva.com/designs".to_string()),
+                browser_build: None,
             },
         )
         .expect("URL should map through built-in Canva site policy");
 
         assert_eq!(selected.profile_id, "canva");
         assert_eq!(selected.reason, ProfileSelectionReason::TargetMatch);
+    }
+
+    #[test]
+    fn test_select_service_profile_prefers_browser_build_with_same_identity_rank() {
+        let mut service_state = ServiceState::default();
+        service_state.profiles.insert(
+            "chrome-native".to_string(),
+            BrowserProfile {
+                id: "chrome-native".to_string(),
+                name: "Chrome native".to_string(),
+                target_service_ids: vec!["only-works-on-chrome".to_string()],
+                account_ids: vec!["myuser".to_string()],
+                browser_build: Some(BrowserBuild::StockChrome),
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        service_state.profiles.insert(
+            "stealth-default".to_string(),
+            BrowserProfile {
+                id: "stealth-default".to_string(),
+                name: "Stealth default".to_string(),
+                target_service_ids: vec!["only-works-on-chrome".to_string()],
+                account_ids: vec!["myuser".to_string()],
+                browser_build: Some(BrowserBuild::StealthcdpChromium),
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let selected = select_service_profile_for_request(
+            &service_state,
+            &ProfileSelectionRequest {
+                service_name: None,
+                target_service_ids: vec!["only-works-on-chrome".to_string()],
+                account_ids: vec!["myuser".to_string()],
+                target_url: None,
+                browser_build: Some(BrowserBuild::StockChrome),
+            },
+        )
+        .expect("browser-build preference should break equal identity ties");
+
+        assert_eq!(selected.profile_id, "chrome-native");
+        assert_eq!(selected.reason, ProfileSelectionReason::AccountMatch);
+    }
+
+    #[test]
+    fn test_select_service_profile_uses_generic_default_browser_build_profile() {
+        let mut service_state = ServiceState {
+            default_browser_build: Some(BrowserBuild::StealthcdpChromium),
+            ..ServiceState::default()
+        };
+        service_state.profiles.insert(
+            "stealth-default".to_string(),
+            BrowserProfile {
+                id: "stealth-default".to_string(),
+                name: "Stealth default".to_string(),
+                browser_build: Some(BrowserBuild::StealthcdpChromium),
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+
+        let selected = select_service_profile_for_request(
+            &service_state,
+            &ProfileSelectionRequest {
+                service_name: Some("NewService".to_string()),
+                target_service_ids: vec!["new-site".to_string()],
+                account_ids: vec!["new-user".to_string()],
+                target_url: None,
+                browser_build: None,
+            },
+        )
+        .expect("generic default browser-build profile should host new identities");
+
+        assert_eq!(selected.profile_id, "stealth-default");
+        assert_eq!(selected.reason, ProfileSelectionReason::BrowserBuildDefault);
     }
 
     #[test]

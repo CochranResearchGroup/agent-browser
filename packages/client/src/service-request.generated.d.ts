@@ -74,6 +74,7 @@ export interface ServiceRequest {
   action: ServiceRequestAction;
   params?: Record<string, unknown>;
   profileLeasePolicy?: string;
+  browserBuild?: string;
   serviceName?: string;
   agentName?: string;
   taskName?: string;

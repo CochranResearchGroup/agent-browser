@@ -21,7 +21,7 @@ use crate::native::service_lifecycle::{
 };
 use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
-    service_site_policy_id_for_url, service_site_policy_sources, BrowserProfile,
+    service_site_policy_id_for_url, service_site_policy_sources, BrowserBuild, BrowserProfile,
     ProfileSelectionReason, ServiceEntitySource, ServiceState,
 };
 use crate::native::service_monitors::{
@@ -1556,6 +1556,7 @@ pub(crate) fn service_profile_lookup_response_for_state(
     let mut account_ids = Vec::new();
     let mut target_url = None;
     let mut readiness_profile_id = None;
+    let mut browser_build = None;
 
     for (key, value) in query_params(query) {
         match key.as_str() {
@@ -1582,6 +1583,9 @@ pub(crate) fn service_profile_lookup_response_for_state(
             "readinessProfileId" | "readiness_profile_id" | "readiness-profile-id" => {
                 readiness_profile_id = non_empty(value);
             }
+            "browserBuild" | "browser_build" | "browser-build" => {
+                browser_build = parse_browser_build(&value)?;
+            }
             "" => {}
             _ => {
                 return Err(format!(
@@ -1604,12 +1608,16 @@ pub(crate) fn service_profile_lookup_response_for_state(
         target_service_ids.sort();
         target_service_ids.dedup();
     }
+    if browser_build.is_none() {
+        browser_build = browser_build_for_profile_lookup(service_state, &target_service_ids);
+    }
 
     let request = ProfileSelectionRequest {
         service_name: service_name.clone(),
         target_service_ids: target_service_ids.clone(),
         account_ids: account_ids.clone(),
         target_url: target_url.clone(),
+        browser_build,
     };
     let selection = select_service_profile_for_request(service_state, &request);
     let selected_profile = selection
@@ -1646,6 +1654,7 @@ pub(crate) fn service_profile_lookup_response_for_state(
             "accountIds": account_ids,
             "url": target_url,
             "readinessProfileId": readiness_profile_id,
+            "browserBuild": browser_build,
         },
         "selectedProfile": selected_profile.clone(),
         "selectedProfileSource": selection.as_ref().map(|selection| {
@@ -1716,6 +1725,15 @@ fn service_profile_match_details(
                 })
                 .cloned(),
         ),
+        ProfileSelectionReason::BrowserBuildDefault => (
+            Some("browserBuild"),
+            request.browser_build.map(|browser_build| {
+                serde_json::to_value(browser_build)
+                    .ok()
+                    .and_then(|value| value.as_str().map(ToString::to_string))
+                    .unwrap_or_default()
+            }),
+        ),
         ProfileSelectionReason::ExplicitProfile => (None, None),
     }
 }
@@ -1733,6 +1751,31 @@ fn append_identity_values(target_service_ids: &mut Vec<String>, value: &str) {
             target_service_ids.push(item);
         }
     }
+}
+
+fn parse_browser_build(value: &str) -> Result<Option<BrowserBuild>, String> {
+    let Some(value) = non_empty(value.to_string()) else {
+        return Ok(None);
+    };
+    BrowserBuild::parse_label(&value)
+        .map(Some)
+        .ok_or_else(|| format!("Unknown browserBuild value: {}", value))
+}
+
+fn browser_build_for_profile_lookup(
+    service_state: &ServiceState,
+    target_service_ids: &[String],
+) -> Option<BrowserBuild> {
+    for target_service_id in target_service_ids {
+        if let Some(browser_build) = service_state
+            .site_policies
+            .get(target_service_id)
+            .and_then(|policy| policy.browser_build)
+        {
+            return Some(browser_build);
+        }
+    }
+    service_state.default_browser_build
 }
 
 fn non_empty(value: String) -> Option<String> {

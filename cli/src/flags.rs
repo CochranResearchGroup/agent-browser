@@ -1330,7 +1330,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         .unwrap_or_default();
     let manual_login_preferred_services = manual_login_preferred_services(&config);
     let configured_service_state = config.service_state_snapshot();
-    let service_state = service_state_from_store(configured_service_state.clone());
+    let mut service_state = service_state_from_store(configured_service_state.clone());
     let service_reconcile_interval_ms = service_reconcile_interval_from_sources(&config);
     let service_job_timeout_ms = service_job_timeout_from_sources(&config);
     let service_monitor_interval_ms = service_monitor_interval_from_sources(&config);
@@ -1369,6 +1369,13 @@ pub fn parse_flags(args: &[String]) -> Flags {
     let config_executable_path = config.executable_path.clone();
     let manifest_executable_path =
         manifest_executable_path(&browser_build_manifest_status, "stealthcdp_chromium");
+    if service_state.default_browser_build.is_none()
+        && manifest_executable_path
+            .as_ref()
+            .is_some_and(|path| Path::new(path).is_file())
+    {
+        service_state.default_browser_build = Some(BrowserBuild::StealthcdpChromium);
+    }
     let executable_path = env_executable_path
         .clone()
         .or(config_executable_path.clone())
@@ -2200,7 +2207,6 @@ mod tests {
             format!(
                 r#"{{
                   "service": {{
-                    "defaultBrowserBuild": "stealthcdp_chromium",
                     "browserBuildManifests": {{
                       "stealthcdp_chromium": {{ "manifestPath": "{}" }}
                     }}
@@ -2228,6 +2234,11 @@ mod tests {
 
         assert_eq!(flags.executable_path.as_deref(), chrome_path.to_str());
         assert_eq!(flags.executable_path_source.as_deref(), Some("manifest"));
+        assert_eq!(
+            flags.service_state.default_browser_build,
+            Some(BrowserBuild::StealthcdpChromium)
+        );
+        assert_eq!(launch_config["defaultBrowserBuild"], "stealthcdp_chromium");
         assert_eq!(launch_config["stealthCdpChromiumReady"], true);
         assert_eq!(launch_config["executablePathSource"], "manifest");
         assert_eq!(
