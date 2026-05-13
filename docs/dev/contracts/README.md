@@ -212,6 +212,11 @@ a local Linux `stealthcdp_chromium` default plus a future Windows
 `stock_chrome` primary binding for one site/account identity. The sample is
 illustrative and should not be read as live host inventory.
 
+Run `pnpm test:browser-capability-registry-draft` to parse the draft schema and
+sample fixture, check required collections, enforce unique IDs, and verify that
+host, executable, and capability cross-references resolve. This is intentionally
+not a full JSON Schema validator.
+
 ## Service Incident Record v1
 
 `service-incident-record.v1.schema.json` describes grouped service incident

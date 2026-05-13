@@ -90,6 +90,13 @@ function selectRecommendations(files, base) {
     add('pnpm test:service-client-types', 'service client type coverage may drift');
   }
 
+  if (files.some(isBrowserCapabilityRegistryDraftSurface)) {
+    add(
+      'pnpm test:browser-capability-registry-draft',
+      'browser capability registry draft schema, sample, or validator changed',
+    );
+  }
+
   if (files.some(isServiceClientSurface)) {
     add('pnpm test:service-client', 'service client package, examples, or generated helpers changed');
   }
@@ -172,6 +179,14 @@ function isServiceClientSurface(file) {
     file.startsWith('scripts/test-service-') ||
     file === 'scripts/generate-service-request-client.js' ||
     file === 'scripts/generate-service-observability-client.js'
+  );
+}
+
+function isBrowserCapabilityRegistryDraftSurface(file) {
+  return (
+    file === 'docs/dev/contracts/service-browser-capability-registry.v1.schema.json' ||
+    file === 'docs/dev/contracts/examples/browser-capability-registry.sample.json' ||
+    file === 'scripts/smoke-browser-capability-registry-draft.js'
   );
 }
 
