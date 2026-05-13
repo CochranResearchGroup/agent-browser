@@ -1337,6 +1337,37 @@ export interface ServiceSitePolicySource {
   [key: string]: unknown;
 }
 
+export interface ServiceAccessPlanBrowserCapabilityEvidence {
+  advisory: true;
+  routingApplied: false;
+  source: 'service.browserCapabilityRegistry';
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | null;
+  browserBuildLabel: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | null;
+  selectedProfileId: string | null;
+  targetServiceIds: string[];
+  accountIds: string[];
+  serviceName: string | null;
+  taskName: string | null;
+  generatedAt: string | null;
+  browserHosts: Array<Record<string, unknown>>;
+  browserExecutables: Array<Record<string, unknown>>;
+  browserCapabilities: Array<Record<string, unknown>>;
+  profileCompatibility: Array<Record<string, unknown>>;
+  browserPreferenceBindings: Array<Record<string, unknown>>;
+  validationEvidence: Array<Record<string, unknown>>;
+  counts: {
+    browserHosts: number;
+    browserExecutables: number;
+    browserCapabilities: number;
+    profileCompatibility: number;
+    browserPreferenceBindings: number;
+    validationEvidence: number;
+    [key: string]: unknown;
+  };
+  notes: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceAccessPlanResponse {
   /** Normalized access-plan query after login, site, and target aliases have been folded together. */
   query: ServiceAccessPlanQuery;
@@ -1362,6 +1393,8 @@ export interface ServiceAccessPlanResponse {
   providers: ServiceProviderRecord[];
   /** Retained non-resolved challenges or the explicit requested challenge. */
   challenges: ServiceChallengeRecord[];
+  /** Advisory browser capability registry evidence relevant to this no-launch plan. */
+  browserCapabilityEvidence: ServiceAccessPlanBrowserCapabilityEvidence;
   /** Service-owned recommendation before any browser launch or control request. */
   decision: ServiceAccessPlanDecision;
   [key: string]: unknown;

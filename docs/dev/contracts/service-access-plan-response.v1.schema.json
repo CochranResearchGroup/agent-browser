@@ -17,6 +17,7 @@
     "sitePolicySource",
     "providers",
     "challenges",
+    "browserCapabilityEvidence",
     "decision"
   ],
   "properties": {
@@ -327,6 +328,166 @@
       "items": {
         "$ref": "service-challenge-record.v1.schema.json"
       }
+    },
+    "browserCapabilityEvidence": {
+      "description": "Advisory browser capability registry evidence relevant to this access-plan request. This field is read-only context for operators, agents, and software clients; scheduler routing and profile selection do not consume it yet.",
+      "type": "object",
+      "required": [
+        "advisory",
+        "routingApplied",
+        "source",
+        "browserBuild",
+        "browserBuildLabel",
+        "selectedProfileId",
+        "targetServiceIds",
+        "accountIds",
+        "serviceName",
+        "taskName",
+        "generatedAt",
+        "browserHosts",
+        "browserExecutables",
+        "browserCapabilities",
+        "profileCompatibility",
+        "browserPreferenceBindings",
+        "validationEvidence",
+        "counts",
+        "notes"
+      ],
+      "properties": {
+        "advisory": {
+          "type": "boolean",
+          "const": true
+        },
+        "routingApplied": {
+          "type": "boolean",
+          "const": false
+        },
+        "source": {
+          "type": "string",
+          "const": "service.browserCapabilityRegistry"
+        },
+        "browserBuild": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "browserBuildLabel": {
+          "type": ["string", "null"],
+          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", null]
+        },
+        "selectedProfileId": {
+          "type": ["string", "null"]
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "accountIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "serviceName": {
+          "type": ["string", "null"]
+        },
+        "taskName": {
+          "type": ["string", "null"]
+        },
+        "generatedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "browserHosts": {
+          "type": "array",
+          "items": {
+            "$ref": "service-browser-capability-registry.v1.schema.json#/$defs/browserHost"
+          }
+        },
+        "browserExecutables": {
+          "type": "array",
+          "items": {
+            "$ref": "service-browser-capability-registry.v1.schema.json#/$defs/browserExecutable"
+          }
+        },
+        "browserCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "service-browser-capability-registry.v1.schema.json#/$defs/browserCapability"
+          }
+        },
+        "profileCompatibility": {
+          "type": "array",
+          "items": {
+            "$ref": "service-browser-capability-registry.v1.schema.json#/$defs/profileCompatibility"
+          }
+        },
+        "browserPreferenceBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "service-browser-capability-registry.v1.schema.json#/$defs/browserPreferenceBinding"
+          }
+        },
+        "validationEvidence": {
+          "type": "array",
+          "items": {
+            "$ref": "service-browser-capability-registry.v1.schema.json#/$defs/browserValidationEvidence"
+          }
+        },
+        "counts": {
+          "type": "object",
+          "required": [
+            "browserHosts",
+            "browserExecutables",
+            "browserCapabilities",
+            "profileCompatibility",
+            "browserPreferenceBindings",
+            "validationEvidence"
+          ],
+          "properties": {
+            "browserHosts": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "browserExecutables": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "browserCapabilities": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "profileCompatibility": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "browserPreferenceBindings": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "validationEvidence": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": true
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
     },
     "decision": {
       "type": "object",

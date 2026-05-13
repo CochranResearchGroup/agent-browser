@@ -5,6 +5,8 @@
 //! browser. It is intentionally read-only so agents and software clients can
 //! get the service recommendation without creating browser process pressure.
 
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 
@@ -172,6 +174,12 @@ pub(crate) fn service_access_plan_for_state(
         site_policy.as_ref(),
         &challenges,
     );
+    let browser_capability_evidence = browser_capability_evidence_for_access_plan(
+        service_state,
+        &request,
+        selected_profile.as_ref(),
+        site_policy.as_ref(),
+    );
     let naming_warnings = access_plan_naming_warnings(&request);
     let has_naming_warning = !naming_warnings.is_empty();
     let decision = access_plan_decision(AccessPlanDecisionInput {
@@ -228,6 +236,7 @@ pub(crate) fn service_access_plan_for_state(
         "sitePolicySource": site_policy_source,
         "providers": providers,
         "challenges": challenges,
+        "browserCapabilityEvidence": browser_capability_evidence,
         "decision": decision,
     })
 }
@@ -420,6 +429,214 @@ fn select_providers(
         .filter(|provider| provider.enabled)
         .cloned()
         .collect()
+}
+
+fn browser_capability_evidence_for_access_plan(
+    service_state: &ServiceState,
+    request: &ServiceAccessPlanRequest,
+    selected_profile: Option<&BrowserProfile>,
+    site_policy: Option<&SitePolicy>,
+) -> Value {
+    let registry = &service_state.browser_capability_registry;
+    let browser_build =
+        browser_build_for_evidence(service_state, request, selected_profile, site_policy);
+    let browser_build_label = browser_build.map(browser_build_label);
+    let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
+
+    let matching_preference_bindings = registry
+        .browser_preference_bindings
+        .iter()
+        .filter(|binding| {
+            preference_binding_matches_access_request(binding, request, browser_build_label)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let matching_executables = registry
+        .browser_executables
+        .iter()
+        .filter(|executable| {
+            browser_build_label.is_none_or(|label| {
+                string_field(executable, "buildLabel").is_some_and(|build| build == label)
+            })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let executable_ids = matching_executables
+        .iter()
+        .filter_map(|executable| string_field(executable, "id"))
+        .collect::<BTreeSet<_>>();
+    let capability_ids_from_bindings = matching_preference_bindings
+        .iter()
+        .filter_map(|binding| string_field(binding, "preferredCapabilityId"))
+        .collect::<BTreeSet<_>>();
+    let executable_ids_from_bindings = matching_preference_bindings
+        .iter()
+        .filter_map(|binding| string_field(binding, "preferredExecutableId"))
+        .collect::<BTreeSet<_>>();
+
+    let matching_capabilities = registry
+        .browser_capabilities
+        .iter()
+        .filter(|capability| {
+            string_field(capability, "executableId").is_some_and(|id| {
+                executable_ids.contains(&id) || executable_ids_from_bindings.contains(&id)
+            }) || string_field(capability, "id")
+                .is_some_and(|id| capability_ids_from_bindings.contains(&id))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let capability_ids = matching_capabilities
+        .iter()
+        .filter_map(|capability| string_field(capability, "id"))
+        .collect::<BTreeSet<_>>();
+    let host_ids = matching_executables
+        .iter()
+        .chain(matching_capabilities.iter())
+        .chain(matching_preference_bindings.iter())
+        .filter_map(|record| {
+            string_field(record, "hostId").or_else(|| string_field(record, "preferredHostId"))
+        })
+        .collect::<BTreeSet<_>>();
+    let matching_hosts = registry
+        .browser_hosts
+        .iter()
+        .filter(|host| string_field(host, "id").is_some_and(|id| host_ids.contains(&id)))
+        .cloned()
+        .collect::<Vec<_>>();
+    let matching_profile_compatibility = registry
+        .profile_compatibility
+        .iter()
+        .filter(|compatibility| {
+            selected_profile_id.as_ref().is_some_and(|profile_id| {
+                string_field(compatibility, "profileId")
+                    .is_some_and(|candidate| candidate == *profile_id)
+            }) || string_field(compatibility, "hostId").is_some_and(|id| host_ids.contains(&id))
+                || string_field(compatibility, "executableId").is_some_and(|id| {
+                    executable_ids.contains(&id) || executable_ids_from_bindings.contains(&id)
+                })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let matching_validation_evidence = registry
+        .validation_evidence
+        .iter()
+        .filter(|evidence| {
+            string_field(evidence, "hostId").is_some_and(|id| host_ids.contains(&id))
+                || string_field(evidence, "executableId").is_some_and(|id| {
+                    executable_ids.contains(&id) || executable_ids_from_bindings.contains(&id)
+                })
+                || string_field(evidence, "capabilityId")
+                    .is_some_and(|id| capability_ids.contains(&id))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    json!({
+        "advisory": true,
+        "routingApplied": false,
+        "source": "service.browserCapabilityRegistry",
+        "browserBuild": browser_build,
+        "browserBuildLabel": browser_build_label,
+        "selectedProfileId": selected_profile_id,
+        "targetServiceIds": request.target_service_ids.clone(),
+        "accountIds": request.account_ids.clone(),
+        "serviceName": request.service_name.clone(),
+        "taskName": request.task_name.clone(),
+        "generatedAt": registry.generated_at.clone(),
+        "browserHosts": matching_hosts,
+        "browserExecutables": matching_executables,
+        "browserCapabilities": matching_capabilities,
+        "profileCompatibility": matching_profile_compatibility,
+        "browserPreferenceBindings": matching_preference_bindings,
+        "validationEvidence": matching_validation_evidence,
+        "counts": {
+            "browserHosts": matching_hosts.len(),
+            "browserExecutables": matching_executables.len(),
+            "browserCapabilities": matching_capabilities.len(),
+            "profileCompatibility": matching_profile_compatibility.len(),
+            "browserPreferenceBindings": matching_preference_bindings.len(),
+            "validationEvidence": matching_validation_evidence.len(),
+        },
+        "notes": [
+            "Advisory registry evidence is exposed for operator and client inspection only.",
+            "Profile selection and browser routing do not consume this registry yet.",
+        ],
+    })
+}
+
+fn browser_build_for_evidence(
+    service_state: &ServiceState,
+    request: &ServiceAccessPlanRequest,
+    selected_profile: Option<&BrowserProfile>,
+    site_policy: Option<&SitePolicy>,
+) -> Option<BrowserBuild> {
+    site_policy
+        .and_then(|policy| policy.browser_build)
+        .or_else(|| selected_profile.and_then(|profile| profile.browser_build))
+        .or(request.browser_build)
+        .or(service_state.default_browser_build)
+}
+
+fn browser_build_label(browser_build: BrowserBuild) -> &'static str {
+    match browser_build {
+        BrowserBuild::StockChrome => "stock_chrome",
+        BrowserBuild::StealthcdpChromium => "stealthcdp_chromium",
+        BrowserBuild::CdpFreeHeaded => "cdp_free_headed",
+    }
+}
+
+fn preference_binding_matches_access_request(
+    binding: &Value,
+    request: &ServiceAccessPlanRequest,
+    browser_build_label: Option<&str>,
+) -> bool {
+    string_field(binding, "scope").as_deref() == Some("global")
+        || browser_build_label.is_some_and(|label| {
+            string_field(binding, "browserBuild").is_some_and(|build| build == label)
+        })
+        || array_field_intersects(binding, "targetServiceIds", &request.target_service_ids)
+        || array_field_intersects(binding, "accountIds", &request.account_ids)
+        || request
+            .service_name
+            .as_ref()
+            .is_some_and(|service_name| array_field_contains(binding, "serviceNames", service_name))
+        || request
+            .task_name
+            .as_ref()
+            .is_some_and(|task_name| array_field_contains(binding, "taskNames", task_name))
+}
+
+fn string_field(value: &Value, field: &str) -> Option<String> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn array_field_contains(value: &Value, field: &str, expected: &str) -> bool {
+    value
+        .get(field)
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|candidate| candidate == expected)
+        })
+}
+
+fn array_field_intersects(value: &Value, field: &str, expected: &[String]) -> bool {
+    !expected.is_empty()
+        && value
+            .get(field)
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .any(|candidate| expected.iter().any(|item| item == candidate))
+            })
 }
 
 struct AccessPlanDecisionInput<'a> {
@@ -1571,10 +1788,10 @@ mod tests {
 
     use super::*;
     use crate::native::service_model::{
-        BrowserHost, BrowserProfile, Challenge, ChallengeKind, InteractionMode, MonitorState,
-        MonitorTarget, ProfileKeyringPolicy, ProfileReadinessState, ProfileSeedingMode,
-        ProfileTargetReadiness, ProviderCapability, ProviderKind, RateLimitPolicy, ServiceIncident,
-        ServiceProvider, SiteMonitor, SitePolicy,
+        BrowserCapabilityRegistry, BrowserHost, BrowserProfile, Challenge, ChallengeKind,
+        InteractionMode, MonitorState, MonitorTarget, ProfileKeyringPolicy, ProfileReadinessState,
+        ProfileSeedingMode, ProfileTargetReadiness, ProviderCapability, ProviderKind,
+        RateLimitPolicy, ServiceIncident, ServiceProvider, SiteMonitor, SitePolicy,
     };
     use serde_json::json;
 
@@ -2303,6 +2520,118 @@ mod tests {
             "use_selected_profile"
         );
         assert_eq!(plan["decision"]["manualActionRequired"], false);
+    }
+
+    #[test]
+    fn service_access_plan_includes_advisory_browser_capability_evidence() {
+        let state = ServiceState {
+            default_browser_build: Some(BrowserBuild::StealthcdpChromium),
+            profiles: BTreeMap::from([(
+                "canva-work".to_string(),
+                BrowserProfile {
+                    id: "canva-work".to_string(),
+                    name: "Canva work".to_string(),
+                    target_service_ids: vec!["design".to_string()],
+                    authenticated_service_ids: vec!["design".to_string()],
+                    browser_build: Some(BrowserBuild::StealthcdpChromium),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_hosts: vec![
+                    json!({"id": "local-linux", "name": "Local Linux"}),
+                    json!({"id": "other-host", "name": "Other Host"}),
+                ],
+                browser_executables: vec![
+                    json!({
+                        "id": "stealth-current",
+                        "hostId": "local-linux",
+                        "buildLabel": "stealthcdp_chromium"
+                    }),
+                    json!({
+                        "id": "stock-current",
+                        "hostId": "other-host",
+                        "buildLabel": "stock_chrome"
+                    }),
+                ],
+                browser_capabilities: vec![json!({
+                    "id": "stealth-capability",
+                    "hostId": "local-linux",
+                    "executableId": "stealth-current",
+                    "cdpSupported": true,
+                    "cdpFreeLaunchSupported": true
+                })],
+                profile_compatibility: vec![json!({
+                    "id": "canva-work-stealth",
+                    "profileId": "canva-work",
+                    "hostId": "local-linux",
+                    "executableId": "stealth-current",
+                    "compatible": true
+                })],
+                browser_preference_bindings: vec![json!({
+                    "id": "canva-prefers-stealth",
+                    "scope": "site",
+                    "targetServiceIds": ["design"],
+                    "accountIds": [],
+                    "serviceNames": ["CanvaCLI"],
+                    "taskNames": [],
+                    "preferredHostId": "local-linux",
+                    "preferredExecutableId": "stealth-current",
+                    "preferredCapabilityId": "stealth-capability",
+                    "browserBuild": "stealthcdp_chromium",
+                    "priority": 100,
+                    "reason": "canva_bot_sensitive"
+                })],
+                validation_evidence: vec![json!({
+                    "id": "stealth-smoke",
+                    "hostId": "local-linux",
+                    "executableId": "stealth-current",
+                    "capabilityId": "stealth-capability",
+                    "kind": "cdp_attach",
+                    "state": "passed",
+                    "evidence": "navigator.webdriver=false"
+                })],
+                generated_at: Some("2026-05-13T00:00:00Z".to_string()),
+            },
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("CanvaCLI".to_string()),
+                target_service_ids: vec!["design".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["selectedProfile"]["id"], "canva-work");
+        assert_eq!(plan["browserCapabilityEvidence"]["advisory"], true);
+        assert_eq!(plan["browserCapabilityEvidence"]["routingApplied"], false);
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["browserBuildLabel"],
+            "stealthcdp_chromium"
+        );
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["browserExecutables"][0]["id"],
+            "stealth-current"
+        );
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["browserHosts"][0]["id"],
+            "local-linux"
+        );
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["browserPreferenceBindings"][0]["id"],
+            "canva-prefers-stealth"
+        );
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["validationEvidence"][0]["id"],
+            "stealth-smoke"
+        );
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["counts"]["browserExecutables"],
+            1
+        );
     }
 
     #[test]

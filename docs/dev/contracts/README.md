@@ -74,8 +74,13 @@ identity, target scope, then shared caller
 service. Software clients should prefer `getServiceAccessPlan()` when they need
 the broader no-launch recommendation that combines the selected profile,
 readiness summary, profile-readiness monitor findings, matching site policy,
-enabled providers, retained challenges, and the service-owned decision before
-requesting browser control. Access-plan `monitorFindings` reports active
+enabled providers, retained challenges, advisory browser capability registry
+evidence, and the service-owned decision before requesting browser control.
+Access-plan `browserCapabilityEvidence` is filtered to the planned browser
+build, selected profile, target identities, account identities, and caller
+labels. It is explicitly advisory and reports `routingApplied: false`; profile
+selection and browser routing do not consume that registry yet. Access-plan
+`monitorFindings` reports active
 `profile_readiness` monitor incidents for the requested target identities, and
 `decision.monitorAttentionRequired` mirrors whether those findings need
 operator or probe attention before trusting the profile. It also reports
@@ -475,7 +480,7 @@ returned by HTTP `GET /api/service/access-plan` and MCP
 It is a read-only, no-launch planning surface. The response includes the same
 profile selector metadata and readiness summary as profile lookup, then adds the
 selected site policy, enabled providers, retained challenges, optional
-`seedingHandoff`, and a `decision` object with `recommendedAction`,
+`seedingHandoff`, advisory `browserCapabilityEvidence`, and a `decision` object with `recommendedAction`,
 manual-action flags, selected profile ID, provider IDs, challenge IDs, stable
 reason strings, and `freshnessUpdate` instructions that identify the serialized
 profile freshness write path for bounded auth probes. The same decision

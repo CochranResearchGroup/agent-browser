@@ -1836,7 +1836,8 @@ such as CanvaCLI should call `getServiceAccessPlan()` for
 `serviceName: "CanvaCLI"`, `agentName`, `taskName`, plus `loginId: "canva"` or
 `targetServiceId: "canva"` before registering a profile. That helper uses HTTP
 `GET /api/service/access-plan` to return the selected profile, readiness
-summary, matching site policy, relevant providers and challenges, and the
+summary, matching site policy, relevant providers and challenges, advisory
+browser capability registry evidence for the planned browser build, and the
 service-owned recommended action before a browser launch. Readiness summaries
 and decisions are scoped to the requested target identities, so an unrelated
 stale or unseeded login on the same profile does not block the requested site.
@@ -2095,7 +2096,8 @@ plan can call `runServiceAccessPlanPostSeedingProbe()` to run the discovered
 against an isolated daemon and temporary profile. Run `pnpm test:service-access-plan-no-launch` when changing the access-plan
 surface; it verifies HTTP `/api/service/access-plan`, MCP
 `agent-browser://access-plan`, and `getServiceAccessPlan()` agree on the same
-seeded no-launch recommendation, including caller label warnings, without
+seeded no-launch recommendation, including caller label warnings and advisory
+`browserCapabilityEvidence`, without
 creating browsers or browser-launching jobs. Run
 `pnpm test:service-request-live` when changing the planned tab-request
 handoff; it verifies an access-plan response can be passed into
