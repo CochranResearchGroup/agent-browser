@@ -90,6 +90,48 @@ site-specific reliability. Operators should be able to make a
 website and account identity primary on a non-default browser once that
 inventory exists.
 
+## Future Browser Capability Registry Shape
+
+The future registry should describe concrete browser hosts and executables
+before access policy assigns a site or account identity to them.
+
+Suggested durable records:
+
+- `BrowserHost`: machine or service that can own browser processes, with host
+  ID, operating system, display support, remote-view support, service
+  reachability, and lifecycle owner.
+- `BrowserExecutable`: install or artifact that can be launched, with browser
+  family, vendor, channel, version, build label, executable path, manifest
+  source, patchset identity, and freshness metadata.
+- `BrowserCapability`: normalized feature set for the executable on that host,
+  including CDP support, CDP-free launch support, extension support, passkey
+  support, profile lock behavior, keychain or password-store behavior, headed
+  support, headless support, streaming support, and known platform limits.
+- `ProfileCompatibility`: allowed profile pairings by browser family, vendor,
+  major version, OS, keyring mode, and extension posture. This should prevent
+  accidental Chrome-profile reuse from a Chromium, Edge, Brave, or Windows host
+  unless an operator explicitly forces the mismatch.
+- `BrowserPreferenceBinding`: policy record that marks a site, login identity,
+  account ID, or service task as primary on a specific capability or executable.
+  This is the future generalized form of routing a specific
+  `OnlyWorksOnChrome.com/myuserID` identity to stock Chrome while the global
+  default remains `stealthcdp_chromium`.
+- `BrowserValidationEvidence`: retained smoke evidence for launch, CDP attach,
+  CDP-free launch, extension availability, profile reuse, streaming, and
+  site-specific reliability.
+
+The registry should keep two concepts separate:
+
+- build posture: what kind of browser behavior a request needs, such as
+  `stealthcdp_chromium`, `stock_chrome`, or `cdp_free_headed`
+- executable placement: which host and executable can satisfy that posture for
+  this profile, site, and account identity
+
+That separation lets agent-browser keep the current browser-build API stable
+while later routing the same access-plan request to Linux Chrome, Windows
+Chrome, Edge, Brave, a patched Chromium artifact, a Docker headed browser, or a
+remote browser host.
+
 ## Validation Expectations
 
 Before treating a Chromium patch as product-ready, agent-browser needs a live

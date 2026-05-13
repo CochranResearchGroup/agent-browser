@@ -177,6 +177,19 @@ whether CDP and extensions are available, and whether a site/account identity
 has been marked primary for that browser. Until that registry exists, the
 current browser-build labels remain Linux-local service policy hints.
 
+The registry should support access-plan questions without launching a browser:
+
+- Which browser hosts are available and healthy?
+- Which executable best satisfies the requested browser posture?
+- Which managed profiles are compatible with that executable and host?
+- Which site or account identities are already primary on a non-default
+  browser?
+- Which capabilities are missing, stale, or unvalidated for the requested site?
+
+This keeps browser selection deterministic as agent-browser grows from one
+local Chrome-like browser into multiple local, Windows-hosted,
+Chrome-compatible, Docker, and remote-view browser options.
+
 ## Interaction Modes
 
 The service should support multiple interaction backends and choose among them
