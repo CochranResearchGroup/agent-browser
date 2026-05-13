@@ -149,6 +149,8 @@ be framed as reliable authorized access, not as a generic bypass mechanism.
 The policy engine should decide:
 
 - headed, headless, Docker headed, remote headed, local, or cloud browser
+- local Linux browser, Windows-hosted browser, or other Chrome-compatible
+  browser once cross-host browser inventory exists
 - persistent profile, temporary profile, or attached existing browser
 - direct CDP, DOM action, browser input, human-like input, or manual control
 - rate limits, jitter, cooldowns, retry budgets, and parallelism limits
@@ -167,6 +169,13 @@ Site policies should be layered:
 
 Built-in site knowledge should accumulate for major providers such as Google,
 Microsoft, GitHub, Canvas, and other commonly automated services.
+
+Future TODO: treat Windows browsers and Chrome-compatible browsers as browser
+capabilities, not as ad hoc executable paths. The service should eventually
+know which host owns a browser, which profile families are compatible with it,
+whether CDP and extensions are available, and whether a site/account identity
+has been marked primary for that browser. Until that registry exists, the
+current browser-build labels remain Linux-local service policy hints.
 
 ## Interaction Modes
 

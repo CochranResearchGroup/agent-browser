@@ -79,6 +79,17 @@ browser lifecycle path. The existing executable-path surface is sufficient for
 the patched Chromium binary until the service needs explicit build inventory,
 capability reporting, or automatic binary selection.
 
+TODO: expand this vocabulary into a broader browser capability registry. Future
+support should cover Windows-hosted browsers and other Chrome-compatible
+browsers such as Edge, Brave, and vendor-packaged Chromium builds. That work
+should not change the current `stock_chrome`, `stealthcdp_chromium`, and
+`cdp_free_headed` semantics until agent-browser has explicit capability
+reporting for host OS, browser family, executable source, profile
+compatibility, CDP support, extension support, keychain behavior, and
+site-specific reliability. Operators should be able to make a
+website and account identity primary on a non-default browser once that
+inventory exists.
+
 ## Validation Expectations
 
 Before treating a Chromium patch as product-ready, agent-browser needs a live
