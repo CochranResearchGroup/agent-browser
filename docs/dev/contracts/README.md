@@ -138,6 +138,11 @@ evidence. It is not yet authoritative routing policy.
       <td>Preferred no-launch selector and recommendation payload</td>
     </tr>
     <tr>
+      <td><code>GET /api/service/browser-capability-registry</code></td>
+      <td><code>agent-browser://browser-capability-registry</code></td>
+      <td>Advisory no-launch browser host, executable, capability, profile compatibility, preference binding, and validation evidence registry</td>
+    </tr>
+    <tr>
       <td><code>GET /api/service/profiles/lookup</code></td>
       <td><code>agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}</code></td>
       <td>Narrow profile selector when the caller does not need the full access plan</td>
@@ -179,17 +184,21 @@ against those declarations.
 
 `packages/client/src/service-observability.generated.d.ts` and
 `packages/client/src/service-observability.generated.js` are generated from the
-service job, event, incident, incident activity, and trace schemas. The
+service browser capability registry, job, event, incident, incident activity, and trace schemas. The
 `@agent-browser/client/service-observability` helper reads those HTTP endpoints
 and returns the generated response types, including `getServiceContracts` for
-the runtime compatibility metadata endpoint and `getServiceMonitors` for the
-retained monitor collection.
+the runtime compatibility metadata endpoint,
+`getServiceBrowserCapabilityRegistry` for the advisory browser registry, and
+`getServiceMonitors` for the retained monitor collection.
 
 ## Draft Browser Capability Registry v1
 
-`service-browser-capability-registry.v1.schema.json` is a draft no-runtime
-contract for future browser inventory and routing. It is not yet exposed by
-HTTP, MCP, CLI, generated clients, or service state.
+`service-browser-capability-registry.v1.schema.json` is a draft advisory
+runtime contract for browser inventory and future routing. It is exposed by
+service state, HTTP `GET /api/service/browser-capability-registry`, MCP
+`agent-browser://browser-capability-registry`, and the generated
+`getServiceBrowserCapabilityRegistry()` software-client helper, but it is not
+yet authoritative routing policy.
 
 The draft separates current access-plan browser posture labels from future
 executable placement. Current posture labels such as `stock_chrome`,
@@ -215,9 +224,9 @@ The draft record groups are:
   CDP-free launch, extension availability, profile reuse, streaming, and
   site-specific reliability
 
-Do not generate client code or runtime metadata from this draft until a later
-implementation slice wires the registry into service state and no-launch
-access-plan responses.
+Do not make scheduler, profile-selection, or access-plan routing decisions from
+this draft until a later implementation slice graduates the registry from
+advisory inventory to authoritative policy.
 
 `examples/browser-capability-registry.sample.json` shows the intended shape for
 a local Linux `stealthcdp_chromium` default plus a future Windows

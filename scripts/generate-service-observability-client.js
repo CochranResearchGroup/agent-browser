@@ -17,6 +17,7 @@ const schemas = {
   profileSeedingHandoffResponse: readSchema('service-profile-seeding-handoff-response.v1.schema.json'),
   profileLookupResponse: readSchema('service-profile-lookup-response.v1.schema.json'),
   accessPlanResponse: readSchema('service-access-plan-response.v1.schema.json'),
+  browserCapabilityRegistry: readSchema('service-browser-capability-registry.v1.schema.json'),
   browser: readSchema('service-browser-record.v1.schema.json'),
   browsersResponse: readSchema('service-browsers-response.v1.schema.json'),
   session: readSchema('service-session-record.v1.schema.json'),
@@ -451,6 +452,17 @@ export interface ServiceContractsResponse {
   contracts: Record<string, ServiceContractRecord>;
   http: Record<string, unknown>;
   mcp: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserCapabilityRegistryResponse {
+  browserHosts: Array<Record<string, unknown>>;
+  browserExecutables: Array<Record<string, unknown>>;
+  browserCapabilities: Array<Record<string, unknown>>;
+  profileCompatibility: Array<Record<string, unknown>>;
+  browserPreferenceBindings: Array<Record<string, unknown>>;
+  validationEvidence: Array<Record<string, unknown>>;
+  generatedAt?: string | null;
   [key: string]: unknown;
 }
 
@@ -1417,6 +1429,7 @@ ${Object.entries(constants)
 
 export declare function getServiceStatus(options: ServiceObservabilityHttpOptions): Promise<ServiceStatusResponse>;
 export declare function getServiceContracts(options: ServiceObservabilityHttpOptions): Promise<ServiceContractsResponse>;
+export declare function getServiceBrowserCapabilityRegistry(options: ServiceObservabilityHttpOptions): Promise<ServiceBrowserCapabilityRegistryResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
 /** Read one profile's no-launch target readiness rows. */

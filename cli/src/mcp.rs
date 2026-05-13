@@ -8,7 +8,8 @@ use crate::native::service_access::{
 };
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
-    service_contracts_metadata, SERVICE_ACCESS_PLAN_MCP_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
+    service_contracts_metadata, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+    SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
 };
 use crate::native::service_incidents::{
@@ -154,6 +155,12 @@ fn service_mcp_resources() -> Vec<Value> {
             "description": "No-launch service-owned access recommendation combining profile readiness, site policy, providers, challenges, and target identity"
         }),
         json!({
+            "uri": SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE,
+            "name": "Service browser capability registry",
+            "mimeType": "application/json",
+            "description": "Advisory no-launch browser host, executable, capability, profile compatibility, preference binding, and validation evidence registry"
+        }),
+        json!({
             "uri": INCIDENTS_RESOURCE,
             "name": "Service incidents",
             "mimeType": "application/json",
@@ -279,6 +286,18 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
         SERVICE_CONTRACTS_RESOURCE => service_contracts_metadata(),
         SERVICE_ACCESS_PLAN_MCP_RESOURCE => {
             service_access_plan_for_state(&state, Default::default())
+        }
+        SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE => {
+            let registry = state.browser_capability_registry;
+            json!({
+                "browserHosts": registry.browser_hosts,
+                "browserExecutables": registry.browser_executables,
+                "browserCapabilities": registry.browser_capabilities,
+                "profileCompatibility": registry.profile_compatibility,
+                "browserPreferenceBindings": registry.browser_preference_bindings,
+                "validationEvidence": registry.validation_evidence,
+                "generatedAt": registry.generated_at,
+            })
         }
         INCIDENTS_RESOURCE => json!({
             "incidents": state.incidents,
@@ -8728,23 +8747,27 @@ mod tests {
             response["data"]["resources"][1]["uri"],
             SERVICE_ACCESS_PLAN_MCP_RESOURCE
         );
-        assert_eq!(response["data"]["resources"][2]["uri"], INCIDENTS_RESOURCE);
-        assert_eq!(response["data"]["resources"][3]["uri"], PROFILES_RESOURCE);
-        assert_eq!(response["data"]["resources"][4]["uri"], SESSIONS_RESOURCE);
-        assert_eq!(response["data"]["resources"][5]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][6]["uri"], TABS_RESOURCE);
-        assert_eq!(response["data"]["resources"][7]["uri"], MONITORS_RESOURCE);
         assert_eq!(
-            response["data"]["resources"][8]["uri"],
+            response["data"]["resources"][2]["uri"],
+            SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE
+        );
+        assert_eq!(response["data"]["resources"][3]["uri"], INCIDENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][4]["uri"], PROFILES_RESOURCE);
+        assert_eq!(response["data"]["resources"][5]["uri"], SESSIONS_RESOURCE);
+        assert_eq!(response["data"]["resources"][6]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][7]["uri"], TABS_RESOURCE);
+        assert_eq!(response["data"]["resources"][8]["uri"], MONITORS_RESOURCE);
+        assert_eq!(
+            response["data"]["resources"][9]["uri"],
             SITE_POLICIES_RESOURCE
         );
-        assert_eq!(response["data"]["resources"][9]["uri"], PROVIDERS_RESOURCE);
+        assert_eq!(response["data"]["resources"][10]["uri"], PROVIDERS_RESOURCE);
         assert_eq!(
-            response["data"]["resources"][10]["uri"],
+            response["data"]["resources"][11]["uri"],
             CHALLENGES_RESOURCE
         );
-        assert_eq!(response["data"]["resources"][11]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["data"]["resources"][12]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["data"]["resources"][12]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["data"]["resources"][13]["uri"], EVENTS_RESOURCE);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
             ACCESS_PLAN_TEMPLATE
@@ -8898,27 +8921,31 @@ mod tests {
         );
         assert_eq!(
             response["result"]["resources"][2]["uri"],
+            SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE
+        );
+        assert_eq!(
+            response["result"]["resources"][3]["uri"],
             INCIDENTS_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][3]["uri"], PROFILES_RESOURCE);
-        assert_eq!(response["result"]["resources"][4]["uri"], SESSIONS_RESOURCE);
-        assert_eq!(response["result"]["resources"][5]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["result"]["resources"][6]["uri"], TABS_RESOURCE);
-        assert_eq!(response["result"]["resources"][7]["uri"], MONITORS_RESOURCE);
+        assert_eq!(response["result"]["resources"][4]["uri"], PROFILES_RESOURCE);
+        assert_eq!(response["result"]["resources"][5]["uri"], SESSIONS_RESOURCE);
+        assert_eq!(response["result"]["resources"][6]["uri"], BROWSERS_RESOURCE);
+        assert_eq!(response["result"]["resources"][7]["uri"], TABS_RESOURCE);
+        assert_eq!(response["result"]["resources"][8]["uri"], MONITORS_RESOURCE);
         assert_eq!(
-            response["result"]["resources"][8]["uri"],
+            response["result"]["resources"][9]["uri"],
             SITE_POLICIES_RESOURCE
         );
         assert_eq!(
-            response["result"]["resources"][9]["uri"],
+            response["result"]["resources"][10]["uri"],
             PROVIDERS_RESOURCE
         );
         assert_eq!(
-            response["result"]["resources"][10]["uri"],
+            response["result"]["resources"][11]["uri"],
             CHALLENGES_RESOURCE
         );
-        assert_eq!(response["result"]["resources"][11]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["result"]["resources"][12]["uri"], EVENTS_RESOURCE);
+        assert_eq!(response["result"]["resources"][12]["uri"], JOBS_RESOURCE);
+        assert_eq!(response["result"]["resources"][13]["uri"], EVENTS_RESOURCE);
     }
 
     #[test]
@@ -8978,6 +9005,35 @@ mod tests {
             resource["contents"]["contracts"]["serviceAccessPlanResponse"]["mcp"]["resource"],
             SERVICE_ACCESS_PLAN_MCP_RESOURCE
         );
+        assert_eq!(
+            resource["contents"]["contracts"]["serviceBrowserCapabilityRegistryResponse"]["mcp"]
+                ["resource"],
+            SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE
+        );
+    }
+
+    #[test]
+    fn read_browser_capability_registry_resource_returns_advisory_registry() {
+        let state = ServiceState {
+            browser_capability_registry: crate::native::service_model::BrowserCapabilityRegistry {
+                browser_hosts: vec![json!({"id": "local-linux"})],
+                generated_at: Some("2026-05-13T00:00:00Z".to_string()),
+                ..crate::native::service_model::BrowserCapabilityRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+        let resource = read_service_mcp_resource_from_state(
+            SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(
+            resource["uri"],
+            SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE
+        );
+        assert_eq!(resource["contents"]["browserHosts"][0]["id"], "local-linux");
+        assert_eq!(resource["contents"]["generatedAt"], "2026-05-13T00:00:00Z");
     }
 
     #[test]

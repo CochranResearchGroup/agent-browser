@@ -337,6 +337,29 @@ const serviceResourceSurface = [
       'agent-browser://access-plan',
     ],
   },
+  {
+    resource: 'agent-browser://browser-capability-registry',
+    route: '/api/service/browser-capability-registry',
+    docsNeedles: [
+      '/api/service/browser-capability-registry',
+      'agent-browser://browser-capability-registry',
+      'getServiceBrowserCapabilityRegistry',
+    ],
+    httpNeedles: [
+      'SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE',
+      'SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE',
+      'service-browser-capability-registry.v1.schema.json',
+    ],
+    clientNeedles: [
+      'getServiceBrowserCapabilityRegistry',
+      '/api/service/browser-capability-registry',
+    ],
+    contractNeedles: [
+      'service-browser-capability-registry.v1.schema.json',
+      'GET /api/service/browser-capability-registry',
+      'agent-browser://browser-capability-registry',
+    ],
+  },
   { resource: 'agent-browser://profiles', route: '/api/service/profiles' },
   { resource: 'agent-browser://sessions', route: '/api/service/sessions' },
   { resource: 'agent-browser://browsers', route: '/api/service/browsers' },

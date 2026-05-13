@@ -36,6 +36,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceObservabilityHttpOptions} ServiceObservabilityHttpOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
  * @typedef {import('./service-observability.generated.js').ServiceProvidersResponse} ServiceProvidersResponse
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryResponse} ServiceBrowserCapabilityRegistryResponse
  * @typedef {import('./service-observability.generated.js').ServiceQueryOptions} ServiceQueryOptions
  * @typedef {import('./service-observability.generated.js').ServiceReconcileResponse} ServiceReconcileResponse
  * @typedef {import('./service-observability.generated.js').ServiceSessionsResponse} ServiceSessionsResponse
@@ -102,6 +103,14 @@ export function getServiceStatus(options) {
  */
 export function getServiceContracts(options) {
   return serviceGet(options, '/api/service/contracts');
+}
+
+/**
+ * @param {ServiceObservabilityHttpOptions} options
+ * @returns {Promise<ServiceBrowserCapabilityRegistryResponse>}
+ */
+export function getServiceBrowserCapabilityRegistry(options) {
+  return serviceGet(options, '/api/service/browser-capability-registry');
 }
 
 /**

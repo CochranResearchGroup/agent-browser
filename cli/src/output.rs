@@ -4517,7 +4517,7 @@ Notes:
   - service_trace responses follow docs/dev/contracts/service-trace-response.v1.schema.json, with summary and activity records covered by the matching service-trace-summary and service-trace-activity schemas.
   - Incident activity responses follow docs/dev/contracts/service-incident-activity-response.v1.schema.json.
   - It reads persisted service state from ~/.agent-browser/service/state.json.
-  - Implemented resources are agent-browser://contracts, agent-browser://access-plan, agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId}, agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}, agent-browser://profiles/{profile_id}/readiness, agent-browser://profiles/{profile_id}/allocation, agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}, agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://monitors, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
+  - Implemented resources are agent-browser://contracts, agent-browser://browser-capability-registry, agent-browser://access-plan, agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId}, agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId}, agent-browser://profiles/{profile_id}/readiness, agent-browser://profiles/{profile_id}/allocation, agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}, agent-browser://incidents, agent-browser://profiles, agent-browser://sessions, agent-browser://browsers, agent-browser://tabs, agent-browser://monitors, agent-browser://site-policies, agent-browser://providers, agent-browser://challenges, agent-browser://jobs, agent-browser://events, and agent-browser://incidents/{incident_id}/activity.
   - Incident activity returns the canonical service-owned timeline shape used by CLI and HTTP.
 
 Global Options:
@@ -4529,6 +4529,7 @@ Examples:
   agent-browser mcp read agent-browser://incidents
   agent-browser mcp read agent-browser://profiles
   agent-browser mcp read agent-browser://contracts
+  agent-browser mcp read agent-browser://browser-capability-registry
   agent-browser mcp read agent-browser://sessions
   agent-browser mcp read agent-browser://browsers
   agent-browser mcp read agent-browser://tabs

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.local/contracts/service-browser-capability-registry.v1.schema.json",
   "title": "agent-browser service browser capability registry draft",
-  "description": "Draft service-state contract for advisory browser host, executable, capability, profile compatibility, preference binding, and validation evidence records. Current runtime surfaces may carry this under service_state.browserCapabilityRegistry, but scheduler routing does not consume it yet.",
+  "description": "Draft runtime contract for advisory browser host, executable, capability, profile compatibility, preference binding, and validation evidence records. Runtime surfaces expose this through service_state.browserCapabilityRegistry, HTTP GET /api/service/browser-capability-registry, MCP agent-browser://browser-capability-registry, and generated service-observability clients, but scheduler routing does not consume it yet.",
   "type": "object",
   "required": [
     "browserHosts",

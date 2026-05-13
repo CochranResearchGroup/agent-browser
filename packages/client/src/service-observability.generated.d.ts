@@ -399,6 +399,17 @@ export interface ServiceContractsResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceBrowserCapabilityRegistryResponse {
+  browserHosts: Array<Record<string, unknown>>;
+  browserExecutables: Array<Record<string, unknown>>;
+  browserCapabilities: Array<Record<string, unknown>>;
+  profileCompatibility: Array<Record<string, unknown>>;
+  browserPreferenceBindings: Array<Record<string, unknown>>;
+  validationEvidence: Array<Record<string, unknown>>;
+  generatedAt?: string | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceProfilesResponse extends ServiceListResponse<ServiceProfileRecord> {
   profiles: ServiceProfileRecord[];
   profileSources: ServiceProfileSourceRecord[];
@@ -1369,6 +1380,7 @@ export declare const SERVICE_BROWSER_HEALTH_STATES: readonly string[];
 
 export declare function getServiceStatus(options: ServiceObservabilityHttpOptions): Promise<ServiceStatusResponse>;
 export declare function getServiceContracts(options: ServiceObservabilityHttpOptions): Promise<ServiceContractsResponse>;
+export declare function getServiceBrowserCapabilityRegistry(options: ServiceObservabilityHttpOptions): Promise<ServiceBrowserCapabilityRegistryResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
 /** Read one profile's no-launch target readiness rows. */

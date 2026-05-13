@@ -14,7 +14,8 @@ use crate::native::service_access::{
 };
 use crate::native::service_config::refresh_persisted_profile_seeding_handoffs;
 use crate::native::service_contracts::{
-    service_contracts_metadata, SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
+    service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE,
+    SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
 use crate::native::service_lifecycle::{
     select_service_profile_for_request, ProfileSelectionRequest,
@@ -1504,6 +1505,18 @@ fn service_collection_contents(path: &str, query: Option<&str>) -> Option<Value>
             Some(json!({
                 "challenges": challenges,
                 "count": challenges.len(),
+            }))
+        }
+        SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE => {
+            let registry = service_state.browser_capability_registry;
+            Some(json!({
+                "browserHosts": registry.browser_hosts,
+                "browserExecutables": registry.browser_executables,
+                "browserCapabilities": registry.browser_capabilities,
+                "profileCompatibility": registry.profile_compatibility,
+                "browserPreferenceBindings": registry.browser_preference_bindings,
+                "validationEvidence": registry.validation_evidence,
+                "generatedAt": registry.generated_at,
             }))
         }
         _ => None,
@@ -3221,6 +3234,8 @@ mod tests {
             service_collection_contents("/api/service/site-policies", None).unwrap();
         let providers = service_collection_contents("/api/service/providers", None).unwrap();
         let challenges = service_collection_contents("/api/service/challenges", None).unwrap();
+        let registry =
+            service_collection_contents("/api/service/browser-capability-registry", None).unwrap();
 
         assert!(profiles["profiles"].is_array());
         assert!(profiles["profileSources"].is_array());
@@ -3232,6 +3247,9 @@ mod tests {
         assert!(site_policies["sitePolicies"].is_array());
         assert!(providers["providers"].is_array());
         assert!(challenges["challenges"].is_array());
+        assert!(registry["browserHosts"].is_array());
+        assert!(registry["browserExecutables"].is_array());
+        assert!(registry["browserCapabilities"].is_array());
         assert_eq!(
             service_collection_contents("/api/service/unknown", None),
             None
