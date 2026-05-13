@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-browser-capability-registry-upsert-response.v1.schema.json",
+  "title": "agent-browser service browser capability registry upsert response",
+  "description": "Stable API shape for advisory browser capability registry record upsert responses returned by HTTP service APIs and MCP service_browser_capability_registry_upsert.",
+  "type": "object",
+  "required": [
+    "id",
+    "collection",
+    "record",
+    "browserCapabilityRegistry",
+    "counts",
+    "upserted",
+    "advisory",
+    "routingApplied"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "collection": {
+      "type": "string",
+      "enum": [
+        "browserHosts",
+        "browserExecutables",
+        "browserCapabilities",
+        "profileCompatibility",
+        "browserPreferenceBindings",
+        "validationEvidence"
+      ]
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "browserCapabilityRegistry": {
+      "$ref": "service-browser-capability-registry.v1.schema.json"
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "browserHosts",
+        "browserExecutables",
+        "browserCapabilities",
+        "profileCompatibility",
+        "browserPreferenceBindings",
+        "validationEvidence"
+      ],
+      "properties": {
+        "browserHosts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "browserExecutables": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "browserCapabilities": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "profileCompatibility": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "browserPreferenceBindings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "validationEvidence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "upserted": {
+      "type": "boolean",
+      "const": true
+    },
+    "advisory": {
+      "type": "boolean",
+      "const": true
+    },
+    "routingApplied": {
+      "type": "boolean",
+      "const": false
+    }
+  },
+  "additionalProperties": true
+}

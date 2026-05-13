@@ -1373,6 +1373,35 @@ pub fn assert_service_monitor_delete_response_contract(value: &serde_json::Value
 }
 
 #[cfg(test)]
+pub fn assert_service_browser_capability_registry_upsert_response_contract(
+    value: &serde_json::Value,
+) {
+    assert_record_fields(
+        "browser capability registry upsert response",
+        value,
+        &[
+            "id",
+            "collection",
+            "record",
+            "browserCapabilityRegistry",
+            "counts",
+            "upserted",
+            "advisory",
+            "routingApplied",
+        ],
+        &[],
+    );
+    assert!(value["id"].is_string());
+    assert!(value["collection"].is_string());
+    assert!(value["record"].is_object());
+    assert!(value["browserCapabilityRegistry"].is_object());
+    assert!(value["counts"].is_object());
+    assert_eq!(value["upserted"], true);
+    assert_eq!(value["advisory"], true);
+    assert_eq!(value["routingApplied"], false);
+}
+
+#[cfg(test)]
 pub fn assert_service_monitor_state_response_contract(value: &serde_json::Value) {
     assert_record_fields(
         "monitor state response",

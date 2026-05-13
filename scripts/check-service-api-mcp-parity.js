@@ -280,6 +280,27 @@ const serviceSurface = [
     route: '/api/service/providers/<id>',
     httpNeedles: ['service_provider_id(path)', 'service_provider_delete_command(provider_id)'],
   },
+  {
+    tool: 'service_browser_capability_registry_upsert',
+    method: 'POST',
+    route: '/api/service/browser-capability-registry/<collection>/<id>',
+    docsNeedles: [
+      '/api/service/browser-capability-registry/<collection>/<id>',
+      '/api/service/browser-capability-registry/&lt;collection&gt;/&lt;id&gt;',
+    ],
+    httpNeedles: [
+      'service_browser_capability_registry_record_id(path)',
+      'service_browser_capability_registry_upsert_command',
+    ],
+    clientNeedles: [
+      'upsertServiceBrowserCapabilityRegistryRecord',
+      '/api/service/browser-capability-registry/${encodeURIComponent(collection)}/${encodeURIComponent(id)}',
+    ],
+    contractNeedles: [
+      'service-browser-capability-registry-upsert-response.v1.schema.json',
+      'service_browser_capability_registry_upsert',
+    ],
+  },
 ];
 
 for (const action of nativeServiceActions) {

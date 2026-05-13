@@ -680,6 +680,34 @@ export interface ServiceProviderDeleteResponse {
   [key: string]: unknown;
 }
 
+export type ServiceBrowserCapabilityRegistryCollection =
+  | 'browserHosts'
+  | 'browserExecutables'
+  | 'browserCapabilities'
+  | 'profileCompatibility'
+  | 'browserPreferenceBindings'
+  | 'validationEvidence';
+
+export interface ServiceBrowserCapabilityRegistryUpsertResponse {
+  id: string;
+  collection: ServiceBrowserCapabilityRegistryCollection;
+  upserted: true;
+  advisory: true;
+  routingApplied: false;
+  record: Record<string, unknown>;
+  browserCapabilityRegistry: ServiceBrowserCapabilityRegistryResponse;
+  counts: {
+    browserHosts: number;
+    browserExecutables: number;
+    browserCapabilities: number;
+    profileCompatibility: number;
+    browserPreferenceBindings: number;
+    validationEvidence: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface ServiceMonitorUpsertResponse {
   id: string;
   upserted: boolean;
@@ -1412,6 +1440,11 @@ export interface ServiceProviderMutationOptions extends ServiceIdOptions {
   provider: Record<string, unknown>;
 }
 
+export interface ServiceBrowserCapabilityRegistryUpsertOptions extends ServiceIdOptions {
+  collection: ServiceBrowserCapabilityRegistryCollection;
+  record: Record<string, unknown>;
+}
+
 export interface ServiceMonitorMutationOptions extends ServiceIdOptions {
   monitor: Record<string, unknown>;
 }
@@ -1523,6 +1556,7 @@ export declare function resetServiceMonitorFailures(options: ServiceIdOptions): 
 export declare function triageServiceMonitor(options: ServiceMonitorTriageOptions): Promise<ServiceMonitorTriageResponse>;
 export declare function upsertServiceProvider(options: ServiceProviderMutationOptions): Promise<ServiceProviderUpsertResponse>;
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
+export declare function upsertServiceBrowserCapabilityRegistryRecord(options: ServiceBrowserCapabilityRegistryUpsertOptions): Promise<ServiceBrowserCapabilityRegistryUpsertResponse>;
 export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;
 export declare function retryServiceBrowser(options: ServiceBrowserRetryOptions): Promise<ServiceBrowserRetryResponse>;
 export declare function applyServiceRemedies(options: ServiceRemediesApplyOptions): Promise<ServiceRemediesApplyResponse>;

@@ -121,7 +121,11 @@ records under `service_state.browserCapabilityRegistry` in CLI
 state-bearing MCP/HTTP payloads that serialize the service state. This is a
 no-launch inventory and evidence surface for browser hosts, executables,
 capabilities, profile compatibility, preference bindings, and validation
-evidence. It is not yet authoritative routing policy.
+evidence. `POST /api/service/browser-capability-registry/<collection>/<id>`,
+MCP `service_browser_capability_registry_upsert`, and
+`upsertServiceBrowserCapabilityRegistryRecord()` upsert one advisory registry
+record through the service worker queue. The registry remains advisory and is
+not yet authoritative routing policy.
 
 <table>
   <thead>
@@ -493,6 +497,13 @@ copyable queued tab-request recipe for HTTP `POST /api/service/request`, MCP
 whether the request can be sent immediately or should be reused after manual
 seeding, challenge approval, or provider work completes.
 
+`service-browser-capability-registry-upsert-response.v1.schema.json` describes
+the response envelope returned by HTTP `POST
+/api/service/browser-capability-registry/<collection>/<id>` and MCP
+`service_browser_capability_registry_upsert`. The path collection and ID are
+authoritative; the response returns the upserted record, updated advisory
+registry, collection counts, and `routingApplied: false`.
+
 The service config mutation schemas describe write response envelopes returned
 by HTTP service APIs and matching MCP tools:
 
@@ -508,6 +519,7 @@ by HTTP service APIs and matching MCP tools:
 - `service-monitor-state-response.v1.schema.json`
 - `service-provider-upsert-response.v1.schema.json`
 - `service-provider-delete-response.v1.schema.json`
+- `service-browser-capability-registry-upsert-response.v1.schema.json`
 
 These schemas cover the authoritative path ID, mutation flag, and returned or
 removed record payload for persisted profile, session, site policy, monitor,

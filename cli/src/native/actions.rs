@@ -44,8 +44,9 @@ use super::service_config::{
     delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
     delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
     update_persisted_monitor_state, update_persisted_profile_freshness,
-    update_persisted_profile_seeding_handoff, upsert_persisted_monitor, upsert_persisted_profile,
-    upsert_persisted_provider, upsert_persisted_session, upsert_persisted_site_policy,
+    update_persisted_profile_seeding_handoff, upsert_persisted_browser_capability_registry_record,
+    upsert_persisted_monitor, upsert_persisted_profile, upsert_persisted_provider,
+    upsert_persisted_session, upsert_persisted_site_policy,
 };
 use super::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
@@ -231,6 +232,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_monitors_run_due"
             | "service_provider_upsert"
             | "service_provider_delete"
+            | "service_browser_capability_registry_upsert"
             | "service_incident_acknowledge"
             | "service_incident_resolve"
             | "service_incident_activity"
@@ -2573,6 +2575,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_monitors_run_due" => handle_service_monitors_run_due(cmd).await,
         "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
         "service_provider_delete" => handle_service_provider_delete(cmd).await,
+        "service_browser_capability_registry_upsert" => {
+            handle_service_browser_capability_registry_upsert(cmd).await
+        }
         "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
         "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
         "service_incident_activity" => handle_service_incident_activity(cmd).await,
@@ -7362,6 +7367,25 @@ async fn handle_service_provider_delete(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+async fn handle_service_browser_capability_registry_upsert(cmd: &Value) -> Result<Value, String> {
+    let collection = required_service_config_id(cmd, "collection")?;
+    let record_id = required_service_config_id(cmd, "recordId")?;
+    let body = cmd.get("record").cloned().ok_or("Missing record")?;
+    let (record, registry, counts) =
+        upsert_persisted_browser_capability_registry_record(collection, record_id, body)?;
+
+    Ok(json!({
+        "id": record_id,
+        "collection": collection,
+        "record": record,
+        "browserCapabilityRegistry": registry,
+        "counts": counts,
+        "upserted": true,
+        "advisory": true,
+        "routingApplied": false,
+    }))
+}
+
 fn required_service_config_id<'a>(cmd: &'a Value, field: &str) -> Result<&'a str, String> {
     cmd.get(field)
         .and_then(|value| value.as_str())
@@ -10766,6 +10790,7 @@ mod tests {
         close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
     };
     use crate::native::service_model::{
+        assert_service_browser_capability_registry_upsert_response_contract,
         assert_service_browser_retry_response_contract,
         assert_service_collection_response_contract, assert_service_event_record_contract,
         assert_service_events_response_contract,
@@ -11219,6 +11244,7 @@ mod tests {
             "service_monitors_run_due",
             "service_provider_upsert",
             "service_provider_delete",
+            "service_browser_capability_registry_upsert",
             "service_incident_acknowledge",
             "service_incident_resolve",
             "service_incident_activity",
@@ -14122,6 +14148,33 @@ mod tests {
         assert_service_provider_upsert_response_contract(&upsert_provider["data"]);
         assert_eq!(upsert_provider["data"]["provider"]["id"], "manual");
 
+        let upsert_browser_capability = execute_command(
+            &json!({
+                "action": "service_browser_capability_registry_upsert",
+                "id": "svc-browser-capability-upsert-1",
+                "collection": "browserHosts",
+                "recordId": "local-linux",
+                "record": {
+                    "name": "Local Linux host",
+                    "serviceName": "JournalDownloader"
+                }
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(upsert_browser_capability["success"], true);
+        assert_service_browser_capability_registry_upsert_response_contract(
+            &upsert_browser_capability["data"],
+        );
+        assert_eq!(
+            upsert_browser_capability["data"]["record"]["id"],
+            "local-linux"
+        );
+        assert_eq!(
+            upsert_browser_capability["data"]["counts"]["browserHosts"],
+            1
+        );
+
         let upsert_monitor = execute_command(
             &json!({
                 "action": "service_monitor_upsert",
@@ -14160,6 +14213,10 @@ mod tests {
         assert_eq!(
             persisted.providers["manual"].display_name,
             "Dashboard approval"
+        );
+        assert_eq!(
+            persisted.browser_capability_registry.browser_hosts[0]["id"],
+            "local-linux"
         );
         assert_eq!(
             persisted.monitors["google-login-freshness"].name,

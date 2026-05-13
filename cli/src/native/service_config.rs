@@ -9,8 +9,8 @@ use serde_json::Value;
 use crate::runtime_profile::pid_is_running;
 
 use super::service_model::{
-    profile_seeding_handoff_id, BrowserProfile, BrowserSession, MonitorState,
-    ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileReadinessState,
+    profile_seeding_handoff_id, BrowserCapabilityRegistry, BrowserProfile, BrowserSession,
+    MonitorState, ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileReadinessState,
     ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
     ProfileTargetReadiness, ServiceActor, ServiceEntitySource, ServiceProvider, ServiceState,
     SiteMonitor, SitePolicy,
@@ -45,6 +45,48 @@ fn object_body_with_path_id(mut value: Value, id: &str, label: &str) -> Result<V
     }
     object.insert("id".to_string(), Value::String(id.to_string()));
     Ok(value)
+}
+
+fn registry_collection_mut<'a>(
+    registry: &'a mut BrowserCapabilityRegistry,
+    collection: &str,
+) -> Result<&'a mut Vec<Value>, String> {
+    match collection {
+        "browserHosts" => Ok(&mut registry.browser_hosts),
+        "browserExecutables" => Ok(&mut registry.browser_executables),
+        "browserCapabilities" => Ok(&mut registry.browser_capabilities),
+        "profileCompatibility" => Ok(&mut registry.profile_compatibility),
+        "browserPreferenceBindings" => Ok(&mut registry.browser_preference_bindings),
+        "validationEvidence" => Ok(&mut registry.validation_evidence),
+        _ => Err(format!(
+            "Unknown browser capability registry collection: {collection}"
+        )),
+    }
+}
+
+fn registry_collection_label(collection: &str) -> Result<&'static str, String> {
+    match collection {
+        "browserHosts" => Ok("browser host"),
+        "browserExecutables" => Ok("browser executable"),
+        "browserCapabilities" => Ok("browser capability"),
+        "profileCompatibility" => Ok("profile compatibility"),
+        "browserPreferenceBindings" => Ok("browser preference binding"),
+        "validationEvidence" => Ok("browser validation evidence"),
+        _ => Err(format!(
+            "Unknown browser capability registry collection: {collection}"
+        )),
+    }
+}
+
+fn browser_capability_registry_counts(registry: &BrowserCapabilityRegistry) -> Value {
+    serde_json::json!({
+        "browserHosts": registry.browser_hosts.len(),
+        "browserExecutables": registry.browser_executables.len(),
+        "browserCapabilities": registry.browser_capabilities.len(),
+        "profileCompatibility": registry.profile_compatibility.len(),
+        "browserPreferenceBindings": registry.browser_preference_bindings.len(),
+        "validationEvidence": registry.validation_evidence.len(),
+    })
 }
 
 fn non_empty(value: Option<&str>) -> Option<&str> {
@@ -657,6 +699,33 @@ pub fn upsert_monitor(
     Ok(monitor)
 }
 
+/// Upsert one advisory browser capability registry record into persisted service state.
+pub fn upsert_browser_capability_registry_record(
+    state: &mut ServiceState,
+    collection: &str,
+    id: &str,
+    body: Value,
+) -> Result<(Value, BrowserCapabilityRegistry, Value), String> {
+    let label = registry_collection_label(collection)?;
+    let body = object_body_with_path_id(body, id, label)?;
+    let collection_records =
+        registry_collection_mut(&mut state.browser_capability_registry, collection)?;
+    if let Some(existing) = collection_records.iter_mut().find(|record| {
+        record
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(|record_id| record_id == id)
+    }) {
+        *existing = body.clone();
+    } else {
+        collection_records.push(body.clone());
+    }
+    state.browser_capability_registry.generated_at = Some(now_rfc3339());
+    let registry = state.browser_capability_registry.clone();
+    let counts = browser_capability_registry_counts(&registry);
+    Ok((body, registry, counts))
+}
+
 /// Delete one service monitor record from persisted service state.
 pub fn delete_monitor(state: &mut ServiceState, id: &str) -> Result<Option<SiteMonitor>, String> {
     validate_entity_id(id, "monitor")?;
@@ -805,6 +874,16 @@ pub fn upsert_persisted_monitor(id: &str, body: Value) -> Result<SiteMonitor, St
     upsert_monitor_in_repository(&repository, id, body)
 }
 
+/// Upsert one persisted advisory browser capability registry record.
+pub fn upsert_persisted_browser_capability_registry_record(
+    collection: &str,
+    id: &str,
+    body: Value,
+) -> Result<(Value, BrowserCapabilityRegistry, Value), String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    upsert_browser_capability_registry_record_in_repository(&repository, collection, id, body)
+}
+
 /// Delete one persisted monitor record under the serialized state mutator.
 pub fn delete_persisted_monitor(id: &str) -> Result<Option<SiteMonitor>, String> {
     let repository = LockedServiceStateRepository::default_json()?;
@@ -910,6 +989,16 @@ pub fn upsert_monitor_in_repository(
     repository.mutate(|state| upsert_monitor(state, id, body))
 }
 
+pub fn upsert_browser_capability_registry_record_in_repository(
+    repository: &impl ServiceStateRepository,
+    collection: &str,
+    id: &str,
+    body: Value,
+) -> Result<(Value, BrowserCapabilityRegistry, Value), String> {
+    repository
+        .mutate(|state| upsert_browser_capability_registry_record(state, collection, id, body))
+}
+
 pub fn delete_monitor_in_repository(
     repository: &impl ServiceStateRepository,
     id: &str,
@@ -1009,6 +1098,42 @@ mod tests {
         .unwrap_err();
 
         assert!(err.contains("requires userDataDir"));
+    }
+
+    #[test]
+    fn upsert_browser_capability_registry_record_sets_path_id_and_counts() {
+        let mut state = ServiceState::default();
+
+        let (record, registry, counts) = upsert_browser_capability_registry_record(
+            &mut state,
+            "browserExecutables",
+            "stealth-current",
+            json!({
+                "hostId": "local-linux",
+                "buildLabel": "stealthcdp_chromium"
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(record["id"], "stealth-current");
+        assert_eq!(registry.browser_executables[0]["id"], "stealth-current");
+        assert_eq!(counts["browserExecutables"], 1);
+        assert!(registry.generated_at.is_some());
+    }
+
+    #[test]
+    fn upsert_browser_capability_registry_record_rejects_conflicting_body_id() {
+        let mut state = ServiceState::default();
+
+        let err = upsert_browser_capability_registry_record(
+            &mut state,
+            "browserHosts",
+            "local-linux",
+            json!({"id": "other-host"}),
+        )
+        .unwrap_err();
+
+        assert!(err.contains("does not match path id"));
     }
 
     #[test]

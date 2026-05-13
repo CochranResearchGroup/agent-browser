@@ -183,6 +183,27 @@ try {
     `serviceProfileLookupResponse MCP resource template mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileLookupResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse?.schemaId ===
+      'https://agent-browser.local/contracts/service-browser-capability-registry-upsert-response.v1.schema.json',
+    `serviceBrowserCapabilityRegistryUpsertResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse?.http?.route ===
+      '/api/service/browser-capability-registry/<collection>/<id>',
+    `serviceBrowserCapabilityRegistryUpsertResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse?.mcp?.tool ===
+      'service_browser_capability_registry_upsert',
+    `serviceBrowserCapabilityRegistryUpsertResponse MCP tool mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse?.client?.helpers?.includes(
+      'upsertServiceBrowserCapabilityRegistryRecord',
+    ),
+    `serviceBrowserCapabilityRegistryUpsertResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.schemaId ===
       'https://agent-browser.local/contracts/service-profile-seeding-handoff-response.v1.schema.json',
     `serviceProfileSeedingHandoffResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,
@@ -278,6 +299,17 @@ try {
     clientContracts.contracts?.serviceProfileLookupResponse?.mcp?.resourceTemplate ===
       'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}',
     `service client could not discover lookup MCP resource template: ${JSON.stringify(clientContracts.contracts?.serviceProfileLookupResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceBrowserCapabilityRegistryUpsertResponse?.client?.helpers?.includes(
+      'upsertServiceBrowserCapabilityRegistryRecord',
+    ),
+    `service client could not discover browser registry upsert helper: ${JSON.stringify(clientContracts.contracts?.serviceBrowserCapabilityRegistryUpsertResponse)}`,
+  );
+  assert(
+    clientContracts.contracts?.serviceBrowserCapabilityRegistryUpsertResponse?.mcp?.tool ===
+      'service_browser_capability_registry_upsert',
+    `service client could not discover browser registry upsert MCP tool: ${JSON.stringify(clientContracts.contracts?.serviceBrowserCapabilityRegistryUpsertResponse)}`,
   );
   assert(
     clientContracts.contracts?.serviceProfileSeedingHandoffResponse?.client?.helpers?.includes(

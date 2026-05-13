@@ -62,6 +62,8 @@ pub const SERVICE_REMEDIES_APPLY_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-remedies-apply-response.v1.schema.json";
 pub const SERVICE_BROWSER_CAPABILITY_REGISTRY_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-browser-capability-registry.v1.schema.json";
+pub const SERVICE_BROWSER_CAPABILITY_REGISTRY_UPSERT_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-browser-capability-registry-upsert-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 
 pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
@@ -174,6 +176,23 @@ pub fn service_contracts_metadata() -> Value {
                 "client": {
                     "package": "@agent-browser/client/service-observability",
                     "helpers": ["getServiceBrowserCapabilityRegistry"],
+                },
+                "advisory": true,
+            },
+            "serviceBrowserCapabilityRegistryUpsertResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_BROWSER_CAPABILITY_REGISTRY_UPSERT_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-browser-capability-registry-upsert-response.v1.schema.json",
+                "http": {
+                    "method": "POST",
+                    "route": "/api/service/browser-capability-registry/<collection>/<id>",
+                },
+                "mcp": {
+                    "tool": "service_browser_capability_registry_upsert",
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["upsertServiceBrowserCapabilityRegistryRecord"],
                 },
                 "advisory": true,
             },
@@ -419,6 +438,14 @@ mod tests {
             metadata["contracts"]["serviceBrowserCapabilityRegistryResponse"]["client"]["helpers"]
                 [0],
             "getServiceBrowserCapabilityRegistry"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceBrowserCapabilityRegistryUpsertResponse"]["schemaId"],
+            SERVICE_BROWSER_CAPABILITY_REGISTRY_UPSERT_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceBrowserCapabilityRegistryUpsertResponse"]["mcp"]["tool"],
+            "service_browser_capability_registry_upsert"
         );
         assert_eq!(
             metadata["contracts"]["serviceProfileAllocationResponse"]["schemaId"],

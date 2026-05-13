@@ -1501,6 +1501,51 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_browser_capability_registry_upsert",
+            "title": "Upsert browser capability registry record",
+            "description": "Persist one advisory browser capability registry record through the service worker queue. The collection and id arguments are authoritative and the registry remains advisory routing context.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "collection": {
+                        "type": "string",
+                        "enum": [
+                            "browserHosts",
+                            "browserExecutables",
+                            "browserCapabilities",
+                            "profileCompatibility",
+                            "browserPreferenceBindings",
+                            "validationEvidence"
+                        ],
+                        "description": "Registry collection to upsert into."
+                    },
+                    "id": {
+                        "type": "string",
+                        "description": "Record id. This id is authoritative and must match record.id when supplied."
+                    },
+                    "record": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Registry record JSON using the service-browser-capability-registry schema fields."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["collection", "id", "record"]
+            }
+        }),
+        json!({
             "name": "browser_snapshot",
             "title": "Take browser snapshot",
             "description": "Queue a browser accessibility snapshot against the active session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
@@ -4150,6 +4195,9 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_monitor_triage" => call_service_monitor_triage(arguments, session),
         "service_provider_upsert" => call_service_provider_upsert(arguments, session),
         "service_provider_delete" => call_service_provider_delete(arguments, session),
+        "service_browser_capability_registry_upsert" => {
+            call_service_browser_capability_registry_upsert(arguments, session)
+        }
         "service_request" => call_service_request(arguments, session),
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
@@ -4647,6 +4695,46 @@ fn call_service_provider_delete(arguments: &Value, session: &str) -> Result<Valu
     let command = service_provider_delete_command(id, service_name, agent_name, task_name);
 
     send_queued_tool_command("service_provider_delete", session, trace, command)
+}
+
+fn call_service_browser_capability_registry_upsert(
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let collection = optional_enum_string_argument(
+        arguments,
+        "collection",
+        &[
+            "browserHosts",
+            "browserExecutables",
+            "browserCapabilities",
+            "profileCompatibility",
+            "browserPreferenceBindings",
+            "validationEvidence",
+        ],
+    )?
+    .ok_or_else(|| JsonRpcError::invalid_params("Missing required argument: collection"))?;
+    let id = required_string_argument(arguments, "id")?;
+    let record = required_object_argument(arguments, "record")?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_browser_capability_registry_upsert_command(
+        collection,
+        id,
+        &record,
+        service_name,
+        agent_name,
+        task_name,
+    );
+
+    send_queued_tool_command(
+        "service_browser_capability_registry_upsert",
+        session,
+        trace,
+        command,
+    )
 }
 
 fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -6423,6 +6511,25 @@ fn service_provider_delete_command(
         "id": format!("mcp-service-provider-delete-{}", uuid::Uuid::new_v4()),
         "action": "service_provider_delete",
         "providerId": provider_id,
+    });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+fn service_browser_capability_registry_upsert_command(
+    collection: &str,
+    record_id: &str,
+    record: &Value,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-service-browser-capability-registry-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_browser_capability_registry_upsert",
+        "collection": collection,
+        "recordId": record_id,
+        "record": record,
     });
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
@@ -9215,6 +9322,21 @@ mod tests {
             .unwrap()
             .iter()
             .any(|tool| tool["name"] == "service_provider_upsert"));
+        assert!(response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(
+                |tool| tool["name"] == "service_browser_capability_registry_upsert"
+                    && tool["inputSchema"]["required"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&json!("collection"))
+                    && tool["inputSchema"]["properties"]["collection"]["enum"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&json!("browserHosts"))
+            ));
         let browser_and_trace_tools: Vec<Value> = response["result"]["tools"]
             .as_array()
             .unwrap()

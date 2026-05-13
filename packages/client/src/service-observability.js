@@ -37,6 +37,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
  * @typedef {import('./service-observability.generated.js').ServiceProvidersResponse} ServiceProvidersResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryResponse} ServiceBrowserCapabilityRegistryResponse
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryUpsertOptions} ServiceBrowserCapabilityRegistryUpsertOptions
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryUpsertResponse} ServiceBrowserCapabilityRegistryUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceQueryOptions} ServiceQueryOptions
  * @typedef {import('./service-observability.generated.js').ServiceReconcileResponse} ServiceReconcileResponse
  * @typedef {import('./service-observability.generated.js').ServiceSessionsResponse} ServiceSessionsResponse
@@ -1264,6 +1266,18 @@ export function upsertServiceProvider({ id, provider, ...options }) {
  */
 export function deleteServiceProvider({ id, ...options }) {
   return serviceDelete(options, `/api/service/providers/${encodeURIComponent(id)}`);
+}
+
+/**
+ * @param {ServiceBrowserCapabilityRegistryUpsertOptions} options
+ * @returns {Promise<ServiceBrowserCapabilityRegistryUpsertResponse>}
+ */
+export function upsertServiceBrowserCapabilityRegistryRecord({ collection, id, record, ...options }) {
+  return servicePost(
+    options,
+    `/api/service/browser-capability-registry/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`,
+    record,
+  );
 }
 
 /**

@@ -380,6 +380,21 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some((collection, record_id)) = service_browser_capability_registry_record_id(path) {
+            let cmd = match service_browser_capability_registry_upsert_command(
+                collection, record_id, body_str,
+            ) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if path == "/api/chat" {
             handle_chat_request(&mut stream, body_str, origin.as_deref()).await;
             return;
@@ -1900,6 +1915,13 @@ fn service_monitor_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/') && *id != "run-due")
 }
 
+fn service_browser_capability_registry_record_id(path: &str) -> Option<(&str, &str)> {
+    let rest = path.strip_prefix("/api/service/browser-capability-registry/")?;
+    let (collection, id) = rest.split_once('/')?;
+    (!collection.is_empty() && !collection.contains('/') && !id.is_empty() && !id.contains('/'))
+        .then_some((collection, id))
+}
+
 fn service_monitor_action_id<'a>(path: &'a str, suffix: &str) -> Option<&'a str> {
     path.strip_prefix("/api/service/monitors/")
         .and_then(|rest| rest.strip_suffix(suffix))
@@ -2031,6 +2053,21 @@ fn service_monitor_upsert_command(monitor_id: &str, body: &str) -> Result<Value,
         "action": "service_monitor_upsert",
         "monitorId": monitor_id,
         "monitor": monitor,
+    }))
+}
+
+fn service_browser_capability_registry_upsert_command(
+    collection: &str,
+    record_id: &str,
+    body: &str,
+) -> Result<Value, String> {
+    let record = parse_service_config_body(body, "browser capability registry record")?;
+    Ok(json!({
+        "id": format!("http-service-browser-capability-registry-upsert-{}", uuid::Uuid::new_v4()),
+        "action": "service_browser_capability_registry_upsert",
+        "collection": collection,
+        "recordId": record_id,
+        "record": record,
     }))
 }
 
@@ -4221,6 +4258,33 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_job_cancel");
         assert_eq!(cmd["jobId"], "job-123");
+    }
+
+    #[test]
+    fn service_browser_capability_registry_upsert_command_maps_record_path() {
+        let cmd = service_browser_capability_registry_upsert_command(
+            "browserHosts",
+            "local-linux",
+            r#"{"name":"Local Linux host"}"#,
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_browser_capability_registry_upsert");
+        assert_eq!(cmd["collection"], "browserHosts");
+        assert_eq!(cmd["recordId"], "local-linux");
+        assert_eq!(cmd["record"]["name"], "Local Linux host");
+        assert_eq!(
+            service_browser_capability_registry_record_id(
+                "/api/service/browser-capability-registry/browserHosts/local-linux",
+            ),
+            Some(("browserHosts", "local-linux"))
+        );
+        assert_eq!(
+            service_browser_capability_registry_record_id(
+                "/api/service/browser-capability-registry/browserHosts/local-linux/extra",
+            ),
+            None
+        );
     }
 
     #[test]
