@@ -1604,8 +1604,49 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
                 .and_then(|value| value.as_str())
                 .unwrap_or("none")
         ),
-        format!("Profiles: {}", profiles.len()),
     ];
+
+    if let Some(launch_config) = data.get("launchConfig") {
+        let default_build = launch_config
+            .get("defaultBrowserBuild")
+            .and_then(|value| value.as_str())
+            .unwrap_or("stock_chrome");
+        let executable_path = launch_config
+            .get("executablePath")
+            .and_then(|value| value.as_str())
+            .unwrap_or("auto");
+        let executable_exists = match launch_config
+            .get("executablePathExists")
+            .and_then(|value| value.as_bool())
+        {
+            Some(true) => "yes",
+            Some(false) => "no",
+            None => "unknown",
+        };
+        let stealth_ready = match launch_config
+            .get("stealthCdpChromiumReady")
+            .and_then(|value| value.as_bool())
+        {
+            Some(true) => "yes",
+            Some(false) => "no",
+            None => "unknown",
+        };
+        lines.push(format!(
+            "Launch config: browser_build={default_build} executable={executable_path} executable_exists={executable_exists} stealthcdp_ready={stealth_ready}"
+        ));
+        if let Some(warnings) = launch_config
+            .get("warnings")
+            .and_then(|value| value.as_array())
+        {
+            for warning in warnings {
+                let code = value_str(warning, "code", "unknown");
+                let message = value_str(warning, "message", "");
+                lines.push(format!("  warning {code}: {message}"));
+            }
+        }
+    }
+
+    lines.push(format!("Profiles: {}", profiles.len()));
 
     if profiles.is_empty() {
         lines.push("  none".to_string());
@@ -4319,6 +4360,7 @@ Notes:
   - pnpm test:service-shutdown-health-live validates the polite-shutdown failure remedy against live service state.
   - Runtime profile and custom profile launches populate linked service profile and session records, including profileSelectionReason, profileLeaseDisposition, and profileLeaseConflictSessionIds when known.
   - Service-scoped launches reject active exclusive profile conflicts by default before browser start; set profileLeasePolicy=wait and profileLeaseWaitTimeoutMs to keep the job queued while polling for release, leaving the worker available for other commands. Same-session retained browser reuse remains allowed.
+  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath or AGENT_BROWSER_EXECUTABLE_PATH. If stealthcdp_chromium is selected but no executable path exists, status reports a warning.
   - Commands should include serviceName, agentName, and taskName when available for traceability.
   - Configured profiles, sessions, site policies, and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 
@@ -4983,6 +5025,7 @@ Configuration:
     --headed false     (disables "headed": true from config)
 
   Extensions from user and project configs are merged (not replaced).
+  Set service.defaultBrowserBuild to stealthcdp_chromium only after executablePath or AGENT_BROWSER_EXECUTABLE_PATH points at the patched Chromium binary.
 
   Runtime profiles can also be declared in config:
     {{
@@ -5407,6 +5450,17 @@ mod tests {
                     }
                 },
                 "tabs": {}
+            },
+            "launchConfig": {
+                "defaultBrowserBuild": "stealthcdp_chromium",
+                "stealthCdpChromiumRequired": true,
+                "stealthCdpChromiumReady": false,
+                "executablePath": "/missing/chrome",
+                "executablePathExists": false,
+                "warnings": [{
+                    "code": "stealthcdp_executable_not_found",
+                    "message": "stealthcdp_chromium is selected, but the configured executable path does not exist"
+                }]
             }
         });
 
@@ -5415,6 +5469,12 @@ mod tests {
         assert!(
             rendered.contains("Service: worker=idle browser=ready queue=1/64 waiting_profile_leases=2 browsers=1 tabs=0")
         );
+        assert!(rendered.contains(
+            "Launch config: browser_build=stealthcdp_chromium executable=/missing/chrome executable_exists=no stealthcdp_ready=no"
+        ));
+        assert!(rendered.contains(
+            "warning stealthcdp_executable_not_found: stealthcdp_chromium is selected, but the configured executable path does not exist"
+        ));
         assert!(rendered.contains("Profiles: 1"));
         assert!(rendered.contains(
             "work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs readiness=none user_data=/tmp/work-profile"

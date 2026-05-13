@@ -50,6 +50,60 @@
         "$ref": "service-profiles-response.v1.schema.json#/$defs/profileAllocation"
       }
     },
+    "launchConfig": {
+      "description": "No-launch diagnostic view of the configured browser build and executable path that service-owned requests would inherit.",
+      "type": "object",
+      "required": [
+        "defaultBrowserBuild",
+        "stealthCdpChromiumRequired",
+        "stealthCdpChromiumReady",
+        "executablePath",
+        "executablePathExists",
+        "warnings"
+      ],
+      "properties": {
+        "defaultBrowserBuild": {
+          "type": ["string", "null"],
+          "description": "Configured service.defaultBrowserBuild value, or null when stock Chrome remains the default posture."
+        },
+        "stealthCdpChromiumRequired": {
+          "type": "boolean",
+          "description": "True when the service default or at least one site policy selects stealthcdp_chromium."
+        },
+        "stealthCdpChromiumReady": {
+          "type": "boolean",
+          "description": "True when stealthcdp_chromium is not selected, or it has a configured executable path that exists."
+        },
+        "executablePath": {
+          "type": ["string", "null"],
+          "description": "Resolved executablePath from config or AGENT_BROWSER_EXECUTABLE_PATH."
+        },
+        "executablePathExists": {
+          "type": ["boolean", "null"],
+          "description": "Whether the resolved executablePath exists as a file. Null means no explicit executable path is configured."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "severity", "message"],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
     "service_state": {
       "type": "object"
     }

@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::io::{self, BufRead};
 
 use crate::color;
-use crate::flags::Flags;
+use crate::flags::{launch_config_status, Flags};
 use crate::validation::{is_valid_session_name, session_name_error};
 
 /// Error type for command parsing with contextual information
@@ -993,6 +993,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "id": id,
                     "action": "service_status",
                     "serviceState": flags.service_state.clone(),
+                    "launchConfig": launch_config_status(flags),
                 });
                 let mut i = if rest.first().copied() == Some("watch") {
                     cmd["watch"] = json!(true);
@@ -5313,6 +5314,31 @@ mod tests {
         assert_eq!(
             cmd["serviceState"]["sitePolicies"]["google"]["manualLoginPreferred"],
             true
+        );
+        assert_eq!(cmd["launchConfig"]["stealthCdpChromiumRequired"], false);
+        assert!(cmd["launchConfig"]["warnings"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn test_service_status_warns_when_stealthcdp_executable_is_missing() {
+        let mut flags = default_flags();
+        flags.service_state.default_browser_build =
+            Some(crate::native::service_model::BrowserBuild::StealthcdpChromium);
+
+        let cmd = parse_command(&args("service status"), &flags).unwrap();
+
+        assert_eq!(
+            cmd["launchConfig"]["defaultBrowserBuild"],
+            "stealthcdp_chromium"
+        );
+        assert_eq!(cmd["launchConfig"]["stealthCdpChromiumRequired"], true);
+        assert_eq!(cmd["launchConfig"]["stealthCdpChromiumReady"], false);
+        assert_eq!(
+            cmd["launchConfig"]["warnings"][0]["code"],
+            "stealthcdp_executable_missing"
         );
     }
 

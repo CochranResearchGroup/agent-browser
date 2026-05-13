@@ -1538,6 +1538,24 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
         &["serviceState"],
     );
     assert!(value["service_state"].is_object());
+    if let Some(launch_config) = value.get("launchConfig") {
+        assert_record_fields(
+            "service status launch config",
+            launch_config,
+            &[
+                "defaultBrowserBuild",
+                "stealthCdpChromiumRequired",
+                "stealthCdpChromiumReady",
+                "executablePath",
+                "executablePathExists",
+                "warnings",
+            ],
+            &["default_browser_build"],
+        );
+        assert!(launch_config["stealthCdpChromiumRequired"].is_boolean());
+        assert!(launch_config["stealthCdpChromiumReady"].is_boolean());
+        assert!(launch_config["warnings"].is_array());
+    }
     for allocation in value["profileAllocations"].as_array().unwrap() {
         assert_service_profile_allocation_contract(allocation);
     }

@@ -185,7 +185,12 @@ impl ControlPlaneHandle {
         })
     }
 
-    pub async fn service_status_response(&self, id: &str, service_state: Value) -> Value {
+    pub async fn service_status_response(
+        &self,
+        id: &str,
+        service_state: Value,
+        launch_config: Value,
+    ) -> Value {
         let mut service_state = serde_json::from_value::<ServiceState>(service_state)
             .unwrap_or_else(|_| ServiceState::default());
         let before = service_state.clone();
@@ -202,6 +207,7 @@ impl ControlPlaneHandle {
             "data": {
                 "control_plane": self.status_payload(waiting_profile_lease_job_count),
                 "profileAllocations": profile_allocations,
+                "launchConfig": launch_config,
                 "service_state": service_state,
             },
         })
@@ -1667,6 +1673,14 @@ mod tests {
                         }
                     }
                 }),
+                json!({
+                    "defaultBrowserBuild": null,
+                    "stealthCdpChromiumRequired": false,
+                    "stealthCdpChromiumReady": true,
+                    "executablePath": null,
+                    "executablePathExists": null,
+                    "warnings": []
+                }),
             )
             .await;
 
@@ -1692,6 +1706,12 @@ mod tests {
                 .pointer("/data/control_plane/waiting_profile_lease_job_count")
                 .and_then(|v| v.as_u64()),
             Some(1)
+        );
+        assert_eq!(
+            response
+                .pointer("/data/launchConfig/stealthCdpChromiumReady")
+                .and_then(|v| v.as_bool()),
+            Some(true)
         );
         assert_eq!(
             response

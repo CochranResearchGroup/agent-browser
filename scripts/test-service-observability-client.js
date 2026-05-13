@@ -91,6 +91,14 @@ async function main() {
       },
       service_state: {},
       profileAllocations: [],
+      launchConfig: {
+        defaultBrowserBuild: null,
+        stealthCdpChromiumRequired: false,
+        stealthCdpChromiumReady: true,
+        executablePath: null,
+        executablePathExists: null,
+        warnings: [],
+      },
     },
   });
   const statusResult = await getServiceStatus({
@@ -101,6 +109,7 @@ async function main() {
   assert.equal(status.calls[0].init.method, 'GET');
   assert.equal(statusResult.control_plane.service_monitor_interval_ms, 60000);
   assert.deepEqual(statusResult.profileAllocations, []);
+  assert.equal(statusResult.launchConfig.stealthCdpChromiumReady, true);
 
   const monitors = createFetchRecorder({
     success: true,

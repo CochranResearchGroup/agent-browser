@@ -6882,10 +6882,15 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
     service_state.refresh_profile_readiness();
 
     let profile_allocations = service_profile_allocations(&service_state);
+    let launch_config = cmd
+        .get("launchConfig")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
 
     Ok(json!({
         "service_state": service_state,
         "profileAllocations": profile_allocations,
+        "launchConfig": launch_config,
     }))
 }
 
@@ -12130,12 +12135,28 @@ mod tests {
                         "lease": "exclusive"
                     }
                 }
+            },
+            "launchConfig": {
+                "defaultBrowserBuild": "stealthcdp_chromium",
+                "stealthCdpChromiumRequired": true,
+                "stealthCdpChromiumReady": false,
+                "executablePath": null,
+                "executablePathExists": null,
+                "warnings": [{
+                    "code": "stealthcdp_executable_missing",
+                    "severity": "warning",
+                    "message": "missing"
+                }]
             }
         });
         let result = execute_command(&cmd, &mut state).await;
 
         assert_eq!(result["success"], true);
         assert_service_status_response_contract(&result["data"]);
+        assert_eq!(
+            result["data"]["launchConfig"]["warnings"][0]["code"],
+            "stealthcdp_executable_missing"
+        );
         assert_eq!(
             result["data"]["service_state"]["sitePolicies"]["google"]["id"],
             "google"

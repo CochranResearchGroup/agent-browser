@@ -384,6 +384,10 @@ try {
     `dashboard service status profileAllocations missing: ${JSON.stringify(status.data)}`,
   );
   assert(
+    status.data?.launchConfig && Array.isArray(status.data.launchConfig.warnings),
+    `dashboard service status launchConfig missing: ${JSON.stringify(status.data)}`,
+  );
+  assert(
     status.data.profileAllocations.length === 0,
     `no-launch service status unexpectedly reported profile allocations: ${JSON.stringify(status.data.profileAllocations)}`,
   );

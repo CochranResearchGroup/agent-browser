@@ -481,8 +481,12 @@ async fn handle_connection<S>(
                         .get("serviceState")
                         .cloned()
                         .unwrap_or_else(|| serde_json::json!({}));
+                    let launch_config = cmd
+                        .get("launchConfig")
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({}));
                     control_plane
-                        .service_status_response(id, service_state)
+                        .service_status_response(id, service_state, launch_config)
                         .await
                 } else {
                     control_plane.submit(cmd).await

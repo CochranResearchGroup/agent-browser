@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 #[cfg(windows)]
 use crate::connection::resolve_port;
 use crate::connection::{attach_daemon_auth_token, get_socket_dir};
-use crate::flags::parse_flags;
+use crate::flags::{launch_config_status, parse_flags};
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state,
 };
@@ -843,9 +843,13 @@ async fn write_json_value(stream: &mut tokio::net::TcpStream, status: &str, valu
 }
 
 fn service_status_command() -> Value {
+    let _ = refresh_persisted_profile_seeding_handoffs();
+    let args = vec!["service".to_string(), "status".to_string()];
+    let flags = parse_flags(&args);
     json!({
         "action": "service_status",
-        "serviceState": load_service_state_snapshot(),
+        "serviceState": flags.service_state.clone(),
+        "launchConfig": launch_config_status(&flags),
     })
 }
 

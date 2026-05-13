@@ -390,6 +390,15 @@ export interface ServiceStatusResponse {
   control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown>;
   profileAllocations: ServiceProfileAllocation[];
+  launchConfig?: {
+    defaultBrowserBuild: string | null;
+    stealthCdpChromiumRequired: boolean;
+    stealthCdpChromiumReady: boolean;
+    executablePath: string | null;
+    executablePathExists: boolean | null;
+    warnings: Array<{ code: string; severity: string; message: string; [key: string]: unknown }>;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 

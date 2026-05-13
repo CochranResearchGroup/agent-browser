@@ -1008,6 +1008,46 @@ pub struct Flags {
     pub cli_runtime_profile: bool,
 }
 
+/// Build the no-launch browser executable readiness view used by service status.
+pub fn launch_config_status(flags: &Flags) -> Value {
+    let default_browser_build = flags.service_state.default_browser_build;
+    let stealth_default = default_browser_build == Some(BrowserBuild::StealthcdpChromium);
+    let stealth_site_policy = flags
+        .service_state
+        .site_policies
+        .values()
+        .any(|policy| policy.browser_build == Some(BrowserBuild::StealthcdpChromium));
+    let stealth_cdp_chromium_required = stealth_default || stealth_site_policy;
+    let executable_path_exists = flags
+        .executable_path
+        .as_ref()
+        .map(|path| Path::new(path).is_file());
+
+    let mut warnings = Vec::new();
+    if stealth_cdp_chromium_required && flags.executable_path.is_none() {
+        warnings.push(json!({
+            "code": "stealthcdp_executable_missing",
+            "severity": "warning",
+            "message": "stealthcdp_chromium is selected, but no executablePath or AGENT_BROWSER_EXECUTABLE_PATH is configured"
+        }));
+    } else if stealth_cdp_chromium_required && executable_path_exists == Some(false) {
+        warnings.push(json!({
+            "code": "stealthcdp_executable_not_found",
+            "severity": "warning",
+            "message": "stealthcdp_chromium is selected, but the configured executable path does not exist"
+        }));
+    }
+
+    json!({
+        "defaultBrowserBuild": default_browser_build,
+        "stealthCdpChromiumRequired": stealth_cdp_chromium_required,
+        "stealthCdpChromiumReady": !stealth_cdp_chromium_required || executable_path_exists == Some(true),
+        "executablePath": flags.executable_path.clone(),
+        "executablePathExists": executable_path_exists,
+        "warnings": warnings
+    })
+}
+
 pub fn parse_flags(args: &[String]) -> Flags {
     let config = load_config(args).unwrap_or_else(|e| {
         eprintln!("{} {}", color::warning_indicator(), e);
