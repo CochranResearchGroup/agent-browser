@@ -91,6 +91,16 @@ export type ServiceTraceBrowserCapabilityLaunch = {
   executablePath?: string | null;
 };
 
+export type ServiceTraceContextAttention = {
+  required?: boolean;
+  owner?: string;
+  severity?: string;
+  reason?: string;
+  message?: string;
+  suggestedActions?: string[];
+  presentation?: string;
+};
+
 export type ServiceTraceData = {
   filters?: ServiceTraceFiltersData;
   events?: ServiceTraceEvent[];
@@ -127,6 +137,7 @@ export type ServiceTraceData = {
       targetIdentityCount?: number;
       targetServiceIds?: string[];
       latestTimestamp?: string | null;
+      attention?: ServiceTraceContextAttention;
       hasNamingWarning?: boolean;
       namingWarnings?: string[];
     }[];

@@ -232,6 +232,7 @@
           "targetServiceIds",
           "controlPlaneModes",
           "lifecycleOnlyJobCount",
+          "attention",
           "latestTimestamp"
         ],
         "properties": {
@@ -314,6 +315,72 @@
             "type": "integer",
             "minimum": 0,
             "description": "Number of lifecycle-only retained jobs in this trace context."
+          },
+          "attention": {
+            "type": "object",
+            "description": "UI-neutral intervention summary for this trace context. Clients decide whether to render it as a log, prompt, dashboard affordance, popup, or other operator channel.",
+            "required": [
+              "required",
+              "owner",
+              "severity",
+              "reason",
+              "message",
+              "suggestedActions",
+              "presentation"
+            ],
+            "properties": {
+              "required": {
+                "type": "boolean"
+              },
+              "owner": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "operator",
+                  "service"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "incidents_present",
+                  "missing_caller_label"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "suggestedActions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "inspect_incidents",
+                    "review_trace_activity",
+                    "apply_remedy_if_available",
+                    "include_service_name",
+                    "include_agent_name",
+                    "include_task_name"
+                  ]
+                },
+                "uniqueItems": true
+              },
+              "presentation": {
+                "type": "string",
+                "enum": [
+                  "client_decides"
+                ]
+              }
+            },
+            "additionalProperties": true
           },
           "latestTimestamp": {
             "type": ["string", "null"],

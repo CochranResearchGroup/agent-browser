@@ -326,6 +326,8 @@ fn service_trace_summary(
         .into_iter()
         .map(|(key, summary)| {
             let naming_warnings = trace_context_naming_warnings(&key);
+            let attention =
+                trace_context_attention(summary.incident_count, naming_warnings.as_slice());
             json!({
                 "serviceName": key.service_name,
                 "agentName": key.agent_name,
@@ -343,6 +345,7 @@ fn service_trace_summary(
                 "targetServiceIds": summary.target_service_ids,
                 "controlPlaneModes": summary.control_plane_modes,
                 "lifecycleOnlyJobCount": summary.lifecycle_only_job_count,
+                "attention": attention,
                 "latestTimestamp": summary.latest_timestamp,
             })
         })
@@ -568,6 +571,50 @@ fn merge_control_plane_mode(control_plane_modes: &mut Vec<String>, job: &Service
     if !control_plane_modes.iter().any(|existing| existing == mode) {
         control_plane_modes.push(mode.to_string());
     }
+}
+
+fn trace_context_attention(incident_count: usize, naming_warnings: &[&str]) -> Value {
+    if incident_count > 0 {
+        return json!({
+            "required": true,
+            "owner": "operator",
+            "severity": "warning",
+            "reason": "incidents_present",
+            "message": "Trace context has retained incidents; inspect related incidents and activity before reusing this browser context.",
+            "suggestedActions": [
+                "inspect_incidents",
+                "review_trace_activity",
+                "apply_remedy_if_available"
+            ],
+            "presentation": "client_decides",
+        });
+    }
+
+    if !naming_warnings.is_empty() {
+        return json!({
+            "required": true,
+            "owner": "service",
+            "severity": "info",
+            "reason": "missing_caller_label",
+            "message": "Trace context is missing service, agent, or task labels; future requests should include caller labels for deterministic multi-agent debugging.",
+            "suggestedActions": [
+                "include_service_name",
+                "include_agent_name",
+                "include_task_name"
+            ],
+            "presentation": "client_decides",
+        });
+    }
+
+    json!({
+        "required": false,
+        "owner": "none",
+        "severity": "info",
+        "reason": "none",
+        "message": "No trace-context intervention is required.",
+        "suggestedActions": [],
+        "presentation": "client_decides",
+    })
 }
 
 fn service_trace_profile_lease_wait_summary(events: &[ServiceEvent]) -> Value {

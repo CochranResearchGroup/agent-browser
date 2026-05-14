@@ -898,6 +898,9 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
                 "activityCount",
                 "targetIdentityCount",
                 "targetServiceIds",
+                "controlPlaneModes",
+                "lifecycleOnlyJobCount",
+                "attention",
                 "latestTimestamp",
             ],
             &[
@@ -915,6 +918,8 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
                 "activity_count",
                 "target_identity_count",
                 "target_service_ids",
+                "control_plane_modes",
+                "lifecycle_only_job_count",
                 "latest_timestamp",
             ],
         );
@@ -931,6 +936,38 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
         assert!(context["activityCount"].is_u64());
         assert!(context["targetIdentityCount"].is_u64());
         assert!(context["targetServiceIds"].is_array());
+        assert!(context["controlPlaneModes"].is_array());
+        assert!(context["lifecycleOnlyJobCount"].is_u64());
+        assert_record_fields(
+            "trace summary context attention",
+            &context["attention"],
+            &[
+                "required",
+                "owner",
+                "severity",
+                "reason",
+                "message",
+                "suggestedActions",
+                "presentation",
+            ],
+            &["suggested_actions"],
+        );
+        assert!(context["attention"]["required"].is_boolean());
+        assert!(matches!(
+            context["attention"]["owner"].as_str().unwrap(),
+            "none" | "operator" | "service"
+        ));
+        assert!(matches!(
+            context["attention"]["severity"].as_str().unwrap(),
+            "info" | "warning"
+        ));
+        assert!(matches!(
+            context["attention"]["reason"].as_str().unwrap(),
+            "none" | "incidents_present" | "missing_caller_label"
+        ));
+        assert!(context["attention"]["message"].is_string());
+        assert!(context["attention"]["suggestedActions"].is_array());
+        assert_eq!(context["attention"]["presentation"], "client_decides");
     }
 }
 
@@ -5785,6 +5822,17 @@ mod tests {
                 "activityCount": 1,
                 "targetIdentityCount": 1,
                 "targetServiceIds": ["acs"],
+                "controlPlaneModes": ["cdp"],
+                "lifecycleOnlyJobCount": 0,
+                "attention": {
+                    "required": false,
+                    "owner": "none",
+                    "severity": "info",
+                    "reason": "none",
+                    "message": "No trace-context intervention is required.",
+                    "suggestedActions": [],
+                    "presentation": "client_decides",
+                },
                 "latestTimestamp": "2026-04-22T00:01:00Z",
             }],
         });

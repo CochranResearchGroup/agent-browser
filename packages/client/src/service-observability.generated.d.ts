@@ -828,6 +828,25 @@ export interface ServiceTraceBrowserCapabilityLaunchSummary {
   [key: string]: unknown;
 }
 
+export interface ServiceTraceContextAttention {
+  required: boolean;
+  owner: 'none' | 'operator' | 'service' | string;
+  severity: 'info' | 'warning' | string;
+  reason: 'none' | 'incidents_present' | 'missing_caller_label' | string;
+  message: string;
+  suggestedActions: Array<
+    | 'inspect_incidents'
+    | 'review_trace_activity'
+    | 'apply_remedy_if_available'
+    | 'include_service_name'
+    | 'include_agent_name'
+    | 'include_task_name'
+    | string
+  >;
+  presentation: 'client_decides' | string;
+  [key: string]: unknown;
+}
+
 export interface ServiceTraceSummaryContext {
   serviceName: string | null;
   agentName: string | null;
@@ -845,6 +864,7 @@ export interface ServiceTraceSummaryContext {
   targetServiceIds: string[];
   controlPlaneModes: ServiceJobControlPlaneMode[];
   lifecycleOnlyJobCount: number;
+  attention: ServiceTraceContextAttention;
   latestTimestamp: string | null;
   [key: string]: unknown;
 }

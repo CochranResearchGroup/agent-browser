@@ -14403,6 +14403,8 @@ mod tests {
         assert_eq!(owned_context["targetServiceIds"], json!(["acs", "google"]));
         assert_eq!(owned_context["hasNamingWarning"], false);
         assert_eq!(owned_context["namingWarnings"].as_array().unwrap().len(), 0);
+        assert_eq!(owned_context["attention"]["required"], false);
+        assert_eq!(owned_context["attention"]["reason"], "none");
         assert_eq!(owned_context["latestTimestamp"], "2026-04-22T00:02:00Z");
         let wait_context = result["data"]["summary"]["contexts"]
             .as_array()
@@ -14426,6 +14428,9 @@ mod tests {
             .find(|context| context["incidentCount"] == 1)
             .expect("trace summary should include incident-only context");
         assert_eq!(incident_context["hasNamingWarning"], true);
+        assert_eq!(incident_context["attention"]["required"], true);
+        assert_eq!(incident_context["attention"]["owner"], "operator");
+        assert_eq!(incident_context["attention"]["reason"], "incidents_present");
         assert_eq!(
             incident_context["namingWarnings"],
             json!([
