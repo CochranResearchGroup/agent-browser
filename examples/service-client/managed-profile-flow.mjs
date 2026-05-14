@@ -85,6 +85,7 @@ export function buildManagedProfilePlan({
     decisionOrder: [
       'ask agent-browser for the no-launch access plan',
       'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
+      'inspect decision.attention before choosing a client prompt, log, or popup',
       'register a managed profile only when agent-browser has no suitable one',
       'optionally run due profile-readiness monitors when access-plan recommends it',
       'refresh the access plan before requesting a tab or CDP-free launch',
@@ -99,6 +100,7 @@ export function buildManagedProfilePlan({
         'providers',
         'challenges',
         'decision',
+        'decision.attention',
       ],
     },
     readinessInspection: readinessProfileId
@@ -359,6 +361,7 @@ export async function runManagedProfileWorkflow({
     readiness: accessPlan.readiness,
     readinessSummary: accessPlan.readinessSummary,
     accessDecision: accessPlan.decision,
+    accessAttention: summarizeAccessPlanAttention(accessPlan.decision?.attention),
     sitePolicy: accessPlan.sitePolicy,
     providers: accessPlan.providers,
     challenges: accessPlan.challenges,
@@ -409,6 +412,28 @@ function summarizeProfileAcquisition({
     monitorRunDueRecommendedAction: monitorRunDue?.accessPlanSummary?.recommendedAction ?? null,
     monitorRunDueFreshTargetServiceIds: monitorRunDue?.accessPlanSummary?.freshTargetServiceIds ?? [],
     monitorRunDueStaleProfileIds: monitorRunDue?.accessPlanSummary?.staleProfileIds ?? [],
+    initialAttention: summarizeAccessPlanAttention(initialAccessPlan?.decision?.attention),
+    refreshedAttention: summarizeAccessPlanAttention(accessPlan?.decision?.attention),
+  };
+}
+
+/**
+ * @param {unknown} attention
+ */
+function summarizeAccessPlanAttention(attention) {
+  if (!attention || typeof attention !== 'object' || Array.isArray(attention)) {
+    return null;
+  }
+  const record = /** @type {Record<string, unknown>} */ (attention);
+  return {
+    required: record.required === true,
+    owner: typeof record.owner === 'string' ? record.owner : null,
+    severity: typeof record.severity === 'string' ? record.severity : null,
+    reason: typeof record.reason === 'string' ? record.reason : null,
+    message: typeof record.message === 'string' ? record.message : null,
+    suggestedActions: Array.isArray(record.suggestedActions)
+      ? record.suggestedActions.filter((action) => typeof action === 'string')
+      : [],
   };
 }
 

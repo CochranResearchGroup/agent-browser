@@ -57,6 +57,14 @@ async function testExistingProfileSelection() {
   assert.equal(result.readinessSummary?.needsManualSeeding, false);
   assert.equal(result.readinessSummary?.manualSeedingRequired, false);
   assert.equal(result.accessDecision?.recommendedAction, 'use_selected_profile');
+  assert.deepEqual(result.accessAttention, {
+    required: false,
+    owner: 'none',
+    severity: 'info',
+    reason: 'use_selected_profile',
+    message: 'No intervention required.',
+    suggestedActions: ['request_service_tab'],
+  });
   assert.equal(result.accessPlan?.decision?.recommendedAction, 'use_selected_profile');
   assert.deepEqual(result.profileAcquisitionSummary, {
     selectedProfileId: 'canva-default',
@@ -70,6 +78,22 @@ async function testExistingProfileSelection() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    initialAttention: {
+      required: false,
+      owner: 'none',
+      severity: 'info',
+      reason: 'use_selected_profile',
+      message: 'No intervention required.',
+      suggestedActions: ['request_service_tab'],
+    },
+    refreshedAttention: {
+      required: false,
+      owner: 'none',
+      severity: 'info',
+      reason: 'use_selected_profile',
+      message: 'No intervention required.',
+      suggestedActions: ['request_service_tab'],
+    },
   });
   assert.equal(result.tab?.success, true);
   assert.equal(result.tab?.data?.url, 'https://www.canva.com/');
@@ -227,6 +251,22 @@ async function testExistingProfileDueMonitorRun() {
     monitorRunDueRecommendedAction: 'use_selected_profile',
     monitorRunDueFreshTargetServiceIds: ['canva'],
     monitorRunDueStaleProfileIds: [],
+    initialAttention: {
+      required: true,
+      owner: 'service',
+      severity: 'warning',
+      reason: 'run_due_profile_readiness_monitor',
+      message: 'Run the due profile-readiness monitor before trusting retained profile freshness.',
+      suggestedActions: ['run_due_profile_readiness_monitor', 'inspect_monitor_result'],
+    },
+    refreshedAttention: {
+      required: false,
+      owner: 'none',
+      severity: 'info',
+      reason: 'use_selected_profile',
+      message: 'No intervention required.',
+      suggestedActions: ['request_service_tab'],
+    },
   });
   assert.equal(result.monitorRunDue?.checked, 1);
   assert.equal(result.tab?.success, true);
@@ -386,6 +426,22 @@ async function testMissingProfileRegistrationThenDueMonitorRun() {
     monitorRunDueRecommendedAction: 'use_selected_profile',
     monitorRunDueFreshTargetServiceIds: ['canva'],
     monitorRunDueStaleProfileIds: [],
+    initialAttention: {
+      required: true,
+      owner: 'client',
+      severity: 'warning',
+      reason: 'register_managed_profile_or_request_throwaway_browser',
+      message: 'No matching managed profile was found.',
+      suggestedActions: ['register_managed_profile', 'request_throwaway_browser'],
+    },
+    refreshedAttention: {
+      required: false,
+      owner: 'none',
+      severity: 'info',
+      reason: 'use_selected_profile',
+      message: 'No intervention required.',
+      suggestedActions: ['request_service_tab'],
+    },
   });
   assert.equal(result.profileRegistration?.upserted, true);
   assert.equal(result.profileReadinessMonitor?.upserted, true);
@@ -443,6 +499,14 @@ async function testManualSeedingReadinessSummary() {
     result.accessDecision?.recommendedAction,
     'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
   );
+  assert.deepEqual(result.accessAttention, {
+    required: true,
+    owner: 'operator',
+    severity: 'blocking',
+    reason: 'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable',
+    message: 'Launch the profile without CDP, complete sign-in or setup, close the browser, then run the post-seeding probe.',
+    suggestedActions: ['launch_detached_seeding', 'close_seeded_browser', 'run_post_seeding_probe'],
+  });
   assert.equal(result.tab?.success, false);
   assert.equal(result.tab?.skipped, true);
   assert.equal(result.tab?.reason, 'manual_seeding_required');
@@ -473,9 +537,10 @@ async function testIdentityFirstGuidanceDrift() {
   assert.deepEqual(plan.decisionOrder.slice(0, 4), [
     'ask agent-browser for the no-launch access plan',
     'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
+    'inspect decision.attention before choosing a client prompt, log, or popup',
     'register a managed profile only when agent-browser has no suitable one',
-    'optionally run due profile-readiness monitors when access-plan recommends it',
   ]);
+  assert(plan.profileInspection.includes.includes('decision.attention'));
 
   const [readme, serviceModeDocs, commandsDocs, skill] = await Promise.all([
     readFile(new URL('../README.md', import.meta.url), 'utf8'),
@@ -491,6 +556,7 @@ async function testIdentityFirstGuidanceDrift() {
     'Direct profile selection is an override',
     'updateServiceProfileFreshness()',
     'upsertServiceProfileReadinessMonitor()',
+    '`decision.attention`',
   ]);
   assertContainsAll(serviceModeDocs, [
     'The normal request model is identity-first',
@@ -499,6 +565,7 @@ async function testIdentityFirstGuidanceDrift() {
     'bring-your-own-profile workflows',
     '<code>updateServiceProfileFreshness()</code>',
     '<code>upsertServiceProfileReadinessMonitor()</code>',
+    '<code>attention</code>',
   ]);
   assertContainsAll(commandsDocs, [
     'Service requests should be identity-first',
@@ -506,6 +573,7 @@ async function testIdentityFirstGuidanceDrift() {
     'known-login overrides or bring-your-own-profile workflows',
     'POST /api/service/profiles/<id>/freshness',
     '`profile_readiness` monitor',
+    'decision.attention',
   ]);
   assertContainsAll(skill, [
     '`getServiceAccessPlan()` with `serviceName`, `agentName`, `taskName`',
@@ -513,6 +581,7 @@ async function testIdentityFirstGuidanceDrift() {
     'Register a new managed login profile only when agent-browser',
     'MCP `service_profile_freshness_update`',
     '`upsertServiceProfileReadinessMonitor()`',
+    '`attention`',
   ]);
 }
 
@@ -576,6 +645,13 @@ function createMockFetch({
             count: targetReadiness.length,
           }
         : null;
+      const recommendedAction = shouldRecommendDueMonitor
+        ? 'run_due_profile_readiness_monitor'
+        : readinessState === 'needs_manual_seeding' && selectedProfile
+          ? readinessRecommendedAction
+          : selectedProfile
+            ? 'use_selected_profile'
+            : 'register_managed_profile_or_request_throwaway_browser';
       return serviceResponse({
         query: {
           serviceName: 'CanvaCLI',
@@ -614,14 +690,8 @@ function createMockFetch({
         providers: [],
         challenges: [],
         decision: {
-          recommendedAction:
-            shouldRecommendDueMonitor
-              ? 'run_due_profile_readiness_monitor'
-              : readinessState === 'needs_manual_seeding' && selectedProfile
-              ? readinessRecommendedAction
-              : selectedProfile
-                ? 'use_selected_profile'
-                : 'register_managed_profile_or_request_throwaway_browser',
+          recommendedAction,
+          attention: mockAccessPlanAttention(recommendedAction),
           monitorRunDue: {
             available: shouldRecommendDueMonitor,
             recommendedBeforeUse: shouldRecommendDueMonitor,
@@ -796,6 +866,52 @@ function createMockFetch({
 
     return jsonResponse({ error: `unexpected route: ${method} ${parsed.pathname}` }, { status: 404 });
   };
+}
+
+function mockAccessPlanAttention(recommendedAction) {
+  switch (recommendedAction) {
+    case 'run_due_profile_readiness_monitor':
+      return {
+        required: true,
+        owner: 'service',
+        severity: 'warning',
+        reason: recommendedAction,
+        message: 'Run the due profile-readiness monitor before trusting retained profile freshness.',
+        suggestedActions: ['run_due_profile_readiness_monitor', 'inspect_monitor_result'],
+        presentation: 'client_decides',
+      };
+    case 'register_managed_profile_or_request_throwaway_browser':
+      return {
+        required: true,
+        owner: 'client',
+        severity: 'warning',
+        reason: recommendedAction,
+        message: 'No matching managed profile was found.',
+        suggestedActions: ['register_managed_profile', 'request_throwaway_browser'],
+        presentation: 'client_decides',
+      };
+    case 'launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable':
+      return {
+        required: true,
+        owner: 'operator',
+        severity: 'blocking',
+        reason: recommendedAction,
+        message:
+          'Launch the profile without CDP, complete sign-in or setup, close the browser, then run the post-seeding probe.',
+        suggestedActions: ['launch_detached_seeding', 'close_seeded_browser', 'run_post_seeding_probe'],
+        presentation: 'client_decides',
+      };
+    default:
+      return {
+        required: false,
+        owner: 'none',
+        severity: 'info',
+        reason: recommendedAction,
+        message: 'No intervention required.',
+        suggestedActions: ['request_service_tab'],
+        presentation: 'client_decides',
+      };
+  }
 }
 
 function jsonResponse(body, { status = 200 } = {}) {

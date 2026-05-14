@@ -158,11 +158,18 @@ Use `managed-profile-flow.mjs` when a software client needs the CanvaCLI-style
 profile-broker pattern:
 
 1. Ask agent-browser for a no-launch access plan with `getServiceAccessPlan()`.
-2. Register a managed profile only when agent-browser has no suitable profile.
-3. Add a `profile_readiness` monitor when registering a new recurring profile.
-4. Optionally run due profile-readiness monitors when access-plan recommends it.
-5. Refresh the access plan before passing it to `requestServiceTab({ accessPlan })`.
-6. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
+2. Inspect `decision.attention` to decide whether the client should log,
+   prompt, invoke a provider, or show an operator-facing affordance.
+3. Register a managed profile only when agent-browser has no suitable profile.
+4. Add a `profile_readiness` monitor when registering a new recurring profile.
+5. Optionally run due profile-readiness monitors when access-plan recommends it.
+6. Refresh the access plan before passing it to `requestServiceTab({ accessPlan })`.
+7. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
+
+The workflow output includes `accessAttention` plus
+`profileAcquisitionSummary.initialAttention` and `refreshedAttention`. These
+are compact summaries of the service-owned intervention decision; presentation
+remains the caller's responsibility.
 
 Dry-run the recipe without contacting a service:
 
