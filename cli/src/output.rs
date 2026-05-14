@@ -4211,16 +4211,19 @@ Examples:
 agent-browser install - Install browser binaries
 
 Usage: agent-browser install [--with-deps]
+       agent-browser install stealthcdp-chromium [--force]
        agent-browser install doctor [--json]
 
 Downloads and installs browser binaries required for automation.
 
 Options:
   -d, --with-deps      Also install system dependencies (Linux only)
+  --force              Replace an existing chromium-stealthcdp artifact
   --json               Output install doctor results as JSON
 
 Examples:
   agent-browser install
+  agent-browser install stealthcdp-chromium
   agent-browser install doctor
   agent-browser install doctor --json
   agent-browser install --with-deps

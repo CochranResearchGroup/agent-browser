@@ -15,6 +15,7 @@ curl -L -o ~/.local/bin/agent-browser \
   https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
 chmod +x ~/.local/bin/agent-browser
 agent-browser install  # Download Chrome from Chrome for Testing (first time only)
+agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
 agent-browser install doctor  # Check user-scoped binary drift and launch readiness
 ```
 
@@ -421,6 +422,7 @@ agent-browser reload                  # Reload page
 
 ```bash
 agent-browser install                 # Download Chrome from Chrome for Testing (Google's official automation channel)
+agent-browser install stealthcdp-chromium  # Download the preferred patched Chromium release when available
 agent-browser install doctor          # Check user-scoped binary drift and launch readiness
 agent-browser install --with-deps     # Also install system deps (Linux)
 agent-browser upgrade                 # Upgrade agent-browser to the latest version
@@ -1175,7 +1177,7 @@ AGENT_BROWSER_CONFIG=./ci-config.json agent-browser open example.com
 
 All options from the table above can be set in the config file using camelCase keys (e.g., `--executable-path` becomes `"executablePath"`, `--proxy-bypass` becomes `"proxyBypass"`). Unknown keys are ignored for forward compatibility.
 
-Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned launches should prefer the patched Chromium posture. If no explicit default is configured and a ready `stealthcdp_chromium` manifest is available, fresh installs prefer that build automatically. Provide the binary through `executablePath`, `AGENT_BROWSER_EXECUTABLE_PATH`, or `service.browserBuildManifests.stealthcdp_chromium.manifestPath`. A manifest path points at a promoted artifact `manifest.json`; agent-browser resolves the executable relative to that manifest and reports artifact metadata from the same source. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, executable source, resolved executable path, manifest metadata, file-existence check, and warnings when `stealthcdp_chromium` is selected without a usable binary or ready manifest.
+Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned launches should prefer the patched Chromium posture. If no explicit default is configured and a ready `stealthcdp_chromium` manifest is available, fresh installs prefer that build automatically. `agent-browser install stealthcdp-chromium` installs the public `chromium-stealthcdp` Windows asset under `%LOCALAPPDATA%\chromium-stealthcdp` on Windows or the matching WSL-mounted `AppData/Local` directory when available, then exposes `current/manifest.json` and `current/chrome.exe`. Provide the binary through `executablePath`, `AGENT_BROWSER_EXECUTABLE_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT`, or `service.browserBuildManifests.stealthcdp_chromium.manifestPath`. A manifest path points at a promoted artifact `manifest.json`; agent-browser resolves the executable relative to that manifest and reports artifact metadata from the same source. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, executable source, resolved executable path, manifest metadata, file-existence check, and warnings when `stealthcdp_chromium` is selected without a usable binary or ready manifest.
 
 `stealthcdp_chromium` is worthwhile for the default service posture because it keeps the CDP control plane available while reducing the obvious automation signal exposed by ordinary DevTools-attached Chromium. It is not a captcha bypass and it does not replace site policy, pacing, or manual seeding rules, but it gives bot-sensitive sites a better baseline than stock headless Chrome when CDP-backed control is still acceptable.
 

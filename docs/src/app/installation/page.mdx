@@ -11,6 +11,7 @@ curl -L -o ~/.local/bin/agent-browser \
   https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
 chmod +x ~/.local/bin/agent-browser
 agent-browser install  # Download Chrome from Chrome for Testing (first time)
+agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
 agent-browser install doctor  # Check binary drift and launch readiness
 ```
 
@@ -40,6 +41,25 @@ On Linux, install system dependencies:
 ```bash
 agent-browser install --with-deps
 ```
+
+## Stealth CDP Chromium
+
+Use <code>agent-browser install stealthcdp-chromium</code> to install the
+preferred patched Chromium release when the public
+<code>CochranResearchGroup/chromium-stealthcdp</code> Windows asset is
+available. The installer verifies the release archive and
+<code>chrome.exe</code> hashes, places the artifact under
+<code>%LOCALAPPDATA%\chromium-stealthcdp</code> on Windows or the matching
+WSL-mounted <code>AppData/Local</code> directory, and exposes
+<code>current/manifest.json</code> plus <code>current/chrome.exe</code>.
+Set <code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT</code> only when that
+location must be overridden.
+
+agent-browser auto-discovers that stable manifest path when it exists, but it
+only prefers <code>stealthcdp_chromium</code> automatically after the manifest
+has live smoke evidence showing <code>navigator.webdriver</code> is false.
+Run <code>agent-browser install doctor</code> to inspect the no-launch
+readiness view.
 
 ## Updating
 

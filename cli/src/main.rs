@@ -27,7 +27,7 @@ use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_I
 use commands::{gen_id, parse_command, ParseError};
 use connection::{cleanup_stale_files, ensure_daemon, get_socket_dir, send_command, DaemonOptions};
 use flags::{clean_args, parse_flags, upsert_runtime_profile_in_user_config, Flags};
-use install::{run_install, run_install_doctor};
+use install::{run_install, run_install_doctor, run_install_stealthcdp_chromium};
 use native::cdp::chrome::{launch_chrome_detached, LaunchOptions};
 use native::service_config::{
     record_persisted_profile_seeding_handoff_launch, refresh_persisted_profile_seeding_handoffs,
@@ -1408,6 +1408,11 @@ fn main() {
     if clean.first().map(|s| s.as_str()) == Some("install") {
         if clean.get(1).map(|s| s.as_str()) == Some("doctor") {
             run_install_doctor(&flags);
+            return;
+        }
+        if clean.get(1).map(|s| s.as_str()) == Some("stealthcdp-chromium") {
+            let force = args.iter().any(|a| a == "--force");
+            run_install_stealthcdp_chromium(force);
             return;
         }
         let with_deps = args.iter().any(|a| a == "--with-deps" || a == "-d");

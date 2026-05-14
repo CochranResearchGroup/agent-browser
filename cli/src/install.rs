@@ -8,6 +8,20 @@ use std::process::{exit, Command, Stdio};
 
 const LAST_KNOWN_GOOD_URL: &str =
     "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json";
+const STEALTHCDP_CHROMIUM_RELEASE_TAG: &str = "v150.0.7835.0-stealthcdp.6b6558b55a1d";
+const STEALTHCDP_CHROMIUM_RELEASE_ASSET: &str =
+    "chromium-stealthcdp_150.0.7835.0+stealthcdp.6b6558b55a1d_win64.zip";
+const STEALTHCDP_CHROMIUM_RELEASE_ASSET_SHA256: &str =
+    "1e3878f270b383acdc99d0e6b82c687f1ffc4f8d27b86cc4bba1dd334946fae3";
+const STEALTHCDP_CHROMIUM_EXECUTABLE_SHA256: &str =
+    "5d4cb9a996df941885cf29beefc53e154a46750eed37b3d83b25e6c423c70f2c";
+const STEALTHCDP_CHROMIUM_VERSION: &str = "150.0.7835.0";
+const STEALTHCDP_CHROMIUM_ARTIFACT_NAME: &str = "150.0.7835.0+stealthcdp.6b6558b55a1d";
+const STEALTHCDP_CHROMIUM_SOURCE_SHA: &str = "24ecda02e97db6fa730a7ccf8747776a4d21e4b9";
+const STEALTHCDP_CHROMIUM_UPSTREAM_REVISION: &str = "d421c3af8268e2e6227b7fe4461183e69b64bc61";
+const STEALTHCDP_CHROMIUM_PATCHSET_SHA: &str = "fcf2d964f9070cc9acf7aabbfb2c576f36107bbe";
+const STEALTHCDP_CHROMIUM_PATCH_QUEUE_SHA256: &str =
+    "6b6558b55a1d3b0dc081871e2d76cd6dc74665d28d0e5789846b456388afd3cf";
 
 pub fn get_browsers_dir() -> PathBuf {
     dirs::home_dir()
@@ -406,6 +420,313 @@ fn extract_zip(bytes: Vec<u8>, dest: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn sha256_bytes(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
+}
+
+fn stealthcdp_chromium_release_url() -> String {
+    format!(
+        "https://github.com/CochranResearchGroup/chromium-stealthcdp/releases/download/{STEALTHCDP_CHROMIUM_RELEASE_TAG}/{STEALTHCDP_CHROMIUM_RELEASE_ASSET}"
+    )
+}
+
+fn stealthcdp_chromium_install_root() -> Result<PathBuf, String> {
+    if let Ok(root) = std::env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT") {
+        let trimmed = root.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
+
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        let trimmed = local_app_data.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed).join("chromium-stealthcdp"));
+        }
+    }
+
+    if let Some(local_app_data) = find_wsl_windows_local_app_data() {
+        return Ok(local_app_data.join("chromium-stealthcdp"));
+    }
+
+    dirs::data_local_dir()
+        .map(|path| path.join("chromium-stealthcdp"))
+        .ok_or_else(|| {
+            "could not determine an install root; set AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT"
+                .to_string()
+        })
+}
+
+fn find_wsl_windows_local_app_data() -> Option<PathBuf> {
+    let users_dir = Path::new("/mnt/c/Users");
+    let entries = fs::read_dir(users_dir).ok()?;
+    let mut candidates = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if matches!(
+            name.as_str(),
+            "All Users" | "Default" | "Default User" | "Public"
+        ) {
+            continue;
+        }
+        let local_app_data = entry.path().join("AppData").join("Local");
+        if local_app_data.is_dir() {
+            candidates.push(local_app_data);
+        }
+    }
+    candidates.sort();
+    candidates.into_iter().next()
+}
+
+fn write_stealthcdp_manifest(artifact_dir: &Path, executable_relative: &str) -> Result<(), String> {
+    let smoke_relative = "smoke.json";
+    let smoke_path = artifact_dir.join(smoke_relative);
+    if !smoke_path.exists() {
+        fs::write(
+            &smoke_path,
+            serde_json::to_vec_pretty(&json!({
+                "success": false,
+                "reason": "live_smoke_not_run_after_install",
+                "checks": {
+                    "navigatorWebdriver": null
+                }
+            }))
+            .map_err(|err| format!("Failed to serialize smoke placeholder: {err}"))?,
+        )
+        .map_err(|err| format!("Failed to write {}: {err}", smoke_path.display()))?;
+    }
+
+    let manifest_path = artifact_dir.join("manifest.json");
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&json!({
+            "schema": "chromium-stealthcdp.artifact.v1",
+            "artifactName": STEALTHCDP_CHROMIUM_ARTIFACT_NAME,
+            "chromeVersion": format!("Chromium {STEALTHCDP_CHROMIUM_VERSION}"),
+            "chromium": {
+                "sourceSha": STEALTHCDP_CHROMIUM_SOURCE_SHA,
+                "upstreamRevision": STEALTHCDP_CHROMIUM_UPSTREAM_REVISION
+            },
+            "patchset": {
+                "repoSha": STEALTHCDP_CHROMIUM_PATCHSET_SHA,
+                "patchQueueSha256": STEALTHCDP_CHROMIUM_PATCH_QUEUE_SHA256
+            },
+            "release": {
+                "repo": "CochranResearchGroup/chromium-stealthcdp",
+                "tag": STEALTHCDP_CHROMIUM_RELEASE_TAG,
+                "asset": STEALTHCDP_CHROMIUM_RELEASE_ASSET,
+                "assetSha256": STEALTHCDP_CHROMIUM_RELEASE_ASSET_SHA256
+            },
+            "executable": {
+                "relativePath": executable_relative,
+                "sha256": STEALTHCDP_CHROMIUM_EXECUTABLE_SHA256
+            },
+            "smoke": {
+                "relativePath": smoke_relative
+            }
+        }))
+        .map_err(|err| format!("Failed to serialize manifest: {err}"))?,
+    )
+    .map_err(|err| format!("Failed to write {}: {err}", manifest_path.display()))?;
+
+    Ok(())
+}
+
+fn create_current_pointer(install_root: &Path, artifact_dir: &Path) -> Result<PathBuf, String> {
+    let current = install_root.join("current");
+    if let Ok(metadata) = fs::symlink_metadata(&current) {
+        if metadata.file_type().is_symlink() || metadata.is_file() {
+            fs::remove_file(&current)
+                .map_err(|err| format!("Failed to replace {}: {err}", current.display()))?;
+        } else if metadata.is_dir() {
+            fs::remove_dir_all(&current)
+                .map_err(|err| format!("Failed to replace {}: {err}", current.display()))?;
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(artifact_dir, &current).map_err(|err| {
+            format!(
+                "Failed to create current symlink {} -> {}: {err}",
+                current.display(),
+                artifact_dir.display()
+            )
+        })?;
+    }
+
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_dir(artifact_dir, &current).map_err(|err| {
+            format!(
+                "Failed to create current symlink {} -> {}: {err}",
+                current.display(),
+                artifact_dir.display()
+            )
+        })?;
+    }
+
+    Ok(current)
+}
+
+fn install_stealthcdp_chromium_archive_bytes(
+    bytes: Vec<u8>,
+    install_root: &Path,
+    force: bool,
+    expected_archive_sha256: &str,
+    expected_executable_sha256: &str,
+) -> Result<PathBuf, String> {
+    let archive_sha256 = sha256_bytes(&bytes);
+    if archive_sha256 != expected_archive_sha256 {
+        return Err(format!(
+            "downloaded archive sha256 mismatch: expected {expected_archive_sha256}, got {archive_sha256}"
+        ));
+    }
+
+    fs::create_dir_all(install_root).map_err(|err| {
+        format!(
+            "Failed to create install root {}: {err}",
+            install_root.display()
+        )
+    })?;
+    let artifact_dir = install_root.join(STEALTHCDP_CHROMIUM_ARTIFACT_NAME);
+    if artifact_dir.exists() {
+        if force {
+            fs::remove_dir_all(&artifact_dir).map_err(|err| {
+                format!(
+                    "Failed to replace existing artifact {}: {err}",
+                    artifact_dir.display()
+                )
+            })?;
+        } else {
+            let chrome_exe = artifact_dir.join("chrome.exe");
+            if !chrome_exe.is_file() {
+                return Err(format!(
+                    "existing artifact {} does not contain chrome.exe; rerun with --force",
+                    artifact_dir.display()
+                ));
+            }
+            let executable_sha256 = file_sha256(&chrome_exe)?;
+            if executable_sha256 != expected_executable_sha256 {
+                return Err(format!(
+                    "existing chrome.exe sha256 mismatch: expected {expected_executable_sha256}, got {executable_sha256}; rerun with --force"
+                ));
+            }
+            write_stealthcdp_manifest(&artifact_dir, "chrome.exe")?;
+            return create_current_pointer(install_root, &artifact_dir);
+        }
+    }
+
+    let tmp_dir = install_root.join(format!(".tmp-{STEALTHCDP_CHROMIUM_ARTIFACT_NAME}"));
+    if tmp_dir.exists() {
+        fs::remove_dir_all(&tmp_dir).map_err(|err| {
+            format!(
+                "Failed to clear temporary install directory {}: {err}",
+                tmp_dir.display()
+            )
+        })?;
+    }
+
+    extract_zip(bytes, &tmp_dir)?;
+    let chrome_exe = tmp_dir.join("chrome.exe");
+    if !chrome_exe.is_file() {
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return Err("release archive did not contain chrome.exe at the artifact root".to_string());
+    }
+
+    let executable_sha256 = file_sha256(&chrome_exe)?;
+    if executable_sha256 != expected_executable_sha256 {
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return Err(format!(
+            "chrome.exe sha256 mismatch: expected {expected_executable_sha256}, got {executable_sha256}"
+        ));
+    }
+
+    write_stealthcdp_manifest(&tmp_dir, "chrome.exe")?;
+    fs::rename(&tmp_dir, &artifact_dir).map_err(|err| {
+        format!(
+            "Failed to move {} to {}: {err}",
+            tmp_dir.display(),
+            artifact_dir.display()
+        )
+    })?;
+
+    create_current_pointer(install_root, &artifact_dir)
+}
+
+pub fn run_install_stealthcdp_chromium(force: bool) {
+    println!("{}", color::cyan("Installing chromium-stealthcdp..."));
+
+    let install_root = match stealthcdp_chromium_install_root() {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("{} {}", color::error_indicator(), err);
+            exit(1);
+        }
+    };
+    let current = install_root.join("current");
+    if current.join("chrome.exe").is_file() && current.join("manifest.json").is_file() && !force {
+        println!(
+            "{} chromium-stealthcdp is already installed",
+            color::success_indicator()
+        );
+        println!("  Location: {}", current.display());
+        println!("  Manifest: {}", current.join("manifest.json").display());
+        return;
+    }
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "{} Failed to create runtime: {}",
+                color::error_indicator(),
+                e
+            );
+            exit(1);
+        });
+    let url = stealthcdp_chromium_release_url();
+    println!("  Downloading {STEALTHCDP_CHROMIUM_RELEASE_ASSET}");
+    println!("  {url}");
+
+    let bytes = match rt.block_on(download_bytes(&url)) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("{} {}", color::error_indicator(), err);
+            exit(1);
+        }
+    };
+
+    match install_stealthcdp_chromium_archive_bytes(
+        bytes,
+        &install_root,
+        force,
+        STEALTHCDP_CHROMIUM_RELEASE_ASSET_SHA256,
+        STEALTHCDP_CHROMIUM_EXECUTABLE_SHA256,
+    ) {
+        Ok(current) => {
+            println!(
+                "{} chromium-stealthcdp installed successfully",
+                color::success_indicator()
+            );
+            println!("  Location: {}", current.display());
+            println!("  Manifest: {}", current.join("manifest.json").display());
+            println!(
+                "  Run a live smoke before relying on it as ready: agent-browser install doctor"
+            );
+        }
+        Err(err) => {
+            eprintln!("{} {}", color::error_indicator(), err);
+            exit(1);
+        }
+    }
 }
 
 pub fn run_install(with_deps: bool) {
@@ -1098,8 +1419,10 @@ fn package_exists_apt(pkg: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::EnvGuard;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+    use zip::write::SimpleFileOptions;
 
     fn http_response(status: u16, reason: &str, body: &[u8]) -> Vec<u8> {
         let header = format!(
@@ -1150,6 +1473,26 @@ mod tests {
             .collect()
     }
 
+    fn test_zip_with_chrome(chrome_bytes: &[u8], smoke: Option<&[u8]>) -> Vec<u8> {
+        let mut cursor = io::Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut cursor);
+            let options = SimpleFileOptions::default();
+            writer
+                .start_file("chrome-win64/chrome.exe", options)
+                .unwrap();
+            writer.write_all(chrome_bytes).unwrap();
+            if let Some(smoke) = smoke {
+                writer
+                    .start_file("chrome-win64/smoke.json", options)
+                    .unwrap();
+                writer.write_all(smoke).unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        cursor.into_inner()
+    }
+
     #[test]
     fn install_doctor_flags_path_and_pnpm_binary_mismatch() {
         let launch_config = json!({
@@ -1190,6 +1533,86 @@ mod tests {
         );
 
         assert_eq!(issue_codes(issues), vec!["launch_config_not_ready"]);
+    }
+
+    #[test]
+    fn install_stealthcdp_chromium_archive_writes_current_manifest_and_preserves_smoke() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-stealthcdp-install-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let root = dir.join("install");
+        let chrome = b"test chrome exe";
+        let chrome_sha = sha256_bytes(chrome);
+        let smoke = br#"{"success":true,"checks":{"navigatorWebdriver":"false"}}"#;
+        let archive = test_zip_with_chrome(chrome, Some(smoke));
+        let archive_sha = sha256_bytes(&archive);
+
+        let current = install_stealthcdp_chromium_archive_bytes(
+            archive,
+            &root,
+            false,
+            &archive_sha,
+            &chrome_sha,
+        )
+        .unwrap();
+
+        assert!(current.join("chrome.exe").is_file());
+        assert!(current.join("manifest.json").is_file());
+        let manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(current.join("manifest.json")).unwrap())
+                .unwrap();
+        assert_eq!(manifest["schema"], "chromium-stealthcdp.artifact.v1");
+        assert_eq!(manifest["executable"]["relativePath"], "chrome.exe");
+        assert_eq!(fs::read(current.join("smoke.json")).unwrap(), smoke);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn install_stealthcdp_chromium_archive_rejects_sha_mismatch() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-stealthcdp-install-sha-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let root = dir.join("install");
+        let archive = test_zip_with_chrome(b"test chrome exe", None);
+
+        let err = install_stealthcdp_chromium_archive_bytes(
+            archive,
+            &root,
+            false,
+            "not-the-archive-sha",
+            "not-the-exe-sha",
+        )
+        .unwrap_err();
+
+        assert!(err.contains("downloaded archive sha256 mismatch"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stealthcdp_chromium_install_root_honors_env_override() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-stealthcdp-install-root-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let guard = EnvGuard::new(&["AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT"]);
+        guard.set(
+            "AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT",
+            dir.to_str().unwrap(),
+        );
+
+        assert_eq!(stealthcdp_chromium_install_root().unwrap(), dir);
     }
 
     #[tokio::test]

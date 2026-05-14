@@ -140,8 +140,15 @@ Set <code>service.defaultBrowserBuild</code> to
 <code>stealthcdp_chromium</code> only when service-owned launches should prefer
 the patched Chromium posture. If no explicit default is configured and a ready
 <code>stealthcdp_chromium</code> manifest is available, fresh installs prefer
-that build automatically. Provide the current binary location with
-<code>executablePath</code>, <code>AGENT_BROWSER_EXECUTABLE_PATH</code>, or
+that build automatically. <code>agent-browser install stealthcdp-chromium</code>
+installs the public <code>chromium-stealthcdp</code> Windows asset under
+<code>%LOCALAPPDATA%\chromium-stealthcdp</code> on Windows or the matching
+WSL-mounted <code>AppData/Local</code> directory when available, then exposes
+<code>current/manifest.json</code> and <code>current/chrome.exe</code>.
+Provide the current binary location with <code>executablePath</code>,
+<code>AGENT_BROWSER_EXECUTABLE_PATH</code>,
+<code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH</code>,
+<code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT</code>, or
 <code>service.browserBuildManifests.stealthcdp_chromium.manifestPath</code>.
 A manifest path points at a promoted artifact <code>manifest.json</code>, and
 agent-browser resolves the executable relative to that manifest before
@@ -340,7 +347,8 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_ENCRYPTION_KEY</code></td><td>64-char hex key for AES-256-GCM session encryption.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_EXTENSIONS</code></td><td>Comma-separated browser extension paths. Extensions work in both headed and headless mode.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_EXECUTABLE_PATH</code></td><td>Custom browser executable path. Overrides config and manifest-resolved executable paths.</td><td>(auto-discovered browser)</td></tr>
-    <tr><td><code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH</code></td><td>Promoted <code>stealthcdp_chromium</code> artifact manifest used to resolve the executable path when no explicit executable path is set.</td><td>(none)</td></tr>
+    <tr><td><code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH</code></td><td>Promoted <code>stealthcdp_chromium</code> artifact manifest used to resolve the executable path when no explicit executable path is set.</td><td>(auto-discovered stable install manifest when present)</td></tr>
+    <tr><td><code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT</code></td><td>Override the install and auto-discovery root for <code>agent-browser install stealthcdp-chromium</code>. The default is <code>%LOCALAPPDATA%\chromium-stealthcdp</code> on Windows or the matching WSL-mounted <code>AppData/Local</code> path.</td><td>(platform default)</td></tr>
     <tr><td><code>AGENT_BROWSER_HEADED</code></td><td>Show browser window instead of running headless (<code>1</code> to enable).</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_RUNTIME_PROFILE</code></td><td>Managed runtime profile name used for persistent browser state.</td><td><code>default</code></td></tr>
     <tr><td><code>AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH</code></td><td>Allow an operator-forced runtime profile launch when the configured profile browser family does not match the resolved browser executable family.</td><td>(disabled)</td></tr>

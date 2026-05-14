@@ -581,6 +581,16 @@ fn browser_build_manifest_configs_from_sources(
         .as_ref()
         .and_then(|service| service.browser_build_manifests.clone())
         .unwrap_or_default();
+    if !manifests.contains_key("stealthcdp_chromium") {
+        if let Some(path) = default_stealthcdp_chromium_manifest_path() {
+            manifests.insert(
+                "stealthcdp_chromium".to_string(),
+                BrowserBuildManifestConfig {
+                    manifest_path: Some(path.display().to_string()),
+                },
+            );
+        }
+    }
     if let Ok(path) = env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH") {
         manifests.insert(
             "stealthcdp_chromium".to_string(),
@@ -590,6 +600,54 @@ fn browser_build_manifest_configs_from_sources(
         );
     }
     manifests
+}
+
+fn default_stealthcdp_chromium_manifest_path() -> Option<PathBuf> {
+    if let Ok(root) = env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT") {
+        let path = PathBuf::from(root).join("current").join("manifest.json");
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
+        let path = PathBuf::from(local_app_data)
+            .join("chromium-stealthcdp")
+            .join("current")
+            .join("manifest.json");
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    find_wsl_stealthcdp_chromium_manifest_path()
+}
+
+fn find_wsl_stealthcdp_chromium_manifest_path() -> Option<PathBuf> {
+    let users_dir = Path::new("/mnt/c/Users");
+    let entries = fs::read_dir(users_dir).ok()?;
+    let mut candidates = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if matches!(
+            name.as_str(),
+            "All Users" | "Default" | "Default User" | "Public"
+        ) {
+            continue;
+        }
+        let manifest = entry
+            .path()
+            .join("AppData")
+            .join("Local")
+            .join("chromium-stealthcdp")
+            .join("current")
+            .join("manifest.json");
+        if manifest.is_file() {
+            candidates.push(manifest);
+        }
+    }
+    candidates.sort();
+    candidates.into_iter().next()
 }
 
 fn value_string(value: &Value, pointer: &str) -> Option<String> {
@@ -2253,6 +2311,77 @@ mod tests {
             launch_config["browserBuildManifests"]["stealthcdp_chromium"]["patchsetSha"],
             "patchset-sha"
         );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_default_stealthcdp_manifest_resolves_from_install_root() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-default-stealthcdp-manifest-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let home = dir.join("home");
+        let install_root = dir.join("chromium-stealthcdp");
+        let current = install_root.join("current");
+        fs::create_dir_all(&current).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        let chrome_path = current.join("chrome.exe");
+        fs::write(&chrome_path, "chrome").unwrap();
+        fs::write(
+            current.join("smoke.json"),
+            r#"{"success":true,"checks":{"navigatorWebdriver":"false"}}"#,
+        )
+        .unwrap();
+        fs::write(
+            current.join("manifest.json"),
+            r#"{
+              "schema": "chromium-stealthcdp.artifact.v1",
+              "artifactName": "150.0.7835.0+stealthcdp.test",
+              "chromeVersion": "Chromium 150.0.7835.0",
+              "chromium": { "sourceSha": "chromium-sha" },
+              "patchset": { "repoSha": "patchset-sha" },
+              "executable": { "relativePath": "chrome.exe", "sha256": "unused" },
+              "smoke": { "relativePath": "smoke.json" }
+            }"#,
+        )
+        .unwrap();
+        let config_path = dir.join("agent-browser.json");
+        fs::write(&config_path, "{}").unwrap();
+
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_EXECUTABLE_PATH",
+            "AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT",
+            "AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH",
+            "HOME",
+            "LOCALAPPDATA",
+        ]);
+        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+        guard.set(
+            "AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT",
+            install_root.to_str().unwrap(),
+        );
+        guard.remove("AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH");
+        guard.set("HOME", home.to_str().unwrap());
+        guard.remove("LOCALAPPDATA");
+
+        let flags = parse_flags(&args(&format!(
+            "--config {} service status",
+            config_path.display()
+        )));
+        let launch_config = launch_config_status(&flags);
+
+        assert_eq!(flags.executable_path.as_deref(), chrome_path.to_str());
+        assert_eq!(flags.executable_path_source.as_deref(), Some("manifest"));
+        assert_eq!(
+            flags.service_state.default_browser_build,
+            Some(BrowserBuild::StealthcdpChromium)
+        );
+        assert_eq!(launch_config["defaultBrowserBuild"], "stealthcdp_chromium");
+        assert_eq!(launch_config["stealthCdpChromiumReady"], true);
 
         let _ = fs::remove_dir_all(&dir);
     }
