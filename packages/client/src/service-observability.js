@@ -46,6 +46,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceStatusResponse} ServiceStatusResponse
  * @typedef {import('./service-observability.generated.js').ServiceTabsResponse} ServiceTabsResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceResponse} ServiceTraceResponse
+ * @typedef {import('./service-observability.generated.js').ServiceTraceAttentionSummary} ServiceTraceAttentionSummary
  * @typedef {import('./service-observability.generated.js').ServiceLoginProfileRegistrationOptions} ServiceLoginProfileRegistrationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
@@ -526,6 +527,66 @@ export function summarizeServiceAccessPlanMonitorRunDue({ accessPlan, monitorRun
     failed,
     recommendedAction,
     matchingResults,
+  };
+}
+
+/**
+ * Summarize UI-neutral trace-context attention rows for software clients.
+ *
+ * @param {ServiceTraceResponse | null | undefined} trace
+ * @returns {ServiceTraceAttentionSummary}
+ */
+export function summarizeServiceTraceAttention(trace) {
+  const contexts = Array.isArray(trace?.summary?.contexts) ? trace.summary.contexts : [];
+  const attentionContexts = contexts
+    .map((context) => {
+      const attention = context?.attention;
+      if (!attention || typeof attention !== 'object' || Array.isArray(attention)) {
+        return null;
+      }
+      return {
+        serviceName: context.serviceName ?? null,
+        agentName: context.agentName ?? null,
+        taskName: context.taskName ?? null,
+        browserId: context.browserId ?? null,
+        profileId: context.profileId ?? null,
+        sessionId: context.sessionId ?? null,
+        eventCount: context.eventCount ?? 0,
+        jobCount: context.jobCount ?? 0,
+        incidentCount: context.incidentCount ?? 0,
+        activityCount: context.activityCount ?? 0,
+        attention,
+      };
+    })
+    .filter((context) => context?.attention?.required === true);
+  const ownerCounts = attentionContexts.reduce(
+    (counts, context) => {
+      if (context.attention.owner === 'operator') {
+        counts.operator += 1;
+      } else if (context.attention.owner === 'service') {
+        counts.service += 1;
+      }
+      return counts;
+    },
+    { operator: 0, service: 0 },
+  );
+
+  return {
+    required: attentionContexts.length > 0,
+    requiredCount: attentionContexts.length,
+    operatorRequiredCount: ownerCounts.operator,
+    serviceRequiredCount: ownerCounts.service,
+    requiresOperator: ownerCounts.operator > 0,
+    requiresService: ownerCounts.service > 0,
+    highestSeverity: highestTraceAttentionSeverity(attentionContexts),
+    reasons: uniqueStrings(attentionContexts.map((context) => context.attention.reason)),
+    suggestedActions: uniqueStrings(
+      attentionContexts.flatMap((context) =>
+        Array.isArray(context.attention.suggestedActions) ? context.attention.suggestedActions : [],
+      ),
+    ),
+    messages: uniqueStrings(attentionContexts.map((context) => context.attention.message)),
+    contexts: attentionContexts,
   };
 }
 
@@ -1640,4 +1701,19 @@ function firstMatchingProfileValue(profile, identities, field) {
  */
 function uniqueStrings(values) {
   return [...new Set(values.flatMap((value) => (typeof value === 'string' && value.length > 0 ? [value] : [])))];
+}
+
+/**
+ * @param {Array<{ attention: { severity?: unknown } }>} contexts
+ * @returns {'none' | 'info' | 'warning' | string}
+ */
+function highestTraceAttentionSeverity(contexts) {
+  const severities = contexts.map((context) => context.attention.severity);
+  if (severities.includes('warning')) {
+    return 'warning';
+  }
+  if (severities.includes('info')) {
+    return 'info';
+  }
+  return 'none';
 }

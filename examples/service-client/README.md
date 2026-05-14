@@ -249,6 +249,10 @@ complete, closed but unverified, verified fresh, failed, or abandoned states.
 The summary comes from `summarizeServiceProfileReadiness()` in
 `@agent-browser/client/service-observability`, so clients can reuse the same
 logic without copying this example.
+For trace review, use `summarizeServiceTraceAttention()` on the
+`getServiceTrace()` response. It rolls up trace-context attention into required
+operator follow-up, service labeling follow-up, reasons, suggested actions,
+messages, and affected contexts without copying dashboard logic.
 
 When a client has just completed a bounded auth probe for an existing managed
 profile, pass the probe result back to agent-browser instead of editing profile

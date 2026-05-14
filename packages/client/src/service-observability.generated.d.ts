@@ -892,6 +892,36 @@ export interface ServiceTraceResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceTraceAttentionContextSummary {
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  browserId: string | null;
+  profileId: string | null;
+  sessionId: string | null;
+  eventCount: number;
+  jobCount: number;
+  incidentCount: number;
+  activityCount: number;
+  attention: ServiceTraceContextAttention;
+  [key: string]: unknown;
+}
+
+export interface ServiceTraceAttentionSummary {
+  required: boolean;
+  requiredCount: number;
+  operatorRequiredCount: number;
+  serviceRequiredCount: number;
+  requiresOperator: boolean;
+  requiresService: boolean;
+  highestSeverity: 'none' | 'info' | 'warning' | string;
+  reasons: string[];
+  suggestedActions: string[];
+  messages: string[];
+  contexts: ServiceTraceAttentionContextSummary[];
+  [key: string]: unknown;
+}
+
 export interface ServiceObservabilityHttpOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
@@ -1541,6 +1571,8 @@ export declare function summarizeServiceAccessPlanMonitorRunDue(options: {
   accessPlan: ServiceAccessPlanResponse;
   monitorRunDue: ServiceMonitorRunDueResponse;
 }): ServiceAccessPlanMonitorRunDueSummary;
+/** Summarize UI-neutral trace-context attention rows for software clients. */
+export declare function summarizeServiceTraceAttention(trace?: ServiceTraceResponse | null): ServiceTraceAttentionSummary;
 export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;

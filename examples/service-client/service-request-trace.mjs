@@ -6,6 +6,7 @@ import {
   acquireServiceLoginProfile,
   cancelServiceJob,
   getServiceTrace,
+  summarizeServiceTraceAttention,
 } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://example.com';
@@ -246,6 +247,7 @@ export async function runServiceWorkflow({
       jobs: trace.counts.jobs,
       incidents: trace.counts.incidents,
       activity: trace.counts.activity,
+      attention: summarizeServiceTraceAttention(trace),
     },
     latestJobs: trace.jobs.slice(-5).map((/** @type {import('@agent-browser/client/service-observability').ServiceJobRecord} */ job) => ({
       id: job.id,

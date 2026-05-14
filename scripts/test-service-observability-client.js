@@ -26,6 +26,7 @@ import {
   runServiceAccessPlanPostSeedingProbe,
   summarizeServiceAccessPlanMonitorRunDue,
   summarizeServiceProfileReadiness,
+  summarizeServiceTraceAttention,
   triageServiceMonitor,
   updateServiceProfileFreshness,
   updateServiceProfileSeedingHandoff,
@@ -1485,9 +1486,9 @@ async function main() {
       incidents: [],
       activity: [],
       summary: {
-        contextCount: 0,
-        hasTraceContext: false,
-        namingWarningCount: 0,
+        contextCount: 2,
+        hasTraceContext: true,
+        namingWarningCount: 1,
         profileLeaseWaits: {
           count: 1,
           activeCount: 0,
@@ -1508,7 +1509,60 @@ async function main() {
             },
           ],
         },
-        contexts: [],
+        contexts: [
+          {
+            serviceName: 'JournalDownloader',
+            agentName: 'agent-a',
+            taskName: 'probeACSwebsite',
+            browserId: 'browser-1',
+            profileId: 'profile-1',
+            sessionId: 'session-1',
+            eventCount: 1,
+            jobCount: 1,
+            incidentCount: 1,
+            activityCount: 1,
+            targetIdentityCount: 1,
+            targetServiceIds: ['acs'],
+            controlPlaneModes: ['cdp'],
+            lifecycleOnlyJobCount: 0,
+            attention: {
+              required: true,
+              owner: 'operator',
+              severity: 'warning',
+              reason: 'incidents_present',
+              message: 'Trace context has retained incidents.',
+              suggestedActions: ['inspect_incidents', 'review_trace_activity'],
+              presentation: 'client_decides',
+            },
+            latestTimestamp: '2026-04-25T12:00:15Z',
+          },
+          {
+            serviceName: null,
+            agentName: null,
+            taskName: null,
+            browserId: null,
+            profileId: 'profile-1',
+            sessionId: null,
+            eventCount: 0,
+            jobCount: 1,
+            incidentCount: 0,
+            activityCount: 0,
+            targetIdentityCount: 0,
+            targetServiceIds: [],
+            controlPlaneModes: ['service'],
+            lifecycleOnlyJobCount: 1,
+            attention: {
+              required: true,
+              owner: 'service',
+              severity: 'info',
+              reason: 'missing_caller_label',
+              message: 'Trace context is missing service, agent, or task labels.',
+              suggestedActions: ['include_service_name', 'include_agent_name', 'include_task_name'],
+              presentation: 'client_decides',
+            },
+            latestTimestamp: '2026-04-25T12:00:10Z',
+          },
+        ],
       },
       counts: {
         events: 0,
@@ -1547,6 +1601,36 @@ async function main() {
   assert.equal(traceResult.summary.profileLeaseWaits.completedCount, 1);
   assert.equal(traceResult.summary.profileLeaseWaits.waits[0].jobId, 'job-wait-complete');
   assert.equal(traceResult.summary.profileLeaseWaits.waits[0].waitedMs, 5000);
+  const traceAttention = summarizeServiceTraceAttention(traceResult);
+  assert.equal(traceAttention.required, true);
+  assert.equal(traceAttention.requiredCount, 2);
+  assert.equal(traceAttention.operatorRequiredCount, 1);
+  assert.equal(traceAttention.serviceRequiredCount, 1);
+  assert.equal(traceAttention.requiresOperator, true);
+  assert.equal(traceAttention.requiresService, true);
+  assert.equal(traceAttention.highestSeverity, 'warning');
+  assert.deepEqual(traceAttention.reasons, ['incidents_present', 'missing_caller_label']);
+  assert.deepEqual(traceAttention.suggestedActions, [
+    'inspect_incidents',
+    'review_trace_activity',
+    'include_service_name',
+    'include_agent_name',
+    'include_task_name',
+  ]);
+  assert.equal(traceAttention.contexts[0].serviceName, 'JournalDownloader');
+  assert.deepEqual(summarizeServiceTraceAttention(null), {
+    required: false,
+    requiredCount: 0,
+    operatorRequiredCount: 0,
+    serviceRequiredCount: 0,
+    requiresOperator: false,
+    requiresService: false,
+    highestSeverity: 'none',
+    reasons: [],
+    suggestedActions: [],
+    messages: [],
+    contexts: [],
+  });
 
   assert.throws(
     () =>

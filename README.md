@@ -1825,7 +1825,7 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 `getServiceProfileSeedingHandoff`, `updateServiceProfileSeedingHandoff`,
 `summarizeServiceProfileReadiness`, `findServiceProfileForIdentity`,
 `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`,
-`summarizeServiceAccessPlanMonitorRunDue`, `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
+`summarizeServiceAccessPlanMonitorRunDue`, `summarizeServiceTraceAttention`, `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 including optional freshness fields such as `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`,
@@ -1835,6 +1835,10 @@ including optional freshness fields such as `readinessState`,
 operator remedy helpers for job cancel, browser retry, and incident handling,
 `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`,
 `getServiceIncident`, `getServiceIncidentActivity`, and `getServiceTrace`.
+Use `summarizeServiceTraceAttention()` on a `getServiceTrace()` response to
+roll up required trace-context attention, operator-owned follow-up, service
+labeling follow-up, reasons, suggested actions, messages, and affected
+contexts without copying dashboard logic into software clients.
 Declarations are generated from the matching service contract schemas.
 
 Software clients should treat agent-browser as the profile broker. A client
