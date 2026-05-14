@@ -540,6 +540,300 @@ fn apply_service_profile_selection(
     Some(selection.reason)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BrowserCapabilityLaunchSelection {
+    binding_id: String,
+    host_id: String,
+    executable_id: String,
+    capability_id: Option<String>,
+    executable_path: String,
+}
+
+fn apply_service_browser_capability_selection(
+    options: &mut LaunchOptions,
+    cmd: &Value,
+) -> Option<BrowserCapabilityLaunchSelection> {
+    if options.executable_path.is_some() || cmd.get("executablePath").is_some() {
+        return None;
+    }
+    let browser_build = browser_build_from_command(cmd)?;
+    let repository = LockedServiceStateRepository::default_json().ok()?;
+    let service_state = repository.load_snapshot().ok()?;
+    let profile_id = service_profile_id(
+        options.profile.as_deref(),
+        options.runtime_profile.as_deref(),
+    );
+    let selection = select_browser_capability_launch_binding(
+        &service_state,
+        cmd,
+        browser_build,
+        profile_id.as_deref(),
+        options.headless,
+        options.manual_login,
+    )?;
+    options.executable_path = Some(selection.executable_path.clone());
+    Some(selection)
+}
+
+fn select_browser_capability_launch_binding(
+    service_state: &ServiceState,
+    cmd: &Value,
+    browser_build: BrowserBuild,
+    profile_id: Option<&str>,
+    headless: bool,
+    cdp_free: bool,
+) -> Option<BrowserCapabilityLaunchSelection> {
+    let registry = &service_state.browser_capability_registry;
+    let browser_build_label = browser_build_label(browser_build);
+    let binding = registry
+        .browser_preference_bindings
+        .iter()
+        .filter(|binding| {
+            preference_binding_matches_launch_command(binding, cmd, Some(browser_build_label))
+        })
+        .max_by(|left, right| {
+            preference_binding_rank(left, cmd).cmp(&preference_binding_rank(right, cmd))
+        })?;
+    let binding_id = registry_string_field(binding, "id")?;
+    let executable_id = registry_string_field(binding, "preferredExecutableId")?;
+    let executable = registry.browser_executables.iter().find(|candidate| {
+        registry_string_field(candidate, "id").as_deref() == Some(executable_id.as_str())
+            && registry_string_field(candidate, "buildLabel").as_deref()
+                == Some(browser_build_label)
+    })?;
+    let executable_path = registry_string_field(executable, "executablePath")?;
+    if !PathBuf::from(&executable_path).is_file() {
+        return None;
+    }
+    let host_id = registry_string_field(binding, "preferredHostId")
+        .or_else(|| registry_string_field(executable, "hostId"))?;
+    let host = registry.browser_hosts.iter().find(|candidate| {
+        registry_string_field(candidate, "id").as_deref() == Some(host_id.as_str())
+    })?;
+    if registry_string_field(host, "hostKind").as_deref() != Some("local")
+        || host.get("reachable").and_then(Value::as_bool) != Some(true)
+        || registry_string_field(host, "lifecycleOwner").as_deref() != Some("agent_browser")
+    {
+        return None;
+    }
+    let capability_id = registry_string_field(binding, "preferredCapabilityId");
+    let capability = capability_id
+        .as_ref()
+        .and_then(|id| {
+            registry.browser_capabilities.iter().find(|candidate| {
+                registry_string_field(candidate, "id").as_deref() == Some(id.as_str())
+            })
+        })
+        .or_else(|| {
+            registry.browser_capabilities.iter().find(|candidate| {
+                registry_string_field(candidate, "executableId").as_deref()
+                    == Some(executable_id.as_str())
+                    && registry_string_field(candidate, "hostId").as_deref()
+                        == Some(host_id.as_str())
+            })
+        })?;
+    let capability_id = capability_id.or_else(|| registry_string_field(capability, "id"));
+    if registry_string_field(capability, "executableId").as_deref() != Some(executable_id.as_str())
+    {
+        return None;
+    }
+    if headless {
+        if capability.get("headlessSupported").and_then(Value::as_bool) != Some(true) {
+            return None;
+        }
+    } else if capability.get("headedSupported").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    if cdp_free {
+        if capability
+            .get("cdpFreeLaunchSupported")
+            .and_then(Value::as_bool)
+            != Some(true)
+        {
+            return None;
+        }
+    } else if capability.get("cdpSupported").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    if !profile_is_compatible_with_registry_executable(
+        service_state,
+        profile_id,
+        &host_id,
+        &executable_id,
+    ) {
+        return None;
+    }
+    if !registry_has_passed_validation(
+        service_state,
+        &host_id,
+        &executable_id,
+        capability_id.as_deref(),
+        cdp_free,
+    ) {
+        return None;
+    }
+    Some(BrowserCapabilityLaunchSelection {
+        binding_id,
+        host_id,
+        executable_id,
+        capability_id,
+        executable_path,
+    })
+}
+
+fn browser_build_label(browser_build: BrowserBuild) -> &'static str {
+    match browser_build {
+        BrowserBuild::StockChrome => "stock_chrome",
+        BrowserBuild::StealthcdpChromium => "stealthcdp_chromium",
+        BrowserBuild::CdpFreeHeaded => "cdp_free_headed",
+    }
+}
+
+fn profile_is_compatible_with_registry_executable(
+    service_state: &ServiceState,
+    profile_id: Option<&str>,
+    host_id: &str,
+    executable_id: &str,
+) -> bool {
+    let Some(profile_id) = profile_id else {
+        return true;
+    };
+    service_state
+        .browser_capability_registry
+        .profile_compatibility
+        .iter()
+        .any(|compatibility| {
+            registry_string_field(compatibility, "profileId").as_deref() == Some(profile_id)
+                && registry_string_field(compatibility, "hostId").as_deref() == Some(host_id)
+                && registry_string_field(compatibility, "executableId").as_deref()
+                    == Some(executable_id)
+                && compatibility.get("compatible").and_then(Value::as_bool) == Some(true)
+                && compatibility
+                    .get("requiresOperatorOverride")
+                    .and_then(Value::as_bool)
+                    != Some(true)
+        })
+}
+
+fn registry_has_passed_validation(
+    service_state: &ServiceState,
+    host_id: &str,
+    executable_id: &str,
+    capability_id: Option<&str>,
+    cdp_free: bool,
+) -> bool {
+    service_state
+        .browser_capability_registry
+        .validation_evidence
+        .iter()
+        .any(|evidence| {
+            registry_string_field(evidence, "hostId").as_deref() == Some(host_id)
+                && registry_string_field(evidence, "executableId").as_deref() == Some(executable_id)
+                && capability_id.is_none_or(|capability_id| {
+                    registry_string_field(evidence, "capabilityId").as_deref()
+                        == Some(capability_id)
+                })
+                && evidence.get("state").and_then(Value::as_str) == Some("passed")
+                && validation_kind_matches_launch(evidence, cdp_free)
+        })
+}
+
+fn validation_kind_matches_launch(evidence: &Value, cdp_free: bool) -> bool {
+    matches!(
+        evidence.get("kind").and_then(Value::as_str),
+        Some("launch")
+            | Some("site_reliability")
+            | Some("cdp_attach") if !cdp_free
+    ) || cdp_free
+        && matches!(
+            evidence.get("kind").and_then(Value::as_str),
+            Some("launch") | Some("cdp_free_launch") | Some("site_reliability")
+        )
+}
+
+fn preference_binding_matches_launch_command(
+    binding: &Value,
+    cmd: &Value,
+    browser_build_label: Option<&str>,
+) -> bool {
+    let browser_build_matches = browser_build_label.is_none_or(|label| {
+        registry_string_field(binding, "browserBuild")
+            .as_deref()
+            .is_none_or(|build| build == label)
+    });
+    let identity_matches = registry_string_field(binding, "scope").as_deref() == Some("global")
+        || registry_array_field_intersects(
+            binding,
+            "targetServiceIds",
+            &target_service_ids_from_command(cmd),
+        )
+        || registry_array_field_intersects(binding, "accountIds", &account_ids_from_command(cmd))
+        || optional_command_string(cmd, "serviceName").is_some_and(|service_name| {
+            registry_array_field_contains(binding, "serviceNames", &service_name)
+        })
+        || optional_command_string(cmd, "taskName").is_some_and(|task_name| {
+            registry_array_field_contains(binding, "taskNames", &task_name)
+        });
+    browser_build_matches && identity_matches
+}
+
+fn preference_binding_rank(binding: &Value, cmd: &Value) -> (i64, i64, String) {
+    let priority = binding
+        .get("priority")
+        .and_then(Value::as_i64)
+        .unwrap_or_default();
+    let specificity = i64::from(registry_array_field_intersects(
+        binding,
+        "accountIds",
+        &account_ids_from_command(cmd),
+    )) * 16
+        + i64::from(registry_array_field_intersects(
+            binding,
+            "targetServiceIds",
+            &target_service_ids_from_command(cmd),
+        )) * 8
+        + i64::from(
+            optional_command_string(cmd, "serviceName").is_some_and(|service_name| {
+                registry_array_field_contains(binding, "serviceNames", &service_name)
+            }),
+        ) * 4
+        + i64::from(
+            optional_command_string(cmd, "taskName").is_some_and(|task_name| {
+                registry_array_field_contains(binding, "taskNames", &task_name)
+            }),
+        ) * 2
+        + i64::from(registry_string_field(binding, "scope").as_deref() != Some("global"));
+    let id = registry_string_field(binding, "id").unwrap_or_default();
+    (priority, specificity, id)
+}
+
+fn registry_string_field(value: &Value, field: &str) -> Option<String> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn registry_array_field_contains(value: &Value, field: &str, expected: &str) -> bool {
+    value
+        .get(field)
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|item| item == expected)
+        })
+}
+
+fn registry_array_field_intersects(value: &Value, field: &str, expected: &[String]) -> bool {
+    expected
+        .iter()
+        .any(|item| registry_array_field_contains(value, field, item))
+}
+
 fn close_behavior_for_attached_browser(
     runtime_attach_managed: bool,
     leave_open: bool,
@@ -3090,6 +3384,8 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         attachable: false,
     };
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
+    let _browser_capability_selection =
+        apply_service_browser_capability_selection(&mut launch_options, cmd);
     let metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
     ensure_service_profile_lease_available(&metadata, &state.session_id, cmd).await?;
@@ -3519,6 +3815,8 @@ fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> 
         attachable: false,
     };
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
+    let _browser_capability_selection =
+        apply_service_browser_capability_selection(&mut launch_options, cmd);
     let metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
 
@@ -10815,8 +11113,8 @@ mod tests {
         assert_service_site_policy_upsert_response_contract,
         assert_service_status_response_contract, assert_service_trace_activity_record_contract,
         assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
-        service_job_naming_warning_values, BrowserProcess, BrowserProfile, BrowserSession,
-        ProfileSeedingHandoffState,
+        service_job_naming_warning_values, BrowserCapabilityRegistry, BrowserProcess,
+        BrowserProfile, BrowserSession, ProfileSeedingHandoffState,
     };
     use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -10958,6 +11256,175 @@ mod tests {
         assert!(selected.is_none());
         assert_eq!(options.profile.as_deref(), Some("/tmp/explicit-profile"));
         assert!(options.runtime_profile.is_none());
+    }
+
+    #[test]
+    fn test_apply_service_browser_capability_selection_sets_validated_executable() {
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_EXECUTABLE_PATH"]);
+        let home = unique_socket_dir("browser-capability-launch-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+        let executable = home.join("chrome");
+        fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
+
+        JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+            .save(&ServiceState {
+                browser_capability_registry: BrowserCapabilityRegistry {
+                    browser_hosts: vec![json!({
+                        "id": "linux-local",
+                        "hostKind": "local",
+                        "reachable": true,
+                        "lifecycleOwner": "agent_browser"
+                    })],
+                    browser_executables: vec![json!({
+                        "id": "stealth-current",
+                        "hostId": "linux-local",
+                        "buildLabel": "stealthcdp_chromium",
+                        "executablePath": executable.display().to_string()
+                    })],
+                    browser_capabilities: vec![json!({
+                        "id": "stealth-capability",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "cdpSupported": true,
+                        "cdpFreeLaunchSupported": true,
+                        "headedSupported": true,
+                        "headlessSupported": true
+                    })],
+                    profile_compatibility: vec![json!({
+                        "id": "stealth-profile-compatible",
+                        "profileId": "stealth-profile",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "compatible": true,
+                        "requiresOperatorOverride": false
+                    })],
+                    browser_preference_bindings: vec![json!({
+                        "id": "canary-stealth-default",
+                        "scope": "site",
+                        "targetServiceIds": ["canary-site"],
+                        "preferredHostId": "linux-local",
+                        "preferredExecutableId": "stealth-current",
+                        "preferredCapabilityId": "stealth-capability",
+                        "browserBuild": "stealthcdp_chromium",
+                        "priority": 50
+                    })],
+                    validation_evidence: vec![json!({
+                        "id": "stealth-launch-smoke",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "capabilityId": "stealth-capability",
+                        "kind": "launch",
+                        "state": "passed"
+                    })],
+                    ..BrowserCapabilityRegistry::default()
+                },
+                ..ServiceState::default()
+            })
+            .expect("service state should be persisted");
+
+        let mut options = LaunchOptions {
+            runtime_profile: Some("stealth-profile".to_string()),
+            ..LaunchOptions::default()
+        };
+        let selection = apply_service_browser_capability_selection(
+            &mut options,
+            &json!({
+                "serviceName": "CanaryRunner",
+                "targetServiceId": "canary-site",
+                "browserBuild": "stealthcdp_chromium"
+            }),
+        )
+        .expect("validated local binding should be selected");
+
+        assert_eq!(selection.binding_id, "canary-stealth-default");
+        assert_eq!(selection.executable_id, "stealth-current");
+        assert_eq!(
+            options.executable_path.as_deref(),
+            Some(executable.to_str().expect("path should be utf-8"))
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_apply_service_browser_capability_selection_requires_compatibility() {
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_EXECUTABLE_PATH"]);
+        let home = unique_socket_dir("browser-capability-incompatible-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+        let executable = home.join("chrome");
+        fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
+
+        JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+            .save(&ServiceState {
+                browser_capability_registry: BrowserCapabilityRegistry {
+                    browser_hosts: vec![json!({
+                        "id": "linux-local",
+                        "hostKind": "local",
+                        "reachable": true,
+                        "lifecycleOwner": "agent_browser"
+                    })],
+                    browser_executables: vec![json!({
+                        "id": "stealth-current",
+                        "hostId": "linux-local",
+                        "buildLabel": "stealthcdp_chromium",
+                        "executablePath": executable.display().to_string()
+                    })],
+                    browser_capabilities: vec![json!({
+                        "id": "stealth-capability",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "cdpSupported": true,
+                        "headedSupported": true,
+                        "headlessSupported": true
+                    })],
+                    profile_compatibility: vec![json!({
+                        "id": "chrome-profile-incompatible",
+                        "profileId": "chrome-profile",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "compatible": false,
+                        "requiresOperatorOverride": true
+                    })],
+                    browser_preference_bindings: vec![json!({
+                        "id": "canary-stealth-default",
+                        "scope": "site",
+                        "targetServiceIds": ["canary-site"],
+                        "preferredHostId": "linux-local",
+                        "preferredExecutableId": "stealth-current",
+                        "preferredCapabilityId": "stealth-capability",
+                        "browserBuild": "stealthcdp_chromium",
+                        "priority": 50
+                    })],
+                    validation_evidence: vec![json!({
+                        "id": "stealth-launch-smoke",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "capabilityId": "stealth-capability",
+                        "kind": "launch",
+                        "state": "passed"
+                    })],
+                    ..BrowserCapabilityRegistry::default()
+                },
+                ..ServiceState::default()
+            })
+            .expect("service state should be persisted");
+
+        let mut options = LaunchOptions {
+            runtime_profile: Some("chrome-profile".to_string()),
+            ..LaunchOptions::default()
+        };
+        let selection = apply_service_browser_capability_selection(
+            &mut options,
+            &json!({
+                "targetServiceId": "canary-site",
+                "browserBuild": "stealthcdp_chromium"
+            }),
+        );
+
+        assert!(selection.is_none());
+        assert!(options.executable_path.is_none());
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]

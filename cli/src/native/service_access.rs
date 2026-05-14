@@ -609,20 +609,22 @@ fn preference_binding_matches_access_request(
     request: &ServiceAccessPlanRequest,
     browser_build_label: Option<&str>,
 ) -> bool {
-    string_field(binding, "scope").as_deref() == Some("global")
-        || browser_build_label.is_some_and(|label| {
-            string_field(binding, "browserBuild").is_some_and(|build| build == label)
-        })
+    let browser_build_matches = browser_build_label.is_none_or(|label| {
+        string_field(binding, "browserBuild")
+            .as_deref()
+            .is_none_or(|build| build == label)
+    });
+    let identity_matches = string_field(binding, "scope").as_deref() == Some("global")
         || array_field_intersects(binding, "targetServiceIds", &request.target_service_ids)
         || array_field_intersects(binding, "accountIds", &request.account_ids)
-        || request
-            .service_name
-            .as_ref()
-            .is_some_and(|service_name| array_field_contains(binding, "serviceNames", service_name))
+        || request.service_name.as_ref().is_some_and(|service_name| {
+            array_field_contains(binding, "serviceNames", service_name)
+        })
         || request
             .task_name
             .as_ref()
-            .is_some_and(|task_name| array_field_contains(binding, "taskNames", task_name))
+            .is_some_and(|task_name| array_field_contains(binding, "taskNames", task_name));
+    browser_build_matches && identity_matches
 }
 
 fn preferred_registry_binding_for_access_request(

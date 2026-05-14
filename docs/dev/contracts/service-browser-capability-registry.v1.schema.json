@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.local/contracts/service-browser-capability-registry.v1.schema.json",
   "title": "agent-browser service browser capability registry draft",
-  "description": "Draft runtime contract for advisory browser host, executable, capability, profile compatibility, preference binding, and validation evidence records. Runtime surfaces expose this through service_state.browserCapabilityRegistry, HTTP GET /api/service/browser-capability-registry, MCP agent-browser://browser-capability-registry, and generated service-observability clients. Access-plan recommendations can consume preference bindings for browser build selection when no explicit, site-policy, or profile browser build has already won, but scheduler launch routing does not consume the registry directly yet.",
+  "description": "Draft runtime contract for advisory browser host, executable, capability, profile compatibility, preference binding, and validation evidence records. Runtime surfaces expose this through service_state.browserCapabilityRegistry, HTTP GET /api/service/browser-capability-registry, MCP agent-browser://browser-capability-registry, and generated service-observability clients. Access-plan recommendations can consume preference bindings for browser build selection when no explicit, site-policy, or profile browser build has already won. Launch routing may apply a matching local executable only after host ownership, executable existence, profile compatibility, and validation evidence gates pass.",
   "type": "object",
   "required": [
     "browserHosts",

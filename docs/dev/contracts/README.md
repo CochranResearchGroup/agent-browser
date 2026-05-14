@@ -81,8 +81,10 @@ build, selected profile, target identities, account identities, and caller
 labels. It remains advisory, but preference bindings can set the access-plan
 browser build recommendation when no explicit request, site policy, or profile
 browser build has already won. In that case it reports `routingApplied: true`
-with `routingScope: "access_plan_recommendation"`. Scheduler launch routing
-does not consume the registry directly yet. Access-plan
+with `routingScope: "access_plan_recommendation"`. The queued launch path may
+apply the matching local executable only after host ownership, executable
+existence, profile compatibility, and validation evidence gates pass.
+Access-plan
 `monitorFindings` reports active
 `profile_readiness` monitor incidents for the requested target identities, and
 `decision.monitorAttentionRequired` mirrors whether those findings need
@@ -236,11 +238,13 @@ The draft record groups are:
   CDP-free launch, extension availability, profile reuse, streaming, and
   site-specific reliability
 
-Do not make scheduler launch-routing decisions from this draft until a later
-implementation slice graduates the registry from advisory inventory to
-authoritative launch policy. Access-plan recommendation code may consume
-`browserPreferenceBindings` for browser build selection when no explicit
-request, site policy, or profile browser build has already won.
+Do not use the registry as unrestricted launch policy. Access-plan
+recommendation code may consume `browserPreferenceBindings` for browser build
+selection when no explicit request, site policy, or profile browser build has
+already won. The launch path may apply a matching local executable from that
+planned request only when the host is local, reachable, and agent-browser owned,
+the executable exists, the selected profile has a positive compatibility row
+when a profile is selected, and matching validation evidence has passed.
 
 `examples/browser-capability-registry.sample.json` shows the intended shape for
 a local Linux `stealthcdp_chromium` default plus a future Windows

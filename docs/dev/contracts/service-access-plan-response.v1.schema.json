@@ -330,7 +330,7 @@
       }
     },
     "browserCapabilityEvidence": {
-      "description": "Advisory browser capability registry evidence relevant to this access-plan request. Preference bindings can influence the access-plan browser build recommendation when no explicit, site-policy, or profile browser build has already won; scheduler launch routing does not consume the registry directly yet.",
+      "description": "Advisory browser capability registry evidence relevant to this access-plan request. Preference bindings can influence the access-plan browser build recommendation when no explicit, site-policy, or profile browser build has already won. The launch path may apply the matching local executable only when host ownership, executable existence, profile compatibility, and validation evidence gates pass.",
       "type": "object",
       "required": [
         "advisory",
