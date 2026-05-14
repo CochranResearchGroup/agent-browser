@@ -80,8 +80,16 @@ function selectRecommendations(files, base) {
     add('cargo clippy --manifest-path cli/Cargo.toml -- -D warnings', 'Rust Quality CI gate');
   }
 
-  if (files.some((file) => file.startsWith('cli/src/'))) {
-    add('cargo test --manifest-path cli/Cargo.toml <focused-filter> -- --test-threads=1', 'Rust source changed; replace <focused-filter> with the touched module or contract test');
+  const focusedRustTests = focusedRustTestCommands(files);
+  if (focusedRustTests.length > 0) {
+    for (const { command, reason } of focusedRustTests) {
+      add(command, reason);
+    }
+  } else if (files.some((file) => file.startsWith('cli/src/'))) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml <focused-filter> -- --test-threads=1',
+      'Rust source changed; replace <focused-filter> with the touched module or contract test',
+    );
   }
 
   if (files.some(isServiceContractSurface)) {
@@ -188,6 +196,59 @@ function isBrowserCapabilityRegistryDraftSurface(file) {
     file === 'docs/dev/contracts/examples/browser-capability-registry.sample.json' ||
     file === 'scripts/smoke-browser-capability-registry-draft.js'
   );
+}
+
+function focusedRustTestCommands(files) {
+  const checks = [];
+  const add = (command, reason) => {
+    if (!checks.some((check) => check.command === command)) {
+      checks.push({ command, reason });
+    }
+  };
+
+  if (files.includes('cli/src/native/service_model.rs')) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1',
+      'service model wire-shape and contract fixtures changed',
+    );
+  }
+
+  if (files.includes('cli/src/native/service_access.rs')) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1',
+      'access-plan decision model changed',
+    );
+  }
+
+  if (files.includes('cli/src/native/service_health.rs')) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1',
+      'browser health, recovery, or launch event model changed',
+    );
+  }
+
+  if (files.includes('cli/src/native/service_contracts.rs')) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1',
+      'service contract metadata changed',
+    );
+  }
+
+  if (files.includes('cli/src/native/service_config.rs')) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml service_config -- --test-threads=1',
+      'service config mutation model changed',
+    );
+  }
+
+  if (files.includes('cli/src/native/service_monitors.rs')) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml service_monitors -- --test-threads=1',
+      'service monitor state or run-due logic changed',
+    );
+  }
+
+  return checks;
 }
 
 function mapChecks(checks) {
