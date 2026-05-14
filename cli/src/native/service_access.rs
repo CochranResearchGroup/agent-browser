@@ -870,9 +870,11 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     );
     let monitor_run_due =
         monitor_run_due_decision(input.request, monitor_findings, profile_readiness_probe_due);
+    let attention = attention_decision(recommended_action);
 
     json!({
         "recommendedAction": recommended_action,
+        "attention": attention,
         "browserHost": launch_posture.browser_host,
         "launchPosture": launch_posture.value,
         "interactionMode": site_policy.map(|policy| policy.interaction_mode),
@@ -897,6 +899,96 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "namingWarnings": naming_warnings,
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
+    })
+}
+
+/// Summarize who should act next without prescribing a UI presentation.
+fn attention_decision(recommended_action: &str) -> Value {
+    let (required, owner, severity, title, message, suggested_actions) = match recommended_action {
+        "deny_request_by_site_policy" => (
+            true,
+            "operator",
+            "blocking",
+            "Request denied by site policy",
+            "The selected site policy or retained challenge denies this browser request.",
+            vec!["review_site_policy", "resolve_or_acknowledge_challenge"],
+        ),
+        "seed_profile_before_authenticated_work"
+        | "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable" => (
+            true,
+            "operator",
+            "blocking",
+            "Profile needs detached seeding",
+            "Launch the profile without CDP, complete sign-in or setup, close the browser, then run the post-seeding probe.",
+            vec!["launch_detached_seeding", "close_seeded_browser", "run_post_seeding_probe"],
+        ),
+        "request_manual_challenge_approval" | "manual_intervention_required" => (
+            true,
+            "operator",
+            "blocking",
+            "Manual challenge intervention required",
+            "A retained challenge requires human approval or manual recovery before browser work should continue.",
+            vec!["inspect_challenge", "approve_or_resolve_challenge"],
+        ),
+        "wait_for_or_invoke_challenge_provider" => (
+            true,
+            "provider",
+            "warning",
+            "Challenge provider should act",
+            "A retained challenge is waiting for an enabled provider or provider-backed workflow.",
+            vec!["invoke_challenge_provider", "poll_challenge_state"],
+        ),
+        "register_or_seed_managed_profile" => (
+            true,
+            "operator",
+            "blocking",
+            "Managed profile required",
+            "The selected site policy requires a managed profile, but no matching profile is registered.",
+            vec!["register_managed_profile", "seed_profile_if_needed"],
+        ),
+        "register_managed_profile_or_request_throwaway_browser" => (
+            true,
+            "client",
+            "warning",
+            "No matching profile selected",
+            "No matching managed profile was found; the caller should register one or explicitly request throwaway browser behavior.",
+            vec!["register_managed_profile", "request_throwaway_browser"],
+        ),
+        "probe_target_auth_or_reseed_if_needed" | "verify_or_seed_profile_before_authenticated_work" => (
+            true,
+            "service",
+            "warning",
+            "Profile freshness needs verification",
+            "Run a bounded auth probe for the selected target identity before relying on authenticated automation.",
+            vec!["run_bounded_auth_probe", "update_profile_freshness", "seed_profile_if_probe_fails"],
+        ),
+        "run_due_profile_readiness_monitor" => (
+            true,
+            "service",
+            "warning",
+            "Profile-readiness monitor is due",
+            "Run the due profile-readiness monitor before trusting retained profile freshness.",
+            vec!["run_due_profile_readiness_monitor", "inspect_monitor_result"],
+        ),
+        _ => (
+            false,
+            "none",
+            "info",
+            "No intervention required",
+            "The selected profile and policy are ready for the recommended service request path.",
+            vec!["request_service_tab"],
+        ),
+    };
+
+    json!({
+        "required": required,
+        "owner": owner,
+        "severity": severity,
+        "reason": recommended_action,
+        "title": title,
+        "message": message,
+        "suggestedActions": suggested_actions,
+        "presentation": "client_decides",
     })
 }
 
@@ -2174,6 +2266,13 @@ mod tests {
             plan["decision"]["recommendedAction"],
             "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
         );
+        assert_eq!(plan["decision"]["attention"]["required"], true);
+        assert_eq!(plan["decision"]["attention"]["owner"], "operator");
+        assert_eq!(plan["decision"]["attention"]["severity"], "blocking");
+        assert_eq!(
+            plan["decision"]["attention"]["reason"],
+            plan["decision"]["recommendedAction"]
+        );
         assert!(plan["decision"]["reasons"]
             .as_array()
             .unwrap()
@@ -2273,6 +2372,9 @@ mod tests {
             plan["decision"]["recommendedAction"],
             "probe_target_auth_or_reseed_if_needed"
         );
+        assert_eq!(plan["decision"]["attention"]["required"], true);
+        assert_eq!(plan["decision"]["attention"]["owner"], "service");
+        assert_eq!(plan["decision"]["attention"]["severity"], "warning");
         assert_eq!(plan["decision"]["monitorAttentionRequired"], true);
         assert!(plan["decision"]["reasons"]
             .as_array()
@@ -2956,6 +3058,9 @@ mod tests {
             plan["decision"]["recommendedAction"],
             "wait_for_or_invoke_challenge_provider"
         );
+        assert_eq!(plan["decision"]["attention"]["required"], true);
+        assert_eq!(plan["decision"]["attention"]["owner"], "provider");
+        assert_eq!(plan["decision"]["attention"]["severity"], "warning");
     }
 
     #[test]

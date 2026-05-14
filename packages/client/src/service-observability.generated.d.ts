@@ -1182,6 +1182,7 @@ export interface ServiceAccessPlanMonitorFindings {
 
 export interface ServiceAccessPlanDecision {
   recommendedAction: string;
+  attention: ServiceAccessPlanAttention;
   browserHost: string | null;
   interactionMode: string | null;
   challengePolicy: string | null;
@@ -1199,6 +1200,18 @@ export interface ServiceAccessPlanDecision {
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
   reasons: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanAttention {
+  required: boolean;
+  owner: 'none' | 'service' | 'operator' | 'provider' | 'client' | string;
+  severity: 'info' | 'warning' | 'blocking' | string;
+  reason: string;
+  title: string;
+  message: string;
+  suggestedActions: string[];
+  presentation: 'client_decides' | string;
   [key: string]: unknown;
 }
 

@@ -368,6 +368,15 @@ function assertAccessPlan(data, label) {
     `${label} manual seeding flag mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.decision?.attention?.required === true &&
+      data.decision.attention.owner === 'operator' &&
+      data.decision.attention.severity === 'blocking' &&
+      data.decision.attention.reason === data.decision.recommendedAction &&
+      data.decision.attention.presentation === 'client_decides' &&
+      data.decision.attention.suggestedActions?.includes('run_post_seeding_probe'),
+    `${label} attention mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     data?.decision?.monitorAttentionRequired === false,
     `${label} monitor attention flag mismatch: ${JSON.stringify(data)}`,
   );
@@ -584,6 +593,13 @@ function assertMonitoredAccessPlan(data, label) {
     `${label} recommended action mismatch: ${JSON.stringify(data)}`,
   );
   assert(
+    data?.decision?.attention?.required === true &&
+      data.decision.attention.owner === 'service' &&
+      data.decision.attention.severity === 'warning' &&
+      data.decision.attention.suggestedActions?.includes('run_bounded_auth_probe'),
+    `${label} monitor attention intervention mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
     data?.decision?.reasons?.includes('profile_readiness_monitor_attention'),
     `${label} monitor attention reason mismatch: ${JSON.stringify(data)}`,
   );
@@ -629,6 +645,13 @@ function assertDueAccessPlan(data, label) {
   assert(
     data?.decision?.recommendedAction === 'run_due_profile_readiness_monitor',
     `${label} recommended action mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.attention?.required === true &&
+      data.decision.attention.owner === 'service' &&
+      data.decision.attention.severity === 'warning' &&
+      data.decision.attention.suggestedActions?.includes('run_due_profile_readiness_monitor'),
+    `${label} due monitor attention mismatch: ${JSON.stringify(data)}`,
   );
   assert(
     data?.decision?.monitorProbeDue === true,

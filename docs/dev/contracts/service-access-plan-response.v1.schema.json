@@ -508,6 +508,7 @@
       "type": "object",
       "required": [
         "recommendedAction",
+        "attention",
         "browserHost",
         "launchPosture",
         "interactionMode",
@@ -536,6 +537,52 @@
       "properties": {
         "recommendedAction": {
           "type": "string"
+        },
+        "attention": {
+          "type": "object",
+          "required": [
+            "required",
+            "owner",
+            "severity",
+            "reason",
+            "title",
+            "message",
+            "suggestedActions",
+            "presentation"
+          ],
+          "properties": {
+            "required": {
+              "type": "boolean"
+            },
+            "owner": {
+              "type": "string",
+              "enum": ["none", "service", "operator", "provider", "client"]
+            },
+            "severity": {
+              "type": "string",
+              "enum": ["info", "warning", "blocking"]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "suggestedActions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "presentation": {
+              "type": "string",
+              "enum": ["client_decides"]
+            }
+          },
+          "additionalProperties": true
         },
         "browserHost": {
           "type": "string",

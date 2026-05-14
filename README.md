@@ -1847,6 +1847,10 @@ browser capability registry evidence for the planned browser build, and the
 service-owned recommended action before a browser launch. Readiness summaries
 and decisions are scoped to the requested target identities, so an unrelated
 stale or unseeded login on the same profile does not block the requested site.
+The decision also includes `attention`, a UI-neutral intervention summary with
+`required`, `owner`, `severity`, `reason`, `message`, and `suggestedActions`.
+Clients can use it for logs, prompts, dashboard chips, or popups, but
+agent-browser does not prescribe the presentation.
 When a software client may need a recurring fallback profile, prefer
 `acquireServiceLoginProfile()` so the client asks for this plan first,
 registers only if no profile is selected, optionally adds the retained
