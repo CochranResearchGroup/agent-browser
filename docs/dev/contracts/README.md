@@ -599,7 +599,11 @@ response returned by `agent-browser service trace`, HTTP `GET
 returned by `agent-browser service trace`, HTTP `GET /api/service/trace`, and
 MCP `service_trace`. Its `profileLeaseWaits` object provides a per-job rollup
 of profile lease waits, including outcome, timing, conflict sessions, and trace
-labels, so clients do not need to reconstruct waits from raw event pairs.
+labels, so clients do not need to reconstruct waits from raw event pairs. Its
+`browserCapabilityLaunches` object provides compact launch binding decision rows
+from retained launch events or matching service sessions, including applied or
+skipped state, reason, browser build, binding ID, host ID, executable ID, and
+trace context labels.
 Summary context rows also include `targetIdentityCount` and `targetServiceIds`
 so dashboards and software clients can show the target profile-selection
 identity for each service, agent, task, browser, profile, or session context

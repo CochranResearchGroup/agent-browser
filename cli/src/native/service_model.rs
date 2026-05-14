@@ -763,6 +763,7 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
             "contextCount",
             "hasTraceContext",
             "namingWarningCount",
+            "browserCapabilityLaunches",
             "profileLeaseWaits",
             "contexts",
         ],
@@ -775,6 +776,63 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
     );
     assert!(value["hasTraceContext"].is_boolean());
     assert!(value["namingWarningCount"].is_u64());
+    let browser_capability_launches = &value["browserCapabilityLaunches"];
+    assert_record_fields(
+        "trace browser capability launches",
+        browser_capability_launches,
+        &["count", "appliedCount", "skippedCount", "launches"],
+        &["applied_count", "skipped_count"],
+    );
+    let launches = browser_capability_launches["launches"].as_array().unwrap();
+    assert_eq!(
+        browser_capability_launches["count"].as_u64().unwrap(),
+        launches.len() as u64
+    );
+    assert!(browser_capability_launches["appliedCount"].is_u64());
+    assert!(browser_capability_launches["skippedCount"].is_u64());
+    for launch in launches {
+        assert_record_fields(
+            "trace browser capability launch",
+            launch,
+            &[
+                "source",
+                "timestamp",
+                "serviceName",
+                "agentName",
+                "taskName",
+                "browserId",
+                "profileId",
+                "sessionId",
+                "applied",
+                "reason",
+                "browserBuild",
+                "bindingId",
+                "hostId",
+                "executableId",
+                "capabilityId",
+                "executablePath",
+            ],
+            &[
+                "service_name",
+                "agent_name",
+                "task_name",
+                "browser_id",
+                "profile_id",
+                "session_id",
+                "browser_build",
+                "binding_id",
+                "host_id",
+                "executable_id",
+                "capability_id",
+                "executable_path",
+            ],
+        );
+        assert!(matches!(
+            launch["source"].as_str().unwrap(),
+            "event" | "session"
+        ));
+        assert!(launch["applied"].is_boolean());
+    }
     let profile_lease_waits = &value["profileLeaseWaits"];
     assert_record_fields(
         "trace profile lease waits",
@@ -5684,6 +5742,7 @@ mod tests {
                 "contextCount",
                 "hasTraceContext",
                 "namingWarningCount",
+                "browserCapabilityLaunches",
                 "profileLeaseWaits",
                 "contexts",
             ],
@@ -5697,6 +5756,12 @@ mod tests {
             "contextCount": 1,
             "hasTraceContext": true,
             "namingWarningCount": 0,
+            "browserCapabilityLaunches": {
+                "count": 0,
+                "appliedCount": 0,
+                "skippedCount": 0,
+                "launches": [],
+            },
             "profileLeaseWaits": {
                 "count": 0,
                 "activeCount": 0,

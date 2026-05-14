@@ -128,7 +128,15 @@ pub(crate) fn service_trace_response(
     let job_count = jobs.len();
     let incident_count = incidents.len();
     let activity_count = activity.len();
-    let summary = service_trace_summary(service_state, &events, &jobs, &incidents, &activity);
+    let summary = service_trace_summary(
+        service_state,
+        &events,
+        &jobs,
+        &incidents,
+        &activity,
+        &filters,
+        since,
+    );
 
     Ok(json!({
         "filters": {
@@ -203,6 +211,18 @@ struct ProfileLeaseWaitSummary {
     task_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct BrowserCapabilityLaunchContext<'a> {
+    source: &'a str,
+    timestamp: Option<&'a str>,
+    browser_id: Option<&'a str>,
+    profile_id: Option<&'a str>,
+    session_id: Option<&'a str>,
+    service_name: Option<&'a str>,
+    agent_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+}
+
 /// Compact owner/context rollup for dashboards, MCP agents, and API clients.
 fn service_trace_summary(
     service_state: &ServiceState,
@@ -210,6 +230,8 @@ fn service_trace_summary(
     jobs: &[ServiceJob],
     incidents: &[ServiceIncident],
     activity: &[Value],
+    filters: &ServiceTraceFilters<'_>,
+    since: Option<DateTime<FixedOffset>>,
 ) -> Value {
     let mut contexts = BTreeMap::<TraceContextKey, TraceContextSummary>::new();
 
@@ -352,9 +374,170 @@ fn service_trace_summary(
         "contextCount": context_count,
         "hasTraceContext": has_trace_context,
         "namingWarningCount": naming_warning_count,
+        "browserCapabilityLaunches": service_trace_browser_capability_launch_summary(
+            service_state,
+            events,
+            filters,
+            since,
+        ),
         "profileLeaseWaits": service_trace_profile_lease_wait_summary(events),
         "contexts": contexts,
     })
+}
+
+fn service_trace_browser_capability_launch_summary(
+    service_state: &ServiceState,
+    events: &[ServiceEvent],
+    filters: &ServiceTraceFilters<'_>,
+    since: Option<DateTime<FixedOffset>>,
+) -> Value {
+    let mut launches = BTreeMap::<String, Value>::new();
+
+    for event in events {
+        let Some(details) = event.details.as_ref() else {
+            continue;
+        };
+        let Some(diagnostic) = details.get("browserCapabilityLaunch") else {
+            continue;
+        };
+        let session_id = event.session_id.as_deref().or_else(|| {
+            details
+                .get("currentSessionIds")
+                .and_then(|value| value.as_array())
+                .and_then(|values| values.iter().find_map(|value| value.as_str()))
+        });
+        let browser_id = event.browser_id.as_deref();
+        let key = browser_capability_launch_key(session_id, browser_id, Some(event.id.as_str()));
+        launches.insert(
+            key,
+            compact_browser_capability_launch(
+                diagnostic,
+                BrowserCapabilityLaunchContext {
+                    source: "event",
+                    timestamp: Some(event.timestamp.as_str()),
+                    browser_id,
+                    profile_id: event.profile_id.as_deref(),
+                    session_id,
+                    service_name: event.service_name.as_deref(),
+                    agent_name: event.agent_name.as_deref(),
+                    task_name: event.task_name.as_deref(),
+                },
+            ),
+        );
+    }
+
+    for session in service_state.sessions.values() {
+        if !session_matches_browser_capability_trace_filters(session, filters, since) {
+            continue;
+        }
+        let Some(diagnostic) = session.browser_capability_launch.as_ref() else {
+            continue;
+        };
+        let browser_id = session.browser_ids.first().map(String::as_str);
+        let key = browser_capability_launch_key(Some(session.id.as_str()), browser_id, None);
+        launches.entry(key).or_insert_with(|| {
+            compact_browser_capability_launch(
+                diagnostic,
+                BrowserCapabilityLaunchContext {
+                    source: "session",
+                    timestamp: session.created_at.as_deref(),
+                    browser_id,
+                    profile_id: session.profile_id.as_deref(),
+                    session_id: Some(session.id.as_str()),
+                    service_name: session.service_name.as_deref(),
+                    agent_name: session.agent_name.as_deref(),
+                    task_name: session.task_name.as_deref(),
+                },
+            )
+        });
+    }
+
+    let launches = launches.into_values().collect::<Vec<_>>();
+    let applied_count = launches
+        .iter()
+        .filter(|launch| {
+            launch
+                .get("applied")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+        })
+        .count();
+    let skipped_count = launches.len().saturating_sub(applied_count);
+    json!({
+        "count": launches.len(),
+        "appliedCount": applied_count,
+        "skippedCount": skipped_count,
+        "launches": launches,
+    })
+}
+
+fn browser_capability_launch_key(
+    session_id: Option<&str>,
+    browser_id: Option<&str>,
+    event_id: Option<&str>,
+) -> String {
+    if session_id.is_some() || browser_id.is_some() {
+        return format!("{}:{}", session_id.unwrap_or(""), browser_id.unwrap_or(""));
+    }
+    format!("event:{}", event_id.unwrap_or(""))
+}
+
+fn compact_browser_capability_launch(
+    diagnostic: &Value,
+    context: BrowserCapabilityLaunchContext<'_>,
+) -> Value {
+    json!({
+        "source": context.source,
+        "timestamp": context.timestamp,
+        "serviceName": context.service_name,
+        "agentName": context.agent_name,
+        "taskName": context.task_name,
+        "browserId": context.browser_id,
+        "profileId": context.profile_id,
+        "sessionId": context.session_id,
+        "applied": diagnostic.get("applied").and_then(|value| value.as_bool()).unwrap_or(false),
+        "reason": diagnostic.get("reason").and_then(|value| value.as_str()),
+        "browserBuild": diagnostic.get("browserBuild").and_then(|value| value.as_str()),
+        "bindingId": diagnostic.get("bindingId").and_then(|value| value.as_str()),
+        "hostId": diagnostic.get("hostId").and_then(|value| value.as_str()),
+        "executableId": diagnostic.get("executableId").and_then(|value| value.as_str()),
+        "capabilityId": diagnostic.get("capabilityId").and_then(|value| value.as_str()),
+        "executablePath": diagnostic.get("executablePath").and_then(|value| value.as_str()),
+    })
+}
+
+fn session_matches_browser_capability_trace_filters(
+    session: &super::service_model::BrowserSession,
+    filters: &ServiceTraceFilters<'_>,
+    since: Option<DateTime<FixedOffset>>,
+) -> bool {
+    filters.browser_id.is_none_or(|expected| {
+        session
+            .browser_ids
+            .iter()
+            .any(|browser_id| browser_id == expected)
+    }) && filters
+        .profile_id
+        .is_none_or(|expected| session.profile_id.as_deref() == Some(expected))
+        && filters
+            .session_id
+            .is_none_or(|expected| session.id == expected)
+        && filters
+            .service_name
+            .is_none_or(|expected| session.service_name.as_deref() == Some(expected))
+        && filters
+            .agent_name
+            .is_none_or(|expected| session.agent_name.as_deref() == Some(expected))
+        && filters
+            .task_name
+            .is_none_or(|expected| session.task_name.as_deref() == Some(expected))
+        && since.is_none_or(|minimum| {
+            session
+                .created_at
+                .as_deref()
+                .and_then(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
+                .is_some_and(|timestamp| timestamp >= minimum)
+        })
 }
 
 fn merge_job_target_service_ids(target_service_ids: &mut Vec<String>, job: &ServiceJob) {

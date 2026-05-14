@@ -8,6 +8,7 @@
     "contextCount",
     "hasTraceContext",
     "namingWarningCount",
+    "browserCapabilityLaunches",
     "profileLeaseWaits",
     "contexts"
   ],
@@ -22,6 +23,107 @@
     "namingWarningCount": {
       "type": "integer",
       "minimum": 0
+    },
+    "browserCapabilityLaunches": {
+      "type": "object",
+      "required": [
+        "count",
+        "appliedCount",
+        "skippedCount",
+        "launches"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "appliedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skippedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "launches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "source",
+              "timestamp",
+              "serviceName",
+              "agentName",
+              "taskName",
+              "browserId",
+              "profileId",
+              "sessionId",
+              "applied",
+              "reason",
+              "browserBuild",
+              "bindingId",
+              "hostId",
+              "executableId",
+              "capabilityId",
+              "executablePath"
+            ],
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": ["event", "session"]
+              },
+              "timestamp": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              },
+              "serviceName": {
+                "type": ["string", "null"]
+              },
+              "agentName": {
+                "type": ["string", "null"]
+              },
+              "taskName": {
+                "type": ["string", "null"]
+              },
+              "browserId": {
+                "type": ["string", "null"]
+              },
+              "profileId": {
+                "type": ["string", "null"]
+              },
+              "sessionId": {
+                "type": ["string", "null"]
+              },
+              "applied": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": ["string", "null"]
+              },
+              "browserBuild": {
+                "type": ["string", "null"]
+              },
+              "bindingId": {
+                "type": ["string", "null"]
+              },
+              "hostId": {
+                "type": ["string", "null"]
+              },
+              "executableId": {
+                "type": ["string", "null"]
+              },
+              "capabilityId": {
+                "type": ["string", "null"]
+              },
+              "executablePath": {
+                "type": ["string", "null"]
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
     },
     "profileLeaseWaits": {
       "type": "object",

@@ -800,6 +800,34 @@ export interface ServiceTraceProfileLeaseWaitSummary {
   [key: string]: unknown;
 }
 
+export interface ServiceTraceBrowserCapabilityLaunch {
+  source: 'event' | 'session' | string;
+  timestamp: string | null;
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  browserId: string | null;
+  profileId: string | null;
+  sessionId: string | null;
+  applied: boolean;
+  reason: string | null;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  bindingId: string | null;
+  hostId: string | null;
+  executableId: string | null;
+  capabilityId: string | null;
+  executablePath: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceTraceBrowserCapabilityLaunchSummary {
+  count: number;
+  appliedCount: number;
+  skippedCount: number;
+  launches: ServiceTraceBrowserCapabilityLaunch[];
+  [key: string]: unknown;
+}
+
 export interface ServiceTraceSummaryContext {
   serviceName: string | null;
   agentName: string | null;
@@ -825,6 +853,7 @@ export interface ServiceTraceSummary {
   contextCount: number;
   hasTraceContext: boolean;
   namingWarningCount: number;
+  browserCapabilityLaunches: ServiceTraceBrowserCapabilityLaunchSummary;
   profileLeaseWaits: ServiceTraceProfileLeaseWaitSummary;
   contexts: ServiceTraceSummaryContext[];
   [key: string]: unknown;

@@ -14116,8 +14116,21 @@ mod tests {
                 "sessions": {
                     "session-1": {
                         "id": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
                         "profileId": "work",
-                        "browserIds": ["browser-1"]
+                        "browserIds": ["browser-1"],
+                        "browserCapabilityLaunch": {
+                            "applied": true,
+                            "reason": "validated_binding_applied",
+                            "browserBuild": "stealthcdp_chromium",
+                            "bindingId": "binding-1",
+                            "hostId": "local",
+                            "executableId": "stealth-current",
+                            "capabilityId": "stealth-cdp",
+                            "executablePath": "/opt/chromium-stealthcdp/chrome"
+                        }
                     }
                 },
                 "incidents": [
@@ -14280,8 +14293,21 @@ mod tests {
                 "sessions": {
                     "session-1": {
                         "id": "session-1",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
                         "profileId": "work",
-                        "browserIds": ["browser-1"]
+                        "browserIds": ["browser-1"],
+                        "browserCapabilityLaunch": {
+                            "applied": true,
+                            "reason": "validated_binding_applied",
+                            "browserBuild": "stealthcdp_chromium",
+                            "bindingId": "binding-1",
+                            "hostId": "local",
+                            "executableId": "stealth-current",
+                            "capabilityId": "stealth-cdp",
+                            "executablePath": "/opt/chromium-stealthcdp/chrome"
+                        }
                     }
                 },
                 "incidents": [
@@ -14324,6 +14350,22 @@ mod tests {
         assert_eq!(result["data"]["summary"]["contextCount"], 3);
         assert_eq!(result["data"]["summary"]["hasTraceContext"], true);
         assert_eq!(result["data"]["summary"]["namingWarningCount"], 1);
+        assert_eq!(
+            result["data"]["summary"]["browserCapabilityLaunches"]["count"],
+            1
+        );
+        assert_eq!(
+            result["data"]["summary"]["browserCapabilityLaunches"]["appliedCount"],
+            1
+        );
+        assert_eq!(
+            result["data"]["summary"]["browserCapabilityLaunches"]["launches"][0]["browserBuild"],
+            "stealthcdp_chromium"
+        );
+        assert_eq!(
+            result["data"]["summary"]["browserCapabilityLaunches"]["launches"][0]["reason"],
+            "validated_binding_applied"
+        );
         assert_eq!(result["data"]["summary"]["profileLeaseWaits"]["count"], 1);
         assert_eq!(
             result["data"]["summary"]["profileLeaseWaits"]["completedCount"],

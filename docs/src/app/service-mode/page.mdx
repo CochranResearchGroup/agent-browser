@@ -51,7 +51,10 @@ executables, capabilities, profile compatibility, preference bindings, and
 validation evidence before guarded launches consume matching local executable
 bindings. Launches persist <code>browserCapabilityLaunch</code> diagnostics on
 the service session and launch-recorded event so operators can see whether a
-binding was applied or skipped and why.
+binding was applied or skipped and why. Service traces summarize those
+decisions in <code>summary.browserCapabilityLaunches</code> and text output
+prints a <code>Browser capability launches</code> block with the applied state,
+reason, browser build, binding, host, executable, and trace context.
 
 Use the HTTP API when another program owns the workflow lifecycle:
 

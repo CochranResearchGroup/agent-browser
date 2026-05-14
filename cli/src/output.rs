@@ -603,6 +603,9 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
             }
         }
     }
+    if let Some(binding_text) = format_service_trace_browser_capability_launch_text(data) {
+        lines.push(binding_text);
+    }
     if let Some(wait_text) = format_service_trace_profile_lease_wait_text(data) {
         lines.push(wait_text);
     }
@@ -612,6 +615,71 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
         }
     }
     Some(lines.join("\n"))
+}
+
+fn format_service_trace_browser_capability_launch_text(data: &serde_json::Value) -> Option<String> {
+    let launches = data
+        .get("summary")
+        .and_then(|summary| summary.get("browserCapabilityLaunches"))
+        .and_then(|summary| summary.get("launches"))
+        .and_then(|value| value.as_array())
+        .filter(|launches| !launches.is_empty())?;
+    let mut lines = vec![format!("Browser capability launches: {}", launches.len())];
+    lines.extend(
+        launches
+            .iter()
+            .map(format_service_trace_browser_capability_launch_line),
+    );
+    Some(lines.join("\n"))
+}
+
+fn format_service_trace_browser_capability_launch_line(launch: &serde_json::Value) -> String {
+    let source = launch
+        .get("source")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let applied = launch
+        .get("applied")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let reason = launch
+        .get("reason")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let browser_build = launch
+        .get("browserBuild")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-build");
+    let session = launch
+        .get("sessionId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-session");
+    let browser = launch
+        .get("browserId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-browser");
+    let profile = launch
+        .get("profileId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown-profile");
+    let binding = launch
+        .get("bindingId")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" binding={value}"))
+        .unwrap_or_default();
+    let executable = launch
+        .get("executableId")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" executable={value}"))
+        .unwrap_or_default();
+    let host = launch
+        .get("hostId")
+        .and_then(|value| value.as_str())
+        .map(|value| format!(" host={value}"))
+        .unwrap_or_default();
+    format!(
+        "  source={source} session={session} browser={browser} profile={profile} build={browser_build} applied={applied} reason={reason}{binding}{host}{executable}"
+    )
 }
 
 fn format_service_trace_profile_lease_wait_text(data: &serde_json::Value) -> Option<String> {
@@ -4490,7 +4558,7 @@ Notes:
   - Example browser_command arguments: {"action":"navigate","params":{"url":"https://example.com","waitUntil":"load","targetServiceId":"acs"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}.
   - Typed browser_* tools also accept targetServiceId, targetService, targetServiceIds, targetServices, siteId, siteIds, loginId, loginIds, accountId, accountIds, and url for first-command profile selection.
   - browser_snapshot queues the existing snapshot command and returns the active session accessibility snapshot.
-  - service_trace reads persisted service state and returns related events, jobs, incidents, activity, profile lease wait summaries, ownership summary contexts, and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
+  - service_trace reads persisted service state and returns related events, jobs, incidents, activity, browser capability launch decisions, profile lease wait summaries, ownership summary contexts, and naming warnings for serviceName, agentName, taskName, browserId, profileId, sessionId, and since filters.
   - service_incidents reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP.
   - service_remedies_apply applies supported active remedy groups such as browser_degraded, monitor_attention, and os_degraded_possible through the same service worker as HTTP POST /api/service/remedies/apply.
   - service_profile_upsert, service_profile_freshness_update, service_profile_seeding_handoff_update, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_monitor_upsert, service_monitor_delete, service_monitor_pause, service_monitor_resume, service_monitor_reset_failures, service_monitor_triage, service_provider_upsert, service_provider_delete, and service_browser_capability_registry_upsert mutate persisted service config through the service worker queue with the same path-ID conflict checks as HTTP. service_monitors_run_due runs due active monitors through the same service worker.
@@ -5959,6 +6027,29 @@ mod tests {
                 "contextCount": 1,
                 "hasTraceContext": true,
                 "namingWarningCount": 0,
+                "browserCapabilityLaunches": {
+                    "count": 1,
+                    "appliedCount": 1,
+                    "skippedCount": 0,
+                    "launches": [{
+                        "source": "session",
+                        "timestamp": "2026-04-25T00:00:00Z",
+                        "serviceName": "JournalDownloader",
+                        "agentName": "codex",
+                        "taskName": "probeACSwebsite",
+                        "browserId": "browser-1",
+                        "profileId": "work",
+                        "sessionId": "session-1",
+                        "applied": true,
+                        "reason": "validated_binding_applied",
+                        "browserBuild": "stealthcdp_chromium",
+                        "bindingId": "binding-1",
+                        "hostId": "local",
+                        "executableId": "stealth-current",
+                        "capabilityId": "stealth-cdp",
+                        "executablePath": "/opt/chromium-stealthcdp/chrome"
+                    }]
+                },
                 "contexts": [{
                     "serviceName": "JournalDownloader",
                     "agentName": "codex",
@@ -6046,7 +6137,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google control=cdp,cdp_free lifecycleOnlyJobs=1 events=1 jobs=1 incidents=1 activity=1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google control=cdp,cdp_free lifecycleOnlyJobs=1 events=1 jobs=1 incidents=1 activity=1\nBrowser capability launches: 1\n  source=session session=session-1 browser=browser-1 profile=work build=stealthcdp_chromium applied=true reason=validated_binding_applied binding=binding-1 host=local executable=stealth-current\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 
