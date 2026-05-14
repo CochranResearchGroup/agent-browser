@@ -4704,6 +4704,7 @@ mod tests {
                 "profileSelectionReason",
                 "profileLeaseDisposition",
                 "profileLeaseConflictSessionIds",
+                "browserCapabilityLaunch",
                 "cleanup",
             ],
         );
@@ -5124,6 +5125,7 @@ mod tests {
             "profileSelectionReason": "authenticated_target",
             "profileLeaseDisposition": "new_browser",
             "profileLeaseConflictSessionIds": [],
+            "browserCapabilityLaunch": null,
             "cleanup": "close_browser",
             "browserIds": [],
             "tabIds": [],
