@@ -171,9 +171,22 @@ export type ServiceTraceSummaryCard = {
   subtitle: string;
   total: number;
   warning: string | null;
+  attention: ServiceTraceContextAttention | null;
   meta: string[];
   targetServiceIds: string[];
   counts: string[];
+};
+
+export type ServiceTraceAttentionSummary = {
+  required: boolean;
+  requiredCount: number;
+  operatorRequiredCount: number;
+  serviceRequiredCount: number;
+  highestSeverity: string;
+  reasons: string[];
+  suggestedActions: string[];
+  messages: string[];
+  contexts: ServiceTraceSummaryContext[];
 };
 
 export type ServiceTraceToolPayload = {
@@ -254,6 +267,7 @@ export function traceSummaryCards(trace: ServiceTraceData | null, limit = 4): Se
         subtitle: context.taskName ?? "untitled task",
         total,
         warning: traceNamingWarningLabel(context.namingWarnings),
+        attention: context.attention?.required === true ? context.attention : null,
         meta: [
           context.agentName && `agent ${context.agentName}`,
           context.browserId && `browser ${context.browserId}`,
@@ -271,6 +285,25 @@ export function traceSummaryCards(trace: ServiceTraceData | null, limit = 4): Se
     });
 }
 
+export function traceAttentionSummary(trace: ServiceTraceData | null): ServiceTraceAttentionSummary {
+  const contexts = traceSummaryContexts(trace).filter((context) => context.attention?.required === true);
+  const operatorRequiredCount = contexts.filter((context) => context.attention?.owner === "operator").length;
+  const serviceRequiredCount = contexts.filter((context) => context.attention?.owner === "service").length;
+  return {
+    required: contexts.length > 0,
+    requiredCount: contexts.length,
+    operatorRequiredCount,
+    serviceRequiredCount,
+    highestSeverity: highestTraceAttentionSeverity(contexts),
+    reasons: uniqueTraceTargets(contexts.map((context) => context.attention?.reason ?? "")),
+    suggestedActions: uniqueTraceTargets(
+      contexts.flatMap((context) => context.attention?.suggestedActions ?? []),
+    ),
+    messages: uniqueTraceTargets(contexts.map((context) => context.attention?.message ?? "")),
+    contexts,
+  };
+}
+
 export function uniqueTraceTargets(values?: string[] | null): string[] {
   const seen = new Set<string>();
   const targets: string[] = [];
@@ -281,6 +314,13 @@ export function uniqueTraceTargets(values?: string[] | null): string[] {
     targets.push(target);
   }
   return targets;
+}
+
+function highestTraceAttentionSeverity(contexts: ServiceTraceSummaryContext[]): string {
+  const severities = contexts.map((context) => context.attention?.severity);
+  if (severities.includes("warning")) return "warning";
+  if (severities.includes("info")) return "info";
+  return "none";
 }
 
 export function traceProfileLeaseWaits(trace: ServiceTraceData | null): ServiceTraceProfileLeaseWait[] {

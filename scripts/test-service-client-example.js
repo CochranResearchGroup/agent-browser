@@ -57,6 +57,9 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
     monitorRunDueStaleProfileIds: [],
   });
   assert.equal(result.commandResult?.success, true);
+  assert.equal(result.traceSummary.attention.required, true);
+  assert.equal(result.traceSummary.attention.operatorRequiredCount, 1);
+  assert.deepEqual(result.traceSummary.attention.reasons, ['incidents_present']);
   assert.deepEqual(callSequence(calls), [
     'GET /api/service/access-plan',
     'POST /api/service/request',
@@ -355,9 +358,34 @@ function createBrokerFirstFetch({
       return serviceResponse({
         counts: {
           events: 1,
-          jobs: 1,
-          incidents: 0,
-          activity: 0,
+        jobs: 1,
+        incidents: 0,
+        activity: 0,
+        },
+        summary: {
+          contexts: [
+            {
+              serviceName,
+              agentName,
+              taskName,
+              browserId: 'browser-1',
+              profileId,
+              sessionId: 'session-1',
+              eventCount: 1,
+              jobCount: 1,
+              incidentCount: 1,
+              activityCount: 0,
+              attention: {
+                required: true,
+                owner: 'operator',
+                severity: 'warning',
+                reason: 'incidents_present',
+                message: 'Trace context has retained incidents.',
+                suggestedActions: ['inspect_incidents'],
+                presentation: 'client_decides',
+              },
+            },
+          ],
         },
         jobs: [
           {

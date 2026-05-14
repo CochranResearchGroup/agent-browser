@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   normalizeServiceTraceData,
+  traceAttentionSummary,
   traceBrowserCapabilityLaunches,
   traceFilterSummary,
   traceProfileLeaseWaits,
@@ -188,6 +189,15 @@ const traceData = {
         jobCount: 0,
         incidentCount: 0,
         activityCount: 0,
+        attention: {
+          required: true,
+          owner: 'service',
+          severity: 'info',
+          reason: 'missing_caller_label',
+          message: 'Trace context is missing service, agent, or task labels.',
+          suggestedActions: ['include_agent_name'],
+          presentation: 'client_decides',
+        },
         latestTimestamp: '2026-04-25T12:01:00Z',
       },
       {
@@ -205,6 +215,15 @@ const traceData = {
         jobCount: 2,
         incidentCount: 0,
         activityCount: 2,
+        attention: {
+          required: false,
+          owner: 'none',
+          severity: 'info',
+          reason: 'none',
+          message: 'No trace-context intervention is required.',
+          suggestedActions: [],
+          presentation: 'client_decides',
+        },
         latestTimestamp: '2026-04-25T12:04:00Z',
       },
     ],
@@ -246,6 +265,7 @@ assert.equal(summaryCards[0].title, 'JournalDownloader');
 assert.equal(summaryCards[0].subtitle, 'probeACSwebsite');
 assert.equal(summaryCards[0].total, 6);
 assert.equal(summaryCards[0].warning, null);
+assert.equal(summaryCards[0].attention, null);
 assert.deepEqual(summaryCards[0].meta, [
   'agent agent-a',
   'browser browser-1',
@@ -255,8 +275,20 @@ assert.deepEqual(summaryCards[0].meta, [
 assert.deepEqual(summaryCards[0].targetServiceIds, ['acs', 'google']);
 assert.deepEqual(summaryCards[0].counts, ['2 ev', '2 jobs', '0 inc', '2 act']);
 assert.equal(summaryCards[1].warning, 'Missing agent name');
+assert.equal(summaryCards[1].attention?.reason, 'missing_caller_label');
 assert.deepEqual(summaryCards[1].targetServiceIds, []);
 assert.equal(traceSummaryCards(null).length, 0);
+
+const attentionSummary = traceAttentionSummary(traceData);
+assert.equal(attentionSummary.required, true);
+assert.equal(attentionSummary.requiredCount, 1);
+assert.equal(attentionSummary.operatorRequiredCount, 0);
+assert.equal(attentionSummary.serviceRequiredCount, 1);
+assert.equal(attentionSummary.highestSeverity, 'info');
+assert.deepEqual(attentionSummary.reasons, ['missing_caller_label']);
+assert.deepEqual(attentionSummary.suggestedActions, ['include_agent_name']);
+assert.equal(attentionSummary.contexts[0].serviceName, 'SmallService');
+assert.equal(traceAttentionSummary(null).required, false);
 
 const browserCapabilityLaunches = traceBrowserCapabilityLaunches(traceData);
 assert.deepEqual(
