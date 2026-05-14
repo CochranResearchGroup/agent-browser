@@ -655,6 +655,17 @@ body {
   padding: 0.65rem;
 }
 
+.service-trace-launches {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 86% 8%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 34%),
+    color-mix(in srgb, var(--background) 42%, transparent);
+  padding: 0.65rem;
+}
+
 .service-trace-contexts-header {
   display: flex;
   align-items: center;
@@ -679,6 +690,12 @@ body {
   gap: 0.45rem;
 }
 
+.service-trace-launch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
 .service-trace-context-card {
   min-width: 0;
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
@@ -697,6 +714,22 @@ body {
     linear-gradient(150deg, color-mix(in srgb, var(--dashboard-panel-strong) 82%, transparent), color-mix(in srgb, var(--background) 50%, transparent));
   padding: 0.65rem;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%);
+}
+
+.service-trace-launch-card {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0.95rem;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--dashboard-panel-strong) 82%, transparent), color-mix(in srgb, var(--background) 50%, transparent));
+  padding: 0.65rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%);
+}
+
+.service-trace-launch-card-applied {
+  border-color: color-mix(in srgb, var(--success) 44%, var(--border));
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--success) 10%, var(--dashboard-panel-strong)), color-mix(in srgb, var(--background) 50%, transparent));
 }
 
 .service-trace-wait-card-active {
@@ -747,6 +780,23 @@ body {
 
 .service-trace-targets {
   margin-top: 0.45rem;
+}
+
+.service-trace-launch-ids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.service-trace-launch-ids span {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: color-mix(in srgb, var(--foreground) 78%, var(--primary));
+  font-size: 0.58rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0.25rem 0.4rem;
 }
 
 .service-trace-targets span {
@@ -1421,6 +1471,7 @@ body {
   .service-trace-grid,
   .service-trace-counts,
   .service-trace-context-grid,
+  .service-trace-launch-grid,
   .service-trace-wait-grid,
   .service-trace-wait-metrics {
     grid-template-columns: 1fr;

@@ -30,11 +30,13 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   normalizeServiceTraceData,
+  traceBrowserCapabilityLaunches,
   traceProfileLeaseWaits,
   traceFilterSummary,
   traceSummaryCards,
   traceTimelineItems,
   type ServiceTraceData,
+  type ServiceTraceBrowserCapabilityLaunch,
   type ServiceTraceTimelineItem,
   type ServiceTraceToolPayload,
 } from "@/lib/service-trace";
@@ -521,6 +523,67 @@ function deriveIncidentTimeline(incident: IncidentRecord): ServiceTraceTimelineI
   );
 }
 
+function browserCapabilityLaunchKey(launch: ServiceTraceBrowserCapabilityLaunch): string {
+  return [
+    launch.sessionId ?? "",
+    launch.browserId ?? "",
+    launch.profileId ?? "",
+    launch.browserBuild ?? "",
+    launch.reason ?? "",
+    launch.timestamp ?? "",
+  ].join(":");
+}
+
+function BrowserCapabilityLaunchCard({ launch }: { launch: ServiceTraceBrowserCapabilityLaunch }) {
+  const context = [launch.serviceName, launch.agentName, launch.taskName]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" / ");
+  const ids = [
+    launch.bindingId && `binding ${launch.bindingId}`,
+    launch.hostId && `host ${launch.hostId}`,
+    launch.executableId && `exec ${launch.executableId}`,
+    launch.capabilityId && `capability ${launch.capabilityId}`,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  return (
+    <div className={cn("service-trace-launch-card", launch.applied && "service-trace-launch-card-applied")}>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="truncate text-xs font-black text-foreground">
+          {launch.browserBuild ?? "unknown build"}
+        </span>
+        <Badge
+          variant={launch.applied ? "outline" : "destructive"}
+          className="ml-auto shrink-0 rounded-full px-1.5 py-0 text-[9px]"
+        >
+          {launch.applied ? "applied" : "skipped"}
+        </Badge>
+      </div>
+      <p className="mt-1 truncate text-[11px] font-bold text-muted-foreground">
+        {launch.reason ?? "no reason recorded"}
+      </p>
+      {context && (
+        <p className="mt-1 truncate text-[10px] text-muted-foreground">
+          {context}
+        </p>
+      )}
+      <div className="service-trace-context-meta">
+        {launch.sessionId && <span>session {launch.sessionId}</span>}
+        {launch.browserId && <span>browser {launch.browserId}</span>}
+        {launch.profileId && <span>profile {launch.profileId}</span>}
+        <span>source {launch.source}</span>
+        {launch.timestamp && <span>{formatRelativeTime(launch.timestamp)}</span>}
+      </div>
+      {ids.length > 0 && (
+        <div className="service-trace-launch-ids">
+          {ids.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function deriveJobIncidentEvents(jobs: ServiceJob[]): ServiceEvent[] {
   return jobs
     .filter((job) => job.state === "timed_out" || job.state === "cancelled")
@@ -783,6 +846,8 @@ function TraceExplorer({
   const counts = trace?.counts;
   const matched = trace?.matched;
   const summaryCards = traceSummaryCards(trace);
+  const browserCapabilityLaunches = traceBrowserCapabilityLaunches(trace);
+  const browserCapabilityLaunchSummary = trace?.summary?.browserCapabilityLaunches;
   const profileLeaseWaits = traceProfileLeaseWaits(trace);
   const profileLeaseWaitSummary = trace?.summary?.profileLeaseWaits;
   const hasFilters =
@@ -980,6 +1045,32 @@ function TraceExplorer({
                     ))}
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {trace && (
+        <div className="service-trace-launches" aria-label="Browser capability launch decisions">
+          <div className="service-trace-contexts-header">
+            <span>Browser capability launches</span>
+            <Badge variant="outline" className="rounded-full px-2 py-0 text-[9px] uppercase">
+              {browserCapabilityLaunchSummary?.count ?? browserCapabilityLaunches.length} decisions
+            </Badge>
+            {(browserCapabilityLaunchSummary?.skippedCount ?? 0) > 0 && (
+              <Badge variant="destructive" className="rounded-full px-2 py-0 text-[9px] uppercase">
+                {browserCapabilityLaunchSummary?.skippedCount} skipped
+              </Badge>
+            )}
+          </div>
+          {browserCapabilityLaunches.length === 0 ? (
+            <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-center text-xs text-muted-foreground">
+              No browser binding decision was returned for this trace.
+            </p>
+          ) : (
+            <div className="service-trace-launch-grid">
+              {browserCapabilityLaunches.map((launch) => (
+                <BrowserCapabilityLaunchCard key={browserCapabilityLaunchKey(launch)} launch={launch} />
               ))}
             </div>
           )}

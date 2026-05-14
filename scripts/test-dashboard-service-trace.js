@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   normalizeServiceTraceData,
+  traceBrowserCapabilityLaunches,
   traceFilterSummary,
   traceProfileLeaseWaits,
   traceSummaryCards,
@@ -99,6 +100,49 @@ const traceData = {
     contextCount: 2,
     hasTraceContext: true,
     namingWarningCount: 1,
+    browserCapabilityLaunches: {
+      count: 2,
+      appliedCount: 1,
+      skippedCount: 1,
+      launches: [
+        {
+          source: 'session',
+          timestamp: '2026-04-25T12:00:20Z',
+          serviceName: 'JournalDownloader',
+          agentName: 'agent-a',
+          taskName: 'probeACSwebsite',
+          browserId: 'browser-1',
+          profileId: 'profile-1',
+          sessionId: 'session-1',
+          applied: true,
+          reason: 'validated_binding_applied',
+          browserBuild: 'stealthcdp_chromium',
+          bindingId: 'binding-1',
+          hostId: 'local',
+          executableId: 'stealth-current',
+          capabilityId: 'stealth-cdp',
+          executablePath: '/opt/chromium-stealthcdp/chrome',
+        },
+        {
+          source: 'event',
+          timestamp: '2026-04-25T12:00:30Z',
+          serviceName: 'JournalDownloader',
+          agentName: 'agent-a',
+          taskName: 'probeACSwebsite',
+          browserId: 'browser-1',
+          profileId: 'profile-1',
+          sessionId: 'session-2',
+          applied: false,
+          reason: 'profile_compatibility_missing_or_blocked',
+          browserBuild: 'stealthcdp_chromium',
+          bindingId: null,
+          hostId: null,
+          executableId: null,
+          capabilityId: null,
+          executablePath: null,
+        },
+      ],
+    },
     profileLeaseWaits: {
       count: 2,
       activeCount: 1,
@@ -213,6 +257,17 @@ assert.deepEqual(summaryCards[0].counts, ['2 ev', '2 jobs', '0 inc', '2 act']);
 assert.equal(summaryCards[1].warning, 'Missing agent name');
 assert.deepEqual(summaryCards[1].targetServiceIds, []);
 assert.equal(traceSummaryCards(null).length, 0);
+
+const browserCapabilityLaunches = traceBrowserCapabilityLaunches(traceData);
+assert.deepEqual(
+  browserCapabilityLaunches.map((launch) => launch.sessionId),
+  ['session-1', 'session-2'],
+  'Applied browser capability launches should sort before skipped decisions',
+);
+assert.equal(browserCapabilityLaunches[0].applied, true);
+assert.equal(browserCapabilityLaunches[0].bindingId, 'binding-1');
+assert.equal(browserCapabilityLaunches[1].reason, 'profile_compatibility_missing_or_blocked');
+assert.equal(traceBrowserCapabilityLaunches(null).length, 0);
 
 const profileLeaseWaits = traceProfileLeaseWaits(traceData);
 assert.deepEqual(

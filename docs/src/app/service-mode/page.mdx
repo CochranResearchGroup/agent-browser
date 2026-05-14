@@ -435,7 +435,7 @@ Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fill
 
 ## Dashboard operations
 
-The dashboard service view is the operator surface for long-lived automation. It should organize multiple services and agents at the same time, show named tasks, expose service traces and incidents, and make browser state inspectable without requiring every operator to attach directly to Chrome.
+The dashboard service view is the operator surface for long-lived automation. It should organize multiple services and agents at the same time, show named tasks, expose service traces and incidents, and make browser state inspectable without requiring every operator to attach directly to Chrome. The trace explorer includes ownership summary rows, browser capability launch decisions, profile lease waits, and the normalized timeline so operators can see why a service received a particular browser build or executable.
 
 When live browser viewing is enabled, use it as an inspection and intervention surface, not as the source of truth. Service records, trace entries, and job or incident state remain the durable control-plane state.
 

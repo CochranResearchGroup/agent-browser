@@ -72,6 +72,25 @@ export type ServiceTraceProfileLeaseWait = {
   taskName?: string | null;
 };
 
+export type ServiceTraceBrowserCapabilityLaunch = {
+  source: string;
+  timestamp?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+  applied: boolean;
+  reason?: string | null;
+  browserBuild?: string | null;
+  bindingId?: string | null;
+  hostId?: string | null;
+  executableId?: string | null;
+  capabilityId?: string | null;
+  executablePath?: string | null;
+};
+
 export type ServiceTraceData = {
   filters?: ServiceTraceFiltersData;
   events?: ServiceTraceEvent[];
@@ -82,6 +101,12 @@ export type ServiceTraceData = {
     contextCount?: number;
     hasTraceContext?: boolean;
     namingWarningCount?: number;
+    browserCapabilityLaunches?: {
+      count?: number;
+      appliedCount?: number;
+      skippedCount?: number;
+      launches?: ServiceTraceBrowserCapabilityLaunch[];
+    };
     profileLeaseWaits?: {
       count?: number;
       activeCount?: number;
@@ -255,6 +280,15 @@ export function traceProfileLeaseWaits(trace: ServiceTraceData | null): ServiceT
     const leftTimestamp = left.endedAt ?? left.startedAt ?? "";
     const rightTimestamp = right.endedAt ?? right.startedAt ?? "";
     return rightTimestamp.localeCompare(leftTimestamp);
+  });
+}
+
+export function traceBrowserCapabilityLaunches(
+  trace: ServiceTraceData | null,
+): ServiceTraceBrowserCapabilityLaunch[] {
+  return [...(trace?.summary?.browserCapabilityLaunches?.launches ?? [])].sort((left, right) => {
+    if (left.applied !== right.applied) return left.applied ? -1 : 1;
+    return (right.timestamp ?? "").localeCompare(left.timestamp ?? "");
   });
 }
 
