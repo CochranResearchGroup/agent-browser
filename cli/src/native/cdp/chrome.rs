@@ -849,11 +849,12 @@ fn try_launch_chrome(
     remote_debugging: bool,
 ) -> Result<ChromeProcess, String> {
     let ChromeArgs {
-        args,
+        mut args,
         user_data_dir,
         temp_user_data_dir,
         runtime_profile,
     } = build_chrome_args(options, remote_debugging)?;
+    translate_wsl_mounted_paths_for_windows_chrome(chrome_path, &mut args);
 
     // Mitigate stale DevToolsActivePort risk (e.g., previous crash left it behind).
     // Puppeteer does similar cleanup before spawning.
@@ -987,6 +988,74 @@ fn try_launch_chrome(
         #[cfg(unix)]
         pgid,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn translate_wsl_mounted_paths_for_windows_chrome(chrome_path: &Path, args: &mut Vec<String>) {
+    if !is_wsl_mounted_windows_executable(chrome_path) {
+        return;
+    }
+
+    for arg in args.iter_mut() {
+        if let Some(path) = arg.strip_prefix("--user-data-dir=") {
+            if let Some(windows_path) = wsl_mount_path_to_windows_path(Path::new(path)) {
+                *arg = format!("--user-data-dir={windows_path}");
+            }
+        } else if let Some(path) = arg.strip_prefix("--download-default-directory=") {
+            if let Some(windows_path) = wsl_mount_path_to_windows_path(Path::new(path)) {
+                *arg = format!("--download-default-directory={windows_path}");
+            }
+        }
+    }
+
+    if !args.iter().any(|arg| arg == "--no-sandbox") {
+        args.push("--no-sandbox".to_string());
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn translate_wsl_mounted_paths_for_windows_chrome(_chrome_path: &Path, _args: &mut Vec<String>) {}
+
+#[cfg(target_os = "linux")]
+fn is_wsl_mounted_windows_executable(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+        && wsl_mount_path_to_windows_path(path).is_some()
+}
+
+#[cfg(target_os = "linux")]
+fn wsl_mount_path_to_windows_path(path: &Path) -> Option<String> {
+    let mut components = path.components();
+    if !matches!(components.next(), Some(std::path::Component::RootDir)) {
+        return None;
+    }
+    match components.next()? {
+        std::path::Component::Normal(value) if value == "mnt" => {}
+        _ => return None,
+    }
+    let drive = match components.next()? {
+        std::path::Component::Normal(value) => value.to_string_lossy().to_string(),
+        _ => return None,
+    };
+    if drive.len() != 1 || !drive.as_bytes()[0].is_ascii_alphabetic() {
+        return None;
+    }
+
+    let mut windows = format!("{}:", drive.to_ascii_uppercase());
+    for component in components {
+        let std::path::Component::Normal(value) = component else {
+            return None;
+        };
+        windows.push('\\');
+        windows.push_str(&value.to_string_lossy());
+    }
+    Some(windows)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wsl_mount_path_to_windows_path(_path: &Path) -> Option<String> {
+    None
 }
 
 fn ws_debug_port(ws_url: &str) -> Option<u16> {
@@ -2161,6 +2230,31 @@ mod tests {
             .args
             .iter()
             .any(|a| a == "--user-data-dir=/tmp/my-profile"));
+    }
+
+    #[test]
+    fn test_wsl_mounted_windows_chrome_translates_user_data_dir_arg() {
+        let mut args = vec![
+            "--user-data-dir=/mnt/c/Users/ecoch/AppData/Local/Temp/profile".to_string(),
+            "--window-size=1280,720".to_string(),
+        ];
+        translate_wsl_mounted_paths_for_windows_chrome(
+            Path::new("/mnt/c/Users/ecoch/AppData/Local/chromium-stealthcdp/current/chrome.exe"),
+            &mut args,
+        );
+
+        if cfg!(target_os = "linux") {
+            assert_eq!(
+                args[0],
+                r"--user-data-dir=C:\Users\ecoch\AppData\Local\Temp\profile"
+            );
+            assert!(args.iter().any(|arg| arg == "--no-sandbox"));
+        } else {
+            assert_eq!(
+                args[0],
+                "--user-data-dir=/mnt/c/Users/ecoch/AppData/Local/Temp/profile"
+            );
+        }
     }
 
     #[test]

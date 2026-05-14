@@ -485,7 +485,13 @@ fn find_wsl_windows_local_app_data() -> Option<PathBuf> {
 }
 
 fn write_stealthcdp_manifest(artifact_dir: &Path, executable_relative: &str) -> Result<(), String> {
-    let smoke_relative = "smoke.json";
+    let smoke_relative = if artifact_dir.join("smoke.json").exists() {
+        "smoke.json"
+    } else if artifact_dir.join("smoke-win.json").exists() {
+        "smoke-win.json"
+    } else {
+        "smoke.json"
+    };
     let smoke_path = artifact_dir.join(smoke_relative);
     if !smoke_path.exists() {
         fs::write(
@@ -534,6 +540,35 @@ fn write_stealthcdp_manifest(artifact_dir: &Path, executable_relative: &str) -> 
         .map_err(|err| format!("Failed to serialize manifest: {err}"))?,
     )
     .map_err(|err| format!("Failed to write {}: {err}", manifest_path.display()))?;
+
+    Ok(())
+}
+
+fn flatten_stealthcdp_artifact_root(extracted_dir: &Path) -> Result<(), String> {
+    if extracted_dir.join("chrome.exe").is_file() {
+        return Ok(());
+    }
+
+    let nested_dir = extracted_dir.join("chromium-stealthcdp");
+    if !nested_dir.join("chrome.exe").is_file() {
+        return Ok(());
+    }
+
+    let entries = fs::read_dir(&nested_dir)
+        .map_err(|err| format!("Failed to read {}: {err}", nested_dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|err| format!("Failed to read artifact entry: {err}"))?;
+        let dest = extracted_dir.join(entry.file_name());
+        fs::rename(entry.path(), &dest).map_err(|err| {
+            format!(
+                "Failed to move {} to {}: {err}",
+                entry.path().display(),
+                dest.display()
+            )
+        })?;
+    }
+    fs::remove_dir(&nested_dir)
+        .map_err(|err| format!("Failed to remove {}: {err}", nested_dir.display()))?;
 
     Ok(())
 }
@@ -634,6 +669,7 @@ fn install_stealthcdp_chromium_archive_bytes(
     }
 
     extract_zip(bytes, &tmp_dir)?;
+    flatten_stealthcdp_artifact_root(&tmp_dir)?;
     let chrome_exe = tmp_dir.join("chrome.exe");
     if !chrome_exe.is_file() {
         let _ = fs::remove_dir_all(&tmp_dir);
@@ -1594,6 +1630,28 @@ mod tests {
         .unwrap_err();
 
         assert!(err.contains("downloaded archive sha256 mismatch"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn flatten_stealthcdp_artifact_root_moves_packaged_release_contents_up() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-stealthcdp-flatten-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let nested = dir.join("chromium-stealthcdp");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("chrome.exe"), "chrome").unwrap();
+        fs::write(nested.join("smoke-win.json"), "{}").unwrap();
+
+        flatten_stealthcdp_artifact_root(&dir).unwrap();
+
+        assert!(dir.join("chrome.exe").is_file());
+        assert!(dir.join("smoke-win.json").is_file());
+        assert!(!nested.exists());
         let _ = fs::remove_dir_all(&dir);
     }
 
