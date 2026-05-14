@@ -549,30 +549,117 @@ struct BrowserCapabilityLaunchSelection {
     executable_path: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BrowserCapabilityLaunchResolution {
+    applied: bool,
+    reason: &'static str,
+    browser_build: Option<BrowserBuild>,
+    profile_id: Option<String>,
+    selection: Option<BrowserCapabilityLaunchSelection>,
+}
+
+impl BrowserCapabilityLaunchResolution {
+    fn skipped(
+        reason: &'static str,
+        browser_build: Option<BrowserBuild>,
+        profile_id: Option<String>,
+    ) -> Self {
+        Self {
+            applied: false,
+            reason,
+            browser_build,
+            profile_id,
+            selection: None,
+        }
+    }
+
+    fn applied(
+        browser_build: BrowserBuild,
+        profile_id: Option<String>,
+        selection: BrowserCapabilityLaunchSelection,
+    ) -> Self {
+        Self {
+            applied: true,
+            reason: "validated_binding_applied",
+            browser_build: Some(browser_build),
+            profile_id,
+            selection: Some(selection),
+        }
+    }
+
+    fn to_value(&self) -> Value {
+        let mut value = json!({
+            "applied": self.applied,
+            "reason": self.reason,
+            "browserBuild": self.browser_build.map(browser_build_label),
+            "profileId": self.profile_id,
+        });
+        if let Some(selection) = self.selection.as_ref() {
+            value["bindingId"] = json!(selection.binding_id);
+            value["hostId"] = json!(selection.host_id);
+            value["executableId"] = json!(selection.executable_id);
+            value["capabilityId"] = json!(selection.capability_id);
+            value["executablePath"] = json!(selection.executable_path);
+        }
+        value
+    }
+}
+
 fn apply_service_browser_capability_selection(
     options: &mut LaunchOptions,
     cmd: &Value,
-) -> Option<BrowserCapabilityLaunchSelection> {
-    if options.executable_path.is_some() || cmd.get("executablePath").is_some() {
-        return None;
-    }
-    let browser_build = browser_build_from_command(cmd)?;
-    let repository = LockedServiceStateRepository::default_json().ok()?;
-    let service_state = repository.load_snapshot().ok()?;
+) -> BrowserCapabilityLaunchResolution {
     let profile_id = service_profile_id(
         options.profile.as_deref(),
         options.runtime_profile.as_deref(),
     );
-    let selection = select_browser_capability_launch_binding(
+    if options.executable_path.is_some() || cmd.get("executablePath").is_some() {
+        return BrowserCapabilityLaunchResolution::skipped(
+            "explicit_executable_path",
+            browser_build_from_command(cmd),
+            profile_id,
+        );
+    }
+    let Some(browser_build) = browser_build_from_command(cmd) else {
+        return BrowserCapabilityLaunchResolution::skipped(
+            "missing_browser_build",
+            None,
+            profile_id,
+        );
+    };
+    let Ok(repository) = LockedServiceStateRepository::default_json() else {
+        return BrowserCapabilityLaunchResolution::skipped(
+            "service_state_unavailable",
+            Some(browser_build),
+            profile_id,
+        );
+    };
+    let Ok(service_state) = repository.load_snapshot() else {
+        return BrowserCapabilityLaunchResolution::skipped(
+            "service_state_unavailable",
+            Some(browser_build),
+            profile_id,
+        );
+    };
+    let selection = match select_browser_capability_launch_binding(
         &service_state,
         cmd,
         browser_build,
         profile_id.as_deref(),
         options.headless,
         options.manual_login,
-    )?;
+    ) {
+        Ok(selection) => selection,
+        Err(reason) => {
+            return BrowserCapabilityLaunchResolution::skipped(
+                reason,
+                Some(browser_build),
+                profile_id,
+            )
+        }
+    };
     options.executable_path = Some(selection.executable_path.clone());
-    Some(selection)
+    BrowserCapabilityLaunchResolution::applied(browser_build, profile_id, selection)
 }
 
 fn select_browser_capability_launch_binding(
@@ -582,7 +669,7 @@ fn select_browser_capability_launch_binding(
     profile_id: Option<&str>,
     headless: bool,
     cdp_free: bool,
-) -> Option<BrowserCapabilityLaunchSelection> {
+) -> Result<BrowserCapabilityLaunchSelection, &'static str> {
     let registry = &service_state.browser_capability_registry;
     let browser_build_label = browser_build_label(browser_build);
     let binding = registry
@@ -593,28 +680,40 @@ fn select_browser_capability_launch_binding(
         })
         .max_by(|left, right| {
             preference_binding_rank(left, cmd).cmp(&preference_binding_rank(right, cmd))
-        })?;
-    let binding_id = registry_string_field(binding, "id")?;
-    let executable_id = registry_string_field(binding, "preferredExecutableId")?;
-    let executable = registry.browser_executables.iter().find(|candidate| {
-        registry_string_field(candidate, "id").as_deref() == Some(executable_id.as_str())
-            && registry_string_field(candidate, "buildLabel").as_deref()
-                == Some(browser_build_label)
-    })?;
-    let executable_path = registry_string_field(executable, "executablePath")?;
+        })
+        .ok_or("no_matching_preference_binding")?;
+    let binding_id = registry_string_field(binding, "id").ok_or("binding_missing_id")?;
+    let executable_id = registry_string_field(binding, "preferredExecutableId")
+        .ok_or("binding_missing_executable_id")?;
+    let executable = registry
+        .browser_executables
+        .iter()
+        .find(|candidate| {
+            registry_string_field(candidate, "id").as_deref() == Some(executable_id.as_str())
+                && registry_string_field(candidate, "buildLabel").as_deref()
+                    == Some(browser_build_label)
+        })
+        .ok_or("executable_not_found")?;
+    let executable_path =
+        registry_string_field(executable, "executablePath").ok_or("executable_path_missing")?;
     if !PathBuf::from(&executable_path).is_file() {
-        return None;
+        return Err("executable_path_not_found");
     }
     let host_id = registry_string_field(binding, "preferredHostId")
-        .or_else(|| registry_string_field(executable, "hostId"))?;
-    let host = registry.browser_hosts.iter().find(|candidate| {
-        registry_string_field(candidate, "id").as_deref() == Some(host_id.as_str())
-    })?;
+        .or_else(|| registry_string_field(executable, "hostId"))
+        .ok_or("host_id_missing")?;
+    let host = registry
+        .browser_hosts
+        .iter()
+        .find(|candidate| {
+            registry_string_field(candidate, "id").as_deref() == Some(host_id.as_str())
+        })
+        .ok_or("host_not_found")?;
     if registry_string_field(host, "hostKind").as_deref() != Some("local")
         || host.get("reachable").and_then(Value::as_bool) != Some(true)
         || registry_string_field(host, "lifecycleOwner").as_deref() != Some("agent_browser")
     {
-        return None;
+        return Err("host_not_local_reachable_agent_browser_owned");
     }
     let capability_id = registry_string_field(binding, "preferredCapabilityId");
     let capability = capability_id
@@ -631,18 +730,19 @@ fn select_browser_capability_launch_binding(
                     && registry_string_field(candidate, "hostId").as_deref()
                         == Some(host_id.as_str())
             })
-        })?;
+        })
+        .ok_or("capability_not_found")?;
     let capability_id = capability_id.or_else(|| registry_string_field(capability, "id"));
     if registry_string_field(capability, "executableId").as_deref() != Some(executable_id.as_str())
     {
-        return None;
+        return Err("capability_executable_mismatch");
     }
     if headless {
         if capability.get("headlessSupported").and_then(Value::as_bool) != Some(true) {
-            return None;
+            return Err("headless_not_supported");
         }
     } else if capability.get("headedSupported").and_then(Value::as_bool) != Some(true) {
-        return None;
+        return Err("headed_not_supported");
     }
     if cdp_free {
         if capability
@@ -650,10 +750,10 @@ fn select_browser_capability_launch_binding(
             .and_then(Value::as_bool)
             != Some(true)
         {
-            return None;
+            return Err("cdp_free_launch_not_supported");
         }
     } else if capability.get("cdpSupported").and_then(Value::as_bool) != Some(true) {
-        return None;
+        return Err("cdp_not_supported");
     }
     if !profile_is_compatible_with_registry_executable(
         service_state,
@@ -661,7 +761,7 @@ fn select_browser_capability_launch_binding(
         &host_id,
         &executable_id,
     ) {
-        return None;
+        return Err("profile_compatibility_missing_or_blocked");
     }
     if !registry_has_passed_validation(
         service_state,
@@ -670,9 +770,9 @@ fn select_browser_capability_launch_binding(
         capability_id.as_deref(),
         cdp_free,
     ) {
-        return None;
+        return Err("validation_evidence_missing_or_not_passed");
     }
-    Some(BrowserCapabilityLaunchSelection {
+    Ok(BrowserCapabilityLaunchSelection {
         binding_id,
         host_id,
         executable_id,
@@ -914,6 +1014,7 @@ impl ServiceLaunchMetadata {
                     .then_some(ProfileSelectionReason::ExplicitProfile)
             }),
             browser_stderr_log_path: None,
+            browser_capability_launch: None,
         }
     }
 }
@@ -3384,10 +3485,11 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         attachable: false,
     };
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
-    let _browser_capability_selection =
+    let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, cmd);
-    let metadata =
+    let mut metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
+    metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
     ensure_service_profile_lease_available(&metadata, &state.session_id, cmd).await?;
 
     let new_hash = launch_hash(&launch_options);
@@ -3815,10 +3917,11 @@ fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> 
         attachable: false,
     };
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
-    let _browser_capability_selection =
+    let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, cmd);
-    let metadata =
+    let mut metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
+    metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
 
     Ok(CdpFreeLaunchPlan {
         launch_options,
@@ -11327,18 +11430,25 @@ mod tests {
             runtime_profile: Some("stealth-profile".to_string()),
             ..LaunchOptions::default()
         };
-        let selection = apply_service_browser_capability_selection(
+        let resolution = apply_service_browser_capability_selection(
             &mut options,
             &json!({
                 "serviceName": "CanaryRunner",
                 "targetServiceId": "canary-site",
                 "browserBuild": "stealthcdp_chromium"
             }),
-        )
-        .expect("validated local binding should be selected");
+        );
 
+        assert!(resolution.applied);
+        assert_eq!(resolution.reason, "validated_binding_applied");
+        let selection = resolution
+            .selection
+            .as_ref()
+            .expect("validated local binding should be selected");
         assert_eq!(selection.binding_id, "canary-stealth-default");
         assert_eq!(selection.executable_id, "stealth-current");
+        assert_eq!(resolution.to_value()["applied"], true);
+        assert_eq!(resolution.to_value()["bindingId"], "canary-stealth-default");
         assert_eq!(
             options.executable_path.as_deref(),
             Some(executable.to_str().expect("path should be utf-8"))
@@ -11414,7 +11524,7 @@ mod tests {
             runtime_profile: Some("chrome-profile".to_string()),
             ..LaunchOptions::default()
         };
-        let selection = apply_service_browser_capability_selection(
+        let resolution = apply_service_browser_capability_selection(
             &mut options,
             &json!({
                 "targetServiceId": "canary-site",
@@ -11422,7 +11532,16 @@ mod tests {
             }),
         );
 
-        assert!(selection.is_none());
+        assert!(!resolution.applied);
+        assert_eq!(
+            resolution.reason,
+            "profile_compatibility_missing_or_blocked"
+        );
+        assert_eq!(resolution.to_value()["applied"], false);
+        assert_eq!(
+            resolution.to_value()["reason"],
+            "profile_compatibility_missing_or_blocked"
+        );
         assert!(options.executable_path.is_none());
         let _ = fs::remove_dir_all(&home);
     }
@@ -15394,6 +15513,11 @@ mod tests {
                 cleanup: SessionCleanupPolicy::Detach,
                 profile_selection_reason: Some(ProfileSelectionReason::ExplicitProfile),
                 browser_stderr_log_path: None,
+                browser_capability_launch: Some(json!({
+                    "applied": true,
+                    "bindingId": "test-binding",
+                    "reason": "validated_binding_applied"
+                })),
             }),
         )
         .unwrap();
@@ -15428,6 +15552,10 @@ mod tests {
         assert_eq!(session.lease, LeaseState::Exclusive);
         assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
         assert_eq!(session.browser_ids, vec!["session:persist-session"]);
+        assert_eq!(
+            session.browser_capability_launch.as_ref().unwrap()["bindingId"],
+            "test-binding"
+        );
 
         let _ = fs::remove_dir_all(&home);
     }

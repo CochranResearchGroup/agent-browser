@@ -15,6 +15,7 @@
     "profileSelectionReason",
     "profileLeaseDisposition",
     "profileLeaseConflictSessionIds",
+    "browserCapabilityLaunch",
     "cleanup",
     "browserIds",
     "tabIds",
@@ -88,6 +89,11 @@
       "items": {
         "type": "string"
       }
+    },
+    "browserCapabilityLaunch": {
+      "description": "Launch-time browser capability binding resolution diagnostic, including applied/skipped state and reason when known.",
+      "type": ["object", "null"],
+      "additionalProperties": true
     },
     "cleanup": {
       "type": "string",

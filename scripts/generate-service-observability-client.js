@@ -246,6 +246,7 @@ export interface ServiceSessionRecord {
   profileSelectionReason: 'explicit_profile' | 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | 'browser_build_default' | null;
   profileLeaseDisposition: 'new_browser' | 'reused_browser' | 'active_lease_conflict' | null;
   profileLeaseConflictSessionIds: string[];
+  browserCapabilityLaunch: Record<string, unknown> | null;
   [key: string]: unknown;
 }
 

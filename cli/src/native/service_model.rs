@@ -549,6 +549,7 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
             "profileSelectionReason",
             "profileLeaseDisposition",
             "profileLeaseConflictSessionIds",
+            "browserCapabilityLaunch",
             "cleanup",
             "browserIds",
             "tabIds",
@@ -563,6 +564,7 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
             "profile_selection_reason",
             "profile_lease_disposition",
             "profile_lease_conflict_session_ids",
+            "browser_capability_launch",
             "browser_ids",
             "tab_ids",
             "created_at",
@@ -577,6 +579,9 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
         assert!(SERVICE_PROFILE_LEASE_DISPOSITION_VALUES.contains(&disposition));
     }
     assert!(value["profileLeaseConflictSessionIds"].is_array());
+    assert!(
+        value["browserCapabilityLaunch"].is_object() || value["browserCapabilityLaunch"].is_null()
+    );
     assert!(SERVICE_SESSION_CLEANUP_VALUES.contains(&value["cleanup"].as_str().unwrap()));
     assert!(value["browserIds"].is_array());
     assert!(value["tabIds"].is_array());
@@ -3588,6 +3593,8 @@ pub struct BrowserSession {
     pub profile_lease_disposition: Option<ProfileLeaseDisposition>,
     /// Other sessions currently holding an exclusive lease on the same profile.
     pub profile_lease_conflict_session_ids: Vec<String>,
+    /// Launch-time browser capability binding resolution for operator diagnostics.
+    pub browser_capability_launch: Option<serde_json::Value>,
     pub cleanup: SessionCleanupPolicy,
     pub browser_ids: Vec<String>,
     pub tab_ids: Vec<String>,
@@ -3608,6 +3615,7 @@ impl Default for BrowserSession {
             profile_selection_reason: None,
             profile_lease_disposition: None,
             profile_lease_conflict_session_ids: Vec::new(),
+            browser_capability_launch: None,
             cleanup: SessionCleanupPolicy::Detach,
             browser_ids: Vec::new(),
             tab_ids: Vec::new(),

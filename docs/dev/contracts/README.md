@@ -245,6 +245,9 @@ already won. The launch path may apply a matching local executable from that
 planned request only when the host is local, reachable, and agent-browser owned,
 the executable exists, the selected profile has a positive compatibility row
 when a profile is selected, and matching validation evidence has passed.
+The launch path records `browserCapabilityLaunch` on the persisted session and
+the `browser_launch_recorded` event details, including `applied`, `reason`,
+`browserBuild`, and selected binding or executable IDs when available.
 
 `examples/browser-capability-registry.sample.json` shows the intended shape for
 a local Linux `stealthcdp_chromium` default plus a future Windows

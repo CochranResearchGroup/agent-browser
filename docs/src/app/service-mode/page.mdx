@@ -48,7 +48,10 @@ Use this advisory no-launch view, HTTP
 <code>agent-browser://browser-capability-registry</code>, or
 <code>getServiceBrowserCapabilityRegistry()</code> to inspect browser hosts,
 executables, capabilities, profile compatibility, preference bindings, and
-validation evidence before the scheduler consumes the registry for routing.
+validation evidence before guarded launches consume matching local executable
+bindings. Launches persist <code>browserCapabilityLaunch</code> diagnostics on
+the service session and launch-recorded event so operators can see whether a
+binding was applied or skipped and why.
 
 Use the HTTP API when another program owns the workflow lifecycle:
 

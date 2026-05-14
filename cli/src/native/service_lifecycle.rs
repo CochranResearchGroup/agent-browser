@@ -22,6 +22,7 @@ pub(crate) struct ServiceLaunchMetadata {
     pub(crate) cleanup: SessionCleanupPolicy,
     pub(crate) profile_selection_reason: Option<ProfileSelectionReason>,
     pub(crate) browser_stderr_log_path: Option<String>,
+    pub(crate) browser_capability_launch: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -162,6 +163,10 @@ pub(crate) fn upsert_service_profile_and_session(
     session.profile_selection_reason = metadata
         .profile_selection_reason
         .or(session.profile_selection_reason);
+    session.browser_capability_launch = metadata
+        .browser_capability_launch
+        .clone()
+        .or(session.browser_capability_launch.clone());
     if let Some(lease_telemetry) = lease_telemetry {
         session.profile_lease_disposition = Some(lease_telemetry.disposition);
         session.profile_lease_conflict_session_ids = lease_telemetry.conflict_session_ids;
@@ -749,6 +754,10 @@ mod tests {
             cleanup: SessionCleanupPolicy::Detach,
             profile_selection_reason: Some(ProfileSelectionReason::ExplicitProfile),
             browser_stderr_log_path: None,
+            browser_capability_launch: Some(serde_json::json!({
+                "applied": false,
+                "reason": "test"
+            })),
         };
 
         upsert_service_profile_and_session(
@@ -791,6 +800,10 @@ mod tests {
         assert!(session.profile_lease_conflict_session_ids.is_empty());
         assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
         assert_eq!(session.browser_ids, vec!["session:persist-session"]);
+        assert_eq!(
+            session.browser_capability_launch.as_ref().unwrap()["reason"],
+            "test"
+        );
     }
 
     #[test]

@@ -1448,6 +1448,11 @@ pub fn record_browser_launch_recorded_event(
     if let Some(path) = metadata.and_then(|metadata| metadata.browser_stderr_log_path.as_deref()) {
         details["browserStderrLogPath"] = serde_json::json!(path);
     }
+    if let Some(browser_capability_launch) =
+        metadata.and_then(|metadata| metadata.browser_capability_launch.clone())
+    {
+        details["browserCapabilityLaunch"] = browser_capability_launch;
+    }
     let mut event = ServiceEvent {
         kind: ServiceEventKind::BrowserLaunchRecorded,
         message: format!("Browser {} launch metadata recorded", browser_id),
@@ -2079,6 +2084,11 @@ mod tests {
             browser_stderr_log_path: Some(
                 "/home/user/.agent-browser/tmp/chrome-launches/chrome-123.stderr.log".to_string(),
             ),
+            browser_capability_launch: Some(serde_json::json!({
+                "applied": false,
+                "reason": "profile_compatibility_missing_or_blocked",
+                "browserBuild": "stealthcdp_chromium"
+            })),
             ..ServiceLaunchMetadata::default()
         };
         record_browser_launch_recorded_event(
@@ -2100,6 +2110,10 @@ mod tests {
         assert_eq!(
             event.details.as_ref().unwrap()["browserStderrLogPath"],
             "/home/user/.agent-browser/tmp/chrome-launches/chrome-123.stderr.log"
+        );
+        assert_eq!(
+            event.details.as_ref().unwrap()["browserCapabilityLaunch"]["reason"],
+            "profile_compatibility_missing_or_blocked"
         );
     }
 
