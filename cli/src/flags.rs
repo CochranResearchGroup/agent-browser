@@ -2301,6 +2301,20 @@ mod tests {
                 .as_nanos()
         ));
         std::fs::write(&config_path, "{}").unwrap();
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_EXECUTABLE_PATH",
+            "AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT",
+            "AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH",
+        ]);
+        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+        guard.remove("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT");
+        guard.set(
+            "AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH",
+            config_path
+                .with_file_name("missing-stealthcdp-manifest.json")
+                .to_str()
+                .unwrap(),
+        );
         let flags = parse_flags(&args(&format!(
             "--config {} --executable-path",
             config_path.display()

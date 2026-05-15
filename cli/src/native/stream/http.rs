@@ -1445,9 +1445,9 @@ fn reject_cdp_free_service_request(
 }
 
 fn parse_query_bool(name: &str, value: &str) -> Result<bool, String> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "true" | "1" | "yes" | "on" => Ok(true),
-        "false" | "0" | "no" | "off" => Ok(false),
+    match value {
+        "true" | "1" => Ok(true),
+        "false" | "0" => Ok(false),
         _ => Err(format!("Invalid {} value: {}", name, value)),
     }
 }
