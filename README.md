@@ -1903,6 +1903,14 @@ It includes the winning source, evidence source, explicit operator override
 status, selected preference binding, profile compatibility summary, and
 validation evidence summary so agents and software can audit browser routing
 without launching Chrome.
+Use `agent-browser service browser-capability preflight --browser-build
+stealthcdp_chromium --target-service-id canva --runtime-profile canva-default
+--headed --service-name CanvaCLI --agent-name codex --task-name
+openCanvaWorkspace` when an operator wants the actual launch-routing gate
+before Chrome opens. The preflight uses the same host, executable, profile
+compatibility, and validation evidence checks as guarded launches, returns the
+exact pass or skip reason, and prints selected compatibility and validation
+evidence IDs when a route passes.
 Launch routing applies a browser capability registry executable only when the
 matching profile-compatibility rows are all acceptable and the matching
 validation evidence includes a passed row with no failed or stale row for that

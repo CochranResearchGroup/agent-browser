@@ -39,6 +39,7 @@ agent-browser service remedies apply --escalation browser_degraded --by operator
 agent-browser service remedies apply --escalation os_degraded_possible --by operator --note host-inspected
 agent-browser service jobs --limit 20
 agent-browser service reconcile
+agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
 ```
 
 Configured <code>service.browserCapabilityRegistry</code> records appear under
@@ -55,6 +56,13 @@ binding was applied or skipped and why. Service traces summarize those
 decisions in <code>summary.browserCapabilityLaunches</code> and text output
 prints a <code>Browser capability launches</code> block with the applied state,
 reason, browser build, binding, host, executable, and trace context.
+Use <code>agent-browser service browser-capability preflight</code> when an
+operator wants the same guarded launch-gate decision before opening Chrome. It
+accepts the requested browser build, site/login/account hints, caller labels,
+profile hints, headed or headless posture, and CDP-free posture, then prints
+whether the service would apply a matching executable binding and the exact
+reason. Passing routes include the selected binding, host, executable,
+capability, profile compatibility evidence IDs, and validation evidence IDs.
 
 Use the HTTP API when another program owns the workflow lifecycle:
 

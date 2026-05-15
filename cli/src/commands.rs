@@ -73,6 +73,176 @@ pub fn gen_id() -> String {
 
 const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
 
+const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
+
+fn parse_service_browser_capability_preflight(
+    id: String,
+    rest: &[&str],
+    _flags: &Flags,
+) -> Result<Value, ParseError> {
+    if rest.get(1).copied() != Some("preflight") {
+        return Err(ParseError::InvalidValue {
+            message: "Expected service browser-capability preflight".to_string(),
+            usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+        });
+    }
+    let mut cmd = json!({
+        "id": id,
+        "action": "service_browser_capability_preflight",
+    });
+    let mut i = 2;
+    while i < rest.len() {
+        match rest[i] {
+            "--browser-build" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --browser-build".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                match crate::native::service_model::BrowserBuild::parse_label(value) {
+                    Some(_) => cmd["browserBuild"] = json!(value),
+                    None => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --browser-build value: {}", value),
+                            usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--target-service-id" | "--target-service" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --target-service-id".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["targetServiceId"] = json!(value);
+                i += 1;
+            }
+            "--site-id" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --site-id".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["siteId"] = json!(value);
+                i += 1;
+            }
+            "--login-id" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --login-id".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["loginId"] = json!(value);
+                i += 1;
+            }
+            "--account-id" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --account-id".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["accountId"] = json!(value);
+                i += 1;
+            }
+            "--url" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --url".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["url"] = json!(value);
+                i += 1;
+            }
+            "--runtime-profile" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --runtime-profile".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["runtimeProfile"] = json!(value);
+                i += 1;
+            }
+            "--profile" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --profile".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["profile"] = json!(value);
+                i += 1;
+            }
+            "--service-name" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --service-name".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["serviceName"] = json!(value);
+                i += 1;
+            }
+            "--agent-name" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --agent-name".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["agentName"] = json!(value);
+                i += 1;
+            }
+            "--task-name" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --task-name".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                    });
+                };
+                cmd["taskName"] = json!(value);
+                i += 1;
+            }
+            "--headed" => {
+                cmd["headless"] = json!(false);
+            }
+            "--headless" => {
+                cmd["headless"] = json!(true);
+            }
+            "--cdp-free" => {
+                cmd["requiresCdpFree"] = json!(true);
+                cmd["cdpAttachmentAllowed"] = json!(false);
+                cmd["headless"] = json!(false);
+            }
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!(
+                        "Unknown flag for service browser-capability preflight: {}",
+                        flag
+                    ),
+                    usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+                });
+            }
+        }
+        i += 1;
+    }
+    if cmd.get("browserBuild").is_none() {
+        return Err(ParseError::MissingArguments {
+            context: "service browser-capability preflight".to_string(),
+            usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
+        });
+    }
+    Ok(cmd)
+}
+
 fn parse_service_profile_verify_seeding(
     id: String,
     rest: &[&str],
@@ -1056,6 +1226,9 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "action": "service_reconcile",
                 "serviceState": flags.service_state.clone(),
             })),
+            Some("browser-capability") => {
+                parse_service_browser_capability_preflight(id, &rest, flags)
+            }
             Some("profiles") => {
                 if rest.len() >= 3 && rest[2] == "seeding-handoff" {
                     if rest.len() > 4 {
@@ -2192,6 +2365,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "status",
                     "watch",
                     "reconcile",
+                    "browser-capability",
                     "profiles",
                     "sessions",
                     "browsers",
@@ -2207,7 +2381,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
+                usage: "service <status|watch|reconcile|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
             }),
         },
 
@@ -5509,6 +5683,25 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_browsers");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_browser_capability_preflight() {
+        let cmd = parse_command(
+            &args("service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --account-id work --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_browser_capability_preflight");
+        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["targetServiceId"], "canva");
+        assert_eq!(cmd["accountId"], "work");
+        assert_eq!(cmd["runtimeProfile"], "canva-default");
+        assert_eq!(cmd["headless"], false);
+        assert_eq!(cmd["serviceName"], "CanvaCLI");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "openCanvaWorkspace");
     }
 
     #[test]

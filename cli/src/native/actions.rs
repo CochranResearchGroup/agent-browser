@@ -212,6 +212,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "stream_status"
             | "service_status"
             | "service_reconcile"
+            | "service_browser_capability_preflight"
             | "service_job_cancel"
             | "service_browser_retry"
             | "service_remedies_apply"
@@ -2998,6 +2999,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_status" => handle_stream_status(state).await,
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
+        "service_browser_capability_preflight" => {
+            handle_service_browser_capability_preflight(cmd).await
+        }
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_browser_retry" => handle_service_browser_retry(cmd).await,
         "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
@@ -7372,6 +7376,67 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+/// Evaluate browser capability launch gates without starting Chrome.
+async fn handle_service_browser_capability_preflight(cmd: &Value) -> Result<Value, String> {
+    let requested_build = browser_build_from_command(cmd);
+    let cdp_free = cmd
+        .get("requiresCdpFree")
+        .or_else(|| cmd.get("cdpFree"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || requested_build == Some(BrowserBuild::CdpFreeHeaded)
+        || cmd
+            .get("cdpAttachmentAllowed")
+            .and_then(Value::as_bool)
+            .is_some_and(|allowed| !allowed);
+    let headless = if cdp_free {
+        false
+    } else {
+        cmd.get("headless").and_then(Value::as_bool).unwrap_or(true)
+    };
+    let mut launch_options = LaunchOptions {
+        headless,
+        executable_path: cmd
+            .get("executablePath")
+            .and_then(|value| value.as_str())
+            .map(str::to_string)
+            .or_else(|| env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok()),
+        profile: launch_profile_from_sources(cmd, true),
+        runtime_profile: cmd
+            .get("runtimeProfile")
+            .and_then(|value| value.as_str())
+            .map(str::to_string)
+            .or_else(runtime_profile_from_env),
+        manual_login: cdp_free,
+        attachable: !cdp_free,
+        ..LaunchOptions::default()
+    };
+    let browser_capability_launch =
+        apply_service_browser_capability_selection(&mut launch_options, cmd);
+    Ok(json!({
+        "preflight": true,
+        "wouldLaunch": false,
+        "wouldApplyExecutable": browser_capability_launch.applied,
+        "browserCapabilityLaunch": browser_capability_launch.to_value(),
+        "request": {
+            "browserBuild": requested_build.map(browser_build_label),
+            "profileId": service_profile_id(
+                launch_options.profile.as_deref(),
+                launch_options.runtime_profile.as_deref()
+            ),
+            "headless": launch_options.headless,
+            "cdpFree": cdp_free,
+            "serviceName": optional_command_string(cmd, "serviceName"),
+            "agentName": optional_command_string(cmd, "agentName"),
+            "taskName": optional_command_string(cmd, "taskName"),
+            "targetServiceIds": target_service_ids_from_command(cmd),
+            "accountIds": account_ids_from_command(cmd),
+            "url": target_url_from_command(cmd),
+        },
+        "selectedExecutablePath": launch_options.executable_path,
+    }))
+}
+
 /// Return the service-owned profile collection without the full status payload.
 async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
     let mut service_state = cmd
@@ -11515,6 +11580,98 @@ mod tests {
             options.executable_path.as_deref(),
             Some(executable.to_str().expect("path should be utf-8"))
         );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_browser_capability_preflight_reports_validated_binding_without_launch() {
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_EXECUTABLE_PATH"]);
+        let home = unique_socket_dir("browser-capability-preflight-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+        let executable = home.join("chrome");
+        fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
+
+        JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+            .save(&ServiceState {
+                browser_capability_registry: BrowserCapabilityRegistry {
+                    browser_hosts: vec![json!({
+                        "id": "linux-local",
+                        "hostKind": "local",
+                        "reachable": true,
+                        "lifecycleOwner": "agent_browser"
+                    })],
+                    browser_executables: vec![json!({
+                        "id": "stealth-current",
+                        "hostId": "linux-local",
+                        "buildLabel": "stealthcdp_chromium",
+                        "executablePath": executable.display().to_string()
+                    })],
+                    browser_capabilities: vec![json!({
+                        "id": "stealth-capability",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "cdpSupported": true,
+                        "headedSupported": true,
+                        "headlessSupported": true
+                    })],
+                    profile_compatibility: vec![json!({
+                        "id": "stealth-profile-compatible",
+                        "profileId": "stealth-profile",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "compatible": true,
+                        "requiresOperatorOverride": false
+                    })],
+                    browser_preference_bindings: vec![json!({
+                        "id": "canary-stealth-default",
+                        "scope": "site",
+                        "targetServiceIds": ["canary-site"],
+                        "preferredHostId": "linux-local",
+                        "preferredExecutableId": "stealth-current",
+                        "preferredCapabilityId": "stealth-capability",
+                        "browserBuild": "stealthcdp_chromium",
+                        "priority": 50
+                    })],
+                    validation_evidence: vec![json!({
+                        "id": "stealth-launch-smoke",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "capabilityId": "stealth-capability",
+                        "kind": "launch",
+                        "state": "passed"
+                    })],
+                    ..BrowserCapabilityRegistry::default()
+                },
+                ..ServiceState::default()
+            })
+            .expect("service state should be persisted");
+
+        let response = handle_service_browser_capability_preflight(&json!({
+            "targetServiceId": "canary-site",
+            "runtimeProfile": "stealth-profile",
+            "browserBuild": "stealthcdp_chromium",
+            "headless": false
+        }))
+        .await
+        .expect("preflight should evaluate");
+
+        assert_eq!(response["preflight"], true);
+        assert_eq!(response["wouldLaunch"], false);
+        assert_eq!(response["wouldApplyExecutable"], true);
+        assert_eq!(
+            response["browserCapabilityLaunch"]["reason"],
+            "validated_binding_applied"
+        );
+        assert_eq!(
+            response["browserCapabilityLaunch"]["profileCompatibilityIds"],
+            json!(["stealth-profile-compatible"])
+        );
+        assert_eq!(
+            response["browserCapabilityLaunch"]["validationEvidenceIds"],
+            json!(["stealth-launch-smoke"])
+        );
+        assert_eq!(response["request"]["profileId"], "stealth-profile");
         let _ = fs::remove_dir_all(&home);
     }
 

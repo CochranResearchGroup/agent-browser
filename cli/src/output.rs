@@ -891,6 +891,55 @@ fn format_service_jobs_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn json_string_array(value: &serde_json::Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|joined| !joined.is_empty())
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn format_service_browser_capability_preflight_text(data: &serde_json::Value) -> Option<String> {
+    let launch = data.get("browserCapabilityLaunch")?;
+    let request = data.get("request").unwrap_or(data);
+    let apply = value_bool_label(data, "wouldApplyExecutable");
+    let reason = value_str(launch, "reason", "unknown");
+    let build = value_str(launch, "browserBuild", "default");
+    let profile = value_str(launch, "profileId", "none");
+    let headless = value_bool_label(request, "headless");
+    let cdp_free = value_bool_label(request, "cdpFree");
+    let mut lines = vec![format!(
+        "Browser capability preflight: apply={apply} reason={reason} build={build} profile={profile} headless={headless} cdp_free={cdp_free}"
+    )];
+    if launch
+        .get("applied")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        lines.push(format!(
+            "  binding={} host={} executable={} capability={} path={}",
+            value_str(launch, "bindingId", "unknown"),
+            value_str(launch, "hostId", "unknown"),
+            value_str(launch, "executableId", "unknown"),
+            value_str(launch, "capabilityId", "none"),
+            value_str(launch, "executablePath", "none")
+        ));
+        lines.push(format!(
+            "  profile_compatibility={} validation_evidence={}",
+            json_string_array(launch, "profileCompatibilityIds"),
+            json_string_array(launch, "validationEvidenceIds")
+        ));
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_job_line(job: &serde_json::Value) -> String {
     let timestamp = job
         .get("submittedAt")
@@ -1915,6 +1964,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_status") {
             if let Some(output) = format_service_status_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_browser_capability_preflight") {
+            if let Some(output) = format_service_browser_capability_preflight_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -4451,6 +4506,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
+  agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
   agent-browser service profiles
   agent-browser service sessions
   agent-browser service browsers
@@ -4482,6 +4538,7 @@ Commands:
   status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
+  browser-capability    Preflight guarded executable routing for one requested browser build without launching
   profiles              Show retained service profile records and derived allocation state
   profiles <id> seeding-handoff [target]
                         Show the detached runtime-login command and operator steps for profile seeding
@@ -4513,6 +4570,7 @@ Commands:
 
 Notes:
   - It does not launch a browser.
+  - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.
   - Persisted service state is loaded from ~/.agent-browser/service/state.json.
   - The current control-plane snapshot is refreshed in the persisted service state.
   - Recent control-plane requests are retained as bounded job records with timestamps and final state.
@@ -4576,6 +4634,7 @@ Notes:
   - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. launchConfig.profileSmoke tells API, MCP, and CLI clients whether the WSL Windows chromium-stealthcdp profile-write smoke is applicable. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning. When no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
   - Service profiles can set browserBuild to stock_chrome, stealthcdp_chromium, or cdp_free_headed. Exact authenticated target, account, and target-site matches win first; browserBuild then breaks ties and can select a generic default profile for new identities.
   - service.browserCapabilityRegistry carries draft browser host, executable, capability, profile compatibility, preference binding, and validation evidence arrays into service_state.browserCapabilityRegistry for no-launch status consumers. Access-plan recommendations can use preference bindings for browserBuild selection, and guarded launches record browserCapabilityLaunch diagnostics explaining whether a local executable binding was applied or skipped. A matching failed, stale, incompatible, or operator-override row blocks launch routing even if another matching row passed.
+  - service browser-capability preflight is the operator no-launch gate check for that same guarded launch path. It accepts the requested build, site/login/account hints, caller labels, profile hint, headed or headless posture, and CDP-free posture, and returns browserCapabilityLaunch plus selected evidence IDs when the route passes.
   - Commands should include serviceName, agentName, and taskName when available for traceability.
   - Configured profiles, sessions, site policies, and providers from agent-browser.json and ~/.agent-browser/config.json override matching persisted entries.
 
@@ -4588,6 +4647,7 @@ Examples:
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
+  agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
   agent-browser service profiles
   agent-browser service sessions
   agent-browser service browsers
@@ -5545,8 +5605,9 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_service_browsers_text, format_service_challenges_text, format_service_events_text,
-        format_service_incidents_text, format_service_jobs_text, format_service_monitor_state_text,
+        format_service_browser_capability_preflight_text, format_service_browsers_text,
+        format_service_challenges_text, format_service_events_text, format_service_incidents_text,
+        format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
         format_service_profile_seeding_handoff_text, format_service_profiles_text,
         format_service_providers_text, format_service_sessions_text,
@@ -5764,6 +5825,38 @@ mod tests {
             rendered,
             "Browsers: 1\n  session:runtime-session health=degraded host=owned_process profile=work pid=1234 observed=2026-04-25T00:00:00Z failure=browser_shutdown_degraded exit_cause=operator_requested_close error=Polite browser close failed; force kill was required"
         );
+    }
+
+    #[test]
+    fn test_format_service_browser_capability_preflight_text_includes_gate_evidence() {
+        let data = json!({
+            "wouldApplyExecutable": true,
+            "request": {
+                "headless": false,
+                "cdpFree": false
+            },
+            "browserCapabilityLaunch": {
+                "applied": true,
+                "reason": "validated_binding_applied",
+                "browserBuild": "stealthcdp_chromium",
+                "profileId": "canva-default",
+                "bindingId": "canva-stealth",
+                "hostId": "linux-local",
+                "executableId": "stealth-current",
+                "capabilityId": "stealth-cdp",
+                "executablePath": "/opt/chromium-stealthcdp/chrome",
+                "profileCompatibilityIds": ["canva-profile-compatible"],
+                "validationEvidenceIds": ["stealth-launch-smoke"]
+            }
+        });
+
+        let rendered = format_service_browser_capability_preflight_text(&data).unwrap();
+
+        assert!(rendered.contains("apply=yes"));
+        assert!(rendered.contains("reason=validated_binding_applied"));
+        assert!(rendered.contains("binding=canva-stealth"));
+        assert!(rendered.contains("profile_compatibility=canva-profile-compatible"));
+        assert!(rendered.contains("validation_evidence=stealth-launch-smoke"));
     }
 
     #[test]
