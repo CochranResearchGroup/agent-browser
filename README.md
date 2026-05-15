@@ -425,6 +425,7 @@ agent-browser install                 # Download Chrome from Chrome for Testing 
 agent-browser install stealthcdp-chromium  # Download the preferred patched Chromium release when available
 agent-browser install doctor          # Check user-scoped binary drift and launch readiness
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
+agent-browser setup windows-browser --print-powershell  # Print reviewed Windows routing setup script
 agent-browser install --with-deps     # Also install system deps (Linux)
 agent-browser upgrade                 # Upgrade agent-browser to the latest version
 ```
@@ -1326,6 +1327,15 @@ This opens a visible browser window instead of running headless.
 On Unix, if `DISPLAY` is unset, agent-browser launches headed Chrome with `DISPLAY=:0.0` by default. This matches common WSL X server setups.
 
 > **Note:** Browser extensions work in both headed and headless mode (Chrome's `--headless=new`).
+
+For WSL operators who prefer Windows-hosted Chrome or Chromium, run
+`agent-browser doctor windows-browser` to diagnose the current CDP route without
+changing firewall, `.wslconfig`, SSH, browser, or profile state. Run
+`agent-browser setup windows-browser --print-powershell` to print a reviewed
+Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall
+rules, fixed CDP ports, SSH tunnel fallback, and rollback commands. The
+agent-browser command is preview-only; the generated script is dry-run by
+default and requires its own `-Apply` switch before creating a firewall rule.
 
 ## Authenticated Sessions
 

@@ -14,6 +14,7 @@ mod test_utils;
 mod upgrade;
 mod validation;
 mod windows_browser_doctor;
+mod windows_browser_setup;
 
 use serde_json::json;
 use std::env;
@@ -1490,6 +1491,37 @@ fn main() {
                 } else {
                     eprintln!(
                         "Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>]"
+                    );
+                }
+                exit(1);
+            }
+        }
+    }
+
+    if clean.first().map(|s| s.as_str()) == Some("setup") {
+        match clean.get(1).map(|s| s.as_str()) {
+            Some("windows-browser") => {
+                windows_browser_setup::run_windows_browser_setup(&clean, flags.json);
+                return;
+            }
+            Some(unknown) => {
+                if flags.json {
+                    print_json_error(format!("Unknown setup subcommand: {unknown}"));
+                } else {
+                    eprintln!(
+                        "{} Unknown setup subcommand: {}",
+                        color::error_indicator(),
+                        unknown
+                    );
+                }
+                exit(1);
+            }
+            None => {
+                if flags.json {
+                    print_json_error("Usage: agent-browser setup windows-browser --print-powershell [--port <port>] [--mode mirrored|nat|ssh]");
+                } else {
+                    eprintln!(
+                        "Usage: agent-browser setup windows-browser --print-powershell [--port <port>] [--mode mirrored|nat|ssh]"
                     );
                 }
                 exit(1);

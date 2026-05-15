@@ -74,6 +74,13 @@ fallback, candidate CDP endpoints, fixed-port probe results, stable manifest
 visibility, and whether WSL path translation plus <code>--no-sandbox</code>
 apply for the selected Windows browser.
 
+Run <code>agent-browser setup windows-browser --print-powershell</code> to
+print a reviewed Windows PowerShell setup helper for mirrored WSL networking,
+scoped Hyper-V firewall rules, fixed CDP ports, SSH tunnel fallback, and
+rollback commands. The agent-browser command is preview-only and does not
+mutate system state. The generated script is dry-run by default and requires
+its own <code>-Apply</code> switch before it creates a scoped firewall rule.
+
 ## Updating
 
 Upgrade to the latest version:

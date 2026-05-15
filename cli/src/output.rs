@@ -4309,6 +4309,38 @@ Examples:
 "##
         }
 
+        // === Setup ===
+        "setup" => {
+            r##"
+agent-browser setup - Generate reviewed setup helpers
+
+Usage: agent-browser setup windows-browser --print-powershell [options]
+
+Subcommands:
+  windows-browser       Print a Windows PowerShell setup script for WSL to Windows browser CDP routing
+
+Options:
+  --print-powershell    Print the PowerShell script to stdout without changing system state
+  --port <port>         Fixed CDP port for operator-owned Windows browsers (default: 9222)
+  --mode <mode>         Route mode: mirrored, nat, or ssh (default: mirrored)
+  --windows-user <user> User placeholder for the SSH tunnel command
+  --windows-host <host> Host placeholder for the SSH tunnel command
+  --rule-name <name>    Hyper-V firewall rule name (default: agent-browser-cdp-<port>)
+  --json                Output the generated script and metadata as JSON
+
+Safety:
+  The agent-browser command is preview-only and never edits .wslconfig,
+  firewall, SSH, or browser state. The generated script is dry-run by default
+  and requires its own -Apply switch before creating a scoped Hyper-V firewall
+  rule.
+
+Examples:
+  agent-browser setup windows-browser --print-powershell
+  agent-browser setup windows-browser --print-powershell --port 9222 > windows-browser-setup.ps1
+  agent-browser setup windows-browser --print-powershell --mode ssh --windows-user ecoch --windows-host winhost
+"##
+        }
+
         // === Connect ===
         "connect" => {
             r##"
@@ -5091,6 +5123,7 @@ Setup:
   install                    Install browser binaries
   install doctor             Check user-scoped install drift and launch readiness
   doctor windows-browser     Diagnose WSL to Windows browser CDP routing
+  setup windows-browser      Print a reviewed PowerShell setup script for Windows browser routing
   install --with-deps        Also install system dependencies (Linux)
   upgrade                    Upgrade to the latest version
   dashboard start            Start the observability dashboard
