@@ -160,8 +160,9 @@ launching.
 <code>agent-browser service status</code> and
 <code>GET /api/service/status</code> include a no-launch
 <code>launchConfig</code> diagnostic with the resolved executable path,
-executable source, artifact metadata, file existence, and warnings when the
-selected custom build is not ready.
+executable source, artifact metadata, file existence,
+<code>profileSmoke</code> readiness for validating WSL Windows profile writes,
+and warnings when the selected custom build is not ready.
 The patched build is useful because it keeps CDP-backed service control while
 reducing the obvious automation signal exposed by ordinary DevTools-attached
 Chromium. It is not a captcha bypass, but it is a better default for

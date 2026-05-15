@@ -1721,6 +1721,21 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
         lines.push(format!(
             "Launch config: browser_build={default_build} executable={executable_path} executable_source={executable_source} executable_exists={executable_exists} stealthcdp_ready={stealth_ready}"
         ));
+        if let Some(profile_smoke) = launch_config.get("profileSmoke") {
+            let available = match profile_smoke
+                .get("available")
+                .and_then(|value| value.as_bool())
+            {
+                Some(true) => "yes",
+                Some(false) => "no",
+                None => "unknown",
+            };
+            let reason = value_str(profile_smoke, "reason", "unknown");
+            let command = value_str(profile_smoke, "command", "none");
+            lines.push(format!(
+                "  profile_smoke available={available} reason={reason} command={command}"
+            ));
+        }
         if let Some(manifests) = launch_config
             .get("browserBuildManifests")
             .and_then(|value| value.as_object())
@@ -4558,7 +4573,7 @@ Notes:
   - pnpm test:service-shutdown-health-live validates the polite-shutdown failure remedy against live service state.
   - Runtime profile and custom profile launches populate linked service profile and session records, including profileSelectionReason, profileLeaseDisposition, profileLeaseConflictSessionIds, and browserCapabilityLaunch diagnostics when known.
   - Service-scoped launches reject active exclusive profile conflicts by default before browser start; set profileLeasePolicy=wait and profileLeaseWaitTimeoutMs to keep the job queued while polling for release, leaving the worker available for other commands. Same-session retained browser reuse remains allowed.
-  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning. When no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
+  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. launchConfig.profileSmoke tells API, MCP, and CLI clients whether the WSL Windows chromium-stealthcdp profile-write smoke is applicable. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning. When no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
   - Service profiles can set browserBuild to stock_chrome, stealthcdp_chromium, or cdp_free_headed. Exact authenticated target, account, and target-site matches win first; browserBuild then breaks ties and can select a generic default profile for new identities.
   - service.browserCapabilityRegistry carries draft browser host, executable, capability, profile compatibility, preference binding, and validation evidence arrays into service_state.browserCapabilityRegistry for no-launch status consumers. Access-plan recommendations can use preference bindings for browserBuild selection, and guarded launches record browserCapabilityLaunch diagnostics explaining whether a local executable binding was applied or skipped.
   - Commands should include serviceName, agentName, and taskName when available for traceability.
@@ -5665,6 +5680,14 @@ mod tests {
                 "executablePathSource": "config",
                 "executablePathExists": false,
                 "browserBuildManifests": {},
+                "profileSmoke": {
+                    "available": false,
+                    "command": "pnpm test:wsl-windows-chromium-profile-live",
+                    "reason": "stealthcdp_executable_not_found",
+                    "isWsl": true,
+                    "executableOnWindowsMount": false,
+                    "description": "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene."
+                },
                 "warnings": [{
                     "code": "stealthcdp_executable_not_found",
                     "message": "stealthcdp_chromium is selected, but the configured executable path does not exist"

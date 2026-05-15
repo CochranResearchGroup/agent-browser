@@ -61,6 +61,7 @@
         "executablePathSource",
         "executablePathExists",
         "browserBuildManifests",
+        "profileSmoke",
         "warnings"
       ],
       "properties": {
@@ -114,6 +115,45 @@
             },
             "additionalProperties": true
           }
+        },
+        "profileSmoke": {
+          "type": "object",
+          "description": "No-launch recommendation for validating WSL to Windows chromium-stealthcdp profile writes after the executable and manifest are ready.",
+          "required": [
+            "available",
+            "command",
+            "reason",
+            "isWsl",
+            "executableOnWindowsMount",
+            "description"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean",
+              "description": "True when this host is WSL, stealthcdp_chromium is selected and ready, and the resolved executable is on a Windows mount."
+            },
+            "command": {
+              "type": "string",
+              "description": "Repo command that runs the live profile-write smoke."
+            },
+            "reason": {
+              "type": "string",
+              "description": "Machine-readable readiness reason for why the smoke is or is not available."
+            },
+            "isWsl": {
+              "type": "boolean",
+              "description": "Whether the service process appears to be running under WSL."
+            },
+            "executableOnWindowsMount": {
+              "type": "boolean",
+              "description": "Whether the resolved executable path is under /mnt/<drive>/ and therefore needs WSL path translation for Windows Chrome arguments."
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of what the smoke validates."
+            }
+          },
+          "additionalProperties": true
         },
         "warnings": {
           "type": "array",

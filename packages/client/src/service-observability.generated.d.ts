@@ -365,6 +365,15 @@ export interface ServiceStatusResponse {
       warnings?: Array<{ code?: string; severity?: string; message?: string; [key: string]: unknown }>;
       [key: string]: unknown;
     }>;
+    profileSmoke: {
+      available: boolean;
+      command: string;
+      reason: string;
+      isWsl: boolean;
+      executableOnWindowsMount: boolean;
+      description: string;
+      [key: string]: unknown;
+    };
     warnings: Array<{ code: string; severity: string; message: string; [key: string]: unknown }>;
     [key: string]: unknown;
   };

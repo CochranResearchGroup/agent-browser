@@ -1688,12 +1688,17 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
                 "executablePathSource",
                 "executablePathExists",
                 "browserBuildManifests",
+                "profileSmoke",
                 "warnings",
             ],
             &["default_browser_build"],
         );
         assert!(launch_config["stealthCdpChromiumRequired"].is_boolean());
         assert!(launch_config["stealthCdpChromiumReady"].is_boolean());
+        assert!(launch_config["profileSmoke"].is_object());
+        assert!(launch_config["profileSmoke"]["available"].is_boolean());
+        assert!(launch_config["profileSmoke"]["command"].is_string());
+        assert!(launch_config["profileSmoke"]["reason"].is_string());
         assert!(launch_config["warnings"].is_array());
     }
     for allocation in value["profileAllocations"].as_array().unwrap() {

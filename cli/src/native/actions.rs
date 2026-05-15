@@ -12774,6 +12774,14 @@ mod tests {
                 "executablePathSource": null,
                 "executablePathExists": null,
                 "browserBuildManifests": {},
+                "profileSmoke": {
+                    "available": false,
+                    "command": "pnpm test:wsl-windows-chromium-profile-live",
+                    "reason": "stealthcdp_executable_missing",
+                    "isWsl": true,
+                    "executableOnWindowsMount": false,
+                    "description": "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene."
+                },
                 "warnings": [{
                     "code": "stealthcdp_executable_missing",
                     "severity": "warning",

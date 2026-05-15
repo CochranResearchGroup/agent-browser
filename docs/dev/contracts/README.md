@@ -362,6 +362,9 @@ response returned by `agent-browser service status` and HTTP
 `GET /api/service/status`. It includes the derived `profileAllocations` view so
 software clients can consume profile holder, waiting job, conflict, lease
 state, and recommended-action data without reconstructing it from raw state.
+Its `launchConfig.profileSmoke` field reports whether the WSL Windows
+`chromium-stealthcdp` profile-write smoke is currently applicable and provides
+the repo command plus machine-readable reason.
 
 The service collection record schemas describe compact records returned by HTTP
 collection APIs and the matching MCP resources:

@@ -1349,6 +1349,13 @@ pub fn launch_config_status(flags: &Flags) -> Value {
 
     let stealth_ready = !stealth_cdp_chromium_required
         || (executable_path_exists == Some(true) && stealth_manifest_ready.unwrap_or(true));
+    let profile_smoke = launch_profile_smoke_status(
+        detect_wsl(),
+        flags.executable_path.as_deref(),
+        executable_path_exists,
+        stealth_cdp_chromium_required,
+        stealth_ready,
+    );
 
     json!({
         "defaultBrowserBuild": default_browser_build,
@@ -1358,8 +1365,79 @@ pub fn launch_config_status(flags: &Flags) -> Value {
         "executablePathSource": flags.executable_path_source.clone(),
         "executablePathExists": executable_path_exists,
         "browserBuildManifests": flags.browser_build_manifest_status.clone(),
+        "profileSmoke": profile_smoke,
         "warnings": warnings
     })
+}
+
+fn launch_profile_smoke_status(
+    is_wsl: bool,
+    executable_path: Option<&str>,
+    executable_path_exists: Option<bool>,
+    stealth_cdp_chromium_required: bool,
+    stealth_cdp_chromium_ready: bool,
+) -> Value {
+    let command = "pnpm test:wsl-windows-chromium-profile-live";
+    let executable_on_windows_mount = executable_path
+        .map(|path| is_wsl_windows_mount_path(Path::new(path)))
+        .unwrap_or(false);
+    let available = is_wsl
+        && stealth_cdp_chromium_required
+        && stealth_cdp_chromium_ready
+        && executable_path_exists == Some(true)
+        && executable_on_windows_mount;
+    let reason = if available {
+        "ready_to_validate_wsl_windows_profile_launch"
+    } else if !is_wsl {
+        "not_wsl"
+    } else if !stealth_cdp_chromium_required {
+        "stealthcdp_chromium_not_selected"
+    } else if !stealth_cdp_chromium_ready {
+        "stealthcdp_chromium_not_ready"
+    } else if executable_path.is_none() {
+        "stealthcdp_executable_missing"
+    } else if executable_path_exists != Some(true) {
+        "stealthcdp_executable_not_found"
+    } else if !executable_on_windows_mount {
+        "stealthcdp_executable_not_on_windows_mount"
+    } else {
+        "unavailable"
+    };
+
+    json!({
+        "available": available,
+        "command": command,
+        "reason": reason,
+        "isWsl": is_wsl,
+        "executableOnWindowsMount": executable_on_windows_mount,
+        "description": "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.",
+    })
+}
+
+fn detect_wsl() -> bool {
+    fs::read_to_string("/proc/sys/kernel/osrelease")
+        .or_else(|_| fs::read_to_string("/proc/version"))
+        .map(|text| text.to_ascii_lowercase().contains("microsoft"))
+        .unwrap_or(false)
+        || env::var_os("WSL_INTEROP").is_some()
+}
+
+fn is_wsl_windows_mount_path(path: &Path) -> bool {
+    let mut components = path.components();
+    if !matches!(components.next(), Some(std::path::Component::RootDir)) {
+        return false;
+    }
+    match components.next() {
+        Some(std::path::Component::Normal(value)) if value == "mnt" => {}
+        _ => return false,
+    }
+    match components.next() {
+        Some(std::path::Component::Normal(value)) => {
+            let drive = value.to_string_lossy();
+            drive.len() == 1 && drive.as_bytes()[0].is_ascii_alphabetic()
+        }
+        _ => false,
+    }
 }
 
 pub fn parse_flags(args: &[String]) -> Flags {
@@ -2311,8 +2389,49 @@ mod tests {
             launch_config["browserBuildManifests"]["stealthcdp_chromium"]["patchsetSha"],
             "patchset-sha"
         );
+        assert_eq!(
+            launch_config["profileSmoke"]["command"],
+            "pnpm test:wsl-windows-chromium-profile-live"
+        );
+        assert!(launch_config["profileSmoke"]["reason"].is_string());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_launch_profile_smoke_status_requires_wsl_stealth_and_windows_mount() {
+        let ready = launch_profile_smoke_status(
+            true,
+            Some("/mnt/c/Users/ecoch/AppData/Local/chromium-stealthcdp/current/chrome.exe"),
+            Some(true),
+            true,
+            true,
+        );
+
+        assert_eq!(ready["available"], true);
+        assert_eq!(
+            ready["reason"],
+            "ready_to_validate_wsl_windows_profile_launch"
+        );
+        assert_eq!(ready["executableOnWindowsMount"], true);
+
+        let stock = launch_profile_smoke_status(
+            true,
+            Some("/mnt/c/Users/ecoch/AppData/Local/chromium-stealthcdp/current/chrome.exe"),
+            Some(true),
+            false,
+            true,
+        );
+        assert_eq!(stock["available"], false);
+        assert_eq!(stock["reason"], "stealthcdp_chromium_not_selected");
+
+        let linux_path =
+            launch_profile_smoke_status(true, Some("/usr/bin/chromium"), Some(true), true, true);
+        assert_eq!(linux_path["available"], false);
+        assert_eq!(
+            linux_path["reason"],
+            "stealthcdp_executable_not_on_windows_mount"
+        );
     }
 
     #[test]
