@@ -4287,6 +4287,28 @@ Examples:
 "##
         }
 
+        // === Doctor ===
+        "doctor" => {
+            r##"
+agent-browser doctor - Diagnose local environment and browser connectivity
+
+Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>] [--json]
+
+Subcommands:
+  windows-browser       Diagnose WSL to Windows browser CDP routing without changing system state
+
+Options:
+  --port <port>         Fixed CDP port to probe for operator-owned browsers (default: 9222)
+  --host <host>         Probe one explicit host instead of route candidates
+  --json               Output machine-readable diagnostics
+
+Examples:
+  agent-browser doctor windows-browser
+  agent-browser doctor windows-browser --port 9222
+  agent-browser doctor windows-browser --host 127.0.0.1 --port 9222 --json
+"##
+        }
+
         // === Connect ===
         "connect" => {
             r##"
@@ -5068,6 +5090,7 @@ Dashboard:
 Setup:
   install                    Install browser binaries
   install doctor             Check user-scoped install drift and launch readiness
+  doctor windows-browser     Diagnose WSL to Windows browser CDP routing
   install --with-deps        Also install system dependencies (Linux)
   upgrade                    Upgrade to the latest version
   dashboard start            Start the observability dashboard

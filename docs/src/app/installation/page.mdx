@@ -67,6 +67,13 @@ translates mounted Windows paths such as <code>/mnt/c/...</code> to
 This host mode needs that launch posture for the patched Windows build to
 expose DevTools reliably.
 
+Run <code>agent-browser doctor windows-browser</code> to diagnose the WSL to
+Windows browser route without changing firewall, <code>.wslconfig</code>, SSH,
+or profile state. The doctor reports WSL mode, the Windows host IP used for NAT
+fallback, candidate CDP endpoints, fixed-port probe results, stable manifest
+visibility, and whether WSL path translation plus <code>--no-sandbox</code>
+apply for the selected Windows browser.
+
 ## Updating
 
 Upgrade to the latest version:

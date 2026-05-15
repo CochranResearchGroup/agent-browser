@@ -424,6 +424,7 @@ agent-browser reload                  # Reload page
 agent-browser install                 # Download Chrome from Chrome for Testing (Google's official automation channel)
 agent-browser install stealthcdp-chromium  # Download the preferred patched Chromium release when available
 agent-browser install doctor          # Check user-scoped binary drift and launch readiness
+agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser install --with-deps     # Also install system deps (Linux)
 agent-browser upgrade                 # Upgrade agent-browser to the latest version
 ```

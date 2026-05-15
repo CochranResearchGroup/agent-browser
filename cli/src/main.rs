@@ -13,6 +13,7 @@ mod runtime_profile;
 mod test_utils;
 mod upgrade;
 mod validation;
+mod windows_browser_doctor;
 
 use serde_json::json;
 use std::env;
@@ -1463,6 +1464,37 @@ fn main() {
     if clean.first().map(|s| s.as_str()) == Some("runtime") {
         run_runtime_command(&clean, &flags);
         return;
+    }
+
+    if clean.first().map(|s| s.as_str()) == Some("doctor") {
+        match clean.get(1).map(|s| s.as_str()) {
+            Some("windows-browser") => {
+                windows_browser_doctor::run_windows_browser_doctor(&clean, flags.json);
+                return;
+            }
+            Some(unknown) => {
+                if flags.json {
+                    print_json_error(format!("Unknown doctor subcommand: {unknown}"));
+                } else {
+                    eprintln!(
+                        "{} Unknown doctor subcommand: {}",
+                        color::error_indicator(),
+                        unknown
+                    );
+                }
+                exit(1);
+            }
+            None => {
+                if flags.json {
+                    print_json_error("Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>]");
+                } else {
+                    eprintln!(
+                        "Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>]"
+                    );
+                }
+                exit(1);
+            }
+        }
     }
 
     if clean.first().map(|s| s.as_str()) == Some("mcp") {
