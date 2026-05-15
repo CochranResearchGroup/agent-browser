@@ -10,6 +10,7 @@ import {
   registerServiceLoginProfile,
   runServiceAccessPlanBrowserCapabilityPreflight,
   runServiceAccessPlanMonitorRunDue,
+  summarizeServiceProfileAcquisition,
   updateServiceProfileFreshness,
   upsertServiceProfileReadinessMonitor,
 } from '@agent-browser/client/service-observability';
@@ -364,18 +365,25 @@ export async function runManagedProfileWorkflow({
         jobTimeoutMs: 30000,
       });
 
+  const profileAcquisitionSummary = summarizeServiceProfileAcquisition({
+    initialAccessPlan,
+    accessPlan,
+    selectedProfile,
+    profileRegistration,
+    profileReadinessMonitor,
+    monitorRunDue,
+    monitorRunDueSummary: monitorRunDue?.accessPlanSummary ?? null,
+    browserCapabilityPreflight,
+    registered: Boolean(profileRegistration),
+    monitorRegistered: Boolean(profileReadinessMonitor),
+    monitorRunDueRan: Boolean(monitorRunDue),
+    browserCapabilityPreflightRan: Boolean(browserCapabilityPreflight),
+  });
+
   return {
     dryRun: false,
     plan,
-    profileAcquisitionSummary: summarizeProfileAcquisition({
-      initialAccessPlan,
-      accessPlan,
-      selectedProfile,
-      profileRegistration,
-      profileReadinessMonitor,
-      monitorRunDue,
-      browserCapabilityPreflight,
-    }),
+    profileAcquisitionSummary,
     initialAccessPlan,
     accessPlan,
     selectedProfile: selectedProfile ? summarizeProfile(selectedProfile) : null,
@@ -383,7 +391,7 @@ export async function runManagedProfileWorkflow({
     readiness: accessPlan.readiness,
     readinessSummary: accessPlan.readinessSummary,
     accessDecision: accessPlan.decision,
-    accessAttention: summarizeAccessPlanAttention(accessPlan.decision?.attention),
+    accessAttention: profileAcquisitionSummary.refreshedAttention,
     sitePolicy: accessPlan.sitePolicy,
     providers: accessPlan.providers,
     challenges: accessPlan.challenges,
@@ -413,57 +421,6 @@ function accessPlanRequiresCdpFree(accessPlan) {
     serviceRequest.requiresCdpFree === true &&
     serviceRequest.cdpAttachmentAllowed !== true;
   return Boolean(postureRequiresCdpFree || serviceRequestRequiresCdpFree);
-}
-
-function summarizeProfileAcquisition({
-  initialAccessPlan,
-  accessPlan,
-  selectedProfile,
-  profileRegistration,
-  profileReadinessMonitor,
-  monitorRunDue,
-  browserCapabilityPreflight,
-}) {
-  return {
-    selectedProfileId: selectedProfile?.id ?? null,
-    registered: Boolean(profileRegistration),
-    monitorRegistered: Boolean(profileReadinessMonitor),
-    monitorRunDueRan: Boolean(monitorRunDue),
-    browserCapabilityPreflightRan: Boolean(browserCapabilityPreflight),
-    initialRecommendedAction: initialAccessPlan?.decision?.recommendedAction ?? null,
-    refreshedRecommendedAction: accessPlan?.decision?.recommendedAction ?? null,
-    browserCapabilityPreflightApplied:
-      browserCapabilityPreflight?.browserCapabilityLaunch?.applied ?? null,
-    browserCapabilityPreflightReason:
-      browserCapabilityPreflight?.browserCapabilityLaunch?.reason ?? null,
-    monitorRunDueChecked: monitorRunDue?.checked ?? null,
-    monitorRunDueFailed: monitorRunDue?.failed ?? null,
-    monitorRunDueRecommendedAction: monitorRunDue?.accessPlanSummary?.recommendedAction ?? null,
-    monitorRunDueFreshTargetServiceIds: monitorRunDue?.accessPlanSummary?.freshTargetServiceIds ?? [],
-    monitorRunDueStaleProfileIds: monitorRunDue?.accessPlanSummary?.staleProfileIds ?? [],
-    initialAttention: summarizeAccessPlanAttention(initialAccessPlan?.decision?.attention),
-    refreshedAttention: summarizeAccessPlanAttention(accessPlan?.decision?.attention),
-  };
-}
-
-/**
- * @param {unknown} attention
- */
-function summarizeAccessPlanAttention(attention) {
-  if (!attention || typeof attention !== 'object' || Array.isArray(attention)) {
-    return null;
-  }
-  const record = /** @type {Record<string, unknown>} */ (attention);
-  return {
-    required: record.required === true,
-    owner: typeof record.owner === 'string' ? record.owner : null,
-    severity: typeof record.severity === 'string' ? record.severity : null,
-    reason: typeof record.reason === 'string' ? record.reason : null,
-    message: typeof record.message === 'string' ? record.message : null,
-    suggestedActions: Array.isArray(record.suggestedActions)
-      ? record.suggestedActions.filter((action) => typeof action === 'string')
-      : [],
-  };
 }
 
 /**

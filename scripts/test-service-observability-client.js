@@ -27,6 +27,7 @@ import {
   runServiceAccessPlanMonitorRunDue,
   runServiceAccessPlanPostSeedingProbe,
   summarizeServiceAccessPlanMonitorRunDue,
+  summarizeServiceProfileAcquisition,
   summarizeServiceProfileReadiness,
   summarizeServiceTraceAttention,
   triageServiceMonitor,
@@ -1311,6 +1312,24 @@ async function main() {
   assert.equal(preflightAcquisitionResult.browserCapabilityPreflight?.preflight, true);
   assert.equal(preflightAcquisitionResult.browserCapabilityPreflightRan, true);
   assert.equal(preflightAcquisitionResult.selectedProfile?.id, 'canva-default');
+  assert.deepEqual(summarizeServiceProfileAcquisition(preflightAcquisitionResult), {
+    selectedProfileId: 'canva-default',
+    registered: false,
+    monitorRegistered: false,
+    monitorRunDueRan: false,
+    browserCapabilityPreflightRan: true,
+    initialRecommendedAction: 'use_selected_profile',
+    refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: true,
+    browserCapabilityPreflightReason: 'validated_preference_binding',
+    monitorRunDueChecked: null,
+    monitorRunDueFailed: null,
+    monitorRunDueRecommendedAction: null,
+    monitorRunDueFreshTargetServiceIds: [],
+    monitorRunDueStaleProfileIds: [],
+    initialAttention: null,
+    refreshedAttention: null,
+  });
 
   const dueMonitorAcquisition = createFetchRecorder((_url, _init, calls) => {
     if (calls.length === 1) {

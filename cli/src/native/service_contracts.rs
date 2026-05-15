@@ -305,6 +305,7 @@ pub fn service_contracts_metadata() -> Value {
                         "runServiceAccessPlanMonitorRunDue",
                         "runServiceAccessPlanBrowserCapabilityPreflight",
                         "acquireServiceLoginProfile",
+                        "summarizeServiceProfileAcquisition",
                         "verifyServiceProfileSeeding"
                     ],
                 },
@@ -583,6 +584,10 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][4],
             "acquireServiceLoginProfile"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][5],
+            "summarizeServiceProfileAcquisition"
         );
         assert_eq!(
             metadata["contracts"]["serviceAccessPlanResponse"]["responseFields"][4],

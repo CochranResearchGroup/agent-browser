@@ -370,6 +370,7 @@ const serviceResourceSurface = [
       'getServiceAccessPlan',
       'runServiceAccessPlanBrowserCapabilityPreflight',
       'acquireServiceLoginProfile',
+      'summarizeServiceProfileAcquisition',
       '/api/service/access-plan',
     ],
     contractNeedles: [

@@ -1864,7 +1864,8 @@ For read-side and service-configuration software clients, import
 browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 `getServiceProfileAllocation`, `getServiceProfileReadiness`,
 `getServiceProfileSeedingHandoff`, `updateServiceProfileSeedingHandoff`,
-`summarizeServiceProfileReadiness`, `findServiceProfileForIdentity`,
+`summarizeServiceProfileReadiness`, `summarizeServiceProfileAcquisition`,
+`findServiceProfileForIdentity`,
 `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`,
 `summarizeServiceAccessPlanMonitorRunDue`, `summarizeServiceTraceAttention`, `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`, `runServiceAccessPlanBrowserCapabilityPreflight`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
@@ -1924,6 +1925,9 @@ profile-readiness monitor, optionally runs due profile-readiness monitors when
 `monitorRunDueSummary` with the target freshness outcome, optionally runs the
 access-plan browser-capability preflight when `runBrowserCapabilityPreflight`
 is true, and uses the refreshed access plan for the tab request.
+Use `summarizeServiceProfileAcquisition()` on the helper result when a client
+needs compact log, trace, dashboard, or operator output for selected profile,
+registration, due-monitor, browser-preflight, and access-plan attention state.
 The decision includes `freshnessUpdate`, which names the selected profile,
 target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.

@@ -59,6 +59,8 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    initialAttention: null,
+    refreshedAttention: null,
   });
   assert.equal(result.commandResult?.success, true);
   assert.equal(result.traceSummary.attention.required, true);
@@ -122,6 +124,8 @@ async function testRegistersFallbackOnlyAfterAccessPlanMiss() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    initialAttention: null,
+    refreshedAttention: null,
   });
   assert.equal(result.commandResult?.success, true);
 
@@ -180,6 +184,8 @@ async function testRunsDueMonitorAndShowsRefreshedRecommendation() {
     monitorRunDueRecommendedAction: 'use_selected_profile',
     monitorRunDueFreshTargetServiceIds: [loginId],
     monitorRunDueStaleProfileIds: [],
+    initialAttention: null,
+    refreshedAttention: null,
   });
   assert.equal(result.monitorRunDue?.checked, 1);
   assert.deepEqual(callSequence(calls), [
@@ -229,6 +235,8 @@ async function testRunsBrowserCapabilityPreflightBeforeBrowserWork() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    initialAttention: null,
+    refreshedAttention: null,
   });
   assert.equal(result.profileAcquisition.browserCapabilityPreflight?.wouldLaunch, false);
   assert.deepEqual(callSequence(calls), [
@@ -284,6 +292,8 @@ async function testRegistersFallbackThenRunsDueMonitor() {
     monitorRunDueRecommendedAction: 'use_selected_profile',
     monitorRunDueFreshTargetServiceIds: [loginId],
     monitorRunDueStaleProfileIds: [],
+    initialAttention: null,
+    refreshedAttention: null,
   });
   assert.equal(result.profileRegistration?.upserted, true);
   assert.equal(result.profileReadinessMonitor?.upserted, true);

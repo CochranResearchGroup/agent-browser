@@ -539,7 +539,10 @@ for HTTP `GET /api/service/browser-capability/preflight`, MCP
 /api/service/request`, MCP `service_request`, and the `requestServiceTab()`
 client helper. `acquireServiceLoginProfile()` is the higher-level
 software-client helper that can run both the due-monitor recipe and the
-browser-capability preflight recipe before returning the final access plan. It reports
+browser-capability preflight recipe before returning the final access plan.
+`summarizeServiceProfileAcquisition()` turns that result into compact
+selected-profile, registration, due-monitor, browser-preflight, and
+access-plan attention fields for software logs and operator output. It reports
 whether the request can be sent immediately or should be reused after manual
 seeding, challenge approval, or provider work completes.
 

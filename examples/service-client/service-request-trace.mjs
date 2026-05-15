@@ -6,6 +6,7 @@ import {
   acquireServiceLoginProfile,
   cancelServiceJob,
   getServiceTrace,
+  summarizeServiceProfileAcquisition,
   summarizeServiceTraceAttention,
 } from '@agent-browser/client/service-observability';
 
@@ -153,7 +154,7 @@ export async function runServiceWorkflow({
   });
   const { initialAccessPlan, profileRegistration, profileReadinessMonitor, monitorRunDue, accessPlan } =
     profileAcquisition;
-  const profileAcquisitionSummary = summarizeProfileAcquisition(profileAcquisition);
+  const profileAcquisitionSummary = summarizeServiceProfileAcquisition(profileAcquisition);
   const commandResult = await requestServiceTab({
     baseUrl,
     fetch,
@@ -265,27 +266,6 @@ export async function runServiceWorkflow({
       controlPlaneMode: job.controlPlaneMode ?? null,
       lifecycleOnly: job.lifecycleOnly ?? false,
     })),
-  };
-}
-
-function summarizeProfileAcquisition(profileAcquisition) {
-  return {
-    selectedProfileId: profileAcquisition.selectedProfile?.id ?? null,
-    registered: profileAcquisition.registered === true,
-    monitorRegistered: profileAcquisition.monitorRegistered === true,
-    monitorRunDueRan: profileAcquisition.monitorRunDueRan === true,
-    browserCapabilityPreflightRan: profileAcquisition.browserCapabilityPreflightRan === true,
-    initialRecommendedAction: profileAcquisition.initialAccessPlan?.decision?.recommendedAction ?? null,
-    refreshedRecommendedAction: profileAcquisition.accessPlan?.decision?.recommendedAction ?? null,
-    browserCapabilityPreflightApplied:
-      profileAcquisition.browserCapabilityPreflight?.browserCapabilityLaunch?.applied ?? null,
-    browserCapabilityPreflightReason:
-      profileAcquisition.browserCapabilityPreflight?.browserCapabilityLaunch?.reason ?? null,
-    monitorRunDueChecked: profileAcquisition.monitorRunDue?.checked ?? null,
-    monitorRunDueFailed: profileAcquisition.monitorRunDue?.failed ?? null,
-    monitorRunDueRecommendedAction: profileAcquisition.monitorRunDueSummary?.recommendedAction ?? null,
-    monitorRunDueFreshTargetServiceIds: profileAcquisition.monitorRunDueSummary?.freshTargetServiceIds ?? [],
-    monitorRunDueStaleProfileIds: profileAcquisition.monitorRunDueSummary?.staleProfileIds ?? [],
   };
 }
 

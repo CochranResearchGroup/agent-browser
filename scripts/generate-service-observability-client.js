@@ -1540,6 +1540,34 @@ export interface ServiceProfileAcquisitionResult {
   browserCapabilityPreflightRan: boolean;
 }
 
+export interface ServiceAccessPlanAttentionSummary {
+  required: boolean;
+  owner: string | null;
+  severity: string | null;
+  reason: string | null;
+  message: string | null;
+  suggestedActions: string[];
+}
+
+export interface ServiceProfileAcquisitionSummary {
+  selectedProfileId: string | null;
+  registered: boolean;
+  monitorRegistered: boolean;
+  monitorRunDueRan: boolean;
+  browserCapabilityPreflightRan: boolean;
+  initialRecommendedAction: string | null;
+  refreshedRecommendedAction: string | null;
+  browserCapabilityPreflightApplied: boolean | null;
+  browserCapabilityPreflightReason: string | null;
+  monitorRunDueChecked: number | null;
+  monitorRunDueFailed: number | null;
+  monitorRunDueRecommendedAction: string | null;
+  monitorRunDueFreshTargetServiceIds: string[];
+  monitorRunDueStaleProfileIds: string[];
+  initialAttention: ServiceAccessPlanAttentionSummary | null;
+  refreshedAttention: ServiceAccessPlanAttentionSummary | null;
+}
+
 export interface ServiceProfileLookupQuery {
   serviceName: string | null;
   targetServiceIds: string[];
@@ -1807,6 +1835,8 @@ export declare function lookupServiceProfile(options: ServiceProfileIdentityLook
 export declare function getServiceAccessPlan(options: ServiceAccessPlanOptions): Promise<ServiceAccessPlanResponse>;
 /** Broker-first helper that access-plans, optionally registers a fallback profile, optionally adds a readiness monitor, and returns the refreshed recommendation. */
 export declare function acquireServiceLoginProfile(options: ServiceProfileAcquisitionOptions): Promise<ServiceProfileAcquisitionResult>;
+/** Build a compact broker-first profile acquisition summary for logs, traces, and operator-facing example output. */
+export declare function summarizeServiceProfileAcquisition(profileAcquisition: ServiceProfileAcquisitionResult): ServiceProfileAcquisitionSummary;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;

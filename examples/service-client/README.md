@@ -175,7 +175,11 @@ profile-broker pattern:
 The workflow output includes `accessAttention` plus
 `profileAcquisitionSummary.initialAttention` and `refreshedAttention`. These
 are compact summaries of the service-owned intervention decision; presentation
-remains the caller's responsibility.
+remains the caller's responsibility. The examples build
+`profileAcquisitionSummary` with `summarizeServiceProfileAcquisition()` so
+software clients can reuse the same selected-profile, registration,
+due-monitor, browser-preflight, and attention fields without copying example
+logic.
 
 Dry-run the recipe without contacting a service:
 

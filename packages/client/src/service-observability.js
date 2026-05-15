@@ -86,6 +86,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanBrowserCapabilityPreflightRunOptions} ServiceAccessPlanBrowserCapabilityPreflightRunOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionOptions} ServiceProfileAcquisitionOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionResult} ServiceProfileAcquisitionResult
+ * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionSummary} ServiceProfileAcquisitionSummary
  * @typedef {import('./service-observability.generated.js').ServiceProfileFreshnessUpdateOptions} ServiceProfileFreshnessUpdateOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunOptions} ServiceAccessPlanPostSeedingProbeRunOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunResult} ServiceAccessPlanPostSeedingProbeRunResult
@@ -488,6 +489,41 @@ export async function acquireServiceLoginProfile({
     monitorRegistered: profileReadinessMonitor !== null,
     monitorRunDueRan: monitorRunDue !== null,
     browserCapabilityPreflightRan: browserCapabilityPreflight !== null,
+  };
+}
+
+/**
+ * Build a compact broker-first profile acquisition summary for logs, traces, and
+ * operator-facing example output.
+ *
+ * @param {ServiceProfileAcquisitionResult} profileAcquisition
+ * @returns {ServiceProfileAcquisitionSummary}
+ */
+export function summarizeServiceProfileAcquisition(profileAcquisition) {
+  const monitorRunDueSummary =
+    profileAcquisition?.monitorRunDueSummary ?? profileAcquisition?.monitorRunDue?.accessPlanSummary ?? null;
+  return {
+    selectedProfileId: profileAcquisition?.selectedProfile?.id ?? null,
+    registered: profileAcquisition?.registered ?? profileAcquisition?.profileRegistration != null,
+    monitorRegistered:
+      profileAcquisition?.monitorRegistered ?? profileAcquisition?.profileReadinessMonitor != null,
+    monitorRunDueRan: profileAcquisition?.monitorRunDueRan ?? profileAcquisition?.monitorRunDue != null,
+    browserCapabilityPreflightRan:
+      profileAcquisition?.browserCapabilityPreflightRan ??
+      profileAcquisition?.browserCapabilityPreflight != null,
+    initialRecommendedAction: profileAcquisition?.initialAccessPlan?.decision?.recommendedAction ?? null,
+    refreshedRecommendedAction: profileAcquisition?.accessPlan?.decision?.recommendedAction ?? null,
+    browserCapabilityPreflightApplied:
+      profileAcquisition?.browserCapabilityPreflight?.browserCapabilityLaunch?.applied ?? null,
+    browserCapabilityPreflightReason:
+      profileAcquisition?.browserCapabilityPreflight?.browserCapabilityLaunch?.reason ?? null,
+    monitorRunDueChecked: profileAcquisition?.monitorRunDue?.checked ?? null,
+    monitorRunDueFailed: profileAcquisition?.monitorRunDue?.failed ?? null,
+    monitorRunDueRecommendedAction: monitorRunDueSummary?.recommendedAction ?? null,
+    monitorRunDueFreshTargetServiceIds: monitorRunDueSummary?.freshTargetServiceIds ?? [],
+    monitorRunDueStaleProfileIds: monitorRunDueSummary?.staleProfileIds ?? [],
+    initialAttention: summarizeAccessPlanAttention(profileAcquisition?.initialAccessPlan?.decision?.attention),
+    refreshedAttention: summarizeAccessPlanAttention(profileAcquisition?.accessPlan?.decision?.attention),
   };
 }
 
@@ -1782,6 +1818,26 @@ function firstMatchingProfileValue(profile, identities, field) {
  */
 function uniqueStrings(values) {
   return [...new Set(values.flatMap((value) => (typeof value === 'string' && value.length > 0 ? [value] : [])))];
+}
+
+/**
+ * @param {unknown} attention
+ */
+function summarizeAccessPlanAttention(attention) {
+  if (!attention || typeof attention !== 'object' || Array.isArray(attention)) {
+    return null;
+  }
+  const record = /** @type {Record<string, unknown>} */ (attention);
+  return {
+    required: record.required === true,
+    owner: typeof record.owner === 'string' ? record.owner : null,
+    severity: typeof record.severity === 'string' ? record.severity : null,
+    reason: typeof record.reason === 'string' ? record.reason : null,
+    message: typeof record.message === 'string' ? record.message : null,
+    suggestedActions: Array.isArray(record.suggestedActions)
+      ? record.suggestedActions.filter((action) => typeof action === 'string')
+      : [],
+  };
 }
 
 /**
