@@ -397,8 +397,9 @@ fn probe_json_version(host: &str, port: u16) -> Option<String> {
     let request =
         format!("GET /json/version HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n");
     stream.write_all(request.as_bytes()).ok()?;
-    let mut response = String::new();
-    stream.read_to_string(&mut response).ok()?;
+    let mut buf = [0_u8; 4096];
+    let n = stream.read(&mut buf).ok()?;
+    let response = String::from_utf8_lossy(&buf[..n]).to_string();
     if response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200") {
         Some(response)
     } else {
@@ -460,6 +461,7 @@ fn firewall_recommendation(networking_mode: &str, recommended_action: &str) -> s
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+    use std::net::TcpListener;
 
     #[test]
     fn parses_wslconfig_sections() {
@@ -538,6 +540,26 @@ autoMemoryReclaim=disabled
                 }
             ]
         );
+    }
+
+    #[test]
+    fn json_version_probe_accepts_response_without_waiting_for_eof() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 512];
+            let _ = stream.read(&mut request);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 16\r\n\r\n{\"Browser\":\"x\"}",
+                )
+                .unwrap();
+            std::thread::sleep(Duration::from_millis(200));
+        });
+
+        assert!(probe_json_version("127.0.0.1", port).is_some());
+        handle.join().unwrap();
     }
 
     #[test]
