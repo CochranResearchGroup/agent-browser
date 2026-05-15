@@ -608,7 +608,8 @@
             "cdpAttachmentAllowed",
             "detachedFirstLoginRequired",
             "attachableAfterSeeding",
-            "rationale"
+            "rationale",
+            "browserBuildSelection"
           ],
           "properties": {
             "browserHost": {
@@ -668,6 +669,186 @@
               "items": {
                 "type": "string"
               }
+            },
+            "browserBuildSelection": {
+              "description": "No-launch explanation of the selected browser build, including the winning source, operator override status, profile compatibility summary, and validation evidence summary.",
+              "type": "object",
+              "required": [
+                "browserBuild",
+                "source",
+                "evidenceSource",
+                "summary",
+                "operatorOverride",
+                "requiresCdpFree",
+                "selectedProfileId",
+                "selectedProfileBrowserBuild",
+                "selectedPreferenceBindingId",
+                "selectedPreferenceBindingReason",
+                "profileCompatibility",
+                "validationEvidence"
+              ],
+              "properties": {
+                "browserBuild": {
+                  "type": "string",
+                  "enum": [
+                    "stock_chrome",
+                    "stealthcdp_chromium",
+                    "cdp_free_headed"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "request",
+                    "site_policy",
+                    "profile_default",
+                    "browser_preference_binding",
+                    "requires_cdp_free",
+                    "service_default"
+                  ]
+                },
+                "evidenceSource": {
+                  "type": "string",
+                  "enum": [
+                    "operator_request",
+                    "site_policy",
+                    "selected_profile",
+                    "service.browserCapabilityRegistry",
+                    "site_policy_requires_cdp_free",
+                    "service_default"
+                  ]
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "operatorOverride": {
+                  "type": "boolean"
+                },
+                "requiresCdpFree": {
+                  "type": "boolean"
+                },
+                "selectedProfileId": {
+                  "type": ["string", "null"]
+                },
+                "selectedProfileBrowserBuild": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stock_chrome",
+                        "stealthcdp_chromium",
+                        "cdp_free_headed"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "selectedPreferenceBindingId": {
+                  "type": ["string", "null"]
+                },
+                "selectedPreferenceBindingReason": {
+                  "type": ["string", "null"]
+                },
+                "profileCompatibility": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "reason",
+                    "selectedProfileId",
+                    "matchingIds",
+                    "compatibleIds",
+                    "incompatibleIds",
+                    "count"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "no_selected_profile",
+                        "not_declared",
+                        "incompatible_or_mixed",
+                        "compatible",
+                        "present_without_boolean_result"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "selectedProfileId": {
+                      "type": ["string", "null"]
+                    },
+                    "matchingIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "compatibleIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "incompatibleIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "validationEvidence": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "reason",
+                    "matchingIds",
+                    "passedIds",
+                    "failedIds",
+                    "count"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["missing", "failed_or_mixed", "passed", "present"]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "matchingIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "passedIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "failedIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": true
             }
           },
           "additionalProperties": true

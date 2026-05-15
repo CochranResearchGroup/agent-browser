@@ -1358,14 +1358,30 @@ fn launch_posture_decision(
     if browser_build_source == "browser_preference_binding" {
         rationale.push("browser_build_from_browser_preference_binding");
     }
+    if browser_build_source == "site_policy" {
+        rationale.push("browser_build_from_site_policy");
+    }
+    if browser_build_source == "profile_default" {
+        rationale.push("browser_build_from_profile_default");
+    }
     if browser_build_source == "request" {
         rationale.push("browser_build_from_request");
+    }
+    if browser_build_source == "service_default" {
+        rationale.push("browser_build_from_service_default");
     }
     match source {
         "site_policy" => rationale.push("browser_host_from_site_policy"),
         "profile_default" => rationale.push("browser_host_from_profile_default"),
         _ => rationale.push("browser_host_from_service_default"),
     }
+    let browser_build_selection = browser_build_selection_decision(
+        browser_build,
+        browser_build_source,
+        selected_profile,
+        requires_cdp_free,
+        browser_capability_evidence,
+    );
 
     LaunchPostureDecision {
         browser_host,
@@ -1381,8 +1397,170 @@ fn launch_posture_decision(
             "detachedFirstLoginRequired": manual_seeding_required,
             "attachableAfterSeeding": attachable_after_seeding,
             "rationale": rationale,
+            "browserBuildSelection": browser_build_selection,
         }),
     }
+}
+
+fn browser_build_selection_decision(
+    browser_build: BrowserBuild,
+    browser_build_source: &'static str,
+    selected_profile: Option<&BrowserProfile>,
+    requires_cdp_free: bool,
+    browser_capability_evidence: &Value,
+) -> Value {
+    let selected_preference_binding = browser_capability_evidence.get("selectedPreferenceBinding");
+    let selected_preference_binding_id =
+        selected_preference_binding.and_then(|binding| string_field(binding, "id"));
+    let selected_preference_binding_reason =
+        selected_preference_binding.and_then(|binding| string_field(binding, "reason"));
+    let profile_compatibility_rows = browser_capability_evidence
+        .get("profileCompatibility")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let validation_rows = browser_capability_evidence
+        .get("validationEvidence")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let profile_compatibility =
+        browser_build_profile_compatibility_summary(selected_profile, &profile_compatibility_rows);
+    let validation_evidence = browser_build_validation_evidence_summary(&validation_rows);
+    let evidence_source = match browser_build_source {
+        "request" => "operator_request",
+        "site_policy" => "site_policy",
+        "profile_default" => "selected_profile",
+        "browser_preference_binding" => "service.browserCapabilityRegistry",
+        "requires_cdp_free" => "site_policy_requires_cdp_free",
+        _ => "service_default",
+    };
+    let summary = match browser_build_source {
+        "request" => "Explicit browserBuild request selected this build.",
+        "site_policy" => "Selected site policy chose this build.",
+        "profile_default" => "Selected managed profile prefers this build.",
+        "browser_preference_binding" => {
+            "Browser capability registry preference binding selected this build."
+        }
+        "requires_cdp_free" => "Site policy requires CDP-free operation.",
+        _ => "Service default browser build selected this build.",
+    };
+
+    json!({
+        "browserBuild": browser_build,
+        "source": browser_build_source,
+        "evidenceSource": evidence_source,
+        "summary": summary,
+        "operatorOverride": browser_build_source == "request",
+        "requiresCdpFree": requires_cdp_free,
+        "selectedProfileId": selected_profile.map(|profile| profile.id.clone()),
+        "selectedProfileBrowserBuild": selected_profile.and_then(|profile| profile.browser_build),
+        "selectedPreferenceBindingId": selected_preference_binding_id,
+        "selectedPreferenceBindingReason": selected_preference_binding_reason,
+        "profileCompatibility": profile_compatibility,
+        "validationEvidence": validation_evidence,
+    })
+}
+
+fn browser_build_profile_compatibility_summary(
+    selected_profile: Option<&BrowserProfile>,
+    profile_compatibility_rows: &[Value],
+) -> Value {
+    let matching_ids = profile_compatibility_rows
+        .iter()
+        .filter_map(|row| string_field(row, "id"))
+        .collect::<Vec<_>>();
+    let compatible_ids = profile_compatibility_rows
+        .iter()
+        .filter(|row| row.get("compatible").and_then(Value::as_bool) == Some(true))
+        .filter_map(|row| string_field(row, "id"))
+        .collect::<Vec<_>>();
+    let incompatible_ids = profile_compatibility_rows
+        .iter()
+        .filter(|row| row.get("compatible").and_then(Value::as_bool) == Some(false))
+        .filter_map(|row| string_field(row, "id"))
+        .collect::<Vec<_>>();
+    let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
+    let status = if selected_profile.is_none() {
+        "no_selected_profile"
+    } else if profile_compatibility_rows.is_empty() {
+        "not_declared"
+    } else if !incompatible_ids.is_empty() {
+        "incompatible_or_mixed"
+    } else if !compatible_ids.is_empty() {
+        "compatible"
+    } else {
+        "present_without_boolean_result"
+    };
+    let reason = match status {
+        "no_selected_profile" => "No managed profile was selected for this access plan.",
+        "not_declared" => {
+            "No browser capability registry profile-compatibility row matched the selected profile."
+        }
+        "incompatible_or_mixed" => {
+            "At least one matched profile-compatibility row reports incompatible."
+        }
+        "compatible" => {
+            "Matched profile-compatibility rows report the selected profile as compatible."
+        }
+        _ => "Profile-compatibility rows matched but did not declare a boolean result.",
+    };
+
+    json!({
+        "status": status,
+        "reason": reason,
+        "selectedProfileId": selected_profile_id,
+        "matchingIds": matching_ids,
+        "compatibleIds": compatible_ids,
+        "incompatibleIds": incompatible_ids,
+        "count": profile_compatibility_rows.len(),
+    })
+}
+
+fn browser_build_validation_evidence_summary(validation_rows: &[Value]) -> Value {
+    let matching_ids = validation_rows
+        .iter()
+        .filter_map(|row| string_field(row, "id"))
+        .collect::<Vec<_>>();
+    let passed_ids = validation_rows
+        .iter()
+        .filter(|row| string_field(row, "state").as_deref() == Some("passed"))
+        .filter_map(|row| string_field(row, "id"))
+        .collect::<Vec<_>>();
+    let failed_ids = validation_rows
+        .iter()
+        .filter(|row| {
+            matches!(
+                string_field(row, "state").as_deref(),
+                Some("failed") | Some("error")
+            )
+        })
+        .filter_map(|row| string_field(row, "id"))
+        .collect::<Vec<_>>();
+    let status = if validation_rows.is_empty() {
+        "missing"
+    } else if !failed_ids.is_empty() {
+        "failed_or_mixed"
+    } else if !passed_ids.is_empty() {
+        "passed"
+    } else {
+        "present"
+    };
+    let reason = match status {
+        "missing" => "No matching browser validation evidence was found.",
+        "failed_or_mixed" => "At least one matching browser validation evidence row failed.",
+        "passed" => "Matching browser validation evidence includes a passed row.",
+        _ => "Matching browser validation evidence exists without a passed or failed state.",
+    };
+
+    json!({
+        "status": status,
+        "reason": reason,
+        "matchingIds": matching_ids,
+        "passedIds": passed_ids,
+        "failedIds": failed_ids,
+        "count": validation_rows.len(),
+    })
 }
 
 fn browser_build_decision(
@@ -2844,6 +3022,20 @@ mod tests {
             "stealth-smoke"
         );
         assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["source"],
+            "profile_default"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["profileCompatibility"]
+                ["status"],
+            "compatible"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["validationEvidence"]
+                ["status"],
+            "passed"
+        );
+        assert_eq!(
             plan["browserCapabilityEvidence"]["counts"]["browserExecutables"],
             1
         );
@@ -2938,6 +3130,20 @@ mod tests {
             "browser_preference_binding"
         );
         assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["evidenceSource"],
+            "service.browserCapabilityRegistry"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]
+                ["selectedPreferenceBindingId"],
+            "only-works-on-chrome-myuser-primary"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["validationEvidence"]
+                ["status"],
+            "passed"
+        );
+        assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["browserBuild"],
             "stock_chrome"
         );
@@ -2991,6 +3197,14 @@ mod tests {
         assert_eq!(
             plan["decision"]["launchPosture"]["browserBuildSource"],
             "request"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["operatorOverride"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["evidenceSource"],
+            "operator_request"
         );
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["browserBuild"],

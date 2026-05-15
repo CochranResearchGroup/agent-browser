@@ -1243,6 +1243,7 @@ export interface ServiceAccessPlanDecision {
   recommendedAction: string;
   attention: ServiceAccessPlanAttention;
   browserHost: string | null;
+  launchPosture: ServiceAccessPlanLaunchPosture;
   interactionMode: string | null;
   challengePolicy: string | null;
   profileId: string | null;
@@ -1259,6 +1260,82 @@ export interface ServiceAccessPlanDecision {
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
   reasons: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanLaunchPosture {
+  browserHost: string;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuildSource:
+    | 'request'
+    | 'site_policy'
+    | 'profile_default'
+    | 'browser_preference_binding'
+    | 'requires_cdp_free'
+    | 'service_default'
+    | string;
+  source: 'site_policy' | 'profile_default' | 'service_default' | string;
+  headed: boolean;
+  remoteViewRecommended: boolean;
+  requiresCdpFree: boolean;
+  cdpAttachmentAllowed: boolean;
+  detachedFirstLoginRequired: boolean;
+  attachableAfterSeeding: boolean;
+  rationale: string[];
+  browserBuildSelection: ServiceAccessPlanBrowserBuildSelection;
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanBrowserBuildSelection {
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  source:
+    | 'request'
+    | 'site_policy'
+    | 'profile_default'
+    | 'browser_preference_binding'
+    | 'requires_cdp_free'
+    | 'service_default'
+    | string;
+  evidenceSource:
+    | 'operator_request'
+    | 'site_policy'
+    | 'selected_profile'
+    | 'service.browserCapabilityRegistry'
+    | 'site_policy_requires_cdp_free'
+    | 'service_default'
+    | string;
+  summary: string;
+  operatorOverride: boolean;
+  requiresCdpFree: boolean;
+  selectedProfileId: string | null;
+  selectedProfileBrowserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  selectedPreferenceBindingId: string | null;
+  selectedPreferenceBindingReason: string | null;
+  profileCompatibility: {
+    status:
+      | 'no_selected_profile'
+      | 'not_declared'
+      | 'incompatible_or_mixed'
+      | 'compatible'
+      | 'present_without_boolean_result'
+      | string;
+    reason: string;
+    selectedProfileId: string | null;
+    matchingIds: string[];
+    compatibleIds: string[];
+    incompatibleIds: string[];
+    count: number;
+    [key: string]: unknown;
+  };
+  validationEvidence: {
+    status: 'missing' | 'failed_or_mixed' | 'passed' | 'present' | string;
+    reason: string;
+    matchingIds: string[];
+    passedIds: string[];
+    failedIds: string[];
+    count: number;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 

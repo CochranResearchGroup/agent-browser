@@ -1897,6 +1897,12 @@ intervention summary with `required`, `owner`, `severity`, `reason`, `message`,
 and `suggestedActions`.
 Clients can use it for logs, prompts, dashboard chips, or popups, but
 agent-browser does not prescribe the presentation.
+Access-plan `decision.launchPosture.browserBuildSelection` explains why
+`stealthcdp_chromium`, `stock_chrome`, or `cdp_free_headed` won before launch.
+It includes the winning source, evidence source, explicit operator override
+status, selected preference binding, profile compatibility summary, and
+validation evidence summary so agents and software can audit browser routing
+without launching Chrome.
 When a software client may need a recurring fallback profile, prefer
 `acquireServiceLoginProfile()` so the client asks for this plan first,
 registers only if no profile is selected, optionally adds the retained
