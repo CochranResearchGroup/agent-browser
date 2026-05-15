@@ -17,6 +17,7 @@ chmod +x ~/.local/bin/agent-browser
 agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
 agent-browser install doctor  # Check user-scoped binary drift and launch readiness
+pnpm test:wsl-windows-chromium-profile-live  # Validate WSL Windows profile writes when doctor says available
 ```
 
 npm, Homebrew, and Cargo are not authoritative release channels for this fork.
@@ -1336,6 +1337,9 @@ changing firewall, `.wslconfig`, SSH, browser, or profile state. Run
 `agent-browser doctor windows-browser --scan-ports --firewall` for a bounded
 scan of common browser/debug ports plus localhost listeners and a read-only
 Windows firewall and Hyper-V firewall query through PowerShell when available.
+The doctor also reports `profileSmoke.available`, `profileSmoke.command`, and
+`profileSmoke.reason` so operators can see whether the Windows
+`chromium-stealthcdp` profile-write smoke is ready to run.
 Run
 `agent-browser setup windows-browser --print-powershell` to print a reviewed
 Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall
@@ -1343,7 +1347,9 @@ rules, fixed CDP ports, SSH tunnel fallback, and rollback commands. The
 agent-browser command is preview-only; the generated script is dry-run by
 default and requires its own `-Apply` switch before creating a firewall rule.
 Add `--doctor` to embed the current route diagnostics as PowerShell comments
-and infer `nat` mode when mirrored networking is not active.
+and infer `nat` mode when mirrored networking is not active. The generated
+script reminds operators to run the profile smoke when doctor reports it is
+available.
 When WSL launches a Windows `chrome.exe`, agent-browser translates mounted
 Windows paths in Chrome arguments, including profile, cache, download,
 extension, and positional path arguments, from `/mnt/<drive>/...` to

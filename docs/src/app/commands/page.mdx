@@ -34,6 +34,7 @@ agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP rout
 agent-browser doctor windows-browser --scan-ports --firewall # Scan bounded ports and query firewall state
 agent-browser setup windows-browser --print-powershell # Print reviewed Windows routing setup script
 agent-browser setup windows-browser --print-powershell --doctor # Embed current route diagnostics in the script
+pnpm test:wsl-windows-chromium-profile-live # Validate WSL Windows Chromium profile writes when doctor says available
 agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming

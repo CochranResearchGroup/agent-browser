@@ -127,6 +127,12 @@ fn windows_browser_doctor_report(args: &DoctorArgs) -> serde_json::Value {
         .is_some_and(|path| is_wsl_windows_mount_path(path));
     let path_translation_applies = is_wsl && executable_on_windows_mount;
     let no_sandbox_applies = path_translation_applies;
+    let profile_smoke = profile_smoke_recommendation(
+        is_wsl,
+        manifest.as_ref(),
+        executable_path.as_ref(),
+        executable_on_windows_mount,
+    );
     let candidates = candidate_endpoints(args, &networking_mode, windows_host_ip.as_deref());
     let probes: Vec<_> = candidates.iter().map(probe_endpoint).collect();
     let recommended_route = recommend_route(&networking_mode, &probes);
@@ -161,6 +167,7 @@ fn windows_browser_doctor_report(args: &DoctorArgs) -> serde_json::Value {
                 "pathTranslationApplies": path_translation_applies,
                 "noSandboxApplies": no_sandbox_applies,
             },
+            "profileSmoke": profile_smoke,
             "candidateEndpoints": candidates.iter().map(|candidate| json!({
                 "host": candidate.host,
                 "port": candidate.port,
@@ -202,6 +209,18 @@ fn print_windows_browser_doctor_report(report: &serde_json::Value) {
     println!(
         "no-sandbox for WSL Windows executable: {}",
         value_or_unknown(&data["stealthCdpChromium"]["noSandboxApplies"])
+    );
+    println!(
+        "profile smoke available: {}",
+        value_or_unknown(&data["profileSmoke"]["available"])
+    );
+    println!(
+        "profile smoke command: {}",
+        value_or_unknown(&data["profileSmoke"]["command"])
+    );
+    println!(
+        "profile smoke reason: {}",
+        value_or_unknown(&data["profileSmoke"]["reason"])
     );
     println!("candidate endpoints:");
     if let Some(probes) = data["probes"].as_array() {
@@ -257,6 +276,38 @@ fn print_windows_browser_doctor_report(report: &serde_json::Value) {
         "recommended action: {}",
         value_or_unknown(&data["recommendedAction"])
     );
+}
+
+fn profile_smoke_recommendation(
+    is_wsl: bool,
+    manifest: Option<&PathBuf>,
+    executable_path: Option<&PathBuf>,
+    executable_on_windows_mount: bool,
+) -> serde_json::Value {
+    let command = "pnpm test:wsl-windows-chromium-profile-live";
+    let available = is_wsl
+        && manifest.is_some_and(|path| path.is_file())
+        && executable_path.is_some_and(|path| path.is_file())
+        && executable_on_windows_mount;
+    let reason = if available {
+        "ready_to_validate_wsl_windows_profile_launch"
+    } else if !is_wsl {
+        "not_wsl"
+    } else if manifest.is_none_or(|path| !path.is_file()) {
+        "stealthcdp_manifest_not_visible"
+    } else if executable_path.is_none_or(|path| !path.is_file()) {
+        "stealthcdp_executable_not_visible"
+    } else if !executable_on_windows_mount {
+        "stealthcdp_executable_not_on_windows_mount"
+    } else {
+        "unavailable"
+    };
+    json!({
+        "available": available,
+        "command": command,
+        "reason": reason,
+        "description": "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.",
+    })
 }
 
 fn value_or_unknown(value: &serde_json::Value) -> String {
@@ -891,6 +942,39 @@ autoMemoryReclaim=disabled
             "/mnt/c/Users/ecoch/AppData/Local/chrome.exe"
         )));
         assert!(!is_wsl_windows_mount_path(Path::new("/tmp/chrome.exe")));
+    }
+
+    #[test]
+    fn profile_smoke_recommendation_requires_visible_windows_mounted_artifact() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-windows-profile-smoke-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let manifest = dir.join("manifest.json");
+        let executable = dir.join("chrome.exe");
+        fs::write(&manifest, "{}").unwrap();
+        fs::write(&executable, "").unwrap();
+
+        let available =
+            profile_smoke_recommendation(true, Some(&manifest), Some(&executable), true);
+        assert_eq!(available["available"], true);
+        assert_eq!(
+            available["command"],
+            "pnpm test:wsl-windows-chromium-profile-live"
+        );
+
+        let missing = profile_smoke_recommendation(true, Some(&manifest), Some(&executable), false);
+        assert_eq!(missing["available"], false);
+        assert_eq!(
+            missing["reason"],
+            "stealthcdp_executable_not_on_windows_mount"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

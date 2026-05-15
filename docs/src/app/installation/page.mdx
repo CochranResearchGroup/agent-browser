@@ -76,7 +76,10 @@ apply for the selected Windows browser.
 Add <code>--scan-ports --firewall</code> to run a bounded scan of common
 browser/debug ports plus localhost listeners and query Windows firewall plus
 Hyper-V firewall state through PowerShell when available. This remains
-read-only.
+read-only. The doctor also reports <code>profileSmoke.available</code>,
+<code>profileSmoke.command</code>, and <code>profileSmoke.reason</code> so
+operators can tell whether the Windows <code>chromium-stealthcdp</code>
+profile-write smoke is ready to run.
 
 When WSL launches a Windows <code>chrome.exe</code>, agent-browser translates
 mounted Windows paths in Chrome arguments from <code>/mnt/&lt;drive&gt;/...</code>
@@ -92,7 +95,8 @@ mutate system state. The generated script is dry-run by default and requires
 its own <code>-Apply</code> switch before it creates a scoped firewall rule.
 Add <code>--doctor</code> to embed current route diagnostics as PowerShell
 comments and infer <code>nat</code> mode when mirrored networking is not active
-and <code>--mode</code> was not supplied.
+and <code>--mode</code> was not supplied. The generated script reminds
+operators to run the profile smoke when doctor reports it is available.
 When the Windows SSM debug instance has been provisioned, run
 <code>pnpm test:windows-browser-setup-powershell-live</code> to verify that the
 generated setup script parses on Windows, stays dry-run by default, prints

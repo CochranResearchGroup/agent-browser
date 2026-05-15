@@ -4304,6 +4304,10 @@ Options:
   --firewall            Query Windows firewall and Hyper-V firewall state through PowerShell when available
   --json               Output machine-readable diagnostics
 
+Post-setup validation:
+  When profileSmoke.available is true, run pnpm test:wsl-windows-chromium-profile-live
+  from the repo to verify Windows chromium-stealthcdp profile writes from WSL.
+
 Examples:
   agent-browser doctor windows-browser
   agent-browser doctor windows-browser --port 9222
@@ -4337,6 +4341,10 @@ Safety:
   firewall, SSH, or browser state. The generated script is dry-run by default
   and requires its own -Apply switch before creating a scoped Hyper-V firewall
   rule.
+
+Post-setup validation:
+  The generated script reminds operators to run doctor again, then run
+  pnpm test:wsl-windows-chromium-profile-live when profileSmoke.available is true.
 
 Examples:
   agent-browser setup windows-browser --print-powershell

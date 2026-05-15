@@ -313,6 +313,7 @@ Write-Host 'ssh -N -L 127.0.0.1:{port}:127.0.0.1:{port} {windows_user}@{windows_
 Write-Host ''
 Write-Host 'After .wslconfig changes, run from Windows PowerShell: wsl --shutdown'
 Write-Host 'Then restart WSL and run: agent-browser doctor windows-browser --port {port}'
+Write-Host 'If the doctor reports profileSmoke.available=true, run from the repo: pnpm test:wsl-windows-chromium-profile-live'
 Write-Host ''
 Write-Host 'Rollback commands:'
 Write-Host "Remove-NetFirewallHyperVRule -Name '$RuleName' -ErrorAction SilentlyContinue"
@@ -356,6 +357,18 @@ fn render_doctor_comments(doctor_report: Option<&serde_json::Value>) -> String {
         format!(
             "# recommendedAction: {}",
             json_value_for_comment(data.pointer("/recommendedAction"))
+        ),
+        format!(
+            "# profileSmokeAvailable: {}",
+            json_value_for_comment(data.pointer("/profileSmoke/available"))
+        ),
+        format!(
+            "# profileSmokeCommand: {}",
+            json_value_for_comment(data.pointer("/profileSmoke/command"))
+        ),
+        format!(
+            "# profileSmokeReason: {}",
+            json_value_for_comment(data.pointer("/profileSmoke/reason"))
         ),
     ];
     if let Some(probes) = data.pointer("/probes").and_then(|value| value.as_array()) {
@@ -477,6 +490,7 @@ mod tests {
         assert!(script.contains("ssh -N -L 127.0.0.1:9333:127.0.0.1:9333 ecoch@winhost"));
         assert!(script.contains("Remove-NetFirewallHyperVRule"));
         assert!(script.contains("agent-browser doctor windows-browser --port 9333"));
+        assert!(script.contains("pnpm test:wsl-windows-chromium-profile-live"));
     }
 
     #[test]
@@ -505,6 +519,11 @@ mod tests {
                 "windowsHostIp": "192.168.50.1",
                 "recommendedRoute": "default-route-host-ip or ssh-forwarded localhost",
                 "recommendedAction": "use_default_route_host_ip_or_configure_mirrored_networking_or_ssh_tunnel",
+                "profileSmoke": {
+                    "available": true,
+                    "command": "pnpm test:wsl-windows-chromium-profile-live",
+                    "reason": "ready_to_validate_wsl_windows_profile_launch"
+                },
                 "probes": []
             }
         });
@@ -512,6 +531,10 @@ mod tests {
         assert_eq!(effective_mode(&args, Some(&report)), SetupMode::Nat);
         let script = render_powershell_setup(&args, &SetupMode::Nat, Some(&report));
         assert!(script.contains("# networkingMode: nat"));
+        assert!(script.contains("# profileSmokeAvailable: true"));
+        assert!(
+            script.contains("# profileSmokeCommand: pnpm test:wsl-windows-chromium-profile-live")
+        );
         assert!(script.contains("Mode: nat"));
     }
 }
