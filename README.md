@@ -1866,7 +1866,7 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 `getServiceProfileSeedingHandoff`, `updateServiceProfileSeedingHandoff`,
 `summarizeServiceProfileReadiness`, `findServiceProfileForIdentity`,
 `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`,
-`summarizeServiceAccessPlanMonitorRunDue`, `summarizeServiceTraceAttention`, `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
+`summarizeServiceAccessPlanMonitorRunDue`, `summarizeServiceTraceAttention`, `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`, `runServiceAccessPlanBrowserCapabilityPreflight`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 including optional freshness fields such as `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`,
@@ -1921,8 +1921,9 @@ When a software client may need a recurring fallback profile, prefer
 registers only if no profile is selected, optionally adds the retained
 profile-readiness monitor, optionally runs due profile-readiness monitors when
 `decision.monitorRunDue.recommendedBeforeUse` is true, returns
-`monitorRunDueSummary` with the target freshness outcome, and uses the
-refreshed access plan for the tab request.
+`monitorRunDueSummary` with the target freshness outcome, optionally runs the
+access-plan browser-capability preflight when `runBrowserCapabilityPreflight`
+is true, and uses the refreshed access plan for the tab request.
 The decision includes `freshnessUpdate`, which names the selected profile,
 target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.
@@ -2083,6 +2084,7 @@ const { accessPlan } = await acquireServiceLoginProfile({
   registerAuthenticated: false,
   registerReadinessMonitor: true,
   runDueReadinessMonitor: true,
+  runBrowserCapabilityPreflight: true,
 });
 
 const tab = await requestServiceTab({

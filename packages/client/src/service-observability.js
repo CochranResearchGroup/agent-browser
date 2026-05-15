@@ -398,8 +398,9 @@ export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, c
  * The helper asks for an access plan first, registers the fallback profile only
  * when agent-browser has no selected profile, optionally installs the standard
  * profile-readiness monitor, optionally runs due monitors recommended by the
- * plan, then refreshes the access plan so callers can pass the final
- * broker-owned recommendation to requestServiceTab().
+ * plan, optionally runs the browser-capability preflight advertised by the
+ * final plan, then returns the broker-owned recommendation callers can pass to
+ * requestServiceTab().
  *
  * @param {ServiceProfileAcquisitionOptions} options
  * @returns {Promise<ServiceProfileAcquisitionResult>}
@@ -410,6 +411,7 @@ export async function acquireServiceLoginProfile({
   registerAuthenticated,
   registerReadinessMonitor = false,
   runDueReadinessMonitor = false,
+  runBrowserCapabilityPreflight = false,
   readinessMonitorId,
   readinessMonitorIntervalMs,
   profileName,
@@ -463,6 +465,15 @@ export async function acquireServiceLoginProfile({
         monitorRunDue,
       })
     : null;
+  const browserCapabilityPreflight =
+    runBrowserCapabilityPreflight && accessPlan?.decision?.browserCapabilityPreflight?.available === true
+      ? await runServiceAccessPlanBrowserCapabilityPreflight({
+          baseUrl: accessPlanOptions.baseUrl,
+          fetch: accessPlanOptions.fetch,
+          signal: accessPlanOptions.signal,
+          accessPlan,
+        })
+      : null;
 
   return {
     initialAccessPlan,
@@ -472,9 +483,11 @@ export async function acquireServiceLoginProfile({
     profileReadinessMonitor,
     monitorRunDue,
     monitorRunDueSummary,
+    browserCapabilityPreflight,
     registered: profileRegistration !== null,
     monitorRegistered: profileReadinessMonitor !== null,
     monitorRunDueRan: monitorRunDue !== null,
+    browserCapabilityPreflightRan: browserCapabilityPreflight !== null,
   };
 }
 

@@ -1193,10 +1193,124 @@ async function main() {
   assert.equal(existingAcquisitionResult.profileRegistration, null);
   assert.equal(existingAcquisitionResult.profileReadinessMonitor, null);
   assert.equal(existingAcquisitionResult.monitorRunDue, null);
+  assert.equal(existingAcquisitionResult.browserCapabilityPreflight, null);
   assert.equal(existingAcquisitionResult.registered, false);
   assert.equal(existingAcquisitionResult.monitorRegistered, false);
   assert.equal(existingAcquisitionResult.monitorRunDueRan, false);
+  assert.equal(existingAcquisitionResult.browserCapabilityPreflightRan, false);
   assert.equal(existingAcquisitionResult.accessPlan, existingAcquisitionResult.initialAccessPlan);
+
+  const preflightAcquisition = createFetchRecorder((_url, _init, calls) => {
+    if (calls.length === 1) {
+      return {
+        success: true,
+        data: {
+          query: {
+            serviceName: 'CanvaCLI',
+            targetServiceIds: ['canva'],
+            accountIds: ['user@example.test'],
+            readinessProfileId: null,
+          },
+          selectedProfile: {
+            id: 'canva-default',
+            name: 'Canva default',
+            targetServiceIds: ['canva'],
+            accountIds: ['user@example.test'],
+            authenticatedServiceIds: ['canva'],
+            sharedServiceIds: ['CanvaCLI'],
+            browserBuild: 'stealthcdp_chromium',
+          },
+          selectedProfileMatch: {
+            profileId: 'canva-default',
+            reason: 'authenticated_target',
+            matchedField: 'authenticatedServiceIds',
+            matchedIdentity: 'canva',
+          },
+          selectedProfileSource: 'config',
+          readiness: null,
+          readinessSummary: {
+            needsManualSeeding: false,
+            manualSeedingRequired: false,
+            targetServiceIds: [],
+            recommendedActions: [],
+          },
+          monitorFindings: {
+            profileReadinessAttentionRequired: false,
+            profileReadinessIncidentIds: [],
+            profileReadinessMonitorIds: [],
+            profileReadinessResults: [],
+            targetServiceIds: [],
+          },
+          sitePolicy: null,
+          sitePolicySource: null,
+          providers: [],
+          challenges: [],
+          decision: {
+            recommendedAction: 'use_selected_profile',
+            browserHost: 'local_headed',
+            interactionMode: 'human_like_input',
+            challengePolicy: 'avoid_first',
+            profileId: 'canva-default',
+            manualActionRequired: false,
+            manualSeedingRequired: false,
+            monitorAttentionRequired: false,
+            browserCapabilityPreflight: {
+              available: true,
+              recommendedBeforeUse: true,
+              request: {
+                browserBuild: 'stealthcdp_chromium',
+                targetServiceIds: ['canva'],
+                accountIds: ['user@example.test'],
+                runtimeProfile: 'canva-default',
+                headed: true,
+                serviceName: 'CanvaCLI',
+                agentName: 'codex',
+                taskName: 'openCanvaWorkspace',
+                url: 'https://www.canva.com/',
+              },
+            },
+            providerIds: [],
+            challengeIds: [],
+            reasons: ['profile_selected'],
+          },
+        },
+      };
+    }
+    return {
+      success: true,
+      data: {
+        preflight: true,
+        wouldLaunch: false,
+        wouldApplyExecutable: true,
+        browserCapabilityLaunch: {
+          applied: true,
+          reason: 'validated_preference_binding',
+          browserBuild: 'stealthcdp_chromium',
+          profileId: 'canva-default',
+        },
+        selectedExecutablePath: '/opt/chromium-stealthcdp/chrome',
+      },
+    };
+  });
+  const preflightAcquisitionResult = await acquireServiceLoginProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: preflightAcquisition.fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'codex',
+    taskName: 'openCanvaWorkspace',
+    targetServiceId: 'canva',
+    accountId: 'user@example.test',
+    url: 'https://www.canva.com/',
+    runBrowserCapabilityPreflight: true,
+  });
+  assert.equal(preflightAcquisition.calls.length, 2);
+  assert.equal(
+    preflightAcquisition.calls[1].url,
+    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=stealthcdp_chromium&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&url=https%3A%2F%2Fwww.canva.com%2F&targetServiceIds=canva&accountIds=user%40example.test&runtimeProfile=canva-default&headed=true',
+  );
+  assert.equal(preflightAcquisitionResult.browserCapabilityPreflight?.preflight, true);
+  assert.equal(preflightAcquisitionResult.browserCapabilityPreflightRan, true);
+  assert.equal(preflightAcquisitionResult.selectedProfile?.id, 'canva-default');
 
   const dueMonitorAcquisition = createFetchRecorder((_url, _init, calls) => {
     if (calls.length === 1) {

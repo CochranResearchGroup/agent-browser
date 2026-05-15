@@ -1513,6 +1513,8 @@ export interface ServiceProfileAcquisitionOptions extends ServiceAccessPlanOptio
   registerReadinessMonitor?: boolean;
   /** Run access-plan-recommended due profile-readiness monitors before returning the final plan. */
   runDueReadinessMonitor?: boolean;
+  /** Run the browser-capability preflight recipe advertised by the final access plan before returning. */
+  runBrowserCapabilityPreflight?: boolean;
   /** Optional monitor ID for the retained profile-readiness monitor. */
   readinessMonitorId?: string;
   /** Optional monitor interval in milliseconds. */
@@ -1531,9 +1533,11 @@ export interface ServiceProfileAcquisitionResult {
   profileReadinessMonitor: ServiceMonitorUpsertResponse | null;
   monitorRunDue: ServiceMonitorRunDueResponse | null;
   monitorRunDueSummary: ServiceAccessPlanMonitorRunDueSummary | null;
+  browserCapabilityPreflight: ServiceBrowserCapabilityPreflightResponse | null;
   registered: boolean;
   monitorRegistered: boolean;
   monitorRunDueRan: boolean;
+  browserCapabilityPreflightRan: boolean;
 }
 
 export interface ServiceProfileLookupQuery {
