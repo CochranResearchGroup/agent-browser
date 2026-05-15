@@ -506,6 +506,8 @@ fn compact_browser_capability_launch(
         "executableId": diagnostic.get("executableId").and_then(|value| value.as_str()),
         "capabilityId": diagnostic.get("capabilityId").and_then(|value| value.as_str()),
         "executablePath": diagnostic.get("executablePath").and_then(|value| value.as_str()),
+        "profileCompatibilityIds": diagnostic.get("profileCompatibilityIds").and_then(|value| value.as_array()).cloned().unwrap_or_default(),
+        "validationEvidenceIds": diagnostic.get("validationEvidenceIds").and_then(|value| value.as_array()).cloned().unwrap_or_default(),
     })
 }
 

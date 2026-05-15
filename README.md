@@ -1903,6 +1903,11 @@ It includes the winning source, evidence source, explicit operator override
 status, selected preference binding, profile compatibility summary, and
 validation evidence summary so agents and software can audit browser routing
 without launching Chrome.
+Launch routing applies a browser capability registry executable only when the
+matching profile-compatibility rows are all acceptable and the matching
+validation evidence includes a passed row with no failed or stale row for that
+launch posture. Trace summaries include the applied compatibility and
+validation evidence IDs.
 When a software client may need a recurring fallback profile, prefer
 `acquireServiceLoginProfile()` so the client asks for this plan first,
 registers only if no profile is selected, optionally adds the retained

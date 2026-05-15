@@ -882,6 +882,8 @@ export interface ServiceTraceBrowserCapabilityLaunch {
   executableId: string | null;
   capabilityId: string | null;
   executablePath: string | null;
+  profileCompatibilityIds: string[];
+  validationEvidenceIds: string[];
   [key: string]: unknown;
 }
 

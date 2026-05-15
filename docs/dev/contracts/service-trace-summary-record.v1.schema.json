@@ -65,7 +65,9 @@
               "hostId",
               "executableId",
               "capabilityId",
-              "executablePath"
+              "executablePath",
+              "profileCompatibilityIds",
+              "validationEvidenceIds"
             ],
             "properties": {
               "source": {
@@ -117,6 +119,18 @@
               },
               "executablePath": {
                 "type": ["string", "null"]
+              },
+              "profileCompatibilityIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "validationEvidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "additionalProperties": true
