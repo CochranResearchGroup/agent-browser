@@ -8,6 +8,7 @@ import {
   findServiceProfileForIdentity,
   deleteServiceMonitor,
   getServiceAccessPlan,
+  getServiceBrowserCapabilityPreflight,
   getServiceContracts,
   getServiceMonitors,
   getServiceProfileAllocation,
@@ -113,6 +114,54 @@ async function main() {
   assert.equal(statusResult.control_plane.service_monitor_interval_ms, 60000);
   assert.deepEqual(statusResult.profileAllocations, []);
   assert.equal(statusResult.launchConfig.stealthCdpChromiumReady, true);
+
+  const preflight = createFetchRecorder({
+    success: true,
+    data: {
+      preflight: true,
+      wouldLaunch: false,
+      wouldApplyExecutable: true,
+      browserCapabilityLaunch: {
+        applied: true,
+        reason: 'validated_preference_binding',
+        browserBuild: 'stealthcdp_chromium',
+        profileId: 'canva-default',
+      },
+      request: {
+        browserBuild: 'stealthcdp_chromium',
+        profileId: 'canva-default',
+        headless: false,
+        cdpFree: false,
+        serviceName: 'CanvaCLI',
+        agentName: 'codex',
+        taskName: 'openCanvaWorkspace',
+        targetServiceIds: ['canva'],
+        accountIds: ['user@example.test'],
+        url: 'https://www.canva.com/',
+      },
+      selectedExecutablePath: '/opt/chromium-stealthcdp/chrome',
+    },
+  });
+  const preflightResult = await getServiceBrowserCapabilityPreflight({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: preflight.fetch,
+    browserBuild: 'stealthcdp_chromium',
+    targetServiceId: 'canva',
+    accountId: 'user@example.test',
+    url: 'https://www.canva.com/',
+    runtimeProfile: 'canva-default',
+    headed: true,
+    serviceName: 'CanvaCLI',
+    agentName: 'codex',
+    taskName: 'openCanvaWorkspace',
+  });
+  assert.equal(
+    preflight.calls[0].url,
+    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=stealthcdp_chromium&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&targetServiceId=canva&accountId=user%40example.test&url=https%3A%2F%2Fwww.canva.com%2F&runtimeProfile=canva-default&headed=true',
+  );
+  assert.equal(preflight.calls[0].init.method, 'GET');
+  assert.equal(preflightResult.wouldLaunch, false);
+  assert.equal(preflightResult.browserCapabilityLaunch.applied, true);
 
   const monitors = createFetchRecorder({
     success: true,

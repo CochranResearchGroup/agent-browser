@@ -301,6 +301,24 @@ const serviceSurface = [
       'service_browser_capability_registry_upsert',
     ],
   },
+  {
+    tool: 'service_browser_capability_preflight',
+    method: 'GET',
+    route: '/api/service/browser-capability/preflight',
+    httpNeedles: [
+      'SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE',
+      'service_browser_capability_preflight_command(query)',
+    ],
+    clientNeedles: [
+      'getServiceBrowserCapabilityPreflight',
+      '/api/service/browser-capability/preflight',
+    ],
+    contractNeedles: [
+      'service-browser-capability-preflight-response.v1.schema.json',
+      'service_browser_capability_preflight',
+      'GET /api/service/browser-capability/preflight',
+    ],
+  },
 ];
 
 for (const action of nativeServiceActions) {

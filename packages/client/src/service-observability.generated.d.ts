@@ -1555,6 +1555,46 @@ export interface ServiceAccessPlanResponse {
   [key: string]: unknown;
 }
 
+export interface ServiceBrowserCapabilityLaunchDecision {
+  applied: boolean;
+  reason: string;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  profileId: string | null;
+  bindingId?: string | null;
+  hostId?: string | null;
+  executableId?: string | null;
+  capabilityId?: string | null;
+  executablePath?: string | null;
+  profileCompatibilityIds?: string[];
+  validationEvidenceIds?: string[];
+  warnings?: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserCapabilityPreflightRequestEcho {
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  profileId: string | null;
+  headless: boolean;
+  cdpFree: boolean;
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  targetServiceIds: string[];
+  accountIds: string[];
+  url: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserCapabilityPreflightResponse {
+  preflight: true;
+  wouldLaunch: false;
+  wouldApplyExecutable: boolean;
+  browserCapabilityLaunch: ServiceBrowserCapabilityLaunchDecision;
+  request: ServiceBrowserCapabilityPreflightRequestEcho;
+  selectedExecutablePath: string | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceSessionMutationOptions extends ServiceIdOptions {
   session: Record<string, unknown>;
 }
@@ -1570,6 +1610,25 @@ export interface ServiceProviderMutationOptions extends ServiceIdOptions {
 export interface ServiceBrowserCapabilityRegistryUpsertOptions extends ServiceIdOptions {
   collection: ServiceBrowserCapabilityRegistryCollection;
   record: Record<string, unknown>;
+}
+
+export interface ServiceBrowserCapabilityPreflightOptions extends ServiceAccessPlanOptions {
+  /** Requested browser build to preflight. */
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  /** Explicit managed runtime profile id. */
+  runtimeProfile?: string;
+  /** Explicit custom user-data directory. */
+  profile?: string;
+  /** Whether the launch would be headless when CDP attachment is allowed. */
+  headless?: boolean;
+  /** Set true to preflight headed launch posture. */
+  headed?: boolean;
+  /** Set true to preflight CDP-free headed posture. */
+  cdpFree?: boolean;
+  /** Set true when the target site requires CDP-free operation. */
+  requiresCdpFree?: boolean;
+  /** Set false when CDP attachment is not allowed. */
+  cdpAttachmentAllowed?: boolean;
 }
 
 export interface ServiceMonitorMutationOptions extends ServiceIdOptions {
@@ -1630,6 +1689,8 @@ export declare const SERVICE_BROWSER_HEALTH_STATES: readonly string[];
 export declare function getServiceStatus(options: ServiceObservabilityHttpOptions): Promise<ServiceStatusResponse>;
 export declare function getServiceContracts(options: ServiceObservabilityHttpOptions): Promise<ServiceContractsResponse>;
 export declare function getServiceBrowserCapabilityRegistry(options: ServiceObservabilityHttpOptions): Promise<ServiceBrowserCapabilityRegistryResponse>;
+/** Evaluate browser capability launch gates without starting Chrome. */
+export declare function getServiceBrowserCapabilityPreflight(options: ServiceBrowserCapabilityPreflightOptions): Promise<ServiceBrowserCapabilityPreflightResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
 /** Read one profile's no-launch target readiness rows. */

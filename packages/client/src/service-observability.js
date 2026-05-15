@@ -37,6 +37,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfilesResponse} ServiceProfilesResponse
  * @typedef {import('./service-observability.generated.js').ServiceProvidersResponse} ServiceProvidersResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryResponse} ServiceBrowserCapabilityRegistryResponse
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityPreflightOptions} ServiceBrowserCapabilityPreflightOptions
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityPreflightResponse} ServiceBrowserCapabilityPreflightResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryUpsertOptions} ServiceBrowserCapabilityRegistryUpsertOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryUpsertResponse} ServiceBrowserCapabilityRegistryUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceQueryOptions} ServiceQueryOptions
@@ -114,6 +116,44 @@ export function getServiceContracts(options) {
  */
 export function getServiceBrowserCapabilityRegistry(options) {
   return serviceGet(options, '/api/service/browser-capability-registry');
+}
+
+/**
+ * Evaluate browser capability launch gates without starting Chrome.
+ *
+ * @param {ServiceBrowserCapabilityPreflightOptions} options
+ * @returns {Promise<ServiceBrowserCapabilityPreflightResponse>}
+ */
+export function getServiceBrowserCapabilityPreflight(options) {
+  return serviceGet(
+    {
+      ...options,
+      query: {
+        ...options.query,
+        browserBuild: options.browserBuild,
+        serviceName: options.serviceName,
+        agentName: options.agentName,
+        taskName: options.taskName,
+        loginId: options.loginId,
+        siteId: options.siteId,
+        targetServiceId: options.targetServiceId,
+        accountId: options.accountId,
+        url: options.url,
+        loginIds: options.loginIds?.join(','),
+        siteIds: options.siteIds?.join(','),
+        targetServiceIds: options.targetServiceIds?.join(','),
+        accountIds: options.accountIds?.join(','),
+        runtimeProfile: options.runtimeProfile,
+        profile: options.profile,
+        headless: options.headless,
+        headed: options.headed,
+        cdpFree: options.cdpFree,
+        requiresCdpFree: options.requiresCdpFree,
+        cdpAttachmentAllowed: options.cdpAttachmentAllowed,
+      },
+    },
+    '/api/service/browser-capability/preflight',
+  );
 }
 
 /**

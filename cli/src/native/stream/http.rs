@@ -14,8 +14,9 @@ use crate::native::service_access::{
 };
 use crate::native::service_config::refresh_persisted_profile_seeding_handoffs;
 use crate::native::service_contracts::{
-    service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE,
-    SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
+    service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
+    SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_REQUEST_ACTIONS,
+    SERVICE_REQUEST_HTTP_ROUTE,
 };
 use crate::native::service_lifecycle::{
     select_service_profile_for_request, ProfileSelectionRequest,
@@ -463,6 +464,19 @@ pub(super) async fn handle_http_request(
     if method == "GET" && path == "/api/service/status" {
         let result = relay_service_command(session_name, service_status_command()).await;
         write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
+    }
+
+    if method == "GET" && path == SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE {
+        match service_browser_capability_preflight_command(query) {
+            Ok(cmd) => {
+                let result = relay_service_command(session_name, cmd).await;
+                write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            }
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+            }
+        }
         return;
     }
 
@@ -1431,9 +1445,9 @@ fn reject_cdp_free_service_request(
 }
 
 fn parse_query_bool(name: &str, value: &str) -> Result<bool, String> {
-    match value {
-        "true" | "1" => Ok(true),
-        "false" | "0" => Ok(false),
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
         _ => Err(format!("Invalid {} value: {}", name, value)),
     }
 }
@@ -1565,6 +1579,114 @@ fn parse_monitor_collection_filters(query: Option<&str>) -> MonitorCollectionFil
         }
     }
     filters
+}
+
+fn service_browser_capability_preflight_command(query: Option<&str>) -> Result<Value, String> {
+    let mut cmd = json!({
+        "id": format!("http-service-browser-capability-preflight-{}", uuid::Uuid::new_v4()),
+        "action": "service_browser_capability_preflight",
+    });
+    let mut has_browser_build = false;
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "browserBuild" | "browser_build" | "browser-build" => {
+                if let Some(browser_build) = parse_browser_build(&value)? {
+                    cmd["browserBuild"] = json!(browser_build);
+                    has_browser_build = true;
+                }
+            }
+            "targetServiceId" | "target_service_id" | "target-service-id" | "targetService"
+            | "target_service" | "target-service" | "siteId" | "site_id" | "site-id"
+            | "loginId" | "login_id" | "login-id" => {
+                if let Some(value) = non_empty(value) {
+                    cmd[key_to_camel_case(key.as_str())] = json!(value);
+                }
+            }
+            "targetServiceIds" | "target_service_ids" | "target-service-ids" | "targetServices"
+            | "target_services" | "target-services" | "siteIds" | "site_ids" | "site-ids"
+            | "loginIds" | "login_ids" | "login-ids" => {
+                let values = identity_values(&value);
+                if !values.is_empty() {
+                    cmd[key_to_camel_case(key.as_str())] = json!(values);
+                }
+            }
+            "accountId" | "account_id" | "account-id" | "account" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["accountId"] = json!(value);
+                }
+            }
+            "accountIds" | "account_ids" | "account-ids" | "accounts" => {
+                let values = identity_values(&value);
+                if !values.is_empty() {
+                    cmd["accountIds"] = json!(values);
+                }
+            }
+            "url" | "targetUrl" | "target_url" | "target-url" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["url"] = json!(value);
+                }
+            }
+            "runtimeProfile" | "runtime_profile" | "runtime-profile" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["runtimeProfile"] = json!(value);
+                }
+            }
+            "profile" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["profile"] = json!(value);
+                }
+            }
+            "serviceName" | "service_name" | "service-name" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["serviceName"] = json!(value);
+                }
+            }
+            "agentName" | "agent_name" | "agent-name" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["agentName"] = json!(value);
+                }
+            }
+            "taskName" | "task_name" | "task-name" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["taskName"] = json!(value);
+                }
+            }
+            "headless" => {
+                cmd["headless"] = json!(parse_query_bool("headless", &value)?);
+            }
+            "headed" => {
+                if parse_query_bool("headed", &value)? {
+                    cmd["headless"] = json!(false);
+                }
+            }
+            "cdpFree" | "cdp_free" | "cdp-free" | "requiresCdpFree" | "requires_cdp_free"
+            | "requires-cdp-free" => {
+                if parse_query_bool(key.as_str(), &value)? {
+                    cmd["requiresCdpFree"] = json!(true);
+                    cmd["cdpAttachmentAllowed"] = json!(false);
+                    cmd["headless"] = json!(false);
+                }
+            }
+            "cdpAttachmentAllowed" | "cdp_attachment_allowed" | "cdp-attachment-allowed" => {
+                cmd["cdpAttachmentAllowed"] =
+                    json!(parse_query_bool("cdpAttachmentAllowed", &value)?);
+            }
+            "" => {}
+            _ => {
+                return Err(format!(
+                    "Unknown browser capability preflight query parameter: {}",
+                    key
+                ))
+            }
+        }
+    }
+
+    if !has_browser_build {
+        return Err("Missing browserBuild query parameter".to_string());
+    }
+
+    Ok(cmd)
 }
 
 fn service_access_plan_response_for_state(
@@ -1778,6 +1900,28 @@ fn append_identity_values(target_service_ids: &mut Vec<String>, value: &str) {
         if let Some(item) = non_empty(item.to_string()) {
             target_service_ids.push(item);
         }
+    }
+}
+
+fn identity_values(value: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    append_identity_values(&mut values, value);
+    values.sort();
+    values.dedup();
+    values
+}
+
+fn key_to_camel_case(key: &str) -> &str {
+    match key {
+        "targetServiceId" | "target_service_id" | "target-service-id" => "targetServiceId",
+        "targetService" | "target_service" | "target-service" => "targetService",
+        "targetServiceIds" | "target_service_ids" | "target-service-ids" => "targetServiceIds",
+        "targetServices" | "target_services" | "target-services" => "targetServices",
+        "siteId" | "site_id" | "site-id" => "siteId",
+        "siteIds" | "site_ids" | "site-ids" => "siteIds",
+        "loginId" | "login_id" | "login-id" => "loginId",
+        "loginIds" | "login_ids" | "login-ids" => "loginIds",
+        _ => key,
     }
 }
 

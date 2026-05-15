@@ -63,7 +63,11 @@ and MCP `agent-browser://profiles/{profile_id}/readiness`, and
 `agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}`,
 plus
 `serviceAccessPlanResponse` for `GET /api/service/access-plan` and MCP
-`agent-browser://access-plan`.
+`agent-browser://access-plan`, and
+`serviceBrowserCapabilityPreflightResponse` for HTTP
+`GET /api/service/browser-capability/preflight`, MCP
+`service_browser_capability_preflight`, and
+`getServiceBrowserCapabilityPreflight()`.
 Readiness, lookup, and access-plan metadata also names the
 `@agent-browser/client/service-observability` helpers that consume those
 routes. Software clients should prefer `lookupServiceProfile()` when they want
@@ -132,6 +136,16 @@ MCP `service_browser_capability_registry_upsert`, and
 record through the service worker queue. The registry remains advisory and is
 not yet authoritative routing policy.
 
+`service-browser-capability-preflight-response.v1.schema.json` describes the
+no-launch preflight response for evaluating whether a requested browser build
+would pass the same executable, host, profile compatibility, and validation
+evidence gates that queued launches use. It is exposed through HTTP
+`GET /api/service/browser-capability/preflight`, MCP
+`service_browser_capability_preflight`, and
+`getServiceBrowserCapabilityPreflight()`. The preflight path relays through the
+daemon queue but reports `wouldLaunch: false`, so clients can inspect launch
+posture without starting Chrome.
+
 <table>
   <thead>
     <tr>
@@ -155,6 +169,11 @@ not yet authoritative routing policy.
       <td><code>GET /api/service/browser-capability-registry</code></td>
       <td><code>agent-browser://browser-capability-registry</code></td>
       <td>Advisory no-launch browser host, executable, capability, profile compatibility, preference binding, and validation evidence registry</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/service/browser-capability/preflight</code></td>
+      <td><code>service_browser_capability_preflight</code></td>
+      <td>No-launch browser build routing and executable gate preflight</td>
     </tr>
     <tr>
       <td><code>GET /api/service/profiles/lookup</code></td>

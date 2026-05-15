@@ -9,6 +9,7 @@ use crate::native::service_access::{
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+    SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
 };
@@ -1543,6 +1544,93 @@ fn service_mcp_tools() -> Vec<Value> {
                     }
                 },
                 "required": ["collection", "id", "record"]
+            }
+        }),
+        json!({
+            "name": SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
+            "title": "Preflight browser capability launch gate",
+            "description": "Evaluate browser capability routing and executable gates without launching Chrome. Use this before requesting browser control when software or agents need to know whether a requested browser build can be applied.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "browserBuild": {
+                        "type": "string",
+                        "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+                        "description": "Requested browser build to preflight."
+                    },
+                    "targetServiceId": {
+                        "type": "string",
+                        "description": "Desired target service or identity provider."
+                    },
+                    "siteId": {
+                        "type": "string",
+                        "description": "Desired site identity alias."
+                    },
+                    "loginId": {
+                        "type": "string",
+                        "description": "Desired login identity."
+                    },
+                    "accountId": {
+                        "type": "string",
+                        "description": "Desired account identity."
+                    },
+                    "targetServiceIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Additional target service identities."
+                    },
+                    "accountIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Additional account identities."
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Target URL used for site-policy aware preflight."
+                    },
+                    "runtimeProfile": {
+                        "type": "string",
+                        "description": "Explicit managed runtime profile id."
+                    },
+                    "profile": {
+                        "type": "string",
+                        "description": "Explicit custom user-data directory."
+                    },
+                    "headless": {
+                        "type": "boolean",
+                        "description": "Whether the launch would be headless when CDP attachment is allowed."
+                    },
+                    "headed": {
+                        "type": "boolean",
+                        "description": "Set true to preflight headed launch posture."
+                    },
+                    "cdpFree": {
+                        "type": "boolean",
+                        "description": "Set true to preflight CDP-free headed posture."
+                    },
+                    "requiresCdpFree": {
+                        "type": "boolean",
+                        "description": "Set true when the target site requires CDP-free operation."
+                    },
+                    "cdpAttachmentAllowed": {
+                        "type": "boolean",
+                        "description": "Set false when CDP attachment is not allowed."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    }
+                },
+                "required": ["browserBuild"]
             }
         }),
         json!({
@@ -4198,6 +4286,9 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         "service_browser_capability_registry_upsert" => {
             call_service_browser_capability_registry_upsert(arguments, session)
         }
+        SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME => {
+            call_service_browser_capability_preflight(arguments, session)
+        }
         "service_request" => call_service_request(arguments, session),
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
@@ -4731,6 +4822,36 @@ fn call_service_browser_capability_registry_upsert(
 
     send_queued_tool_command(
         "service_browser_capability_registry_upsert",
+        session,
+        trace,
+        command,
+    )
+}
+
+fn call_service_browser_capability_preflight(
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let browser_build = optional_enum_string_argument(
+        arguments,
+        "browserBuild",
+        &["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+    )?
+    .ok_or_else(|| JsonRpcError::invalid_params("browserBuild is required"))?;
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_browser_capability_preflight_command(
+        arguments,
+        browser_build,
+        service_name,
+        agent_name,
+        task_name,
+    )?;
+
+    send_queued_tool_command(
+        SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
         session,
         trace,
         command,
@@ -6533,6 +6654,71 @@ fn service_browser_capability_registry_upsert_command(
     });
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
+}
+
+fn service_browser_capability_preflight_command(
+    arguments: &Value,
+    browser_build: &str,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Result<Value, JsonRpcError> {
+    let mut command = json!({
+        "id": format!("mcp-service-browser-capability-preflight-{}", uuid::Uuid::new_v4()),
+        "action": "service_browser_capability_preflight",
+        "browserBuild": browser_build,
+    });
+    for name in [
+        "targetServiceId",
+        "targetService",
+        "siteId",
+        "loginId",
+        "accountId",
+        "url",
+        "runtimeProfile",
+        "profile",
+    ] {
+        if let Some(value) = optional_string_argument(arguments, name)? {
+            command[name] = json!(value);
+        }
+    }
+    for name in [
+        "targetServiceIds",
+        "targetServices",
+        "siteIds",
+        "loginIds",
+        "accountIds",
+    ] {
+        if let Some(values) = optional_string_array_argument(arguments, name)? {
+            command[name] = json!(values);
+        }
+    }
+    for name in [
+        "headless",
+        "headed",
+        "cdpFree",
+        "requiresCdpFree",
+        "cdpAttachmentAllowed",
+    ] {
+        if let Some(value) = optional_bool_argument(arguments, name)? {
+            command[name] = json!(value);
+        }
+    }
+    if command["headed"].as_bool() == Some(true)
+        || command["cdpFree"].as_bool() == Some(true)
+        || command["requiresCdpFree"].as_bool() == Some(true)
+        || command["cdpAttachmentAllowed"].as_bool() == Some(false)
+    {
+        command["headless"] = json!(false);
+    }
+    if command["cdpFree"].as_bool() == Some(true)
+        || command["requiresCdpFree"].as_bool() == Some(true)
+    {
+        command["requiresCdpFree"] = json!(true);
+        command["cdpAttachmentAllowed"] = json!(false);
+    }
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    Ok(command)
 }
 
 fn apply_service_trace_fields(

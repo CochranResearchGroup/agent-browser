@@ -204,6 +204,35 @@ try {
     `serviceBrowserCapabilityRegistryUpsertResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityRegistryUpsertResponse)}`,
   );
   assert(
+    contracts.data?.contracts?.serviceBrowserCapabilityPreflightResponse?.schemaId ===
+      'https://agent-browser.local/contracts/service-browser-capability-preflight-response.v1.schema.json',
+    `serviceBrowserCapabilityPreflightResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityPreflightResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceBrowserCapabilityPreflightResponse?.http?.route ===
+      '/api/service/browser-capability/preflight',
+    `serviceBrowserCapabilityPreflightResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityPreflightResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceBrowserCapabilityPreflightResponse?.mcp?.tool ===
+      'service_browser_capability_preflight',
+    `serviceBrowserCapabilityPreflightResponse MCP tool mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityPreflightResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceBrowserCapabilityPreflightResponse?.client?.helpers?.includes(
+      'getServiceBrowserCapabilityPreflight',
+    ),
+    `serviceBrowserCapabilityPreflightResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceBrowserCapabilityPreflightResponse)}`,
+  );
+  const preflight = await httpJson(
+    port,
+    'GET',
+    '/api/service/browser-capability/preflight?browserBuild=stealthcdp_chromium&targetServiceId=canva&serviceName=contracts-smoke&agentName=codex&taskName=no-launch-preflight',
+  );
+  assert(preflight.success === true, `browser capability preflight failed: ${JSON.stringify(preflight)}`);
+  assert(preflight.data?.preflight === true, `preflight marker mismatch: ${JSON.stringify(preflight)}`);
+  assert(preflight.data?.wouldLaunch === false, `preflight launched browser: ${JSON.stringify(preflight)}`);
+  assert(
     contracts.data?.contracts?.serviceProfileSeedingHandoffResponse?.schemaId ===
       'https://agent-browser.local/contracts/service-profile-seeding-handoff-response.v1.schema.json',
     `serviceProfileSeedingHandoffResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileSeedingHandoffResponse)}`,

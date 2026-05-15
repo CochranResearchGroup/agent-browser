@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-browser-capability-preflight-response.v1.schema.json",
+  "title": "Service browser capability preflight response",
+  "description": "Stable API shape for no-launch browser capability preflight responses returned by HTTP and MCP.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "preflight",
+    "wouldLaunch",
+    "wouldApplyExecutable",
+    "browserCapabilityLaunch",
+    "request",
+    "selectedExecutablePath"
+  ],
+  "properties": {
+    "preflight": {
+      "const": true
+    },
+    "wouldLaunch": {
+      "const": false
+    },
+    "wouldApplyExecutable": {
+      "type": "boolean"
+    },
+    "browserCapabilityLaunch": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["applied", "reason"],
+      "properties": {
+        "applied": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "browserBuild": {
+          "type": ["string", "null"],
+          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", null]
+        },
+        "profileId": {
+          "type": ["string", "null"]
+        },
+        "bindingId": {
+          "type": ["string", "null"]
+        },
+        "hostId": {
+          "type": ["string", "null"]
+        },
+        "executableId": {
+          "type": ["string", "null"]
+        },
+        "capabilityId": {
+          "type": ["string", "null"]
+        },
+        "executablePath": {
+          "type": ["string", "null"]
+        },
+        "profileCompatibilityIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "validationEvidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "browserBuild",
+        "profileId",
+        "headless",
+        "cdpFree",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "targetServiceIds",
+        "accountIds",
+        "url"
+      ],
+      "properties": {
+        "browserBuild": {
+          "type": ["string", "null"],
+          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", null]
+        },
+        "profileId": {
+          "type": ["string", "null"]
+        },
+        "headless": {
+          "type": "boolean"
+        },
+        "cdpFree": {
+          "type": "boolean"
+        },
+        "serviceName": {
+          "type": ["string", "null"]
+        },
+        "agentName": {
+          "type": ["string", "null"]
+        },
+        "taskName": {
+          "type": ["string", "null"]
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "accountIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "url": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "selectedExecutablePath": {
+      "type": ["string", "null"]
+    }
+  }
+}
