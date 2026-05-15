@@ -74,7 +74,8 @@
     "test:service-health-live": "node scripts/smoke-service-health.js",
     "test:service-config-live": "node scripts/smoke-service-config.js",
     "test:service-job-naming-live": "node scripts/smoke-service-job-naming.js",
-    "test:windows-browser-setup-powershell-live": "bash scripts/smoke-windows-browser-setup-powershell.sh"
+    "test:windows-browser-setup-powershell-live": "bash scripts/smoke-windows-browser-setup-powershell.sh",
+    "test:wsl-windows-chromium-profile-live": "bash scripts/smoke-wsl-windows-chromium-profile.sh"
   },
   "keywords": [
     "browser",

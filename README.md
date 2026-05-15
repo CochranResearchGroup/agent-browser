@@ -1352,6 +1352,12 @@ When the Windows SSM debug instance is available, run
 `pnpm test:windows-browser-setup-powershell-live` to send the generated script
 to Windows and verify that the default invocation stays dry-run, prints rollback
 commands, and does not create firewall rules.
+Run `pnpm test:wsl-windows-chromium-profile-live` on WSL hosts with the
+Windows `chromium-stealthcdp` artifact installed to verify the headed
+agent-browser launch path with a Windows-mounted profile. The smoke uses an
+isolated daemon socket, expects `DevToolsActivePort` and `Local State` to be
+written, checks the captured Chrome stderr for `/mnt/...` path or write-failure
+evidence, and closes the test browser.
 
 ## Authenticated Sessions
 

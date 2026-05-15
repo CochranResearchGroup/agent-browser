@@ -198,6 +198,19 @@ script to the Windows debug host, runs it without `-Apply`, and fails if the
 dry-run marker or rollback commands are missing or if the script reports
 creating a firewall rule.
 
+Implemented WSL to Windows Chromium profile validation:
+
+```bash
+pnpm test:wsl-windows-chromium-profile-live
+```
+
+This launches the Windows `chromium-stealthcdp` executable from WSL through
+agent-browser, using an isolated daemon socket and a Windows-mounted profile
+under `AppData/Local/Temp`. The smoke defaults to headed mode, verifies
+`DevToolsActivePort` and `Local State`, rejects captured Chrome stderr that
+mentions `/mnt/...` path or write-failure evidence, and closes the test
+browser.
+
 ## Security Defaults
 
 - Do not expose CDP on `0.0.0.0` by default.
