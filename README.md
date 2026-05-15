@@ -425,6 +425,7 @@ agent-browser install                 # Download Chrome from Chrome for Testing 
 agent-browser install stealthcdp-chromium  # Download the preferred patched Chromium release when available
 agent-browser install doctor          # Check user-scoped binary drift and launch readiness
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
+agent-browser doctor windows-browser --scan-ports --firewall  # Scan bounded ports and query Windows firewall state
 agent-browser setup windows-browser --print-powershell  # Print reviewed Windows routing setup script
 agent-browser setup windows-browser --print-powershell --doctor  # Embed current route diagnostics in the script
 agent-browser install --with-deps     # Also install system deps (Linux)
@@ -1332,6 +1333,10 @@ On Unix, if `DISPLAY` is unset, agent-browser launches headed Chrome with `DISPL
 For WSL operators who prefer Windows-hosted Chrome or Chromium, run
 `agent-browser doctor windows-browser` to diagnose the current CDP route without
 changing firewall, `.wslconfig`, SSH, browser, or profile state. Run
+`agent-browser doctor windows-browser --scan-ports --firewall` for a bounded
+scan of common browser/debug ports plus localhost listeners and a read-only
+Windows firewall and Hyper-V firewall query through PowerShell when available.
+Run
 `agent-browser setup windows-browser --print-powershell` to print a reviewed
 Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall
 rules, fixed CDP ports, SSH tunnel fallback, and rollback commands. The
@@ -1339,6 +1344,10 @@ agent-browser command is preview-only; the generated script is dry-run by
 default and requires its own `-Apply` switch before creating a firewall rule.
 Add `--doctor` to embed the current route diagnostics as PowerShell comments
 and infer `nat` mode when mirrored networking is not active.
+When WSL launches a Windows `chrome.exe`, agent-browser translates mounted
+Windows paths in Chrome arguments, including profile, cache, download,
+extension, and positional path arguments, from `/mnt/<drive>/...` to
+`<drive>:\...` before launch.
 When the Windows SSM debug instance is available, run
 `pnpm test:windows-browser-setup-powershell-live` to send the generated script
 to Windows and verify that the default invocation stays dry-run, prints rollback

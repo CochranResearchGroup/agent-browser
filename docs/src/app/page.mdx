@@ -9,6 +9,7 @@ curl -L -o ~/.local/bin/agent-browser \
 chmod +x ~/.local/bin/agent-browser
 agent-browser install             # Download Chrome (first time)
 agent-browser doctor windows-browser # Diagnose WSL to Windows browser routing
+agent-browser doctor windows-browser --scan-ports --firewall # Read-only port and firewall diagnostics
 agent-browser setup windows-browser --print-powershell # Print Windows routing setup script
 agent-browser setup windows-browser --print-powershell --doctor # Include current routing diagnosis
 ```

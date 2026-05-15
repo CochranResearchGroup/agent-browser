@@ -997,20 +997,27 @@ fn translate_wsl_mounted_paths_for_windows_chrome(chrome_path: &Path, args: &mut
     }
 
     for arg in args.iter_mut() {
-        if let Some(path) = arg.strip_prefix("--user-data-dir=") {
-            if let Some(windows_path) = wsl_mount_path_to_windows_path(Path::new(path)) {
-                *arg = format!("--user-data-dir={windows_path}");
-            }
-        } else if let Some(path) = arg.strip_prefix("--download-default-directory=") {
-            if let Some(windows_path) = wsl_mount_path_to_windows_path(Path::new(path)) {
-                *arg = format!("--download-default-directory={windows_path}");
-            }
-        }
+        *arg = translate_wsl_mounted_paths_in_chrome_arg(arg);
     }
 
     if !args.iter().any(|arg| arg == "--no-sandbox") {
         args.push("--no-sandbox".to_string());
     }
+}
+
+#[cfg(target_os = "linux")]
+fn translate_wsl_mounted_paths_in_chrome_arg(arg: &str) -> String {
+    if let Some((flag, value)) = arg.split_once('=') {
+        let translated = value
+            .split(',')
+            .map(|part| {
+                wsl_mount_path_to_windows_path(Path::new(part)).unwrap_or_else(|| part.to_string())
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        return format!("{flag}={translated}");
+    }
+    wsl_mount_path_to_windows_path(Path::new(arg)).unwrap_or_else(|| arg.to_string())
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2253,6 +2260,34 @@ mod tests {
             assert_eq!(
                 args[0],
                 "--user-data-dir=/mnt/c/Users/ecoch/AppData/Local/Temp/profile"
+            );
+        }
+    }
+
+    #[test]
+    fn test_wsl_mounted_windows_chrome_translates_path_valued_args() {
+        let mut args = vec![
+            "--disk-cache-dir=/mnt/c/Users/ecoch/AppData/Local/Temp/cache".to_string(),
+            "--load-extension=/mnt/c/ext-one,/mnt/d/ext-two".to_string(),
+            "/mnt/c/Users/ecoch/Downloads/file.html".to_string(),
+        ];
+        translate_wsl_mounted_paths_for_windows_chrome(
+            Path::new("/mnt/c/Users/ecoch/AppData/Local/chromium-stealthcdp/current/chrome.exe"),
+            &mut args,
+        );
+
+        if cfg!(target_os = "linux") {
+            assert_eq!(
+                args[0],
+                r"--disk-cache-dir=C:\Users\ecoch\AppData\Local\Temp\cache"
+            );
+            assert_eq!(args[1], r"--load-extension=C:\ext-one,D:\ext-two");
+            assert_eq!(args[2], r"C:\Users\ecoch\Downloads\file.html");
+            assert!(args.iter().any(|arg| arg == "--no-sandbox"));
+        } else {
+            assert_eq!(
+                args[0],
+                "--disk-cache-dir=/mnt/c/Users/ecoch/AppData/Local/Temp/cache"
             );
         }
     }

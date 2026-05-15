@@ -4292,7 +4292,7 @@ Examples:
             r##"
 agent-browser doctor - Diagnose local environment and browser connectivity
 
-Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>] [--json]
+Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>] [--scan-ports] [--firewall] [--json]
 
 Subcommands:
   windows-browser       Diagnose WSL to Windows browser CDP routing without changing system state
@@ -4300,11 +4300,14 @@ Subcommands:
 Options:
   --port <port>         Fixed CDP port to probe for operator-owned browsers (default: 9222)
   --host <host>         Probe one explicit host instead of route candidates
+  --scan-ports          Run a bounded scan of common browser/debug ports and localhost listeners
+  --firewall            Query Windows firewall and Hyper-V firewall state through PowerShell when available
   --json               Output machine-readable diagnostics
 
 Examples:
   agent-browser doctor windows-browser
   agent-browser doctor windows-browser --port 9222
+  agent-browser doctor windows-browser --scan-ports --firewall
   agent-browser doctor windows-browser --host 127.0.0.1 --port 9222 --json
 "##
         }
