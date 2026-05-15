@@ -4321,6 +4321,7 @@ Subcommands:
 
 Options:
   --print-powershell    Print the PowerShell script to stdout without changing system state
+  --doctor              Embed current route diagnostics and infer mirrored vs nat when mode is not explicit
   --port <port>         Fixed CDP port for operator-owned Windows browsers (default: 9222)
   --mode <mode>         Route mode: mirrored, nat, or ssh (default: mirrored)
   --windows-user <user> User placeholder for the SSH tunnel command
@@ -4336,6 +4337,7 @@ Safety:
 
 Examples:
   agent-browser setup windows-browser --print-powershell
+  agent-browser setup windows-browser --print-powershell --doctor
   agent-browser setup windows-browser --print-powershell --port 9222 > windows-browser-setup.ps1
   agent-browser setup windows-browser --print-powershell --mode ssh --windows-user ecoch --windows-host winhost
 "##

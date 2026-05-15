@@ -37,6 +37,13 @@ pub fn run_windows_browser_doctor(clean: &[String], json_mode: bool) {
     print_windows_browser_doctor_report(&report);
 }
 
+pub(crate) fn windows_browser_doctor_report_for_setup(
+    port: u16,
+    host: Option<String>,
+) -> serde_json::Value {
+    windows_browser_doctor_report(&DoctorArgs { port, host })
+}
+
 fn parse_doctor_args(clean: &[String]) -> DoctorArgs {
     let mut port = 9222_u16;
     let mut host = None;

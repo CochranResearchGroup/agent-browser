@@ -1,4 +1,4 @@
-use crate::color;
+use crate::{color, windows_browser_doctor};
 use serde_json::json;
 use std::process::exit;
 
@@ -7,8 +7,10 @@ const HYPER_V_WSL_VM_CREATOR_ID: &str = "{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}"
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SetupArgs {
     print_powershell: bool,
+    doctor: bool,
     port: u16,
     mode: SetupMode,
+    mode_explicit: bool,
     windows_user: Option<String>,
     windows_host: Option<String>,
     rule_name: String,
@@ -57,7 +59,17 @@ pub fn run_windows_browser_setup(clean: &[String], json_mode: bool) {
                 );
             }
 
-            let script = render_powershell_setup(&args);
+            let doctor_report = if args.doctor {
+                Some(
+                    windows_browser_doctor::windows_browser_doctor_report_for_setup(
+                        args.port, None,
+                    ),
+                )
+            } else {
+                None
+            };
+            let effective_mode = effective_mode(&args, doctor_report.as_ref());
+            let script = render_powershell_setup(&args, &effective_mode, doctor_report.as_ref());
             if json_mode {
                 println!(
                     "{}",
@@ -67,7 +79,9 @@ pub fn run_windows_browser_setup(clean: &[String], json_mode: bool) {
                             "mutated": false,
                             "kind": "windows_browser_setup_powershell",
                             "port": args.port,
-                            "mode": args.mode.as_str(),
+                            "mode": effective_mode.as_str(),
+                            "doctorIncluded": args.doctor,
+                            "doctor": doctor_report,
                             "ruleName": args.rule_name,
                             "vmCreatorId": HYPER_V_WSL_VM_CREATOR_ID,
                             "script": script,
@@ -104,8 +118,10 @@ fn exit_with_error(message: impl AsRef<str>, json_mode: bool) -> ! {
 
 fn parse_setup_args(clean: &[String]) -> Result<SetupArgs, String> {
     let mut print_powershell = false;
+    let mut doctor = false;
     let mut port = 9222_u16;
     let mut mode = SetupMode::Mirrored;
+    let mut mode_explicit = false;
     let mut windows_user = None;
     let mut windows_host = None;
     let mut rule_name = None;
@@ -115,6 +131,7 @@ fn parse_setup_args(clean: &[String]) -> Result<SetupArgs, String> {
     while i < clean.len() {
         match clean[i].as_str() {
             "--print-powershell" => print_powershell = true,
+            "--doctor" => doctor = true,
             "--apply" => apply_requested = true,
             "--port" => {
                 let value = clean
@@ -132,6 +149,7 @@ fn parse_setup_args(clean: &[String]) -> Result<SetupArgs, String> {
                 mode = SetupMode::parse(value).ok_or_else(|| {
                     format!("Invalid --mode value: {value}; expected mirrored, nat, or ssh")
                 })?;
+                mode_explicit = true;
                 i += 1;
             }
             "--windows-user" => {
@@ -168,8 +186,10 @@ fn parse_setup_args(clean: &[String]) -> Result<SetupArgs, String> {
 
     Ok(SetupArgs {
         print_powershell,
+        doctor,
         port,
         mode,
+        mode_explicit,
         windows_user,
         windows_host,
         rule_name: rule_name.unwrap_or_else(|| format!("agent-browser-cdp-{port}")),
@@ -177,13 +197,34 @@ fn parse_setup_args(clean: &[String]) -> Result<SetupArgs, String> {
     })
 }
 
-fn render_powershell_setup(args: &SetupArgs) -> String {
+fn effective_mode(args: &SetupArgs, doctor_report: Option<&serde_json::Value>) -> SetupMode {
+    if args.mode_explicit {
+        return args.mode.clone();
+    }
+    let networking_mode = doctor_report
+        .and_then(|report| report.pointer("/data/networkingMode"))
+        .and_then(|value| value.as_str())
+        .unwrap_or_default();
+    if networking_mode.eq_ignore_ascii_case("mirrored") {
+        SetupMode::Mirrored
+    } else if doctor_report.is_some() {
+        SetupMode::Nat
+    } else {
+        args.mode.clone()
+    }
+}
+
+fn render_powershell_setup(
+    args: &SetupArgs,
+    effective_mode: &SetupMode,
+    doctor_report: Option<&serde_json::Value>,
+) -> String {
     let rule_name = powershell_single_quote(&args.rule_name);
     let windows_user =
         powershell_single_quote(args.windows_user.as_deref().unwrap_or("<windows-user>"));
     let windows_host =
         powershell_single_quote(args.windows_host.as_deref().unwrap_or("<windows-host>"));
-    let recommended_route = match args.mode {
+    let recommended_route = match effective_mode {
         SetupMode::Mirrored => "Use 127.0.0.1 from WSL when mirrored networking is active.",
         SetupMode::Nat => "Use the Windows host IP from the WSL default route when mirrored networking is unavailable.",
         SetupMode::Ssh => "Use an SSH local tunnel and connect agent-browser to 127.0.0.1.",
@@ -192,11 +233,13 @@ fn render_powershell_setup(args: &SetupArgs) -> String {
         "Start the Windows browser with --remote-debugging-address=127.0.0.1 --remote-debugging-port={}",
         args.port
     );
+    let doctor_comments = render_doctor_comments(doctor_report);
 
     format!(
         r#"# agent-browser Windows browser setup preview
 # Generated by: agent-browser setup windows-browser --print-powershell
 # This script is dry-run by default. Re-run with -Apply after reviewing it.
+{doctor_comments}
 
 param(
     [switch]$Apply
@@ -278,12 +321,67 @@ Write-Host "Remove-NetFirewallRule -DisplayName '$DisplayName' -ErrorAction Sile
         port = args.port,
         rule_name = rule_name,
         vm_creator_id = HYPER_V_WSL_VM_CREATOR_ID,
-        mode = args.mode.as_str(),
+        mode = effective_mode.as_str(),
         recommended_route = powershell_single_quote(recommended_route),
         launch_hint = powershell_single_quote(&launch_hint),
         windows_user = windows_user,
         windows_host = windows_host,
     )
+}
+
+fn render_doctor_comments(doctor_report: Option<&serde_json::Value>) -> String {
+    let Some(report) = doctor_report else {
+        return String::new();
+    };
+    let data = &report["data"];
+    let mut lines = vec![
+        "#".to_string(),
+        "# Embedded doctor summary from this WSL environment:".to_string(),
+        format!(
+            "# isWsl: {}",
+            json_value_for_comment(data.pointer("/isWsl"))
+        ),
+        format!(
+            "# networkingMode: {}",
+            json_value_for_comment(data.pointer("/networkingMode"))
+        ),
+        format!(
+            "# windowsHostIp: {}",
+            json_value_for_comment(data.pointer("/windowsHostIp"))
+        ),
+        format!(
+            "# recommendedRoute: {}",
+            json_value_for_comment(data.pointer("/recommendedRoute"))
+        ),
+        format!(
+            "# recommendedAction: {}",
+            json_value_for_comment(data.pointer("/recommendedAction"))
+        ),
+    ];
+    if let Some(probes) = data.pointer("/probes").and_then(|value| value.as_array()) {
+        for probe in probes {
+            lines.push(format!(
+                "# probe: {}:{} source={} reachable={} httpJsonVersion={}",
+                json_value_for_comment(probe.get("host")),
+                json_value_for_comment(probe.get("port")),
+                json_value_for_comment(probe.get("source")),
+                json_value_for_comment(probe.get("reachable")),
+                json_value_for_comment(probe.get("httpJsonVersion"))
+            ));
+        }
+    }
+    lines.push(String::new());
+    lines.join("\n")
+}
+
+fn json_value_for_comment(value: Option<&serde_json::Value>) -> String {
+    match value {
+        Some(serde_json::Value::String(value)) => value.clone(),
+        Some(serde_json::Value::Bool(value)) => value.to_string(),
+        Some(serde_json::Value::Number(value)) => value.to_string(),
+        Some(serde_json::Value::Null) | None => "unknown".to_string(),
+        Some(value) => value.to_string(),
+    }
 }
 
 fn powershell_single_quote(value: &str) -> String {
@@ -307,8 +405,10 @@ mod tests {
             args,
             SetupArgs {
                 print_powershell: true,
+                doctor: false,
                 port: 9222,
                 mode: SetupMode::Mirrored,
+                mode_explicit: false,
                 windows_user: None,
                 windows_host: None,
                 rule_name: "agent-browser-cdp-9222".to_string(),
@@ -338,6 +438,7 @@ mod tests {
 
         assert_eq!(args.port, 9333);
         assert_eq!(args.mode, SetupMode::Ssh);
+        assert!(args.mode_explicit);
         assert_eq!(args.windows_user, Some("ecoch".to_string()));
         assert_eq!(args.windows_host, Some("winhost".to_string()));
         assert_eq!(args.rule_name, "custom-rule");
@@ -360,14 +461,16 @@ mod tests {
     fn powershell_contains_firewall_and_rollback() {
         let args = SetupArgs {
             print_powershell: true,
+            doctor: false,
             port: 9333,
             mode: SetupMode::Ssh,
+            mode_explicit: true,
             windows_user: Some("ecoch".to_string()),
             windows_host: Some("winhost".to_string()),
             rule_name: "agent-browser-cdp-9333".to_string(),
             apply_requested: false,
         };
-        let script = render_powershell_setup(&args);
+        let script = render_powershell_setup(&args, &SetupMode::Ssh, None);
 
         assert!(script.contains("New-NetFirewallHyperVRule"));
         assert!(script.contains(HYPER_V_WSL_VM_CREATOR_ID));
@@ -379,5 +482,36 @@ mod tests {
     #[test]
     fn powershell_escapes_single_quotes() {
         assert_eq!(powershell_single_quote("agent's rule"), "agent''s rule");
+    }
+
+    #[test]
+    fn doctor_summary_infers_nat_when_not_mirrored() {
+        let args = SetupArgs {
+            print_powershell: true,
+            doctor: true,
+            port: 9222,
+            mode: SetupMode::Mirrored,
+            mode_explicit: false,
+            windows_user: None,
+            windows_host: None,
+            rule_name: "agent-browser-cdp-9222".to_string(),
+            apply_requested: false,
+        };
+        let report = json!({
+            "success": true,
+            "data": {
+                "isWsl": true,
+                "networkingMode": "nat",
+                "windowsHostIp": "192.168.50.1",
+                "recommendedRoute": "default-route-host-ip or ssh-forwarded localhost",
+                "recommendedAction": "use_default_route_host_ip_or_configure_mirrored_networking_or_ssh_tunnel",
+                "probes": []
+            }
+        });
+
+        assert_eq!(effective_mode(&args, Some(&report)), SetupMode::Nat);
+        let script = render_powershell_setup(&args, &SetupMode::Nat, Some(&report));
+        assert!(script.contains("# networkingMode: nat"));
+        assert!(script.contains("Mode: nat"));
     }
 }

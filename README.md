@@ -426,6 +426,7 @@ agent-browser install stealthcdp-chromium  # Download the preferred patched Chro
 agent-browser install doctor          # Check user-scoped binary drift and launch readiness
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser setup windows-browser --print-powershell  # Print reviewed Windows routing setup script
+agent-browser setup windows-browser --print-powershell --doctor  # Embed current route diagnostics in the script
 agent-browser install --with-deps     # Also install system deps (Linux)
 agent-browser upgrade                 # Upgrade agent-browser to the latest version
 ```
@@ -1336,6 +1337,8 @@ Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall
 rules, fixed CDP ports, SSH tunnel fallback, and rollback commands. The
 agent-browser command is preview-only; the generated script is dry-run by
 default and requires its own `-Apply` switch before creating a firewall rule.
+Add `--doctor` to embed the current route diagnostics as PowerShell comments
+and infer `nat` mode when mirrored networking is not active.
 
 ## Authenticated Sessions
 

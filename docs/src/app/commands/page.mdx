@@ -32,6 +32,7 @@ agent-browser eval <js>               # Run JavaScript
 agent-browser connect <port|url>      # Connect to browser via CDP
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser setup windows-browser --print-powershell # Print reviewed Windows routing setup script
+agent-browser setup windows-browser --print-powershell --doctor # Embed current route diagnostics in the script
 agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming

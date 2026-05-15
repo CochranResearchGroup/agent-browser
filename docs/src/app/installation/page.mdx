@@ -80,6 +80,9 @@ scoped Hyper-V firewall rules, fixed CDP ports, SSH tunnel fallback, and
 rollback commands. The agent-browser command is preview-only and does not
 mutate system state. The generated script is dry-run by default and requires
 its own <code>-Apply</code> switch before it creates a scoped firewall rule.
+Add <code>--doctor</code> to embed current route diagnostics as PowerShell
+comments and infer <code>nat</code> mode when mirrored networking is not active
+and <code>--mode</code> was not supplied.
 
 ## Updating
 
