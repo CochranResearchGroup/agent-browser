@@ -62,8 +62,8 @@ and MCP `agent-browser://profiles/{profile_id}/readiness`, and
 `serviceProfileLookupResponse` for `GET /api/service/profiles/lookup` and MCP
 `agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}`,
 plus
-`serviceAccessPlanResponse` for `GET /api/service/access-plan` and MCP
-`agent-browser://access-plan`, and
+`serviceAccessPlanResponse` for `GET /api/service/access-plan`, MCP
+`service_access_plan`, and MCP `agent-browser://access-plan`, and
 `serviceBrowserCapabilityPreflightResponse` for HTTP
 `GET /api/service/browser-capability/preflight`, MCP
 `service_browser_capability_preflight`, and
@@ -166,7 +166,7 @@ to run the recipe returned by `getServiceAccessPlan()` directly.
     </tr>
     <tr>
       <td><code>GET /api/service/access-plan</code></td>
-      <td><code>agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}</code></td>
+      <td><code>service_access_plan</code> or <code>agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}</code></td>
       <td>Preferred no-launch selector and recommendation payload</td>
     </tr>
     <tr>
@@ -517,8 +517,8 @@ same operator-ready command and warnings as the explicit profile seeding
 handoff endpoint.
 
 `service-access-plan-response.v1.schema.json` describes the response envelope
-returned by HTTP `GET /api/service/access-plan` and MCP
-`agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}`.
+returned by HTTP `GET /api/service/access-plan`, MCP `service_access_plan`, and
+MCP `agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}`.
 It is a read-only, no-launch planning surface. The response includes the same
 profile selector metadata and readiness summary as profile lookup, then adds the
 selected site policy, enabled providers, retained challenges, optional

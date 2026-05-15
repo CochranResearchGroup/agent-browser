@@ -156,6 +156,8 @@ Read-side and service-configuration software clients can import <code>@agent-bro
 
 Set <code>runDueReadinessMonitor: true</code> on <code>acquireServiceLoginProfile()</code> when a software client wants the helper to run an access-plan-recommended due profile-readiness monitor through <code>runServiceAccessPlanMonitorRunDue()</code> and then refresh the returned access plan before submitting browser work. Set <code>runBrowserCapabilityPreflight: true</code> when the same helper should run the final access plan's no-launch browser-capability gate and return <code>browserCapabilityPreflight</code> plus <code>browserCapabilityPreflightRan</code>.
 
+MCP agents can call <code>service_access_plan</code> for the same no-launch access-plan response without constructing an <code>agent-browser://access-plan&#123;?...&#125;</code> resource URI. This is the preferred tool-call entrypoint when an agent needs the broker-owned profile decision before calling <code>service_request</code>.
+
 Software clients should ask agent-browser for an access plan before creating new runtime state:
 
 ```ts

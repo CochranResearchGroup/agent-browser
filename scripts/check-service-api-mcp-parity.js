@@ -96,6 +96,25 @@ const rustServiceRequestActions = extractRustStringArray(
 const schemaServiceRequestActions = extractServiceRequestSchemaActions(files.serviceRequestSchema);
 const serviceSurface = [
   {
+    tool: 'service_access_plan',
+    method: 'GET',
+    route: '/api/service/access-plan',
+    docsNeedles: ['service_access_plan', '/api/service/access-plan'],
+    httpNeedles: [
+      'path == "/api/service/access-plan"',
+      'service_access_plan_response(query)',
+    ],
+    clientNeedles: [
+      'getServiceAccessPlan',
+      '/api/service/access-plan',
+    ],
+    contractNeedles: [
+      'service-access-plan-response.v1.schema.json',
+      'service_access_plan',
+      'GET /api/service/access-plan',
+    ],
+  },
+  {
     tool: 'service_request',
     method: 'POST',
     route: '/api/service/request',

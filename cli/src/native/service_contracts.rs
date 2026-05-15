@@ -23,6 +23,7 @@ pub const SERVICE_MONITOR_RESET_FAILURES_HTTP_ROUTE: &str =
     "/api/service/monitors/<id>/reset-failures";
 pub const SERVICE_MONITOR_TRIAGE_HTTP_ROUTE: &str = "/api/service/monitors/<id>/triage";
 pub const SERVICE_ACCESS_PLAN_MCP_RESOURCE: &str = "agent-browser://access-plan";
+pub const SERVICE_ACCESS_PLAN_MCP_TOOL_NAME: &str = "service_access_plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME: &str =
     "service_browser_capability_preflight";
@@ -296,6 +297,7 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "mcp": {
                     "resource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+                    "tool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
                 },
                 "client": {
                     "package": "@agent-browser/client/service-observability",
@@ -418,6 +420,7 @@ pub fn service_contracts_metadata() -> Value {
             "contractsResource": SERVICE_CONTRACTS_RESOURCE,
             "serviceBrowserCapabilityRegistryResource": SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE,
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
+            "serviceAccessPlanTool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
             "serviceBrowserCapabilityPreflightTool": SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
             "serviceAccessPlanResource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
             "serviceRemediesApplyTool": SERVICE_REMEDIES_APPLY_MCP_TOOL_NAME,
@@ -572,6 +575,10 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceAccessPlanResponse"]["mcp"]["resource"],
             SERVICE_ACCESS_PLAN_MCP_RESOURCE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["mcp"]["tool"],
+            SERVICE_ACCESS_PLAN_MCP_TOOL_NAME
         );
         assert_eq!(
             metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][0],

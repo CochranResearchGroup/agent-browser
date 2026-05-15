@@ -9,7 +9,7 @@ use crate::native::service_access::{
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
-    SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
+    SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
 };
@@ -584,7 +584,7 @@ fn handle_jsonrpc_request(
                 .map_err(|err| resource_read_error(uri, err))
         }
         "tools/list" => Ok(json!({ "tools": service_mcp_tools() })),
-        "tools/call" => call_service_mcp_tool(params, session),
+        "tools/call" => call_service_mcp_tool(params, session, configured_service_state),
         "prompts/list" => Ok(json!({ "prompts": [] })),
         _ => Err(JsonRpcError::method_not_found(method)),
     }
@@ -617,6 +617,96 @@ fn initialize_result(params: Option<&Value>) -> Value {
 
 fn service_mcp_tools() -> Vec<Value> {
     let tools = vec![
+        json!({
+            "name": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
+            "title": "Read service access plan",
+            "description": "Return the same no-launch service-owned access recommendation as agent-browser://access-plan and HTTP GET /api/service/access-plan. Use this before service_request so agent-browser owns profile selection, readiness, site policy, provider, challenge, and browser posture decisions.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    },
+                    "targetServiceId": {
+                        "type": "string",
+                        "description": "Target site or identity provider for profile selection."
+                    },
+                    "targetService": {
+                        "type": "string",
+                        "description": "Alias for targetServiceId."
+                    },
+                    "targetServiceIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Target sites or identity providers for profile selection."
+                    },
+                    "targetServices": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Alias for targetServiceIds."
+                    },
+                    "siteId": {
+                        "type": "string",
+                        "description": "Site identifier alias for targetServiceId."
+                    },
+                    "siteIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Site identifier aliases for targetServiceIds."
+                    },
+                    "loginId": {
+                        "type": "string",
+                        "description": "Login identity alias for targetServiceId."
+                    },
+                    "loginIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Login identity aliases for targetServiceIds."
+                    },
+                    "accountId": {
+                        "type": "string",
+                        "description": "Account identity for profile selection."
+                    },
+                    "accountIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Account identities for profile selection."
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Target URL used for site-policy matching."
+                    },
+                    "sitePolicyId": {
+                        "type": "string",
+                        "description": "Explicit site policy id."
+                    },
+                    "challengeId": {
+                        "type": "string",
+                        "description": "Explicit retained challenge id."
+                    },
+                    "readinessProfileId": {
+                        "type": "string",
+                        "description": "Explicit profile id for readiness inspection."
+                    },
+                    "browserBuild": {
+                        "type": "string",
+                        "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+                        "description": "Optional browser-build preference for profile selection and launch posture."
+                    }
+                },
+                "required": []
+            }
+        }),
         json!({
             "name": "service_request",
             "title": "Queue service browser request",
@@ -4241,7 +4331,11 @@ fn browser_element_state_tool_schema(
     })
 }
 
-fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value, JsonRpcError> {
+fn call_service_mcp_tool(
+    params: Option<&Value>,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
     let name = params
         .and_then(|value| value.get("name"))
         .and_then(|value| value.as_str())
@@ -4251,6 +4345,9 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
         .unwrap_or(&Value::Null);
 
     match name {
+        SERVICE_ACCESS_PLAN_MCP_TOOL_NAME => {
+            call_service_access_plan(arguments, session, configured_service_state)
+        }
         "service_job_cancel" => call_service_job_cancel(arguments, session),
         "service_browser_retry" => call_service_browser_retry(arguments, session),
         "service_remedies_apply" => call_service_remedies_apply(arguments, session),
@@ -4413,6 +4510,35 @@ fn call_service_mcp_tool(params: Option<&Value>, session: &str) -> Result<Value,
             data: Some(json!({ "message": format!("Unknown MCP tool: {}", name) })),
         }),
     }
+}
+
+fn call_service_access_plan(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let request = parse_service_access_plan_query(access_plan_params_from_arguments(arguments)?)
+        .map_err(|err| JsonRpcError::invalid_params(&err))?;
+    let mut state = load_default_service_state_snapshot().map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({ "message": err, "tool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME })),
+    })?;
+    state.overlay_configured_entities(configured_service_state.clone());
+    state.refresh_profile_readiness();
+    let data = service_access_plan_for_state(&state, request);
+
+    Ok(tool_response_from_payload(
+        SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
+        session,
+        trace,
+        data,
+        false,
+    ))
 }
 
 fn call_service_trace(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -8450,6 +8576,53 @@ fn optional_string_array_argument(
     required_string_array_argument(arguments, name).map(Some)
 }
 
+fn access_plan_params_from_arguments(
+    arguments: &Value,
+) -> Result<Vec<(String, String)>, JsonRpcError> {
+    let mut params = Vec::new();
+    for name in [
+        "serviceName",
+        "agentName",
+        "taskName",
+        "targetServiceId",
+        "targetService",
+        "siteId",
+        "loginId",
+        "accountId",
+        "url",
+        "sitePolicyId",
+        "challengeId",
+        "readinessProfileId",
+    ] {
+        if let Some(value) = optional_string_argument(arguments, name)? {
+            params.push((name.to_string(), value.to_string()));
+        }
+    }
+    if let Some(browser_build) = optional_enum_string_argument(
+        arguments,
+        "browserBuild",
+        &["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+    )? {
+        params.push(("browserBuild".to_string(), browser_build.to_string()));
+    }
+    for name in [
+        "targetServiceIds",
+        "targetServices",
+        "siteIds",
+        "loginIds",
+        "accountIds",
+    ] {
+        if let Some(values) = optional_string_value_array_argument(arguments, name)? {
+            for value in values {
+                if let Some(value) = value.as_str() {
+                    params.push((name.to_string(), value.to_string()));
+                }
+            }
+        }
+    }
+    Ok(params)
+}
+
 fn optional_string_value_array_argument<'a>(
     arguments: &'a Value,
     name: &str,
@@ -9368,6 +9541,12 @@ mod tests {
 
         assert_eq!(response["id"], "tools");
         let tools = response["result"]["tools"].as_array().unwrap();
+        let service_access_plan = tools
+            .iter()
+            .find(|tool| tool["name"] == SERVICE_ACCESS_PLAN_MCP_TOOL_NAME)
+            .expect("service_access_plan schema should be listed");
+        assert!(service_access_plan["inputSchema"]["properties"]["loginId"].is_object());
+        assert!(service_access_plan["inputSchema"]["properties"]["browserBuild"].is_object());
         let service_job_cancel = tools
             .iter()
             .find(|tool| tool["name"] == "service_job_cancel")
@@ -12871,6 +13050,58 @@ mod tests {
         );
         assert_eq!(
             resource["contents"]["decision"]["recommendedAction"],
+            "use_selected_profile"
+        );
+    }
+
+    #[test]
+    fn service_access_plan_tool_returns_service_owned_recommendation() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            BrowserProfile, ProfileReadinessState, ProfileTargetReadiness,
+        };
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "canva".to_string(),
+                BrowserProfile {
+                    id: "canva".to_string(),
+                    name: "Canva".to_string(),
+                    target_service_ids: vec!["canva".to_string()],
+                    authenticated_service_ids: vec!["canva".to_string()],
+                    shared_service_ids: vec!["CanvaCLI".to_string()],
+                    target_readiness: vec![ProfileTargetReadiness {
+                        target_service_id: "canva".to_string(),
+                        state: ProfileReadinessState::Fresh,
+                        evidence: "authenticated_hint_present".to_string(),
+                        recommended_action: "use_profile".to_string(),
+                        ..ProfileTargetReadiness::default()
+                    }],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let response = handle_jsonrpc_line_with_config(
+            r#"{"jsonrpc":"2.0","id":"access-plan","method":"tools/call","params":{"name":"service_access_plan","arguments":{"serviceName":"CanvaCLI","agentName":"codex","taskName":"openCanvaWorkspace","loginId":"canva","browserBuild":"stealthcdp_chromium"}}}"#,
+            "default",
+            &state,
+        )
+        .unwrap();
+        let text = response["result"]["content"][0]["text"].as_str().unwrap();
+        let payload: Value = serde_json::from_str(text).unwrap();
+
+        assert_eq!(payload["tool"], SERVICE_ACCESS_PLAN_MCP_TOOL_NAME);
+        assert_eq!(payload["trace"]["agentName"], "codex");
+        assert_eq!(
+            payload["data"]["query"]["browserBuild"],
+            "stealthcdp_chromium"
+        );
+        assert_eq!(payload["data"]["selectedProfile"]["id"], "canva");
+        assert_eq!(
+            payload["data"]["decision"]["recommendedAction"],
             "use_selected_profile"
         );
     }
