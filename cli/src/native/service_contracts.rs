@@ -299,9 +299,16 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "client": {
                     "package": "@agent-browser/client/service-observability",
-                    "helpers": ["getServiceAccessPlan", "runServiceAccessPlanPostSeedingProbe", "runServiceAccessPlanMonitorRunDue", "verifyServiceProfileSeeding"],
+                    "helpers": [
+                        "getServiceAccessPlan",
+                        "runServiceAccessPlanPostSeedingProbe",
+                        "runServiceAccessPlanMonitorRunDue",
+                        "runServiceAccessPlanBrowserCapabilityPreflight",
+                        "acquireServiceLoginProfile",
+                        "verifyServiceProfileSeeding"
+                    ],
                 },
-                "responseFields": ["decision.attention", "decision.freshnessUpdate", "decision.postSeedingProbe", "decision.monitorRunDue", "decision.serviceRequest"],
+                "responseFields": ["decision.attention", "decision.freshnessUpdate", "decision.postSeedingProbe", "decision.monitorRunDue", "decision.browserCapabilityPreflight", "decision.serviceRequest"],
             },
             "serviceMonitorRunDueResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
@@ -568,6 +575,18 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][0],
             "getServiceAccessPlan"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][3],
+            "runServiceAccessPlanBrowserCapabilityPreflight"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][4],
+            "acquireServiceLoginProfile"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["responseFields"][4],
+            "decision.browserCapabilityPreflight"
         );
         assert_eq!(
             metadata["contracts"]["serviceMonitorRunDueResponse"]["schemaId"],

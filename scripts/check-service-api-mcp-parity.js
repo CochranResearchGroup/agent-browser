@@ -368,12 +368,15 @@ const serviceResourceSurface = [
     ],
     clientNeedles: [
       'getServiceAccessPlan',
+      'runServiceAccessPlanBrowserCapabilityPreflight',
+      'acquireServiceLoginProfile',
       '/api/service/access-plan',
     ],
     contractNeedles: [
       'service-access-plan-response.v1.schema.json',
       'GET /api/service/access-plan',
       'agent-browser://access-plan',
+      'decision.browserCapabilityPreflight',
     ],
   },
   {

@@ -529,9 +529,17 @@ profile freshness write path for bounded auth probes. The same decision
 includes `monitorRunDue`, a copyable due-monitor recipe for HTTP
 `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`,
 CLI `agent-browser service monitors run-due`, and
-`runServiceAccessPlanMonitorRunDue()`. It also includes `serviceRequest`, a
-copyable queued tab-request recipe for HTTP `POST /api/service/request`, MCP
-`service_request`, and the `requestServiceTab()` client helper. It reports
+`runServiceAccessPlanMonitorRunDue()`. It includes
+`browserCapabilityPreflight`, a copyable no-launch browser routing gate recipe
+for HTTP `GET /api/service/browser-capability/preflight`, MCP
+`service_browser_capability_preflight`, CLI
+`agent-browser service browser-capability preflight`, and
+`runServiceAccessPlanBrowserCapabilityPreflight()`. It also includes
+`serviceRequest`, a copyable queued tab-request recipe for HTTP `POST
+/api/service/request`, MCP `service_request`, and the `requestServiceTab()`
+client helper. `acquireServiceLoginProfile()` is the higher-level
+software-client helper that can run both the due-monitor recipe and the
+browser-capability preflight recipe before returning the final access plan. It reports
 whether the request can be sent immediately or should be reused after manual
 seeding, challenge approval, or provider work completes.
 
