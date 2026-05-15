@@ -98,3 +98,39 @@ agent-browser install doctor
 
 Treat a nonzero result as an install or browser-build readiness problem before
 debugging service behavior.
+
+## 2026-05-15 Profile Smoke Refresh
+
+The user-scoped install was refreshed from the current repo build so active
+agents using `/home/ecochran76/.local/bin/agent-browser` can see
+`launchConfig.profileSmoke` in `service status`.
+
+Durable tarball:
+
+```text
+/home/ecochran76/.agent-browser/releases/agent-browser-0.26.1-profile-smoke-20260515060931.tgz
+```
+
+Standalone binary backup:
+
+```text
+/home/ecochran76/.local/bin/agent-browser.pre-profile-smoke-20260515061007
+```
+
+Post-install verification:
+
+- `agent-browser --version` reported `agent-browser 0.26.1`.
+- `agent-browser --json service status` reported
+  `launchConfig.executablePath` as
+  `/mnt/c/Users/ecoch/AppData/Local/chromium-stealthcdp/current/chrome.exe`.
+- `launchConfig.profileSmoke.available` was `true` with reason
+  `ready_to_validate_wsl_windows_profile_launch`.
+- `agent-browser install doctor --json` reported no issues and identical
+  SHA-256 values for current executable, PATH command, pnpm package binary, and
+  workspace binary:
+  `26f814bf90a7a0c85f8bb77a2d3e59abed6128e953cd60ed2dcff7daad49dcb3`.
+
+The pnpm global install still uses a tarball from `~/.agent-browser/releases/`,
+not a workspace link. pnpm blocked package build scripts during install, so the
+packaged native binary permission was corrected explicitly and the standalone
+PATH binary was atomically replaced after a direct copy hit `Text file busy`.
