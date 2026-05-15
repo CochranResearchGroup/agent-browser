@@ -186,6 +186,18 @@ The wizard should produce:
 - An SSH tunnel recipe when the user selects tunnel mode.
 - A rollback script for every firewall rule it creates.
 
+Implemented preview validation:
+
+```bash
+pnpm test:windows-browser-setup-powershell-live
+```
+
+This uses the existing SSM-backed Windows debug harness. It generates
+`agent-browser setup windows-browser --print-powershell`, copies the generated
+script to the Windows debug host, runs it without `-Apply`, and fails if the
+dry-run marker or rollback commands are missing or if the script reports
+creating a firewall rule.
+
 ## Security Defaults
 
 - Do not expose CDP on `0.0.0.0` by default.

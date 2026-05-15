@@ -73,7 +73,8 @@
     "test:service-shutdown-faulted-live": "node scripts/smoke-service-shutdown-faulted.js",
     "test:service-health-live": "node scripts/smoke-service-health.js",
     "test:service-config-live": "node scripts/smoke-service-config.js",
-    "test:service-job-naming-live": "node scripts/smoke-service-job-naming.js"
+    "test:service-job-naming-live": "node scripts/smoke-service-job-naming.js",
+    "test:windows-browser-setup-powershell-live": "bash scripts/smoke-windows-browser-setup-powershell.sh"
   },
   "keywords": [
     "browser",

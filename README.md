@@ -1339,6 +1339,10 @@ agent-browser command is preview-only; the generated script is dry-run by
 default and requires its own `-Apply` switch before creating a firewall rule.
 Add `--doctor` to embed the current route diagnostics as PowerShell comments
 and infer `nat` mode when mirrored networking is not active.
+When the Windows SSM debug instance is available, run
+`pnpm test:windows-browser-setup-powershell-live` to send the generated script
+to Windows and verify that the default invocation stays dry-run, prints rollback
+commands, and does not create firewall rules.
 
 ## Authenticated Sessions
 

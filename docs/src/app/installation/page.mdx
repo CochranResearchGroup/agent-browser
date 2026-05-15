@@ -83,6 +83,10 @@ its own <code>-Apply</code> switch before it creates a scoped firewall rule.
 Add <code>--doctor</code> to embed current route diagnostics as PowerShell
 comments and infer <code>nat</code> mode when mirrored networking is not active
 and <code>--mode</code> was not supplied.
+When the Windows SSM debug instance has been provisioned, run
+<code>pnpm test:windows-browser-setup-powershell-live</code> to verify that the
+generated setup script parses on Windows, stays dry-run by default, prints
+rollback commands, and does not report creating firewall rules.
 
 ## Updating
 
