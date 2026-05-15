@@ -83,6 +83,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileLookupResponse} ServiceProfileLookupResponse
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanOptions} ServiceAccessPlanOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanResponse} ServiceAccessPlanResponse
+ * @typedef {import('./service-observability.generated.js').ServiceAccessPlanBrowserCapabilityPreflightRunOptions} ServiceAccessPlanBrowserCapabilityPreflightRunOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionOptions} ServiceProfileAcquisitionOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionResult} ServiceProfileAcquisitionResult
  * @typedef {import('./service-observability.generated.js').ServiceProfileFreshnessUpdateOptions} ServiceProfileFreshnessUpdateOptions
@@ -154,6 +155,24 @@ export function getServiceBrowserCapabilityPreflight(options) {
     },
     '/api/service/browser-capability/preflight',
   );
+}
+
+/**
+ * Run the browser-capability preflight recipe advertised by an access plan.
+ *
+ * @param {ServiceAccessPlanBrowserCapabilityPreflightRunOptions} options
+ * @returns {Promise<ServiceBrowserCapabilityPreflightResponse>}
+ */
+export function runServiceAccessPlanBrowserCapabilityPreflight({ accessPlan, ...options }) {
+  const recipe = accessPlanBrowserCapabilityPreflight(accessPlan);
+  if (recipe.available !== true) {
+    throw new Error('access plan browserCapabilityPreflight is not available');
+  }
+  assertPlainObject(recipe.request, 'service access plan decision.browserCapabilityPreflight.request');
+  return getServiceBrowserCapabilityPreflight({
+    ...options,
+    ...recipe.request,
+  });
 }
 
 /**
@@ -1104,6 +1123,15 @@ function accessPlanMonitorRunDue(accessPlan) {
   const recipe = /** @type {Record<string, unknown>} */ (decision).monitorRunDue;
   assertPlainObject(recipe, 'service access plan decision.monitorRunDue');
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanMonitorRunDue} */ (recipe);
+}
+
+function accessPlanBrowserCapabilityPreflight(accessPlan) {
+  assertPlainObject(accessPlan, 'service access plan');
+  const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
+  assertPlainObject(decision, 'service access plan decision');
+  const recipe = /** @type {Record<string, unknown>} */ (decision).browserCapabilityPreflight;
+  assertPlainObject(recipe, 'service access plan decision.browserCapabilityPreflight');
+  return /** @type {import('./service-observability.generated.js').ServiceAccessPlanBrowserCapabilityPreflight} */ (recipe);
 }
 
 function profileReadinessTargetServiceId(target) {

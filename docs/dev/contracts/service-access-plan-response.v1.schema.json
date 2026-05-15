@@ -529,6 +529,7 @@
         "freshnessUpdate",
         "postSeedingProbe",
         "monitorRunDue",
+        "browserCapabilityPreflight",
         "serviceRequest",
         "namingWarnings",
         "hasNamingWarning",
@@ -1049,6 +1050,125 @@
               "additionalProperties": true
             },
             "requestFields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "browserCapabilityPreflight": {
+          "type": "object",
+          "required": [
+            "available",
+            "recommendedBeforeUse",
+            "reason",
+            "selectedProfileId",
+            "browserBuild",
+            "request",
+            "http",
+            "mcp",
+            "client",
+            "cli",
+            "requestFields",
+            "notes"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "recommendedBeforeUse": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "browser_capability_evidence_available",
+                "browser_build_selected_without_registry_evidence",
+                "browser_build_unavailable"
+              ]
+            },
+            "selectedProfileId": {
+              "type": ["string", "null"]
+            },
+            "browserBuild": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "request": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "http": {
+              "type": "object",
+              "required": ["method", "route"],
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "enum": ["GET"]
+                },
+                "route": {
+                  "type": "string",
+                  "enum": ["/api/service/browser-capability/preflight"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "mcp": {
+              "type": "object",
+              "required": ["tool"],
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "enum": ["service_browser_capability_preflight"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "client": {
+              "type": "object",
+              "required": ["package", "helper"],
+              "properties": {
+                "package": {
+                  "type": "string",
+                  "enum": ["@agent-browser/client/service-observability"]
+                },
+                "helper": {
+                  "type": "string",
+                  "enum": ["runServiceAccessPlanBrowserCapabilityPreflight"]
+                },
+                "fallbackHelper": {
+                  "type": "string",
+                  "enum": ["getServiceBrowserCapabilityPreflight"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "cli": {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "type": ["string", "null"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "requestFields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
               "type": "array",
               "items": {
                 "type": "string"

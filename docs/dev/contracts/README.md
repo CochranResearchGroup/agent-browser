@@ -145,6 +145,10 @@ evidence gates that queued launches use. It is exposed through HTTP
 `getServiceBrowserCapabilityPreflight()`. The preflight path relays through the
 daemon queue but reports `wouldLaunch: false`, so clients can inspect launch
 posture without starting Chrome.
+Access-plan responses also include `decision.browserCapabilityPreflight` with a
+copyable HTTP, MCP, CLI, and client-helper recipe. Use
+`runServiceAccessPlanBrowserCapabilityPreflight()` when a software client wants
+to run the recipe returned by `getServiceAccessPlan()` directly.
 
 <table>
   <thead>

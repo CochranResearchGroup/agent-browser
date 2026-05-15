@@ -870,6 +870,12 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     );
     let monitor_run_due =
         monitor_run_due_decision(input.request, monitor_findings, profile_readiness_probe_due);
+    let browser_capability_preflight = browser_capability_preflight_decision(
+        input.request,
+        selected_profile,
+        &launch_posture.value,
+        browser_capability_evidence,
+    );
     let attention = attention_decision(recommended_action);
 
     json!({
@@ -895,6 +901,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "freshnessUpdate": freshness_update,
         "postSeedingProbe": post_seeding_probe,
         "monitorRunDue": monitor_run_due,
+        "browserCapabilityPreflight": browser_capability_preflight,
         "serviceRequest": service_request,
         "namingWarnings": naming_warnings,
         "hasNamingWarning": !naming_warnings.is_empty(),
@@ -1142,6 +1149,213 @@ fn post_seeding_probe_decision(
             "taskName": request.task_name.as_ref(),
         },
     })
+}
+
+/// Describe the no-launch browser capability preflight clients can run before browser work.
+fn browser_capability_preflight_decision(
+    request: &ServiceAccessPlanRequest,
+    selected_profile: Option<&BrowserProfile>,
+    launch_posture: &Value,
+    browser_capability_evidence: &Value,
+) -> Value {
+    let browser_build = launch_posture
+        .get("browserBuild")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let browser_build_label = browser_build.as_str().map(ToString::to_string);
+    let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
+    let headed = launch_posture
+        .get("headed")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let requires_cdp_free = launch_posture
+        .get("requiresCdpFree")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let cdp_attachment_allowed = launch_posture
+        .get("cdpAttachmentAllowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(!requires_cdp_free);
+    let evidence_available = browser_capability_evidence
+        .get("counts")
+        .and_then(Value::as_object)
+        .map(|counts| {
+            [
+                "browserExecutables",
+                "profileCompatibility",
+                "validationEvidence",
+            ]
+            .iter()
+            .any(|key| counts.get(*key).and_then(Value::as_u64).unwrap_or(0) > 0)
+        })
+        .unwrap_or(false)
+        || browser_capability_evidence
+            .get("selectedPreferenceBinding")
+            .is_some_and(|value| value.is_object());
+    let available = browser_build_label.is_some();
+    let recommended_before_use = available && evidence_available;
+    let mut preflight_request = Map::new();
+
+    if let Some(browser_build_label) = browser_build_label.as_ref() {
+        preflight_request.insert("browserBuild".to_string(), json!(browser_build_label));
+    }
+    if let Some(service_name) = request.service_name.as_ref() {
+        preflight_request.insert("serviceName".to_string(), json!(service_name));
+    }
+    if let Some(agent_name) = request.agent_name.as_ref() {
+        preflight_request.insert("agentName".to_string(), json!(agent_name));
+    }
+    if let Some(task_name) = request.task_name.as_ref() {
+        preflight_request.insert("taskName".to_string(), json!(task_name));
+    }
+    if !request.target_service_ids.is_empty() {
+        preflight_request.insert(
+            "targetServiceIds".to_string(),
+            json!(request.target_service_ids),
+        );
+    }
+    if !request.account_ids.is_empty() {
+        preflight_request.insert("accountIds".to_string(), json!(request.account_ids));
+    }
+    if let Some(target_url) = request.target_url.as_ref() {
+        preflight_request.insert("url".to_string(), json!(target_url));
+    }
+    if let Some(profile_id) = selected_profile_id.as_ref() {
+        preflight_request.insert("runtimeProfile".to_string(), json!(profile_id));
+    }
+    preflight_request.insert("headless".to_string(), json!(!headed && !requires_cdp_free));
+    if headed {
+        preflight_request.insert("headed".to_string(), json!(true));
+    }
+    if requires_cdp_free || !cdp_attachment_allowed {
+        preflight_request.insert("cdpFree".to_string(), json!(true));
+        preflight_request.insert("requiresCdpFree".to_string(), json!(true));
+        preflight_request.insert("cdpAttachmentAllowed".to_string(), json!(false));
+    } else {
+        preflight_request.insert(
+            "cdpAttachmentAllowed".to_string(),
+            json!(cdp_attachment_allowed),
+        );
+    }
+
+    json!({
+        "available": available,
+        "recommendedBeforeUse": recommended_before_use,
+        "reason": if recommended_before_use {
+            "browser_capability_evidence_available"
+        } else if available {
+            "browser_build_selected_without_registry_evidence"
+        } else {
+            "browser_build_unavailable"
+        },
+        "selectedProfileId": selected_profile_id,
+        "browserBuild": browser_build,
+        "request": Value::Object(preflight_request),
+        "http": {
+            "method": "GET",
+            "route": "/api/service/browser-capability/preflight",
+        },
+        "mcp": {
+            "tool": "service_browser_capability_preflight",
+        },
+        "client": {
+            "package": "@agent-browser/client/service-observability",
+            "helper": "runServiceAccessPlanBrowserCapabilityPreflight",
+            "fallbackHelper": "getServiceBrowserCapabilityPreflight",
+        },
+        "cli": {
+            "command": browser_capability_preflight_cli_command(
+                browser_build_label.as_deref(),
+                selected_profile_id.as_deref(),
+                request,
+                headed,
+                requires_cdp_free,
+            ),
+        },
+        "requestFields": [
+            "browserBuild",
+            "serviceName",
+            "agentName",
+            "taskName",
+            "targetServiceIds",
+            "accountIds",
+            "url",
+            "runtimeProfile",
+            "headless",
+            "headed",
+            "cdpFree",
+            "requiresCdpFree",
+            "cdpAttachmentAllowed",
+        ],
+        "notes": [
+            "This is a no-launch gate. It relays through the service worker and reports wouldLaunch false.",
+            "Run before browser work when launch routing depends on browser capability registry evidence.",
+        ],
+    })
+}
+
+fn browser_capability_preflight_cli_command(
+    browser_build: Option<&str>,
+    runtime_profile: Option<&str>,
+    request: &ServiceAccessPlanRequest,
+    headed: bool,
+    requires_cdp_free: bool,
+) -> Option<String> {
+    let browser_build = browser_build?;
+    let mut parts = vec![
+        "agent-browser".to_string(),
+        "service".to_string(),
+        "browser-capability".to_string(),
+        "preflight".to_string(),
+        "--browser-build".to_string(),
+        shell_arg(browser_build),
+    ];
+    if let Some(runtime_profile) = runtime_profile {
+        parts.push("--runtime-profile".to_string());
+        parts.push(shell_arg(runtime_profile));
+    }
+    for target_service_id in &request.target_service_ids {
+        parts.push("--target-service-id".to_string());
+        parts.push(shell_arg(target_service_id));
+    }
+    for account_id in &request.account_ids {
+        parts.push("--account-id".to_string());
+        parts.push(shell_arg(account_id));
+    }
+    if let Some(url) = request.target_url.as_ref() {
+        parts.push("--url".to_string());
+        parts.push(shell_arg(url));
+    }
+    if let Some(service_name) = request.service_name.as_ref() {
+        parts.push("--service-name".to_string());
+        parts.push(shell_arg(service_name));
+    }
+    if let Some(agent_name) = request.agent_name.as_ref() {
+        parts.push("--agent-name".to_string());
+        parts.push(shell_arg(agent_name));
+    }
+    if let Some(task_name) = request.task_name.as_ref() {
+        parts.push("--task-name".to_string());
+        parts.push(shell_arg(task_name));
+    }
+    if headed {
+        parts.push("--headed".to_string());
+    }
+    if requires_cdp_free {
+        parts.push("--cdp-free".to_string());
+    }
+    Some(parts.join(" "))
+}
+
+fn shell_arg(value: &str) -> String {
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/' | ':' | '@'))
+    {
+        value.to_string()
+    } else {
+        format!("'{}'", value.replace('\'', "'\\''"))
+    }
 }
 
 /// Describe the queued browser-control handoff clients should use after planning.
@@ -3146,6 +3360,34 @@ mod tests {
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["browserBuild"],
             "stock_chrome"
+        );
+        assert_eq!(
+            plan["decision"]["browserCapabilityPreflight"]["available"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["browserCapabilityPreflight"]["recommendedBeforeUse"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["browserCapabilityPreflight"]["request"]["browserBuild"],
+            "stock_chrome"
+        );
+        assert_eq!(
+            plan["decision"]["browserCapabilityPreflight"]["request"]["runtimeProfile"],
+            "only-works-profile"
+        );
+        assert_eq!(
+            plan["decision"]["browserCapabilityPreflight"]["http"]["route"],
+            "/api/service/browser-capability/preflight"
+        );
+        assert_eq!(
+            plan["decision"]["browserCapabilityPreflight"]["mcp"]["tool"],
+            "service_browser_capability_preflight"
+        );
+        assert_eq!(
+            plan["decision"]["browserCapabilityPreflight"]["client"]["helper"],
+            "runServiceAccessPlanBrowserCapabilityPreflight"
         );
     }
 

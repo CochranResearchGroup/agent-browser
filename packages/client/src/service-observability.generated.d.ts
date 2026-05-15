@@ -1207,6 +1207,47 @@ export interface ServiceAccessPlanMonitorRunDueOptions extends ServiceObservabil
   accessPlan: ServiceAccessPlanResponse;
 }
 
+export interface ServiceAccessPlanBrowserCapabilityPreflight {
+  /** True when the access plan selected a browser build that can be preflighted. */
+  available: boolean;
+  /** True when registry evidence exists and preflight is recommended before browser use. */
+  recommendedBeforeUse: boolean;
+  reason:
+    | 'browser_capability_evidence_available'
+    | 'browser_build_selected_without_registry_evidence'
+    | 'browser_build_unavailable'
+    | string;
+  selectedProfileId: string | null;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  request: ServiceBrowserCapabilityPreflightOptions;
+  http: {
+    method: 'GET';
+    route: '/api/service/browser-capability/preflight';
+    [key: string]: unknown;
+  };
+  mcp: {
+    tool: 'service_browser_capability_preflight';
+    [key: string]: unknown;
+  };
+  client: {
+    package: '@agent-browser/client/service-observability';
+    helper: 'runServiceAccessPlanBrowserCapabilityPreflight';
+    fallbackHelper: 'getServiceBrowserCapabilityPreflight';
+    [key: string]: unknown;
+  };
+  cli: {
+    command: string | null;
+    [key: string]: unknown;
+  };
+  requestFields: string[];
+  notes: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanBrowserCapabilityPreflightRunOptions extends ServiceObservabilityHttpOptions {
+  accessPlan: ServiceAccessPlanResponse;
+}
+
 export interface ServiceAccessPlanMonitorRunDueSummary {
   targetServiceIds: string[];
   matched: number;
@@ -1258,6 +1299,7 @@ export interface ServiceAccessPlanDecision {
   freshnessUpdate: ServiceAccessPlanFreshnessUpdate;
   postSeedingProbe: ServiceAccessPlanPostSeedingProbe;
   monitorRunDue: ServiceAccessPlanMonitorRunDue;
+  browserCapabilityPreflight: ServiceAccessPlanBrowserCapabilityPreflight;
   serviceRequest: ServiceAccessPlanServiceRequest;
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
@@ -1740,6 +1782,8 @@ export declare function verifyServiceProfileSeeding(options: ServiceProfileFresh
 export declare function runServiceAccessPlanPostSeedingProbe(options: ServiceAccessPlanPostSeedingProbeRunOptions): Promise<ServiceAccessPlanPostSeedingProbeRunResult>;
 /** Run the due-monitor recipe advertised by an access plan. */
 export declare function runServiceAccessPlanMonitorRunDue(options: ServiceAccessPlanMonitorRunDueOptions): Promise<ServiceMonitorRunDueResponse>;
+/** Run the browser-capability preflight recipe advertised by an access plan. */
+export declare function runServiceAccessPlanBrowserCapabilityPreflight(options: ServiceAccessPlanBrowserCapabilityPreflightRunOptions): Promise<ServiceBrowserCapabilityPreflightResponse>;
 export declare function deleteServiceProfile(options: ServiceIdOptions): Promise<ServiceProfileDeleteResponse>;
 export declare function upsertServiceSession(options: ServiceSessionMutationOptions): Promise<ServiceSessionUpsertResponse>;
 export declare function deleteServiceSession(options: ServiceIdOptions): Promise<ServiceSessionDeleteResponse>;

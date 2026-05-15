@@ -23,6 +23,7 @@ import {
   resumeServiceMonitor,
   resetServiceMonitorFailures,
   runDueServiceMonitors,
+  runServiceAccessPlanBrowserCapabilityPreflight,
   runServiceAccessPlanMonitorRunDue,
   runServiceAccessPlanPostSeedingProbe,
   summarizeServiceAccessPlanMonitorRunDue,
@@ -162,6 +163,61 @@ async function main() {
   assert.equal(preflight.calls[0].init.method, 'GET');
   assert.equal(preflightResult.wouldLaunch, false);
   assert.equal(preflightResult.browserCapabilityLaunch.applied, true);
+
+  const accessPlanPreflight = createFetchRecorder({
+    success: true,
+    data: {
+      preflight: true,
+      wouldLaunch: false,
+      wouldApplyExecutable: true,
+      browserCapabilityLaunch: {
+        applied: true,
+        reason: 'validated_preference_binding',
+        browserBuild: 'stealthcdp_chromium',
+        profileId: 'canva-default',
+      },
+      request: {
+        browserBuild: 'stealthcdp_chromium',
+        profileId: 'canva-default',
+        headless: false,
+        cdpFree: false,
+        serviceName: 'CanvaCLI',
+        agentName: 'codex',
+        taskName: 'openCanvaWorkspace',
+        targetServiceIds: ['canva'],
+        accountIds: [],
+        url: 'https://www.canva.com/',
+      },
+      selectedExecutablePath: '/opt/chromium-stealthcdp/chrome',
+    },
+  });
+  const accessPlanPreflightResult = await runServiceAccessPlanBrowserCapabilityPreflight({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: accessPlanPreflight.fetch,
+    accessPlan: {
+      decision: {
+        browserCapabilityPreflight: {
+          available: true,
+          request: {
+            browserBuild: 'stealthcdp_chromium',
+            targetServiceIds: ['canva'],
+            runtimeProfile: 'canva-default',
+            headed: true,
+            serviceName: 'CanvaCLI',
+            agentName: 'codex',
+            taskName: 'openCanvaWorkspace',
+            url: 'https://www.canva.com/',
+          },
+        },
+      },
+    },
+  });
+  assert.equal(
+    accessPlanPreflight.calls[0].url,
+    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=stealthcdp_chromium&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&url=https%3A%2F%2Fwww.canva.com%2F&targetServiceIds=canva&runtimeProfile=canva-default&headed=true',
+  );
+  assert.equal(accessPlanPreflight.calls[0].init.method, 'GET');
+  assert.equal(accessPlanPreflightResult.preflight, true);
 
   const monitors = createFetchRecorder({
     success: true,
