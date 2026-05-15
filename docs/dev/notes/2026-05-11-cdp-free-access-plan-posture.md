@@ -21,6 +21,14 @@ Local configured or persisted policies with the same ID still override built-in 
 
 ## Current Boundary
 
+Update on 2026-05-15: CDP-free remains an explicit service posture, but it is
+not the preferred general anti-bot path now that `chromium-stealthcdp` can keep
+CDP control available while reducing browser-visible automation signals. Prefer
+validated `stealthcdp_chromium` for ordinary managed automation when site
+policy allows DevTools attachment. Use CDP-free for sites that hard-block the
+existence of a DevTools endpoint, for detached manual seeding or setup, and for
+future OS-level or remote-headed control work.
+
 The access-plan and request surfaces now separate CDP-backed tab control from CDP-free process ownership. When `requiresCdpFree` is true, clients should avoid DevTools attachment and treat CDP-backed commands as unavailable unless a later service capability explicitly says otherwise.
 
 The follow-up enforcement slice copies `requiresCdpFree` and `cdpAttachmentAllowed` into `decision.serviceRequest.request`. HTTP `POST /api/service/request`, MCP `service_request`, and the generated service-request client reject requests with `requiresCdpFree: true` and `cdpAttachmentAllowed: false`, so a normal queued tab request cannot accidentally open a DevTools-attached browser for a CDP-sensitive site.

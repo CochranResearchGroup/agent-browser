@@ -213,14 +213,24 @@ automation commands over CDP; they may fail to load or degrade behavior when a
 Chrome remote debugging port is enabled at all. Canva is the current example
 to keep in mind.
 
-The service roadmap needs a CDP-free operating mode distinct from the Google
-first-login seeding flow. In this mode, agent-browser should launch and manage
-a headed browser without a DevTools port, retain authoritative process,
+As of the `chromium-stealthcdp` integration, CDP-free operation is no longer
+the preferred next lane for ordinary anti-bot hardening. Stealth CDP keeps the
+core service control plane intact while reducing the website-visible automation
+signals that originally pushed the roadmap toward no-DevTools operation. The
+normal managed path should therefore be CDP-backed `stealthcdp_chromium` when
+the build is available and policy does not explicitly prohibit DevTools
+attachment.
+
+The service roadmap still needs a CDP-free operating mode distinct from the
+Google first-login seeding flow. It is a fallback and compatibility posture for
+sites that reject the existence of a DevTools endpoint, for manual seeding when
+CDP attachment blocks sign-in or extension setup, and for future OS-level or
+window-level control experiments. In this mode, agent-browser should launch and
+manage a headed browser without a DevTools port, retain authoritative process,
 profile, lease, task, and operator-intervention state, and expose every safe
 control surface that does not require CDP. Early CDP-free support can be
 limited to launch, profile ownership, process health, live viewing when
-available through non-CDP mechanisms, operator handoff, and lifecycle
-tracking.
+available through non-CDP mechanisms, operator handoff, and lifecycle tracking.
 
 Future work should add CDP-free automation incrementally through OS-level or
 browser-window-level controls such as real keyboard input, real mouse input,
@@ -245,12 +255,17 @@ Site policy should eventually distinguish browser build choice from browser
 lifecycle. The current `chromium-stealthcdp` patchset is an engine choice that
 can use the existing custom executable path while agent-browser still owns the
 process lifecycle, CDP connection, queue, profile lease, and service state.
+When a promoted and validated `chromium-stealthcdp` build is available, it
+should be the preferred browser build for new managed site and account
+combinations unless site policy, profile compatibility, or an operator override
+selects a different build.
 
 The first vocabulary should be descriptive and internal:
 
 - `stock_chrome`: normal Chrome or Chromium
-- `stealthcdp_chromium`: patched Chromium for CDP-backed sessions where
-  `navigator.webdriver` self-reporting should be suppressed
+- `stealthcdp_chromium`: preferred patched Chromium for CDP-backed managed
+  sessions where browser-internal automation signals should be reduced while
+  preserving service-owned CDP control
 - `cdp_free_headed`: headed browser without a DevTools endpoint for sites where
   CDP presence itself is risky
 
@@ -258,6 +273,16 @@ Chromium patches should stay narrow. They are appropriate for browser-internal
 self-reporting that agent-browser cannot coherently manage from outside the
 browser process. Site-specific posture, profile selection, pacing, input mode,
 challenge handling, and operator intervention belong in agent-browser policy.
+
+This makes the browser-build priority:
+
+1. Use `stealthcdp_chromium` for normal managed automation when a validated
+   build is available.
+2. Use `stock_chrome` when a site, identity, profile, or operator preference
+   needs native Chrome behavior.
+3. Use `cdp_free_headed` only when policy says a DevTools endpoint is itself
+   unsafe or when detached manual setup must happen before CDP-backed
+   automation can be trusted.
 
 See `docs/dev/notes/2026-05-12-browser-build-policy-boundary.md` for the
 current patch request criteria and validation expectations.
