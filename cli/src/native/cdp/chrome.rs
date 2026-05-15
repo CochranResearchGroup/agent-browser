@@ -20,9 +20,22 @@ const MAX_CHROME_STDERR_LINES: usize = 80;
 fn set_private_dir_permissions(path: &Path) {
     #[cfg(unix)]
     {
+        if should_skip_private_dir_permissions(path) {
+            return;
+        }
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700));
     }
+}
+
+#[cfg(target_os = "linux")]
+fn should_skip_private_dir_permissions(path: &Path) -> bool {
+    wsl_mount_path_to_windows_path(path).is_some()
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn should_skip_private_dir_permissions(_path: &Path) -> bool {
+    false
 }
 
 fn create_profile_dir(path: &Path, label: &str) -> Result<(), String> {
@@ -2289,6 +2302,18 @@ mod tests {
                 args[0],
                 "--disk-cache-dir=/mnt/c/Users/ecoch/AppData/Local/Temp/cache"
             );
+        }
+    }
+
+    #[test]
+    fn test_wsl_mounted_windows_profile_skips_unix_private_permissions() {
+        if cfg!(target_os = "linux") {
+            assert!(should_skip_private_dir_permissions(Path::new(
+                "/mnt/c/Users/ecoch/AppData/Local/Temp/profile"
+            )));
+            assert!(!should_skip_private_dir_permissions(Path::new(
+                "/home/ecoch/.agent-browser/profile"
+            )));
         }
     }
 
