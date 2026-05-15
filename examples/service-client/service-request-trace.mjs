@@ -27,6 +27,7 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   profileUserDataDir?: string;
  *   registerReadinessMonitor?: boolean;
  *   runDueReadinessMonitor?: boolean;
+ *   runBrowserCapabilityPreflight?: boolean;
  *   readinessMonitorId?: string;
  *   readinessMonitorIntervalMs?: number;
  *   cancelJobId?: string;
@@ -73,6 +74,7 @@ export async function runServiceWorkflow({
   profileUserDataDir,
   registerReadinessMonitor = false,
   runDueReadinessMonitor = false,
+  runBrowserCapabilityPreflight = false,
   readinessMonitorId,
   readinessMonitorIntervalMs,
   cancelJobId,
@@ -101,6 +103,9 @@ export async function runServiceWorkflow({
         monitorPolicy: runDueReadinessMonitor
           ? 'run access-plan-recommended due profile-readiness monitors before returning the final plan'
           : 'inspect access-plan monitorRunDue before relying on retained profile freshness',
+        browserPreflightPolicy: runBrowserCapabilityPreflight
+          ? 'run the final access-plan browser-capability preflight before browser work'
+          : 'inspect access-plan browserCapabilityPreflight before launching browser work',
       },
       profileRegistration: registerProfileId
         ? buildLoginProfileRegistration({
@@ -142,6 +147,7 @@ export async function runServiceWorkflow({
     profileUserDataDir,
     registerReadinessMonitor,
     runDueReadinessMonitor,
+    runBrowserCapabilityPreflight,
     readinessMonitorId,
     readinessMonitorIntervalMs,
   });
@@ -268,8 +274,13 @@ function summarizeProfileAcquisition(profileAcquisition) {
     registered: profileAcquisition.registered === true,
     monitorRegistered: profileAcquisition.monitorRegistered === true,
     monitorRunDueRan: profileAcquisition.monitorRunDueRan === true,
+    browserCapabilityPreflightRan: profileAcquisition.browserCapabilityPreflightRan === true,
     initialRecommendedAction: profileAcquisition.initialAccessPlan?.decision?.recommendedAction ?? null,
     refreshedRecommendedAction: profileAcquisition.accessPlan?.decision?.recommendedAction ?? null,
+    browserCapabilityPreflightApplied:
+      profileAcquisition.browserCapabilityPreflight?.browserCapabilityLaunch?.applied ?? null,
+    browserCapabilityPreflightReason:
+      profileAcquisition.browserCapabilityPreflight?.browserCapabilityLaunch?.reason ?? null,
     monitorRunDueChecked: profileAcquisition.monitorRunDue?.checked ?? null,
     monitorRunDueFailed: profileAcquisition.monitorRunDue?.failed ?? null,
     monitorRunDueRecommendedAction: profileAcquisition.monitorRunDueSummary?.recommendedAction ?? null,
@@ -345,6 +356,7 @@ function parseArgs(args) {
     profileUserDataDir: nodeProcess.env.AGENT_BROWSER_EXAMPLE_PROFILE_USER_DATA_DIR,
     registerReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_READINESS_MONITOR === '1',
     runDueReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_RUN_DUE_READINESS_MONITOR === '1',
+    runBrowserCapabilityPreflight: nodeProcess.env.AGENT_BROWSER_EXAMPLE_RUN_BROWSER_CAPABILITY_PREFLIGHT === '1',
     readinessMonitorId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_ID,
     readinessMonitorIntervalMs: numberEnv(nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_INTERVAL_MS),
     cancelJobId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_CANCEL_JOB_ID,
@@ -377,6 +389,8 @@ function parseArgs(args) {
       parsed.registerReadinessMonitor = true;
     } else if (arg === '--run-due-readiness-monitor') {
       parsed.runDueReadinessMonitor = true;
+    } else if (arg === '--run-browser-capability-preflight') {
+      parsed.runBrowserCapabilityPreflight = true;
     } else if (arg === '--readiness-monitor-id') {
       parsed.readinessMonitorId = requiredValue(args, ++index, arg);
     } else if (arg === '--readiness-monitor-interval-ms') {

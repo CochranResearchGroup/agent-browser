@@ -8,6 +8,7 @@ import {
 import {
   getServiceAccessPlan,
   registerServiceLoginProfile,
+  runServiceAccessPlanBrowserCapabilityPreflight,
   runServiceAccessPlanMonitorRunDue,
   updateServiceProfileFreshness,
   upsertServiceProfileReadinessMonitor,
@@ -37,6 +38,7 @@ const nodeProcess = /** @type {{ argv: string[], env: Record<string, string | un
  *   registerAuthenticated?: boolean;
  *   registerReadinessMonitor?: boolean;
  *   runDueReadinessMonitor?: boolean;
+ *   runBrowserCapabilityPreflight?: boolean;
  *   readinessMonitorId?: string;
  *   readinessMonitorIntervalMs?: number;
  *   freshnessProfileId?: string;
@@ -66,6 +68,7 @@ export function buildManagedProfilePlan({
   registerAuthenticated = false,
   registerReadinessMonitor = false,
   runDueReadinessMonitor = false,
+  runBrowserCapabilityPreflight = false,
   readinessMonitorId,
   readinessMonitorIntervalMs,
   freshnessProfileId,
@@ -89,6 +92,7 @@ export function buildManagedProfilePlan({
       'register a managed profile only when agent-browser has no suitable one',
       'optionally run due profile-readiness monitors when access-plan recommends it',
       'refresh the access plan before requesting a tab or CDP-free launch',
+      'optionally run the browser-capability preflight before browser work',
       'seed the profile manually when readiness reports needs_manual_seeding',
     ],
     profileInspection: {
@@ -142,6 +146,13 @@ export function buildManagedProfilePlan({
           refreshesAccessPlan: true,
         }
       : null,
+    optionalBrowserCapabilityPreflight: runBrowserCapabilityPreflight
+      ? {
+          helper: 'runServiceAccessPlanBrowserCapabilityPreflight',
+          when: 'decision.browserCapabilityPreflight.available',
+          launchesBrowser: false,
+        }
+      : null,
     optionalFreshnessUpdate: freshnessProfileId
       ? buildProfileFreshnessUpdate({
           id: freshnessProfileId,
@@ -174,6 +185,7 @@ export async function runManagedProfileWorkflow({
   registerAuthenticated = false,
   registerReadinessMonitor = false,
   runDueReadinessMonitor = false,
+  runBrowserCapabilityPreflight = false,
   readinessMonitorId,
   readinessMonitorIntervalMs,
   freshnessProfileId,
@@ -198,6 +210,7 @@ export async function runManagedProfileWorkflow({
     registerAuthenticated,
     registerReadinessMonitor,
     runDueReadinessMonitor,
+    runBrowserCapabilityPreflight,
     readinessMonitorId,
     readinessMonitorIntervalMs,
     freshnessProfileId,
@@ -309,6 +322,14 @@ export async function runManagedProfileWorkflow({
     });
   }
 
+  const browserCapabilityPreflight =
+    runBrowserCapabilityPreflight && accessPlan.decision?.browserCapabilityPreflight?.available === true
+      ? await runServiceAccessPlanBrowserCapabilityPreflight({
+          baseUrl,
+          fetch,
+          accessPlan,
+        })
+      : null;
   const selectedProfile = accessPlan.selectedProfile;
 
   const manualSeedingRequired =
@@ -353,6 +374,7 @@ export async function runManagedProfileWorkflow({
       profileRegistration,
       profileReadinessMonitor,
       monitorRunDue,
+      browserCapabilityPreflight,
     }),
     initialAccessPlan,
     accessPlan,
@@ -368,6 +390,7 @@ export async function runManagedProfileWorkflow({
     profileRegistration,
     profileReadinessMonitor,
     monitorRunDue,
+    browserCapabilityPreflight,
     profileFreshnessUpdate,
     tab,
   };
@@ -399,14 +422,20 @@ function summarizeProfileAcquisition({
   profileRegistration,
   profileReadinessMonitor,
   monitorRunDue,
+  browserCapabilityPreflight,
 }) {
   return {
     selectedProfileId: selectedProfile?.id ?? null,
     registered: Boolean(profileRegistration),
     monitorRegistered: Boolean(profileReadinessMonitor),
     monitorRunDueRan: Boolean(monitorRunDue),
+    browserCapabilityPreflightRan: Boolean(browserCapabilityPreflight),
     initialRecommendedAction: initialAccessPlan?.decision?.recommendedAction ?? null,
     refreshedRecommendedAction: accessPlan?.decision?.recommendedAction ?? null,
+    browserCapabilityPreflightApplied:
+      browserCapabilityPreflight?.browserCapabilityLaunch?.applied ?? null,
+    browserCapabilityPreflightReason:
+      browserCapabilityPreflight?.browserCapabilityLaunch?.reason ?? null,
     monitorRunDueChecked: monitorRunDue?.checked ?? null,
     monitorRunDueFailed: monitorRunDue?.failed ?? null,
     monitorRunDueRecommendedAction: monitorRunDue?.accessPlanSummary?.recommendedAction ?? null,
@@ -573,6 +602,7 @@ function parseArgs(args) {
     registerAuthenticated: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_AUTHENTICATED === '1',
     registerReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_REGISTER_READINESS_MONITOR === '1',
     runDueReadinessMonitor: nodeProcess.env.AGENT_BROWSER_EXAMPLE_RUN_DUE_READINESS_MONITOR === '1',
+    runBrowserCapabilityPreflight: nodeProcess.env.AGENT_BROWSER_EXAMPLE_RUN_BROWSER_CAPABILITY_PREFLIGHT === '1',
     readinessMonitorId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_ID,
     readinessMonitorIntervalMs: numberEnv(nodeProcess.env.AGENT_BROWSER_EXAMPLE_READINESS_MONITOR_INTERVAL_MS),
     freshnessProfileId: nodeProcess.env.AGENT_BROWSER_EXAMPLE_FRESHNESS_PROFILE_ID,
@@ -615,6 +645,8 @@ function parseArgs(args) {
       parsed.registerReadinessMonitor = true;
     } else if (arg === '--run-due-readiness-monitor') {
       parsed.runDueReadinessMonitor = true;
+    } else if (arg === '--run-browser-capability-preflight') {
+      parsed.runBrowserCapabilityPreflight = true;
     } else if (arg === '--readiness-monitor-id') {
       parsed.readinessMonitorId = requiredValue(args, ++index, arg);
     } else if (arg === '--readiness-monitor-interval-ms') {

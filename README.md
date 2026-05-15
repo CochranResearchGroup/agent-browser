@@ -2127,8 +2127,9 @@ plan first, register the profile only when no selected profile exists, add the
 retained freshness monitor for that fallback profile, optionally run due
 profile-readiness monitors, refresh the access plan, and submit the planned tab
 request. Its output includes `profileAcquisitionSummary.monitorRunDueRan`,
+`profileAcquisitionSummary.browserCapabilityPreflightRan`,
 `initialRecommendedAction`, `refreshedRecommendedAction`, monitor-run target
-freshness summary fields, and latest trace job
+freshness summary fields, browser-capability preflight outcome fields, and latest trace job
 `controlPlaneMode` plus `lifecycleOnly` values so callers can see whether
 access-plan freshness work changed the recommendation before browser control
 begins and whether the retained job was CDP-backed or lifecycle-only.
@@ -2137,7 +2138,9 @@ profile-broker recipe that uses the no-launch profile planning surfaces to
 ask agent-browser for an access plan, inspect readiness and the service-owned
 decision, register a managed login profile only when agent-browser has no
 suitable one, optionally run access-plan-recommended due profile-readiness
-monitors with `--run-due-readiness-monitor`, refresh the access plan, and pass
+monitors with `--run-due-readiness-monitor`, refresh the access plan,
+optionally run the no-launch browser-capability gate with
+`--run-browser-capability-preflight`, and pass
 the final response to `requestServiceTab()` or `requestServiceCdpFreeLaunch()`
 when the selected site policy requires CDP-free operation. It can also post bounded
 auth-probe evidence through `updateServiceProfileFreshness()` for an existing
@@ -2155,6 +2158,9 @@ decision recommends `run_due_profile_readiness_monitor` and includes
 the serialized service worker before trusting the profile for authenticated
 work. The helper summarizes whether the requested target is fresh, expired, or
 still unverified from the returned per-monitor results.
+The browser-capability preflight path summarizes whether the planned executable,
+host, profile compatibility, and validation evidence gates would allow the
+service to apply the preferred browser route before any Chrome process starts.
 Its output includes `profileAcquisitionSummary`,
 `readinessSummary.needsManualSeeding`, target service IDs, recommended actions,
 and `seedingHandoff` when readiness says an operator must seed the profile. Run

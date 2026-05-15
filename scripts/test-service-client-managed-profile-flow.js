@@ -17,6 +17,7 @@ const profile = {
 };
 
 await testExistingProfileSelection();
+await testExistingProfileBrowserCapabilityPreflight();
 await testExistingProfileCdpFreeLaunch();
 await testExistingProfileFreshnessUpdate();
 await testExistingProfileDueMonitorRun();
@@ -71,8 +72,11 @@ async function testExistingProfileSelection() {
     registered: false,
     monitorRegistered: false,
     monitorRunDueRan: false,
+    browserCapabilityPreflightRan: false,
     initialRecommendedAction: 'use_selected_profile',
     refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: null,
+    browserCapabilityPreflightReason: null,
     monitorRunDueChecked: null,
     monitorRunDueFailed: null,
     monitorRunDueRecommendedAction: null,
@@ -106,6 +110,72 @@ async function testExistingProfileSelection() {
   assert.deepEqual(
     calls.map((call) => `${call.method} ${call.path}`),
     ['GET /api/service/access-plan', 'POST /api/service/request'],
+  );
+}
+
+async function testExistingProfileBrowserCapabilityPreflight() {
+  const calls = [];
+  const fetch = createMockFetch({
+    profiles: [profile],
+    calls,
+    rejectRegistration: true,
+  });
+
+  const result = await runManagedProfileWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    readinessProfileId: 'canva-default',
+    registerProfileId: 'canva-default',
+    runBrowserCapabilityPreflight: true,
+    url: 'https://www.canva.com/',
+  });
+
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: 'canva-default',
+    registered: false,
+    monitorRegistered: false,
+    monitorRunDueRan: false,
+    browserCapabilityPreflightRan: true,
+    initialRecommendedAction: 'use_selected_profile',
+    refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: true,
+    browserCapabilityPreflightReason: 'validated_preference_binding',
+    monitorRunDueChecked: null,
+    monitorRunDueFailed: null,
+    monitorRunDueRecommendedAction: null,
+    monitorRunDueFreshTargetServiceIds: [],
+    monitorRunDueStaleProfileIds: [],
+    initialAttention: {
+      required: false,
+      owner: 'none',
+      severity: 'info',
+      reason: 'use_selected_profile',
+      message: 'No intervention required.',
+      suggestedActions: ['request_service_tab'],
+    },
+    refreshedAttention: {
+      required: false,
+      owner: 'none',
+      severity: 'info',
+      reason: 'use_selected_profile',
+      message: 'No intervention required.',
+      suggestedActions: ['request_service_tab'],
+    },
+  });
+  assert.equal(result.browserCapabilityPreflight?.wouldLaunch, false);
+  assert.equal(result.tab?.success, true);
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    [
+      'GET /api/service/access-plan',
+      'GET /api/service/browser-capability/preflight',
+      'POST /api/service/request',
+    ],
   );
 }
 
@@ -244,8 +314,11 @@ async function testExistingProfileDueMonitorRun() {
     registered: false,
     monitorRegistered: false,
     monitorRunDueRan: true,
+    browserCapabilityPreflightRan: false,
     initialRecommendedAction: 'run_due_profile_readiness_monitor',
     refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: null,
+    browserCapabilityPreflightReason: null,
     monitorRunDueChecked: 1,
     monitorRunDueFailed: 0,
     monitorRunDueRecommendedAction: 'use_selected_profile',
@@ -419,8 +492,11 @@ async function testMissingProfileRegistrationThenDueMonitorRun() {
     registered: true,
     monitorRegistered: true,
     monitorRunDueRan: true,
+    browserCapabilityPreflightRan: false,
     initialRecommendedAction: 'register_managed_profile_or_request_throwaway_browser',
     refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: null,
+    browserCapabilityPreflightReason: null,
     monitorRunDueChecked: 1,
     monitorRunDueFailed: 0,
     monitorRunDueRecommendedAction: 'use_selected_profile',
@@ -745,6 +821,24 @@ function createMockFetch({
             requiresCdpFree: cdpFreeRequired,
             cdpAttachmentAllowed: !cdpFreeRequired,
           },
+          browserCapabilityPreflight: {
+            available: Boolean(selectedProfile),
+            recommendedBeforeUse: Boolean(selectedProfile),
+            reason: selectedProfile ? 'browser_capability_evidence_available' : 'browser_build_unavailable',
+            selectedProfileId: selectedProfile?.id ?? null,
+            browserBuild: selectedProfile ? 'stealthcdp_chromium' : null,
+            request: selectedProfile
+              ? {
+                  browserBuild: 'stealthcdp_chromium',
+                  serviceName: 'CanvaCLI',
+                  agentName: 'canva-cli-agent',
+                  taskName: 'openCanvaWorkspace',
+                  targetServiceIds: ['canva'],
+                  runtimeProfile: selectedProfile.id,
+                  headed: true,
+                }
+              : {},
+          },
           browserHost: null,
           interactionMode: null,
           challengePolicy: null,
@@ -774,6 +868,26 @@ function createMockFetch({
             staleProfileIds: [],
           },
         ],
+      });
+    }
+
+    if (method === 'GET' && parsed.pathname === '/api/service/browser-capability/preflight') {
+      assert.equal(parsed.searchParams.get('browserBuild'), 'stealthcdp_chromium');
+      assert.equal(parsed.searchParams.get('serviceName'), 'CanvaCLI');
+      assert.equal(parsed.searchParams.get('agentName'), 'canva-cli-agent');
+      assert.equal(parsed.searchParams.get('taskName'), 'openCanvaWorkspace');
+      assert.equal(parsed.searchParams.get('targetServiceIds'), 'canva');
+      assert.equal(parsed.searchParams.get('runtimeProfile'), 'canva-default');
+      return serviceResponse({
+        preflight: true,
+        wouldLaunch: false,
+        wouldApplyExecutable: true,
+        browserCapabilityLaunch: {
+          applied: true,
+          reason: 'validated_preference_binding',
+          browserBuild: 'stealthcdp_chromium',
+          profileId: 'canva-default',
+        },
       });
     }
 

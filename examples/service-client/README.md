@@ -119,8 +119,12 @@ register or seed a managed profile. It calls `getServiceAccessPlan()` first,
 registers the fallback profile only when no profile is selected, optionally
 adds the standard retained profile-readiness monitor, optionally runs due
 readiness monitors when `runDueReadinessMonitor` is true, then returns the
-refreshed access plan for the tab request. The generic example output includes
-`profileAcquisitionSummary` with `monitorRunDueRan`, initial recommendation,
+refreshed access plan for the tab request. Set
+`runBrowserCapabilityPreflight: true` or pass
+`--run-browser-capability-preflight` when the client should also run the final
+access plan's no-launch browser-capability gate before browser work. The
+generic example output includes `profileAcquisitionSummary` with
+`monitorRunDueRan`, `browserCapabilityPreflightRan`, initial recommendation,
 refreshed recommendation fields, and latest trace job `controlPlaneMode` plus
 `lifecycleOnly` values for operator inspection.
 
@@ -141,6 +145,7 @@ const { accessPlan } = await acquireServiceLoginProfile({
   registerAuthenticated: false,
   registerReadinessMonitor: true,
   runDueReadinessMonitor: true,
+  runBrowserCapabilityPreflight: true,
 });
 
 await requestServiceTab({
@@ -164,7 +169,8 @@ profile-broker pattern:
 4. Add a `profile_readiness` monitor when registering a new recurring profile.
 5. Optionally run due profile-readiness monitors when access-plan recommends it.
 6. Refresh the access plan before passing it to `requestServiceTab({ accessPlan })`.
-7. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
+7. Optionally run the browser-capability preflight before browser work.
+8. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
 
 The workflow output includes `accessAttention` plus
 `profileAcquisitionSummary.initialAttention` and `refreshedAttention`. These
@@ -201,6 +207,7 @@ pnpm --filter agent-browser-service-client-example exec node managed-profile-flo
   --target-service-id canva \
   --readiness-profile-id canva-default \
   --run-due-readiness-monitor \
+  --run-browser-capability-preflight \
   --url https://www.canva.com/
 ```
 
@@ -223,6 +230,11 @@ access-plan-recommended due profile-readiness monitor through
 then refreshes the access plan and prints `profileAcquisitionSummary` with the
 selected profile ID, whether registration happened, whether a due monitor ran,
 the initial recommendation, and the refreshed recommendation.
+Add `--run-browser-capability-preflight` when the script should also run the
+access-plan-recommended no-launch browser-capability gate through
+`runServiceAccessPlanBrowserCapabilityPreflight()` before requesting browser
+work. The script prints `browserCapabilityPreflightRan`, whether the launch
+binding would apply, and the preflight reason in `profileAcquisitionSummary`.
 When a readiness row reports `needs_manual_seeding`, the script output includes
 `readinessSummary.needsManualSeeding: true` plus the target service IDs and
 recommended actions so the client can show operator instructions directly.

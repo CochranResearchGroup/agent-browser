@@ -13,6 +13,7 @@ const profileId = 'journal-example';
 await testSkipsRegistrationWhenBrokerSelectsProfile();
 await testRegistersFallbackOnlyAfterAccessPlanMiss();
 await testRunsDueMonitorAndShowsRefreshedRecommendation();
+await testRunsBrowserCapabilityPreflightBeforeBrowserWork();
 await testRegistersFallbackThenRunsDueMonitor();
 
 console.log('Service client example no-launch broker tests passed');
@@ -48,8 +49,11 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
     registered: false,
     monitorRegistered: false,
     monitorRunDueRan: false,
+    browserCapabilityPreflightRan: false,
     initialRecommendedAction: 'use_selected_profile',
     refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: null,
+    browserCapabilityPreflightReason: null,
     monitorRunDueChecked: null,
     monitorRunDueFailed: null,
     monitorRunDueRecommendedAction: null,
@@ -108,8 +112,11 @@ async function testRegistersFallbackOnlyAfterAccessPlanMiss() {
     registered: true,
     monitorRegistered: true,
     monitorRunDueRan: false,
+    browserCapabilityPreflightRan: false,
     initialRecommendedAction: 'register_managed_profile_or_request_throwaway_browser',
     refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: null,
+    browserCapabilityPreflightReason: null,
     monitorRunDueChecked: null,
     monitorRunDueFailed: null,
     monitorRunDueRecommendedAction: null,
@@ -163,8 +170,11 @@ async function testRunsDueMonitorAndShowsRefreshedRecommendation() {
     registered: false,
     monitorRegistered: false,
     monitorRunDueRan: true,
+    browserCapabilityPreflightRan: false,
     initialRecommendedAction: 'run_due_profile_readiness_monitor',
     refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: null,
+    browserCapabilityPreflightReason: null,
     monitorRunDueChecked: 1,
     monitorRunDueFailed: 0,
     monitorRunDueRecommendedAction: 'use_selected_profile',
@@ -176,6 +186,54 @@ async function testRunsDueMonitorAndShowsRefreshedRecommendation() {
     'GET /api/service/access-plan',
     'POST /api/service/monitors/run-due',
     'GET /api/service/access-plan',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'POST /api/service/request',
+    'GET /api/service/trace',
+  ]);
+}
+
+async function testRunsBrowserCapabilityPreflightBeforeBrowserWork() {
+  const calls = [];
+  const fetch = createBrokerFirstFetch({
+    calls,
+    initialSelectedProfile: brokerProfile(),
+  });
+
+  const result = await runServiceWorkflow({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch,
+    serviceName,
+    agentName,
+    taskName,
+    siteId: loginId,
+    loginId,
+    runBrowserCapabilityPreflight: true,
+    url: 'https://example.com',
+  });
+
+  assert.deepEqual(result.profileAcquisitionSummary, {
+    selectedProfileId: profileId,
+    registered: false,
+    monitorRegistered: false,
+    monitorRunDueRan: false,
+    browserCapabilityPreflightRan: true,
+    initialRecommendedAction: 'use_selected_profile',
+    refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: true,
+    browserCapabilityPreflightReason: 'validated_preference_binding',
+    monitorRunDueChecked: null,
+    monitorRunDueFailed: null,
+    monitorRunDueRecommendedAction: null,
+    monitorRunDueFreshTargetServiceIds: [],
+    monitorRunDueStaleProfileIds: [],
+  });
+  assert.equal(result.profileAcquisition.browserCapabilityPreflight?.wouldLaunch, false);
+  assert.deepEqual(callSequence(calls), [
+    'GET /api/service/access-plan',
+    'GET /api/service/browser-capability/preflight',
     'POST /api/service/request',
     'POST /api/service/request',
     'POST /api/service/request',
@@ -216,8 +274,11 @@ async function testRegistersFallbackThenRunsDueMonitor() {
     registered: true,
     monitorRegistered: true,
     monitorRunDueRan: true,
+    browserCapabilityPreflightRan: false,
     initialRecommendedAction: 'register_managed_profile_or_request_throwaway_browser',
     refreshedRecommendedAction: 'use_selected_profile',
+    browserCapabilityPreflightApplied: null,
+    browserCapabilityPreflightReason: null,
     monitorRunDueChecked: 1,
     monitorRunDueFailed: 0,
     monitorRunDueRecommendedAction: 'use_selected_profile',
@@ -295,6 +356,26 @@ function createBrokerFirstFetch({
             staleProfileIds: [],
           },
         ],
+      });
+    }
+
+    if (method === 'GET' && parsed.pathname === '/api/service/browser-capability/preflight') {
+      assert.equal(parsed.searchParams.get('browserBuild'), 'stealthcdp_chromium');
+      assert.equal(parsed.searchParams.get('serviceName'), serviceName);
+      assert.equal(parsed.searchParams.get('agentName'), agentName);
+      assert.equal(parsed.searchParams.get('taskName'), taskName);
+      assert.equal(parsed.searchParams.get('targetServiceIds'), loginId);
+      assert.equal(parsed.searchParams.get('runtimeProfile'), profileId);
+      return serviceResponse({
+        preflight: true,
+        wouldLaunch: false,
+        wouldApplyExecutable: true,
+        browserCapabilityLaunch: {
+          applied: true,
+          reason: 'validated_preference_binding',
+          browserBuild: 'stealthcdp_chromium',
+          profileId,
+        },
       });
     }
 
@@ -476,6 +557,24 @@ function accessPlanResponse(selectedProfile, { dueMonitorRecommended = false } =
           profileLeasePolicy: 'wait',
           action: 'tab_new',
         },
+      },
+      browserCapabilityPreflight: {
+        available: Boolean(selectedProfile),
+        recommendedBeforeUse: Boolean(selectedProfile),
+        reason: selectedProfile ? 'browser_capability_evidence_available' : 'browser_build_unavailable',
+        selectedProfileId: selectedProfile?.id ?? null,
+        browserBuild: selectedProfile ? 'stealthcdp_chromium' : null,
+        request: selectedProfile
+          ? {
+              browserBuild: 'stealthcdp_chromium',
+              serviceName,
+              agentName,
+              taskName,
+              targetServiceIds: [loginId],
+              runtimeProfile: selectedProfile.id,
+              headed: true,
+            }
+          : {},
       },
       manualActionRequired: false,
       manualSeedingRequired: false,
