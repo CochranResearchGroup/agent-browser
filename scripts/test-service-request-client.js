@@ -105,6 +105,77 @@ function createAccessPlanToServiceRequestFetchRecorder() {
   return { calls, fetch };
 }
 
+function createCdpFreeAccessPlanToServiceRequestFetchRecorder() {
+  const calls = [];
+  const accessPlan = {
+    selectedProfile: {
+      id: 'canva-default',
+    },
+    decision: {
+      launchPosture: {
+        browserBuild: 'cdp_free_headed',
+        requiresCdpFree: true,
+        cdpAttachmentAllowed: false,
+      },
+      serviceRequest: {
+        available: false,
+        blockedByCdpFree: true,
+        requiresCdpFree: true,
+        cdpAttachmentAllowed: false,
+        cdpFreeAvailability: {
+          applies: true,
+          availableCommands: ['cdp_free_launch'],
+          unsupportedCommands: ['snapshot', 'click'],
+          supportedOperations: ['process_lifecycle', 'service_state'],
+          unsupportedOperations: ['cdp_commands', 'dom_interaction'],
+          client: {
+            summaryHelper: 'summarizeServiceCdpFreeLaunchAvailability',
+            predicateHelper: 'isServiceCdpFreeActionAvailable',
+          },
+        },
+        request: {
+          serviceName: 'CanvaCLI',
+          agentName: 'canva-cli-agent',
+          taskName: 'openCanvaWorkspace',
+          loginId: 'canva',
+          targetServiceId: 'canva',
+          profileLeasePolicy: 'wait',
+          action: 'tab_new',
+          requiresCdpFree: true,
+          cdpAttachmentAllowed: false,
+        },
+      },
+    },
+  };
+  const fetch = async (url, init = {}) => {
+    const parsed = new URL(String(url));
+    calls.push({
+      url: String(url),
+      method: init.method || 'GET',
+      body: init.body ? JSON.parse(String(init.body)) : null,
+    });
+
+    if (parsed.pathname === '/api/service/access-plan') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: accessPlan }),
+      };
+    }
+
+    if (parsed.pathname === '/api/service/request') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: { jobId: 'job-access-plan-cdp-free' } }),
+      };
+    }
+
+    throw new Error(`Unexpected request: ${String(url)}`);
+  };
+  return { calls, fetch };
+}
+
 async function main() {
   assertServiceRequestActionDataCoverage();
 
@@ -782,6 +853,55 @@ async function main() {
       url: 'https://example.com/access-plan-workflow',
     },
     jobTimeoutMs: 90_000,
+  });
+
+  const cdpFreeAccessPlanWorkflow = createCdpFreeAccessPlanToServiceRequestFetchRecorder();
+  const observedCdpFreeAccessPlan = await getServiceAccessPlan({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: cdpFreeAccessPlanWorkflow.fetch,
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+  });
+  assert.equal(
+    observedCdpFreeAccessPlan.decision.serviceRequest.cdpFreeAvailability.availableCommands.includes(
+      'cdp_free_launch',
+    ),
+    true,
+  );
+  const accessPlanCdpFreeResponse = await requestServiceCdpFreeLaunch({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: cdpFreeAccessPlanWorkflow.fetch,
+    accessPlan: observedCdpFreeAccessPlan,
+    url: 'https://www.canva.com/',
+    jobTimeoutMs: 120_000,
+  });
+  assert.deepEqual(accessPlanCdpFreeResponse, {
+    success: true,
+    data: { jobId: 'job-access-plan-cdp-free' },
+  });
+  assert.equal(cdpFreeAccessPlanWorkflow.calls.length, 2);
+  assert.equal(
+    cdpFreeAccessPlanWorkflow.calls[0].url,
+    'http://127.0.0.1:4849/api/service/access-plan?serviceName=CanvaCLI&agentName=canva-cli-agent&taskName=openCanvaWorkspace&loginId=canva&targetServiceId=canva',
+  );
+  assert.deepEqual(cdpFreeAccessPlanWorkflow.calls[1].body, {
+    serviceName: 'CanvaCLI',
+    agentName: 'canva-cli-agent',
+    taskName: 'openCanvaWorkspace',
+    loginId: 'canva',
+    targetServiceId: 'canva',
+    profileLeasePolicy: 'wait',
+    requiresCdpFree: true,
+    cdpAttachmentAllowed: false,
+    action: 'cdp_free_launch',
+    url: 'https://www.canva.com/',
+    params: {
+      url: 'https://www.canva.com/',
+    },
+    jobTimeoutMs: 120_000,
   });
 
   console.log('Service request client helper tests passed');
