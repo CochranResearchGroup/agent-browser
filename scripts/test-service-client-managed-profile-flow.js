@@ -82,6 +82,7 @@ async function testExistingProfileSelection() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: {
       required: false,
       owner: 'none',
@@ -150,6 +151,7 @@ async function testExistingProfileBrowserCapabilityPreflight() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: {
       required: false,
       owner: 'none',
@@ -205,6 +207,7 @@ async function testExistingProfileCdpFreeLaunch() {
   assert.equal(result.selectedProfile?.id, 'canva-default');
   assert.equal(result.accessPlan?.decision?.launchPosture?.requiresCdpFree, true);
   assert.equal(result.cdpFreeAvailability?.applies, true);
+  assert.equal(result.profileAcquisitionSummary?.cdpFreeAvailability?.applies, true);
   assert.deepEqual(result.cdpFreeAvailability?.availableCommands, ['cdp_free_launch']);
   assert.equal(result.cdpFreeAvailability?.unsupportedCommands.includes('snapshot'), true);
   assert.equal(result.cdpFreeAvailability?.unsupportedCommands.includes('click'), true);
@@ -329,6 +332,7 @@ async function testExistingProfileDueMonitorRun() {
     monitorRunDueRecommendedAction: 'use_selected_profile',
     monitorRunDueFreshTargetServiceIds: ['canva'],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: {
       required: true,
       owner: 'service',
@@ -507,6 +511,7 @@ async function testMissingProfileRegistrationThenDueMonitorRun() {
     monitorRunDueRecommendedAction: 'use_selected_profile',
     monitorRunDueFreshTargetServiceIds: ['canva'],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: {
       required: true,
       owner: 'client',

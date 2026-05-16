@@ -338,7 +338,6 @@ export async function runManagedProfileWorkflow({
     accessPlan.readinessSummary?.manualSeedingRequired === true ||
     accessPlan.decision?.manualSeedingRequired === true;
   const cdpFreeRequired = accessPlanRequiresCdpFree(accessPlan);
-  const cdpFreeAvailability = summarizeCdpFreeAvailability(accessPlan);
   const tab = manualSeedingRequired
     ? {
         success: false,
@@ -394,7 +393,7 @@ export async function runManagedProfileWorkflow({
     readinessSummary: accessPlan.readinessSummary,
     accessDecision: accessPlan.decision,
     accessAttention: profileAcquisitionSummary.refreshedAttention,
-    cdpFreeAvailability,
+    cdpFreeAvailability: profileAcquisitionSummary.cdpFreeAvailability,
     sitePolicy: accessPlan.sitePolicy,
     providers: accessPlan.providers,
     challenges: accessPlan.challenges,
@@ -424,33 +423,6 @@ function accessPlanRequiresCdpFree(accessPlan) {
     serviceRequest.requiresCdpFree === true &&
     serviceRequest.cdpAttachmentAllowed !== true;
   return Boolean(postureRequiresCdpFree || serviceRequestRequiresCdpFree);
-}
-
-/**
- * @param {Record<string, any>} accessPlan
- */
-function summarizeCdpFreeAvailability(accessPlan) {
-  const availability = accessPlan.decision?.serviceRequest?.cdpFreeAvailability;
-  if (!availability || typeof availability !== 'object') {
-    return null;
-  }
-  return {
-    applies: availability.applies === true,
-    availableCommands: Array.isArray(availability.availableCommands)
-      ? availability.availableCommands
-      : [],
-    unsupportedCommands: Array.isArray(availability.unsupportedCommands)
-      ? availability.unsupportedCommands
-      : [],
-    supportedOperations: Array.isArray(availability.supportedOperations)
-      ? availability.supportedOperations
-      : [],
-    unsupportedOperations: Array.isArray(availability.unsupportedOperations)
-      ? availability.unsupportedOperations
-      : [],
-    summaryHelper: availability.client?.summaryHelper ?? null,
-    predicateHelper: availability.client?.predicateHelper ?? null,
-  };
 }
 
 /**

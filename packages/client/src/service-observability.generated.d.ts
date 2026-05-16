@@ -1512,6 +1512,16 @@ export interface ServiceAccessPlanAttentionSummary {
   suggestedActions: string[];
 }
 
+export interface ServiceProfileAcquisitionCdpFreeAvailabilitySummary {
+  applies: boolean;
+  availableCommands: string[];
+  unsupportedCommands: string[];
+  supportedOperations: string[];
+  unsupportedOperations: string[];
+  summaryHelper: string | null;
+  predicateHelper: string | null;
+}
+
 export interface ServiceProfileAcquisitionSummary {
   selectedProfileId: string | null;
   registered: boolean;
@@ -1527,6 +1537,7 @@ export interface ServiceProfileAcquisitionSummary {
   monitorRunDueRecommendedAction: string | null;
   monitorRunDueFreshTargetServiceIds: string[];
   monitorRunDueStaleProfileIds: string[];
+  cdpFreeAvailability: ServiceProfileAcquisitionCdpFreeAvailabilitySummary | null;
   initialAttention: ServiceAccessPlanAttentionSummary | null;
   refreshedAttention: ServiceAccessPlanAttentionSummary | null;
 }

@@ -1327,8 +1327,40 @@ async function main() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: null,
     refreshedAttention: null,
+  });
+  const cdpFreeAcquisitionSummary = summarizeServiceProfileAcquisition({
+    ...preflightAcquisitionResult,
+    accessPlan: {
+      ...preflightAcquisitionResult.accessPlan,
+      decision: {
+        ...preflightAcquisitionResult.accessPlan.decision,
+        serviceRequest: {
+          cdpFreeAvailability: {
+            applies: true,
+            availableCommands: ['cdp_free_launch'],
+            unsupportedCommands: ['snapshot', 'click'],
+            supportedOperations: ['process_lifecycle', 'service_state'],
+            unsupportedOperations: ['cdp_commands', 'dom_interaction'],
+            client: {
+              summaryHelper: 'summarizeServiceCdpFreeLaunchAvailability',
+              predicateHelper: 'isServiceCdpFreeActionAvailable',
+            },
+          },
+        },
+      },
+    },
+  });
+  assert.deepEqual(cdpFreeAcquisitionSummary.cdpFreeAvailability, {
+    applies: true,
+    availableCommands: ['cdp_free_launch'],
+    unsupportedCommands: ['snapshot', 'click'],
+    supportedOperations: ['process_lifecycle', 'service_state'],
+    unsupportedOperations: ['cdp_commands', 'dom_interaction'],
+    summaryHelper: 'summarizeServiceCdpFreeLaunchAvailability',
+    predicateHelper: 'isServiceCdpFreeActionAvailable',
   });
 
   const dueMonitorAcquisition = createFetchRecorder((_url, _init, calls) => {

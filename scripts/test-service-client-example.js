@@ -59,6 +59,7 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: null,
     refreshedAttention: null,
   });
@@ -124,6 +125,7 @@ async function testRegistersFallbackOnlyAfterAccessPlanMiss() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: null,
     refreshedAttention: null,
   });
@@ -184,6 +186,7 @@ async function testRunsDueMonitorAndShowsRefreshedRecommendation() {
     monitorRunDueRecommendedAction: 'use_selected_profile',
     monitorRunDueFreshTargetServiceIds: [loginId],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: null,
     refreshedAttention: null,
   });
@@ -235,6 +238,7 @@ async function testRunsBrowserCapabilityPreflightBeforeBrowserWork() {
     monitorRunDueRecommendedAction: null,
     monitorRunDueFreshTargetServiceIds: [],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: null,
     refreshedAttention: null,
   });
@@ -292,6 +296,7 @@ async function testRegistersFallbackThenRunsDueMonitor() {
     monitorRunDueRecommendedAction: 'use_selected_profile',
     monitorRunDueFreshTargetServiceIds: [loginId],
     monitorRunDueStaleProfileIds: [],
+    cdpFreeAvailability: null,
     initialAttention: null,
     refreshedAttention: null,
   });

@@ -1935,7 +1935,8 @@ access-plan browser-capability preflight when `runBrowserCapabilityPreflight`
 is true, and uses the refreshed access plan for the tab request.
 Use `summarizeServiceProfileAcquisition()` on the helper result when a client
 needs compact log, trace, dashboard, or operator output for selected profile,
-registration, due-monitor, browser-preflight, and access-plan attention state.
+registration, due-monitor, browser-preflight, access-plan attention, and
+CDP-free launch availability state.
 The decision includes `freshnessUpdate`, which names the selected profile,
 target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.
@@ -2144,6 +2145,7 @@ retained freshness monitor for that fallback profile, optionally run due
 profile-readiness monitors, refresh the access plan, and submit the planned tab
 request. Its output includes `profileAcquisitionSummary.monitorRunDueRan`,
 `profileAcquisitionSummary.browserCapabilityPreflightRan`,
+`profileAcquisitionSummary.cdpFreeAvailability`,
 `initialRecommendedAction`, `refreshedRecommendedAction`, monitor-run target
 freshness summary fields, browser-capability preflight outcome fields, and latest trace job
 `controlPlaneMode` plus `lifecycleOnly` values so callers can see whether

@@ -87,6 +87,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionOptions} ServiceProfileAcquisitionOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionResult} ServiceProfileAcquisitionResult
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionSummary} ServiceProfileAcquisitionSummary
+ * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionCdpFreeAvailabilitySummary} ServiceProfileAcquisitionCdpFreeAvailabilitySummary
  * @typedef {import('./service-observability.generated.js').ServiceProfileFreshnessUpdateOptions} ServiceProfileFreshnessUpdateOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunOptions} ServiceAccessPlanPostSeedingProbeRunOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbeRunResult} ServiceAccessPlanPostSeedingProbeRunResult
@@ -522,8 +523,37 @@ export function summarizeServiceProfileAcquisition(profileAcquisition) {
     monitorRunDueRecommendedAction: monitorRunDueSummary?.recommendedAction ?? null,
     monitorRunDueFreshTargetServiceIds: monitorRunDueSummary?.freshTargetServiceIds ?? [],
     monitorRunDueStaleProfileIds: monitorRunDueSummary?.staleProfileIds ?? [],
+    cdpFreeAvailability: summarizeAccessPlanCdpFreeAvailability(profileAcquisition?.accessPlan),
     initialAttention: summarizeAccessPlanAttention(profileAcquisition?.initialAccessPlan?.decision?.attention),
     refreshedAttention: summarizeAccessPlanAttention(profileAcquisition?.accessPlan?.decision?.attention),
+  };
+}
+
+/**
+ * @param {ServiceAccessPlanResponse | undefined | null} accessPlan
+ * @returns {ServiceProfileAcquisitionCdpFreeAvailabilitySummary | null}
+ */
+function summarizeAccessPlanCdpFreeAvailability(accessPlan) {
+  const availability = accessPlan?.decision?.serviceRequest?.cdpFreeAvailability;
+  if (!availability || typeof availability !== 'object' || availability.applies !== true) {
+    return null;
+  }
+  return {
+    applies: availability.applies === true,
+    availableCommands: Array.isArray(availability.availableCommands)
+      ? availability.availableCommands
+      : [],
+    unsupportedCommands: Array.isArray(availability.unsupportedCommands)
+      ? availability.unsupportedCommands
+      : [],
+    supportedOperations: Array.isArray(availability.supportedOperations)
+      ? availability.supportedOperations
+      : [],
+    unsupportedOperations: Array.isArray(availability.unsupportedOperations)
+      ? availability.unsupportedOperations
+      : [],
+    summaryHelper: availability.client?.summaryHelper ?? null,
+    predicateHelper: availability.client?.predicateHelper ?? null,
   };
 }
 
