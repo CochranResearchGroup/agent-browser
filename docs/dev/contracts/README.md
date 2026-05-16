@@ -537,7 +537,10 @@ for HTTP `GET /api/service/browser-capability/preflight`, MCP
 `runServiceAccessPlanBrowserCapabilityPreflight()`. It also includes
 `serviceRequest`, a copyable queued tab-request recipe for HTTP `POST
 /api/service/request`, MCP `service_request`, and the `requestServiceTab()`
-client helper. `acquireServiceLoginProfile()` is the higher-level
+client helper. When CDP-free posture blocks that tab recipe, `serviceRequest`
+also includes `cdpFreeAvailability`, a no-launch command-availability summary
+that names `cdp_free_launch` as the lifecycle-only alternative and lists
+service-request actions that still require CDP. `acquireServiceLoginProfile()` is the higher-level
 software-client helper that can run both the due-monitor recipe and the
 browser-capability preflight recipe before returning the final access plan.
 `summarizeServiceProfileAcquisition()` turns that result into compact

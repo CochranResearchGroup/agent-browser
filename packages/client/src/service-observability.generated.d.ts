@@ -1066,6 +1066,8 @@ export interface ServiceAccessPlanServiceRequest {
   selectedProfileId: string | null;
   /** Lease policy the planner recommends for service-owned queue coordination. */
   profileLeasePolicy: 'wait';
+  /** No-launch CDP-free command availability for clients preparing lifecycle-only work. */
+  cdpFreeAvailability: ServiceAccessPlanCdpFreeAvailability;
   /** Copyable POST /api/service/request payload for the planned tab request. */
   request: {
     action: 'tab_new';
@@ -1091,6 +1093,26 @@ export interface ServiceAccessPlanServiceRequest {
     [key: string]: unknown;
   };
   requestFields: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanCdpFreeAvailability {
+  /** True when the access plan requires the lifecycle-only CDP-free launch path. */
+  applies: boolean;
+  controlPlaneMode: 'cdp_free';
+  lifecycleOnly: boolean;
+  cdpAttachmentAllowed: boolean;
+  supportedOperations: string[];
+  unsupportedOperations: string[];
+  unsupportedCommands: string[];
+  availableCommands: string[];
+  hasUnsupportedCommandList: boolean;
+  client: {
+    package: '@agent-browser/client/service-request';
+    summaryHelper: 'summarizeServiceCdpFreeLaunchAvailability';
+    predicateHelper: 'isServiceCdpFreeActionAvailable';
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 

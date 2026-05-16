@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 
+use super::service_contracts::SERVICE_REQUEST_ACTIONS;
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
     builtin_site_policy, service_profile_seeding_handoff, service_site_policy_id_for_url,
@@ -1433,6 +1434,7 @@ fn service_request_decision(
         "action": "tab_new",
         "selectedProfileId": selected_profile_id,
         "profileLeasePolicy": "wait",
+        "cdpFreeAvailability": cdp_free_command_availability(blocked_by_cdp_free),
         "request": Value::Object(service_request),
         "http": {
             "method": "POST",
@@ -1458,6 +1460,49 @@ fn service_request_decision(
             "url",
             "params",
         ],
+    })
+}
+
+/// No-launch command availability for clients preparing CDP-free lifecycle-only work.
+fn cdp_free_command_availability(applies: bool) -> Value {
+    let unsupported_commands: Vec<&str> = if applies {
+        SERVICE_REQUEST_ACTIONS
+            .iter()
+            .copied()
+            .filter(|action| *action != "cdp_free_launch")
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let available_commands: Vec<&str> = if applies {
+        vec!["cdp_free_launch"]
+    } else {
+        Vec::new()
+    };
+
+    json!({
+        "applies": applies,
+        "controlPlaneMode": "cdp_free",
+        "lifecycleOnly": applies,
+        "cdpAttachmentAllowed": !applies,
+        "supportedOperations": if applies {
+            vec!["process_lifecycle", "profile_lease", "service_state"]
+        } else {
+            Vec::<&str>::new()
+        },
+        "unsupportedOperations": if applies {
+            vec!["cdp_commands", "snapshot", "screenshot", "dom_interaction"]
+        } else {
+            Vec::<&str>::new()
+        },
+        "unsupportedCommands": unsupported_commands,
+        "availableCommands": available_commands,
+        "hasUnsupportedCommandList": applies,
+        "client": {
+            "package": "@agent-browser/client/service-request",
+            "summaryHelper": "summarizeServiceCdpFreeLaunchAvailability",
+            "predicateHelper": "isServiceCdpFreeActionAvailable",
+        },
     })
 }
 
@@ -3760,6 +3805,25 @@ mod tests {
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["cdpAttachmentAllowed"],
             false
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["cdpFreeAvailability"]["applies"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["cdpFreeAvailability"]["availableCommands"][0],
+            "cdp_free_launch"
+        );
+        assert!(
+            plan["decision"]["serviceRequest"]["cdpFreeAvailability"]["unsupportedCommands"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|command| command == "snapshot")
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["cdpFreeAvailability"]["client"]["summaryHelper"],
+            "summarizeServiceCdpFreeLaunchAvailability"
         );
         assert_eq!(plan["decision"]["launchPosture"]["requiresCdpFree"], true);
         assert_eq!(

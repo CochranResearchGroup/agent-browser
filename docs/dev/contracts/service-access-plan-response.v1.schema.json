@@ -1190,6 +1190,7 @@
             "action",
             "selectedProfileId",
             "profileLeasePolicy",
+            "cdpFreeAvailability",
             "request",
             "http",
             "mcp",
@@ -1228,6 +1229,83 @@
             "profileLeasePolicy": {
               "type": "string",
               "enum": ["wait"]
+            },
+            "cdpFreeAvailability": {
+              "type": "object",
+              "required": [
+                "applies",
+                "controlPlaneMode",
+                "lifecycleOnly",
+                "cdpAttachmentAllowed",
+                "supportedOperations",
+                "unsupportedOperations",
+                "unsupportedCommands",
+                "availableCommands",
+                "hasUnsupportedCommandList",
+                "client"
+              ],
+              "properties": {
+                "applies": {
+                  "type": "boolean"
+                },
+                "controlPlaneMode": {
+                  "type": "string",
+                  "enum": ["cdp_free"]
+                },
+                "lifecycleOnly": {
+                  "type": "boolean"
+                },
+                "cdpAttachmentAllowed": {
+                  "type": "boolean"
+                },
+                "supportedOperations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "unsupportedOperations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "unsupportedCommands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "availableCommands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "hasUnsupportedCommandList": {
+                  "type": "boolean"
+                },
+                "client": {
+                  "type": "object",
+                  "required": ["package", "summaryHelper", "predicateHelper"],
+                  "properties": {
+                    "package": {
+                      "type": "string",
+                      "enum": ["@agent-browser/client/service-request"]
+                    },
+                    "summaryHelper": {
+                      "type": "string",
+                      "enum": ["summarizeServiceCdpFreeLaunchAvailability"]
+                    },
+                    "predicateHelper": {
+                      "type": "string",
+                      "enum": ["isServiceCdpFreeActionAvailable"]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": true
             },
             "request": {
               "type": "object",

@@ -718,6 +718,24 @@ function assertDueAccessPlan(data, label) {
       data.decision.serviceRequest.request.cdpAttachmentAllowed === false,
     `${label} service request body CDP-free markers mismatch: ${JSON.stringify(data)}`,
   );
+  assert(
+    data?.decision?.serviceRequest?.cdpFreeAvailability?.applies === true,
+    `${label} service request CDP-free availability applies mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.cdpFreeAvailability?.availableCommands?.includes('cdp_free_launch'),
+    `${label} service request CDP-free availability command mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.cdpFreeAvailability?.unsupportedCommands?.includes('snapshot') &&
+      data.decision.serviceRequest.cdpFreeAvailability.unsupportedCommands.includes('click'),
+    `${label} service request CDP-free unsupported commands mismatch: ${JSON.stringify(data)}`,
+  );
+  assert(
+    data?.decision?.serviceRequest?.cdpFreeAvailability?.client?.summaryHelper ===
+      'summarizeServiceCdpFreeLaunchAvailability',
+    `${label} service request CDP-free helper mismatch: ${JSON.stringify(data)}`,
+  );
 }
 
 function assertMonitorRunDueParity(expected, actual, label) {

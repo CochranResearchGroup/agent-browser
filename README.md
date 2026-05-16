@@ -1839,7 +1839,10 @@ commands, so a normal queued tab request cannot accidentally open a
 DevTools-attached browser for a CDP-sensitive site. Use the explicit
 `requestServiceCdpFreeLaunch()` helper or the lower-level `cdp_free_launch`
 service request action when the intended behavior is only to launch and track a
-headed no-DevTools browser. `createServiceCdpFreeLaunchRequest()` accepts the
+headed no-DevTools browser. The access-plan decision includes
+`decision.serviceRequest.cdpFreeAvailability` before launch so API, MCP, and
+dashboard clients can see that only `cdp_free_launch` is currently available
+for that lifecycle-only posture. `createServiceCdpFreeLaunchRequest()` accepts the
 same access-plan response and converts its blocked tab recipe into that
 lifecycle-only request. The `cdp_free_launch` response includes
 `unsupportedCommands` so software can branch on the exact service-request
@@ -1978,7 +1981,9 @@ refuse that CDP-backed tab request. The first non-CDP service action is
 records the browser PID, profile, session ownership, and lease state, and
 returns unsupported CDP operations and command names explicitly. Software clients can use
 `requestServiceCdpFreeLaunch({ accessPlan, url })` instead of manually copying
-the service request fields, then call
+the service request fields, or read
+`accessPlan.decision.serviceRequest.cdpFreeAvailability` when they need the
+same availability decision before launch. After launch, call
 `summarizeServiceCdpFreeLaunchAvailability(response.data)` before rendering or
 enabling follow-up controls.
 Access-plan responses echo `agentName` and `taskName` in `query` and report
