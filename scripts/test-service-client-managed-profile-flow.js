@@ -204,6 +204,11 @@ async function testExistingProfileCdpFreeLaunch() {
   assert.equal(result.dryRun, false);
   assert.equal(result.selectedProfile?.id, 'canva-default');
   assert.equal(result.accessPlan?.decision?.launchPosture?.requiresCdpFree, true);
+  assert.equal(result.cdpFreeAvailability?.applies, true);
+  assert.deepEqual(result.cdpFreeAvailability?.availableCommands, ['cdp_free_launch']);
+  assert.equal(result.cdpFreeAvailability?.unsupportedCommands.includes('snapshot'), true);
+  assert.equal(result.cdpFreeAvailability?.unsupportedCommands.includes('click'), true);
+  assert.equal(result.cdpFreeAvailability?.summaryHelper, 'summarizeServiceCdpFreeLaunchAvailability');
   assert.equal(result.tab?.success, true);
   assert.equal(result.tab?.mode, 'cdp_free_launch');
   assert.equal(result.tab?.data?.cdpFree, true);
@@ -794,6 +799,7 @@ function createMockFetch({
             blockedByCdpFree: cdpFreeRequired,
             requiresCdpFree: cdpFreeRequired,
             cdpAttachmentAllowed: cdpFreeRequired ? false : true,
+            cdpFreeAvailability: mockCdpFreeAvailability(cdpFreeRequired),
             request: {
               serviceName: 'CanvaCLI',
               agentName: 'canva-cli-agent',
@@ -980,6 +986,27 @@ function createMockFetch({
     }
 
     return jsonResponse({ error: `unexpected route: ${method} ${parsed.pathname}` }, { status: 404 });
+  };
+}
+
+function mockCdpFreeAvailability(applies) {
+  return {
+    applies,
+    controlPlaneMode: 'cdp_free',
+    lifecycleOnly: applies,
+    cdpAttachmentAllowed: !applies,
+    supportedOperations: applies ? ['process_lifecycle', 'profile_lease', 'service_state'] : [],
+    unsupportedOperations: applies
+      ? ['cdp_commands', 'snapshot', 'screenshot', 'dom_interaction']
+      : [],
+    unsupportedCommands: applies ? ['snapshot', 'screenshot', 'click', 'fill'] : [],
+    availableCommands: applies ? ['cdp_free_launch'] : [],
+    hasUnsupportedCommandList: applies,
+    client: {
+      package: '@agent-browser/client/service-request',
+      summaryHelper: 'summarizeServiceCdpFreeLaunchAvailability',
+      predicateHelper: 'isServiceCdpFreeActionAvailable',
+    },
   };
 }
 

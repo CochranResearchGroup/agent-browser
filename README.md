@@ -2179,6 +2179,7 @@ host, profile compatibility, and validation evidence gates would allow the
 service to apply the preferred browser route before any Chrome process starts.
 Its output includes `profileAcquisitionSummary`,
 `readinessSummary.needsManualSeeding`, target service IDs, recommended actions,
+`cdpFreeAvailability` for the pre-launch headed no-DevTools branching decision,
 and `seedingHandoff` when readiness says an operator must seed the profile. Run
 `pnpm test:service-client-managed-profile-flow` for the no-launch mock smoke
 that proves an existing managed profile is selected without registering a new
