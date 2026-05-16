@@ -27,6 +27,7 @@ import {
   runServiceAccessPlanMonitorRunDue,
   runServiceAccessPlanPostSeedingProbe,
   summarizeServiceAccessPlanMonitorRunDue,
+  summarizeServiceProfileAllocationBrowserHealth,
   summarizeServiceProfileAcquisition,
   summarizeServiceProfileReadiness,
   summarizeServiceTraceAttention,
@@ -646,6 +647,24 @@ async function main() {
         agentNames: ['codex'],
         taskNames: ['probeACSwebsite'],
         browserIds: ['browser-1'],
+        browserSummaries: [
+          {
+            browserId: 'browser-1',
+            host: 'local_headed',
+            health: 'ready',
+            pid: 42,
+            hasCdpEndpoint: true,
+            activeSessionIds: ['session-1'],
+          },
+          {
+            browserId: 'browser-degraded',
+            host: 'local_headed',
+            health: 'process_exited',
+            pid: null,
+            hasCdpEndpoint: false,
+            activeSessionIds: [],
+          },
+        ],
         tabIds: ['tab-1'],
       },
     },
@@ -659,6 +678,30 @@ async function main() {
   assert.equal(allocation.calls[0].init.method, 'GET');
   assert.equal(allocationResult.profileAllocation.profileId, 'work');
   assert.equal(allocationResult.profileAllocation.targetReadiness[0].state, 'needs_manual_seeding');
+  assert.deepEqual(summarizeServiceProfileAllocationBrowserHealth(allocationResult), {
+    profileId: 'work',
+    browserCount: 2,
+    readyBrowserIds: ['browser-1'],
+    nonReadyBrowserIds: ['browser-degraded'],
+    nonReadyBrowserCount: 1,
+    healthStates: ['ready', 'process_exited'],
+    hasNonReadyBrowsers: true,
+    recommendedAction: 'inspect_or_recover_non_ready_profile_browsers',
+    browsers: allocationResult.profileAllocation.browserSummaries,
+    nonReadyBrowsers: [allocationResult.profileAllocation.browserSummaries[1]],
+  });
+  assert.deepEqual(summarizeServiceProfileAllocationBrowserHealth(null), {
+    profileId: null,
+    browserCount: 0,
+    readyBrowserIds: [],
+    nonReadyBrowserIds: [],
+    nonReadyBrowserCount: 0,
+    healthStates: [],
+    hasNonReadyBrowsers: false,
+    recommendedAction: null,
+    browsers: [],
+    nonReadyBrowsers: [],
+  });
 
   const readiness = createFetchRecorder({
     success: true,

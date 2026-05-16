@@ -52,6 +52,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceLoginProfileRegistrationOptions} ServiceLoginProfileRegistrationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationBrowserHealthSummary} ServiceProfileAllocationBrowserHealthSummary
  * @typedef {import('./service-observability.generated.js').ServiceProfileReadinessResponse} ServiceProfileReadinessResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffOptions} ServiceProfileSeedingHandoffOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileSeedingHandoffResponse} ServiceProfileSeedingHandoffResponse
@@ -192,6 +193,40 @@ export function getServiceProfiles(options) {
 export function getServiceProfileAllocation({ id, ...options }) {
   assertServiceId(id, 'getServiceProfileAllocation');
   return serviceGet(options, `/api/service/profiles/${encodeURIComponent(id)}/allocation`);
+}
+
+/**
+ * Summarize browser ownership and readiness from one profile allocation row.
+ *
+ * @param {import('./service-observability.generated.js').ServiceProfileAllocation | ServiceProfileAllocationResponse | null | undefined} allocation
+ * @returns {ServiceProfileAllocationBrowserHealthSummary}
+ */
+export function summarizeServiceProfileAllocationBrowserHealth(allocation) {
+  const input = allocation && typeof allocation === 'object' ? allocation : {};
+  const profileAllocation = /** @type {import('./service-observability.generated.js').ServiceProfileAllocation | null} */ (
+    'profileAllocation' in input ? input.profileAllocation : input
+  );
+  const browserSummaries = Array.isArray(profileAllocation?.browserSummaries)
+    ? profileAllocation.browserSummaries
+    : [];
+  const readyBrowsers = browserSummaries.filter((browser) => browser?.health === 'ready');
+  const nonReadyBrowsers = browserSummaries.filter((browser) => browser?.health !== 'ready');
+
+  return {
+    profileId: profileAllocation?.profileId ?? null,
+    browserCount: browserSummaries.length,
+    readyBrowserIds: uniqueStrings(readyBrowsers.map((browser) => browser?.browserId)),
+    nonReadyBrowserIds: uniqueStrings(nonReadyBrowsers.map((browser) => browser?.browserId)),
+    nonReadyBrowserCount: nonReadyBrowsers.length,
+    healthStates: /** @type {import('./service-observability.generated.js').ServiceBrowserHealthState[]} */ (
+      uniqueStrings(browserSummaries.map((browser) => browser?.health))
+    ),
+    hasNonReadyBrowsers: nonReadyBrowsers.length > 0,
+    recommendedAction:
+      nonReadyBrowsers.length > 0 ? 'inspect_or_recover_non_ready_profile_browsers' : null,
+    browsers: browserSummaries,
+    nonReadyBrowsers,
+  };
 }
 
 /**

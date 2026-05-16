@@ -251,6 +251,20 @@ export interface ServiceProfileAllocationBrowserSummary {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileAllocationBrowserHealthSummary {
+  profileId: string | null;
+  browserCount: number;
+  readyBrowserIds: string[];
+  nonReadyBrowserIds: string[];
+  nonReadyBrowserCount: number;
+  healthStates: ServiceBrowserHealthState[];
+  hasNonReadyBrowsers: boolean;
+  recommendedAction: 'inspect_or_recover_non_ready_profile_browsers' | null;
+  browsers: ServiceProfileAllocationBrowserSummary[];
+  nonReadyBrowsers: ServiceProfileAllocationBrowserSummary[];
+  [key: string]: unknown;
+}
+
 export interface ServiceBrowserRecord {
   id: string;
   profileId: string | null;
