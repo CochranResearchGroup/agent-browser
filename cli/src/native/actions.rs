@@ -4005,6 +4005,76 @@ fn cdp_free_launch_response(
     launch: &ManualChromeLaunch,
     url: Option<String>,
 ) -> Value {
+    // Keep the lifecycle-only response explicit so clients do not offer CDP-backed controls.
+    const UNSUPPORTED_CDP_FREE_COMMANDS: &[&str] = &[
+        "navigate",
+        "back",
+        "forward",
+        "reload",
+        "tab_new",
+        "tab_switch",
+        "tab_close",
+        "tab_list",
+        "url",
+        "title",
+        "viewport",
+        "user_agent",
+        "emulatemedia",
+        "timezone",
+        "locale",
+        "geolocation",
+        "permissions",
+        "cookies_get",
+        "cookies_set",
+        "cookies_clear",
+        "storage_get",
+        "storage_set",
+        "storage_clear",
+        "console",
+        "errors",
+        "setcontent",
+        "headers",
+        "offline",
+        "dialog",
+        "clipboard",
+        "upload",
+        "download",
+        "waitfordownload",
+        "pdf",
+        "responsebody",
+        "har_start",
+        "har_stop",
+        "route",
+        "unroute",
+        "requests",
+        "request_detail",
+        "snapshot",
+        "screenshot",
+        "click",
+        "fill",
+        "wait",
+        "type",
+        "press",
+        "hover",
+        "select",
+        "gettext",
+        "inputvalue",
+        "isvisible",
+        "getattribute",
+        "innerhtml",
+        "styles",
+        "count",
+        "boundingbox",
+        "isenabled",
+        "ischecked",
+        "check",
+        "uncheck",
+        "scroll",
+        "scrollintoview",
+        "focus",
+        "clear",
+    ];
+
     json!({
         "launched": true,
         "cdpFree": true,
@@ -4029,6 +4099,7 @@ fn cdp_free_launch_response(
             "screenshot",
             "dom_interaction",
         ],
+        "unsupportedCommands": UNSUPPORTED_CDP_FREE_COMMANDS,
     })
 }
 
@@ -11940,6 +12011,16 @@ mod tests {
             .expect("unsupported operations should be an array")
             .iter()
             .any(|operation| operation == "cdp_commands"));
+        assert!(response["unsupportedCommands"]
+            .as_array()
+            .expect("unsupported commands should be an array")
+            .iter()
+            .any(|command| command == "snapshot"));
+        assert!(response["unsupportedCommands"]
+            .as_array()
+            .expect("unsupported commands should be an array")
+            .iter()
+            .any(|command| command == "click"));
         assert!(launch.devtools_port.is_none());
     }
 

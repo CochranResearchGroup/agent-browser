@@ -966,6 +966,7 @@ function createMockFetch({
             userDataDir: '/tmp/canva-default',
             supportedOperations: ['process_lifecycle', 'profile_lease', 'service_state'],
             unsupportedOperations: ['cdp_commands', 'snapshot', 'screenshot', 'dom_interaction'],
+            unsupportedCommands: ['snapshot', 'screenshot', 'click', 'fill'],
           },
         });
       }

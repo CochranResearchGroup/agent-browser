@@ -648,6 +648,7 @@ async function main() {
       userDataDir: '/tmp/canva',
       supportedOperations: ['process_lifecycle', 'profile_lease', 'service_state'],
       unsupportedOperations: ['cdp_commands', 'snapshot', 'screenshot', 'dom_interaction'],
+      unsupportedCommands: ['snapshot', 'screenshot', 'click', 'fill'],
     },
   });
   const cdpFreeLaunchResponse = await requestServiceCdpFreeLaunch({
@@ -657,6 +658,8 @@ async function main() {
     url: 'https://www.canva.com/',
   });
   assert.equal(cdpFreeLaunchResponse.data.cdpFree, true);
+  assert.ok(cdpFreeLaunchResponse.data.unsupportedCommands.includes('snapshot'));
+  assert.ok(cdpFreeLaunchResponse.data.unsupportedCommands.includes('click'));
   assert.deepEqual(cdpFreeLaunchRecorder.calls[0].body, {
     serviceName: 'CanvaCLI',
     agentName: 'article-probe-agent',

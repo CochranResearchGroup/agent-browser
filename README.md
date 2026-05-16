@@ -1841,7 +1841,9 @@ DevTools-attached browser for a CDP-sensitive site. Use the explicit
 service request action when the intended behavior is only to launch and track a
 headed no-DevTools browser. `createServiceCdpFreeLaunchRequest()` accepts the
 same access-plan response and converts its blocked tab recipe into that
-lifecycle-only request. When adding or
+lifecycle-only request. The `cdp_free_launch` response includes
+`unsupportedCommands` so software can branch on the exact service-request
+actions that still require CDP instead of inferring from prose. When adding or
 removing service request actions, update the Rust
 `SERVICE_REQUEST_ACTIONS` list, the JSON schema enum, MCP `service_request`,
 HTTP `/api/service/request`, and generated client files together; run
@@ -1971,7 +1973,7 @@ When the copied tab request carries `requiresCdpFree: true` and
 refuse that CDP-backed tab request. The first non-CDP service action is
 `cdp_free_launch`, which starts a headed Chrome process without DevTools,
 records the browser PID, profile, session ownership, and lease state, and
-returns unsupported CDP operations explicitly. Software clients can use
+returns unsupported CDP operations and command names explicitly. Software clients can use
 `requestServiceCdpFreeLaunch({ accessPlan, url })` instead of manually copying
 the service request fields.
 Access-plan responses echo `agentName` and `taskName` in `query` and report

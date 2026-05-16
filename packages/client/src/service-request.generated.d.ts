@@ -134,6 +134,7 @@ export interface ServiceCdpFreeLaunchData {
   url?: string | null;
   supportedOperations: string[];
   unsupportedOperations: string[];
+  unsupportedCommands: ServiceRequestAction[];
 }
 
 export interface ServiceTabNewData {
