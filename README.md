@@ -2154,8 +2154,9 @@ profile-readiness monitors, refresh the access plan, and submit the planned tab
 request. Its output includes `profileAcquisitionSummary.monitorRunDueRan`,
 `profileAcquisitionSummary.browserCapabilityPreflightRan`,
 `profileAcquisitionSummary.cdpFreeAvailability`,
-`initialRecommendedAction`, `refreshedRecommendedAction`, monitor-run target
-freshness summary fields, browser-capability preflight outcome fields, and latest trace job
+`browserBuildSelectionSummary`, `initialRecommendedAction`,
+`refreshedRecommendedAction`, monitor-run target freshness summary fields,
+browser-capability preflight outcome fields, and latest trace job
 `controlPlaneMode` plus `lifecycleOnly` values so callers can see whether
 access-plan freshness work changed the recommendation before browser control
 begins and whether the retained job was CDP-backed or lifecycle-only.
@@ -2187,7 +2188,7 @@ still unverified from the returned per-monitor results.
 The browser-capability preflight path summarizes whether the planned executable,
 host, profile compatibility, and validation evidence gates would allow the
 service to apply the preferred browser route before any Chrome process starts.
-Its output includes `profileAcquisitionSummary`,
+Its output includes `profileAcquisitionSummary`, `browserBuildSelectionSummary`,
 `readinessSummary.needsManualSeeding`, target service IDs, recommended actions,
 `cdpFreeAvailability` for the pre-launch headed no-DevTools branching decision,
 and `seedingHandoff` when readiness says an operator must seed the profile. Run

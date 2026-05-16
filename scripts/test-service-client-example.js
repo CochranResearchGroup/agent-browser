@@ -63,6 +63,7 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
     initialAttention: null,
     refreshedAttention: null,
   });
+  assert.deepEqual(result.browserBuildSelectionSummary, expectedBrowserBuildSelectionSummary());
   assert.equal(result.commandResult?.success, true);
   assert.equal(result.traceSummary.attention.required, true);
   assert.equal(result.traceSummary.attention.operatorRequiredCount, 1);
@@ -129,6 +130,8 @@ async function testRegistersFallbackOnlyAfterAccessPlanMiss() {
     initialAttention: null,
     refreshedAttention: null,
   });
+  assert.deepEqual(result.initialBrowserBuildSelectionSummary, expectedMissingBrowserBuildSelectionSummary());
+  assert.deepEqual(result.browserBuildSelectionSummary, expectedBrowserBuildSelectionSummary());
   assert.equal(result.commandResult?.success, true);
 
   assert.deepEqual(callSequence(calls), [
@@ -190,6 +193,7 @@ async function testRunsDueMonitorAndShowsRefreshedRecommendation() {
     initialAttention: null,
     refreshedAttention: null,
   });
+  assert.deepEqual(result.browserBuildSelectionSummary, expectedBrowserBuildSelectionSummary());
   assert.equal(result.monitorRunDue?.checked, 1);
   assert.deepEqual(callSequence(calls), [
     'GET /api/service/access-plan',
@@ -242,6 +246,7 @@ async function testRunsBrowserCapabilityPreflightBeforeBrowserWork() {
     initialAttention: null,
     refreshedAttention: null,
   });
+  assert.deepEqual(result.browserBuildSelectionSummary, expectedBrowserBuildSelectionSummary());
   assert.equal(result.profileAcquisition.browserCapabilityPreflight?.wouldLaunch, false);
   assert.deepEqual(callSequence(calls), [
     'GET /api/service/access-plan',
@@ -300,6 +305,8 @@ async function testRegistersFallbackThenRunsDueMonitor() {
     initialAttention: null,
     refreshedAttention: null,
   });
+  assert.deepEqual(result.initialBrowserBuildSelectionSummary, expectedMissingBrowserBuildSelectionSummary());
+  assert.deepEqual(result.browserBuildSelectionSummary, expectedBrowserBuildSelectionSummary());
   assert.equal(result.profileRegistration?.upserted, true);
   assert.equal(result.profileReadinessMonitor?.upserted, true);
   assert.equal(result.monitorRunDue?.checked, 1);
@@ -591,10 +598,117 @@ function accessPlanResponse(selectedProfile, { dueMonitorRecommended = false } =
             }
           : {},
       },
+      launchPosture: {
+        browserHost: 'local_headed',
+        browserBuild: selectedProfile ? 'stealthcdp_chromium' : 'stock_chrome',
+        browserBuildSource: selectedProfile ? 'browser_preference_binding' : 'service_default',
+        source: 'service_default',
+        headed: true,
+        remoteViewRecommended: true,
+        requiresCdpFree: false,
+        cdpAttachmentAllowed: true,
+        detachedFirstLoginRequired: false,
+        attachableAfterSeeding: true,
+        rationale: selectedProfile
+          ? ['browser_build_stealthcdp_chromium', 'browser_build_from_browser_preference_binding']
+          : ['browser_build_stock_chrome', 'browser_build_from_service_default'],
+        browserBuildSelection: browserBuildSelection(selectedProfile),
+      },
       manualActionRequired: false,
       manualSeedingRequired: false,
       reasons: selectedProfile ? ['selected_profile_has_readiness_evidence'] : ['no_matching_profile'],
     },
+  };
+}
+
+function browserBuildSelection(selectedProfile) {
+  return {
+    browserBuild: selectedProfile ? 'stealthcdp_chromium' : 'stock_chrome',
+    source: selectedProfile ? 'browser_preference_binding' : 'service_default',
+    evidenceSource: selectedProfile ? 'service.browserCapabilityRegistry' : 'service_default',
+    summary: selectedProfile
+      ? 'Browser capability registry preference binding selected this build.'
+      : 'Service default browser build selected this build.',
+    operatorOverride: false,
+    requiresCdpFree: false,
+    selectedProfileId: selectedProfile?.id ?? null,
+    selectedProfileBrowserBuild: null,
+    selectedPreferenceBindingId: selectedProfile ? 'journal-stealth-preference' : null,
+    selectedPreferenceBindingReason: selectedProfile ? 'prefer stealth Chromium for journal login' : null,
+    profileCompatibility: {
+      status: selectedProfile ? 'compatible' : 'no_selected_profile',
+      reason: selectedProfile
+        ? 'Selected profile is compatible with the planned browser build.'
+        : 'No selected profile is available for profile compatibility checks.',
+      selectedProfileId: selectedProfile?.id ?? null,
+      matchingIds: selectedProfile ? ['journal-stealth-profile'] : [],
+      compatibleIds: selectedProfile ? ['journal-stealth-profile'] : [],
+      incompatibleIds: [],
+      count: selectedProfile ? 1 : 0,
+    },
+    validationEvidence: {
+      status: selectedProfile ? 'passed' : 'missing',
+      reason: selectedProfile
+        ? 'Matching validation evidence passed for this browser build.'
+        : 'No validation evidence matched this browser build.',
+      matchingIds: selectedProfile ? ['journal-stealth-validation'] : [],
+      passedIds: selectedProfile ? ['journal-stealth-validation'] : [],
+      failedIds: [],
+      staleIds: [],
+      count: selectedProfile ? 1 : 0,
+    },
+  };
+}
+
+function expectedBrowserBuildSelectionSummary() {
+  return {
+    browserBuild: 'stealthcdp_chromium',
+    source: 'browser_preference_binding',
+    evidenceSource: 'service.browserCapabilityRegistry',
+    summary: 'Browser capability registry preference binding selected this build.',
+    operatorOverride: false,
+    requiresCdpFree: false,
+    selectedProfileId: profileId,
+    selectedProfileBrowserBuild: null,
+    selectedPreferenceBindingId: 'journal-stealth-preference',
+    selectedPreferenceBindingReason: 'prefer stealth Chromium for journal login',
+    profileCompatibilityStatus: 'compatible',
+    profileCompatibilityReason: 'Selected profile is compatible with the planned browser build.',
+    profileCompatibilityIds: ['journal-stealth-profile'],
+    validationEvidenceStatus: 'passed',
+    validationEvidenceReason: 'Matching validation evidence passed for this browser build.',
+    validationEvidenceIds: ['journal-stealth-validation'],
+    auditFlags: ['preference_binding_selected'],
+    attentionRequired: false,
+    compact:
+      'build=stealthcdp_chromium source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=journal-stealth-preference',
+    raw: browserBuildSelection(brokerProfile()),
+  };
+}
+
+function expectedMissingBrowserBuildSelectionSummary() {
+  return {
+    browserBuild: 'stock_chrome',
+    source: 'service_default',
+    evidenceSource: 'service_default',
+    summary: 'Service default browser build selected this build.',
+    operatorOverride: false,
+    requiresCdpFree: false,
+    selectedProfileId: null,
+    selectedProfileBrowserBuild: null,
+    selectedPreferenceBindingId: null,
+    selectedPreferenceBindingReason: null,
+    profileCompatibilityStatus: 'no_selected_profile',
+    profileCompatibilityReason: 'No selected profile is available for profile compatibility checks.',
+    profileCompatibilityIds: [],
+    validationEvidenceStatus: 'missing',
+    validationEvidenceReason: 'No validation evidence matched this browser build.',
+    validationEvidenceIds: [],
+    auditFlags: ['validation_evidence_attention'],
+    attentionRequired: true,
+    compact:
+      'build=stock_chrome source=service_default evidence=service_default override=no profileCompatibility=no_selected_profile validation=missing',
+    raw: browserBuildSelection(null),
   };
 }
 

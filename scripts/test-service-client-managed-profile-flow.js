@@ -100,6 +100,7 @@ async function testExistingProfileSelection() {
       suggestedActions: ['request_service_tab'],
     },
   });
+  assert.deepEqual(result.browserBuildSelectionSummary, expectedBrowserBuildSelectionSummary());
   assert.equal(result.tab?.success, true);
   assert.equal(result.tab?.data?.url, 'https://www.canva.com/');
 
@@ -169,6 +170,7 @@ async function testExistingProfileBrowserCapabilityPreflight() {
       suggestedActions: ['request_service_tab'],
     },
   });
+  assert.deepEqual(result.browserBuildSelectionSummary, expectedBrowserBuildSelectionSummary());
   assert.equal(result.browserCapabilityPreflight?.wouldLaunch, false);
   assert.equal(result.tab?.success, true);
   assert.deepEqual(
@@ -207,6 +209,7 @@ async function testExistingProfileCdpFreeLaunch() {
   assert.equal(result.selectedProfile?.id, 'canva-default');
   assert.equal(result.accessPlan?.decision?.launchPosture?.requiresCdpFree, true);
   assert.equal(result.cdpFreeAvailability?.applies, true);
+  assert.deepEqual(result.browserBuildSelectionSummary, expectedCdpFreeBrowserBuildSelectionSummary());
   assert.equal(result.profileAcquisitionSummary?.cdpFreeAvailability?.applies, true);
   assert.deepEqual(result.cdpFreeAvailability?.availableCommands, ['cdp_free_launch']);
   assert.equal(result.cdpFreeAvailability?.unsupportedCommands.includes('snapshot'), true);
@@ -627,6 +630,7 @@ async function testIdentityFirstGuidanceDrift() {
     'register a managed profile only when agent-browser has no suitable one',
   ]);
   assert(plan.profileInspection.includes.includes('decision.attention'));
+  assert(plan.profileInspection.includes.includes('decision.launchPosture.browserBuildSelection'));
 
   const [readme, serviceModeDocs, commandsDocs, skill] = await Promise.all([
     readFile(new URL('../README.md', import.meta.url), 'utf8'),
@@ -829,8 +833,29 @@ function createMockFetch({
           },
           launchPosture: {
             browserHost: 'local_headed',
+            browserBuild: cdpFreeRequired
+              ? 'cdp_free_headed'
+              : selectedProfile
+                ? 'stealthcdp_chromium'
+                : 'stock_chrome',
+            browserBuildSource: cdpFreeRequired
+              ? 'requires_cdp_free'
+              : selectedProfile
+                ? 'browser_preference_binding'
+                : 'service_default',
+            source: cdpFreeRequired ? 'site_policy' : 'service_default',
+            headed: true,
+            remoteViewRecommended: true,
             requiresCdpFree: cdpFreeRequired,
             cdpAttachmentAllowed: !cdpFreeRequired,
+            detachedFirstLoginRequired: false,
+            attachableAfterSeeding: !cdpFreeRequired,
+            rationale: cdpFreeRequired
+              ? ['site_policy_requires_cdp_free', 'browser_build_cdp_free_headed']
+              : selectedProfile
+                ? ['browser_build_stealthcdp_chromium', 'browser_build_from_browser_preference_binding']
+                : ['browser_build_stock_chrome', 'browser_build_from_service_default'],
+            browserBuildSelection: browserBuildSelection(selectedProfile, { cdpFreeRequired }),
           },
           browserCapabilityPreflight: {
             available: Boolean(selectedProfile),
@@ -1012,6 +1037,115 @@ function mockCdpFreeAvailability(applies) {
       summaryHelper: 'summarizeServiceCdpFreeLaunchAvailability',
       predicateHelper: 'isServiceCdpFreeActionAvailable',
     },
+  };
+}
+
+function browserBuildSelection(selectedProfile, { cdpFreeRequired = false } = {}) {
+  const browserBuild = cdpFreeRequired
+    ? 'cdp_free_headed'
+    : selectedProfile
+      ? 'stealthcdp_chromium'
+      : 'stock_chrome';
+  const source = cdpFreeRequired
+    ? 'requires_cdp_free'
+    : selectedProfile
+      ? 'browser_preference_binding'
+      : 'service_default';
+  const evidenceSource = cdpFreeRequired
+    ? 'site_policy_requires_cdp_free'
+    : selectedProfile
+      ? 'service.browserCapabilityRegistry'
+      : 'service_default';
+  return {
+    browserBuild,
+    source,
+    evidenceSource,
+    summary: cdpFreeRequired
+      ? 'Site policy requires CDP-free operation.'
+      : selectedProfile
+        ? 'Browser capability registry preference binding selected this build.'
+        : 'Service default browser build selected this build.',
+    operatorOverride: false,
+    requiresCdpFree: cdpFreeRequired,
+    selectedProfileId: selectedProfile?.id ?? null,
+    selectedProfileBrowserBuild: null,
+    selectedPreferenceBindingId: selectedProfile && !cdpFreeRequired ? 'canva-stealth-preference' : null,
+    selectedPreferenceBindingReason:
+      selectedProfile && !cdpFreeRequired ? 'prefer stealth Chromium for Canva' : null,
+    profileCompatibility: {
+      status: selectedProfile ? 'compatible' : 'no_selected_profile',
+      reason: selectedProfile
+        ? 'Selected profile is compatible with the planned browser build.'
+        : 'No selected profile is available for profile compatibility checks.',
+      selectedProfileId: selectedProfile?.id ?? null,
+      matchingIds: selectedProfile ? ['canva-stealth-profile'] : [],
+      compatibleIds: selectedProfile ? ['canva-stealth-profile'] : [],
+      incompatibleIds: [],
+      count: selectedProfile ? 1 : 0,
+    },
+    validationEvidence: {
+      status: selectedProfile ? 'passed' : 'missing',
+      reason: selectedProfile
+        ? 'Matching validation evidence passed for this browser build.'
+        : 'No validation evidence matched this browser build.',
+      matchingIds: selectedProfile ? ['canva-stealth-validation'] : [],
+      passedIds: selectedProfile ? ['canva-stealth-validation'] : [],
+      failedIds: [],
+      staleIds: [],
+      count: selectedProfile ? 1 : 0,
+    },
+  };
+}
+
+function expectedBrowserBuildSelectionSummary() {
+  return {
+    browserBuild: 'stealthcdp_chromium',
+    source: 'browser_preference_binding',
+    evidenceSource: 'service.browserCapabilityRegistry',
+    summary: 'Browser capability registry preference binding selected this build.',
+    operatorOverride: false,
+    requiresCdpFree: false,
+    selectedProfileId: 'canva-default',
+    selectedProfileBrowserBuild: null,
+    selectedPreferenceBindingId: 'canva-stealth-preference',
+    selectedPreferenceBindingReason: 'prefer stealth Chromium for Canva',
+    profileCompatibilityStatus: 'compatible',
+    profileCompatibilityReason: 'Selected profile is compatible with the planned browser build.',
+    profileCompatibilityIds: ['canva-stealth-profile'],
+    validationEvidenceStatus: 'passed',
+    validationEvidenceReason: 'Matching validation evidence passed for this browser build.',
+    validationEvidenceIds: ['canva-stealth-validation'],
+    auditFlags: ['preference_binding_selected'],
+    attentionRequired: false,
+    compact:
+      'build=stealthcdp_chromium source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference',
+    raw: browserBuildSelection(profile),
+  };
+}
+
+function expectedCdpFreeBrowserBuildSelectionSummary() {
+  return {
+    browserBuild: 'cdp_free_headed',
+    source: 'requires_cdp_free',
+    evidenceSource: 'site_policy_requires_cdp_free',
+    summary: 'Site policy requires CDP-free operation.',
+    operatorOverride: false,
+    requiresCdpFree: true,
+    selectedProfileId: 'canva-default',
+    selectedProfileBrowserBuild: null,
+    selectedPreferenceBindingId: null,
+    selectedPreferenceBindingReason: null,
+    profileCompatibilityStatus: 'compatible',
+    profileCompatibilityReason: 'Selected profile is compatible with the planned browser build.',
+    profileCompatibilityIds: ['canva-stealth-profile'],
+    validationEvidenceStatus: 'passed',
+    validationEvidenceReason: 'Matching validation evidence passed for this browser build.',
+    validationEvidenceIds: ['canva-stealth-validation'],
+    auditFlags: ['requires_cdp_free'],
+    attentionRequired: false,
+    compact:
+      'build=cdp_free_headed source=requires_cdp_free evidence=site_policy_requires_cdp_free override=no profileCompatibility=compatible validation=passed',
+    raw: browserBuildSelection(profile, { cdpFreeRequired: true }),
   };
 }
 

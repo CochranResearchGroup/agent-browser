@@ -6,6 +6,7 @@ import {
   acquireServiceLoginProfile,
   cancelServiceJob,
   getServiceTrace,
+  summarizeServiceAccessPlanBrowserBuildSelection,
   summarizeServiceProfileAcquisition,
   summarizeServiceTraceAttention,
 } from '@agent-browser/client/service-observability';
@@ -155,6 +156,9 @@ export async function runServiceWorkflow({
   const { initialAccessPlan, profileRegistration, profileReadinessMonitor, monitorRunDue, accessPlan } =
     profileAcquisition;
   const profileAcquisitionSummary = summarizeServiceProfileAcquisition(profileAcquisition);
+  const initialBrowserBuildSelectionSummary =
+    summarizeServiceAccessPlanBrowserBuildSelection(initialAccessPlan);
+  const browserBuildSelectionSummary = summarizeServiceAccessPlanBrowserBuildSelection(accessPlan);
   const commandResult = await requestServiceTab({
     baseUrl,
     fetch,
@@ -233,6 +237,8 @@ export async function runServiceWorkflow({
     profileReadinessMonitor,
     monitorRunDue,
     profileAcquisitionSummary,
+    initialBrowserBuildSelectionSummary,
+    browserBuildSelectionSummary,
     accessPlan,
     commandResult,
     commandResultData: {

@@ -182,9 +182,10 @@ profile-broker pattern:
 8. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
 
 The workflow output includes `accessAttention` plus
-`profileAcquisitionSummary.initialAttention` and `refreshedAttention`. These
-are compact summaries of the service-owned intervention decision; presentation
-remains the caller's responsibility. The examples build
+`profileAcquisitionSummary.initialAttention`, `refreshedAttention`, and
+`browserBuildSelectionSummary`. These are compact summaries of the
+service-owned intervention and browser-routing decisions; presentation remains
+the caller's responsibility. The examples build
 `profileAcquisitionSummary` with `summarizeServiceProfileAcquisition()` so
 software clients can reuse the same selected-profile, registration,
 due-monitor, browser-preflight, and attention fields without copying example
@@ -249,6 +250,9 @@ access-plan-recommended due profile-readiness monitor through
 then refreshes the access plan and prints `profileAcquisitionSummary` with the
 selected profile ID, whether registration happened, whether a due monitor ran,
 the initial recommendation, and the refreshed recommendation.
+It also prints `browserBuildSelectionSummary` so clients can log the selected
+browser build, source, evidence source, and launch-gate evidence before browser
+work.
 Add `--run-browser-capability-preflight` when the script should also run the
 access-plan-recommended no-launch browser-capability gate through
 `runServiceAccessPlanBrowserCapabilityPreflight()` before requesting browser

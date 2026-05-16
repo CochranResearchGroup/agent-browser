@@ -10,6 +10,7 @@ import {
   registerServiceLoginProfile,
   runServiceAccessPlanBrowserCapabilityPreflight,
   runServiceAccessPlanMonitorRunDue,
+  summarizeServiceAccessPlanBrowserBuildSelection,
   summarizeServiceProfileAcquisition,
   updateServiceProfileFreshness,
   upsertServiceProfileReadinessMonitor,
@@ -107,6 +108,7 @@ export function buildManagedProfilePlan({
         'challenges',
         'decision',
         'decision.attention',
+        'decision.launchPosture.browserBuildSelection',
       ],
     },
     readinessInspection: readinessProfileId
@@ -380,11 +382,16 @@ export async function runManagedProfileWorkflow({
     monitorRunDueRan: Boolean(monitorRunDue),
     browserCapabilityPreflightRan: Boolean(browserCapabilityPreflight),
   });
+  const initialBrowserBuildSelectionSummary =
+    summarizeServiceAccessPlanBrowserBuildSelection(initialAccessPlan);
+  const browserBuildSelectionSummary = summarizeServiceAccessPlanBrowserBuildSelection(accessPlan);
 
   return {
     dryRun: false,
     plan,
     profileAcquisitionSummary,
+    initialBrowserBuildSelectionSummary,
+    browserBuildSelectionSummary,
     initialAccessPlan,
     accessPlan,
     selectedProfile: selectedProfile ? summarizeProfile(selectedProfile) : null,
