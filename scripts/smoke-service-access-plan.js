@@ -3,7 +3,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { getServiceAccessPlan } from '../packages/client/src/service-observability.js';
+import {
+  getServiceAccessPlan,
+  summarizeServiceProfileAcquisition,
+} from '../packages/client/src/service-observability.js';
 
 import {
   assert,
@@ -763,6 +766,59 @@ function assertMonitorRunDueParity(expected, actual, label) {
   );
 }
 
+function assertCdpFreeAcquisitionSummaryMatchesAccessPlan(accessPlan, label) {
+  const accessPlanAvailability = accessPlan?.decision?.serviceRequest?.cdpFreeAvailability;
+  const summary = summarizeServiceProfileAcquisition({
+    initialAccessPlan: accessPlan,
+    accessPlan,
+    selectedProfile: accessPlan?.selectedProfile ?? null,
+    profileRegistration: null,
+    profileReadinessMonitor: null,
+    monitorRunDue: null,
+    monitorRunDueSummary: null,
+    browserCapabilityPreflight: null,
+    registered: false,
+    monitorRegistered: false,
+    monitorRunDueRan: false,
+    browserCapabilityPreflightRan: false,
+  });
+
+  assert(
+    summary?.cdpFreeAvailability?.applies === true,
+    `${label} acquisition summary CDP-free applies mismatch: ${JSON.stringify(summary)}`,
+  );
+  assert(
+    JSON.stringify(summary.cdpFreeAvailability.availableCommands) ===
+      JSON.stringify(accessPlanAvailability?.availableCommands),
+    `${label} acquisition summary CDP-free available commands mismatch: ${JSON.stringify({
+      summary: summary.cdpFreeAvailability,
+      accessPlan: accessPlanAvailability,
+    })}`,
+  );
+  assert(
+    JSON.stringify(summary.cdpFreeAvailability.unsupportedCommands) ===
+      JSON.stringify(accessPlanAvailability?.unsupportedCommands),
+    `${label} acquisition summary CDP-free unsupported commands mismatch: ${JSON.stringify({
+      summary: summary.cdpFreeAvailability,
+      accessPlan: accessPlanAvailability,
+    })}`,
+  );
+  assert(
+    summary.cdpFreeAvailability.summaryHelper === accessPlanAvailability?.client?.summaryHelper,
+    `${label} acquisition summary CDP-free summary helper mismatch: ${JSON.stringify({
+      summary: summary.cdpFreeAvailability,
+      accessPlan: accessPlanAvailability,
+    })}`,
+  );
+  assert(
+    summary.cdpFreeAvailability.predicateHelper === accessPlanAvailability?.client?.predicateHelper,
+    `${label} acquisition summary CDP-free predicate helper mismatch: ${JSON.stringify({
+      summary: summary.cdpFreeAvailability,
+      accessPlan: accessPlanAvailability,
+    })}`,
+  );
+}
+
 function assertAnonymousAccessPlan(data, label) {
   assert(data?.query?.serviceName === null, `${label} anonymous serviceName mismatch: ${JSON.stringify(data)}`);
   assert(data?.query?.agentName === null, `${label} anonymous agentName mismatch: ${JSON.stringify(data)}`);
@@ -839,6 +895,10 @@ try {
   });
   assertDueAccessPlan(dueClientPlan, 'client due access plan');
   assertMonitorRunDueParity(dueHttpPlan.data, dueClientPlan, 'HTTP/client due access plan');
+  assertCdpFreeAcquisitionSummaryMatchesAccessPlan(
+    dueClientPlan,
+    'client due access plan acquisition summary',
+  );
 
   await runDueMonitors();
   const query =
