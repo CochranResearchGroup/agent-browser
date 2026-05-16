@@ -1746,6 +1746,7 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
             "agentNames",
             "taskNames",
             "browserIds",
+            "browserSummaries",
             "tabIds",
         ],
         &[
@@ -1769,6 +1770,7 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
             "agent_names",
             "task_names",
             "browser_ids",
+            "browser_summaries",
             "tab_ids",
         ],
     );
@@ -1797,6 +1799,27 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
     assert!(value["agentNames"].is_array());
     assert!(value["taskNames"].is_array());
     assert!(value["browserIds"].is_array());
+    assert!(value["browserSummaries"].is_array());
+    for browser in value["browserSummaries"].as_array().unwrap() {
+        assert_record_fields(
+            "profile allocation browser summary",
+            browser,
+            &[
+                "browserId",
+                "host",
+                "health",
+                "pid",
+                "hasCdpEndpoint",
+                "activeSessionIds",
+            ],
+            &["browser_id", "has_cdp_endpoint", "active_session_ids"],
+        );
+        assert!(SERVICE_BROWSER_HOST_VALUES.contains(&browser["host"].as_str().unwrap()));
+        assert!(SERVICE_BROWSER_HEALTH_VALUES.contains(&browser["health"].as_str().unwrap()));
+        assert!(browser["pid"].is_u64() || browser["pid"].is_null());
+        assert!(browser["hasCdpEndpoint"].is_boolean());
+        assert!(browser["activeSessionIds"].is_array());
+    }
     assert!(value["tabIds"].is_array());
 }
 
@@ -2099,7 +2122,36 @@ pub struct ServiceProfileAllocation {
     pub agent_names: Vec<String>,
     pub task_names: Vec<String>,
     pub browser_ids: Vec<String>,
+    pub browser_summaries: Vec<ServiceProfileAllocationBrowserSummary>,
     pub tab_ids: Vec<String>,
+}
+
+/// Compact browser state attached to a profile allocation.
+///
+/// This lets service clients answer which browser currently hosts a profile
+/// without joining the raw browser collection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceProfileAllocationBrowserSummary {
+    pub browser_id: String,
+    pub host: BrowserHost,
+    pub health: BrowserHealth,
+    pub pid: Option<u32>,
+    pub has_cdp_endpoint: bool,
+    pub active_session_ids: Vec<String>,
+}
+
+impl Default for ServiceProfileAllocationBrowserSummary {
+    fn default() -> Self {
+        Self {
+            browser_id: String::new(),
+            host: BrowserHost::LocalHeaded,
+            health: BrowserHealth::NotStarted,
+            pid: None,
+            has_cdp_endpoint: false,
+            active_session_ids: Vec::new(),
+        }
+    }
 }
 
 /// Return the service-owned profile allocation view sorted by profile id.
@@ -2146,6 +2198,7 @@ fn service_profile_allocation(
     let mut agent_names = BTreeSet::new();
     let mut task_names = BTreeSet::new();
     let mut browser_ids = BTreeSet::new();
+    let mut browser_summaries = BTreeMap::new();
     let mut tab_ids = BTreeSet::new();
 
     for session in service_state.sessions.values() {
@@ -2176,6 +2229,21 @@ fn service_profile_allocation(
     for browser in service_state.browsers.values() {
         if browser.profile_id.as_deref() == Some(profile_id) {
             insert_non_empty(&mut browser_ids, Some(browser.id.as_str()));
+            browser_summaries.insert(
+                browser.id.clone(),
+                ServiceProfileAllocationBrowserSummary {
+                    browser_id: browser.id.clone(),
+                    host: browser.host,
+                    health: browser.health,
+                    pid: browser.pid,
+                    has_cdp_endpoint: browser
+                        .cdp_endpoint
+                        .as_deref()
+                        .map(|endpoint| !endpoint.is_empty())
+                        .unwrap_or(false),
+                    active_session_ids: sorted_strings(browser.active_session_ids.iter()),
+                },
+            );
             for session_id in &browser.active_session_ids {
                 insert_non_empty(&mut holder_session_ids, Some(session_id));
             }
@@ -2263,6 +2331,7 @@ fn service_profile_allocation(
         agent_names: agent_names.into_iter().collect(),
         task_names: task_names.into_iter().collect(),
         browser_ids: browser_ids.into_iter().collect(),
+        browser_summaries: browser_summaries.into_values().collect(),
         tab_ids: tab_ids.into_iter().collect(),
     }
 }

@@ -170,7 +170,25 @@ export interface ServiceProfileAllocation {
   agentNames: string[];
   taskNames: string[];
   browserIds: string[];
+  browserSummaries: ServiceProfileAllocationBrowserSummary[];
   tabIds: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileAllocationBrowserSummary {
+  browserId: string;
+  host:
+    | 'local_headless'
+    | 'local_headed'
+    | 'docker_headed'
+    | 'remote_headed'
+    | 'cloud_provider'
+    | 'attached_existing'
+    | string;
+  health: ServiceBrowserHealthState;
+  pid: number | null;
+  hasCdpEndpoint: boolean;
+  activeSessionIds: string[];
   [key: string]: unknown;
 }
 

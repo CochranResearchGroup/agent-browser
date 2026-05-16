@@ -88,6 +88,7 @@
         "agentNames",
         "taskNames",
         "browserIds",
+        "browserSummaries",
         "tabIds"
       ],
       "properties": {
@@ -207,6 +208,66 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "browserSummaries": {
+          "description": "Compact service-owned browser state for browsers currently associated with this profile allocation.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "browserId",
+              "host",
+              "health",
+              "pid",
+              "hasCdpEndpoint",
+              "activeSessionIds"
+            ],
+            "properties": {
+              "browserId": {
+                "type": "string"
+              },
+              "host": {
+                "type": "string",
+                "enum": [
+                  "local_headless",
+                  "local_headed",
+                  "docker_headed",
+                  "remote_headed",
+                  "cloud_provider",
+                  "attached_existing"
+                ]
+              },
+              "health": {
+                "type": "string",
+                "enum": [
+                  "not_started",
+                  "launching",
+                  "ready",
+                  "degraded",
+                  "unreachable",
+                  "process_exited",
+                  "cdp_disconnected",
+                  "reconnecting",
+                  "closing",
+                  "faulted"
+                ]
+              },
+              "pid": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "hasCdpEndpoint": {
+                "type": "boolean"
+              },
+              "activeSessionIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": true
           }
         },
         "tabIds": {

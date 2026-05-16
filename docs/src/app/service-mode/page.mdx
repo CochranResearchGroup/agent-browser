@@ -259,7 +259,7 @@ suitable managed Canva profile exists, register one with
 seed it when readiness says manual seeding is needed, and keep future work
 identity-based instead of profile-name-based.
 
-HTTP <code>GET /api/service/profiles/&lt;id&gt;/allocation</code> and MCP `agent-browser://profiles/{profile_id}/allocation` return one derived profile allocation row when a caller wants current holder, waiting job, conflict, lease state, and recommended-action data without fetching the full profile collection.
+HTTP <code>GET /api/service/profiles/&lt;id&gt;/allocation</code> and MCP `agent-browser://profiles/{profile_id}/allocation` return one derived profile allocation row when a caller wants current holder, waiting job, conflict, lease state, browser ownership, browser health, and recommended-action data without fetching the full profile collection.
 
 Waiting lease requests stay queued until the selected profile becomes available or <code>profileLeaseWaitTimeoutMs</code> expires.
 

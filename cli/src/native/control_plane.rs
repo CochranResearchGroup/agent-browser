@@ -1665,6 +1665,17 @@ mod tests {
                             "name": "Work"
                         }
                     },
+                    "browsers": {
+                        "browser-work": {
+                            "id": "browser-work",
+                            "profileId": "work",
+                            "host": "local_headed",
+                            "health": "ready",
+                            "pid": 42,
+                            "cdpEndpoint": "http://127.0.0.1:9222",
+                            "activeSessionIds": ["holder"]
+                        }
+                    },
                     "sessions": {
                         "holder": {
                             "id": "holder",
@@ -1737,6 +1748,24 @@ mod tests {
         );
         assert_eq!(
             response
+                .pointer("/data/profileAllocations/0/browserSummaries/0/browserId")
+                .and_then(|v| v.as_str()),
+            Some("browser-work")
+        );
+        assert_eq!(
+            response
+                .pointer("/data/profileAllocations/0/browserSummaries/0/health")
+                .and_then(|v| v.as_str()),
+            Some("process_exited")
+        );
+        assert_eq!(
+            response
+                .pointer("/data/profileAllocations/0/browserSummaries/0/hasCdpEndpoint")
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            response
                 .pointer("/data/service_state/sitePolicies/google/id")
                 .and_then(|v| v.as_str()),
             Some("google")
@@ -1757,14 +1786,15 @@ mod tests {
             response
                 .pointer("/data/service_state/reconciliation/browserCount")
                 .and_then(|v| v.as_u64()),
-            Some(0)
+            Some(1)
         );
-        assert_eq!(
-            response
-                .pointer("/data/service_state/events/0/kind")
-                .and_then(|v| v.as_str()),
-            Some("reconciliation")
-        );
+        assert!(response["data"]["service_state"]["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(
+                |event| event.get("kind").and_then(|kind| kind.as_str()) == Some("reconciliation")
+            ));
         assert!(response
             .pointer("/data/service_state/reconciliation/lastReconciledAt")
             .and_then(|v| v.as_str())
@@ -1784,9 +1814,11 @@ mod tests {
                 .reconciliation
                 .as_ref()
                 .map(|snapshot| snapshot.browser_count),
-            Some(0)
+            Some(1)
         );
-        assert_eq!(persisted.events.len(), 1);
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == crate::native::service_model::ServiceEventKind::Reconciliation
+        }));
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
