@@ -25,6 +25,7 @@ import {
   lookupServiceProfile,
   registerServiceLoginProfile,
   runServiceAccessPlanPostSeedingProbe,
+  summarizeServiceProfileAllocationBrowserHealth,
   summarizeServiceProfileReadiness,
   summarizeServiceTraceAttention,
   updateServiceProfileFreshness,
@@ -51,6 +52,7 @@ assert.equal(typeof getServiceTrace, 'function');
 assert.equal(typeof lookupServiceProfile, 'function');
 assert.equal(typeof registerServiceLoginProfile, 'function');
 assert.equal(typeof runServiceAccessPlanPostSeedingProbe, 'function');
+assert.equal(typeof summarizeServiceProfileAllocationBrowserHealth, 'function');
 assert.equal(typeof summarizeServiceProfileReadiness, 'function');
 assert.equal(typeof summarizeServiceTraceAttention, 'function');
 assert.equal(typeof updateServiceProfileFreshness, 'function');

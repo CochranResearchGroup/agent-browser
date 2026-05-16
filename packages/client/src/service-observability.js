@@ -211,6 +211,18 @@ export function summarizeServiceProfileAllocationBrowserHealth(allocation) {
     : [];
   const readyBrowsers = browserSummaries.filter((browser) => browser?.health === 'ready');
   const nonReadyBrowsers = browserSummaries.filter((browser) => browser?.health !== 'ready');
+  const compactLabels = browserSummaries
+    .map((browser) => {
+      const id = typeof browser?.browserId === 'string' && browser.browserId ? browser.browserId : null;
+      if (!id) {
+        return null;
+      }
+      const health = typeof browser?.health === 'string' && browser.health ? browser.health : 'unknown';
+      const host = typeof browser?.host === 'string' && browser.host ? browser.host : 'unknown';
+      const cdp = browser?.hasCdpEndpoint === true ? 'yes' : 'no';
+      return `${id}:${health}:host=${host}:cdp=${cdp}`;
+    })
+    .filter(Boolean);
 
   return {
     profileId: profileAllocation?.profileId ?? null,
@@ -224,6 +236,8 @@ export function summarizeServiceProfileAllocationBrowserHealth(allocation) {
     hasNonReadyBrowsers: nonReadyBrowsers.length > 0,
     recommendedAction:
       nonReadyBrowsers.length > 0 ? 'inspect_or_recover_non_ready_profile_browsers' : null,
+    compact: compactLabels.length > 0 ? compactLabels.join(',') : 'none',
+    compactLabels,
     browsers: browserSummaries,
     nonReadyBrowsers,
   };

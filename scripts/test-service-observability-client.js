@@ -687,6 +687,12 @@ async function main() {
     healthStates: ['ready', 'process_exited'],
     hasNonReadyBrowsers: true,
     recommendedAction: 'inspect_or_recover_non_ready_profile_browsers',
+    compact:
+      'browser-1:ready:host=local_headed:cdp=yes,browser-degraded:process_exited:host=local_headed:cdp=no',
+    compactLabels: [
+      'browser-1:ready:host=local_headed:cdp=yes',
+      'browser-degraded:process_exited:host=local_headed:cdp=no',
+    ],
     browsers: allocationResult.profileAllocation.browserSummaries,
     nonReadyBrowsers: [allocationResult.profileAllocation.browserSummaries[1]],
   });
@@ -699,6 +705,8 @@ async function main() {
     healthStates: [],
     hasNonReadyBrowsers: false,
     recommendedAction: null,
+    compact: 'none',
+    compactLabels: [],
     browsers: [],
     nonReadyBrowsers: [],
   });

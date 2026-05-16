@@ -201,6 +201,8 @@ export interface ServiceProfileAllocationBrowserHealthSummary {
   healthStates: ServiceBrowserHealthState[];
   hasNonReadyBrowsers: boolean;
   recommendedAction: 'inspect_or_recover_non_ready_profile_browsers' | null;
+  compact: string;
+  compactLabels: string[];
   browsers: ServiceProfileAllocationBrowserSummary[];
   nonReadyBrowsers: ServiceProfileAllocationBrowserSummary[];
   [key: string]: unknown;
@@ -1832,6 +1834,8 @@ export declare function getServiceBrowserCapabilityRegistry(options: ServiceObse
 export declare function getServiceBrowserCapabilityPreflight(options: ServiceBrowserCapabilityPreflightOptions): Promise<ServiceBrowserCapabilityPreflightResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
+/** Summarize browser ownership and readiness from one profile allocation row. */
+export declare function summarizeServiceProfileAllocationBrowserHealth(allocation?: ServiceProfileAllocation | ServiceProfileAllocationResponse | null): ServiceProfileAllocationBrowserHealthSummary;
 /** Read one profile's no-launch target readiness rows. */
 export declare function getServiceProfileReadiness(options: ServiceIdOptions): Promise<ServiceProfileReadinessResponse>;
 /** Read the operator-ready detached profile seeding handoff for one profile. */

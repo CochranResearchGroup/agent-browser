@@ -261,6 +261,8 @@ identity-based instead of profile-name-based.
 
 HTTP <code>GET /api/service/profiles/&lt;id&gt;/allocation</code> and MCP `agent-browser://profiles/{profile_id}/allocation` return one derived profile allocation row when a caller wants current holder, waiting job, conflict, lease state, browser ownership, compact browser health, and recommended-action data without fetching the full profile collection.
 
+Software clients can call <code>summarizeServiceProfileAllocationBrowserHealth()</code> on <code>getServiceProfileAllocation()</code> or any <code>profileAllocations</code> row to produce the same compact browser-health labels shown by <code>agent-browser service profiles</code>. The helper returns <code>compact</code>, <code>compactLabels</code>, ready and non-ready browser IDs, health states, and an inspection recommendation for logs, traces, and operator-facing status output.
+
 Waiting lease requests stay queued until the selected profile becomes available or <code>profileLeaseWaitTimeoutMs</code> expires.
 
 ## Profile and session planning
