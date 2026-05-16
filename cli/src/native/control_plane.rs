@@ -1671,7 +1671,7 @@ mod tests {
                             "profileId": "work",
                             "host": "local_headed",
                             "health": "ready",
-                            "pid": 42,
+                            "pid": 2147483647u32,
                             "cdpEndpoint": "http://127.0.0.1:9222",
                             "activeSessionIds": ["holder"]
                         }
