@@ -1843,7 +1843,10 @@ headed no-DevTools browser. `createServiceCdpFreeLaunchRequest()` accepts the
 same access-plan response and converts its blocked tab recipe into that
 lifecycle-only request. The `cdp_free_launch` response includes
 `unsupportedCommands` so software can branch on the exact service-request
-actions that still require CDP instead of inferring from prose. When adding or
+actions that still require CDP instead of inferring from prose. Use
+`summarizeServiceCdpFreeLaunchAvailability()` or
+`isServiceCdpFreeActionAvailable()` to convert that response into API, MCP, or
+dashboard control availability. When adding or
 removing service request actions, update the Rust
 `SERVICE_REQUEST_ACTIONS` list, the JSON schema enum, MCP `service_request`,
 HTTP `/api/service/request`, and generated client files together; run
@@ -1975,7 +1978,9 @@ refuse that CDP-backed tab request. The first non-CDP service action is
 records the browser PID, profile, session ownership, and lease state, and
 returns unsupported CDP operations and command names explicitly. Software clients can use
 `requestServiceCdpFreeLaunch({ accessPlan, url })` instead of manually copying
-the service request fields.
+the service request fields, then call
+`summarizeServiceCdpFreeLaunchAvailability(response.data)` before rendering or
+enabling follow-up controls.
 Access-plan responses echo `agentName` and `taskName` in `query` and report
 `namingWarnings` plus `hasNamingWarning` in both `query` and `decision` when
 the caller omits `serviceName`, `agentName`, or `taskName`.

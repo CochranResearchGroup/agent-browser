@@ -14,8 +14,11 @@ const actionSet = new Set(SERVICE_REQUEST_ACTIONS);
 
 /**
  * @typedef {import('./service-request.generated.js').ServiceRequest} ServiceRequest
+ * @typedef {import('./service-request.generated.js').ServiceRequestAction} ServiceRequestAction
  * @typedef {import('./service-request.generated.js').ServiceRequestHttpOptions} ServiceRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRequestResponse} ServiceRequestResponse
+ * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchAvailability} ServiceCdpFreeLaunchAvailability
+ * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchData} ServiceCdpFreeLaunchData
  * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestHttpOptions} ServiceCdpFreeLaunchRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestOptions} ServiceCdpFreeLaunchRequestOptions
@@ -255,6 +258,47 @@ export async function requestServiceCdpFreeLaunch({ baseUrl, fetch = globalThis.
 }
 
 /**
+ * Converts a CDP-free launch response into a serializable command availability
+ * summary for API, MCP, and dashboard clients.
+ *
+ * @param {ServiceCdpFreeLaunchData} data
+ * @returns {ServiceCdpFreeLaunchAvailability}
+ */
+export function summarizeServiceCdpFreeLaunchAvailability(data) {
+  assertPlainObject(data, 'CDP-free launch data');
+  const record = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (data));
+  const hasUnsupportedCommandList = Array.isArray(record.unsupportedCommands);
+  const unsupportedCommands = serviceRequestActionArray(record.unsupportedCommands);
+  const unsupportedCommandSet = new Set(unsupportedCommands);
+  const availableCommands = hasUnsupportedCommandList
+    ? SERVICE_REQUEST_ACTIONS.filter((action) => !unsupportedCommandSet.has(action))
+    : /** @type {ServiceRequestAction[]} */ (['cdp_free_launch']);
+
+  return {
+    controlPlaneMode: 'cdp_free',
+    lifecycleOnly: true,
+    cdpAttachmentAllowed: record.cdpAttachmentAllowed === true,
+    supportedOperations: stringArray(record.supportedOperations),
+    unsupportedOperations: stringArray(record.unsupportedOperations),
+    unsupportedCommands,
+    availableCommands,
+    hasUnsupportedCommandList,
+  };
+}
+
+/**
+ * @param {ServiceCdpFreeLaunchData} data
+ * @param {ServiceRequestAction} action
+ * @returns {boolean}
+ */
+export function isServiceCdpFreeActionAvailable(data, action) {
+  if (!actionSet.has(action)) {
+    return false;
+  }
+  return summarizeServiceCdpFreeLaunchAvailability(data).availableCommands.includes(action);
+}
+
+/**
  * @param {Record<string, unknown>} accessPlan
  * @param {{ allowManualAction?: boolean }} options
  * @returns {Record<string, unknown>}
@@ -407,6 +451,16 @@ function assertMonitorRunDueSummarySafe(summary, options) {
  */
 function stringArray(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
+}
+
+/**
+ * @param {unknown} value
+ * @returns {ServiceRequestAction[]}
+ */
+function serviceRequestActionArray(value) {
+  return stringArray(value)
+    .filter((action) => actionSet.has(/** @type {ServiceRequestAction} */ (action)))
+    .map((action) => /** @type {ServiceRequestAction} */ (action));
 }
 
 /**

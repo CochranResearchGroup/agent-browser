@@ -9,9 +9,12 @@ import {
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
   createServiceTabRequestFromAccessPlan,
+  isServiceCdpFreeActionAvailable,
   postServiceRequest,
   requestServiceCdpFreeLaunch,
   requestServiceTab,
+  SERVICE_REQUEST_ACTIONS,
+  summarizeServiceCdpFreeLaunchAvailability,
 } from '../packages/client/src/service-request.js';
 import { getServiceAccessPlan } from '../packages/client/src/service-observability.js';
 
@@ -648,7 +651,7 @@ async function main() {
       userDataDir: '/tmp/canva',
       supportedOperations: ['process_lifecycle', 'profile_lease', 'service_state'],
       unsupportedOperations: ['cdp_commands', 'snapshot', 'screenshot', 'dom_interaction'],
-      unsupportedCommands: ['snapshot', 'screenshot', 'click', 'fill'],
+      unsupportedCommands: SERVICE_REQUEST_ACTIONS.filter((action) => action !== 'cdp_free_launch'),
     },
   });
   const cdpFreeLaunchResponse = await requestServiceCdpFreeLaunch({
@@ -660,6 +663,15 @@ async function main() {
   assert.equal(cdpFreeLaunchResponse.data.cdpFree, true);
   assert.ok(cdpFreeLaunchResponse.data.unsupportedCommands.includes('snapshot'));
   assert.ok(cdpFreeLaunchResponse.data.unsupportedCommands.includes('click'));
+  const cdpFreeAvailability = summarizeServiceCdpFreeLaunchAvailability(cdpFreeLaunchResponse.data);
+  assert.deepEqual(cdpFreeAvailability.availableCommands, ['cdp_free_launch']);
+  assert.equal(cdpFreeAvailability.unsupportedCommands.includes('snapshot'), true);
+  assert.equal(cdpFreeAvailability.unsupportedCommands.includes('click'), true);
+  assert.equal(cdpFreeAvailability.controlPlaneMode, 'cdp_free');
+  assert.equal(cdpFreeAvailability.lifecycleOnly, true);
+  assert.equal(cdpFreeAvailability.hasUnsupportedCommandList, true);
+  assert.equal(isServiceCdpFreeActionAvailable(cdpFreeLaunchResponse.data, 'cdp_free_launch'), true);
+  assert.equal(isServiceCdpFreeActionAvailable(cdpFreeLaunchResponse.data, 'snapshot'), false);
   assert.deepEqual(cdpFreeLaunchRecorder.calls[0].body, {
     serviceName: 'CanvaCLI',
     agentName: 'article-probe-agent',

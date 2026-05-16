@@ -133,6 +133,17 @@ export interface ServiceCdpFreeLaunchData {
   unsupportedCommands: ServiceRequestAction[];
 }
 
+export interface ServiceCdpFreeLaunchAvailability {
+  controlPlaneMode: "cdp_free";
+  lifecycleOnly: true;
+  cdpAttachmentAllowed: boolean;
+  supportedOperations: string[];
+  unsupportedOperations: string[];
+  unsupportedCommands: ServiceRequestAction[];
+  availableCommands: ServiceRequestAction[];
+  hasUnsupportedCommandList: boolean;
+}
+
 export interface ServiceTabNewData {
   index: number;
   url: string;
@@ -628,6 +639,13 @@ export declare function requestServiceTab(options: ServiceTabRequestHttpOptions)
 export declare function requestServiceCdpFreeLaunch(
   options: ServiceCdpFreeLaunchRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceCdpFreeLaunchData>>;
+export declare function summarizeServiceCdpFreeLaunchAvailability(
+  data: ServiceCdpFreeLaunchData,
+): ServiceCdpFreeLaunchAvailability;
+export declare function isServiceCdpFreeActionAvailable(
+  data: ServiceCdpFreeLaunchData,
+  action: ServiceRequestAction,
+): boolean;
 `;
 }
 
