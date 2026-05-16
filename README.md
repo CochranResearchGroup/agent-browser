@@ -1878,6 +1878,7 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 `summarizeServiceProfileAcquisition`,
 `findServiceProfileForIdentity`,
 `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`,
+`summarizeServiceAccessPlanBrowserBuildSelection`,
 `summarizeServiceAccessPlanMonitorRunDue`, `summarizeServiceTraceAttention`, `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`, `runServiceAccessPlanBrowserCapabilityPreflight`, `postServiceReconcile`, upsert and delete helpers for profiles, sessions, site policies, and providers,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
 including optional freshness fields such as `readinessState`,
@@ -1915,6 +1916,10 @@ It includes the winning source, evidence source, explicit operator override
 status, selected preference binding, profile compatibility summary, and
 validation evidence summary so agents and software can audit browser routing
 without launching Chrome.
+Use `summarizeServiceAccessPlanBrowserBuildSelection()` when a software client
+needs a compact routing audit string plus selected build, source, evidence
+source, operator override, preference binding, profile compatibility, validation
+evidence, and attention flags without copying nested access-plan parsing logic.
 Use `agent-browser service browser-capability preflight --browser-build
 stealthcdp_chromium --target-service-id canva --runtime-profile canva-default
 --headed --service-name CanvaCLI --agent-name codex --task-name

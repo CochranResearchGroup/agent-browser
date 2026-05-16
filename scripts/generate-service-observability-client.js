@@ -267,6 +267,51 @@ export interface ServiceProfileAllocationBrowserHealthSummary {
   [key: string]: unknown;
 }
 
+export interface ServiceAccessPlanBrowserBuildSelectionSummary {
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  source:
+    | 'request'
+    | 'site_policy'
+    | 'profile_default'
+    | 'browser_preference_binding'
+    | 'requires_cdp_free'
+    | 'service_default'
+    | string
+    | null;
+  evidenceSource:
+    | 'operator_request'
+    | 'site_policy'
+    | 'selected_profile'
+    | 'service.browserCapabilityRegistry'
+    | 'site_policy_requires_cdp_free'
+    | 'service_default'
+    | string
+    | null;
+  summary: string | null;
+  operatorOverride: boolean;
+  requiresCdpFree: boolean;
+  selectedProfileId: string | null;
+  selectedProfileBrowserBuild:
+    | 'stock_chrome'
+    | 'stealthcdp_chromium'
+    | 'cdp_free_headed'
+    | string
+    | null;
+  selectedPreferenceBindingId: string | null;
+  selectedPreferenceBindingReason: string | null;
+  profileCompatibilityStatus: string | null;
+  profileCompatibilityReason: string | null;
+  profileCompatibilityIds: string[];
+  validationEvidenceStatus: string | null;
+  validationEvidenceReason: string | null;
+  validationEvidenceIds: string[];
+  auditFlags: string[];
+  attentionRequired: boolean;
+  compact: string;
+  raw: ServiceAccessPlanBrowserBuildSelection | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceBrowserRecord {
   id: string;
   profileId: string | null;
@@ -1908,6 +1953,8 @@ export declare function getServiceProfileForIdentity(options: ServiceProfileIden
 export declare function lookupServiceProfile(options: ServiceProfileIdentityLookupOptions): Promise<ServiceProfileLookupResponse>;
 /** Ask agent-browser for the no-launch profile, policy, provider, challenge, and readiness recommendation. */
 export declare function getServiceAccessPlan(options: ServiceAccessPlanOptions): Promise<ServiceAccessPlanResponse>;
+/** Summarize the no-launch browser-build routing explanation from an access plan. */
+export declare function summarizeServiceAccessPlanBrowserBuildSelection(accessPlan?: ServiceAccessPlanResponse | null): ServiceAccessPlanBrowserBuildSelectionSummary;
 /** Broker-first helper that access-plans, optionally registers a fallback profile, optionally adds a readiness monitor, and returns the refreshed recommendation. */
 export declare function acquireServiceLoginProfile(options: ServiceProfileAcquisitionOptions): Promise<ServiceProfileAcquisitionResult>;
 /** Build a compact broker-first profile acquisition summary for logs, traces, and operator-facing example output. */

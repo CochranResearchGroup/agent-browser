@@ -84,6 +84,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileLookupResponse} ServiceProfileLookupResponse
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanOptions} ServiceAccessPlanOptions
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanResponse} ServiceAccessPlanResponse
+ * @typedef {import('./service-observability.generated.js').ServiceAccessPlanBrowserBuildSelectionSummary} ServiceAccessPlanBrowserBuildSelectionSummary
  * @typedef {import('./service-observability.generated.js').ServiceAccessPlanBrowserCapabilityPreflightRunOptions} ServiceAccessPlanBrowserCapabilityPreflightRunOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionOptions} ServiceProfileAcquisitionOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileAcquisitionResult} ServiceProfileAcquisitionResult
@@ -176,6 +177,102 @@ export function runServiceAccessPlanBrowserCapabilityPreflight({ accessPlan, ...
     ...options,
     ...recipe.request,
   });
+}
+
+/**
+ * Summarize the no-launch browser-build routing explanation from an access plan.
+ *
+ * @param {ServiceAccessPlanResponse | null | undefined} accessPlan
+ * @returns {ServiceAccessPlanBrowserBuildSelectionSummary}
+ */
+export function summarizeServiceAccessPlanBrowserBuildSelection(accessPlan) {
+  const selection =
+    accessPlan?.decision?.launchPosture?.browserBuildSelection &&
+    typeof accessPlan.decision.launchPosture.browserBuildSelection === 'object'
+      ? accessPlan.decision.launchPosture.browserBuildSelection
+      : null;
+  const profileCompatibility =
+    selection?.profileCompatibility && typeof selection.profileCompatibility === 'object'
+      ? selection.profileCompatibility
+      : {};
+  const validationEvidence =
+    selection?.validationEvidence && typeof selection.validationEvidence === 'object'
+      ? selection.validationEvidence
+      : {};
+  const browserBuild = typeof selection?.browserBuild === 'string' ? selection.browserBuild : null;
+  const source = typeof selection?.source === 'string' ? selection.source : null;
+  const evidenceSource =
+    typeof selection?.evidenceSource === 'string' ? selection.evidenceSource : null;
+  const profileCompatibilityStatus =
+    typeof profileCompatibility.status === 'string' ? profileCompatibility.status : null;
+  const validationEvidenceStatus =
+    typeof validationEvidence.status === 'string' ? validationEvidence.status : null;
+  const selectedPreferenceBindingId =
+    typeof selection?.selectedPreferenceBindingId === 'string'
+      ? selection.selectedPreferenceBindingId
+      : null;
+  const compactParts = [
+    browserBuild ? `build=${browserBuild}` : 'build=unknown',
+    source ? `source=${source}` : 'source=unknown',
+    evidenceSource ? `evidence=${evidenceSource}` : 'evidence=unknown',
+    selection?.operatorOverride === true ? 'override=yes' : 'override=no',
+    profileCompatibilityStatus
+      ? `profileCompatibility=${profileCompatibilityStatus}`
+      : 'profileCompatibility=unknown',
+    validationEvidenceStatus
+      ? `validation=${validationEvidenceStatus}`
+      : 'validation=unknown',
+  ];
+  if (selectedPreferenceBindingId) {
+    compactParts.push(`preferenceBinding=${selectedPreferenceBindingId}`);
+  }
+  const auditFlags = uniqueStrings([
+    source === 'browser_preference_binding' ? 'preference_binding_selected' : null,
+    selection?.operatorOverride === true ? 'operator_override' : null,
+    selection?.requiresCdpFree === true ? 'requires_cdp_free' : null,
+    profileCompatibilityStatus === 'incompatible_or_mixed'
+      ? 'profile_compatibility_attention'
+      : null,
+    validationEvidenceStatus === 'failed_or_mixed' || validationEvidenceStatus === 'missing'
+      ? 'validation_evidence_attention'
+      : null,
+  ]);
+
+  return {
+    browserBuild,
+    source,
+    evidenceSource,
+    summary: typeof selection?.summary === 'string' ? selection.summary : null,
+    operatorOverride: selection?.operatorOverride === true,
+    requiresCdpFree: selection?.requiresCdpFree === true,
+    selectedProfileId:
+      typeof selection?.selectedProfileId === 'string' ? selection.selectedProfileId : null,
+    selectedProfileBrowserBuild:
+      typeof selection?.selectedProfileBrowserBuild === 'string'
+        ? selection.selectedProfileBrowserBuild
+        : null,
+    selectedPreferenceBindingId,
+    selectedPreferenceBindingReason:
+      typeof selection?.selectedPreferenceBindingReason === 'string'
+        ? selection.selectedPreferenceBindingReason
+        : null,
+    profileCompatibilityStatus,
+    profileCompatibilityReason:
+      typeof profileCompatibility.reason === 'string' ? profileCompatibility.reason : null,
+    profileCompatibilityIds: uniqueStrings(
+      Array.isArray(profileCompatibility.matchingIds) ? profileCompatibility.matchingIds : [],
+    ),
+    validationEvidenceStatus,
+    validationEvidenceReason:
+      typeof validationEvidence.reason === 'string' ? validationEvidence.reason : null,
+    validationEvidenceIds: uniqueStrings(
+      Array.isArray(validationEvidence.matchingIds) ? validationEvidence.matchingIds : [],
+    ),
+    auditFlags,
+    attentionRequired: auditFlags.some((flag) => flag.endsWith('_attention')),
+    compact: compactParts.join(' '),
+    raw: selection,
+  };
 }
 
 /**

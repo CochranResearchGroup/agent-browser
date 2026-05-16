@@ -27,6 +27,7 @@ import {
   runServiceAccessPlanBrowserCapabilityPreflight,
   runServiceAccessPlanMonitorRunDue,
   runServiceAccessPlanPostSeedingProbe,
+  summarizeServiceAccessPlanBrowserBuildSelection,
   summarizeServiceAccessPlanMonitorRunDue,
   summarizeServiceProfileAllocationBrowserHealth,
   summarizeServiceProfileAcquisition,
@@ -1117,6 +1118,52 @@ async function main() {
           monitorAttentionRequired: true,
           providerIds: [],
           challengeIds: [],
+          launchPosture: {
+            browserHost: 'local_headed',
+            browserBuild: 'stealthcdp_chromium',
+            browserBuildSource: 'browser_preference_binding',
+            source: 'service_default',
+            headed: true,
+            remoteViewRecommended: true,
+            requiresCdpFree: false,
+            cdpAttachmentAllowed: true,
+            detachedFirstLoginRequired: false,
+            attachableAfterSeeding: true,
+            rationale: [
+              'browser_build_stealthcdp_chromium',
+              'browser_build_from_browser_preference_binding',
+            ],
+            browserBuildSelection: {
+              browserBuild: 'stealthcdp_chromium',
+              source: 'browser_preference_binding',
+              evidenceSource: 'service.browserCapabilityRegistry',
+              summary: 'Browser capability registry preference binding selected this build.',
+              operatorOverride: false,
+              requiresCdpFree: false,
+              selectedProfileId: 'authenticated',
+              selectedProfileBrowserBuild: null,
+              selectedPreferenceBindingId: 'canva-stealth-preference',
+              selectedPreferenceBindingReason: 'prefer stealth Chromium for Canva',
+              profileCompatibility: {
+                status: 'compatible',
+                reason: 'Selected profile is compatible with the planned browser build.',
+                selectedProfileId: 'authenticated',
+                matchingIds: ['canva-stealth-profile'],
+                compatibleIds: ['canva-stealth-profile'],
+                incompatibleIds: [],
+                count: 1,
+              },
+              validationEvidence: {
+                status: 'passed',
+                reason: 'Matching validation evidence passed for this browser build.',
+                matchingIds: ['canva-stealth-validation'],
+                passedIds: ['canva-stealth-validation'],
+                failedIds: [],
+                staleIds: [],
+                count: 1,
+              },
+            },
+          },
           reasons: ['site_policy_selected'],
         },
       },
@@ -1139,6 +1186,38 @@ async function main() {
   ]);
   assert.equal(accessPlanResult.decision.monitorAttentionRequired, true);
   assert.equal(accessPlanResult.decision.recommendedAction, 'use_selected_profile');
+  const browserBuildSelectionSummary =
+    summarizeServiceAccessPlanBrowserBuildSelection(accessPlanResult);
+  assert.equal(browserBuildSelectionSummary.browserBuild, 'stealthcdp_chromium');
+  assert.equal(browserBuildSelectionSummary.source, 'browser_preference_binding');
+  assert.equal(browserBuildSelectionSummary.evidenceSource, 'service.browserCapabilityRegistry');
+  assert.equal(browserBuildSelectionSummary.operatorOverride, false);
+  assert.equal(browserBuildSelectionSummary.selectedProfileId, 'authenticated');
+  assert.equal(
+    browserBuildSelectionSummary.selectedPreferenceBindingId,
+    'canva-stealth-preference',
+  );
+  assert.equal(browserBuildSelectionSummary.profileCompatibilityStatus, 'compatible');
+  assert.deepEqual(browserBuildSelectionSummary.profileCompatibilityIds, [
+    'canva-stealth-profile',
+  ]);
+  assert.equal(browserBuildSelectionSummary.validationEvidenceStatus, 'passed');
+  assert.deepEqual(browserBuildSelectionSummary.validationEvidenceIds, [
+    'canva-stealth-validation',
+  ]);
+  assert.deepEqual(browserBuildSelectionSummary.auditFlags, ['preference_binding_selected']);
+  assert.equal(browserBuildSelectionSummary.attentionRequired, false);
+  assert.equal(
+    browserBuildSelectionSummary.compact,
+    'build=stealthcdp_chromium source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference',
+  );
+  const missingBrowserBuildSelectionSummary =
+    summarizeServiceAccessPlanBrowserBuildSelection(undefined);
+  assert.equal(missingBrowserBuildSelectionSummary.browserBuild, null);
+  assert.equal(
+    missingBrowserBuildSelectionSummary.compact,
+    'build=unknown source=unknown evidence=unknown override=no profileCompatibility=unknown validation=unknown',
+  );
 
   const accessPlanAllocation = createFetchRecorder({
     success: true,
