@@ -41,6 +41,7 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
+agent-browser service prune-retained  # Preview retained closed-tab and inert-browser cleanup
 agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
 agent-browser service profiles        # Show retained service profile records
 agent-browser service sessions        # Show retained service session records
@@ -311,6 +312,7 @@ agent-browser service status          # Inspect worker state, browser health, qu
 agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile       # Probe persisted browser records and update service state
+agent-browser service prune-retained  # Dry-run retained closed-tab and inert-browser cleanup
 agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
 agent-browser service profiles        # Show retained profile records
 agent-browser service sessions        # Show retained session records
@@ -370,6 +372,8 @@ The persisted service state also includes bounded audit records for recent contr
 `service status --watch` and `service watch` poll the same status path until interrupted. Use `--interval <ms>` to set the polling interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 
 `service reconcile` runs the same persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `state.json`, refreshes live tab records for reachable browser CDP endpoints, refreshes the `reconciliation` snapshot, appends service events, and returns the reconciled service state plus counts for total and changed browser records.
+
+`service prune-retained` is dry-run by default for retained inventory cleanup. It previews closed tabs and inert <code>not_started</code> browser records that are safe to remove from service state, then applies the cleanup only when <code>--apply</code> is present. Add <code>--process-exited-browsers</code> only after reviewing failure evidence because those records may explain a crash or shutdown path.
 
 `service access-plan` prints the same no-launch recommendation returned by HTTP <code>GET /api/service/access-plan</code> and MCP <code>service_access_plan</code>. Use it before browser work when an operator, agent, or software client needs the selected profile, manual-seeding posture, monitor freshness recommendation, service request availability, and compact <code>browser_build_summary</code> that explains whether stock Chrome, stealth CDP Chromium, or CDP-free headed mode won.
 

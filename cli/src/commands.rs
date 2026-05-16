@@ -1381,6 +1381,57 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "action": "service_reconcile",
                 "serviceState": flags.service_state.clone(),
             })),
+            Some("prune-retained") => {
+                let mut apply = false;
+                let mut dry_run = true;
+                let mut closed_tabs = true;
+                let mut not_started_browsers = true;
+                let mut process_exited_browsers = false;
+                let mut saw_apply = false;
+                let mut saw_dry_run = false;
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--apply" => {
+                            saw_apply = true;
+                            apply = true;
+                            dry_run = false;
+                        }
+                        "--dry-run" => {
+                            saw_dry_run = true;
+                            dry_run = true;
+                        }
+                        "--closed-tabs" => closed_tabs = true,
+                        "--no-closed-tabs" => closed_tabs = false,
+                        "--not-started-browsers" => not_started_browsers = true,
+                        "--no-not-started-browsers" => not_started_browsers = false,
+                        "--process-exited-browsers" => process_exited_browsers = true,
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service prune-retained: {}", flag),
+                                usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                if saw_apply && saw_dry_run {
+                    return Err(ParseError::InvalidValue {
+                        message: "--apply and --dry-run cannot be used together".to_string(),
+                        usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers]",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_prune_retained",
+                    "apply": apply,
+                    "dryRun": dry_run,
+                    "closedTabs": closed_tabs,
+                    "notStartedBrowsers": not_started_browsers,
+                    "processExitedBrowsers": process_exited_browsers,
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
             Some("access-plan") => parse_service_access_plan(id, &rest, flags),
             Some("browser-capability") => {
                 parse_service_browser_capability_preflight(id, &rest, flags)
@@ -5839,6 +5890,45 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_browsers");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_prune_retained_defaults_to_dry_run() {
+        let cmd = parse_command(&args("service prune-retained"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_prune_retained");
+        assert_eq!(cmd["dryRun"], true);
+        assert_eq!(cmd["apply"], false);
+        assert_eq!(cmd["closedTabs"], true);
+        assert_eq!(cmd["notStartedBrowsers"], true);
+        assert_eq!(cmd["processExitedBrowsers"], false);
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_prune_retained_accepts_apply_and_explicit_process_exited() {
+        let cmd = parse_command(
+            &args("service prune-retained --apply --process-exited-browsers --no-closed-tabs"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_prune_retained");
+        assert_eq!(cmd["dryRun"], false);
+        assert_eq!(cmd["apply"], true);
+        assert_eq!(cmd["closedTabs"], false);
+        assert_eq!(cmd["processExitedBrowsers"], true);
+    }
+
+    #[test]
+    fn test_service_prune_retained_rejects_apply_with_dry_run() {
+        let err = parse_command(
+            &args("service prune-retained --dry-run --apply"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
     }
 
     #[test]

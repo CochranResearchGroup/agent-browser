@@ -72,6 +72,7 @@ use super::service_model::{
     BrowserBuild, BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
     JobState as ServiceJobState, MonitorState, ProfileKeyringPolicy, ProfileLeaseDisposition,
     ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy,
+    TabLifecycle,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -3001,6 +3002,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_status" => handle_stream_status(state).await,
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
+        "service_prune_retained" => handle_service_prune_retained(cmd).await,
         "service_access_plan" => handle_service_access_plan(cmd).await,
         "service_browser_capability_preflight" => {
             handle_service_browser_capability_preflight(cmd).await
@@ -7875,6 +7877,158 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ServiceRetentionPruneOptions {
+    apply: bool,
+    closed_tabs: bool,
+    not_started_browsers: bool,
+    process_exited_browsers: bool,
+}
+
+impl ServiceRetentionPruneOptions {
+    fn from_command(cmd: &Value) -> Self {
+        Self {
+            apply: cmd.get("apply").and_then(Value::as_bool).unwrap_or(false),
+            closed_tabs: cmd
+                .get("closedTabs")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+            not_started_browsers: cmd
+                .get("notStartedBrowsers")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+            process_exited_browsers: cmd
+                .get("processExitedBrowsers")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        }
+    }
+}
+
+async fn handle_service_prune_retained(cmd: &Value) -> Result<Value, String> {
+    let options = ServiceRetentionPruneOptions::from_command(cmd);
+    if options.apply {
+        let repository = LockedServiceStateRepository::default_json()?;
+        repository.mutate(|state| Ok(prune_retained_service_state(state, options)))
+    } else {
+        let mut service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        Ok(prune_retained_service_state(&mut service_state, options))
+    }
+}
+
+fn prune_retained_service_state(
+    state: &mut ServiceState,
+    options: ServiceRetentionPruneOptions,
+) -> Value {
+    let before_browser_count = state.browsers.len();
+    let before_tab_count = state.tabs.len();
+    let before_session_count = state.sessions.len();
+
+    let closed_tab_ids = if options.closed_tabs {
+        state
+            .tabs
+            .iter()
+            .filter(|(_, tab)| tab.lifecycle == TabLifecycle::Closed)
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+
+    let browser_ids = state
+        .browsers
+        .iter()
+        .filter(|(id, browser)| {
+            let not_started_matches = options.not_started_browsers
+                && browser.health == ServiceBrowserHealth::NotStarted
+                && browser.pid.is_none()
+                && browser.cdp_endpoint.is_none();
+            let process_exited_matches = options.process_exited_browsers
+                && browser.health == ServiceBrowserHealth::ProcessExited;
+            (not_started_matches || process_exited_matches)
+                && browser.active_session_ids.is_empty()
+                && browser.view_streams.is_empty()
+                && !state.tabs.values().any(|tab| {
+                    tab.browser_id == **id
+                        && !(options.closed_tabs && tab.lifecycle == TabLifecycle::Closed)
+                })
+        })
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+
+    let mut session_tab_refs_removed = 0usize;
+    let mut session_browser_refs_removed = 0usize;
+    if options.apply {
+        for tab_id in &closed_tab_ids {
+            state.tabs.remove(tab_id);
+        }
+        for browser_id in &browser_ids {
+            state.browsers.remove(browser_id);
+        }
+        for session in state.sessions.values_mut() {
+            let before = session.tab_ids.len();
+            session
+                .tab_ids
+                .retain(|tab_id| !closed_tab_ids.contains(tab_id));
+            session_tab_refs_removed += before.saturating_sub(session.tab_ids.len());
+
+            let before = session.browser_ids.len();
+            session
+                .browser_ids
+                .retain(|browser_id| !browser_ids.contains(browser_id));
+            session_browser_refs_removed += before.saturating_sub(session.browser_ids.len());
+        }
+        state.refresh_derived_views();
+    }
+
+    json!({
+        "pruned": options.apply,
+        "dryRun": !options.apply,
+        "policy": {
+            "closedTabs": options.closed_tabs,
+            "notStartedBrowsers": options.not_started_browsers,
+            "processExitedBrowsers": options.process_exited_browsers,
+            "processExitedRequiresExplicitFlag": true,
+        },
+        "before": {
+            "browserCount": before_browser_count,
+            "tabCount": before_tab_count,
+            "sessionCount": before_session_count,
+        },
+        "candidates": {
+            "closedTabs": closed_tab_ids,
+            "browsers": browser_ids,
+        },
+        "candidateCounts": {
+            "closedTabs": closed_tab_ids.len(),
+            "browsers": browser_ids.len(),
+            "total": closed_tab_ids.len() + browser_ids.len(),
+        },
+        "removed": {
+            "closedTabs": if options.apply { closed_tab_ids.len() } else { 0 },
+            "browsers": if options.apply { browser_ids.len() } else { 0 },
+            "sessionTabRefs": session_tab_refs_removed,
+            "sessionBrowserRefs": session_browser_refs_removed,
+        },
+        "after": {
+            "browserCount": state.browsers.len(),
+            "tabCount": state.tabs.len(),
+            "sessionCount": state.sessions.len(),
+        },
+        "recommendedNextStep": if options.apply {
+            "Run agent-browser service reconcile and inspect agent-browser service status."
+        } else {
+            "Review the candidates, then rerun with --apply when the retained records are safe to remove."
+        },
+    })
+}
+
 async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
     let job_id = cmd
         .get("jobId")
@@ -11554,7 +11708,7 @@ mod tests {
         assert_service_status_response_contract, assert_service_trace_activity_record_contract,
         assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
         service_job_naming_warning_values, BrowserCapabilityRegistry, BrowserProcess,
-        BrowserProfile, BrowserSession, ProfileSeedingHandoffState,
+        BrowserProfile, BrowserSession, BrowserTab, ProfileSeedingHandoffState,
     };
     use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -13739,6 +13893,115 @@ mod tests {
         assert_eq!(result["data"]["summary"]["faulted"], 1);
         assert_eq!(result["data"]["summary"]["failing"], 1);
         assert_eq!(result["data"]["summary"]["repeatedFailures"], 1);
+    }
+
+    #[tokio::test]
+    async fn test_service_prune_retained_dry_run_reports_candidates_without_launch() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_prune_retained",
+            "id": "svc-prune-retained-1",
+            "serviceState": {
+                "browsers": {
+                    "browser-old": {
+                        "id": "browser-old",
+                        "health": "not_started",
+                        "host": "local_headed"
+                    },
+                    "browser-live": {
+                        "id": "browser-live",
+                        "health": "ready",
+                        "host": "local_headed",
+                        "pid": 123
+                    }
+                },
+                "tabs": {
+                    "tab-closed": {
+                        "id": "tab-closed",
+                        "browserId": "browser-old",
+                        "lifecycle": "closed"
+                    },
+                    "tab-ready": {
+                        "id": "tab-ready",
+                        "browserId": "browser-live",
+                        "lifecycle": "ready"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["dryRun"], true);
+        assert_eq!(result["data"]["candidateCounts"]["closedTabs"], 1);
+        assert_eq!(result["data"]["candidateCounts"]["browsers"], 1);
+        assert_eq!(result["data"]["removed"]["closedTabs"], 0);
+    }
+
+    #[test]
+    fn test_prune_retained_service_state_apply_removes_session_references() {
+        let mut service_state = ServiceState {
+            browsers: BTreeMap::from([
+                (
+                    "browser-old".to_string(),
+                    BrowserProcess {
+                        id: "browser-old".to_string(),
+                        health: ServiceBrowserHealth::NotStarted,
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "browser-exited".to_string(),
+                    BrowserProcess {
+                        id: "browser-exited".to_string(),
+                        health: ServiceBrowserHealth::ProcessExited,
+                        pid: Some(99),
+                        cdp_endpoint: Some("http://127.0.0.1:9999".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                ),
+            ]),
+            tabs: BTreeMap::from([(
+                "tab-closed".to_string(),
+                BrowserTab {
+                    id: "tab-closed".to_string(),
+                    browser_id: "browser-old".to_string(),
+                    lifecycle: TabLifecycle::Closed,
+                    ..BrowserTab::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-1".to_string(),
+                BrowserSession {
+                    id: "session-1".to_string(),
+                    browser_ids: vec!["browser-old".to_string(), "browser-exited".to_string()],
+                    tab_ids: vec!["tab-closed".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let result = prune_retained_service_state(
+            &mut service_state,
+            ServiceRetentionPruneOptions {
+                apply: true,
+                closed_tabs: true,
+                not_started_browsers: true,
+                process_exited_browsers: false,
+            },
+        );
+
+        assert_eq!(result["pruned"], true);
+        assert_eq!(result["removed"]["closedTabs"], 1);
+        assert_eq!(result["removed"]["browsers"], 1);
+        assert!(!service_state.browsers.contains_key("browser-old"));
+        assert!(service_state.browsers.contains_key("browser-exited"));
+        assert!(!service_state.tabs.contains_key("tab-closed"));
+        assert_eq!(
+            service_state.sessions["session-1"].browser_ids,
+            vec!["browser-exited"]
+        );
+        assert!(service_state.sessions["session-1"].tab_ids.is_empty());
     }
 
     #[tokio::test]

@@ -1655,6 +1655,38 @@ fn main() {
         return;
     }
 
+    if cmd
+        .get("action")
+        .and_then(|value| value.as_str())
+        .is_some_and(|action| action == "service_prune_retained")
+    {
+        let action = cmd.get("action").and_then(|value| value.as_str());
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+        let mut state = native::actions::DaemonState::new();
+        let raw = rt.block_on(native::actions::execute_command(&cmd, &mut state));
+        let resp = connection::Response {
+            success: raw
+                .get("success")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+            data: raw.get("data").cloned(),
+            error: raw
+                .get("error")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+            warning: raw
+                .get("warning")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+        };
+        let output_opts = OutputOptions::from_flags(&flags);
+        output::print_response_with_opts(&resp, action, &output_opts);
+        if !resp.success {
+            exit(1);
+        }
+        return;
+    }
+
     // Parse proxy URL to separate server from credentials for the daemon.
     let (proxy_server, proxy_username, proxy_password) = if let Some(ref proxy_str) = flags.proxy {
         let parsed = parse_proxy(proxy_str);

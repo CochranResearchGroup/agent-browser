@@ -39,6 +39,7 @@ agent-browser service remedies apply --escalation browser_degraded --by operator
 agent-browser service remedies apply --escalation os_degraded_possible --by operator --note host-inspected
 agent-browser service jobs --limit 20
 agent-browser service reconcile
+agent-browser service prune-retained
 agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
 agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
 ```
@@ -73,6 +74,15 @@ shell operator or CLI-driven agent needs the same broker recommendation as HTTP
 profile, manual-seeding posture, monitor freshness recommendation, service
 request availability, and compact <code>browser_build_summary</code> routing
 audit output.
+
+Use <code>agent-browser service prune-retained</code> when retained service
+inventory is noisy after many completed jobs. The command is dry-run by default
+and applies no mutation unless <code>--apply</code> is present. The default
+cleanup candidates are closed tabs plus inert <code>not_started</code> browser
+records with no PID, CDP endpoint, active sessions, view streams, or non-closed
+tabs. Add <code>--process-exited-browsers</code> only after reviewing failure
+evidence because process-exited browser records may explain a crash, close
+failure, or host problem.
 
 Use the HTTP API when another program owns the workflow lifecycle:
 

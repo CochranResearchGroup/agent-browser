@@ -1441,6 +1441,62 @@ fn format_service_tabs_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String> {
+    let dry_run = data
+        .get("dryRun")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true);
+    let counts = data.get("candidateCounts")?;
+    let removed = data.get("removed").unwrap_or(&serde_json::Value::Null);
+    let before = data.get("before").unwrap_or(&serde_json::Value::Null);
+    let after = data.get("after").unwrap_or(&serde_json::Value::Null);
+    let mode = if dry_run { "dry-run" } else { "applied" };
+    let closed_tabs = counts
+        .get("closedTabs")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let browsers = counts
+        .get("browsers")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let total = counts
+        .get("total")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(closed_tabs + browsers);
+    let removed_tabs = removed
+        .get("closedTabs")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let removed_browsers = removed
+        .get("browsers")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let before_browsers = before
+        .get("browserCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let before_tabs = before
+        .get("tabCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let after_browsers = after
+        .get("browserCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(before_browsers);
+    let after_tabs = after
+        .get("tabCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(before_tabs);
+    let next = data
+        .get("recommendedNextStep")
+        .and_then(|value| value.as_str())
+        .unwrap_or("Review service status.");
+
+    Some(format!(
+        "Retained service prune {mode}: candidates={total} closed_tabs={closed_tabs} browsers={browsers}\nBefore: browsers={before_browsers} tabs={before_tabs}\nRemoved: browsers={removed_browsers} closed_tabs={removed_tabs}\nAfter: browsers={after_browsers} tabs={after_tabs}\nNext: {next}"
+    ))
+}
+
 fn format_service_site_policy_line(
     policy: &serde_json::Value,
     source: Option<&serde_json::Value>,
@@ -2091,6 +2147,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_tabs") {
             if let Some(output) = format_service_tabs_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_prune_retained") {
+            if let Some(output) = format_service_prune_retained_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -4597,6 +4659,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
+  agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers]
   agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]
   agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
   agent-browser service profiles
@@ -4630,6 +4693,7 @@ Commands:
   status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
+  prune-retained        Dry-run or apply removal of inert retained browser and closed-tab records
   access-plan           Show the no-launch profile, readiness, site-policy, provider, challenge, and browser-build routing recommendation
   browser-capability    Preflight guarded executable routing for one requested browser build without launching
   profiles              Show retained service profile records and derived allocation state
@@ -4663,6 +4727,8 @@ Commands:
 
 Notes:
   - It does not launch a browser.
+  - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
+  - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
   - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.
@@ -4742,6 +4808,7 @@ Examples:
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
+  agent-browser service prune-retained
   agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
   agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
   agent-browser service profiles
@@ -5246,6 +5313,7 @@ Service:
   service status             Show service worker health, profile lease waits, and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
+  service prune-retained     Dry-run or apply retained closed-tab and inert-browser cleanup
   service access-plan        Show no-launch profile and browser-build routing recommendation
   service profiles           Show retained profile records and allocation state
   service sessions           Show retained service session records
@@ -5562,6 +5630,7 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
+  agent-browser service prune-retained   # Preview retained closed-tab and inert-browser cleanup
   agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
   agent-browser service profiles         # Inspect retained service profiles and allocation state
   agent-browser service sessions         # Inspect retained service session records
@@ -5708,9 +5777,10 @@ mod tests {
         format_service_incidents_text, format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
         format_service_profile_seeding_handoff_text, format_service_profiles_text,
-        format_service_providers_text, format_service_sessions_text,
-        format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
-        format_service_trace_text, format_storage_text,
+        format_service_providers_text, format_service_prune_retained_text,
+        format_service_sessions_text, format_service_site_policies_text,
+        format_service_status_text, format_service_tabs_text, format_service_trace_text,
+        format_storage_text,
     };
     use serde_json::json;
 
@@ -6130,6 +6200,38 @@ mod tests {
             rendered,
             "Tabs: 1\n  tab-1 browser=browser-1 session=cdp-session-1 owner=runtime-session lifecycle=ready target=target-1 title=Example url=https://example.com/"
         );
+    }
+
+    #[test]
+    fn test_format_service_prune_retained_text_includes_counts_and_next_step() {
+        let data = json!({
+            "dryRun": true,
+            "candidateCounts": {
+                "closedTabs": 3,
+                "browsers": 2,
+                "total": 5
+            },
+            "removed": {
+                "closedTabs": 0,
+                "browsers": 0
+            },
+            "before": {
+                "browserCount": 10,
+                "tabCount": 30
+            },
+            "after": {
+                "browserCount": 10,
+                "tabCount": 30
+            },
+            "recommendedNextStep": "Review candidates."
+        });
+
+        let rendered = format_service_prune_retained_text(&data).unwrap();
+
+        assert!(rendered
+            .contains("Retained service prune dry-run: candidates=5 closed_tabs=3 browsers=2"));
+        assert!(rendered.contains("Before: browsers=10 tabs=30"));
+        assert!(rendered.contains("Next: Review candidates."));
     }
 
     #[test]
