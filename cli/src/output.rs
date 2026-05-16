@@ -1072,12 +1072,34 @@ fn format_service_profile_allocation_line(allocation: &serde_json::Value) -> Str
     let agents = value_string_list(allocation, "agentNames");
     let tasks = value_string_list(allocation, "taskNames");
     let browsers = value_string_list(allocation, "browserIds");
+    let browser_health = format_profile_allocation_browser_health(allocation);
     let tabs = value_string_list(allocation, "tabIds");
     let readiness = format_profile_readiness(allocation);
 
     format!(
-        "{profile} state={state} action={action} readiness={readiness} holders={holders} waiting={waiting} conflicts={conflicts} services={services} agents={agents} tasks={tasks} browsers={browsers} tabs={tabs}"
+        "{profile} state={state} action={action} readiness={readiness} holders={holders} waiting={waiting} conflicts={conflicts} services={services} agents={agents} tasks={tasks} browsers={browsers} browser_health={browser_health} tabs={tabs}"
     )
+}
+
+fn format_profile_allocation_browser_health(allocation: &serde_json::Value) -> String {
+    allocation
+        .get("browserSummaries")
+        .and_then(|value| value.as_array())
+        .map(|browsers| {
+            browsers
+                .iter()
+                .filter_map(|browser| {
+                    let id = browser.get("browserId")?.as_str()?;
+                    let health = value_str(browser, "health", "unknown");
+                    let host = value_str(browser, "host", "unknown");
+                    let cdp = value_bool_label(browser, "hasCdpEndpoint");
+                    Some(format!("{id}:{health}:host={host}:cdp={cdp}"))
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "none".to_string())
 }
 
 fn format_service_profile_line(profile: &serde_json::Value) -> String {
@@ -4602,7 +4624,7 @@ Notes:
   - Operator-requested close health events include shutdownReasonKind, processExitCause, and polite-close and force-kill outcome metadata so clients can distinguish expected shutdown from unexpected process exit.
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
-  - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, and recommended actions.
+  - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, browser health summaries, and recommended actions.
   - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding with seedingMode=detached_headed_no_cdp, cdpAttachmentAllowedDuringSeeding=false, preferredKeyring=basic_password_store, and setup scopes for sign-in, Chrome sync, passkeys, and browser plugins. Explicit freshness rows are preserved through readiness refreshes.
   - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus lifecycle, operator steps, and close-detection state for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
   - service profiles <id> verify-seeding <target> records a bounded post-close auth probe by reusing the serialized profile freshness update path. Fresh evidence moves a matching closed handoff to fresh; stale, blocked, or inconclusive evidence moves it to verification_pending.
@@ -5885,6 +5907,14 @@ mod tests {
                 "agentNames": ["codex"],
                 "taskNames": ["probeACSwebsite"],
                 "browserIds": ["browser-1"],
+                "browserSummaries": [{
+                    "browserId": "browser-1",
+                    "host": "local_headed",
+                    "health": "process_exited",
+                    "pid": null,
+                    "hasCdpEndpoint": false,
+                    "activeSessionIds": ["runtime-session"]
+                }],
                 "tabIds": ["tab-1"]
             }]
         });
@@ -5893,7 +5923,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs readiness=none user_data=/tmp/work-profile\nProfile allocations: 1\n  work state=conflicted action=release_holder_or_redirect_waiting_jobs readiness=none holders=runtime-session waiting=job-1 conflicts=runtime-session services=JournalDownloader agents=codex tasks=probeACSwebsite browsers=browser-1 tabs=tab-1"
+            "Profiles: 1\n  work name=Work allocation=per_service keyring=basic_password_store persistent=yes manual_login=no services=JournalDownloader targets=acs authenticated=acs readiness=none user_data=/tmp/work-profile\nProfile allocations: 1\n  work state=conflicted action=release_holder_or_redirect_waiting_jobs readiness=none holders=runtime-session waiting=job-1 conflicts=runtime-session services=JournalDownloader agents=codex tasks=probeACSwebsite browsers=browser-1 browser_health=browser-1:process_exited:host=local_headed:cdp=no tabs=tab-1"
         );
     }
 
