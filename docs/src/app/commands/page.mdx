@@ -41,6 +41,7 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
+agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
 agent-browser service profiles        # Show retained service profile records
 agent-browser service sessions        # Show retained service session records
 agent-browser service browsers        # Show retained browser health records
@@ -310,6 +311,7 @@ agent-browser service status          # Inspect worker state, browser health, qu
 agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile       # Probe persisted browser records and update service state
+agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
 agent-browser service profiles        # Show retained profile records
 agent-browser service sessions        # Show retained session records
 agent-browser service browsers        # Show retained browser records and latest health evidence
@@ -368,6 +370,8 @@ The persisted service state also includes bounded audit records for recent contr
 `service status --watch` and `service watch` poll the same status path until interrupted. Use `--interval <ms>` to set the polling interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
 
 `service reconcile` runs the same persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `state.json`, refreshes live tab records for reachable browser CDP endpoints, refreshes the `reconciliation` snapshot, appends service events, and returns the reconciled service state plus counts for total and changed browser records.
+
+`service access-plan` prints the same no-launch recommendation returned by HTTP <code>GET /api/service/access-plan</code> and MCP <code>service_access_plan</code>. Use it before browser work when an operator, agent, or software client needs the selected profile, manual-seeding posture, monitor freshness recommendation, service request availability, and compact <code>browser_build_summary</code> that explains whether stock Chrome, stealth CDP Chromium, or CDP-free headed mode won.
 
 `service cancel <job-id>` marks a queued or lease-waiting service job cancelled before it dispatches or requests cooperative cancellation for a running job. Running cancellation drops the active service future, records the job as <code>cancelled</code>, and cleans up browser state before the worker accepts more work. Terminal jobs are rejected rather than rewritten. Add <code>--reason &lt;text&gt;</code> to record an operator-readable reason for queued cancellation.
 

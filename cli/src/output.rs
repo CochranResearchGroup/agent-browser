@@ -906,6 +906,69 @@ fn json_string_array(value: &serde_json::Value, key: &str) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
+fn format_service_access_plan_text(data: &serde_json::Value) -> Option<String> {
+    let decision = data.get("decision")?;
+    let summary = data
+        .get("browserBuildSelectionSummary")
+        .or_else(|| data.pointer("/decision/launchPosture/browserBuildSelection"))?;
+    let selected_profile_id = data
+        .pointer("/selectedProfile/id")
+        .and_then(|value| value.as_str())
+        .or_else(|| decision.get("profileId").and_then(|value| value.as_str()))
+        .unwrap_or("none");
+    let mut lines = vec![format!(
+        "Access plan: action={} profile={} manual_action={} manual_seeding={}",
+        value_str(decision, "recommendedAction", "unknown"),
+        selected_profile_id,
+        value_bool_label(decision, "manualActionRequired"),
+        value_bool_label(decision, "manualSeedingRequired")
+    )];
+    lines.push(format!(
+        "  browser_build={} source={} evidence={} override={} profile_compatibility={} validation={} preference_binding={}",
+        value_str(summary, "browserBuild", "unknown"),
+        value_str(summary, "source", "unknown"),
+        value_str(summary, "evidenceSource", "unknown"),
+        value_bool_label(summary, "operatorOverride"),
+        value_str(summary, "profileCompatibilityStatus", "unknown"),
+        value_str(summary, "validationEvidenceStatus", "unknown"),
+        value_str(summary, "selectedPreferenceBindingId", "none")
+    ));
+    let compact = summary
+        .get("compact")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    lines.push(format!("  browser_build_summary={compact}"));
+    if let Some(attention) = decision.get("attention") {
+        lines.push(format!(
+            "  attention required={} owner={} severity={} reason={}",
+            value_bool_label(attention, "required"),
+            value_str(attention, "owner", "unknown"),
+            value_str(attention, "severity", "unknown"),
+            value_str(attention, "reason", "unknown")
+        ));
+    }
+    if let Some(monitor_run_due) = decision.get("monitorRunDue") {
+        lines.push(format!(
+            "  monitor_run_due available={} recommended={} monitors={} targets={}",
+            value_bool_label(monitor_run_due, "available"),
+            value_bool_label(monitor_run_due, "recommendedBeforeUse"),
+            json_string_array(monitor_run_due, "monitorIds"),
+            json_string_array(monitor_run_due, "targetServiceIds")
+        ));
+    }
+    if let Some(service_request) = decision.get("serviceRequest") {
+        let request = service_request.get("request").unwrap_or(service_request);
+        lines.push(format!(
+            "  service_request available={} action={} cdp_free={} blocked_manual={}",
+            value_bool_label(service_request, "available"),
+            value_str(request, "action", "unknown"),
+            value_bool_label(service_request, "requiresCdpFree"),
+            value_bool_label(service_request, "blockedByManualAction")
+        ));
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_browser_capability_preflight_text(data: &serde_json::Value) -> Option<String> {
     let launch = data.get("browserCapabilityLaunch")?;
     let request = data.get("request").unwrap_or(data);
@@ -1986,6 +2049,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_status") {
             if let Some(output) = format_service_status_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_access_plan") {
+            if let Some(output) = format_service_access_plan_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -4528,6 +4597,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
+  agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]
   agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
   agent-browser service profiles
   agent-browser service sessions
@@ -4560,6 +4630,7 @@ Commands:
   status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
+  access-plan           Show the no-launch profile, readiness, site-policy, provider, challenge, and browser-build routing recommendation
   browser-capability    Preflight guarded executable routing for one requested browser build without launching
   profiles              Show retained service profile records and derived allocation state
   profiles <id> seeding-handoff [target]
@@ -4592,6 +4663,8 @@ Commands:
 
 Notes:
   - It does not launch a browser.
+  - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
+  - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.
   - Persisted service state is loaded from ~/.agent-browser/service/state.json.
   - The current control-plane snapshot is refreshed in the persisted service state.
@@ -4669,6 +4742,7 @@ Examples:
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
+  agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
   agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
   agent-browser service profiles
   agent-browser service sessions
@@ -5172,6 +5246,7 @@ Service:
   service status             Show service worker health, profile lease waits, and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
+  service access-plan        Show no-launch profile and browser-build routing recommendation
   service profiles           Show retained profile records and allocation state
   service sessions           Show retained service session records
   service browsers           Show retained browser health records
@@ -5487,6 +5562,7 @@ Examples:
   agent-browser service status           # Inspect service control-plane state
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
+  agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
   agent-browser service profiles         # Inspect retained service profiles and allocation state
   agent-browser service sessions         # Inspect retained service session records
   agent-browser service browsers         # Inspect retained browser health records
@@ -5627,9 +5703,9 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_service_browser_capability_preflight_text, format_service_browsers_text,
-        format_service_challenges_text, format_service_events_text, format_service_incidents_text,
-        format_service_jobs_text, format_service_monitor_state_text,
+        format_service_access_plan_text, format_service_browser_capability_preflight_text,
+        format_service_browsers_text, format_service_challenges_text, format_service_events_text,
+        format_service_incidents_text, format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
         format_service_profile_seeding_handoff_text, format_service_profiles_text,
         format_service_providers_text, format_service_sessions_text,
@@ -5879,6 +5955,54 @@ mod tests {
         assert!(rendered.contains("binding=canva-stealth"));
         assert!(rendered.contains("profile_compatibility=canva-profile-compatible"));
         assert!(rendered.contains("validation_evidence=stealth-launch-smoke"));
+    }
+
+    #[test]
+    fn test_format_service_access_plan_text_includes_browser_build_summary() {
+        let data = json!({
+            "selectedProfile": {
+                "id": "canva-default"
+            },
+            "decision": {
+                "recommendedAction": "use_selected_profile",
+                "manualActionRequired": false,
+                "manualSeedingRequired": false,
+                "attention": {
+                    "required": false,
+                    "owner": "none",
+                    "severity": "info",
+                    "reason": "use_selected_profile"
+                },
+                "serviceRequest": {
+                    "available": true,
+                    "requiresCdpFree": false,
+                    "blockedByManualAction": false,
+                    "request": {
+                        "action": "tab_new"
+                    }
+                }
+            },
+            "browserBuildSelectionSummary": {
+                "browserBuild": "stealthcdp_chromium",
+                "source": "browser_preference_binding",
+                "evidenceSource": "service.browserCapabilityRegistry",
+                "operatorOverride": false,
+                "profileCompatibilityStatus": "compatible",
+                "validationEvidenceStatus": "passed",
+                "selectedPreferenceBindingId": "canva-stealth-preference",
+                "compact": "build=stealthcdp_chromium source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference"
+            }
+        });
+
+        let rendered = format_service_access_plan_text(&data).unwrap();
+
+        assert!(rendered.contains("Access plan: action=use_selected_profile profile=canva-default"));
+        assert!(rendered.contains("browser_build=stealthcdp_chromium"));
+        assert!(rendered.contains("preference_binding=canva-stealth-preference"));
+        assert!(rendered.contains("browser_build_summary=build=stealthcdp_chromium"));
+        assert!(rendered.contains(
+            "service_request available=yes action=tab_new cdp_free=no blocked_manual=no"
+        ));
     }
 
     #[test]

@@ -39,6 +39,7 @@ agent-browser service remedies apply --escalation browser_degraded --by operator
 agent-browser service remedies apply --escalation os_degraded_possible --by operator --note host-inspected
 agent-browser service jobs --limit 20
 agent-browser service reconcile
+agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
 agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
 ```
 
@@ -63,6 +64,15 @@ profile hints, headed or headless posture, and CDP-free posture, then prints
 whether the service would apply a matching executable binding and the exact
 reason. Passing routes include the selected binding, host, executable,
 capability, profile compatibility evidence IDs, and validation evidence IDs.
+
+Use <code>agent-browser service access-plan</code> before browser work when a
+shell operator or CLI-driven agent needs the same broker recommendation as HTTP
+<code>GET /api/service/access-plan</code>, MCP
+<code>service_access_plan</code>, or
+<code>agent-browser://access-plan</code>. The text view includes selected
+profile, manual-seeding posture, monitor freshness recommendation, service
+request availability, and compact <code>browser_build_summary</code> routing
+audit output.
 
 Use the HTTP API when another program owns the workflow lifecycle:
 

@@ -39,6 +39,7 @@ use super::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use super::providers;
 use super::recording::{self, RecordingState};
 use super::screenshot::{self, ScreenshotOptions};
+use super::service_access::{service_access_plan_for_state, ServiceAccessPlanRequest};
 use super::service_activity::service_incident_activity_response;
 use super::service_config::{
     delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
@@ -212,6 +213,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "stream_status"
             | "service_status"
             | "service_reconcile"
+            | "service_access_plan"
             | "service_browser_capability_preflight"
             | "service_job_cancel"
             | "service_browser_retry"
@@ -2999,6 +3001,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_status" => handle_stream_status(state).await,
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
+        "service_access_plan" => handle_service_access_plan(cmd).await,
         "service_browser_capability_preflight" => {
             handle_service_browser_capability_preflight(cmd).await
         }
@@ -7447,6 +7450,150 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
     }))
 }
 
+/// Return the no-launch service access plan from the current service state.
+async fn handle_service_access_plan(cmd: &Value) -> Result<Value, String> {
+    let mut service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    service_state.refresh_profile_readiness();
+
+    let request = ServiceAccessPlanRequest {
+        service_name: optional_command_string(cmd, "serviceName"),
+        agent_name: optional_command_string(cmd, "agentName"),
+        task_name: optional_command_string(cmd, "taskName"),
+        target_service_ids: target_service_ids_from_command(cmd),
+        account_ids: account_ids_from_command(cmd),
+        target_url: target_url_from_command(cmd),
+        site_policy_id: optional_command_string(cmd, "sitePolicyId"),
+        challenge_id: optional_command_string(cmd, "challengeId"),
+        readiness_profile_id: optional_command_string(cmd, "readinessProfileId"),
+        browser_build: browser_build_from_command(cmd),
+        browser_build_explicit: cmd.get("browserBuild").and_then(Value::as_str).is_some(),
+    };
+
+    let mut plan = service_access_plan_for_state(&service_state, request);
+    let summary = access_plan_browser_build_selection_summary(&plan);
+    if let Some(object) = plan.as_object_mut() {
+        object.insert("browserBuildSelectionSummary".to_string(), summary);
+    }
+    Ok(plan)
+}
+
+fn access_plan_browser_build_selection_summary(plan: &Value) -> Value {
+    let selection = plan
+        .pointer("/decision/launchPosture/browserBuildSelection")
+        .unwrap_or(&Value::Null);
+    let profile_compatibility = selection
+        .get("profileCompatibility")
+        .unwrap_or(&Value::Null);
+    let validation_evidence = selection.get("validationEvidence").unwrap_or(&Value::Null);
+    let browser_build = optional_command_string(selection, "browserBuild");
+    let source = optional_command_string(selection, "source");
+    let evidence_source = optional_command_string(selection, "evidenceSource");
+    let profile_compatibility_status = optional_command_string(profile_compatibility, "status");
+    let validation_evidence_status = optional_command_string(validation_evidence, "status");
+    let selected_preference_binding_id =
+        optional_command_string(selection, "selectedPreferenceBindingId");
+    let mut compact_parts = vec![
+        format!("build={}", browser_build.as_deref().unwrap_or("unknown")),
+        format!("source={}", source.as_deref().unwrap_or("unknown")),
+        format!(
+            "evidence={}",
+            evidence_source.as_deref().unwrap_or("unknown")
+        ),
+        format!(
+            "override={}",
+            if selection
+                .get("operatorOverride")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                "yes"
+            } else {
+                "no"
+            }
+        ),
+        format!(
+            "profileCompatibility={}",
+            profile_compatibility_status.as_deref().unwrap_or("unknown")
+        ),
+        format!(
+            "validation={}",
+            validation_evidence_status.as_deref().unwrap_or("unknown")
+        ),
+    ];
+    if let Some(binding_id) = selected_preference_binding_id.as_deref() {
+        compact_parts.push(format!("preferenceBinding={binding_id}"));
+    }
+    let mut audit_flags = Vec::new();
+    if source.as_deref() == Some("browser_preference_binding") {
+        audit_flags.push("preference_binding_selected");
+    }
+    if selection
+        .get("operatorOverride")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        audit_flags.push("operator_override");
+    }
+    if selection
+        .get("requiresCdpFree")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        audit_flags.push("requires_cdp_free");
+    }
+    if profile_compatibility_status.as_deref() == Some("incompatible_or_mixed") {
+        audit_flags.push("profile_compatibility_attention");
+    }
+    if matches!(
+        validation_evidence_status.as_deref(),
+        Some("failed_or_mixed" | "missing")
+    ) {
+        audit_flags.push("validation_evidence_attention");
+    }
+    let attention_required = audit_flags.iter().any(|flag| flag.ends_with("_attention"));
+    json!({
+        "browserBuild": browser_build,
+        "source": source,
+        "evidenceSource": evidence_source,
+        "summary": optional_command_string(selection, "summary"),
+        "operatorOverride": selection.get("operatorOverride").and_then(Value::as_bool).unwrap_or(false),
+        "requiresCdpFree": selection.get("requiresCdpFree").and_then(Value::as_bool).unwrap_or(false),
+        "selectedProfileId": optional_command_string(selection, "selectedProfileId"),
+        "selectedProfileBrowserBuild": optional_command_string(selection, "selectedProfileBrowserBuild"),
+        "selectedPreferenceBindingId": selected_preference_binding_id,
+        "selectedPreferenceBindingReason": optional_command_string(selection, "selectedPreferenceBindingReason"),
+        "profileCompatibilityStatus": profile_compatibility_status,
+        "profileCompatibilityReason": optional_command_string(profile_compatibility, "reason"),
+        "profileCompatibilityIds": string_array_field(profile_compatibility, "matchingIds"),
+        "validationEvidenceStatus": validation_evidence_status,
+        "validationEvidenceReason": optional_command_string(validation_evidence, "reason"),
+        "validationEvidenceIds": string_array_field(validation_evidence, "matchingIds"),
+        "auditFlags": audit_flags,
+        "attentionRequired": attention_required,
+        "compact": compact_parts.join(" "),
+    })
+}
+
+fn string_array_field(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
 /// Evaluate browser capability launch gates without starting Chrome.
 async fn handle_service_browser_capability_preflight(cmd: &Value) -> Result<Value, String> {
     let requested_build = browser_build_from_command(cmd);
@@ -11746,6 +11893,30 @@ mod tests {
         let _ = fs::remove_dir_all(&home);
     }
 
+    #[tokio::test]
+    async fn test_service_access_plan_reports_browser_build_summary_without_launch() {
+        let response = handle_service_access_plan(&json!({
+            "serviceName": "CanvaCLI",
+            "agentName": "codex",
+            "taskName": "openCanvaWorkspace",
+            "loginId": "canary-site",
+            "browserBuild": "stealthcdp_chromium"
+        }))
+        .await
+        .expect("access plan should evaluate");
+
+        assert_eq!(response["query"]["serviceName"], "CanvaCLI");
+        assert!(response["decision"].is_object());
+        assert_eq!(
+            response["browserBuildSelectionSummary"]["browserBuild"],
+            "stealthcdp_chromium"
+        );
+        assert!(response["browserBuildSelectionSummary"]["compact"]
+            .as_str()
+            .expect("compact summary should be present")
+            .contains("build=stealthcdp_chromium"));
+    }
+
     #[test]
     fn test_apply_service_browser_capability_selection_requires_compatibility() {
         let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_EXECUTABLE_PATH"]);
@@ -12226,6 +12397,8 @@ mod tests {
             "service_provider_upsert",
             "service_provider_delete",
             "service_browser_capability_registry_upsert",
+            "service_access_plan",
+            "service_browser_capability_preflight",
             "service_incident_acknowledge",
             "service_incident_resolve",
             "service_incident_activity",
