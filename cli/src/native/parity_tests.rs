@@ -378,8 +378,31 @@ fn minimal_command(action: &str, id: &str) -> Value {
 // 1. Action dispatch coverage
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn test_all_documented_actions_are_handled() {
+    let env_guard = EnvGuard::new(&[
+        "AGENT_BROWSER_ACTION_POLICY",
+        "AGENT_BROWSER_ALLOWED_DOMAINS",
+        "AGENT_BROWSER_CONFIRM_ACTIONS",
+        "AGENT_BROWSER_DEFAULT_TIMEOUT",
+        "AGENT_BROWSER_ENGINE",
+        "AGENT_BROWSER_EXECUTABLE_PATH",
+        "AGENT_BROWSER_PROFILE",
+        "AGENT_BROWSER_RUNTIME_PROFILE",
+        "AGENT_BROWSER_SESSION",
+        "AGENT_BROWSER_SESSION_NAME",
+    ]);
+    env_guard.remove("AGENT_BROWSER_ACTION_POLICY");
+    env_guard.remove("AGENT_BROWSER_ALLOWED_DOMAINS");
+    env_guard.remove("AGENT_BROWSER_CONFIRM_ACTIONS");
+    env_guard.remove("AGENT_BROWSER_DEFAULT_TIMEOUT");
+    env_guard.remove("AGENT_BROWSER_ENGINE");
+    env_guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+    env_guard.remove("AGENT_BROWSER_PROFILE");
+    env_guard.remove("AGENT_BROWSER_RUNTIME_PROFILE");
+    env_guard.remove("AGENT_BROWSER_SESSION");
+    env_guard.remove("AGENT_BROWSER_SESSION_NAME");
+
     let mut state = DaemonState::new();
 
     for (i, action) in DOCUMENTED_ACTIONS.iter().enumerate() {
