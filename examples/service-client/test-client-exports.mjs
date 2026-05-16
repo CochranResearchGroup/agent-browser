@@ -16,6 +16,7 @@ import {
   createServiceProfileReadinessMonitor,
   findServiceProfileForIdentity,
   getServiceAccessPlan,
+  getServiceProfileAllocationForAccessPlan,
   getServiceProfileForIdentity,
   getServiceProfileReadiness,
   getServiceProfileSeedingHandoff,
@@ -43,6 +44,7 @@ assert.equal(typeof cancelServiceJob, 'function');
 assert.equal(typeof createServiceProfileReadinessMonitor, 'function');
 assert.equal(typeof findServiceProfileForIdentity, 'function');
 assert.equal(typeof getServiceAccessPlan, 'function');
+assert.equal(typeof getServiceProfileAllocationForAccessPlan, 'function');
 assert.equal(typeof getServiceProfileForIdentity, 'function');
 assert.equal(typeof getServiceProfileReadiness, 'function');
 assert.equal(typeof getServiceProfileSeedingHandoff, 'function');

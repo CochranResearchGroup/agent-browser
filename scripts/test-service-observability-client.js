@@ -12,6 +12,7 @@ import {
   getServiceContracts,
   getServiceMonitors,
   getServiceProfileAllocation,
+  getServiceProfileAllocationForAccessPlan,
   getServiceProfileForIdentity,
   getServiceProfileReadiness,
   getServiceProfileSeedingHandoff,
@@ -1138,6 +1139,61 @@ async function main() {
   ]);
   assert.equal(accessPlanResult.decision.monitorAttentionRequired, true);
   assert.equal(accessPlanResult.decision.recommendedAction, 'use_selected_profile');
+
+  const accessPlanAllocation = createFetchRecorder({
+    success: true,
+    data: {
+      profileAllocation: {
+        profileId: 'authenticated',
+        profileName: 'Authenticated',
+        allocation: 'per_service',
+        keyring: 'basic_password_store',
+        browserBuild: 'stealthcdp_chromium',
+        targetServiceIds: ['canva'],
+        authenticatedServiceIds: ['canva'],
+        accountIds: [],
+        targetReadiness: [],
+        sharedServiceIds: ['CanvaCLI'],
+        holderSessionIds: ['session-1'],
+        holderCount: 1,
+        exclusiveHolderSessionIds: ['session-1'],
+        waitingJobIds: [],
+        waitingJobCount: 0,
+        conflictSessionIds: [],
+        leaseState: 'exclusive',
+        recommendedAction: 'reuse_holder_or_wait',
+        serviceNames: ['CanvaCLI'],
+        agentNames: ['codex'],
+        taskNames: ['openCanvaWorkspace'],
+        browserIds: ['browser-1'],
+        browserSummaries: [
+          {
+            browserId: 'browser-1',
+            host: 'local_headed',
+            health: 'ready',
+            pid: 42,
+            hasCdpEndpoint: true,
+            activeSessionIds: ['session-1'],
+          },
+        ],
+        tabIds: ['tab-1'],
+      },
+    },
+  });
+  const accessPlanAllocationResult = await getServiceProfileAllocationForAccessPlan({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: accessPlanAllocation.fetch,
+    accessPlan: accessPlanResult,
+  });
+  assert.equal(
+    accessPlanAllocation.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/authenticated/allocation',
+  );
+  assert.equal(accessPlanAllocation.calls[0].init.method, 'GET');
+  assert.equal(
+    summarizeServiceProfileAllocationBrowserHealth(accessPlanAllocationResult).compact,
+    'browser-1:ready:host=local_headed:cdp=yes',
+  );
 
   const emptyLookup = createFetchRecorder({
     success: true,

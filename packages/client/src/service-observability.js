@@ -196,6 +196,25 @@ export function getServiceProfileAllocation({ id, ...options }) {
 }
 
 /**
+ * Fetch the selected profile allocation advertised by an access-plan response.
+ *
+ * @param {import('./service-observability.generated.js').ServiceAccessPlanProfileAllocationOptions} options
+ * @returns {Promise<ServiceProfileAllocationResponse>}
+ */
+export function getServiceProfileAllocationForAccessPlan({ accessPlan, ...options }) {
+  assertPlainObject(accessPlan, 'service access plan');
+  const selectedProfileId =
+    nestedString(accessPlan, ['selectedProfile', 'id']) ??
+    nestedString(accessPlan, ['decision', 'profileId']) ??
+    nestedString(accessPlan, ['decision', 'serviceRequest', 'selectedProfileId']);
+  assertServiceId(selectedProfileId, 'getServiceProfileAllocationForAccessPlan');
+  return getServiceProfileAllocation({
+    ...options,
+    id: selectedProfileId,
+  });
+}
+
+/**
  * Summarize browser ownership and readiness from one profile allocation row.
  *
  * @param {import('./service-observability.generated.js').ServiceProfileAllocation | ServiceProfileAllocationResponse | null | undefined} allocation

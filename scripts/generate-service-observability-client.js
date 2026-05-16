@@ -1363,6 +1363,10 @@ export interface ServiceAccessPlanBrowserCapabilityPreflightRunOptions extends S
   accessPlan: ServiceAccessPlanResponse;
 }
 
+export interface ServiceAccessPlanProfileAllocationOptions extends ServiceObservabilityHttpOptions {
+  accessPlan: ServiceAccessPlanResponse;
+}
+
 export interface ServiceAccessPlanMonitorRunDueSummary {
   targetServiceIds: string[];
   matched: number;
@@ -1886,6 +1890,8 @@ export declare function getServiceBrowserCapabilityRegistry(options: ServiceObse
 export declare function getServiceBrowserCapabilityPreflight(options: ServiceBrowserCapabilityPreflightOptions): Promise<ServiceBrowserCapabilityPreflightResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
+/** Fetch the selected profile allocation advertised by an access-plan response. */
+export declare function getServiceProfileAllocationForAccessPlan(options: ServiceAccessPlanProfileAllocationOptions): Promise<ServiceProfileAllocationResponse>;
 /** Summarize browser ownership and readiness from one profile allocation row. */
 export declare function summarizeServiceProfileAllocationBrowserHealth(allocation?: ServiceProfileAllocation | ServiceProfileAllocationResponse | null): ServiceProfileAllocationBrowserHealthSummary;
 /** Read one profile's no-launch target readiness rows. */

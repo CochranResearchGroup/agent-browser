@@ -120,6 +120,9 @@ same compact browser-health labels shown by `agent-browser service profiles`.
 The summary includes `compact`, `compactLabels`, ready and non-ready browser
 IDs, health states, and the recommended recovery action for log lines, traces,
 and operator-facing status output.
+If the client already has an access-plan response, use
+`getServiceProfileAllocationForAccessPlan()` to fetch the broker-selected
+profile allocation without manually unpacking `selectedProfile.id`.
 Prefer `acquireServiceLoginProfile()` when the client is deciding whether to
 register or seed a managed profile. It calls `getServiceAccessPlan()` first,
 registers the fallback profile only when no profile is selected, optionally
