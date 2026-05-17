@@ -75,6 +75,8 @@ const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id
 
 const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
 
+const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
+
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
 
 fn parse_service_access_plan(
@@ -397,6 +399,275 @@ fn parse_service_browser_capability_preflight(
         });
     }
     Ok(cmd)
+}
+
+fn parse_service_browser_capability_prefer(id: String, rest: &[&str]) -> Result<Value, ParseError> {
+    if rest.get(1).copied() != Some("prefer") {
+        return Err(ParseError::InvalidValue {
+            message: "Expected service browser-capability prefer".to_string(),
+            usage: SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+        });
+    }
+    let mut binding_id: Option<String> = None;
+    let mut browser_build: Option<String> = None;
+    let mut preferred_executable_id: Option<String> = None;
+    let mut preferred_host_id: Option<String> = None;
+    let mut preferred_capability_id: Option<String> = None;
+    let mut target_service_ids: Vec<String> = Vec::new();
+    let mut account_ids: Vec<String> = Vec::new();
+    let mut service_names: Vec<String> = Vec::new();
+    let mut task_names: Vec<String> = Vec::new();
+    let mut priority: i64 = 100;
+    let mut reason = "operator_primary_browser_preference".to_string();
+
+    let mut i = 2;
+    while i < rest.len() {
+        match rest[i] {
+            "--id" => {
+                binding_id = Some(required_next(
+                    rest,
+                    i,
+                    "--id",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?);
+                i += 1;
+            }
+            "--browser-build" => {
+                let value = required_next(
+                    rest,
+                    i,
+                    "--browser-build",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?;
+                match crate::native::service_model::BrowserBuild::parse_label(&value) {
+                    Some(_) => browser_build = Some(value),
+                    None => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --browser-build value: {}", value),
+                            usage: SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--preferred-executable-id" => {
+                preferred_executable_id = Some(required_next(
+                    rest,
+                    i,
+                    "--preferred-executable-id",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?);
+                i += 1;
+            }
+            "--preferred-host-id" => {
+                preferred_host_id = Some(required_next(
+                    rest,
+                    i,
+                    "--preferred-host-id",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?);
+                i += 1;
+            }
+            "--preferred-capability-id" => {
+                preferred_capability_id = Some(required_next(
+                    rest,
+                    i,
+                    "--preferred-capability-id",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?);
+                i += 1;
+            }
+            "--target-service-id" | "--target-service" | "--site-id" | "--login-id" => {
+                target_service_ids.push(required_next(
+                    rest,
+                    i,
+                    rest[i],
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?);
+                i += 1;
+            }
+            "--account-id" => {
+                account_ids.push(required_next(
+                    rest,
+                    i,
+                    "--account-id",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?);
+                i += 1;
+            }
+            "--service-name" => {
+                service_names.push(required_next(
+                    rest,
+                    i,
+                    "--service-name",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?);
+                i += 1;
+            }
+            "--task-name" => {
+                task_names.push(required_next(
+                    rest,
+                    i,
+                    "--task-name",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?);
+                i += 1;
+            }
+            "--priority" => {
+                let value = required_next(
+                    rest,
+                    i,
+                    "--priority",
+                    SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                )?;
+                priority = value.parse::<i64>().map_err(|_| ParseError::InvalidValue {
+                    message: format!("Invalid --priority value: {}", value),
+                    usage: SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                })?;
+                if priority < 0 {
+                    return Err(ParseError::InvalidValue {
+                        message: "--priority must be 0 or greater".to_string(),
+                        usage: SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                    });
+                }
+                i += 1;
+            }
+            "--reason" => {
+                reason =
+                    required_next(rest, i, "--reason", SERVICE_BROWSER_CAPABILITY_PREFER_USAGE)?;
+                i += 1;
+            }
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!(
+                        "Unknown flag for service browser-capability prefer: {}",
+                        flag
+                    ),
+                    usage: SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+                });
+            }
+        }
+        i += 1;
+    }
+
+    let Some(browser_build) = browser_build else {
+        return Err(ParseError::MissingArguments {
+            context: "service browser-capability prefer".to_string(),
+            usage: SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+        });
+    };
+    let Some(preferred_executable_id) = preferred_executable_id else {
+        return Err(ParseError::MissingArguments {
+            context: "service browser-capability prefer".to_string(),
+            usage: SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+        });
+    };
+    if target_service_ids.is_empty()
+        && account_ids.is_empty()
+        && service_names.is_empty()
+        && task_names.is_empty()
+    {
+        return Err(ParseError::InvalidValue {
+            message: "At least one target, account, service, or task filter is required"
+                .to_string(),
+            usage: SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
+        });
+    }
+
+    let scope = if !account_ids.is_empty() {
+        "account"
+    } else if !target_service_ids.is_empty() {
+        "site"
+    } else if !task_names.is_empty() {
+        "task"
+    } else {
+        "service"
+    };
+    let record_id = binding_id.unwrap_or_else(|| {
+        browser_preference_binding_id(
+            &browser_build,
+            &preferred_executable_id,
+            &target_service_ids,
+            &account_ids,
+            &service_names,
+            &task_names,
+        )
+    });
+    let record = json!({
+        "id": record_id.clone(),
+        "scope": scope,
+        "targetServiceIds": target_service_ids,
+        "accountIds": account_ids,
+        "serviceNames": service_names,
+        "taskNames": task_names,
+        "preferredHostId": preferred_host_id,
+        "preferredExecutableId": preferred_executable_id,
+        "preferredCapabilityId": preferred_capability_id,
+        "browserBuild": browser_build,
+        "priority": priority,
+        "reason": reason,
+        "source": "cli",
+    });
+
+    Ok(json!({
+        "id": id,
+        "action": "service_browser_capability_registry_upsert",
+        "collection": "browserPreferenceBindings",
+        "recordId": record_id,
+        "record": record,
+    }))
+}
+
+fn required_next(
+    rest: &[&str],
+    index: usize,
+    flag: &str,
+    usage: &'static str,
+) -> Result<String, ParseError> {
+    rest.get(index + 1)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| ParseError::InvalidValue {
+            message: format!("Missing value for {}", flag),
+            usage,
+        })
+}
+
+fn browser_preference_binding_id(
+    browser_build: &str,
+    preferred_executable_id: &str,
+    target_service_ids: &[String],
+    account_ids: &[String],
+    service_names: &[String],
+    task_names: &[String],
+) -> String {
+    let mut parts = vec!["primary".to_string(), browser_build.to_string()];
+    parts.extend(target_service_ids.iter().cloned());
+    parts.extend(account_ids.iter().cloned());
+    parts.extend(service_names.iter().cloned());
+    parts.extend(task_names.iter().cloned());
+    parts.push(preferred_executable_id.to_string());
+    slug_id(&parts.join("-"))
+}
+
+fn slug_id(value: &str) -> String {
+    let mut slug = String::new();
+    for ch in value.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+        } else if matches!(ch, '-' | '_' | '.') {
+            slug.push(ch);
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() {
+        format!("primary-browser-{}", gen_id())
+    } else {
+        slug.to_string()
+    }
 }
 
 fn parse_service_profile_verify_seeding(
@@ -1504,9 +1775,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }))
             }
             Some("access-plan") => parse_service_access_plan(id, &rest, flags),
-            Some("browser-capability") => {
-                parse_service_browser_capability_preflight(id, &rest, flags)
-            }
+            Some("browser-capability") => match rest.get(1).copied() {
+                Some("preflight") => parse_service_browser_capability_preflight(id, &rest, flags),
+                Some("prefer") => parse_service_browser_capability_prefer(id, &rest),
+                Some(subcommand) => Err(ParseError::UnknownSubcommand {
+                    subcommand: subcommand.to_string(),
+                    valid_options: &["preflight", "prefer"],
+                }),
+                None => Err(ParseError::MissingArguments {
+                    context: "service browser-capability".to_string(),
+                    usage: "service browser-capability <preflight|prefer>",
+                }),
+            },
             Some("profiles") => {
                 if rest.len() >= 3 && rest[2] == "seeding-handoff" {
                     if rest.len() > 4 {
@@ -6084,6 +6364,58 @@ mod tests {
         assert_eq!(cmd["agentName"], "codex");
         assert_eq!(cmd["taskName"], "openCanvaWorkspace");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_browser_capability_prefer_builds_preference_binding() {
+        let cmd = parse_command(
+            &args("service browser-capability prefer --browser-build stock_chrome --target-service-id only-works-on-chrome --account-id myuser --preferred-executable-id windows-chrome-stable --preferred-host-id windows-desktop-1 --preferred-capability-id windows-chrome-capability --priority 250 --reason site_requires_stock_chrome"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_browser_capability_registry_upsert");
+        assert_eq!(cmd["collection"], "browserPreferenceBindings");
+        assert_eq!(
+            cmd["recordId"],
+            "primary-stock_chrome-only-works-on-chrome-myuser-windows-chrome-stable"
+        );
+        assert_eq!(
+            cmd["record"]["id"],
+            "primary-stock_chrome-only-works-on-chrome-myuser-windows-chrome-stable"
+        );
+        assert_eq!(cmd["record"]["scope"], "account");
+        assert_eq!(
+            cmd["record"]["targetServiceIds"],
+            json!(["only-works-on-chrome"])
+        );
+        assert_eq!(cmd["record"]["accountIds"], json!(["myuser"]));
+        assert_eq!(
+            cmd["record"]["preferredExecutableId"],
+            "windows-chrome-stable"
+        );
+        assert_eq!(cmd["record"]["preferredHostId"], "windows-desktop-1");
+        assert_eq!(
+            cmd["record"]["preferredCapabilityId"],
+            "windows-chrome-capability"
+        );
+        assert_eq!(cmd["record"]["browserBuild"], "stock_chrome");
+        assert_eq!(cmd["record"]["priority"], 250);
+        assert_eq!(cmd["record"]["reason"], "site_requires_stock_chrome");
+    }
+
+    #[test]
+    fn test_service_browser_capability_prefer_requires_filter() {
+        let err = parse_command(
+            &args("service browser-capability prefer --browser-build stock_chrome --preferred-executable-id windows-chrome-stable"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+        assert!(err
+            .format()
+            .contains("At least one target, account, service, or task filter"));
     }
 
     #[test]

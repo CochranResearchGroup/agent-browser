@@ -36,6 +36,7 @@ import {
   triageServiceMonitor,
   updateServiceProfileFreshness,
   updateServiceProfileSeedingHandoff,
+  upsertServiceBrowserPreferenceBinding,
   upsertServiceMonitor,
   verifyServiceProfileSeeding,
 } from '../packages/client/src/service-observability.js';
@@ -300,6 +301,44 @@ async function main() {
   );
   assert.equal(monitorUpsert.calls[0].init.method, 'POST');
   assert.equal(monitorUpsertResult.monitor.id, 'google-login-freshness');
+
+  const browserPreferenceUpsert = createFetchRecorder({
+    success: true,
+    data: {
+      id: 'primary-stock_chrome-only-works-on-chrome-myuser-windows-chrome-stable',
+      upserted: true,
+      collection: 'browserPreferenceBindings',
+      record: {},
+      routingApplied: false,
+    },
+  });
+  const browserPreferenceResult = await upsertServiceBrowserPreferenceBinding({
+    browserBuild: 'stock_chrome',
+    targetServiceId: 'only-works-on-chrome',
+    accountId: 'myuser',
+    preferredExecutableId: 'windows-chrome-stable',
+    preferredHostId: 'windows-desktop-1',
+    preferredCapabilityId: 'windows-chrome-capability',
+    priority: 250,
+    reason: 'site_requires_stock_chrome',
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: browserPreferenceUpsert.fetch,
+  });
+  assert.equal(
+    browserPreferenceUpsert.calls[0].url,
+    'http://127.0.0.1:4849/api/service/browser-capability-registry/browserPreferenceBindings/primary-stock_chrome-only-works-on-chrome-myuser-windows-chrome-stable',
+  );
+  assert.equal(browserPreferenceUpsert.calls[0].init.method, 'POST');
+  assert.equal(browserPreferenceUpsert.calls[0].body.scope, 'account');
+  assert.deepEqual(browserPreferenceUpsert.calls[0].body.targetServiceIds, ['only-works-on-chrome']);
+  assert.deepEqual(browserPreferenceUpsert.calls[0].body.accountIds, ['myuser']);
+  assert.equal(browserPreferenceUpsert.calls[0].body.browserBuild, 'stock_chrome');
+  assert.equal(browserPreferenceUpsert.calls[0].body.preferredExecutableId, 'windows-chrome-stable');
+  assert.equal(browserPreferenceUpsert.calls[0].body.preferredHostId, 'windows-desktop-1');
+  assert.equal(browserPreferenceUpsert.calls[0].body.preferredCapabilityId, 'windows-chrome-capability');
+  assert.equal(browserPreferenceUpsert.calls[0].body.priority, 250);
+  assert.equal(browserPreferenceUpsert.calls[0].body.reason, 'site_requires_stock_chrome');
+  assert.equal(browserPreferenceResult.collection, 'browserPreferenceBindings');
 
   const monitorDelete = createFetchRecorder({
     success: true,

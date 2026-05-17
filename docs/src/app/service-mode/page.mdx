@@ -61,6 +61,10 @@ reason, browser build, binding, host, executable, and trace context.
 Preference binding filters are conjunctive. A binding with both
 <code>targetServiceIds</code> and <code>accountIds</code> matches only when the
 request includes the matching site and account.
+Operators can write that primary route without hand-authored JSON:
+<code>agent-browser service browser-capability prefer --browser-build stock_chrome --target-service-id only-works-on-chrome --account-id myuser --preferred-executable-id windows-chrome-stable</code>.
+Software clients can call <code>upsertServiceBrowserPreferenceBinding()</code>
+for the same <code>browserPreferenceBindings</code> record.
 Use <code>agent-browser service browser-capability preflight</code> when an
 operator wants the same guarded launch-gate decision before opening Chrome. It
 accepts the requested browser build, site/login/account hints, caller labels,

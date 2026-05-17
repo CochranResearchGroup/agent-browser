@@ -39,6 +39,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryResponse} ServiceBrowserCapabilityRegistryResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityPreflightOptions} ServiceBrowserCapabilityPreflightOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityPreflightResponse} ServiceBrowserCapabilityPreflightResponse
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserPreferenceBindingOptions} ServiceBrowserPreferenceBindingOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryUpsertOptions} ServiceBrowserCapabilityRegistryUpsertOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryUpsertResponse} ServiceBrowserCapabilityRegistryUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceQueryOptions} ServiceQueryOptions
@@ -1654,6 +1655,74 @@ export function upsertServiceBrowserCapabilityRegistryRecord({ collection, id, r
 }
 
 /**
+ * @param {ServiceBrowserPreferenceBindingOptions} options
+ * @returns {Promise<ServiceBrowserCapabilityRegistryUpsertResponse>}
+ */
+export function upsertServiceBrowserPreferenceBinding({
+  id,
+  browserBuild,
+  preferredExecutableId,
+  preferredHostId = null,
+  preferredCapabilityId = null,
+  targetServiceId,
+  siteId,
+  loginId,
+  targetServiceIds = [],
+  accountId,
+  accountIds = [],
+  serviceName,
+  serviceNames = [],
+  taskName,
+  taskNames = [],
+  priority = 100,
+  reason = 'operator_primary_browser_preference',
+  record = {},
+  ...options
+}) {
+  if (typeof browserBuild !== 'string' || browserBuild.length === 0) {
+    throw new TypeError('upsertServiceBrowserPreferenceBinding requires browserBuild');
+  }
+  if (typeof preferredExecutableId !== 'string' || preferredExecutableId.length === 0) {
+    throw new TypeError('upsertServiceBrowserPreferenceBinding requires preferredExecutableId');
+  }
+  const targets = uniqueStrings([targetServiceId, siteId, loginId, ...targetServiceIds]);
+  const accounts = uniqueStrings([accountId, ...accountIds]);
+  const services = uniqueStrings([serviceName, ...serviceNames]);
+  const tasks = uniqueStrings([taskName, ...taskNames]);
+  if (targets.length === 0 && accounts.length === 0 && services.length === 0 && tasks.length === 0) {
+    throw new TypeError(
+      'upsertServiceBrowserPreferenceBinding requires at least one target, account, service, or task filter',
+    );
+  }
+  const bindingId =
+    typeof id === 'string' && id.length > 0
+      ? id
+      : browserPreferenceBindingId(browserBuild, preferredExecutableId, targets, accounts, services, tasks);
+  const scope = accounts.length > 0 ? 'account' : targets.length > 0 ? 'site' : tasks.length > 0 ? 'task' : 'service';
+  return upsertServiceBrowserCapabilityRegistryRecord({
+    ...options,
+    collection: 'browserPreferenceBindings',
+    id: bindingId,
+    record: {
+      id: bindingId,
+      scope,
+      targetServiceIds: targets,
+      accountIds: accounts,
+      serviceNames: services,
+      taskNames: tasks,
+      preferredHostId,
+      preferredExecutableId,
+      preferredCapabilityId,
+      browserBuild,
+      priority,
+      reason,
+      source: 'service_observability_client',
+      ...record,
+    },
+  });
+}
+
+/**
  * @param {ServiceJobCancelOptions} options
  * @returns {Promise<ServiceJobCancelResponse>}
  */
@@ -2013,6 +2082,19 @@ function firstMatchingProfileValue(profile, identities, field) {
  */
 function uniqueStrings(values) {
   return [...new Set(values.flatMap((value) => (typeof value === 'string' && value.length > 0 ? [value] : [])))];
+}
+
+function browserPreferenceBindingId(browserBuild, preferredExecutableId, targets, accounts, services, tasks) {
+  return slugId(['primary', browserBuild, ...targets, ...accounts, ...services, ...tasks, preferredExecutableId].join('-'));
+}
+
+function slugId(value) {
+  const slug = value
+    .replace(/[^A-Za-z0-9_.-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+  return slug || `primary-browser-${Date.now()}`;
 }
 
 /**

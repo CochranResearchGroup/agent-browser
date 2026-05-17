@@ -1862,6 +1862,45 @@ export interface ServiceBrowserCapabilityRegistryUpsertOptions extends ServiceId
   record: Record<string, unknown>;
 }
 
+export interface ServiceBrowserPreferenceBindingOptions extends ServiceQueryOptions {
+  /** Optional binding ID. When omitted, the helper derives one from build, filters, and executable. */
+  id?: string;
+  /** Browser build selected by this preference. */
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  /** Preferred executable ID from service.browserCapabilityRegistry.browserExecutables. */
+  preferredExecutableId: string;
+  /** Optional preferred host ID. The launch gate can also derive this from the executable record. */
+  preferredHostId?: string | null;
+  /** Optional preferred capability ID. The launch gate can derive this from host and executable. */
+  preferredCapabilityId?: string | null;
+  /** Desired target site or identity provider. */
+  targetServiceId?: string;
+  /** Desired site identity alias. */
+  siteId?: string;
+  /** Desired login identity alias. */
+  loginId?: string;
+  /** Additional target identities. */
+  targetServiceIds?: string[];
+  /** Desired account identity within the target site. */
+  accountId?: string;
+  /** Additional account identities. */
+  accountIds?: string[];
+  /** Optional calling service filter. */
+  serviceName?: string;
+  /** Additional calling service filters. */
+  serviceNames?: string[];
+  /** Optional caller task filter. */
+  taskName?: string;
+  /** Additional task filters. */
+  taskNames?: string[];
+  /** Binding priority. Defaults to 100. */
+  priority?: number;
+  /** Human-readable routing reason. */
+  reason?: string;
+  /** Additional record fields merged last. */
+  record?: Record<string, unknown>;
+}
+
 export interface ServiceBrowserCapabilityPreflightOptions extends ServiceAccessPlanOptions {
   /** Requested browser build to preflight. */
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
@@ -2007,6 +2046,7 @@ export declare function triageServiceMonitor(options: ServiceMonitorTriageOption
 export declare function upsertServiceProvider(options: ServiceProviderMutationOptions): Promise<ServiceProviderUpsertResponse>;
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
 export declare function upsertServiceBrowserCapabilityRegistryRecord(options: ServiceBrowserCapabilityRegistryUpsertOptions): Promise<ServiceBrowserCapabilityRegistryUpsertResponse>;
+export declare function upsertServiceBrowserPreferenceBinding(options: ServiceBrowserPreferenceBindingOptions): Promise<ServiceBrowserCapabilityRegistryUpsertResponse>;
 export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;
 export declare function retryServiceBrowser(options: ServiceBrowserRetryOptions): Promise<ServiceBrowserRetryResponse>;
 export declare function applyServiceRemedies(options: ServiceRemediesApplyOptions): Promise<ServiceRemediesApplyResponse>;
