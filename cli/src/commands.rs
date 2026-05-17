@@ -233,7 +233,7 @@ fn parse_service_access_plan(
 fn parse_service_browser_capability_preflight(
     id: String,
     rest: &[&str],
-    _flags: &Flags,
+    flags: &Flags,
 ) -> Result<Value, ParseError> {
     if rest.get(1).copied() != Some("preflight") {
         return Err(ParseError::InvalidValue {
@@ -244,6 +244,7 @@ fn parse_service_browser_capability_preflight(
     let mut cmd = json!({
         "id": id,
         "action": "service_browser_capability_preflight",
+        "serviceState": flags.service_state.clone(),
     });
     let mut i = 2;
     while i < rest.len() {
@@ -6082,6 +6083,7 @@ mod tests {
         assert_eq!(cmd["serviceName"], "CanvaCLI");
         assert_eq!(cmd["agentName"], "codex");
         assert_eq!(cmd["taskName"], "openCanvaWorkspace");
+        assert!(cmd["serviceState"].is_object());
     }
 
     #[test]

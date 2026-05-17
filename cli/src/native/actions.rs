@@ -623,7 +623,7 @@ fn apply_service_browser_capability_selection(
         options.profile.as_deref(),
         options.runtime_profile.as_deref(),
     );
-    if options.executable_path.is_some() || cmd.get("executablePath").is_some() {
+    if executable_path_is_operator_supplied(options.executable_path.as_deref(), cmd) {
         return BrowserCapabilityLaunchResolution::skipped(
             "explicit_executable_path",
             browser_build_from_command(cmd),
@@ -637,14 +637,7 @@ fn apply_service_browser_capability_selection(
             profile_id,
         );
     };
-    let Ok(repository) = LockedServiceStateRepository::default_json() else {
-        return BrowserCapabilityLaunchResolution::skipped(
-            "service_state_unavailable",
-            Some(browser_build),
-            profile_id,
-        );
-    };
-    let Ok(service_state) = repository.load_snapshot() else {
+    let Ok(service_state) = browser_capability_service_state(cmd) else {
         return BrowserCapabilityLaunchResolution::skipped(
             "service_state_unavailable",
             Some(browser_build),
@@ -670,6 +663,35 @@ fn apply_service_browser_capability_selection(
     };
     options.executable_path = Some(selection.executable_path.clone());
     BrowserCapabilityLaunchResolution::applied(browser_build, profile_id, selection)
+}
+
+fn browser_capability_service_state(cmd: &Value) -> Result<ServiceState, String> {
+    if let Some(service_state) = cmd.get("serviceState") {
+        return serde_json::from_value::<ServiceState>(service_state.clone())
+            .map_err(|err| format!("Invalid serviceState: {}", err));
+    }
+    LockedServiceStateRepository::default_json()
+        .and_then(|repository| repository.load_snapshot())
+        .map_err(|err| err.to_string())
+}
+
+fn executable_path_is_operator_supplied(executable_path: Option<&str>, cmd: &Value) -> bool {
+    if cmd.get("executablePath").is_some() {
+        return true;
+    }
+    let Some(executable_path) = executable_path else {
+        return false;
+    };
+    let Ok(env_executable_path) = env::var("AGENT_BROWSER_EXECUTABLE_PATH") else {
+        return true;
+    };
+    if env_executable_path != executable_path {
+        return true;
+    }
+    !matches!(
+        env::var("AGENT_BROWSER_EXECUTABLE_PATH_SOURCE").as_deref(),
+        Ok("manifest")
+    )
 }
 
 fn select_browser_capability_launch_binding(
@@ -12321,12 +12343,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_service_browser_capability_preflight_reports_validated_binding_without_launch() {
-        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_EXECUTABLE_PATH"]);
+        let guard = EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_EXECUTABLE_PATH",
+            "AGENT_BROWSER_EXECUTABLE_PATH_SOURCE",
+        ]);
         let home = unique_socket_dir("browser-capability-preflight-home");
         fs::create_dir_all(&home).expect("test home should be created");
         guard.set("HOME", home.to_str().expect("test home should be utf-8"));
         let executable = home.join("chrome");
         fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
+        let manifest_default = home.join("manifest-default-chrome");
+        fs::write(&manifest_default, "#!/bin/sh\n")
+            .expect("manifest default executable should be written");
+        guard.set(
+            "AGENT_BROWSER_EXECUTABLE_PATH",
+            manifest_default
+                .to_str()
+                .expect("manifest default path should be utf-8"),
+        );
+        guard.set("AGENT_BROWSER_EXECUTABLE_PATH_SOURCE", "manifest");
 
         JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
             .save(&ServiceState {
@@ -12398,6 +12434,10 @@ mod tests {
         assert_eq!(
             response["browserCapabilityLaunch"]["reason"],
             "validated_binding_applied"
+        );
+        assert_eq!(
+            response["selectedExecutablePath"],
+            executable.to_str().expect("path should be utf-8")
         );
         assert_eq!(
             response["browserCapabilityLaunch"]["profileCompatibilityIds"],

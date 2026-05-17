@@ -273,6 +273,7 @@ pub struct DaemonOptions<'a> {
     pub debug: bool,
     pub leave_open: bool,
     pub executable_path: Option<&'a str>,
+    pub executable_path_source: Option<&'a str>,
     pub extensions: &'a [String],
     pub args: Option<&'a str>,
     pub user_agent: Option<&'a str>,
@@ -327,6 +328,9 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     }
     if let Some(path) = opts.executable_path {
         cmd.env("AGENT_BROWSER_EXECUTABLE_PATH", path);
+    }
+    if let Some(source) = opts.executable_path_source {
+        cmd.env("AGENT_BROWSER_EXECUTABLE_PATH_SOURCE", source);
     }
     if !opts.extensions.is_empty() {
         cmd.env("AGENT_BROWSER_EXTENSIONS", opts.extensions.join(","));
@@ -1010,7 +1014,8 @@ mod tests {
             headed: false,
             debug: false,
             leave_open: false,
-            executable_path: None,
+            executable_path: Some("/opt/chromium-stealthcdp/chrome"),
+            executable_path_source: Some("manifest"),
             extensions: &[],
             args: None,
             user_agent: None,
@@ -1064,6 +1069,13 @@ mod tests {
         assert!(envs
             .iter()
             .any(|(k, v)| { k == "AGENT_BROWSER_USE_REAL_KEYCHAIN" && v.as_deref() == Some("1") }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_EXECUTABLE_PATH"
+                && v.as_deref() == Some("/opt/chromium-stealthcdp/chrome")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_EXECUTABLE_PATH_SOURCE" && v.as_deref() == Some("manifest")
+        }));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_KEYCHAIN_PASSWORD" && v.as_deref() == Some("secret")
         }));
