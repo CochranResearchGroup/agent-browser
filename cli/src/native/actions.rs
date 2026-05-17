@@ -7957,28 +7957,48 @@ fn prune_retained_service_state(
         Vec::new()
     };
 
+    let mut skipped_abandoned_sessions_missing_age_timestamp = Vec::new();
+    let mut skipped_abandoned_sessions_too_fresh = Vec::new();
     let session_ids = state
         .sessions
         .iter()
         .filter(|(_, session)| {
             let released_lease_matches = options.released_sessions
                 && matches!(session.lease, LeaseState::Released | LeaseState::Expired);
+            let abandoned_age_status = abandoned_session_age_status(
+                session
+                    .last_lease_observed_at
+                    .as_deref()
+                    .or(session.created_at.as_deref()),
+                options.abandoned_session_min_age_minutes,
+            );
             let abandoned_lease_matches = options.abandoned_sessions
                 && !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
-                && session_is_at_least_age_minutes(
-                    session
-                        .last_lease_observed_at
-                        .as_deref()
-                        .or(session.created_at.as_deref()),
-                    options.abandoned_session_min_age_minutes,
-                );
+                && matches!(abandoned_age_status, SessionAgeStatus::OldEnough);
             let lease_matches = released_lease_matches || abandoned_lease_matches;
-            lease_matches
-                && session.tab_ids.is_empty()
+            let session_shape_matches = session.tab_ids.is_empty()
                 && !session.browser_ids.is_empty()
                 && session.browser_ids.iter().all(|browser_id| {
                     inert_session_browser_placeholder(state, browser_id, session.id.as_str())
-                })
+                });
+
+            if options.abandoned_sessions
+                && !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                && session_shape_matches
+                && !abandoned_lease_matches
+            {
+                match abandoned_age_status {
+                    SessionAgeStatus::MissingOrInvalid => {
+                        skipped_abandoned_sessions_missing_age_timestamp.push(session.id.clone())
+                    }
+                    SessionAgeStatus::TooFresh => {
+                        skipped_abandoned_sessions_too_fresh.push(session.id.clone())
+                    }
+                    SessionAgeStatus::OldEnough => {}
+                }
+            }
+
+            lease_matches && session_shape_matches
         })
         .map(|(id, _)| id.clone())
         .collect::<Vec<_>>();
@@ -8014,6 +8034,9 @@ fn prune_retained_service_state(
     let browser_ids = browser_ids.into_iter().collect::<HashSet<_>>();
     let mut browser_ids = browser_ids.into_iter().collect::<Vec<_>>();
     browser_ids.sort();
+    let skipped_abandoned_sessions_missing_age_timestamp_count =
+        skipped_abandoned_sessions_missing_age_timestamp.len();
+    let skipped_abandoned_sessions_too_fresh_count = skipped_abandoned_sessions_too_fresh.len();
 
     let mut session_tab_refs_removed = 0usize;
     let mut session_browser_refs_removed = 0usize;
@@ -8081,6 +8104,14 @@ fn prune_retained_service_state(
             "sessions": session_ids.len(),
             "total": closed_tab_ids.len() + browser_ids.len() + session_ids.len(),
         },
+        "skipped": {
+            "abandonedSessionsMissingAgeTimestamp": skipped_abandoned_sessions_missing_age_timestamp,
+            "abandonedSessionsTooFresh": skipped_abandoned_sessions_too_fresh,
+        },
+        "skippedCounts": {
+            "abandonedSessionsMissingAgeTimestamp": skipped_abandoned_sessions_missing_age_timestamp_count,
+            "abandonedSessionsTooFresh": skipped_abandoned_sessions_too_fresh_count,
+        },
         "removed": {
             "closedTabs": if options.apply { closed_tab_ids.len() } else { 0 },
             "browsers": if options.apply { browser_ids.len() } else { 0 },
@@ -8101,19 +8132,33 @@ fn prune_retained_service_state(
     })
 }
 
-fn session_is_at_least_age_minutes(created_at: Option<&str>, min_age_minutes: u64) -> bool {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SessionAgeStatus {
+    OldEnough,
+    TooFresh,
+    MissingOrInvalid,
+}
+
+fn abandoned_session_age_status(
+    created_at: Option<&str>,
+    min_age_minutes: u64,
+) -> SessionAgeStatus {
     let Some(created_at) = created_at else {
-        return false;
+        return SessionAgeStatus::MissingOrInvalid;
     };
     let Ok(created_at) = DateTime::parse_from_rfc3339(created_at) else {
-        return false;
+        return SessionAgeStatus::MissingOrInvalid;
     };
     let Ok(min_age_minutes) = i64::try_from(min_age_minutes) else {
-        return false;
+        return SessionAgeStatus::MissingOrInvalid;
     };
     // Shared and exclusive leases are only pruned when retained age evidence is explicit.
     let threshold = chrono::Utc::now() - chrono::Duration::minutes(min_age_minutes);
-    created_at.with_timezone(&chrono::Utc) <= threshold
+    if created_at.with_timezone(&chrono::Utc) <= threshold {
+        SessionAgeStatus::OldEnough
+    } else {
+        SessionAgeStatus::TooFresh
+    }
 }
 
 fn inert_session_browser_placeholder(
@@ -14241,6 +14286,19 @@ mod tests {
 
         assert_eq!(result["candidateCounts"]["sessions"], 1);
         assert_eq!(result["candidates"]["sessions"][0], "old-session");
+        assert_eq!(
+            result["skipped"]["abandonedSessionsTooFresh"][0],
+            "fresh-session"
+        );
+        assert_eq!(
+            result["skipped"]["abandonedSessionsMissingAgeTimestamp"][0],
+            "unknown-session"
+        );
+        assert_eq!(result["skippedCounts"]["abandonedSessionsTooFresh"], 1);
+        assert_eq!(
+            result["skippedCounts"]["abandonedSessionsMissingAgeTimestamp"],
+            1
+        );
         assert_eq!(
             result["policy"]["abandonedSessionsRequireAgeTimestamp"],
             true

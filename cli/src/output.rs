@@ -1448,6 +1448,9 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         .and_then(|value| value.as_bool())
         .unwrap_or(true);
     let counts = data.get("candidateCounts")?;
+    let skipped_counts = data
+        .get("skippedCounts")
+        .unwrap_or(&serde_json::Value::Null);
     let removed = data.get("removed").unwrap_or(&serde_json::Value::Null);
     let before = data.get("before").unwrap_or(&serde_json::Value::Null);
     let after = data.get("after").unwrap_or(&serde_json::Value::Null);
@@ -1468,6 +1471,14 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         .get("total")
         .and_then(|value| value.as_u64())
         .unwrap_or(closed_tabs + browsers + sessions);
+    let skipped_abandoned_missing_age = skipped_counts
+        .get("abandonedSessionsMissingAgeTimestamp")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let skipped_abandoned_too_fresh = skipped_counts
+        .get("abandonedSessionsTooFresh")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
     let removed_tabs = removed
         .get("closedTabs")
         .and_then(|value| value.as_u64())
@@ -1501,9 +1512,25 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         .and_then(|value| value.as_str())
         .unwrap_or("Review service status.");
 
-    Some(format!(
-        "Retained service prune {mode}: candidates={total} closed_tabs={closed_tabs} browsers={browsers} sessions={sessions}\nBefore: browsers={before_browsers} tabs={before_tabs}\nRemoved: browsers={removed_browsers} closed_tabs={removed_tabs} sessions={removed_sessions}\nAfter: browsers={after_browsers} tabs={after_tabs}\nNext: {next}"
-    ))
+    let mut lines = vec![
+        format!(
+            "Retained service prune {mode}: candidates={total} closed_tabs={closed_tabs} browsers={browsers} sessions={sessions}"
+        ),
+        format!("Before: browsers={before_browsers} tabs={before_tabs}"),
+    ];
+    if skipped_abandoned_missing_age > 0 || skipped_abandoned_too_fresh > 0 {
+        lines.push(format!(
+            "Skipped: abandoned_missing_age={skipped_abandoned_missing_age} abandoned_too_fresh={skipped_abandoned_too_fresh}"
+        ));
+    }
+    lines.extend([
+        format!(
+            "Removed: browsers={removed_browsers} closed_tabs={removed_tabs} sessions={removed_sessions}"
+        ),
+        format!("After: browsers={after_browsers} tabs={after_tabs}"),
+        format!("Next: {next}"),
+    ]);
+    Some(lines.join("\n"))
 }
 
 fn format_service_site_policy_line(
@@ -4739,7 +4766,7 @@ Notes:
   - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
   - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
-  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable lastLeaseObservedAt or createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; use it only after confirming the retained lease should no longer block profile reuse.
+  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable lastLeaseObservedAt or createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; dry-runs also report skipped abandoned sessions that are too fresh or missing age evidence.
   - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.
@@ -6225,6 +6252,10 @@ mod tests {
                 "sessions": 1,
                 "total": 6
             },
+            "skippedCounts": {
+                "abandonedSessionsMissingAgeTimestamp": 4,
+                "abandonedSessionsTooFresh": 5
+            },
             "removed": {
                 "closedTabs": 0,
                 "browsers": 0,
@@ -6247,6 +6278,7 @@ mod tests {
             "Retained service prune dry-run: candidates=6 closed_tabs=3 browsers=2 sessions=1"
         ));
         assert!(rendered.contains("Before: browsers=10 tabs=30"));
+        assert!(rendered.contains("Skipped: abandoned_missing_age=4 abandoned_too_fresh=5"));
         assert!(rendered.contains("Next: Review candidates."));
     }
 

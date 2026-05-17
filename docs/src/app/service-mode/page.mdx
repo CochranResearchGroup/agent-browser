@@ -89,7 +89,10 @@ the same cleanup to shared or exclusive session leases that may otherwise
 affect profile allocation. Abandoned shared or exclusive sessions also need a
 parseable <code>lastLeaseObservedAt</code> or <code>createdAt</code> older than
 <code>--abandoned-session-min-age-minutes</code>, which defaults to
-<code>1440</code>.
+<code>1440</code>. Dry-runs report skipped abandoned sessions as
+<code>abandonedSessionsMissingAgeTimestamp</code> or
+<code>abandonedSessionsTooFresh</code> so operators can separate missing age
+evidence and too-fresh lease observations from safe prune candidates.
 
 Use the HTTP API when another program owns the workflow lifecycle:
 
