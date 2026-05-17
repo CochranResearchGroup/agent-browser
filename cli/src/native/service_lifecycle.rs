@@ -9,6 +9,12 @@ use super::service_model::{
     ServiceActor, ServiceState, SessionCleanupPolicy,
 };
 
+fn current_timestamp() -> String {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ServiceLaunchMetadata {
     pub(crate) profile_id: Option<String>,
@@ -88,6 +94,7 @@ pub(crate) fn upsert_service_profile_and_session(
     profile_id: Option<String>,
     metadata: &ServiceLaunchMetadata,
 ) {
+    let lease_observed_at = current_timestamp();
     if let Some(profile_id) = profile_id.as_ref() {
         let profile = service_state
             .profiles
@@ -176,6 +183,7 @@ pub(crate) fn upsert_service_profile_and_session(
     } else {
         session.lease
     };
+    session.last_lease_observed_at = Some(lease_observed_at);
     session.cleanup = metadata.cleanup;
     merge_unique(
         &mut session.browser_ids,
@@ -797,6 +805,7 @@ mod tests {
             session.profile_lease_disposition,
             Some(ProfileLeaseDisposition::NewBrowser)
         );
+        assert!(session.last_lease_observed_at.is_some());
         assert!(session.profile_lease_conflict_session_ids.is_empty());
         assert_eq!(session.cleanup, SessionCleanupPolicy::Detach);
         assert_eq!(session.browser_ids, vec!["session:persist-session"]);

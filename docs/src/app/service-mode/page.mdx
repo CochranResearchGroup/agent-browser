@@ -87,7 +87,7 @@ or expired sessions with only inert linked browser placeholders. Add
 <code>--abandoned-sessions</code> only after operator review because it applies
 the same cleanup to shared or exclusive session leases that may otherwise
 affect profile allocation. Abandoned shared or exclusive sessions also need a
-parseable <code>createdAt</code> older than
+parseable <code>lastLeaseObservedAt</code> or <code>createdAt</code> older than
 <code>--abandoned-session-min-age-minutes</code>, which defaults to
 <code>1440</code>.
 

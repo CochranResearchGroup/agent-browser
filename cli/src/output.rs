@@ -1333,6 +1333,7 @@ fn format_service_session_line(session: &serde_json::Value) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "none".to_string());
     let lease = value_str(session, "lease", "unknown");
+    let lease_observed = value_str(session, "lastLeaseObservedAt", "unknown");
     let cleanup = value_str(session, "cleanup", "unknown");
     let browsers = session
         .get("browserIds")
@@ -1348,7 +1349,7 @@ fn format_service_session_line(session: &serde_json::Value) -> String {
         .unwrap_or_else(|| "none".to_string());
 
     format!(
-        "{id} service={service} agent={agent} task={task} profile={profile} profile_reason={profile_reason} lease_disposition={lease_disposition} lease_conflicts={lease_conflicts} lease={lease} cleanup={cleanup} browsers={browsers}"
+        "{id} service={service} agent={agent} task={task} profile={profile} profile_reason={profile_reason} lease_disposition={lease_disposition} lease_conflicts={lease_conflicts} lease={lease} lease_observed={lease_observed} cleanup={cleanup} browsers={browsers}"
     )
 }
 
@@ -4738,7 +4739,7 @@ Notes:
   - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
   - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
-  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; use it only after confirming the retained lease should no longer block profile reuse.
+  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable lastLeaseObservedAt or createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; use it only after confirming the retained lease should no longer block profile reuse.
   - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.
@@ -4777,7 +4778,7 @@ Notes:
   - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding with seedingMode=detached_headed_no_cdp, cdpAttachmentAllowedDuringSeeding=false, preferredKeyring=basic_password_store, and setup scopes for sign-in, Chrome sync, passkeys, and browser plugins. Explicit freshness rows are preserved through readiness refreshes.
   - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus lifecycle, operator steps, and close-detection state for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
   - service profiles <id> verify-seeding <target> records a bounded post-close auth probe by reusing the serialized profile freshness update path. Fresh evidence moves a matching closed handoff to fresh; stale, blocked, or inconclusive evidence moves it to verification_pending.
-  - Text service profiles and sessions focus retained service-owned identity, lease, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
+  - Text service profiles and sessions focus retained service-owned identity, lease, last lease observation timestamp, profile, profile selection reason, profile lease disposition, lease conflicts, and browser-linkage records.
   - Text service browsers focuses retained browser records and their lastHealthObservation fields.
   - Text service tabs focuses retained tab lifecycle, browser, session, target, URL, and title fields.
   - Text service monitors focuses monitor identity, target, interval, state, last health timestamps, and failure counts, including profile_readiness:<targetServiceId> freshness monitors.
@@ -6176,6 +6177,7 @@ mod tests {
                 "profileLeaseDisposition": "new_browser",
                 "profileLeaseConflictSessionIds": [],
                 "lease": "exclusive",
+                "lastLeaseObservedAt": "2026-05-16T12:00:00Z",
                 "cleanup": "close_browser",
                 "browserIds": ["session:runtime-session"]
             }]
@@ -6185,7 +6187,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Sessions: 1\n  runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work profile_reason=authenticated_target lease_disposition=new_browser lease_conflicts=none lease=exclusive cleanup=close_browser browsers=session:runtime-session"
+            "Sessions: 1\n  runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work profile_reason=authenticated_target lease_disposition=new_browser lease_conflicts=none lease=exclusive lease_observed=2026-05-16T12:00:00Z cleanup=close_browser browsers=session:runtime-session"
         );
     }
 

@@ -20,6 +20,7 @@
     "browserIds",
     "tabIds",
     "createdAt",
+    "lastLeaseObservedAt",
     "expiresAt"
   ],
   "properties": {
@@ -117,6 +118,11 @@
       }
     },
     "createdAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "lastLeaseObservedAt": {
+      "description": "Last service-owned observation that this session lease was still current.",
       "type": ["string", "null"],
       "format": "date-time"
     },

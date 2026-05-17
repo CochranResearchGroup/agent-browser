@@ -714,6 +714,7 @@ pub(crate) fn persist_closed_browser_health_in_repository(
         );
         if let Some(session) = service_state.sessions.get_mut(session_id) {
             session.lease = LeaseState::Released;
+            session.last_lease_observed_at = Some(current_timestamp());
             session.profile_lease_conflict_session_ids.clear();
         }
         service_state.browsers.insert(id, browser);

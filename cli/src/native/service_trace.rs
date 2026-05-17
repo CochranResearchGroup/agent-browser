@@ -443,7 +443,10 @@ fn service_trace_browser_capability_launch_summary(
                 diagnostic,
                 BrowserCapabilityLaunchContext {
                     source: "session",
-                    timestamp: session.created_at.as_deref(),
+                    timestamp: session
+                        .last_lease_observed_at
+                        .as_deref()
+                        .or(session.created_at.as_deref()),
                     browser_id,
                     profile_id: session.profile_id.as_deref(),
                     session_id: Some(session.id.as_str()),

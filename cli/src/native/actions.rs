@@ -214,6 +214,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "stream_status"
             | "service_status"
             | "service_reconcile"
+            | "service_prune_retained"
             | "service_access_plan"
             | "service_browser_capability_preflight"
             | "service_job_cancel"
@@ -7965,7 +7966,10 @@ fn prune_retained_service_state(
             let abandoned_lease_matches = options.abandoned_sessions
                 && !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
                 && session_is_at_least_age_minutes(
-                    session.created_at.as_deref(),
+                    session
+                        .last_lease_observed_at
+                        .as_deref()
+                        .or(session.created_at.as_deref()),
                     options.abandoned_session_min_age_minutes,
                 );
             let lease_matches = released_lease_matches || abandoned_lease_matches;
@@ -8058,7 +8062,8 @@ fn prune_retained_service_state(
             "abandonedSessionMinAgeMinutes": options.abandoned_session_min_age_minutes,
             "processExitedRequiresExplicitFlag": true,
             "abandonedSessionsRequiresExplicitFlag": true,
-            "abandonedSessionsRequireCreatedAt": true,
+            "abandonedSessionsRequireAgeTimestamp": true,
+            "abandonedSessionAgeSource": "lastLeaseObservedAtOrCreatedAt",
         },
         "before": {
             "browserCount": before_browser_count,
@@ -8106,7 +8111,7 @@ fn session_is_at_least_age_minutes(created_at: Option<&str>, min_age_minutes: u6
     let Ok(min_age_minutes) = i64::try_from(min_age_minutes) else {
         return false;
     };
-    // Shared and exclusive leases are only pruned when their retained age is explicit.
+    // Shared and exclusive leases are only pruned when retained age evidence is explicit.
     let threshold = chrono::Utc::now() - chrono::Duration::minutes(min_age_minutes);
     created_at.with_timezone(&chrono::Utc) <= threshold
 }
@@ -14193,7 +14198,8 @@ mod tests {
                         id: "old-session".to_string(),
                         lease: LeaseState::Exclusive,
                         browser_ids: vec!["session:old-session".to_string()],
-                        created_at: Some(old_session_time),
+                        created_at: Some(fresh_session_time.clone()),
+                        last_lease_observed_at: Some(old_session_time),
                         ..BrowserSession::default()
                     },
                 ),
@@ -14203,7 +14209,8 @@ mod tests {
                         id: "fresh-session".to_string(),
                         lease: LeaseState::Shared,
                         browser_ids: vec!["session:fresh-session".to_string()],
-                        created_at: Some(fresh_session_time),
+                        created_at: Some("2000-01-01T00:00:00Z".to_string()),
+                        last_lease_observed_at: Some(fresh_session_time),
                         ..BrowserSession::default()
                     },
                 ),
@@ -14234,7 +14241,14 @@ mod tests {
 
         assert_eq!(result["candidateCounts"]["sessions"], 1);
         assert_eq!(result["candidates"]["sessions"][0], "old-session");
-        assert_eq!(result["policy"]["abandonedSessionsRequireCreatedAt"], true);
+        assert_eq!(
+            result["policy"]["abandonedSessionsRequireAgeTimestamp"],
+            true
+        );
+        assert_eq!(
+            result["policy"]["abandonedSessionAgeSource"],
+            "lastLeaseObservedAtOrCreatedAt"
+        );
         assert_eq!(result["policy"]["abandonedSessionMinAgeMinutes"], 60);
         assert!(service_state.sessions.contains_key("fresh-session"));
         assert!(service_state.sessions.contains_key("unknown-session"));

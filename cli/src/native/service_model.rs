@@ -554,6 +554,7 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
             "browserIds",
             "tabIds",
             "createdAt",
+            "lastLeaseObservedAt",
             "expiresAt",
         ],
         &[
@@ -568,6 +569,7 @@ pub fn assert_service_session_record_contract(value: &serde_json::Value) {
             "browser_ids",
             "tab_ids",
             "created_at",
+            "last_lease_observed_at",
             "expires_at",
         ],
     );
@@ -3768,6 +3770,8 @@ pub struct BrowserSession {
     pub browser_ids: Vec<String>,
     pub tab_ids: Vec<String>,
     pub created_at: Option<String>,
+    /// Last service-owned observation that this session lease was still current.
+    pub last_lease_observed_at: Option<String>,
     pub expires_at: Option<String>,
 }
 
@@ -3789,6 +3793,7 @@ impl Default for BrowserSession {
             browser_ids: Vec::new(),
             tab_ids: Vec::new(),
             created_at: None,
+            last_lease_observed_at: None,
             expires_at: None,
         }
     }
@@ -5241,6 +5246,7 @@ mod tests {
             "browserIds": [],
             "tabIds": [],
             "createdAt": null,
+            "lastLeaseObservedAt": null,
             "expiresAt": null,
         });
         let site_policy = json!({

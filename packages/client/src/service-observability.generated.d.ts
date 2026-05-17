@@ -270,6 +270,7 @@ export interface ServiceSessionRecord {
   profileLeaseDisposition: 'new_browser' | 'reused_browser' | 'active_lease_conflict' | null;
   profileLeaseConflictSessionIds: string[];
   browserCapabilityLaunch: Record<string, unknown> | null;
+  lastLeaseObservedAt: string | null;
   [key: string]: unknown;
 }
 
