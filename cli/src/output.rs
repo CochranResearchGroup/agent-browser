@@ -5901,6 +5901,7 @@ mod tests {
                         "profileLeaseDisposition": "new_browser",
                         "profileLeaseConflictSessionIds": [],
                         "lease": "exclusive",
+                        "lastLeaseObservedAt": "2026-05-16T12:00:00Z",
                         "cleanup": "close_browser",
                         "browserIds": ["session:runtime-session"]
                     }
@@ -5952,7 +5953,7 @@ mod tests {
         ));
         assert!(rendered.contains("Sessions: 1"));
         assert!(rendered.contains(
-            "runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work profile_reason=authenticated_target lease_disposition=new_browser lease_conflicts=none lease=exclusive cleanup=close_browser browsers=session:runtime-session"
+            "runtime-session service=JournalDownloader agent=codex task=probeACSwebsite profile=work profile_reason=authenticated_target lease_disposition=new_browser lease_conflicts=none lease=exclusive lease_observed=2026-05-16T12:00:00Z cleanup=close_browser browsers=session:runtime-session"
         ));
     }
 
