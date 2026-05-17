@@ -7885,6 +7885,7 @@ struct ServiceRetentionPruneOptions {
     process_exited_browsers: bool,
     released_sessions: bool,
     abandoned_sessions: bool,
+    abandoned_session_min_age_minutes: u64,
 }
 
 impl ServiceRetentionPruneOptions {
@@ -7911,6 +7912,10 @@ impl ServiceRetentionPruneOptions {
                 .get("abandonedSessions")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            abandoned_session_min_age_minutes: cmd
+                .get("abandonedSessionMinAgeMinutes")
+                .and_then(Value::as_u64)
+                .unwrap_or(1440),
         }
     }
 }
@@ -7955,9 +7960,15 @@ fn prune_retained_service_state(
         .sessions
         .iter()
         .filter(|(_, session)| {
-            let lease_matches = (options.released_sessions
-                && matches!(session.lease, LeaseState::Released | LeaseState::Expired))
-                || options.abandoned_sessions;
+            let released_lease_matches = options.released_sessions
+                && matches!(session.lease, LeaseState::Released | LeaseState::Expired);
+            let abandoned_lease_matches = options.abandoned_sessions
+                && !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                && session_is_at_least_age_minutes(
+                    session.created_at.as_deref(),
+                    options.abandoned_session_min_age_minutes,
+                );
+            let lease_matches = released_lease_matches || abandoned_lease_matches;
             lease_matches
                 && session.tab_ids.is_empty()
                 && !session.browser_ids.is_empty()
@@ -8044,8 +8055,10 @@ fn prune_retained_service_state(
             "processExitedBrowsers": options.process_exited_browsers,
             "releasedSessions": options.released_sessions,
             "abandonedSessions": options.abandoned_sessions,
+            "abandonedSessionMinAgeMinutes": options.abandoned_session_min_age_minutes,
             "processExitedRequiresExplicitFlag": true,
             "abandonedSessionsRequiresExplicitFlag": true,
+            "abandonedSessionsRequireCreatedAt": true,
         },
         "before": {
             "browserCount": before_browser_count,
@@ -8081,6 +8094,21 @@ fn prune_retained_service_state(
             "Review the candidates, then rerun with --apply when the retained records are safe to remove."
         },
     })
+}
+
+fn session_is_at_least_age_minutes(created_at: Option<&str>, min_age_minutes: u64) -> bool {
+    let Some(created_at) = created_at else {
+        return false;
+    };
+    let Ok(created_at) = DateTime::parse_from_rfc3339(created_at) else {
+        return false;
+    };
+    let Ok(min_age_minutes) = i64::try_from(min_age_minutes) else {
+        return false;
+    };
+    // Shared and exclusive leases are only pruned when their retained age is explicit.
+    let threshold = chrono::Utc::now() - chrono::Duration::minutes(min_age_minutes);
+    created_at.with_timezone(&chrono::Utc) <= threshold
 }
 
 fn inert_session_browser_placeholder(
@@ -14065,6 +14093,7 @@ mod tests {
                 process_exited_browsers: false,
                 released_sessions: false,
                 abandoned_sessions: false,
+                abandoned_session_min_age_minutes: 1440,
             },
         );
 
@@ -14113,6 +14142,7 @@ mod tests {
                 process_exited_browsers: false,
                 released_sessions: true,
                 abandoned_sessions: false,
+                abandoned_session_min_age_minutes: 1440,
             },
         );
 
@@ -14120,6 +14150,94 @@ mod tests {
         assert_eq!(result["removed"]["browsers"], 1);
         assert!(service_state.sessions.is_empty());
         assert!(service_state.browsers.is_empty());
+    }
+
+    #[test]
+    fn test_prune_retained_service_state_abandoned_sessions_require_age() {
+        let old_session_time = (chrono::Utc::now() - chrono::Duration::minutes(90)).to_rfc3339();
+        let fresh_session_time = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();
+        let mut service_state = ServiceState {
+            browsers: BTreeMap::from([
+                (
+                    "session:old-session".to_string(),
+                    BrowserProcess {
+                        id: "session:old-session".to_string(),
+                        health: ServiceBrowserHealth::NotStarted,
+                        active_session_ids: vec!["old-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "session:fresh-session".to_string(),
+                    BrowserProcess {
+                        id: "session:fresh-session".to_string(),
+                        health: ServiceBrowserHealth::NotStarted,
+                        active_session_ids: vec!["fresh-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "session:unknown-session".to_string(),
+                    BrowserProcess {
+                        id: "session:unknown-session".to_string(),
+                        health: ServiceBrowserHealth::NotStarted,
+                        active_session_ids: vec!["unknown-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                ),
+            ]),
+            sessions: BTreeMap::from([
+                (
+                    "old-session".to_string(),
+                    BrowserSession {
+                        id: "old-session".to_string(),
+                        lease: LeaseState::Exclusive,
+                        browser_ids: vec!["session:old-session".to_string()],
+                        created_at: Some(old_session_time),
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "fresh-session".to_string(),
+                    BrowserSession {
+                        id: "fresh-session".to_string(),
+                        lease: LeaseState::Shared,
+                        browser_ids: vec!["session:fresh-session".to_string()],
+                        created_at: Some(fresh_session_time),
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "unknown-session".to_string(),
+                    BrowserSession {
+                        id: "unknown-session".to_string(),
+                        lease: LeaseState::Shared,
+                        browser_ids: vec!["session:unknown-session".to_string()],
+                        ..BrowserSession::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+        let result = prune_retained_service_state(
+            &mut service_state,
+            ServiceRetentionPruneOptions {
+                apply: false,
+                closed_tabs: true,
+                not_started_browsers: true,
+                process_exited_browsers: false,
+                released_sessions: false,
+                abandoned_sessions: true,
+                abandoned_session_min_age_minutes: 60,
+            },
+        );
+
+        assert_eq!(result["candidateCounts"]["sessions"], 1);
+        assert_eq!(result["candidates"]["sessions"][0], "old-session");
+        assert_eq!(result["policy"]["abandonedSessionsRequireCreatedAt"], true);
+        assert_eq!(result["policy"]["abandonedSessionMinAgeMinutes"], 60);
+        assert!(service_state.sessions.contains_key("fresh-session"));
+        assert!(service_state.sessions.contains_key("unknown-session"));
     }
 
     #[tokio::test]

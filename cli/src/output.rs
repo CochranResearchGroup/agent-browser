@@ -4667,7 +4667,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
-  agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions]
+  agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--abandoned-session-min-age-minutes <n>]
   agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]
   agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
   agent-browser service profiles
@@ -4738,7 +4738,7 @@ Notes:
   - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
   - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
-  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records; use it only after confirming the retained lease should no longer block profile reuse.
+  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; use it only after confirming the retained lease should no longer block profile reuse.
   - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.

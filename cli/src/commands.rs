@@ -1389,6 +1389,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 let mut process_exited_browsers = false;
                 let mut released_sessions = false;
                 let mut abandoned_sessions = false;
+                let mut abandoned_session_min_age_minutes = 1440u64;
                 let mut saw_apply = false;
                 let mut saw_dry_run = false;
                 let mut i = 1;
@@ -1410,10 +1411,28 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         "--process-exited-browsers" => process_exited_browsers = true,
                         "--released-sessions" => released_sessions = true,
                         "--abandoned-sessions" => abandoned_sessions = true,
+                        "--abandoned-session-min-age-minutes" => {
+                            i += 1;
+                            let Some(raw) = rest.get(i) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "--abandoned-session-min-age-minutes requires a value"
+                                        .to_string(),
+                                    usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--abandoned-session-min-age-minutes <n>]",
+                                });
+                            };
+                            abandoned_session_min_age_minutes =
+                                raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                                    message: format!(
+                                        "Invalid --abandoned-session-min-age-minutes value: {}",
+                                        raw
+                                    ),
+                                    usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--abandoned-session-min-age-minutes <n>]",
+                                })?;
+                        }
                         flag => {
                             return Err(ParseError::InvalidValue {
                                 message: format!("Unknown flag for service prune-retained: {}", flag),
-                                usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions]",
+                                usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--abandoned-session-min-age-minutes <n>]",
                             });
                         }
                     }
@@ -1422,7 +1441,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 if saw_apply && saw_dry_run {
                     return Err(ParseError::InvalidValue {
                         message: "--apply and --dry-run cannot be used together".to_string(),
-                        usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions]",
+                        usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--abandoned-session-min-age-minutes <n>]",
                     });
                 }
                 Ok(json!({
@@ -1435,6 +1454,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "processExitedBrowsers": process_exited_browsers,
                     "releasedSessions": released_sessions,
                     "abandonedSessions": abandoned_sessions,
+                    "abandonedSessionMinAgeMinutes": abandoned_session_min_age_minutes,
                     "serviceState": flags.service_state.clone(),
                 }))
             }
@@ -5910,6 +5930,7 @@ mod tests {
         assert_eq!(cmd["processExitedBrowsers"], false);
         assert_eq!(cmd["releasedSessions"], false);
         assert_eq!(cmd["abandonedSessions"], false);
+        assert_eq!(cmd["abandonedSessionMinAgeMinutes"], 1440);
         assert!(cmd["serviceState"].is_object());
     }
 
@@ -5931,7 +5952,7 @@ mod tests {
     #[test]
     fn test_service_prune_retained_accepts_session_retention_flags() {
         let cmd = parse_command(
-            &args("service prune-retained --released-sessions --abandoned-sessions"),
+            &args("service prune-retained --released-sessions --abandoned-sessions --abandoned-session-min-age-minutes 60"),
             &default_flags(),
         )
         .unwrap();
@@ -5939,6 +5960,18 @@ mod tests {
         assert_eq!(cmd["action"], "service_prune_retained");
         assert_eq!(cmd["releasedSessions"], true);
         assert_eq!(cmd["abandonedSessions"], true);
+        assert_eq!(cmd["abandonedSessionMinAgeMinutes"], 60);
+    }
+
+    #[test]
+    fn test_service_prune_retained_rejects_invalid_abandoned_session_min_age() {
+        let err = parse_command(
+            &args("service prune-retained --abandoned-session-min-age-minutes soon"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
     }
 
     #[test]
