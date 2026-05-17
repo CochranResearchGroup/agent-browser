@@ -943,19 +943,25 @@ fn preference_binding_matches_launch_command(
             .as_deref()
             .is_none_or(|build| build == label)
     });
+    let target_service_ids = target_service_ids_from_command(cmd);
+    let account_ids = account_ids_from_command(cmd);
+    let service_name = optional_command_string(cmd, "serviceName");
+    let task_name = optional_command_string(cmd, "taskName");
+    let has_filters = registry_array_field_has_items(binding, "targetServiceIds")
+        || registry_array_field_has_items(binding, "accountIds")
+        || registry_array_field_has_items(binding, "serviceNames")
+        || registry_array_field_has_items(binding, "taskNames");
     let identity_matches = registry_string_field(binding, "scope").as_deref() == Some("global")
-        || registry_array_field_intersects(
-            binding,
-            "targetServiceIds",
-            &target_service_ids_from_command(cmd),
-        )
-        || registry_array_field_intersects(binding, "accountIds", &account_ids_from_command(cmd))
-        || optional_command_string(cmd, "serviceName").is_some_and(|service_name| {
-            registry_array_field_contains(binding, "serviceNames", &service_name)
-        })
-        || optional_command_string(cmd, "taskName").is_some_and(|task_name| {
-            registry_array_field_contains(binding, "taskNames", &task_name)
-        });
+        && !has_filters
+        || has_filters
+            && registry_binding_filter_matches(binding, "targetServiceIds", &target_service_ids)
+            && registry_binding_filter_matches(binding, "accountIds", &account_ids)
+            && registry_binding_optional_filter_matches(
+                binding,
+                "serviceNames",
+                service_name.as_deref(),
+            )
+            && registry_binding_optional_filter_matches(binding, "taskNames", task_name.as_deref());
     browser_build_matches && identity_matches
 }
 
@@ -1010,10 +1016,35 @@ fn registry_array_field_contains(value: &Value, field: &str, expected: &str) -> 
         })
 }
 
+fn registry_array_field_has_items(value: &Value, field: &str) -> bool {
+    value
+        .get(field)
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| item.as_str().is_some_and(|item| !item.is_empty()))
+        })
+}
+
 fn registry_array_field_intersects(value: &Value, field: &str, expected: &[String]) -> bool {
     expected
         .iter()
         .any(|item| registry_array_field_contains(value, field, item))
+}
+
+fn registry_binding_filter_matches(value: &Value, field: &str, expected: &[String]) -> bool {
+    !registry_array_field_has_items(value, field)
+        || registry_array_field_intersects(value, field, expected)
+}
+
+fn registry_binding_optional_filter_matches(
+    value: &Value,
+    field: &str,
+    expected: Option<&str>,
+) -> bool {
+    !registry_array_field_has_items(value, field)
+        || expected.is_some_and(|expected| registry_array_field_contains(value, field, expected))
 }
 
 fn close_behavior_for_attached_browser(
@@ -12449,6 +12480,55 @@ mod tests {
         );
         assert_eq!(response["request"]["profileId"], "stealth-profile");
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_browser_preference_binding_requires_all_identity_filters_for_launch() {
+        let binding = json!({
+            "id": "only-works-on-chrome-myuser-primary",
+            "scope": "account",
+            "targetServiceIds": ["only-works-on-chrome"],
+            "accountIds": ["myuser"],
+            "browserBuild": "stock_chrome"
+        });
+
+        assert!(!preference_binding_matches_launch_command(
+            &binding,
+            &json!({
+                "targetServiceId": "only-works-on-chrome",
+                "browserBuild": "stock_chrome"
+            }),
+            Some("stock_chrome")
+        ));
+        assert!(!preference_binding_matches_launch_command(
+            &binding,
+            &json!({
+                "accountId": "myuser",
+                "browserBuild": "stock_chrome"
+            }),
+            Some("stock_chrome")
+        ));
+        assert!(preference_binding_matches_launch_command(
+            &binding,
+            &json!({
+                "targetServiceId": "only-works-on-chrome",
+                "accountId": "myuser",
+                "browserBuild": "stock_chrome"
+            }),
+            Some("stock_chrome")
+        ));
+        assert!(preference_binding_matches_launch_command(
+            &json!({
+                "id": "default-new-identities-use-stealthcdp",
+                "scope": "global",
+                "browserBuild": "stealthcdp_chromium"
+            }),
+            &json!({
+                "targetServiceId": "any-site",
+                "browserBuild": "stealthcdp_chromium"
+            }),
+            Some("stealthcdp_chromium")
+        ));
     }
 
     #[tokio::test]

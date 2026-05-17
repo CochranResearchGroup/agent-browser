@@ -615,16 +615,21 @@ fn preference_binding_matches_access_request(
             .as_deref()
             .is_none_or(|build| build == label)
     });
+    let has_filters = array_field_has_items(binding, "targetServiceIds")
+        || array_field_has_items(binding, "accountIds")
+        || array_field_has_items(binding, "serviceNames")
+        || array_field_has_items(binding, "taskNames");
     let identity_matches = string_field(binding, "scope").as_deref() == Some("global")
-        || array_field_intersects(binding, "targetServiceIds", &request.target_service_ids)
-        || array_field_intersects(binding, "accountIds", &request.account_ids)
-        || request.service_name.as_ref().is_some_and(|service_name| {
-            array_field_contains(binding, "serviceNames", service_name)
-        })
-        || request
-            .task_name
-            .as_ref()
-            .is_some_and(|task_name| array_field_contains(binding, "taskNames", task_name));
+        && !has_filters
+        || has_filters
+            && binding_filter_matches(binding, "targetServiceIds", &request.target_service_ids)
+            && binding_filter_matches(binding, "accountIds", &request.account_ids)
+            && binding_optional_filter_matches(
+                binding,
+                "serviceNames",
+                request.service_name.as_deref(),
+            )
+            && binding_optional_filter_matches(binding, "taskNames", request.task_name.as_deref());
     browser_build_matches && identity_matches
 }
 
@@ -697,6 +702,17 @@ fn array_field_contains(value: &Value, field: &str, expected: &str) -> bool {
         })
 }
 
+fn array_field_has_items(value: &Value, field: &str) -> bool {
+    value
+        .get(field)
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| item.as_str().is_some_and(|item| !item.is_empty()))
+        })
+}
+
 fn array_field_intersects(value: &Value, field: &str, expected: &[String]) -> bool {
     !expected.is_empty()
         && value
@@ -708,6 +724,15 @@ fn array_field_intersects(value: &Value, field: &str, expected: &[String]) -> bo
                     .filter_map(Value::as_str)
                     .any(|candidate| expected.iter().any(|item| item == candidate))
             })
+}
+
+fn binding_filter_matches(value: &Value, field: &str, expected: &[String]) -> bool {
+    !array_field_has_items(value, field) || array_field_intersects(value, field, expected)
+}
+
+fn binding_optional_filter_matches(value: &Value, field: &str, expected: Option<&str>) -> bool {
+    !array_field_has_items(value, field)
+        || expected.is_some_and(|expected| array_field_contains(value, field, expected))
 }
 
 struct AccessPlanDecisionInput<'a> {
@@ -3433,6 +3458,28 @@ mod tests {
         assert_eq!(
             plan["decision"]["browserCapabilityPreflight"]["client"]["helper"],
             "runServiceAccessPlanBrowserCapabilityPreflight"
+        );
+
+        let target_only_plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("Downloader".to_string()),
+                target_service_ids: vec!["only-works-on-chrome".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            target_only_plan["query"]["browserBuild"],
+            "stealthcdp_chromium"
+        );
+        assert_eq!(
+            target_only_plan["browserCapabilityEvidence"]["selectedPreferenceBinding"]["id"],
+            "default-new-identities-use-stealthcdp"
+        );
+        assert_eq!(
+            target_only_plan["decision"]["launchPosture"]["browserBuildSource"],
+            "browser_preference_binding"
         );
     }
 
