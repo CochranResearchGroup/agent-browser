@@ -98,6 +98,15 @@ prefix after trimming trailing numeric run suffixes, including total and
 omitted group counts. Text output shows the same top groups for faster
 retained-state triage.
 
+Use <code>agent-browser service repair-retained</code> before abandoned-session
+cleanup when legacy inert session placeholders lack parseable age evidence. The
+command is dry-run by default and only mutates state with <code>--apply</code>.
+The default repair stamps current observation time into
+<code>lastLeaseObservedAt</code> for shared or exclusive sessions that have no
+retained tabs and only inert self-linked <code>not_started</code> browser
+placeholders. Repaired sessions become too fresh for
+<code>--abandoned-sessions</code> pruning until the minimum age guard elapses.
+
 Use the HTTP API when another program owns the workflow lifecycle:
 
 ```bash

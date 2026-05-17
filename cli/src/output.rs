@@ -1552,6 +1552,52 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
     Some(lines.join("\n"))
 }
 
+fn format_service_repair_retained_text(data: &serde_json::Value) -> Option<String> {
+    let dry_run = data
+        .get("dryRun")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true);
+    let counts = data.get("candidateCounts")?;
+    let repaired = data
+        .get("repairedCounts")
+        .unwrap_or(&serde_json::Value::Null);
+    let before = data.get("before").unwrap_or(&serde_json::Value::Null);
+    let after = data.get("after").unwrap_or(&serde_json::Value::Null);
+    let mode = if dry_run { "dry-run" } else { "applied" };
+    let missing_lease_observed = counts
+        .get("missingLeaseObservedAt")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let total = counts
+        .get("total")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(missing_lease_observed);
+    let repaired_missing_lease_observed = repaired
+        .get("missingLeaseObservedAt")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let before_sessions = before
+        .get("sessionCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let after_sessions = after
+        .get("sessionCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(before_sessions);
+    let observed_at = data
+        .get("observedAt")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let next = data
+        .get("recommendedNextStep")
+        .and_then(|value| value.as_str())
+        .unwrap_or("Review service status.");
+
+    Some(format!(
+        "Retained service repair {mode}: candidates={total} missing_lease_observed_at={missing_lease_observed}\nObserved at: {observed_at}\nBefore: sessions={before_sessions}\nRepaired: missing_lease_observed_at={repaired_missing_lease_observed}\nAfter: sessions={after_sessions}\nNext: {next}"
+    ))
+}
+
 fn skipped_summary_groups_text(
     summary: &serde_json::Value,
     key: &str,
@@ -2237,6 +2283,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_prune_retained") {
             if let Some(output) = format_service_prune_retained_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_repair_retained") {
+            if let Some(output) = format_service_repair_retained_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -4744,6 +4796,7 @@ Usage:
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
   agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--abandoned-session-min-age-minutes <n>]
+  agent-browser service repair-retained [--dry-run|--apply] [--missing-lease-observed-at|--no-missing-lease-observed-at]
   agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]
   agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
   agent-browser service profiles
@@ -4778,6 +4831,7 @@ Commands:
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
   prune-retained        Dry-run or apply removal of inert retained browser and closed-tab records
+  repair-retained       Dry-run or apply safe repair of legacy inert retained session evidence
   access-plan           Show the no-launch profile, readiness, site-policy, provider, challenge, and browser-build routing recommendation
   browser-capability    Preflight guarded executable routing for one requested browser build without launching
   profiles              Show retained service profile records and derived allocation state
@@ -4815,6 +4869,7 @@ Notes:
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
   - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
   - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable lastLeaseObservedAt or createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; dry-runs also report skipped abandoned sessions that are too fresh or missing age evidence, plus grouped skippedSummary rows for triage.
+  - service repair-retained defaults to dry-run and stamps current observation time onto legacy shared or exclusive inert session placeholders only when --apply is present; repaired sessions become too fresh for abandoned-session pruning until the minimum age guard elapses.
   - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.
@@ -4895,6 +4950,7 @@ Examples:
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile
   agent-browser service prune-retained
+  agent-browser service repair-retained
   agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
   agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
   agent-browser service profiles
@@ -5400,6 +5456,7 @@ Service:
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
   service prune-retained     Dry-run or apply retained closed-tab and inert-browser cleanup
+  service repair-retained    Dry-run or apply retained session evidence repair
   service access-plan        Show no-launch profile and browser-build routing recommendation
   service profiles           Show retained profile records and allocation state
   service sessions           Show retained service session records
@@ -5717,6 +5774,7 @@ Examples:
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
   agent-browser service prune-retained   # Preview retained closed-tab and inert-browser cleanup
+  agent-browser service repair-retained  # Preview safe retained session evidence repair
   agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
   agent-browser service profiles         # Inspect retained service profiles and allocation state
   agent-browser service sessions         # Inspect retained service session records
@@ -5864,9 +5922,9 @@ mod tests {
         format_service_monitors_run_due_text, format_service_monitors_text,
         format_service_profile_seeding_handoff_text, format_service_profiles_text,
         format_service_providers_text, format_service_prune_retained_text,
-        format_service_sessions_text, format_service_site_policies_text,
-        format_service_status_text, format_service_tabs_text, format_service_trace_text,
-        format_storage_text,
+        format_service_repair_retained_text, format_service_sessions_text,
+        format_service_site_policies_text, format_service_status_text, format_service_tabs_text,
+        format_service_trace_text, format_storage_text,
     };
     use serde_json::json;
 
@@ -6346,6 +6404,37 @@ mod tests {
         assert!(rendered.contains("Skipped: abandoned_missing_age=4 abandoned_too_fresh=5"));
         assert!(rendered.contains("abandoned_missing_age_groups: receipts-live:3,auracall:1"));
         assert!(rendered.contains("abandoned_too_fresh_groups: canva:5"));
+        assert!(rendered.contains("Next: Review candidates."));
+    }
+
+    #[test]
+    fn test_format_service_repair_retained_text_includes_counts_and_next_step() {
+        let data = json!({
+            "dryRun": true,
+            "observedAt": "2026-05-17T12:00:00Z",
+            "candidateCounts": {
+                "missingLeaseObservedAt": 7,
+                "total": 7
+            },
+            "repairedCounts": {
+                "missingLeaseObservedAt": 0,
+                "total": 0
+            },
+            "before": {
+                "sessionCount": 140
+            },
+            "after": {
+                "sessionCount": 140
+            },
+            "recommendedNextStep": "Review candidates."
+        });
+
+        let rendered = format_service_repair_retained_text(&data).unwrap();
+
+        assert!(rendered
+            .contains("Retained service repair dry-run: candidates=7 missing_lease_observed_at=7"));
+        assert!(rendered.contains("Observed at: 2026-05-17T12:00:00Z"));
+        assert!(rendered.contains("Repaired: missing_lease_observed_at=0"));
         assert!(rendered.contains("Next: Review candidates."));
     }
 

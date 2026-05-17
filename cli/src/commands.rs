@@ -1458,6 +1458,50 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "serviceState": flags.service_state.clone(),
                 }))
             }
+            Some("repair-retained") => {
+                let mut apply = false;
+                let mut dry_run = true;
+                let mut missing_lease_observed_at = true;
+                let mut saw_apply = false;
+                let mut saw_dry_run = false;
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--apply" => {
+                            saw_apply = true;
+                            apply = true;
+                            dry_run = false;
+                        }
+                        "--dry-run" => {
+                            saw_dry_run = true;
+                            dry_run = true;
+                        }
+                        "--missing-lease-observed-at" => missing_lease_observed_at = true,
+                        "--no-missing-lease-observed-at" => missing_lease_observed_at = false,
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service repair-retained: {}", flag),
+                                usage: "service repair-retained [--dry-run|--apply] [--missing-lease-observed-at|--no-missing-lease-observed-at]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                if saw_apply && saw_dry_run {
+                    return Err(ParseError::InvalidValue {
+                        message: "--apply and --dry-run cannot be used together".to_string(),
+                        usage: "service repair-retained [--dry-run|--apply] [--missing-lease-observed-at|--no-missing-lease-observed-at]",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_repair_retained",
+                    "apply": apply,
+                    "dryRun": dry_run,
+                    "missingLeaseObservedAt": missing_lease_observed_at,
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
             Some("access-plan") => parse_service_access_plan(id, &rest, flags),
             Some("browser-capability") => {
                 parse_service_browser_capability_preflight(id, &rest, flags)
@@ -5978,6 +6022,42 @@ mod tests {
     fn test_service_prune_retained_rejects_apply_with_dry_run() {
         let err = parse_command(
             &args("service prune-retained --dry-run --apply"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_repair_retained_defaults_to_dry_run() {
+        let cmd = parse_command(&args("service repair-retained"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_repair_retained");
+        assert_eq!(cmd["dryRun"], true);
+        assert_eq!(cmd["apply"], false);
+        assert_eq!(cmd["missingLeaseObservedAt"], true);
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_repair_retained_accepts_apply_and_missing_age_toggle() {
+        let cmd = parse_command(
+            &args("service repair-retained --apply --no-missing-lease-observed-at"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_repair_retained");
+        assert_eq!(cmd["dryRun"], false);
+        assert_eq!(cmd["apply"], true);
+        assert_eq!(cmd["missingLeaseObservedAt"], false);
+    }
+
+    #[test]
+    fn test_service_repair_retained_rejects_apply_with_dry_run() {
+        let err = parse_command(
+            &args("service repair-retained --dry-run --apply"),
             &default_flags(),
         )
         .unwrap_err();

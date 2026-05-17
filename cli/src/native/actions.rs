@@ -70,7 +70,7 @@ use super::service_lifecycle::{
 use super::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     BrowserBuild, BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
-    JobState as ServiceJobState, LeaseState, MonitorState, ProfileKeyringPolicy,
+    BrowserSession, JobState as ServiceJobState, LeaseState, MonitorState, ProfileKeyringPolicy,
     ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
     SessionCleanupPolicy, TabLifecycle,
 };
@@ -215,6 +215,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_status"
             | "service_reconcile"
             | "service_prune_retained"
+            | "service_repair_retained"
             | "service_access_plan"
             | "service_browser_capability_preflight"
             | "service_job_cancel"
@@ -3004,6 +3005,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
         "service_prune_retained" => handle_service_prune_retained(cmd).await,
+        "service_repair_retained" => handle_service_repair_retained(cmd).await,
         "service_access_plan" => handle_service_access_plan(cmd).await,
         "service_browser_capability_preflight" => {
             handle_service_browser_capability_preflight(cmd).await
@@ -7938,6 +7940,129 @@ async fn handle_service_prune_retained(cmd: &Value) -> Result<Value, String> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ServiceRetentionRepairOptions {
+    apply: bool,
+    missing_lease_observed_at: bool,
+}
+
+impl ServiceRetentionRepairOptions {
+    fn from_command(cmd: &Value) -> Self {
+        Self {
+            apply: cmd.get("apply").and_then(Value::as_bool).unwrap_or(false),
+            missing_lease_observed_at: cmd
+                .get("missingLeaseObservedAt")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        }
+    }
+}
+
+async fn handle_service_repair_retained(cmd: &Value) -> Result<Value, String> {
+    let options = ServiceRetentionRepairOptions::from_command(cmd);
+    let observed_at = chrono::Utc::now().to_rfc3339();
+    if options.apply {
+        let repository = LockedServiceStateRepository::default_json()?;
+        repository.mutate(|state| {
+            Ok(repair_retained_service_state(
+                state,
+                options,
+                observed_at.as_str(),
+            ))
+        })
+    } else {
+        let mut service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        Ok(repair_retained_service_state(
+            &mut service_state,
+            options,
+            observed_at.as_str(),
+        ))
+    }
+}
+
+fn repair_retained_service_state(
+    state: &mut ServiceState,
+    options: ServiceRetentionRepairOptions,
+    observed_at: &str,
+) -> Value {
+    let before_session_count = state.sessions.len();
+    let mut missing_lease_observed_at = Vec::new();
+    let mut skipped = Vec::new();
+
+    if options.missing_lease_observed_at {
+        for session in state.sessions.values() {
+            if session_has_parseable_age_evidence(session) {
+                continue;
+            }
+            if matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                || !legacy_inert_session_placeholder(state, session)
+            {
+                skipped.push(session.id.clone());
+                continue;
+            }
+            missing_lease_observed_at.push(session.id.clone());
+        }
+    }
+
+    missing_lease_observed_at.sort();
+    skipped.sort();
+    let repaired_count = missing_lease_observed_at.len();
+
+    if options.apply {
+        for session_id in &missing_lease_observed_at {
+            if let Some(session) = state.sessions.get_mut(session_id) {
+                session.last_lease_observed_at = Some(observed_at.to_string());
+            }
+        }
+    }
+
+    json!({
+        "repaired": options.apply,
+        "dryRun": !options.apply,
+        "observedAt": observed_at,
+        "policy": {
+            "missingLeaseObservedAt": options.missing_lease_observed_at,
+            "requiresInertSessionPlaceholder": true,
+            "excludesReleasedOrExpiredSessions": true,
+            "stampSource": "currentObservationTime",
+        },
+        "before": {
+            "sessionCount": before_session_count,
+        },
+        "candidates": {
+            "missingLeaseObservedAt": missing_lease_observed_at,
+        },
+        "candidateCounts": {
+            "missingLeaseObservedAt": repaired_count,
+            "total": repaired_count,
+        },
+        "skipped": {
+            "missingLeaseObservedAt": skipped,
+        },
+        "skippedCounts": {
+            "missingLeaseObservedAt": skipped.len(),
+        },
+        "repairedCounts": {
+            "missingLeaseObservedAt": if options.apply { repaired_count } else { 0 },
+            "total": if options.apply { repaired_count } else { 0 },
+        },
+        "after": {
+            "sessionCount": state.sessions.len(),
+        },
+        "recommendedNextStep": if options.apply {
+            "Run agent-browser service prune-retained --abandoned-sessions as a dry-run; repaired sessions should now be too fresh until the minimum age guard elapses."
+        } else {
+            "Review candidates, then rerun with --apply to stamp current observation time onto safe legacy placeholders."
+        },
+    })
+}
+
 fn prune_retained_service_state(
     state: &mut ServiceState,
     options: ServiceRetentionPruneOptions,
@@ -8228,6 +8353,23 @@ fn skipped_session_group(session_id: &str) -> String {
     } else {
         session_id.to_string()
     }
+}
+
+fn session_has_parseable_age_evidence(session: &BrowserSession) -> bool {
+    session
+        .last_lease_observed_at
+        .as_deref()
+        .or(session.created_at.as_deref())
+        .and_then(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
+        .is_some()
+}
+
+fn legacy_inert_session_placeholder(state: &ServiceState, session: &BrowserSession) -> bool {
+    session.tab_ids.is_empty()
+        && !session.browser_ids.is_empty()
+        && session.browser_ids.iter().all(|browser_id| {
+            inert_session_browser_placeholder(state, browser_id, session.id.as_str())
+        })
 }
 
 fn inert_session_browser_placeholder(
@@ -14158,6 +14300,112 @@ mod tests {
         assert_eq!(result["data"]["candidateCounts"]["closedTabs"], 1);
         assert_eq!(result["data"]["candidateCounts"]["browsers"], 1);
         assert_eq!(result["data"]["removed"]["closedTabs"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_service_repair_retained_dry_run_reports_legacy_missing_age() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_repair_retained",
+            "id": "svc-repair-retained-1",
+            "serviceState": {
+                "browsers": {
+                    "session:legacy-session": {
+                        "id": "session:legacy-session",
+                        "health": "not_started",
+                        "activeSessionIds": ["legacy-session"]
+                    },
+                    "session:tabbed-session": {
+                        "id": "session:tabbed-session",
+                        "health": "not_started",
+                        "activeSessionIds": ["tabbed-session"]
+                    }
+                },
+                "sessions": {
+                    "legacy-session": {
+                        "id": "legacy-session",
+                        "lease": "shared",
+                        "browserIds": ["session:legacy-session"]
+                    },
+                    "fresh-session": {
+                        "id": "fresh-session",
+                        "lease": "shared",
+                        "browserIds": ["session:fresh-session"],
+                        "lastLeaseObservedAt": "2026-05-17T00:00:00Z"
+                    },
+                    "tabbed-session": {
+                        "id": "tabbed-session",
+                        "lease": "shared",
+                        "browserIds": ["session:tabbed-session"],
+                        "tabIds": ["tab-1"]
+                    }
+                },
+                "tabs": {
+                    "tab-1": {
+                        "id": "tab-1",
+                        "browserId": "session:tabbed-session",
+                        "lifecycle": "ready"
+                    }
+                }
+            }
+        });
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["dryRun"], true);
+        assert_eq!(
+            result["data"]["candidateCounts"]["missingLeaseObservedAt"],
+            1
+        );
+        assert_eq!(
+            result["data"]["candidates"]["missingLeaseObservedAt"][0],
+            "legacy-session"
+        );
+        assert_eq!(
+            result["data"]["repairedCounts"]["missingLeaseObservedAt"],
+            0
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[test]
+    fn test_repair_retained_service_state_apply_stamps_observation_time() {
+        let mut service_state = ServiceState {
+            browsers: BTreeMap::from([(
+                "session:legacy-session".to_string(),
+                BrowserProcess {
+                    id: "session:legacy-session".to_string(),
+                    health: ServiceBrowserHealth::NotStarted,
+                    active_session_ids: vec!["legacy-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "legacy-session".to_string(),
+                BrowserSession {
+                    id: "legacy-session".to_string(),
+                    lease: LeaseState::Shared,
+                    browser_ids: vec!["session:legacy-session".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let result = repair_retained_service_state(
+            &mut service_state,
+            ServiceRetentionRepairOptions {
+                apply: true,
+                missing_lease_observed_at: true,
+            },
+            "2026-05-17T12:00:00Z",
+        );
+
+        assert_eq!(result["repaired"], true);
+        assert_eq!(result["repairedCounts"]["missingLeaseObservedAt"], 1);
+        assert_eq!(
+            service_state.sessions["legacy-session"].last_lease_observed_at,
+            Some("2026-05-17T12:00:00Z".to_string())
+        );
     }
 
     #[test]

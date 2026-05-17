@@ -1658,7 +1658,9 @@ fn main() {
     if cmd
         .get("action")
         .and_then(|value| value.as_str())
-        .is_some_and(|action| action == "service_prune_retained")
+        .is_some_and(|action| {
+            matches!(action, "service_prune_retained" | "service_repair_retained")
+        })
     {
         let action = cmd.get("action").and_then(|value| value.as_str());
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
