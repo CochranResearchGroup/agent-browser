@@ -1387,6 +1387,8 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 let mut closed_tabs = true;
                 let mut not_started_browsers = true;
                 let mut process_exited_browsers = false;
+                let mut released_sessions = false;
+                let mut abandoned_sessions = false;
                 let mut saw_apply = false;
                 let mut saw_dry_run = false;
                 let mut i = 1;
@@ -1406,10 +1408,12 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         "--not-started-browsers" => not_started_browsers = true,
                         "--no-not-started-browsers" => not_started_browsers = false,
                         "--process-exited-browsers" => process_exited_browsers = true,
+                        "--released-sessions" => released_sessions = true,
+                        "--abandoned-sessions" => abandoned_sessions = true,
                         flag => {
                             return Err(ParseError::InvalidValue {
                                 message: format!("Unknown flag for service prune-retained: {}", flag),
-                                usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers]",
+                                usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions]",
                             });
                         }
                     }
@@ -1418,7 +1422,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 if saw_apply && saw_dry_run {
                     return Err(ParseError::InvalidValue {
                         message: "--apply and --dry-run cannot be used together".to_string(),
-                        usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers]",
+                        usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions]",
                     });
                 }
                 Ok(json!({
@@ -1429,6 +1433,8 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "closedTabs": closed_tabs,
                     "notStartedBrowsers": not_started_browsers,
                     "processExitedBrowsers": process_exited_browsers,
+                    "releasedSessions": released_sessions,
+                    "abandonedSessions": abandoned_sessions,
                     "serviceState": flags.service_state.clone(),
                 }))
             }
@@ -5902,6 +5908,8 @@ mod tests {
         assert_eq!(cmd["closedTabs"], true);
         assert_eq!(cmd["notStartedBrowsers"], true);
         assert_eq!(cmd["processExitedBrowsers"], false);
+        assert_eq!(cmd["releasedSessions"], false);
+        assert_eq!(cmd["abandonedSessions"], false);
         assert!(cmd["serviceState"].is_object());
     }
 
@@ -5918,6 +5926,19 @@ mod tests {
         assert_eq!(cmd["apply"], true);
         assert_eq!(cmd["closedTabs"], false);
         assert_eq!(cmd["processExitedBrowsers"], true);
+    }
+
+    #[test]
+    fn test_service_prune_retained_accepts_session_retention_flags() {
+        let cmd = parse_command(
+            &args("service prune-retained --released-sessions --abandoned-sessions"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_prune_retained");
+        assert_eq!(cmd["releasedSessions"], true);
+        assert_eq!(cmd["abandonedSessions"], true);
     }
 
     #[test]

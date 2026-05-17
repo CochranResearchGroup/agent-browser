@@ -1459,16 +1459,24 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         .get("browsers")
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
+    let sessions = counts
+        .get("sessions")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
     let total = counts
         .get("total")
         .and_then(|value| value.as_u64())
-        .unwrap_or(closed_tabs + browsers);
+        .unwrap_or(closed_tabs + browsers + sessions);
     let removed_tabs = removed
         .get("closedTabs")
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
     let removed_browsers = removed
         .get("browsers")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let removed_sessions = removed
+        .get("sessions")
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
     let before_browsers = before
@@ -1493,7 +1501,7 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         .unwrap_or("Review service status.");
 
     Some(format!(
-        "Retained service prune {mode}: candidates={total} closed_tabs={closed_tabs} browsers={browsers}\nBefore: browsers={before_browsers} tabs={before_tabs}\nRemoved: browsers={removed_browsers} closed_tabs={removed_tabs}\nAfter: browsers={after_browsers} tabs={after_tabs}\nNext: {next}"
+        "Retained service prune {mode}: candidates={total} closed_tabs={closed_tabs} browsers={browsers} sessions={sessions}\nBefore: browsers={before_browsers} tabs={before_tabs}\nRemoved: browsers={removed_browsers} closed_tabs={removed_tabs} sessions={removed_sessions}\nAfter: browsers={after_browsers} tabs={after_tabs}\nNext: {next}"
     ))
 }
 
@@ -4659,7 +4667,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
-  agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers]
+  agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions]
   agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]
   agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
   agent-browser service profiles
@@ -4729,6 +4737,8 @@ Notes:
   - It does not launch a browser.
   - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
+  - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
+  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records; use it only after confirming the retained lease should no longer block profile reuse.
   - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.
@@ -6209,11 +6219,13 @@ mod tests {
             "candidateCounts": {
                 "closedTabs": 3,
                 "browsers": 2,
-                "total": 5
+                "sessions": 1,
+                "total": 6
             },
             "removed": {
                 "closedTabs": 0,
-                "browsers": 0
+                "browsers": 0,
+                "sessions": 0
             },
             "before": {
                 "browserCount": 10,
@@ -6228,8 +6240,9 @@ mod tests {
 
         let rendered = format_service_prune_retained_text(&data).unwrap();
 
-        assert!(rendered
-            .contains("Retained service prune dry-run: candidates=5 closed_tabs=3 browsers=2"));
+        assert!(rendered.contains(
+            "Retained service prune dry-run: candidates=6 closed_tabs=3 browsers=2 sessions=1"
+        ));
         assert!(rendered.contains("Before: browsers=10 tabs=30"));
         assert!(rendered.contains("Next: Review candidates."));
     }
