@@ -92,7 +92,11 @@ parseable <code>lastLeaseObservedAt</code> or <code>createdAt</code> older than
 <code>1440</code>. Dry-runs report skipped abandoned sessions as
 <code>abandonedSessionsMissingAgeTimestamp</code> or
 <code>abandonedSessionsTooFresh</code> so operators can separate missing age
-evidence and too-fresh lease observations from safe prune candidates.
+evidence and too-fresh lease observations from safe prune candidates. The
+<code>skippedSummary</code> field reports the top skipped groups by stable
+prefix after trimming trailing numeric run suffixes, including total and
+omitted group counts. Text output shows the same top groups for faster
+retained-state triage.
 
 Use the HTTP API when another program owns the workflow lifecycle:
 

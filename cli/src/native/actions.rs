@@ -1,6 +1,6 @@
 use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::future::Future;
@@ -8037,6 +8037,10 @@ fn prune_retained_service_state(
     let skipped_abandoned_sessions_missing_age_timestamp_count =
         skipped_abandoned_sessions_missing_age_timestamp.len();
     let skipped_abandoned_sessions_too_fresh_count = skipped_abandoned_sessions_too_fresh.len();
+    let skipped_abandoned_sessions_missing_age_timestamp_summary =
+        summarize_skipped_session_groups(&skipped_abandoned_sessions_missing_age_timestamp);
+    let skipped_abandoned_sessions_too_fresh_summary =
+        summarize_skipped_session_groups(&skipped_abandoned_sessions_too_fresh);
 
     let mut session_tab_refs_removed = 0usize;
     let mut session_browser_refs_removed = 0usize;
@@ -8112,6 +8116,10 @@ fn prune_retained_service_state(
             "abandonedSessionsMissingAgeTimestamp": skipped_abandoned_sessions_missing_age_timestamp_count,
             "abandonedSessionsTooFresh": skipped_abandoned_sessions_too_fresh_count,
         },
+        "skippedSummary": {
+            "abandonedSessionsMissingAgeTimestamp": skipped_abandoned_sessions_missing_age_timestamp_summary,
+            "abandonedSessionsTooFresh": skipped_abandoned_sessions_too_fresh_summary,
+        },
         "removed": {
             "closedTabs": if options.apply { closed_tab_ids.len() } else { 0 },
             "browsers": if options.apply { browser_ids.len() } else { 0 },
@@ -8158,6 +8166,67 @@ fn abandoned_session_age_status(
         SessionAgeStatus::OldEnough
     } else {
         SessionAgeStatus::TooFresh
+    }
+}
+
+fn summarize_skipped_session_groups(session_ids: &[String]) -> Value {
+    let mut groups = BTreeMap::<String, Vec<String>>::new();
+    for session_id in session_ids {
+        groups
+            .entry(skipped_session_group(session_id))
+            .or_default()
+            .push(session_id.clone());
+    }
+    let group_count = groups.len();
+    let mut groups = groups
+        .into_iter()
+        .map(|(group, mut ids)| {
+            ids.sort();
+            json!({
+                "group": group,
+                "count": ids.len(),
+                "examples": ids.into_iter().take(3).collect::<Vec<_>>(),
+            })
+        })
+        .collect::<Vec<_>>();
+    groups.sort_by(|left, right| {
+        let left_count = left
+            .get("count")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        let right_count = right
+            .get("count")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        right_count.cmp(&left_count).then_with(|| {
+            left.get("group")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .cmp(
+                    right
+                        .get("group")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or(""),
+                )
+        })
+    });
+    let omitted_group_count = group_count.saturating_sub(10);
+    groups.truncate(10);
+    json!({
+        "groupCount": group_count,
+        "omittedGroupCount": omitted_group_count,
+        "groups": groups,
+    })
+}
+
+fn skipped_session_group(session_id: &str) -> String {
+    let Some((prefix, suffix)) = session_id.rsplit_once('-') else {
+        return session_id.to_string();
+    };
+    if !prefix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit()) {
+        prefix.to_string()
+    } else {
+        session_id.to_string()
     }
 }
 
@@ -14227,11 +14296,29 @@ mod tests {
                     },
                 ),
                 (
+                    "session:fresh-session-2".to_string(),
+                    BrowserProcess {
+                        id: "session:fresh-session-2".to_string(),
+                        health: ServiceBrowserHealth::NotStarted,
+                        active_session_ids: vec!["fresh-session-2".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
                     "session:unknown-session".to_string(),
                     BrowserProcess {
                         id: "session:unknown-session".to_string(),
                         health: ServiceBrowserHealth::NotStarted,
                         active_session_ids: vec!["unknown-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "session:unknown-session-2".to_string(),
+                    BrowserProcess {
+                        id: "session:unknown-session-2".to_string(),
+                        health: ServiceBrowserHealth::NotStarted,
+                        active_session_ids: vec!["unknown-session-2".to_string()],
                         ..BrowserProcess::default()
                     },
                 ),
@@ -14255,7 +14342,17 @@ mod tests {
                         lease: LeaseState::Shared,
                         browser_ids: vec!["session:fresh-session".to_string()],
                         created_at: Some("2000-01-01T00:00:00Z".to_string()),
-                        last_lease_observed_at: Some(fresh_session_time),
+                        last_lease_observed_at: Some(fresh_session_time.clone()),
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "fresh-session-2".to_string(),
+                    BrowserSession {
+                        id: "fresh-session-2".to_string(),
+                        lease: LeaseState::Shared,
+                        browser_ids: vec!["session:fresh-session-2".to_string()],
+                        last_lease_observed_at: Some(fresh_session_time.clone()),
                         ..BrowserSession::default()
                     },
                 ),
@@ -14265,6 +14362,15 @@ mod tests {
                         id: "unknown-session".to_string(),
                         lease: LeaseState::Shared,
                         browser_ids: vec!["session:unknown-session".to_string()],
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "unknown-session-2".to_string(),
+                    BrowserSession {
+                        id: "unknown-session-2".to_string(),
+                        lease: LeaseState::Shared,
+                        browser_ids: vec!["session:unknown-session-2".to_string()],
                         ..BrowserSession::default()
                     },
                 ),
@@ -14294,10 +14400,26 @@ mod tests {
             result["skipped"]["abandonedSessionsMissingAgeTimestamp"][0],
             "unknown-session"
         );
-        assert_eq!(result["skippedCounts"]["abandonedSessionsTooFresh"], 1);
+        assert_eq!(result["skippedCounts"]["abandonedSessionsTooFresh"], 2);
         assert_eq!(
             result["skippedCounts"]["abandonedSessionsMissingAgeTimestamp"],
-            1
+            2
+        );
+        assert_eq!(
+            result["skippedSummary"]["abandonedSessionsTooFresh"]["groups"][0]["group"],
+            "fresh-session"
+        );
+        assert_eq!(
+            result["skippedSummary"]["abandonedSessionsTooFresh"]["groups"][0]["count"],
+            2
+        );
+        assert_eq!(
+            result["skippedSummary"]["abandonedSessionsMissingAgeTimestamp"]["groups"][0]["group"],
+            "unknown-session"
+        );
+        assert_eq!(
+            result["skippedSummary"]["abandonedSessionsMissingAgeTimestamp"]["groups"][0]["count"],
+            2
         );
         assert_eq!(
             result["policy"]["abandonedSessionsRequireAgeTimestamp"],

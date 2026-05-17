@@ -1522,6 +1522,25 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         lines.push(format!(
             "Skipped: abandoned_missing_age={skipped_abandoned_missing_age} abandoned_too_fresh={skipped_abandoned_too_fresh}"
         ));
+        let summary = data
+            .get("skippedSummary")
+            .unwrap_or(&serde_json::Value::Null);
+        let missing_age_summary = skipped_summary_groups_text(
+            summary,
+            "abandonedSessionsMissingAgeTimestamp",
+            "abandoned_missing_age_groups",
+        );
+        let too_fresh_summary = skipped_summary_groups_text(
+            summary,
+            "abandonedSessionsTooFresh",
+            "abandoned_too_fresh_groups",
+        );
+        if let Some(summary) = missing_age_summary {
+            lines.push(summary);
+        }
+        if let Some(summary) = too_fresh_summary {
+            lines.push(summary);
+        }
     }
     lines.extend([
         format!(
@@ -1531,6 +1550,35 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         format!("Next: {next}"),
     ]);
     Some(lines.join("\n"))
+}
+
+fn skipped_summary_groups_text(
+    summary: &serde_json::Value,
+    key: &str,
+    label: &str,
+) -> Option<String> {
+    let summary = summary.get(key)?;
+    let groups = summary
+        .get("groups")
+        .and_then(|value| value.as_array())
+        .or_else(|| summary.as_array())?;
+    if groups.is_empty() {
+        return None;
+    }
+    let values = groups
+        .iter()
+        .take(5)
+        .map(|group| {
+            let name = value_str(group, "group", "unknown");
+            let count = group
+                .get("count")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0);
+            format!("{name}:{count}")
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    Some(format!("{label}: {values}"))
 }
 
 fn format_service_site_policy_line(
@@ -4766,7 +4814,7 @@ Notes:
   - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
   - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
-  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable lastLeaseObservedAt or createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; dry-runs also report skipped abandoned sessions that are too fresh or missing age evidence.
+  - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable lastLeaseObservedAt or createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; dry-runs also report skipped abandoned sessions that are too fresh or missing age evidence, plus grouped skippedSummary rows for triage.
   - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing, then prints whether a browser capability binding would be applied and why.
@@ -6256,6 +6304,23 @@ mod tests {
                 "abandonedSessionsMissingAgeTimestamp": 4,
                 "abandonedSessionsTooFresh": 5
             },
+            "skippedSummary": {
+                "abandonedSessionsMissingAgeTimestamp": {
+                    "groupCount": 2,
+                    "omittedGroupCount": 0,
+                    "groups": [
+                        {"group": "receipts-live", "count": 3, "examples": ["receipts-live-1"]},
+                        {"group": "auracall", "count": 1, "examples": ["auracall-1"]}
+                    ]
+                },
+                "abandonedSessionsTooFresh": {
+                    "groupCount": 1,
+                    "omittedGroupCount": 0,
+                    "groups": [
+                        {"group": "canva", "count": 5, "examples": ["canva-1"]}
+                    ]
+                }
+            },
             "removed": {
                 "closedTabs": 0,
                 "browsers": 0,
@@ -6279,6 +6344,8 @@ mod tests {
         ));
         assert!(rendered.contains("Before: browsers=10 tabs=30"));
         assert!(rendered.contains("Skipped: abandoned_missing_age=4 abandoned_too_fresh=5"));
+        assert!(rendered.contains("abandoned_missing_age_groups: receipts-live:3,auracall:1"));
+        assert!(rendered.contains("abandoned_too_fresh_groups: canva:5"));
         assert!(rendered.contains("Next: Review candidates."));
     }
 
