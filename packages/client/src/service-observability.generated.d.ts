@@ -1842,6 +1842,54 @@ export interface ServiceBrowserPreferenceBindingOptions extends ServiceQueryOpti
   record?: Record<string, unknown>;
 }
 
+export interface ServiceBrowserPreferenceCommandOptions {
+  browserBuild?: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  targetServiceId?: string;
+  siteId?: string;
+  loginId?: string;
+  targetServiceIds?: string[];
+  accountId?: string;
+  accountIds?: string[];
+  serviceName?: string;
+  serviceNames?: string[];
+  taskName?: string;
+  taskNames?: string[];
+  reason?: string;
+}
+
+export interface ServiceBrowserPreferenceCommandSuggestion {
+  executableId: string;
+  browserBuild: string;
+  hostId: string | null;
+  capabilityId: string | null;
+  executablePath: string | null;
+  source: string | null;
+  fresh: boolean | null;
+  tags: string[];
+  existingBindingIds: string[];
+  copyable: boolean;
+  command: string;
+}
+
+export interface ServiceBrowserPreferenceCommandSummary {
+  copyable: boolean;
+  requested: {
+    browserBuild: string | null;
+    targetServiceIds: string[];
+    accountIds: string[];
+    serviceNames: string[];
+    taskNames: string[];
+    reason: string;
+  };
+  counts: {
+    browserExecutables: number;
+    matchingExecutables: number;
+    browserPreferenceBindings: number;
+  };
+  suggestions: ServiceBrowserPreferenceCommandSuggestion[];
+  recommendedNextStep: string;
+}
+
 export interface ServiceBrowserCapabilityPreflightOptions extends ServiceAccessPlanOptions {
   /** Requested browser build to preflight. */
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
@@ -1995,6 +2043,7 @@ export declare function upsertServiceProvider(options: ServiceProviderMutationOp
 export declare function deleteServiceProvider(options: ServiceIdOptions): Promise<ServiceProviderDeleteResponse>;
 export declare function upsertServiceBrowserCapabilityRegistryRecord(options: ServiceBrowserCapabilityRegistryUpsertOptions): Promise<ServiceBrowserCapabilityRegistryUpsertResponse>;
 export declare function upsertServiceBrowserPreferenceBinding(options: ServiceBrowserPreferenceBindingOptions): Promise<ServiceBrowserCapabilityRegistryUpsertResponse>;
+export declare function summarizeServiceBrowserPreferenceCommands(registry: ServiceBrowserCapabilityRegistryResponse | Record<string, unknown>, options?: ServiceBrowserPreferenceCommandOptions): ServiceBrowserPreferenceCommandSummary;
 export declare function cancelServiceJob(options: ServiceJobCancelOptions): Promise<ServiceJobCancelResponse>;
 export declare function retryServiceBrowser(options: ServiceBrowserRetryOptions): Promise<ServiceBrowserRetryResponse>;
 export declare function applyServiceRemedies(options: ServiceRemediesApplyOptions): Promise<ServiceRemediesApplyResponse>;

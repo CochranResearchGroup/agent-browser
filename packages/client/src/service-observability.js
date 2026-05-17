@@ -40,6 +40,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityPreflightOptions} ServiceBrowserCapabilityPreflightOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityPreflightResponse} ServiceBrowserCapabilityPreflightResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowserPreferenceBindingOptions} ServiceBrowserPreferenceBindingOptions
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserPreferenceCommandOptions} ServiceBrowserPreferenceCommandOptions
+ * @typedef {import('./service-observability.generated.js').ServiceBrowserPreferenceCommandSummary} ServiceBrowserPreferenceCommandSummary
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryUpsertOptions} ServiceBrowserCapabilityRegistryUpsertOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryUpsertResponse} ServiceBrowserCapabilityRegistryUpsertResponse
  * @typedef {import('./service-observability.generated.js').ServiceQueryOptions} ServiceQueryOptions
@@ -1723,6 +1725,102 @@ export function upsertServiceBrowserPreferenceBinding({
 }
 
 /**
+ * @param {ServiceBrowserCapabilityRegistryResponse | Record<string, unknown>} registry
+ * @param {ServiceBrowserPreferenceCommandOptions} [options]
+ * @returns {ServiceBrowserPreferenceCommandSummary}
+ */
+export function summarizeServiceBrowserPreferenceCommands(registry, options = {}) {
+  const registryRecord = /** @type {Record<string, unknown>} */ (registry);
+  const browserCapabilityRegistry = /** @type {Record<string, unknown>} */ (isRecord(registryRecord.browserCapabilityRegistry)
+    ? registryRecord.browserCapabilityRegistry
+    : registryRecord);
+  const executables = Array.isArray(browserCapabilityRegistry.browserExecutables)
+    ? browserCapabilityRegistry.browserExecutables
+    : [];
+  const capabilities = Array.isArray(browserCapabilityRegistry.browserCapabilities)
+    ? browserCapabilityRegistry.browserCapabilities
+    : [];
+  const bindings = Array.isArray(browserCapabilityRegistry.browserPreferenceBindings)
+    ? browserCapabilityRegistry.browserPreferenceBindings
+    : [];
+  const targets = uniqueStrings([options.targetServiceId, options.siteId, options.loginId, ...(options.targetServiceIds ?? [])]);
+  const accounts = uniqueStrings([options.accountId, ...(options.accountIds ?? [])]);
+  const services = uniqueStrings([options.serviceName, ...(options.serviceNames ?? [])]);
+  const tasks = uniqueStrings([options.taskName, ...(options.taskNames ?? [])]);
+  const hasFilter = targets.length > 0 || accounts.length > 0 || services.length > 0 || tasks.length > 0;
+  const reason = typeof options.reason === 'string' && options.reason.length > 0 ? options.reason : 'operator_primary_browser_preference';
+  const suggestions = executables
+    .filter((executable) => {
+      if (!isRecord(executable)) return false;
+      return !options.browserBuild || executable.buildLabel === options.browserBuild;
+    })
+    .map((executable) => {
+      const record = /** @type {Record<string, unknown>} */ (executable);
+      const executableId = stringField(record, 'id');
+      const browserBuild = stringField(record, 'buildLabel') || options.browserBuild || 'stock_chrome';
+      const hostId = stringField(record, 'hostId');
+      const capabilityId = capabilities
+        .filter(isRecord)
+        .find(
+          (capability) =>
+            stringField(capability, 'executableId') === executableId &&
+            (!hostId || stringField(capability, 'hostId') === hostId),
+        );
+      const preferredCapabilityId = capabilityId ? stringField(capabilityId, 'id') : null;
+      const existingBindingIds = bindings
+        .filter(isRecord)
+        .filter((binding) => stringField(binding, 'preferredExecutableId') === executableId)
+        .map((binding) => stringField(binding, 'id'))
+        .filter(Boolean);
+      return {
+        executableId,
+        browserBuild,
+        hostId: hostId || null,
+        capabilityId: preferredCapabilityId || null,
+        executablePath: stringField(record, 'executablePath') || null,
+        source: stringField(record, 'source') || null,
+        fresh: typeof record.fresh === 'boolean' ? record.fresh : null,
+        tags: Array.isArray(record.tags) ? record.tags.filter((tag) => typeof tag === 'string') : [],
+        existingBindingIds,
+        copyable: hasFilter,
+        command: browserPreferenceCommand({
+          browserBuild,
+          preferredExecutableId: executableId,
+          preferredHostId: hostId || null,
+          preferredCapabilityId,
+          targetServiceIds: targets,
+          accountIds: accounts,
+          serviceNames: services,
+          taskNames: tasks,
+          reason,
+        }),
+      };
+    })
+    .filter((suggestion) => suggestion.executableId.length > 0)
+    .sort((left, right) => `${left.browserBuild}:${left.executableId}`.localeCompare(`${right.browserBuild}:${right.executableId}`));
+  return {
+    copyable: hasFilter,
+    requested: {
+      browserBuild: options.browserBuild ?? null,
+      targetServiceIds: targets,
+      accountIds: accounts,
+      serviceNames: services,
+      taskNames: tasks,
+      reason,
+    },
+    counts: {
+      browserExecutables: executables.length,
+      matchingExecutables: suggestions.length,
+      browserPreferenceBindings: bindings.length,
+    },
+    suggestions,
+    recommendedNextStep: hasFilter
+      ? 'Copy the preferred command, run it, then run service browser-capability preflight for the same site/account before requesting browser work.'
+      : 'Rerun with targetServiceId and accountId to produce exact copyable prefer commands.',
+  };
+}
+
+/**
  * @param {ServiceJobCancelOptions} options
  * @returns {Promise<ServiceJobCancelResponse>}
  */
@@ -2088,6 +2186,46 @@ function browserPreferenceBindingId(browserBuild, preferredExecutableId, targets
   return slugId(['primary', browserBuild, ...targets, ...accounts, ...services, ...tasks, preferredExecutableId].join('-'));
 }
 
+function browserPreferenceCommand({
+  browserBuild,
+  preferredExecutableId,
+  preferredHostId,
+  preferredCapabilityId,
+  targetServiceIds,
+  accountIds,
+  serviceNames,
+  taskNames,
+  reason,
+}) {
+  const args = [
+    'agent-browser',
+    'service',
+    'browser-capability',
+    'prefer',
+    '--browser-build',
+    browserBuild,
+    '--preferred-executable-id',
+    preferredExecutableId,
+  ];
+  if (preferredHostId) args.push('--preferred-host-id', preferredHostId);
+  if (preferredCapabilityId) args.push('--preferred-capability-id', preferredCapabilityId);
+  if (targetServiceIds.length === 0 && accountIds.length === 0 && serviceNames.length === 0 && taskNames.length === 0) {
+    args.push('--target-service-id', '<site>', '--account-id', '<account>');
+  } else {
+    for (const target of targetServiceIds) args.push('--target-service-id', target);
+    for (const account of accountIds) args.push('--account-id', account);
+    for (const service of serviceNames) args.push('--service-name', service);
+    for (const task of taskNames) args.push('--task-name', task);
+  }
+  args.push('--reason', reason);
+  return args.map(shellQuoteArg).join(' ');
+}
+
+function shellQuoteArg(value) {
+  if (value.startsWith('<') && value.endsWith('>')) return value;
+  return /^[A-Za-z0-9_.:/=-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 function slugId(value) {
   const slug = value
     .replace(/[^A-Za-z0-9_.-]+/g, '-')
@@ -2095,6 +2233,15 @@ function slugId(value) {
     .replace(/^-|-$/g, '')
     .toLowerCase();
   return slug || `primary-browser-${Date.now()}`;
+}
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stringField(value, key) {
+  const field = value[key];
+  return typeof field === 'string' && field.length > 0 ? field : '';
 }
 
 /**

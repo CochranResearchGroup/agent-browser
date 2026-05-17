@@ -1003,6 +1003,62 @@ fn format_service_browser_capability_preflight_text(data: &serde_json::Value) ->
     Some(lines.join("\n"))
 }
 
+fn format_service_browser_capability_preference_guide_text(
+    data: &serde_json::Value,
+) -> Option<String> {
+    let suggestions = data.get("suggestions").and_then(|value| value.as_array())?;
+    let counts = data.get("counts").unwrap_or(data);
+    let requested = data.get("requested").unwrap_or(data);
+    let mut lines = vec![format!(
+        "Browser capability preference guide: matches={} executables={} bindings={} copyable={}",
+        value_u64(counts, "matchingExecutables", suggestions.len() as u64),
+        value_u64(counts, "browserExecutables", 0),
+        value_u64(counts, "browserPreferenceBindings", 0),
+        value_bool_label(data, "copyable")
+    )];
+    lines.push(format!(
+        "  requested build={} targets={} accounts={} service={} task={}",
+        value_str(requested, "browserBuild", "any"),
+        json_string_array(requested, "targetServiceIds"),
+        json_string_array(requested, "accountIds"),
+        value_str(requested, "serviceName", "none"),
+        value_str(requested, "taskName", "none")
+    ));
+    for suggestion in suggestions {
+        lines.push(format!(
+            "  executable={} build={} host={} capability={} fresh={} source={}",
+            value_str(suggestion, "executableId", "unknown"),
+            value_str(suggestion, "browserBuild", "unknown"),
+            value_str(suggestion, "hostId", "none"),
+            value_str(suggestion, "capabilityId", "none"),
+            value_display(suggestion, "fresh", "unknown"),
+            value_str(suggestion, "source", "unknown")
+        ));
+        lines.push(format!(
+            "    existing_bindings={}",
+            json_string_array(suggestion, "existingBindingIds")
+        ));
+        if let Some(command) = suggestion.get("command").and_then(|value| value.as_str()) {
+            if suggestion
+                .get("copyable")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            {
+                lines.push(format!("    command={command}"));
+            } else {
+                lines.push(format!("    template={command}"));
+            }
+        }
+    }
+    if let Some(next) = data
+        .get("recommendedNextStep")
+        .and_then(|value| value.as_str())
+    {
+        lines.push(format!("  recommended_next_step={next}"));
+    }
+    Some(lines.join("\n"))
+}
+
 fn format_service_job_line(job: &serde_json::Value) -> String {
     let timestamp = job
         .get("submittedAt")
@@ -1060,6 +1116,28 @@ fn value_str<'a>(value: &'a serde_json::Value, key: &str, fallback: &'a str) -> 
     value
         .get(key)
         .and_then(|value| value.as_str())
+        .unwrap_or(fallback)
+}
+
+fn value_display(value: &serde_json::Value, key: &str, fallback: &str) -> String {
+    match value.get(key) {
+        Some(serde_json::Value::String(value)) => value.clone(),
+        Some(serde_json::Value::Bool(value)) => {
+            if *value {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }
+        }
+        Some(serde_json::Value::Number(value)) => value.to_string(),
+        _ => fallback.to_string(),
+    }
+}
+
+fn value_u64(value: &serde_json::Value, key: &str, fallback: u64) -> u64 {
+    value
+        .get(key)
+        .and_then(|value| value.as_u64())
         .unwrap_or(fallback)
 }
 
@@ -2247,6 +2325,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("service_browser_capability_preflight") {
             if let Some(output) = format_service_browser_capability_preflight_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("service_browser_capability_preference_guide") {
+            if let Some(output) = format_service_browser_capability_preference_guide_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -4799,6 +4883,7 @@ Usage:
   agent-browser service repair-retained [--dry-run|--apply] [--missing-lease-observed-at|--no-missing-lease-observed-at]
   agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]
   agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
+  agent-browser service browser-capability guide [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]
   agent-browser service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]
   agent-browser service profiles
   agent-browser service sessions
@@ -4835,6 +4920,8 @@ Commands:
   repair-retained       Dry-run or apply safe repair of legacy inert retained session evidence
   access-plan           Show the no-launch profile, readiness, site-policy, provider, challenge, and browser-build routing recommendation
   browser-capability    Preflight guarded executable routing for one requested browser build without launching
+  browser-capability guide
+                        List known executable IDs and copyable prefer commands derived from the current registry
   browser-capability prefer
                         Persist an advisory browserPreferenceBindings row for a primary browser on a site, account, service, or task filter
   profiles              Show retained service profile records and derived allocation state
@@ -4876,6 +4963,7 @@ Notes:
   - service access-plan prints the service-owned profile and browser-build recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
   - service browser-capability preflight evaluates the same local host, executable, profile compatibility, and validation-evidence gates used by launch routing against effective configured service state, then prints whether a browser capability binding would be applied and why. Manifest-derived default executables do not count as explicit operator overrides.
+  - service browser-capability guide is the read-only discovery step before prefer. It lists matching browserExecutables rows, existing bindings that already reference each executable, and an exact command when target/account/service/task filters are supplied.
   - service browser-capability prefer writes one browserPreferenceBindings row without hand-authored JSON. Populated filters are conjunctive, so passing --target-service-id and --account-id creates a primary browser route only for that site plus account combination.
   - Persisted service state is loaded from ~/.agent-browser/service/state.json.
   - The current control-plane snapshot is refreshed in the persisted service state.
@@ -4957,6 +5045,7 @@ Examples:
   agent-browser service repair-retained
   agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
   agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
+  agent-browser service browser-capability guide --browser-build stock_chrome --target-service-id only-works-on-chrome --account-id myuser
   agent-browser service browser-capability prefer --browser-build stock_chrome --target-service-id only-works-on-chrome --account-id myuser --preferred-executable-id windows-chrome-stable --reason site_requires_stock_chrome
   agent-browser service profiles
   agent-browser service sessions
@@ -5021,7 +5110,7 @@ Notes:
   - HTTP GET /api/service/profiles/<id>/allocation and MCP agent-browser://profiles/{profile_id}/allocation return one profile's lease, holder, conflict, recommended-action, and readiness state without fetching the full profile collection.
   - HTTP GET /api/service/profiles/<id>/seeding-handoff and MCP agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId} return the exact detached runtime-login command, setup URL, operator steps, and warnings derived from one profile's targetReadiness rows. HTTP POST /api/service/profiles/<id>/seeding-handoff and MCP service_profile_seeding_handoff_update persist lifecycle changes through the same service worker.
   - HTTP GET /api/service/access-plan, MCP service_access_plan, and MCP agent-browser://access-plan accept serviceName, agentName, taskName, targetServiceId, siteId, loginId, accountId, url, browserBuild, or their array aliases, then return the no-launch service-owned profile, policy, provider, challenge, readiness, seedingHandoff, monitorFindings, advisory browserCapabilityEvidence, caller-label warning, and recommendation payload. decision.attention summarizes whether intervention is required, who owns it, severity, reason, message, and suggested actions while leaving popup or dashboard presentation to clients. browserCapabilityEvidence is filtered by the planned browser build and request identity. Preference bindings can set the access-plan browser build recommendation when no explicit request, site policy, or profile browser build has already won; that case reports routingApplied=true with routingScope=access_plan_recommendation. The queued launch path may apply the matching local executable only when the host is local, reachable, and agent-browser owned, the executable exists, selected-profile compatibility rows are all acceptable, and matching validation evidence includes a passed row with no failed or stale row. decision.launchPosture includes browserBuild, browserBuildSelection, requiresCdpFree, and cdpAttachmentAllowed so agents and software clients can choose stock Chrome, stealth CDP Chromium, or CDP-free headed posture before opening a browser. Matching active profile_readiness monitors that are due or never checked set monitorFindings.profileReadinessProbeDue and decision.monitorProbeDue, fill decision.monitorRunDue with HTTP, MCP, CLI, and service-client instructions, and recommend run_due_profile_readiness_monitor before relying on retained freshness. Access-plan-backed tab requests marked blockedByManualAction and manualSeedingRequired are refused by the service request client, HTTP POST /api/service/request, and MCP service_request unless allowManualAction is explicitly true. Raw requests carrying monitorRunDueSummary are refused when the summary reports expired, unverified, or missing target freshness evidence unless allowMonitorFreshnessRisk is explicitly true. Copied tab requests marked requiresCdpFree with cdpAttachmentAllowed=false are refused by those same request paths; decision.serviceRequest.cdpFreeAvailability names the no-launch lifecycle-only alternative. Use action=cdp_free_launch only when process lifecycle and service-state tracking are sufficient, then read unsupportedCommands before offering follow-up automation controls.
-  - HTTP POST /api/service/browser-capability-registry/<collection>/<id>, MCP service_browser_capability_registry_upsert, service browser-capability prefer, and upsertServiceBrowserPreferenceBinding persist advisory browser capability registry records through the service worker queue. Path collection and ID are authoritative, and returned upsert records report routingApplied=false because an upsert does not itself route browser work.
+  - HTTP POST /api/service/browser-capability-registry/<collection>/<id>, MCP service_browser_capability_registry_upsert, service browser-capability prefer, and upsertServiceBrowserPreferenceBinding persist advisory browser capability registry records through the service worker queue. service browser-capability guide is the read-only CLI discovery step for executable IDs and copyable prefer commands. Path collection and ID are authoritative, and returned upsert records report routingApplied=false because an upsert does not itself route browser work.
   - The guarded service read surface has MCP resource parity; agents should usually start with agent-browser://access-plan{?...} and use narrower profile lookup, readiness, allocation, or seeding-handoff resources only when the full recommendation is not needed.
   - browser_navigate, browser_back, browser_forward, browser_reload, browser_tab_*, browser_set_content, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_*, browser_storage_*, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_*, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, and browser_clipboard provide typed schemas for common navigation, tab, page-content, request-inspection, session-shaping, observability, artifact, file-transfer, HAR, routing, cookie, and storage workflows.
   - browser_command queues remaining HTTP-parity actions with params copied into the queued daemon command when a typed browser_* tool is not yet available.

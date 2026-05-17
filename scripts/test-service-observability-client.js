@@ -29,6 +29,7 @@ import {
   runServiceAccessPlanPostSeedingProbe,
   summarizeServiceAccessPlanBrowserBuildSelection,
   summarizeServiceAccessPlanMonitorRunDue,
+  summarizeServiceBrowserPreferenceCommands,
   summarizeServiceProfileAllocationBrowserHealth,
   summarizeServiceProfileAcquisition,
   summarizeServiceProfileReadiness,
@@ -339,6 +340,50 @@ async function main() {
   assert.equal(browserPreferenceUpsert.calls[0].body.priority, 250);
   assert.equal(browserPreferenceUpsert.calls[0].body.reason, 'site_requires_stock_chrome');
   assert.equal(browserPreferenceResult.collection, 'browserPreferenceBindings');
+
+  const browserPreferenceSummary = summarizeServiceBrowserPreferenceCommands(
+    {
+      browserCapabilityRegistry: {
+        browserExecutables: [
+          {
+            id: 'windows-chrome-stable',
+            hostId: 'windows-desktop-1',
+            buildLabel: 'stock_chrome',
+            executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            source: 'system',
+            fresh: true,
+            tags: ['windows', 'stock-chrome'],
+          },
+        ],
+        browserCapabilities: [
+          {
+            id: 'windows-chrome-capability',
+            hostId: 'windows-desktop-1',
+            executableId: 'windows-chrome-stable',
+          },
+        ],
+        browserPreferenceBindings: [
+          {
+            id: 'existing-chrome-binding',
+            preferredExecutableId: 'windows-chrome-stable',
+          },
+        ],
+      },
+    },
+    {
+      browserBuild: 'stock_chrome',
+      targetServiceId: 'only-works-on-chrome',
+      accountId: 'my user',
+      reason: 'site requires stock chrome',
+    },
+  );
+  assert.equal(browserPreferenceSummary.copyable, true);
+  assert.equal(browserPreferenceSummary.counts.matchingExecutables, 1);
+  assert.deepEqual(browserPreferenceSummary.suggestions[0].existingBindingIds, ['existing-chrome-binding']);
+  assert.equal(
+    browserPreferenceSummary.suggestions[0].command,
+    "agent-browser service browser-capability prefer --browser-build stock_chrome --preferred-executable-id windows-chrome-stable --preferred-host-id windows-desktop-1 --preferred-capability-id windows-chrome-capability --target-service-id only-works-on-chrome --account-id 'my user' --reason 'site requires stock chrome'",
+  );
 
   const monitorDelete = createFetchRecorder({
     success: true,

@@ -69,10 +69,10 @@ use super::service_lifecycle::{
 };
 use super::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
-    BrowserBuild, BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost,
-    BrowserSession, JobState as ServiceJobState, LeaseState, MonitorState, ProfileKeyringPolicy,
-    ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
-    SessionCleanupPolicy, TabLifecycle,
+    BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+    BrowserHost as ServiceBrowserHost, BrowserSession, JobState as ServiceJobState, LeaseState,
+    MonitorState, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason,
+    ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy, TabLifecycle,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -218,6 +218,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_repair_retained"
             | "service_access_plan"
             | "service_browser_capability_preflight"
+            | "service_browser_capability_preference_guide"
             | "service_job_cancel"
             | "service_browser_retry"
             | "service_remedies_apply"
@@ -3062,6 +3063,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_access_plan" => handle_service_access_plan(cmd).await,
         "service_browser_capability_preflight" => {
             handle_service_browser_capability_preflight(cmd).await
+        }
+        "service_browser_capability_preference_guide" => {
+            handle_service_browser_capability_preference_guide(cmd).await
         }
         "service_job_cancel" => handle_service_job_cancel(cmd).await,
         "service_browser_retry" => handle_service_browser_retry(cmd).await,
@@ -7713,6 +7717,220 @@ async fn handle_service_browser_capability_preflight(cmd: &Value) -> Result<Valu
     }))
 }
 
+/// Generate operator-facing commands for binding a site/account to a known browser executable.
+async fn handle_service_browser_capability_preference_guide(cmd: &Value) -> Result<Value, String> {
+    let service_state = cmd
+        .get("serviceState")
+        .cloned()
+        .map(serde_json::from_value::<ServiceState>)
+        .transpose()
+        .map_err(|err| format!("Invalid serviceState: {}", err))?
+        .unwrap_or_default();
+    Ok(browser_capability_preference_guide(&service_state, cmd))
+}
+
+fn browser_capability_preference_guide(service_state: &ServiceState, cmd: &Value) -> Value {
+    let registry = &service_state.browser_capability_registry;
+    let requested_build = optional_command_string(cmd, "browserBuild");
+    let target_service_ids = target_service_ids_from_command(cmd);
+    let account_ids = account_ids_from_command(cmd);
+    let service_name = optional_command_string(cmd, "serviceName");
+    let task_name = optional_command_string(cmd, "taskName");
+    let reason = optional_command_string(cmd, "reason")
+        .unwrap_or_else(|| "operator_primary_browser_preference".to_string());
+    let has_filter = !target_service_ids.is_empty()
+        || !account_ids.is_empty()
+        || service_name.is_some()
+        || task_name.is_some();
+    let mut suggestions = registry
+        .browser_executables
+        .iter()
+        .filter(|executable| {
+            requested_build.as_deref().is_none_or(|build| {
+                registry_string_field(executable, "buildLabel").as_deref() == Some(build)
+            })
+        })
+        .filter_map(|executable| {
+            let executable_id = registry_string_field(executable, "id")?;
+            let browser_build = registry_string_field(executable, "buildLabel")
+                .or_else(|| requested_build.clone())
+                .unwrap_or_else(|| "stock_chrome".to_string());
+            let host_id = registry_string_field(executable, "hostId");
+            let capability_id =
+                matching_capability_id(registry, host_id.as_deref(), &executable_id);
+            let command = browser_preference_command(BrowserPreferenceCommandInput {
+                browser_build: &browser_build,
+                executable_id: &executable_id,
+                host_id: host_id.as_deref(),
+                capability_id: capability_id.as_deref(),
+                target_service_ids: &target_service_ids,
+                account_ids: &account_ids,
+                service_name: service_name.as_deref(),
+                task_name: task_name.as_deref(),
+                reason: &reason,
+            });
+            let existing_binding_ids = registry
+                .browser_preference_bindings
+                .iter()
+                .filter(|binding| {
+                    registry_string_field(binding, "preferredExecutableId").as_deref()
+                        == Some(executable_id.as_str())
+                })
+                .filter_map(|binding| registry_string_field(binding, "id"))
+                .collect::<Vec<_>>();
+            Some(json!({
+                "executableId": executable_id,
+                "browserBuild": browser_build,
+                "hostId": host_id,
+                "capabilityId": capability_id,
+                "source": registry_string_field(executable, "source"),
+                "executablePath": registry_string_field(executable, "executablePath"),
+                "fresh": executable.get("fresh").cloned().unwrap_or(Value::Null),
+                "tags": executable.get("tags").cloned().unwrap_or_else(|| json!([])),
+                "existingBindingIds": existing_binding_ids,
+                "copyable": has_filter,
+                "command": command,
+            }))
+        })
+        .collect::<Vec<_>>();
+    suggestions.sort_by(|left, right| {
+        json_string_field(left, "browserBuild")
+            .cmp(&json_string_field(right, "browserBuild"))
+            .then_with(|| {
+                json_string_field(left, "executableId")
+                    .cmp(&json_string_field(right, "executableId"))
+            })
+    });
+
+    json!({
+        "guide": true,
+        "advisory": true,
+        "copyable": has_filter,
+        "requested": {
+            "browserBuild": requested_build,
+            "targetServiceIds": target_service_ids,
+            "accountIds": account_ids,
+            "serviceName": service_name,
+            "taskName": task_name,
+            "reason": reason,
+        },
+        "counts": {
+            "browserExecutables": registry.browser_executables.len(),
+            "matchingExecutables": suggestions.len(),
+            "browserPreferenceBindings": registry.browser_preference_bindings.len(),
+        },
+        "suggestions": suggestions,
+        "recommendedNextStep": if has_filter {
+            "Copy the preferred command, run it, then run service browser-capability preflight for the same site/account before requesting browser work."
+        } else {
+            "Rerun with --target-service-id and --account-id to produce exact copyable prefer commands."
+        },
+    })
+}
+
+fn json_string_field(value: &Value, field: &str) -> String {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn matching_capability_id(
+    registry: &BrowserCapabilityRegistry,
+    host_id: Option<&str>,
+    executable_id: &str,
+) -> Option<String> {
+    registry.browser_capabilities.iter().find_map(|capability| {
+        let executable_matches =
+            registry_string_field(capability, "executableId").as_deref() == Some(executable_id);
+        let host_matches = host_id.is_none_or(|host_id| {
+            registry_string_field(capability, "hostId").as_deref() == Some(host_id)
+        });
+        (executable_matches && host_matches).then(|| registry_string_field(capability, "id"))?
+    })
+}
+
+struct BrowserPreferenceCommandInput<'a> {
+    browser_build: &'a str,
+    executable_id: &'a str,
+    host_id: Option<&'a str>,
+    capability_id: Option<&'a str>,
+    target_service_ids: &'a [String],
+    account_ids: &'a [String],
+    service_name: Option<&'a str>,
+    task_name: Option<&'a str>,
+    reason: &'a str,
+}
+
+fn browser_preference_command(input: BrowserPreferenceCommandInput<'_>) -> String {
+    let mut args = vec![
+        "agent-browser".to_string(),
+        "service".to_string(),
+        "browser-capability".to_string(),
+        "prefer".to_string(),
+        "--browser-build".to_string(),
+        input.browser_build.to_string(),
+        "--preferred-executable-id".to_string(),
+        input.executable_id.to_string(),
+    ];
+    if let Some(host_id) = input.host_id {
+        args.push("--preferred-host-id".to_string());
+        args.push(host_id.to_string());
+    }
+    if let Some(capability_id) = input.capability_id {
+        args.push("--preferred-capability-id".to_string());
+        args.push(capability_id.to_string());
+    }
+    if input.target_service_ids.is_empty()
+        && input.account_ids.is_empty()
+        && input.service_name.is_none()
+        && input.task_name.is_none()
+    {
+        args.push("--target-service-id".to_string());
+        args.push("<site>".to_string());
+        args.push("--account-id".to_string());
+        args.push("<account>".to_string());
+    } else {
+        for target in input.target_service_ids {
+            args.push("--target-service-id".to_string());
+            args.push(target.clone());
+        }
+        for account in input.account_ids {
+            args.push("--account-id".to_string());
+            args.push(account.clone());
+        }
+        if let Some(service_name) = input.service_name {
+            args.push("--service-name".to_string());
+            args.push(service_name.to_string());
+        }
+        if let Some(task_name) = input.task_name {
+            args.push("--task-name".to_string());
+            args.push(task_name.to_string());
+        }
+    }
+    args.push("--reason".to_string());
+    args.push(input.reason.to_string());
+    args.into_iter()
+        .map(|arg| shell_quote_command_arg(&arg))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn shell_quote_command_arg(arg: &str) -> String {
+    if arg.starts_with('<') && arg.ends_with('>') {
+        return arg.to_string();
+    }
+    if arg
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '/' | ':' | '='))
+    {
+        arg.to_string()
+    } else {
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    }
+}
+
 /// Return the service-owned profile collection without the full status payload.
 async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
     let mut service_state = cmd
@@ -12267,6 +12485,58 @@ mod tests {
         assert!(selected.is_none());
         assert_eq!(options.profile.as_deref(), Some("/tmp/explicit-profile"));
         assert!(options.runtime_profile.is_none());
+    }
+
+    #[test]
+    fn test_browser_capability_preference_guide_builds_copyable_command() {
+        let service_state = ServiceState {
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_executables: vec![json!({
+                    "id": "windows-chrome-stable",
+                    "hostId": "windows-desktop-1",
+                    "buildLabel": "stock_chrome",
+                    "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                    "source": "system",
+                    "fresh": true
+                })],
+                browser_capabilities: vec![json!({
+                    "id": "windows-chrome-capability",
+                    "hostId": "windows-desktop-1",
+                    "executableId": "windows-chrome-stable"
+                })],
+                browser_preference_bindings: vec![json!({
+                    "id": "existing-chrome-binding",
+                    "preferredExecutableId": "windows-chrome-stable"
+                })],
+                ..BrowserCapabilityRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+
+        let guide = browser_capability_preference_guide(
+            &service_state,
+            &json!({
+                "browserBuild": "stock_chrome",
+                "targetServiceId": "only-works-on-chrome",
+                "accountId": "my user",
+                "reason": "site requires stock chrome"
+            }),
+        );
+
+        assert_eq!(guide["copyable"], true);
+        assert_eq!(guide["counts"]["matchingExecutables"], 1);
+        assert_eq!(
+            guide["suggestions"][0]["executableId"],
+            "windows-chrome-stable"
+        );
+        assert_eq!(
+            guide["suggestions"][0]["existingBindingIds"],
+            json!(["existing-chrome-binding"])
+        );
+        assert_eq!(
+            guide["suggestions"][0]["command"],
+            "agent-browser service browser-capability prefer --browser-build stock_chrome --preferred-executable-id windows-chrome-stable --preferred-host-id windows-desktop-1 --preferred-capability-id windows-chrome-capability --target-service-id only-works-on-chrome --account-id 'my user' --reason 'site requires stock chrome'"
+        );
     }
 
     #[test]

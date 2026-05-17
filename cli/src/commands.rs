@@ -75,6 +75,8 @@ const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id
 
 const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
 
+const SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE: &str = "service browser-capability guide [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]";
+
 const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
 
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
@@ -398,6 +400,105 @@ fn parse_service_browser_capability_preflight(
             usage: SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE,
         });
     }
+    Ok(cmd)
+}
+
+fn parse_service_browser_capability_guide(
+    id: String,
+    rest: &[&str],
+    flags: &Flags,
+) -> Result<Value, ParseError> {
+    if rest.get(1).copied() != Some("guide") {
+        return Err(ParseError::InvalidValue {
+            message: "Expected service browser-capability guide".to_string(),
+            usage: SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+        });
+    }
+    let mut cmd = json!({
+        "id": id,
+        "action": "service_browser_capability_preference_guide",
+        "serviceState": flags.service_state.clone(),
+    });
+
+    let mut i = 2;
+    while i < rest.len() {
+        match rest[i] {
+            "--browser-build" => {
+                let value = required_next(
+                    rest,
+                    i,
+                    "--browser-build",
+                    SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+                )?;
+                match crate::native::service_model::BrowserBuild::parse_label(&value) {
+                    Some(_) => cmd["browserBuild"] = json!(value),
+                    None => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --browser-build value: {}", value),
+                            usage: SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--target-service-id" | "--target-service" | "--site-id" | "--login-id" => {
+                cmd["targetServiceId"] = json!(required_next(
+                    rest,
+                    i,
+                    rest[i],
+                    SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+                )?);
+                i += 1;
+            }
+            "--account-id" => {
+                cmd["accountId"] = json!(required_next(
+                    rest,
+                    i,
+                    "--account-id",
+                    SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+                )?);
+                i += 1;
+            }
+            "--service-name" => {
+                cmd["serviceName"] = json!(required_next(
+                    rest,
+                    i,
+                    "--service-name",
+                    SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+                )?);
+                i += 1;
+            }
+            "--task-name" => {
+                cmd["taskName"] = json!(required_next(
+                    rest,
+                    i,
+                    "--task-name",
+                    SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+                )?);
+                i += 1;
+            }
+            "--reason" => {
+                cmd["reason"] = json!(required_next(
+                    rest,
+                    i,
+                    "--reason",
+                    SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+                )?);
+                i += 1;
+            }
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!(
+                        "Unknown flag for service browser-capability guide: {}",
+                        flag
+                    ),
+                    usage: SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
+                });
+            }
+        }
+        i += 1;
+    }
+
     Ok(cmd)
 }
 
@@ -1777,14 +1878,15 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             Some("access-plan") => parse_service_access_plan(id, &rest, flags),
             Some("browser-capability") => match rest.get(1).copied() {
                 Some("preflight") => parse_service_browser_capability_preflight(id, &rest, flags),
+                Some("guide") => parse_service_browser_capability_guide(id, &rest, flags),
                 Some("prefer") => parse_service_browser_capability_prefer(id, &rest),
                 Some(subcommand) => Err(ParseError::UnknownSubcommand {
                     subcommand: subcommand.to_string(),
-                    valid_options: &["preflight", "prefer"],
+                    valid_options: &["preflight", "guide", "prefer"],
                 }),
                 None => Err(ParseError::MissingArguments {
                     context: "service browser-capability".to_string(),
-                    usage: "service browser-capability <preflight|prefer>",
+                    usage: "service browser-capability <preflight|guide|prefer>",
                 }),
             },
             Some("profiles") => {
@@ -6402,6 +6504,22 @@ mod tests {
         assert_eq!(cmd["record"]["browserBuild"], "stock_chrome");
         assert_eq!(cmd["record"]["priority"], 250);
         assert_eq!(cmd["record"]["reason"], "site_requires_stock_chrome");
+    }
+
+    #[test]
+    fn test_service_browser_capability_guide_builds_read_command() {
+        let cmd = parse_command(
+            &args("service browser-capability guide --browser-build stock_chrome --target-service-id only-works-on-chrome --account-id myuser --reason site_requires_stock_chrome"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_browser_capability_preference_guide");
+        assert_eq!(cmd["browserBuild"], "stock_chrome");
+        assert_eq!(cmd["targetServiceId"], "only-works-on-chrome");
+        assert_eq!(cmd["accountId"], "myuser");
+        assert_eq!(cmd["reason"], "site_requires_stock_chrome");
+        assert!(cmd["serviceState"].is_object());
     }
 
     #[test]
