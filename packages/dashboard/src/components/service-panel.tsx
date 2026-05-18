@@ -136,6 +136,7 @@ export type ServiceBrowser = {
 type ServicePanelProps = {
   onBrowserInspect?: (browser: ServiceBrowser) => void;
   onInspectSelection?: (selection: ServiceInspectorSelection) => void;
+  onInspectorActionsChange?: (actions: ServiceInspectorActions) => void;
 };
 
 export type ServiceSession = {
@@ -237,6 +238,13 @@ export type ServiceInspectorSelection =
   | { kind: "session"; session: ServiceSession }
   | { kind: "tab"; tab: ServiceTab; viewStreamAvailable?: boolean }
   | { kind: "job"; job: ServiceJob };
+
+export type ServiceInspectorActions = {
+  actingIncidentId?: string | null;
+  onAcknowledgeIncident?: (incident: IncidentRecord, note: string) => void;
+  onResolveIncident?: (incident: IncidentRecord, note: string) => void;
+  onCancelJob?: (job: ServiceJob) => void;
+};
 
 type RetainedCleanupKind = "prune" | "repair";
 
@@ -2018,7 +2026,13 @@ function BrowserDetailContent({
   );
 }
 
-export function ServiceDetailInspector({ selection }: { selection: ServiceInspectorSelection | null }) {
+export function ServiceDetailInspector({
+  selection,
+  actions = {},
+}: {
+  selection: ServiceInspectorSelection | null;
+  actions?: ServiceInspectorActions;
+}) {
   if (!selection) {
     return (
       <div className="service-inspector-empty">
@@ -2026,7 +2040,7 @@ export function ServiceDetailInspector({ selection }: { selection: ServiceInspec
           <RadioTower className="size-6 text-muted-foreground" />
           <div>
             <p>Select a service record</p>
-            <span>Choose a browser, session, tab, or job row to inspect operational details here.</span>
+            <span>Choose a browser, profile, incident, session, tab, or job row to inspect operational details here.</span>
           </div>
         </div>
       </div>
@@ -2047,12 +2061,19 @@ export function ServiceDetailInspector({ selection }: { selection: ServiceInspec
         </div>
         {selection.kind === "browser" && <BrowserDetailContent browser={selection.browser} />}
         {selection.kind === "profile" && <ProfileAllocationDetailContent allocation={selection.allocation} />}
-        {selection.kind === "incident" && <IncidentDetailContent incident={selection.incident} />}
+        {selection.kind === "incident" && (
+          <IncidentDetailContent
+            incident={selection.incident}
+            acting={actions.actingIncidentId === selection.incident.id}
+            onAcknowledge={actions.onAcknowledgeIncident}
+            onResolve={actions.onResolveIncident}
+          />
+        )}
         {selection.kind === "session" && <SessionDetailContent session={selection.session} />}
         {selection.kind === "tab" && (
           <TabDetailContent tab={selection.tab} viewStreamAvailable={selection.viewStreamAvailable} />
         )}
-        {selection.kind === "job" && <JobDetailContent job={selection.job} />}
+        {selection.kind === "job" && <JobDetailContent job={selection.job} onCancel={actions.onCancelJob} />}
       </div>
     </ScrollArea>
   );
@@ -2938,11 +2959,29 @@ function IncidentDetailDialog({
   );
 }
 
-function IncidentDetailContent({ incident }: { incident: IncidentRecord }) {
+function IncidentDetailContent({
+  incident,
+  acting = false,
+  onAcknowledge,
+  onResolve,
+}: {
+  incident: IncidentRecord;
+  acting?: boolean;
+  onAcknowledge?: (incident: IncidentRecord, note: string) => void;
+  onResolve?: (incident: IncidentRecord, note: string) => void;
+}) {
+  const [actionNote, setActionNote] = useState("");
   const timeline = deriveIncidentTimeline(incident);
   const incidentCount = timeline.length;
   const serviceOnlyEvents = incident.serviceEvents.filter((event) => event.kind !== "browser_health_changed");
+  const handlingState = incidentHandlingState(incident);
   const priority = incidentPriorityView(incident);
+  const actionsAvailable = Boolean(onAcknowledge || onResolve);
+
+  useEffect(() => {
+    setActionNote("");
+  }, [incident.id]);
+
   return (
     <div className="service-event-dialog-body">
       <p className="service-event-dialog-message">{incident.latestMessage}</p>
@@ -2991,6 +3030,47 @@ function IncidentDetailContent({ incident }: { incident: IncidentRecord }) {
               <span>Resolution note</span>
               {incident.resolutionNote}
             </p>
+          )}
+        </div>
+      )}
+      {actionsAvailable && handlingState !== "resolved" && (
+        <div className="service-incident-action-note">
+          <label htmlFor={`service-incident-action-note-${incident.id}`}>
+            Operator note
+          </label>
+          <textarea
+            id={`service-incident-action-note-${incident.id}`}
+            value={actionNote}
+            onChange={(event) => setActionNote(event.target.value)}
+            placeholder="Optional context for the acknowledgement or resolution"
+            rows={3}
+          />
+        </div>
+      )}
+      {actionsAvailable && (
+        <div className="service-incident-actions">
+          {handlingState === "unacknowledged" && onAcknowledge && (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              disabled={acting}
+              onClick={() => onAcknowledge(incident, actionNote)}
+            >
+              {acting ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+              Mark acknowledged
+            </Button>
+          )}
+          {handlingState !== "resolved" && onResolve && (
+            <Button
+              type="button"
+              className="rounded-full"
+              disabled={acting}
+              onClick={() => onResolve(incident, actionNote)}
+            >
+              {acting ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+              Mark resolved
+            </Button>
           )}
         </div>
       )}
@@ -3101,7 +3181,11 @@ function IncidentDetailContent({ incident }: { incident: IncidentRecord }) {
   );
 }
 
-export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePanelProps = {}) {
+export function ServicePanel({
+  onBrowserInspect,
+  onInspectSelection,
+  onInspectorActionsChange,
+}: ServicePanelProps = {}) {
   const activePort = useAtomValue(activePortAtom);
   const activeSession = useAtomValue(activeSessionNameAtom);
   const [status, setStatus] = useState<ServiceStatusData | null>(null);
@@ -3397,8 +3481,8 @@ export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePa
     setSelectedIncident(incident);
   }, [onInspectSelection]);
 
-  const cancelJob = useCallback(async (job: ServiceJob) => {
-    if (!canFetch || !job.id) return;
+  const cancelJob = useCallback(async (job: ServiceJob): Promise<ServiceJob | null> => {
+    if (!canFetch || !job.id) return null;
     setError("");
     try {
       const resp = await fetch(`${serviceBase(activePort)}/jobs/${encodeURIComponent(job.id)}/cancel`, {
@@ -3406,10 +3490,13 @@ export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePa
       });
       const json = (await resp.json()) as ApiResponse<ServiceJobsData & { cancelled?: boolean }>;
       if (!json.success) throw new Error(json.error || "Service job cancel failed");
-      setSelectedJob(json.data?.job ?? { ...job, error: "Cancellation requested" });
+      const selected = json.data?.job ?? { ...job, error: "Cancellation requested" };
+      setSelectedJob(selected);
       await fetchService(false);
+      return selected;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service job cancel unavailable");
+      return null;
     }
   }, [activePort, canFetch, fetchService]);
 
@@ -3466,8 +3553,9 @@ export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePa
     incident: IncidentRecord,
     action: "acknowledge" | "resolve",
     note: string,
+    closeDialog = true,
   ) => {
-    if (!canFetch || !incident.id) return;
+    if (!canFetch || !incident.id) return false;
     setActingIncidentId(incident.id);
     setError("");
     try {
@@ -3482,14 +3570,75 @@ export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePa
       );
       const json = (await resp.json()) as ApiResponse<{ incident?: ServiceIncident }>;
       if (!json.success) throw new Error(json.error || `Service incident ${action} failed`);
-      setSelectedIncident(null);
+      if (closeDialog) setSelectedIncident(null);
       await fetchService(false);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : `Service incident ${action} unavailable`);
+      return false;
     } finally {
       setActingIncidentId(null);
     }
   }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
+
+  const cancelInspectorJob = useCallback(async (job: ServiceJob) => {
+    const selected = await cancelJob(job);
+    if (selected && onInspectSelection) {
+      onInspectSelection({ kind: "job", job: selected });
+    }
+  }, [cancelJob, onInspectSelection]);
+
+  const updateInspectorIncident = useCallback((
+    incident: IncidentRecord,
+    action: "acknowledge" | "resolve",
+    note: string,
+  ) => {
+    const now = new Date().toISOString();
+    const actor = operatorIdentity.trim() || activeSession || "dashboard";
+    const trimmedNote = note.trim();
+    const selected = action === "acknowledge"
+      ? {
+          ...incident,
+          acknowledgedAt: incident.acknowledgedAt ?? now,
+          acknowledgedBy: incident.acknowledgedBy ?? actor,
+          acknowledgementNote: trimmedNote || incident.acknowledgementNote,
+        }
+      : {
+          ...incident,
+          resolvedAt: incident.resolvedAt ?? now,
+          resolvedBy: incident.resolvedBy ?? actor,
+          resolutionNote: trimmedNote || incident.resolutionNote,
+        };
+    onInspectSelection?.({ kind: "incident", incident: selected });
+  }, [activeSession, onInspectSelection, operatorIdentity]);
+
+  const acknowledgeInspectorIncident = useCallback(async (incident: IncidentRecord, note: string) => {
+    if (await handleIncident(incident, "acknowledge", note, false)) {
+      updateInspectorIncident(incident, "acknowledge", note);
+    }
+  }, [handleIncident, updateInspectorIncident]);
+
+  const resolveInspectorIncident = useCallback(async (incident: IncidentRecord, note: string) => {
+    if (await handleIncident(incident, "resolve", note, false)) {
+      updateInspectorIncident(incident, "resolve", note);
+    }
+  }, [handleIncident, updateInspectorIncident]);
+
+  useEffect(() => {
+    if (!onInspectorActionsChange) return;
+    onInspectorActionsChange({
+      actingIncidentId,
+      onAcknowledgeIncident: acknowledgeInspectorIncident,
+      onResolveIncident: resolveInspectorIncident,
+      onCancelJob: cancelInspectorJob,
+    });
+  }, [
+    acknowledgeInspectorIncident,
+    actingIncidentId,
+    cancelInspectorJob,
+    onInspectorActionsChange,
+    resolveInspectorIncident,
+  ]);
 
   const serviceState = status?.service_state;
   const control = status?.control_plane;

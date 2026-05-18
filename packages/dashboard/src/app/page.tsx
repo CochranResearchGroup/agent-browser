@@ -21,6 +21,7 @@ import { AppShell, type DashboardSection } from "@/components/app-shell";
 import {
   ServiceDetailInspector,
   ServicePanel,
+  type ServiceInspectorActions,
   type ServiceInspectorSelection,
 } from "@/components/service-panel";
 import {
@@ -62,6 +63,7 @@ export default function DashboardPage() {
     readStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, true),
   );
   const [serviceInspectorSelection, setServiceInspectorSelection] = useState<ServiceInspectorSelection | null>(null);
+  const [serviceInspectorActions, setServiceInspectorActions] = useState<ServiceInspectorActions>({});
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -119,11 +121,18 @@ export default function DashboardPage() {
     </Button>
   );
   const primaryPanel = activeSection === "service"
-    ? <ServicePanel onInspectSelection={inspectServiceSelection} />
+    ? (
+      <ServicePanel
+        onInspectSelection={inspectServiceSelection}
+        onInspectorActionsChange={setServiceInspectorActions}
+      />
+    )
     : activeSection === "activity"
       ? <ActivityFeed />
       : <Viewport />;
-  const serviceInspectorPanel = <ServiceDetailInspector selection={serviceInspectorSelection} />;
+  const serviceInspectorPanel = (
+    <ServiceDetailInspector selection={serviceInspectorSelection} actions={serviceInspectorActions} />
+  );
 
   const sidePanel = (
     <Tabs defaultValue="chat" className="flex h-full flex-col">
@@ -248,7 +257,10 @@ export default function DashboardPage() {
               <div className="dashboard-pane dashboard-pane-viewport dashboard-pane-with-rails">
                 {leftPaneCollapsed && leftPaneToggle}
                 {rightPaneCollapsed && rightPaneToggle}
-                <ServicePanel onInspectSelection={inspectServiceSelection} />
+                <ServicePanel
+                  onInspectSelection={inspectServiceSelection}
+                  onInspectorActionsChange={setServiceInspectorActions}
+                />
               </div>
             </ResizablePanel>
             {!rightPaneCollapsed && (
