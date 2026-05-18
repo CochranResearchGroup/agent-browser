@@ -152,7 +152,7 @@ export type ServiceSession = {
   expiresAt?: string | null;
 };
 
-type ServiceProfileAllocation = {
+export type ServiceProfileAllocation = {
   profileId: string;
   profileName?: string;
   allocation?: string;
@@ -232,6 +232,8 @@ export type ServiceJob = {
 
 export type ServiceInspectorSelection =
   | { kind: "browser"; browser: ServiceBrowser }
+  | { kind: "profile"; allocation: ServiceProfileAllocation }
+  | { kind: "incident"; incident: IncidentRecord }
   | { kind: "session"; session: ServiceSession }
   | { kind: "tab"; tab: ServiceTab; viewStreamAvailable?: boolean }
   | { kind: "job"; job: ServiceJob };
@@ -308,7 +310,7 @@ type ApiResponse<T> = {
   error?: string | null;
 };
 
-type IncidentRecord = {
+export type IncidentRecord = {
   id: string;
   browserId?: string | null;
   label: string;
@@ -2044,6 +2046,8 @@ export function ServiceDetailInspector({ selection }: { selection: ServiceInspec
           <span className={cn("service-browser-health-dot", `service-browser-health-${header.tone}`)} />
         </div>
         {selection.kind === "browser" && <BrowserDetailContent browser={selection.browser} />}
+        {selection.kind === "profile" && <ProfileAllocationDetailContent allocation={selection.allocation} />}
+        {selection.kind === "incident" && <IncidentDetailContent incident={selection.incident} />}
         {selection.kind === "session" && <SessionDetailContent session={selection.session} />}
         {selection.kind === "tab" && (
           <TabDetailContent tab={selection.tab} viewStreamAvailable={selection.viewStreamAvailable} />
@@ -2074,6 +2078,23 @@ function serviceInspectorHeader(selection: ServiceInspectorSelection): {
       title: selection.session.id || "Service session",
       description: `${selection.session.lease ?? "shared"} / ${formatActor(selection.session.owner)}`,
       tone: "good",
+    };
+  }
+  if (selection.kind === "profile") {
+    return {
+      kicker: "Profile inspector",
+      title: selection.allocation.profileName || selection.allocation.profileId || "Profile allocation",
+      description: `${selection.allocation.leaseState ?? "unknown"} / ${selection.allocation.recommendedAction ?? "inspect"}`,
+      tone: profileAllocationTone(selection.allocation.leaseState),
+    };
+  }
+  if (selection.kind === "incident") {
+    const priority = incidentPriorityView(selection.incident);
+    return {
+      kicker: "Incident inspector",
+      title: selection.incident.label,
+      description: `${priority.severityLabel} / ${priority.escalationLabel} / ${incidentHandlingLabel(selection.incident)}`,
+      tone: healthTone(selection.incident.currentHealth ?? undefined),
     };
   }
   if (selection.kind === "tab") {
@@ -2256,7 +2277,6 @@ function ProfileAllocationDetailDialog({
   error: string;
   onOpenChange: (open: boolean) => void;
 }) {
-  const raw = formatDetails(allocation);
   return (
     <Dialog open={!!allocation} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -2272,57 +2292,72 @@ function ProfileAllocationDetailDialog({
                   : `${allocation.leaseState ?? "unknown"} / ${allocation.recommendedAction ?? "inspect"}`}
               </DialogDescription>
             </DialogHeader>
-            <div className="service-event-dialog-body">
-              {loading && (
-                <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-foreground/[0.03] px-3 py-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  Loading current allocation row
-                </div>
-              )}
-              {error && (
-                <div className="flex items-start gap-2 rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-              <div className="service-event-detail-grid">
-                <EventDetailItem label="Profile ID" value={allocation.profileId} />
-                <EventDetailItem label="Profile name" value={allocation.profileName} />
-                <EventDetailItem label="Lease state" value={allocation.leaseState} />
-                <EventDetailItem label="Recommended action" value={allocation.recommendedAction} />
-                <EventDetailItem label="Allocation" value={allocation.allocation} />
-                <EventDetailItem label="Keyring" value={allocation.keyring} />
-                <EventDetailItem label="Holder count" value={String(allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0)} />
-                <EventDetailItem label="Waiting job count" value={String(allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0)} />
-                <EventDetailItem label="Browser count" value={String(allocation.browserIds?.length ?? 0)} />
-                <EventDetailItem label="Tab count" value={String(allocation.tabIds?.length ?? 0)} />
-              </div>
-              <ProfileAllocationTokenSection title="Holder sessions" values={allocation.holderSessionIds} />
-              <ProfileAllocationTokenSection title="Exclusive holders" values={allocation.exclusiveHolderSessionIds} />
-              <ProfileAllocationTokenSection title="Waiting jobs" values={allocation.waitingJobIds} />
-              <ProfileAllocationTokenSection title="Conflicts" values={allocation.conflictSessionIds} />
-              <ProfileAllocationTokenSection title="Services" values={allocation.serviceNames} />
-              <ProfileAllocationTokenSection title="Agents" values={allocation.agentNames} />
-              <ProfileAllocationTokenSection title="Tasks" values={allocation.taskNames} />
-              <ProfileAllocationTokenSection title="Target services" values={allocation.targetServiceIds} />
-              <ProfileAllocationTokenSection title="Authenticated services" values={allocation.authenticatedServiceIds} />
-              <ProfileReadinessSection rows={allocation.targetReadiness} />
-              <ProfileAllocationTokenSection title="Shared services" values={allocation.sharedServiceIds} />
-              <ProfileAllocationTokenSection title="Browsers" values={allocation.browserIds} />
-              <ProfileAllocationTokenSection title="Tabs" values={allocation.tabIds} />
-              {raw && (
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    Raw allocation
-                  </p>
-                  <pre className="service-event-details-json">{raw}</pre>
-                </div>
-              )}
-            </div>
+            <ProfileAllocationDetailContent allocation={allocation} loading={loading} error={error} />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ProfileAllocationDetailContent({
+  allocation,
+  loading = false,
+  error = "",
+}: {
+  allocation: ServiceProfileAllocation;
+  loading?: boolean;
+  error?: string;
+}) {
+  const raw = formatDetails(allocation);
+  return (
+    <div className="service-event-dialog-body">
+      {loading && (
+        <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-foreground/[0.03] px-3 py-2 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" />
+          Loading current allocation row
+        </div>
+      )}
+      {error && (
+        <div className="flex items-start gap-2 rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+      <div className="service-event-detail-grid">
+        <EventDetailItem label="Profile ID" value={allocation.profileId} />
+        <EventDetailItem label="Profile name" value={allocation.profileName} />
+        <EventDetailItem label="Lease state" value={allocation.leaseState} />
+        <EventDetailItem label="Recommended action" value={allocation.recommendedAction} />
+        <EventDetailItem label="Allocation" value={allocation.allocation} />
+        <EventDetailItem label="Keyring" value={allocation.keyring} />
+        <EventDetailItem label="Holder count" value={String(allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0)} />
+        <EventDetailItem label="Waiting job count" value={String(allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0)} />
+        <EventDetailItem label="Browser count" value={String(allocation.browserIds?.length ?? 0)} />
+        <EventDetailItem label="Tab count" value={String(allocation.tabIds?.length ?? 0)} />
+      </div>
+      <ProfileAllocationTokenSection title="Holder sessions" values={allocation.holderSessionIds} />
+      <ProfileAllocationTokenSection title="Exclusive holders" values={allocation.exclusiveHolderSessionIds} />
+      <ProfileAllocationTokenSection title="Waiting jobs" values={allocation.waitingJobIds} />
+      <ProfileAllocationTokenSection title="Conflicts" values={allocation.conflictSessionIds} />
+      <ProfileAllocationTokenSection title="Services" values={allocation.serviceNames} />
+      <ProfileAllocationTokenSection title="Agents" values={allocation.agentNames} />
+      <ProfileAllocationTokenSection title="Tasks" values={allocation.taskNames} />
+      <ProfileAllocationTokenSection title="Target services" values={allocation.targetServiceIds} />
+      <ProfileAllocationTokenSection title="Authenticated services" values={allocation.authenticatedServiceIds} />
+      <ProfileReadinessSection rows={allocation.targetReadiness} />
+      <ProfileAllocationTokenSection title="Shared services" values={allocation.sharedServiceIds} />
+      <ProfileAllocationTokenSection title="Browsers" values={allocation.browserIds} />
+      <ProfileAllocationTokenSection title="Tabs" values={allocation.tabIds} />
+      {raw && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Raw allocation
+          </p>
+          <pre className="service-event-details-json">{raw}</pre>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2903,6 +2938,169 @@ function IncidentDetailDialog({
   );
 }
 
+function IncidentDetailContent({ incident }: { incident: IncidentRecord }) {
+  const timeline = deriveIncidentTimeline(incident);
+  const incidentCount = timeline.length;
+  const serviceOnlyEvents = incident.serviceEvents.filter((event) => event.kind !== "browser_health_changed");
+  const priority = incidentPriorityView(incident);
+  return (
+    <div className="service-event-dialog-body">
+      <p className="service-event-dialog-message">{incident.latestMessage}</p>
+      <div className="service-incident-priority-row">
+        <div className={cn("service-incident-priority-card", `service-incident-priority-${priority.severityTone}`)}>
+          <span>Severity</span>
+          <strong>{priority.severityLabel}</strong>
+        </div>
+        <div className="service-incident-priority-card service-incident-priority-escalation">
+          <span>Escalation</span>
+          <strong>{priority.escalationLabel}</strong>
+        </div>
+      </div>
+      {priority.recommendedAction && (
+        <div className={cn("service-incident-recommended-action", `service-incident-priority-${priority.severityTone}`)}>
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <div>
+            <span>Recommended action</span>
+            <p>{priority.recommendedAction}</p>
+          </div>
+        </div>
+      )}
+      <div className="service-event-detail-grid">
+        <EventDetailItem label="Browser" value={incident.browserId} />
+        <EventDetailItem label="Severity" value={priority.severityLabel} />
+        <EventDetailItem label="Escalation" value={priority.escalationLabel} />
+        <EventDetailItem label="Latest kind" value={formatEventKind(incident.latestKind)} />
+        <EventDetailItem label="Current health" value={incident.currentHealth} />
+        <EventDetailItem label="Handling state" value={incidentHandlingLabel(incident)} />
+        <EventDetailItem label="Incident count" value={String(incidentCount)} />
+        <EventDetailItem label="Acknowledged by" value={incident.acknowledgedBy} />
+        <EventDetailItem label="Acknowledged" value={incident.acknowledgedAt ? formatAbsoluteTime(incident.acknowledgedAt) : null} />
+        <EventDetailItem label="Resolved by" value={incident.resolvedBy} />
+        <EventDetailItem label="Resolved" value={incident.resolvedAt ? formatAbsoluteTime(incident.resolvedAt) : null} />
+      </div>
+      {(incident.acknowledgementNote || incident.resolutionNote) && (
+        <div className="service-incident-notes">
+          {incident.acknowledgementNote && (
+            <p>
+              <span>Acknowledgement note</span>
+              {incident.acknowledgementNote}
+            </p>
+          )}
+          {incident.resolutionNote && (
+            <p>
+              <span>Resolution note</span>
+              {incident.resolutionNote}
+            </p>
+          )}
+        </div>
+      )}
+      {timeline.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Incident history
+          </p>
+          <div className="service-incident-history">
+            {timeline.map((item) => (
+              <div key={item.id} className="service-incident-history-item">
+                <EventDot kind={item.kind} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-xs font-bold text-foreground">
+                      {item.title}
+                    </span>
+                    {item.source && (
+                      <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px] uppercase">
+                        {item.source}
+                      </Badge>
+                    )}
+                    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                      {formatAbsoluteTime(item.timestamp)}
+                    </span>
+                  </div>
+                  {item.message && (
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {item.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {incident.transitionEvents.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Health transitions
+          </p>
+          <div className="space-y-1">
+            {incident.transitionEvents.map((event) => (
+              <div key={event.id} className="service-incident-entry">
+                <div className="flex items-center gap-2">
+                  <EventDot kind={event.kind} />
+                  <span className="truncate text-xs font-bold text-foreground">
+                    {formatHealthLabel(event.previousHealth)} to {formatHealthLabel(event.currentHealth)}
+                  </span>
+                  <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                    {formatAbsoluteTime(event.timestamp)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{event.message}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {serviceOnlyEvents.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Related service events
+          </p>
+          <div className="space-y-1">
+            {serviceOnlyEvents.map((event) => (
+              <div key={event.id} className="service-incident-entry">
+                <div className="flex items-center gap-2">
+                  <EventDot kind={event.kind} />
+                  <span className="truncate text-xs font-bold text-foreground">
+                    {formatEventKind(event.kind)}
+                  </span>
+                  <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                    {formatAbsoluteTime(event.timestamp)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{event.message}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {incident.jobEvents.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Related jobs
+          </p>
+          <div className="space-y-1">
+            {incident.jobEvents.map((event) => (
+              <div key={event.id} className="service-incident-entry">
+                <div className="flex items-center gap-2">
+                  <EventDot kind={event.kind} />
+                  <span className="truncate text-xs font-bold text-foreground">
+                    {formatEventKind(event.kind)}
+                  </span>
+                  <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                    {formatAbsoluteTime(event.timestamp)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{event.message}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePanelProps = {}) {
   const activePort = useAtomValue(activePortAtom);
   const activeSession = useAtomValue(activeSessionNameAtom);
@@ -3154,19 +3352,32 @@ export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePa
   const inspectProfileAllocation = useCallback(async (allocation: ServiceProfileAllocation) => {
     const lookupId = profileAllocationLookupId.current + 1;
     profileAllocationLookupId.current = lookupId;
-    setSelectedProfileAllocation(allocation);
+    if (onInspectSelection) {
+      onInspectSelection({ kind: "profile", allocation });
+    } else {
+      setSelectedProfileAllocation(allocation);
+    }
     setSelectedProfileAllocationError("");
     if (!canFetch || !allocation.profileId) return;
-    setSelectedProfileAllocationLoading(true);
+    if (!onInspectSelection) setSelectedProfileAllocationLoading(true);
     try {
       const resp = await fetch(serviceProfileAllocationLookupUrl(serviceBase(activePort), allocation.profileId));
       const json = (await resp.json()) as ApiResponse<ServiceProfileAllocationData>;
       if (profileAllocationLookupId.current === lookupId) {
-        setSelectedProfileAllocation(profileAllocationFromLookupPayload(json, allocation));
+        const selected = profileAllocationFromLookupPayload(json, allocation);
+        if (onInspectSelection) {
+          onInspectSelection({ kind: "profile", allocation: selected });
+        } else {
+          setSelectedProfileAllocation(selected);
+        }
       }
     } catch (err) {
       if (profileAllocationLookupId.current === lookupId) {
-        setSelectedProfileAllocation(allocation);
+        if (onInspectSelection) {
+          onInspectSelection({ kind: "profile", allocation });
+        } else {
+          setSelectedProfileAllocation(allocation);
+        }
         setSelectedProfileAllocationError(
           err instanceof Error ? err.message : "Service profile allocation lookup unavailable",
         );
@@ -3176,7 +3387,15 @@ export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePa
         setSelectedProfileAllocationLoading(false);
       }
     }
-  }, [activePort, canFetch]);
+  }, [activePort, canFetch, onInspectSelection]);
+
+  const inspectIncident = useCallback((incident: IncidentRecord) => {
+    if (onInspectSelection) {
+      onInspectSelection({ kind: "incident", incident });
+      return;
+    }
+    setSelectedIncident(incident);
+  }, [onInspectSelection]);
 
   const cancelJob = useCallback(async (job: ServiceJob) => {
     if (!canFetch || !job.id) return;
@@ -4055,7 +4274,7 @@ export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePa
                     <IncidentRow
                       key={incident.id}
                       incident={incident}
-                      onSelect={setSelectedIncident}
+                      onSelect={inspectIncident}
                     />
                   ))
                 )}
