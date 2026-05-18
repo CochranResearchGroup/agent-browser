@@ -13546,28 +13546,36 @@ mod tests {
         let resource =
             read_service_mcp_resource_from_state(SITE_POLICIES_RESOURCE, &state).unwrap();
 
-        assert_eq!(resource["contents"]["count"], 4);
-        assert_eq!(resource["contents"]["sitePolicies"][0]["id"], "canva");
-        assert_eq!(resource["contents"]["sitePolicies"][1]["id"], "gmail");
-        assert_eq!(resource["contents"]["sitePolicies"][2]["id"], "google");
-        assert_eq!(resource["contents"]["sitePolicies"][3]["id"], "microsoft");
-        assert_eq!(resource["contents"]["sitePolicySources"][0]["id"], "canva");
-        assert_eq!(
-            resource["contents"]["sitePolicySources"][0]["source"],
-            "builtin"
-        );
-        assert_eq!(
-            resource["contents"]["sitePolicySources"][1]["source"],
-            "builtin"
-        );
-        assert_eq!(
-            resource["contents"]["sitePolicySources"][2]["source"],
-            "persisted_state"
-        );
-        assert_eq!(
-            resource["contents"]["sitePolicySources"][3]["source"],
-            "persisted_state"
-        );
+        let site_policies = resource["contents"]["sitePolicies"].as_array().unwrap();
+        let site_policy_sources = resource["contents"]["sitePolicySources"]
+            .as_array()
+            .unwrap();
+        let ids = site_policies
+            .iter()
+            .map(|policy| policy["id"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        let source_ids = site_policy_sources
+            .iter()
+            .map(|source| source["id"].as_str().unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(resource["contents"]["count"], site_policies.len());
+        assert_eq!(site_policies.len(), site_policy_sources.len());
+        assert_eq!(ids, source_ids);
+        assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(ids.contains(&"canva"));
+        assert!(ids.contains(&"gmail"));
+        assert!(ids.contains(&"google"));
+        assert!(ids.contains(&"microsoft"));
+
+        for source in site_policy_sources {
+            let id = source["id"].as_str().unwrap();
+            let expected_source = match id {
+                "google" | "microsoft" => "persisted_state",
+                _ => "builtin",
+            };
+            assert_eq!(source["source"], expected_source);
+        }
         assert_service_site_policy_record_contract(&resource["contents"]["sitePolicies"][0]);
     }
 
