@@ -294,6 +294,12 @@ Validation:
 - dashboard build
 - dry-run cleanup command smoke only
 
+Status on 2026-05-18: implemented as a retained-state warning with dry-run
+prune and repair actions, summarized candidate and skipped counts, and a
+shadcn-style confirmation dialog before applying reviewed cleanup. The dashboard
+uses the existing service request path and does not add dashboard-only cleanup
+authority.
+
 ## Open Questions
 
 - Should browser records default to live-only, with retained records behind a

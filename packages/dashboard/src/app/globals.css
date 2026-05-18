@@ -1080,6 +1080,18 @@ body {
   font-weight: 800;
 }
 
+.service-retained-cleanup-confirm {
+  display: grid;
+  gap: 0.25rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--destructive) 7%, transparent);
+  padding: 0.75rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .service-health-timeline-card {
   background:
     radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--success) 18%, transparent), transparent 34%),

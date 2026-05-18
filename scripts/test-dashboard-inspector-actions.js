@@ -56,6 +56,12 @@ assert.match(
 );
 
 assert.match(
+  servicePanel,
+  /AlertDialogTrigger asChild[\s\S]*\{cleanupApplyLabel\}[\s\S]*AlertDialogContent[\s\S]*Apply cleanup/,
+  'Retained-state cleanup apply must be guarded by an AlertDialog confirmation',
+);
+
+assert.match(
   dashboardPage,
   /const \[serviceInspectorActions, setServiceInspectorActions\] = useState<ServiceInspectorActions>\(\{\}\);/,
   'Dashboard page must hold inspector actions outside the selected-record state',

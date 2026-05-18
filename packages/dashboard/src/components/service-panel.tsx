@@ -25,6 +25,17 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -3903,6 +3914,13 @@ export function ServicePanel({
   const cleanupAppliedTotal = cleanupKind === "repair"
     ? cleanupTotal(cleanupResult?.repairedCounts)
     : cleanupTotal(cleanupResult?.removed);
+  const cleanupApplyLabel = cleanupKind ? `Apply reviewed ${cleanupKind}` : "Apply reviewed cleanup";
+  const cleanupDialogTitle = cleanupKind === "repair"
+    ? "Apply retained-state repair?"
+    : "Apply retained-state prune?";
+  const cleanupDialogDescription = cleanupKind === "repair"
+    ? "This will mutate retained session evidence based on the reviewed dry-run result. It does not launch Chrome, but it changes service state."
+    : "This will remove inert retained records based on the reviewed dry-run result. Failure evidence is preserved unless the dry-run selected removable candidates.";
   const workspaceTabs = useMemo(() => [
     {
       value: "profiles" as const,
@@ -4189,15 +4207,46 @@ export function ServicePanel({
                       {cleanupLoading === "repair" ? <Loader2 className="size-3 animate-spin" /> : null}
                       Dry-run repair
                     </Button>
-                    <Button
-                      size="sm"
-                      className="h-7 rounded-lg px-2 text-[11px]"
-                      disabled={!cleanupApplyEnabled || !!cleanupLoading || !!cleanupApplying || !cleanupKind}
-                      onClick={() => cleanupKind && runRetainedCleanup(cleanupKind, true)}
-                    >
-                      {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
-                      Apply reviewed {cleanupKind ?? "cleanup"}
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          className="h-7 rounded-lg px-2 text-[11px]"
+                          disabled={!cleanupApplyEnabled || !!cleanupLoading || !!cleanupApplying || !cleanupKind}
+                        >
+                          {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
+                          {cleanupApplyLabel}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>{cleanupDialogTitle}</AlertDialogTitle>
+                          <AlertDialogDescription>{cleanupDialogDescription}</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="service-retained-cleanup-confirm">
+                          <p>
+                            Candidates: {cleanupCountSummary(cleanupResult?.candidateCounts)}
+                          </p>
+                          <p>
+                            Skipped: {cleanupCountSummary(cleanupResult?.skippedCounts)}
+                          </p>
+                          <p>
+                            Actor: {operatorIdentity.trim() || activeSession || "operator"}
+                          </p>
+                        </div>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel disabled={!!cleanupApplying}>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20"
+                            disabled={!cleanupKind || !!cleanupApplying}
+                            onClick={() => cleanupKind && runRetainedCleanup(cleanupKind, true)}
+                          >
+                            {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
+                            Apply cleanup
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                   {cleanupError && <p className="service-retained-cleanup-error">{cleanupError}</p>}
                   {cleanupResult && (
