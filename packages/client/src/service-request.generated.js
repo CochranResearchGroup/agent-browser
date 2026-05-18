@@ -10,6 +10,7 @@ export const SERVICE_REQUEST_ACTIONS = [
   "tab_new",
   "tab_switch",
   "tab_close",
+  "view_focus",
   "tab_list",
   "url",
   "title",
@@ -68,7 +69,9 @@ export const SERVICE_REQUEST_ACTIONS = [
   "scroll",
   "scrollintoview",
   "focus",
-  "clear"
+  "clear",
+  "service_prune_retained",
+  "service_repair_retained"
 ];
 
 export const SERVICE_REQUEST_REQUIRED_FIELDS = [

@@ -18,7 +18,6 @@ import {
 } from "@/store/sessions";
 import { tabsForPortAtom, engineForPortAtom } from "@/store/tabs";
 import { ChevronRight, Loader2, Plus, Trash2 } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -401,7 +400,6 @@ export function SessionTree() {
       <div className="flex shrink-0 items-center px-3 py-2">
         <span className="text-xs text-muted-foreground">Sessions</span>
         <div className="ml-auto flex items-center gap-0.5">
-          <ThemeToggle />
           {sessions.some((s) => !s.pending) && (
             <button
               type="button"

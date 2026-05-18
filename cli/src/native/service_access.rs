@@ -1442,6 +1442,21 @@ fn service_request_decision(
     if requires_cdp_free {
         service_request.insert("requiresCdpFree".to_string(), json!(true));
     }
+    let headed = launch_posture
+        .get("headed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let browser_host = launch_posture.get("browserHost").cloned();
+    let mut request_params = Map::new();
+    if headed {
+        request_params.insert("headless".to_string(), json!(false));
+    }
+    if let Some(browser_host) = browser_host {
+        request_params.insert("browserHost".to_string(), browser_host);
+    }
+    if !request_params.is_empty() {
+        service_request.insert("params".to_string(), Value::Object(request_params));
+    }
     service_request.insert(
         "cdpAttachmentAllowed".to_string(),
         json!(cdp_attachment_allowed),
@@ -3896,6 +3911,62 @@ mod tests {
                 .iter()
                 .any(|reason| reason == "site_policy_requires_cdp_free"),
             true
+        );
+    }
+
+    #[test]
+    fn service_access_plan_uses_builtin_ups_remote_view_headed_policy() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "ups-work".to_string(),
+                BrowserProfile {
+                    id: "ups-work".to_string(),
+                    name: "UPS Work".to_string(),
+                    target_service_ids: vec!["ups".to_string()],
+                    authenticated_service_ids: vec!["ups".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_url: Some(
+                    "https://www.ups.com/track?tracknum=1Z035CX1YW53854301".to_string(),
+                ),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["query"]["targetServiceIds"], json!(["ups"]));
+        assert_eq!(plan["sitePolicy"]["id"], "ups");
+        assert_eq!(plan["sitePolicySource"]["source"], "builtin");
+        assert_eq!(plan["sitePolicySource"]["matchedBy"], "target_service_id");
+        assert_eq!(plan["sitePolicy"]["browserHost"], "remote_headed");
+        assert_eq!(plan["sitePolicy"]["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(plan["decision"]["browserHost"], "remote_headed");
+        assert_eq!(plan["decision"]["launchPosture"]["headed"], true);
+        assert_eq!(
+            plan["decision"]["launchPosture"]["remoteViewRecommended"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuild"],
+            "stealthcdp_chromium"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSource"],
+            "site_policy"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["headless"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["browserHost"],
+            "remote_headed"
         );
     }
 

@@ -114,6 +114,9 @@ function selectRecommendations(files, base) {
   }
 
   if (files.some((file) => file.startsWith('packages/dashboard/') || file.startsWith('docs/src/components/dashboard/'))) {
+    if (files.some((file) => file.includes('view-stream') || file === 'packages/dashboard/src/components/service-panel.tsx')) {
+      add('pnpm test:dashboard-view-streams', 'dashboard view stream provider handling changed');
+    }
     add('pnpm build:dashboard', 'dashboard package or dashboard UI changed');
   }
 

@@ -1067,10 +1067,23 @@ agent-browser dashboard stop
 ```
 
 The dashboard runs as a standalone background process on port 4848, independent of browser sessions. It stays available even when no sessions are running. All sessions automatically stream to the dashboard.
+The standalone dashboard also exposes `/api/service/*` on the same origin by proxying to the active session service API when available and falling back to CLI-backed read-only service views where possible. This keeps the Service view usable through stable local or authenticated ingress routes instead of requiring the operator's browser to reach per-session localhost ports.
+
+On Linux workstations that should expose the dashboard through a stable local
+or external ingress route, install the user-scoped systemd service:
+
+```bash
+bash scripts/install-dashboard-user-service.sh
+```
+
+The service runs the bundled dashboard in foreground mode on port 4848, enables
+restart-on-failure behavior, and starts at user login. Set
+`AGENT_BROWSER_DASHBOARD_PORT` before running the script to choose another
+port.
 
 The dashboard displays:
 - **Live viewport** — real-time JPEG frames from the browser
-- **Service view** — worker and browser health cards, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent incident severity, escalation, recommended action displays, and remedy summary groups sourced from the service incident contract, a service-owned incident history timeline with local fallback, a trace explorer backed by `/api/service/trace` for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards, naming warnings, and profile lease wait cards from the shared trace payload, a browser-health transition timeline for crash/recovery visibility, a backend-owned profile allocation view from `profileAllocations` with detail inspection refreshed from `GET /api/service/profiles/<id>/allocation` and guarded by `pnpm test:dashboard-profile-allocation`, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, managed entity counts, recent service jobs with naming warnings and queued/running job cancellation, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action
+- **Service view** — worker and browser health cards, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent incident severity, escalation, recommended action displays, and remedy summary groups sourced from the service incident contract, a service-owned incident history timeline with local fallback, a trace explorer backed by `/api/service/trace` for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards, naming warnings, and profile lease wait cards from the shared trace payload, a browser-health transition timeline for crash/recovery visibility, a backend-owned profile allocation view from `profileAllocations` with detail inspection refreshed from `GET /api/service/profiles/<id>/allocation` and guarded by `pnpm test:dashboard-profile-allocation`, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, managed entity counts, recent service jobs with naming warnings and queued/running job cancellation, browser/session/tab detail inspection, embedded remote-view inspection for browser view streams and service tabs with a fullscreen toggle, a queued `view_focus` request that brings the selected tab forward and asks Chrome to maximize the containing window before inspection, filterable service events including tab lifecycle changes, and a reconcile action
 - **Activity feed** — chronological command/result stream with timing and expandable details
 - **Console output** — browser console messages (log, warn, error)
 - **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
@@ -1565,6 +1578,19 @@ To bind to a specific port, set `AGENT_BROWSER_STREAM_PORT`:
 AGENT_BROWSER_STREAM_PORT=9223 agent-browser open example.com
 ```
 
+Service requests that use `params.browserHost=remote_headed` launch a headed
+browser for CDP control while keeping it off the operator desktop on Linux when
+`DISPLAY` is unset. In that case agent-browser starts a private Xvfb display.
+Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` to reuse an existing virtual display,
+and set `AGENT_BROWSER_REMOTE_VIEW_URL` when an external noVNC, RDP gateway,
+WebRTC, or dashboard view URL should be recorded on the service browser record.
+Set `AGENT_BROWSER_REMOTE_VIEW_PROVIDER=rdp_gateway` when the URL points to an
+HTML5 RDP gateway that should be embedded in the dashboard browser details.
+Use `pnpm test:rdp-gateway-readiness-live` on operator workstations to check
+the local RDP backend. It verifies `guacd`, `xrdp`, `xfreerdp`, and their TCP
+ports. Add `--require-html5-client` when `AGENT_BROWSER_REMOTE_VIEW_URL` should
+also be reachable before the setup is considered ready.
+
 You can also manage streaming at runtime with `stream enable`, `stream disable`, and `stream status`:
 
 ```bash
@@ -1652,6 +1678,8 @@ Use `service prune-retained` when the retained service inventory has accumulated
 Add `--released-sessions` when released or expired session records should be pruned with their inert linked `not_started` browser placeholders. The session must have no retained tabs and every linked browser must have no PID, CDP endpoint, view streams, profile binding, or non-self active sessions. Add `--abandoned-sessions` only after operator review; it applies the same inert-placeholder rule to shared or exclusive session leases that would otherwise continue to affect profile allocation. Abandoned shared or exclusive sessions must also have a parseable `lastLeaseObservedAt` or `createdAt` older than `--abandoned-session-min-age-minutes`, which defaults to `1440`. Dry-runs report skipped abandoned sessions as `abandonedSessionsMissingAgeTimestamp` or `abandonedSessionsTooFresh` so operators can distinguish unsafe stale-looking placeholders from actual prune candidates. The `skippedSummary` field reports the top skipped groups by stable prefix after trimming trailing numeric run suffixes, including total and omitted group counts, and text output shows the same top groups for triage.
 
 Use `service repair-retained` before abandoned-session cleanup when legacy inert session placeholders lack parseable age evidence. It is dry-run by default and only mutates state with `--apply`. The default repair stamps the current observation time into `lastLeaseObservedAt` for shared or exclusive sessions that have no retained tabs and only inert self-linked `not_started` browser placeholders. Repaired sessions become too fresh for `--abandoned-sessions` pruning until the minimum age guard elapses, which prevents a repair from immediately turning into deletion.
+
+The Service dashboard shows a retained-state cleanup workflow when persisted state grows large. It queues `service_prune_retained` and `service_repair_retained` through `POST /api/service/request`, runs dry-runs first, and only enables apply after the operator has a reviewed candidate result in view.
 
 Use `service access-plan` before browser work when an operator, agent, or software client needs the same no-launch broker recommendation as HTTP `GET /api/service/access-plan` and MCP `service_access_plan`. Text output includes the selected profile, manual-seeding posture, monitor freshness recommendation, service request availability, and compact `browser_build_summary` explaining which browser build won.
 
@@ -2041,9 +2069,18 @@ explains whether the plan is headed, remote-view capable, or requires detached
 first-login seeding. It also reports `browserBuild`, `browserBuildSource`,
 `requiresCdpFree`, and `cdpAttachmentAllowed`, so agents and software clients
 can distinguish stock Chrome, stealth CDP Chromium, and CDP-free headed posture
-before opening a browser. The shipped Canva site policy recommends
-`cdp_free_headed` by default because some Canva sessions can fail before the
-page loads when DevTools is attached.
+before opening a browser. Access-plan tab requests for headed site policies
+include `params.headless=false` and `params.browserHost` so service clients do
+not accidentally launch true headless Chrome or discard the host selected by a
+site policy. A copied `remote_headed` request is actionable in the daemon: on
+Linux it starts a hidden Xvfb-backed headed browser when no display is supplied,
+keeps CDP control available, and records a view stream entry for dashboard or
+operator surfaces. The shipped Canva
+site policy recommends `cdp_free_headed` by default because some Canva sessions
+can fail before the page loads when DevTools is attached. The shipped UPS site
+policy recommends `stealthcdp_chromium` with a remote-view-capable headed host
+because live testing on 2026-05-17 showed true headless stealth Chromium failed
+UPS tracking navigation while headed stealth Chromium loaded the tracking page.
 When manual seeding is required, `seedingHandoff.operatorIntervention` is the
 canonical user-feedback contract. It carries the intervention state, severity,
 default channels for API, MCP, and dashboard clients, optional desktop,
@@ -2076,7 +2113,7 @@ performs a no-launch profile lookup and refuses the run when the broker-selected
 profile does not match the profile being verified.
 
 When no local site policy exists, agent-browser applies shipped defaults for
-Canva, Google, Gmail, and Microsoft login identities. Local persisted or configured
+Canva, UPS, Google, Gmail, and Microsoft login identities. Local persisted or configured
 policies with the same IDs override those defaults. `sitePolicySource` reports
 whether the selected policy came from config, persisted state, or a built-in default, how
 it matched the request, and whether it is overrideable.

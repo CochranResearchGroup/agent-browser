@@ -19,6 +19,7 @@
         "tab_new",
         "tab_switch",
         "tab_close",
+        "view_focus",
         "tab_list",
         "url",
         "title",
@@ -77,9 +78,11 @@
         "scroll",
         "scrollintoview",
         "focus",
-        "clear"
+        "clear",
+        "service_prune_retained",
+        "service_repair_retained"
       ],
-      "description": "Underlying browser-control action to queue through the service worker. cdp_free_launch starts a headed browser without DevTools and records service-owned lifecycle metadata."
+      "description": "Underlying service or browser-control action to queue through the service worker. cdp_free_launch starts a headed browser without DevTools and records service-owned lifecycle metadata. view_focus brings a selected tab forward and asks the browser host to maximize the containing window for remote-view inspection. service_prune_retained and service_repair_retained provide reviewed retained-state cleanup and default to dry-run unless params.apply is true."
     },
     "params": {
       "type": "object",

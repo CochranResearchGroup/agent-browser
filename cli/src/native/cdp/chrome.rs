@@ -58,6 +58,7 @@ fn create_profile_dir(path: &Path, label: &str) -> Result<(), String> {
 
 pub struct ChromeProcess {
     child: Child,
+    aux_processes: Vec<Child>,
     pub ws_url: String,
     temp_user_data_dir: Option<PathBuf>,
     user_data_dir: PathBuf,
@@ -188,6 +189,8 @@ impl ChromeProcess {
             }
         };
         outcome.force_kill_succeeded = child_kill_ok && process_group_kill_ok && wait_ok;
+        let aux_ok = kill_aux_processes(&mut self.aux_processes, &mut outcome);
+        outcome.force_kill_succeeded = outcome.force_kill_succeeded && aux_ok;
         if std::env::var_os("AGENT_BROWSER_TEST_FORCE_KILL_FAILURE").is_some() {
             outcome.force_kill_succeeded = false;
             outcome
@@ -260,9 +263,16 @@ impl ChromeProcess {
         while start.elapsed() < timeout {
             match self.child.try_wait() {
                 Ok(Some(_)) => {
-                    return ProcessShutdownOutcome {
+                    let mut outcome = ProcessShutdownOutcome {
                         graceful_exit: true,
                         ..ProcessShutdownOutcome::default()
+                    };
+                    kill_aux_processes(&mut self.aux_processes, &mut outcome);
+                    return ProcessShutdownOutcome {
+                        graceful_exit: outcome.graceful_exit,
+                        force_kill_attempted: outcome.force_kill_attempted,
+                        force_kill_succeeded: outcome.force_kill_succeeded,
+                        errors: outcome.errors,
                     };
                 }
                 Ok(None) => std::thread::sleep(poll_interval),
@@ -283,6 +293,36 @@ impl ChromeProcess {
 
         self.kill_with_outcome()
     }
+}
+
+fn kill_aux_processes(
+    aux_processes: &mut Vec<Child>,
+    outcome: &mut ProcessShutdownOutcome,
+) -> bool {
+    let mut all_ok = true;
+    for aux in aux_processes.iter_mut() {
+        outcome.force_kill_attempted = true;
+        match aux.kill() {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::InvalidInput => {}
+            Err(err) => {
+                all_ok = false;
+                outcome.errors.push(format!(
+                    "Failed to force kill auxiliary browser process: {}",
+                    err
+                ));
+            }
+        }
+        if let Err(err) = aux.wait() {
+            all_ok = false;
+            outcome.errors.push(format!(
+                "Failed to wait for auxiliary browser process: {}",
+                err
+            ));
+        }
+    }
+    aux_processes.clear();
+    all_ok
 }
 
 impl Drop for ChromeProcess {
@@ -347,6 +387,13 @@ pub struct LaunchOptions {
     /// When true, keep DevTools remote debugging enabled for detached manual
     /// launches so automation can later attach to the live browser.
     pub attachable: bool,
+    /// Optional X11 display to use for headed launches. When `remote_headed`
+    /// is true and this is unset on Linux, agent-browser starts an isolated
+    /// Xvfb display so the browser is headed without cluttering the desktop.
+    pub display: Option<String>,
+    /// Launch as a service-managed remote-headed browser. On Linux this can
+    /// use a private virtual display while keeping CDP available for control.
+    pub remote_headed: bool,
 }
 
 impl Default for LaunchOptions {
@@ -374,6 +421,8 @@ impl Default for LaunchOptions {
             keychain_password: None,
             manual_login: false,
             attachable: false,
+            display: None,
+            remote_headed: false,
         }
     }
 }
@@ -736,7 +785,7 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
     }
 
     #[cfg(unix)]
-    if let Some(display) = headed_display_fallback(options) {
+    if let Some(display) = headed_display_value(options) {
         cmd.env("DISPLAY", display);
     }
 
@@ -879,6 +928,23 @@ fn try_launch_chrome(
         }
     };
 
+    let mut aux_processes = Vec::new();
+    #[cfg(target_os = "linux")]
+    let remote_headed_display = if options.remote_headed
+        && !options.headless
+        && options.display.is_none()
+        && std::env::var_os("DISPLAY").is_none()
+        && !is_wsl_mounted_windows_executable(chrome_path)
+    {
+        let (display, child) = start_remote_headed_virtual_display(options.viewport_size)?;
+        aux_processes.push(child);
+        Some(display)
+    } else {
+        None
+    };
+    #[cfg(not(target_os = "linux"))]
+    let remote_headed_display: Option<String> = None;
+
     let mut cmd = Command::new(chrome_path);
     cmd.args(&args)
         .stdin(Stdio::null())
@@ -892,7 +958,9 @@ fn try_launch_chrome(
     // and similar environments can attach to the user's primary X server
     // without requiring explicit DISPLAY configuration.
     #[cfg(unix)]
-    if let Some(display) = headed_display_fallback(options) {
+    if let Some(display) =
+        headed_display_value_with_override(options, remote_headed_display.as_deref())
+    {
         cmd.env("DISPLAY", display);
     }
 
@@ -918,6 +986,8 @@ fn try_launch_chrome(
     }
 
     let mut child = cmd.spawn().map_err(|e| {
+        let mut outcome = ProcessShutdownOutcome::default();
+        kill_aux_processes(&mut aux_processes, &mut outcome);
         cleanup_temp_dir(&temp_user_data_dir);
         format!("Failed to launch Chrome at {:?}: {}", chrome_path, e)
     })?;
@@ -928,6 +998,8 @@ fn try_launch_chrome(
             Err(e) => {
                 let _ = child.kill();
                 let _ = child.wait();
+                let mut outcome = ProcessShutdownOutcome::default();
+                kill_aux_processes(&mut aux_processes, &mut outcome);
                 cleanup_temp_dir(&temp_user_data_dir);
                 return Err(e);
             }
@@ -950,6 +1022,8 @@ fn try_launch_chrome(
             Err(err) => {
                 let _ = child.kill();
                 let _ = child.wait();
+                let mut outcome = ProcessShutdownOutcome::default();
+                kill_aux_processes(&mut aux_processes, &mut outcome);
                 cleanup_temp_dir(&temp_user_data_dir);
                 return Err(err);
             }
@@ -998,6 +1072,7 @@ fn try_launch_chrome(
         runtime_profile,
         stderr_log_path,
         stderr_drainer: Some(stderr_drainer),
+        aux_processes,
         #[cfg(unix)]
         pgid,
     })
@@ -2006,12 +2081,63 @@ fn expand_tilde(path: &str) -> String {
     path.to_string()
 }
 
-fn headed_display_fallback(options: &LaunchOptions) -> Option<&'static str> {
-    if !options.headless && std::env::var_os("DISPLAY").is_none() {
-        Some(":0.0")
-    } else {
-        None
+fn headed_display_value(options: &LaunchOptions) -> Option<String> {
+    headed_display_value_with_override(options, None)
+}
+
+fn headed_display_value_with_override(
+    options: &LaunchOptions,
+    virtual_display: Option<&str>,
+) -> Option<String> {
+    if options.headless {
+        return None;
     }
+    options
+        .display
+        .clone()
+        .or_else(|| virtual_display.map(str::to_string))
+        .or_else(|| (std::env::var_os("DISPLAY").is_none()).then(|| ":0.0".to_string()))
+}
+
+#[cfg(target_os = "linux")]
+fn start_remote_headed_virtual_display(
+    viewport_size: Option<(u32, u32)>,
+) -> Result<(String, Child), String> {
+    let xvfb = find_path_executable("Xvfb").ok_or_else(|| {
+        "remote_headed launch requires Xvfb when DISPLAY is unset; install Xvfb or set AGENT_BROWSER_REMOTE_HEADED_DISPLAY".to_string()
+    })?;
+    let display = available_x_display().ok_or_else(|| {
+        "No available X display number found for remote_headed launch".to_string()
+    })?;
+    let (width, height) = viewport_size.unwrap_or((1280, 720));
+    let display_arg = format!(":{}", display);
+    let screen = format!("{}x{}x24", width, height);
+    let child = Command::new(xvfb)
+        .args([&display_arg, "-screen", "0", &screen, "-nolisten", "tcp"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|err| format!("Failed to start Xvfb for remote_headed launch: {}", err))?;
+    std::thread::sleep(Duration::from_millis(150));
+    Ok((display_arg, child))
+}
+
+#[cfg(target_os = "linux")]
+fn available_x_display() -> Option<u16> {
+    (90..130).find(|display| {
+        !Path::new(&format!("/tmp/.X11-unix/X{}", display)).exists()
+            && !Path::new(&format!("/tmp/.X{}-lock", display)).exists()
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn find_path_executable(name: &str) -> Option<PathBuf> {
+    std::env::var_os("PATH").and_then(|path| {
+        std::env::split_paths(&path)
+            .map(|dir| dir.join(name))
+            .find(|candidate| candidate.is_file())
+    })
 }
 
 #[cfg(test)]
@@ -2391,7 +2517,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(headed_display_fallback(&opts), Some(":0.0"));
+        assert_eq!(headed_display_value(&opts), Some(":0.0".to_string()));
     }
 
     #[test]
@@ -2404,7 +2530,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(headed_display_fallback(&opts), None);
+        assert_eq!(headed_display_value(&opts), None);
     }
 
     #[test]
@@ -2417,7 +2543,54 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(headed_display_fallback(&opts), None);
+        assert_eq!(headed_display_value(&opts), None);
+    }
+
+    #[test]
+    fn test_headed_display_value_prefers_explicit_remote_display() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.remove("DISPLAY");
+
+        let opts = LaunchOptions {
+            headless: false,
+            display: Some(":92".to_string()),
+            remote_headed: true,
+            ..Default::default()
+        };
+
+        assert_eq!(headed_display_value(&opts), Some(":92".to_string()));
+    }
+
+    #[test]
+    fn test_headed_display_value_uses_virtual_display_before_fallback() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.remove("DISPLAY");
+
+        let opts = LaunchOptions {
+            headless: false,
+            remote_headed: true,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            headed_display_value_with_override(&opts, Some(":91")),
+            Some(":91".to_string())
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_remote_headed_virtual_display_starts_when_xvfb_available() {
+        if find_path_executable("Xvfb").is_none() {
+            return;
+        }
+
+        let (display, mut child) = start_remote_headed_virtual_display(Some((640, 480))).unwrap();
+        assert!(display.starts_with(':'));
+        assert!(child.try_wait().unwrap().is_none());
+
+        let _ = child.kill();
+        let _ = child.wait();
     }
 
     #[test]
@@ -2554,6 +2727,7 @@ mod tests {
             let child = spawn_noop_child();
             let _process = ChromeProcess {
                 child,
+                aux_processes: Vec::new(),
                 ws_url: String::new(),
                 temp_user_data_dir: Some(dir.clone()),
                 user_data_dir: dir.clone(),

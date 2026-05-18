@@ -155,11 +155,12 @@ pub const SERVICE_TAB_LIFECYCLE_VALUES: [&str; 7] = [
     "unknown", "opening", "loading", "ready", "closing", "closed", "crashed",
 ];
 pub const SERVICE_MONITOR_STATE_VALUES: [&str; 3] = ["active", "paused", "faulted"];
-pub const SERVICE_VIEW_STREAM_PROVIDER_VALUES: [&str; 5] = [
+pub const SERVICE_VIEW_STREAM_PROVIDER_VALUES: [&str; 6] = [
     "cdp_screencast",
     "chrome_tab_webrtc",
     "virtual_display_webrtc",
     "novnc",
+    "rdp_gateway",
     "external_url",
 ];
 pub const SERVICE_CONTROL_INPUT_PROVIDER_VALUES: [&str; 4] = [
@@ -2712,6 +2713,27 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             ..SitePolicy::default()
         },
         SitePolicy {
+            id: "ups".to_string(),
+            origin_pattern: "https://www.ups.com".to_string(),
+            browser_host: Some(BrowserHost::RemoteHeaded),
+            browser_build: Some(BrowserBuild::StealthcdpChromium),
+            interaction_mode: InteractionMode::HumanLikeInput,
+            rate_limit: RateLimitPolicy {
+                min_action_delay_ms: Some(500),
+                jitter_ms: Some(400),
+                cooldown_ms: Some(2_000),
+                max_parallel_sessions: Some(1),
+                retry_budget: Some(1),
+            },
+            profile_required: true,
+            challenge_policy: ChallengePolicy::AvoidFirst,
+            notes: Some(
+                "UPS tracking failed in true headless stealth Chromium on 2026-05-17 with HTTP/2 navigation errors; prefer a headed, remotely viewable stealth Chromium session."
+                    .to_string(),
+            ),
+            ..SitePolicy::default()
+        },
+        SitePolicy {
             id: "google".to_string(),
             origin_pattern: "https://accounts.google.com".to_string(),
             browser_host: Some(BrowserHost::LocalHeaded),
@@ -4181,6 +4203,7 @@ pub enum ViewStreamProvider {
     ChromeTabWebrtc,
     VirtualDisplayWebrtc,
     Novnc,
+    RdpGateway,
     ExternalUrl,
 }
 

@@ -433,6 +433,16 @@ pub fn persist_service_browser_record_in_repository(
                     .as_ref()
                     .and_then(|browser| browser.profile_id.clone())
             });
+        let view_streams = metadata
+            .as_ref()
+            .map(|metadata| metadata.view_streams.clone())
+            .filter(|streams| !streams.is_empty())
+            .or_else(|| {
+                previous
+                    .as_ref()
+                    .map(|browser| browser.view_streams.clone())
+            })
+            .unwrap_or_default();
         let mut browser = BrowserProcess {
             id: id.clone(),
             profile_id: profile_id.clone(),
@@ -440,7 +450,7 @@ pub fn persist_service_browser_record_in_repository(
             health,
             pid,
             cdp_endpoint,
-            view_streams: Vec::new(),
+            view_streams,
             active_session_ids: vec![session_id.to_string()],
             last_error,
             last_health_observation: None,

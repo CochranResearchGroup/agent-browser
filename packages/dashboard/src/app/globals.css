@@ -367,6 +367,7 @@ body {
 }
 
 .dashboard-pane {
+  position: relative;
   height: 100%;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
@@ -393,7 +394,58 @@ body {
   animation: dashboard-slide-left 520ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
 }
 
+.dashboard-pane-with-toggle {
+  padding-top: 2.25rem;
+}
+
+.dashboard-pane-with-rails {
+  position: relative;
+}
+
+.dashboard-pane-toggle {
+  position: absolute;
+  z-index: 20;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dashboard-panel-strong) 96%, transparent), color-mix(in srgb, var(--dashboard-panel) 88%, transparent)),
+    var(--dashboard-panel);
+  color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground));
+  box-shadow:
+    0 8px 22px rgb(0 0 0 / 10%),
+    inset 0 1px 0 rgb(255 255 255 / 16%);
+  backdrop-filter: blur(18px) saturate(145%);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.dashboard-pane-toggle:hover,
+.dashboard-pane-toggle:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+  color: var(--foreground);
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--primary) 14%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 18%);
+}
+
+.dashboard-pane-toggle-left {
+  top: 0.55rem;
+  left: 0.55rem;
+}
+
+.dashboard-pane-toggle-right {
+  top: 0.55rem;
+  right: 0.55rem;
+}
+
 .dashboard-empty-state {
+  position: relative;
   display: grid;
   height: 100%;
   place-items: center;
@@ -442,11 +494,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.85rem;
+  padding: 0.6rem 0.75rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--success) 22%, transparent), transparent 44%),
-    color-mix(in srgb, var(--dashboard-panel-strong) 82%, transparent);
+  background: color-mix(in srgb, var(--dashboard-panel-strong) 86%, transparent);
 }
 
 .service-operator-card {
@@ -454,13 +504,10 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
-  margin: 0.75rem 0.75rem 0;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 1rem;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--success) 8%, transparent), transparent 42%),
-    color-mix(in srgb, var(--card) 72%, transparent);
-  padding: 0.75rem;
+  margin: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+  background: color-mix(in srgb, var(--background) 44%, transparent);
+  padding: 0.5rem 0.75rem;
 }
 
 .service-operator-input {
@@ -493,17 +540,43 @@ body {
 
 .service-panel-mark {
   display: grid;
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 1.65rem;
+  height: 1.65rem;
   place-items: center;
   flex-shrink: 0;
-  border-radius: 0.8rem;
+  border-radius: 0.55rem;
   color: var(--primary-foreground);
   background: linear-gradient(140deg, var(--primary), color-mix(in srgb, var(--success) 68%, var(--primary)));
-  box-shadow: 0 14px 32px color-mix(in srgb, var(--success) 22%, transparent);
 }
 
-.service-health-card,
+.service-panel-action-button {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 48%, transparent);
+  color: var(--muted-foreground);
+}
+
+.service-panel-action-button:hover,
+.service-panel-action-button:focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.service-panel-body {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.service-status-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.75rem, 1fr));
+  gap: 0.35rem;
+}
+
 .service-summary-card,
 .service-health-timeline-card,
 .service-trace-card,
@@ -511,69 +584,400 @@ body {
 .service-panel-empty-card {
   position: relative;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-  border-radius: 1.25rem;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--dashboard-panel-strong) 88%, transparent), color-mix(in srgb, var(--dashboard-panel) 94%, transparent)),
-    var(--dashboard-panel);
+  border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--dashboard-panel) 94%, transparent);
   box-shadow:
-    0 18px 42px rgb(15 35 31 / 9%),
-    inset 0 1px 0 rgb(255 255 255 / 13%);
+    0 0 0 1px rgb(0 0 0 / 2%),
+    0 1px 2px -1px rgb(0 0 0 / 8%);
 }
 
-.service-health-card {
-  min-height: 8.25rem;
-  padding: 0.85rem;
+.service-status-light {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--dashboard-panel) 88%, transparent);
+  padding: 0.4rem 0.5rem;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 1.5%),
+    0 1px 2px -1px rgb(0 0 0 / 8%);
+  outline: none;
   animation: dashboard-rise 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
-.service-health-card::after {
-  content: "";
-  position: absolute;
-  inset: auto -20% -42% auto;
-  width: 7rem;
-  height: 7rem;
-  border-radius: 999px;
-  opacity: 0.4;
-  background: color-mix(in srgb, var(--muted-foreground) 18%, transparent);
-  filter: blur(18px);
+.service-status-light:hover,
+.service-status-light:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background: color-mix(in srgb, var(--dashboard-panel-strong) 86%, transparent);
 }
 
 .service-health-icon {
   display: grid;
-  width: 2rem;
-  height: 2rem;
+  width: 1.45rem;
+  height: 1.45rem;
   place-items: center;
   flex-shrink: 0;
-  border-radius: 0.9rem;
+  border-radius: 999px;
   color: var(--muted-foreground);
   background: color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
-.service-health-good .service-health-icon,
-.service-health-good::after {
+.service-health-good .service-health-icon {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 18%, transparent);
 }
 
-.service-health-warn .service-health-icon,
-.service-health-warn::after {
+.service-health-warn .service-health-icon {
   color: var(--warning);
   background: color-mix(in srgb, var(--warning) 18%, transparent);
 }
 
-.service-health-bad .service-health-icon,
-.service-health-bad::after {
+.service-health-bad .service-health-icon {
   color: var(--destructive);
   background: color-mix(in srgb, var(--destructive) 18%, transparent);
+}
+
+.service-status-light-label,
+.service-status-light-value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-status-light-label {
+  color: var(--muted-foreground);
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.service-status-light-value {
+  margin-top: 0.1rem;
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 .service-summary-card,
 .service-health-timeline-card,
 .service-trace-card,
 .service-timeline-card {
-  padding: 0.9rem;
+  padding: 0.65rem;
   animation: dashboard-rise 460ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+}
+
+.service-section {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--dashboard-panel) 90%, transparent);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 1.5%),
+    0 1px 2px -1px rgb(0 0 0 / 8%);
+  animation: dashboard-rise 460ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+}
+
+.service-section-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.55rem;
+  border: 0;
+  background: color-mix(in srgb, var(--background) 26%, transparent);
+  padding: 0.5rem 0.6rem;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.service-section-trigger:hover,
+.service-section-trigger:focus-visible {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.service-section-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 72%, transparent);
+  outline-offset: -2px;
+}
+
+.service-section-icon {
+  display: grid;
+  width: 1.45rem;
+  height: 1.45rem;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.service-section-good .service-section-icon {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+}
+
+.service-section-warn .service-section-icon {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.service-section-bad .service-section-icon {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 16%, transparent);
+}
+
+.service-section-title,
+.service-section-detail {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-section-title {
+  color: var(--foreground);
+  font-size: 0.74rem;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.service-section-detail {
+  margin-top: 0.06rem;
+  color: var(--muted-foreground);
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.service-section-count {
+  min-width: 2rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  padding: 0.12rem 0.45rem;
+  color: var(--foreground);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  text-align: center;
+}
+
+.service-section-chevron {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition: transform 160ms ease;
+}
+
+.service-section-trigger[data-state="open"] .service-section-chevron {
+  transform: rotate(180deg);
+}
+
+.service-section-content {
+  border-top: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+  padding: 0.55rem;
+}
+
+.service-section-list {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.service-record-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+}
+
+.service-record-filter {
+  margin: 0;
+}
+
+.service-record-limit-groups {
+  display: flex;
+  flex: 1 1 26rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.service-record-limit-label {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.service-record-list-heading {
+  padding: 0 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.service-split-records {
+  display: grid;
+  gap: 0.55rem;
+}
+
+@media (min-width: 1024px) {
+  .service-split-records {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.service-entity-strip {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--background) 32%, transparent);
+  padding: 0.45rem;
+}
+
+.service-entity-strip-heading {
+  display: flex;
+  min-width: 13rem;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.1rem 0.25rem;
+}
+
+.service-entity-chip-grid {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 28rem;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.service-entity-count-chip {
+  display: inline-flex;
+  min-width: 7.2rem;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dashboard-panel) 80%, transparent);
+  padding: 0.28rem 0.55rem;
+  outline: none;
+}
+
+.service-entity-count-chip:hover,
+.service-entity-count-chip:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: color-mix(in srgb, var(--dashboard-panel-strong) 82%, transparent);
+}
+
+.service-entity-count-value {
+  color: var(--foreground);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.service-entity-count-label {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-entity-strip-error {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  padding: 0.45rem 0.6rem;
+  color: var(--destructive);
+  font-size: 0.75rem;
+}
+
+.service-retained-state-hint {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  padding: 0.45rem 0.6rem;
+  color: color-mix(in srgb, var(--warning) 72%, var(--foreground));
+  font-size: 0.75rem;
+}
+
+.service-retained-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.service-retained-state-hint code {
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.service-retained-cleanup-error {
+  margin-top: 0.5rem;
+  color: var(--destructive);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.service-retained-cleanup-result {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.55rem;
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--background) 50%, transparent);
+  padding: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+}
+
+.service-retained-cleanup-result-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--foreground);
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+
+.service-retained-cleanup-next {
+  color: color-mix(in srgb, var(--warning) 74%, var(--foreground));
+  font-weight: 800;
 }
 
 .service-health-timeline-card {
@@ -1090,6 +1494,207 @@ body {
   outline-offset: 2px;
 }
 
+.service-browser-table-shell {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.service-browser-table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.service-browser-filter {
+  display: inline-flex;
+  min-width: min(100%, 22rem);
+  flex: 1 1 18rem;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 48%, transparent);
+  padding: 0.32rem 0.6rem;
+  color: var(--muted-foreground);
+}
+
+.service-browser-filter input {
+  min-width: 0;
+  flex: 1;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 650;
+  outline: none;
+}
+
+.service-browser-filter input::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+
+.service-browser-table-count {
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.service-browser-table-scroll {
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--background) 30%, transparent);
+}
+
+.service-browser-table {
+  width: 100%;
+  min-width: 58rem;
+  border-collapse: collapse;
+}
+
+.service-browser-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  background: color-mix(in srgb, var(--dashboard-panel-strong) 94%, transparent);
+  padding: 0.35rem 0.45rem;
+  text-align: left;
+}
+
+.service-browser-table th,
+.service-browser-table td {
+  vertical-align: middle;
+}
+
+.service-browser-table td {
+  max-width: 15rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 38%, transparent);
+  padding: 0.42rem 0.45rem;
+  color: var(--foreground);
+  font-size: 0.72rem;
+}
+
+.service-browser-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.service-browser-table-row {
+  transition: background-color 140ms ease;
+}
+
+.service-browser-table-row:hover {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.service-browser-table-sort {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.25rem;
+  border: 0;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.service-browser-table-sort:hover,
+.service-browser-table-sort:focus-visible,
+.service-browser-table-sort-active {
+  color: var(--foreground);
+}
+
+.service-browser-table-sort:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 72%, transparent);
+  outline-offset: 2px;
+}
+
+.service-browser-table-health,
+.service-browser-table-host {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.service-browser-table-host {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.service-browser-table-host span,
+.service-browser-table-id,
+.service-browser-table-cell-muted,
+.service-browser-table-error {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-browser-table-host span:last-child,
+.service-browser-table-cell-muted {
+  color: var(--muted-foreground);
+}
+
+.service-browser-table-id {
+  display: block;
+  max-width: 14rem;
+  border: 0;
+  color: var(--foreground);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+}
+
+.service-browser-table-id:hover,
+.service-browser-table-id:focus-visible {
+  color: var(--primary);
+}
+
+.service-browser-table-id:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 72%, transparent);
+  outline-offset: 2px;
+}
+
+.service-browser-table-number {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  text-align: right;
+}
+
+.service-browser-table-error {
+  max-width: 18rem;
+  color: var(--destructive);
+}
+
+.service-browser-table-empty {
+  padding: 1.4rem !important;
+  color: var(--muted-foreground) !important;
+  text-align: center;
+}
+
+.service-browser-row-composite {
+  cursor: default;
+}
+
+.service-browser-row-composite > button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.service-browser-row-composite > button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 72%, transparent);
+  outline-offset: 2px;
+}
+
 .service-browser-health-dot {
   width: 0.72rem;
   height: 0.72rem;
@@ -1158,6 +1763,37 @@ body {
     radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--success) 16%, transparent), transparent 34%),
     var(--popover);
   box-shadow: 0 28px 90px rgb(0 0 0 / 18%);
+}
+
+.service-view-stream-dialog {
+  width: min(72rem, calc(100vw - 2rem));
+  max-width: min(72rem, calc(100vw - 2rem));
+  border-radius: 1.5rem;
+  border-color: color-mix(in srgb, var(--border) 78%, transparent);
+  background:
+    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 34%),
+    var(--popover);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 18%);
+}
+
+.service-view-stream-dialog-fullscreen {
+  width: calc(100vw - 1rem);
+  max-width: calc(100vw - 1rem);
+  height: calc(100vh - 1rem);
+  max-height: calc(100vh - 1rem);
+}
+
+.service-view-stream-frame {
+  width: 100%;
+  height: min(62vh, 46rem);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 1rem;
+  background: black;
+}
+
+.service-view-stream-dialog-fullscreen .service-view-stream-frame {
+  height: calc(100vh - 11rem);
 }
 
 .service-event-dialog-body {

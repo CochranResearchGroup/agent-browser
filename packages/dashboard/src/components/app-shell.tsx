@@ -198,12 +198,12 @@ export function AppShell({
                 Stream {streamConnected ? "connected" : "waiting"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={(event) => event.preventDefault()}>
+              <DropdownMenuItem asChild>
+                <ThemeToggle showLabel className="cursor-default" />
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
                 <Sparkles className="size-4" />
-                Theme
-                <span className="ml-auto">
-                  <ThemeToggle />
-                </span>
+                Appearance follows the dashboard shell
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

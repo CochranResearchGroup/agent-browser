@@ -72,7 +72,8 @@ use super::service_model::{
     BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
     BrowserHost as ServiceBrowserHost, BrowserSession, JobState as ServiceJobState, LeaseState,
     MonitorState, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason,
-    ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy, TabLifecycle,
+    ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy, TabLifecycle, ViewStream,
+    ViewStreamProvider,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -394,6 +395,8 @@ fn launch_hash(opts: &LaunchOptions) -> u64 {
     opts.use_real_keychain.hash(&mut h);
     opts.keychain_password.hash(&mut h);
     opts.manual_login.hash(&mut h);
+    opts.display.hash(&mut h);
+    opts.remote_headed.hash(&mut h);
     h.finish()
 }
 
@@ -1129,6 +1132,9 @@ impl ServiceLaunchMetadata {
             }),
             browser_stderr_log_path: None,
             browser_capability_launch: None,
+            view_streams: command
+                .map(remote_headed_view_streams_from_command)
+                .unwrap_or_default(),
         }
     }
 }
@@ -1142,7 +1148,125 @@ fn optional_command_string(command: &Value, name: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+fn browser_host_from_command(command: &Value) -> Option<ServiceBrowserHost> {
+    for name in ["browserHost", "browser_host", "browser-host"] {
+        if let Some(host) = command.get(name).and_then(Value::as_str) {
+            return parse_service_browser_host(host);
+        }
+    }
+    command.get("params").and_then(browser_host_from_command)
+}
+
+fn parse_service_browser_host(value: &str) -> Option<ServiceBrowserHost> {
+    match value.trim() {
+        "local_headless" | "local-headless" => Some(ServiceBrowserHost::LocalHeadless),
+        "local_headed" | "local-headed" => Some(ServiceBrowserHost::LocalHeaded),
+        "docker_headed" | "docker-headed" => Some(ServiceBrowserHost::DockerHeaded),
+        "remote_headed" | "remote-headed" => Some(ServiceBrowserHost::RemoteHeaded),
+        "cloud_provider" | "cloud-provider" => Some(ServiceBrowserHost::CloudProvider),
+        "attached_existing" | "attached-existing" => Some(ServiceBrowserHost::AttachedExisting),
+        _ => None,
+    }
+}
+
+fn apply_launch_host_hints(options: &mut LaunchOptions, command: &Value) -> ServiceBrowserHost {
+    let host = browser_host_from_command(command).unwrap_or_else(|| {
+        if command.get("provider").is_some() {
+            ServiceBrowserHost::CloudProvider
+        } else if command.get("cdpUrl").is_some()
+            || command.get("cdpPort").is_some()
+            || command
+                .get("autoConnect")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        {
+            ServiceBrowserHost::AttachedExisting
+        } else if options.headless {
+            ServiceBrowserHost::LocalHeadless
+        } else {
+            ServiceBrowserHost::LocalHeaded
+        }
+    });
+
+    if matches!(
+        host,
+        ServiceBrowserHost::LocalHeaded
+            | ServiceBrowserHost::RemoteHeaded
+            | ServiceBrowserHost::DockerHeaded
+    ) {
+        options.headless = false;
+    }
+    if host == ServiceBrowserHost::LocalHeadless {
+        options.headless = true;
+    }
+    if host == ServiceBrowserHost::RemoteHeaded {
+        options.remote_headed = true;
+        options.display = remote_headed_display_from_command(command);
+    }
+    host
+}
+
+fn remote_headed_display_from_command(command: &Value) -> Option<String> {
+    optional_command_string(command, "remoteHeadedDisplay")
+        .or_else(|| optional_command_string(command, "display"))
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(remote_headed_display_from_command)
+        })
+        .or_else(|| env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY").ok())
+}
+
+fn remote_headed_view_streams_from_command(command: &Value) -> Vec<ViewStream> {
+    if browser_host_from_command(command) != Some(ServiceBrowserHost::RemoteHeaded) {
+        return Vec::new();
+    }
+    let provider = optional_command_string(command, "viewStream")
+        .or_else(|| optional_command_string(command, "viewStreamProvider"))
+        .or_else(|| {
+            command.get("params").and_then(|params| {
+                optional_command_string(params, "viewStream")
+                    .or_else(|| optional_command_string(params, "viewStreamProvider"))
+            })
+        })
+        .or_else(|| env::var("AGENT_BROWSER_REMOTE_VIEW_PROVIDER").ok())
+        .and_then(|provider| parse_view_stream_provider(&provider))
+        .unwrap_or(ViewStreamProvider::CdpScreencast);
+    let url = optional_command_string(command, "remoteViewUrl")
+        .or_else(|| optional_command_string(command, "viewStreamUrl"))
+        .or_else(|| {
+            command.get("params").and_then(|params| {
+                optional_command_string(params, "remoteViewUrl")
+                    .or_else(|| optional_command_string(params, "viewStreamUrl"))
+            })
+        })
+        .or_else(|| env::var("AGENT_BROWSER_REMOTE_VIEW_URL").ok());
+    vec![ViewStream {
+        id: "remote-headed-view".to_string(),
+        provider,
+        url,
+        read_only: false,
+    }]
+}
+
+fn parse_view_stream_provider(value: &str) -> Option<ViewStreamProvider> {
+    match value.trim() {
+        "cdp_screencast" | "cdp-screencast" => Some(ViewStreamProvider::CdpScreencast),
+        "chrome_tab_webrtc" | "chrome-tab-webrtc" => Some(ViewStreamProvider::ChromeTabWebrtc),
+        "virtual_display_webrtc" | "virtual-display-webrtc" => {
+            Some(ViewStreamProvider::VirtualDisplayWebrtc)
+        }
+        "novnc" => Some(ViewStreamProvider::Novnc),
+        "rdp_gateway" | "rdp-gateway" | "rdp" => Some(ViewStreamProvider::RdpGateway),
+        "external_url" | "external-url" => Some(ViewStreamProvider::ExternalUrl),
+        _ => None,
+    }
+}
+
 fn service_browser_host_for_launch(cmd: &Value, headless: bool) -> ServiceBrowserHost {
+    if let Some(host) = browser_host_from_command(cmd) {
+        return host;
+    }
     if cmd.get("provider").is_some() {
         ServiceBrowserHost::CloudProvider
     } else if cmd.get("cdpUrl").is_some()
@@ -3012,6 +3136,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "tab_new" => handle_tab_new(cmd, state).await,
         "tab_switch" => handle_tab_switch(cmd, state).await,
         "tab_close" => handle_tab_close(cmd, state).await,
+        "view_focus" => handle_view_focus(cmd, state).await,
         "viewport" => handle_viewport(cmd, state).await,
         "useragent" | "user_agent" => handle_user_agent(cmd, state).await,
         "set_media" => handle_set_media(cmd, state).await,
@@ -3261,6 +3386,7 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
         options.viewport_size = Some(server.viewport().await);
     }
     let engine = env::var("AGENT_BROWSER_ENGINE").ok();
+    let service_host = apply_launch_host_hints(&mut options, command);
     let selection_reason = apply_service_profile_selection(&mut options, command);
     let metadata =
         ServiceLaunchMetadata::from_launch_options(&options, Some(command), selection_reason);
@@ -3382,11 +3508,6 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
         }
     }
 
-    let service_host = if options.headless {
-        ServiceBrowserHost::LocalHeadless
-    } else {
-        ServiceBrowserHost::LocalHeaded
-    };
     let hash = launch_hash(&options);
     if engine.as_deref().unwrap_or("chrome") == "chrome" {
         if let Some(target) = managed_runtime_attach_target(options.runtime_profile.as_deref()) {
@@ -3473,6 +3594,8 @@ fn launch_options_from_env() -> LaunchOptions {
         keychain_password: keychain_password_from_env(),
         manual_login: false,
         attachable: false,
+        display: None,
+        remote_headed: false,
     }
 }
 
@@ -3499,7 +3622,6 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         .get("headless")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
-    let service_host = service_browser_host_for_launch(cmd, headless);
     let cdp_url = cmd.get("cdpUrl").and_then(|v| v.as_str());
     let cdp_port = cmd.get("cdpPort").and_then(|v| v.as_u64());
     let auto_connect = cmd
@@ -3606,7 +3728,10 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         keychain_password: keychain_password_from_env(),
         manual_login: false,
         attachable: false,
+        display: None,
+        remote_headed: false,
     };
+    let service_host = apply_launch_host_hints(&mut launch_options, cmd);
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
     let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, cmd);
@@ -4038,6 +4163,8 @@ fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> 
         keychain_password: keychain_password_from_env(),
         manual_login: true,
         attachable: false,
+        display: None,
+        remote_headed: false,
     };
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
     let browser_capability_launch =
@@ -4079,6 +4206,7 @@ fn cdp_free_launch_response(
         "tab_new",
         "tab_switch",
         "tab_close",
+        "view_focus",
         "tab_list",
         "url",
         "title",
@@ -6195,6 +6323,32 @@ async fn handle_tab_close(cmd: &Value, state: &mut DaemonState) -> Result<Value,
     state.iframe_sessions.clear();
     state.active_frame_id = None;
     mgr.tab_close(index).await
+}
+
+async fn handle_view_focus(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+    state.ref_map.clear();
+    state.iframe_sessions.clear();
+    state.active_frame_id = None;
+
+    let mut tab_switched = None;
+    if let Some(index) = cmd
+        .get("index")
+        .and_then(|v| v.as_u64())
+        .map(|i| i as usize)
+    {
+        tab_switched = Some(mgr.tab_switch(index).await?);
+    }
+
+    let maximize = cmd
+        .get("maximize")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let mut result = mgr.focus_for_view(maximize).await?;
+    if let Some(tab_switched) = tab_switched {
+        result["tabSwitch"] = tab_switched;
+    }
+    Ok(result)
 }
 
 async fn handle_viewport(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
@@ -12364,6 +12518,79 @@ mod tests {
     }
 
     #[test]
+    fn service_browser_host_for_launch_honors_nested_remote_headed_param() {
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed",
+                "headless": false
+            }
+        });
+
+        assert_eq!(
+            service_browser_host_for_launch(&command, false),
+            ServiceBrowserHost::RemoteHeaded
+        );
+    }
+
+    #[test]
+    fn apply_launch_host_hints_makes_remote_headed_hidden_headed() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_HEADED_DISPLAY"]);
+        guard.set("AGENT_BROWSER_REMOTE_HEADED_DISPLAY", ":93");
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed"
+            }
+        });
+        let mut options = LaunchOptions::default();
+
+        let host = apply_launch_host_hints(&mut options, &command);
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert!(!options.headless);
+        assert!(options.remote_headed);
+        assert_eq!(options.display.as_deref(), Some(":93"));
+    }
+
+    #[test]
+    fn remote_headed_view_stream_defaults_to_cdp_screencast() {
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed"
+            }
+        });
+
+        let streams = remote_headed_view_streams_from_command(&command);
+
+        assert_eq!(streams.len(), 1);
+        assert_eq!(streams[0].provider, ViewStreamProvider::CdpScreencast);
+        assert_eq!(streams[0].id, "remote-headed-view");
+    }
+
+    #[test]
+    fn remote_headed_view_stream_accepts_nested_provider_and_url() {
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed",
+                "viewStreamProvider": "rdp_gateway",
+                "viewStreamUrl": "http://127.0.0.1:8080/rdp/session"
+            }
+        });
+
+        let streams = remote_headed_view_streams_from_command(&command);
+
+        assert_eq!(streams.len(), 1);
+        assert_eq!(streams[0].provider, ViewStreamProvider::RdpGateway);
+        assert_eq!(
+            streams[0].url.as_deref(),
+            Some("http://127.0.0.1:8080/rdp/session")
+        );
+    }
+
+    #[test]
     fn test_target_service_ids_from_command_accepts_singular_and_arrays() {
         let command = json!({
             "targetServiceId": "google",
@@ -17472,6 +17699,7 @@ mod tests {
                     "bindingId": "test-binding",
                     "reason": "validated_binding_applied"
                 })),
+                view_streams: Vec::new(),
             }),
         )
         .unwrap();

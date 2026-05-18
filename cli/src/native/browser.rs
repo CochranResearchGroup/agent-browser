@@ -1288,6 +1288,61 @@ impl BrowserManager {
         Ok(())
     }
 
+    /// Bring the active page forward and ask Chrome to maximize the containing
+    /// native window for operator remote-view inspection.
+    pub async fn focus_for_view(&self, maximize: bool) -> Result<Value, String> {
+        self.bring_to_front().await?;
+
+        if !maximize {
+            return Ok(json!({
+                "broughtToFront": true,
+                "maximizeRequested": false,
+                "maximized": false,
+            }));
+        }
+
+        let target_id = self.active_target_id()?;
+        let window_info = self
+            .client
+            .send_command(
+                "Browser.getWindowForTarget",
+                Some(json!({ "targetId": target_id })),
+                None,
+            )
+            .await?;
+        let window_id = window_info
+            .get("windowId")
+            .and_then(|v| v.as_i64())
+            .ok_or_else(|| "Browser.getWindowForTarget did not return windowId".to_string())?;
+
+        match self
+            .client
+            .send_command(
+                "Browser.setWindowBounds",
+                Some(json!({
+                    "windowId": window_id,
+                    "bounds": { "windowState": "maximized" },
+                })),
+                None,
+            )
+            .await
+        {
+            Ok(_) => Ok(json!({
+                "broughtToFront": true,
+                "maximizeRequested": true,
+                "maximized": true,
+                "windowId": window_id,
+            })),
+            Err(err) => Ok(json!({
+                "broughtToFront": true,
+                "maximizeRequested": true,
+                "maximized": false,
+                "windowId": window_id,
+                "maximizeError": err,
+            })),
+        }
+    }
+
     pub async fn set_timezone(&self, timezone_id: &str) -> Result<(), String> {
         let session_id = self.active_session_id()?;
         self.client

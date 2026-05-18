@@ -368,6 +368,7 @@ Suggested view stream providers:
 - `chrome_tab_webrtc`
 - `virtual_display_webrtc`
 - `novnc`
+- `rdp_gateway`
 - `external_url`
 
 Suggested control input providers:
@@ -379,6 +380,13 @@ Suggested control input providers:
 
 The first implementation does not need to prove every provider. It should
 define the abstraction, then prototype one practical path.
+
+The dashboard root should remain an agent-browser operations console, not a
+direct navigation target for a raw view-stream provider. Guacamole, noVNC, or
+other gateway UIs are implementation details of one browser/tab inspection
+mode. Operators should normally land on the React dashboard, see the service
+fleet, expand browsers into tabs, and then open a remote-view affordance only
+for the selected hidden headed browser or tab.
 
 ## Docker Headed Browser Option
 
@@ -406,18 +414,31 @@ The dashboard should become the operations console for browser sessions.
 It should show:
 
 - browser fleet status
+- a browser/session tree with expandable tab rows
 - live browser or tab view
 - current URL, title, and tab lifecycle
 - active agent, human, or system lease
+- the service, agent, and task that most recently touched each tab
 - queue depth and active job
 - site policy selected for the current page
 - login and challenge state
+- animated state indicators for queued work, active work, idle tabs,
+  degraded browsers, hidden remote-view availability, and human takeover
 - recent events, console logs, screenshots, and crash reports
-- controls for watch, takeover, release, pause queue, resume queue, and close
+- controls for watch, inspect remote view, fullscreen remote view, takeover,
+  release, pause queue, resume queue, and close
 
 Human takeover should be modeled as a lease. When a human is controlling a tab,
 the agent queue should pause, enter cooperative mode, or require explicit
 resume.
+
+When a hidden headed browser exposes an RDP or VNC-backed view stream, the
+dashboard should show an interaction icon on the affected browser or tab row.
+Activating it opens the gateway in an iframe owned by the dashboard, with an
+external-open fallback and a fullscreen toggle. Before displaying the iframe,
+the service should make the requested browser/tab the foreground/maximized
+target inside the remote desktop viewport so the operator sees the intended
+state, not whichever window happened to have focus.
 
 ## MCP Surface
 

@@ -57,7 +57,41 @@
       "type": ["string", "null"]
     },
     "viewStreams": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "provider",
+          "readOnly"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "cdp_screencast",
+              "chrome_tab_webrtc",
+              "virtual_display_webrtc",
+              "novnc",
+              "rdp_gateway",
+              "external_url"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "readOnly": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
     },
     "activeSessionIds": {
       "type": "array",

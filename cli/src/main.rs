@@ -692,6 +692,8 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 keychain_password: env::var("AGENT_BROWSER_KEYCHAIN_PASSWORD").ok(),
                 manual_login: true,
                 attachable,
+                display: None,
+                remote_headed: false,
             };
 
             if let Some(url) = first_runtime_positional(clean, 2) {

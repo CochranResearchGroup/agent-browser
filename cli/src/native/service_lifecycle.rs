@@ -6,7 +6,7 @@
 use super::service_model::{
     service_site_policy_id_for_url, BrowserBuild, BrowserProfile, BrowserSession, LeaseState,
     ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason,
-    ServiceActor, ServiceState, SessionCleanupPolicy,
+    ServiceActor, ServiceState, SessionCleanupPolicy, ViewStream,
 };
 
 fn current_timestamp() -> String {
@@ -29,6 +29,7 @@ pub(crate) struct ServiceLaunchMetadata {
     pub(crate) profile_selection_reason: Option<ProfileSelectionReason>,
     pub(crate) browser_stderr_log_path: Option<String>,
     pub(crate) browser_capability_launch: Option<serde_json::Value>,
+    pub(crate) view_streams: Vec<ViewStream>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -766,6 +767,7 @@ mod tests {
                 "applied": false,
                 "reason": "test"
             })),
+            view_streams: Vec::new(),
         };
 
         upsert_service_profile_and_session(

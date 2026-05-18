@@ -26,10 +26,37 @@ import {
 } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Plus,
+} from "lucide-react";
+
+const LEFT_PANE_COLLAPSED_KEY = "agent-browser-dashboard-left-pane-collapsed";
+const RIGHT_PANE_COLLAPSED_KEY = "agent-browser-dashboard-right-pane-collapsed";
+
+function readStoredBoolean(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const value = window.localStorage.getItem(key);
+  if (value === null) return fallback;
+  return value === "true";
+}
+
+function writeStoredBoolean(key: string, value: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, String(value));
+}
 
 export default function DashboardPage() {
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
+  const [leftPaneCollapsed, setLeftPaneCollapsed] = useState(() =>
+    readStoredBoolean(LEFT_PANE_COLLAPSED_KEY, false),
+  );
+  const [rightPaneCollapsed, setRightPaneCollapsed] = useState(() =>
+    readStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, true),
+  );
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -47,6 +74,42 @@ export default function DashboardPage() {
     : activeSection === "activity"
       ? <ActivityFeed />
       : <Viewport />;
+  const toggleLeftPane = () => {
+    const next = !leftPaneCollapsed;
+    setLeftPaneCollapsed(next);
+    writeStoredBoolean(LEFT_PANE_COLLAPSED_KEY, next);
+  };
+  const toggleRightPane = () => {
+    const next = !rightPaneCollapsed;
+    setRightPaneCollapsed(next);
+    writeStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, next);
+  };
+  const leftPaneToggle = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="dashboard-pane-toggle dashboard-pane-toggle-left"
+      aria-label={leftPaneCollapsed ? "Show session pane" : "Collapse session pane"}
+      title={leftPaneCollapsed ? "Show session pane" : "Collapse session pane"}
+      onClick={toggleLeftPane}
+    >
+      {leftPaneCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+    </Button>
+  );
+  const rightPaneToggle = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="dashboard-pane-toggle dashboard-pane-toggle-right"
+      aria-label={rightPaneCollapsed ? "Show detail pane" : "Collapse detail pane"}
+      title={rightPaneCollapsed ? "Show detail pane" : "Collapse detail pane"}
+      onClick={toggleRightPane}
+    >
+      {rightPaneCollapsed ? <PanelRightOpen className="size-4" /> : <PanelRightClose className="size-4" />}
+    </Button>
+  );
 
   const sidePanel = (
     <Tabs defaultValue="chat" className="flex h-full flex-col">
@@ -54,7 +117,9 @@ export default function DashboardPage() {
         <TabsList variant="line" className="h-7 w-full">
           <TabsTrigger value="chat" className="text-[11px]">Chat</TabsTrigger>
           <TabsTrigger value="activity" className="text-[11px]">Activity</TabsTrigger>
-          <TabsTrigger value="service" className="text-[11px]">Service</TabsTrigger>
+          {activeSection !== "service" && (
+            <TabsTrigger value="service" className="text-[11px]">Service</TabsTrigger>
+          )}
           <TabsTrigger value="console" className="text-[11px]">
             Console
             {hasConsoleErrors && (
@@ -74,9 +139,11 @@ export default function DashboardPage() {
       <TabsContent value="activity" className="min-h-0 flex-1 overflow-hidden">
         <ActivityFeed />
       </TabsContent>
-      <TabsContent value="service" className="min-h-0 flex-1 overflow-hidden">
-        <ServicePanel />
-      </TabsContent>
+      {activeSection !== "service" && (
+        <TabsContent value="service" className="min-h-0 flex-1 overflow-hidden">
+          <ServicePanel />
+        </TabsContent>
+      )}
       <TabsContent value="console" className="min-h-0 flex-1 overflow-hidden">
         <ConsolePanel />
       </TabsContent>
@@ -96,21 +163,27 @@ export default function DashboardPage() {
   );
 
   if (isDesktop) {
-    if (!hasSessions) {
+    if (!hasSessions && activeSection !== "service") {
       return (
         <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
           <ResizablePanelGroup
             orientation="horizontal"
             className="dashboard-panel-grid"
           >
-            <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
-              <div className="dashboard-pane dashboard-pane-left">
-                <SessionTree />
-              </div>
-            </ResizablePanel>
-            <ResizableHandle />
+            {!leftPaneCollapsed && (
+              <>
+                <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
+                  <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
+                    {leftPaneToggle}
+                    <SessionTree />
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle />
+              </>
+            )}
             <ResizablePanel id="empty" defaultSize="85%">
-              <div className="dashboard-empty-state">
+              <div className="dashboard-empty-state dashboard-pane-with-rails">
+                {leftPaneCollapsed && leftPaneToggle}
                 <div className="dashboard-empty-card">
                   <div className="dashboard-empty-orb">
                     <Plus className="size-6" />
@@ -139,29 +212,71 @@ export default function DashboardPage() {
       );
     }
 
+    if (!hasSessions && activeSection === "service") {
+      return (
+        <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
+          <ResizablePanelGroup
+            orientation="horizontal"
+            className="dashboard-panel-grid"
+          >
+            {!leftPaneCollapsed && (
+              <>
+                <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
+                  <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
+                    {leftPaneToggle}
+                    <SessionTree />
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle />
+              </>
+            )}
+            <ResizablePanel id="service" defaultSize="85%">
+              <div className="dashboard-pane dashboard-pane-viewport dashboard-pane-with-rails">
+                {leftPaneCollapsed && leftPaneToggle}
+                {rightPaneCollapsed && rightPaneToggle}
+                <ServicePanel />
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </AppShell>
+      );
+    }
+
     return (
       <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
         <ResizablePanelGroup
           orientation="horizontal"
           className="dashboard-panel-grid"
         >
-          <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
-            <div className="dashboard-pane dashboard-pane-left">
-              <SessionTree />
-            </div>
-          </ResizablePanel>
-          <ResizableHandle />
-          <ResizablePanel id="viewport" defaultSize="55%" minSize="30%">
-            <div className="dashboard-pane dashboard-pane-viewport">
+          {!leftPaneCollapsed && (
+            <>
+              <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
+                <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
+                  {leftPaneToggle}
+                  <SessionTree />
+                </div>
+              </ResizablePanel>
+              <ResizableHandle />
+            </>
+          )}
+          <ResizablePanel id="viewport" defaultSize={rightPaneCollapsed ? "85%" : "55%"} minSize="30%">
+            <div className="dashboard-pane dashboard-pane-viewport dashboard-pane-with-rails">
+              {leftPaneCollapsed && leftPaneToggle}
+              {rightPaneCollapsed && rightPaneToggle}
               {primaryPanel}
             </div>
           </ResizablePanel>
-          <ResizableHandle />
-          <ResizablePanel id="activity" defaultSize="30%" minSize="15%" maxSize="50%">
-            <div className="dashboard-pane dashboard-pane-right">
-              {sidePanel}
-            </div>
-          </ResizablePanel>
+          {!rightPaneCollapsed && (
+            <>
+              <ResizableHandle />
+              <ResizablePanel id="activity" defaultSize="30%" minSize="15%" maxSize="50%">
+                <div className="dashboard-pane dashboard-pane-right dashboard-pane-with-toggle">
+                  {rightPaneToggle}
+                  {sidePanel}
+                </div>
+              </ResizablePanel>
+            </>
+          )}
         </ResizablePanelGroup>
       </AppShell>
     );

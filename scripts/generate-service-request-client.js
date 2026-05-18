@@ -160,6 +160,15 @@ export interface ServiceTabCloseData {
   activeIndex: number;
 }
 
+export interface ServiceViewFocusData {
+  broughtToFront: boolean;
+  maximizeRequested: boolean;
+  maximized: boolean;
+  windowId?: number;
+  maximizeError?: string;
+  tabSwitch?: ServiceTabSwitchData;
+}
+
 export interface ServiceTabRecord {
   index: number;
   title: string;
@@ -467,6 +476,24 @@ export interface ServiceRequestsData {
   requests: ServiceTrackedRequest[];
 }
 
+export interface ServiceRetainedCleanupData {
+  pruned?: boolean;
+  repaired?: boolean;
+  dryRun: boolean;
+  observedAt?: string;
+  policy?: Record<string, unknown>;
+  before?: Record<string, number>;
+  after?: Record<string, number>;
+  candidates?: Record<string, string[]>;
+  candidateCounts: Record<string, number>;
+  skipped?: Record<string, string[]>;
+  skippedCounts?: Record<string, number>;
+  skippedSummary?: Record<string, unknown>;
+  removed?: Record<string, number>;
+  repairedCounts?: Record<string, number>;
+  recommendedNextStep?: string;
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   cdp_free_launch: ServiceCdpFreeLaunchData;
@@ -476,6 +503,7 @@ export interface ServiceRequestActionDataMap {
   tab_new: ServiceTabNewData;
   tab_switch: ServiceTabSwitchData;
   tab_close: ServiceTabCloseData;
+  view_focus: ServiceViewFocusData;
   tab_list: ServiceTabListData;
   url: ServiceUrlData;
   title: ServiceTitleData;
@@ -535,6 +563,8 @@ export interface ServiceRequestActionDataMap {
   unroute: ServiceUnrouteData;
   requests: ServiceRequestsData | ServiceClearedData;
   request_detail: ServiceTrackedRequest;
+  service_prune_retained: ServiceRetainedCleanupData;
+  service_repair_retained: ServiceRetainedCleanupData;
 }
 
 export type ServiceRequestDataForAction<TAction extends ServiceRequestAction> =

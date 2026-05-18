@@ -73,6 +73,9 @@ pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-browser-capability-preflight-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 
+/// Actions accepted by HTTP `/api/service/request`, MCP `service_request`, and
+/// generated software clients. Service-maintenance actions live here too so
+/// operator dashboard controls use the same serialized worker queue as agents.
 pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "navigate",
     "cdp_free_launch",
@@ -82,6 +85,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "tab_new",
     "tab_switch",
     "tab_close",
+    "view_focus",
     "tab_list",
     "url",
     "title",
@@ -141,6 +145,8 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "scrollintoview",
     "focus",
     "clear",
+    "service_prune_retained",
+    "service_repair_retained",
 ];
 
 pub fn service_contracts_metadata() -> Value {

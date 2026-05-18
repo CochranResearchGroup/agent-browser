@@ -71,6 +71,7 @@
             "chrome_tab_webrtc",
             "virtual_display_webrtc",
             "novnc",
+            "rdp_gateway",
             "external_url"
           ]
         },
