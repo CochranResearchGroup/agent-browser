@@ -28,6 +28,7 @@
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
     "test:dashboard-view-streams": "node --no-warnings --experimental-strip-types scripts/test-dashboard-view-streams.js",
     "test:dashboard-incident-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-incident-summary.js",
+    "test:dashboard-inspector-actions": "node scripts/test-dashboard-inspector-actions.js",
     "test:dashboard-profile-allocation": "node --no-warnings --experimental-strip-types scripts/test-dashboard-profile-allocation.js",
     "test:service-api-mcp-parity": "node scripts/check-service-api-mcp-parity.js",
     "test:browser-capability-registry-draft": "node scripts/smoke-browser-capability-registry-draft.js",
