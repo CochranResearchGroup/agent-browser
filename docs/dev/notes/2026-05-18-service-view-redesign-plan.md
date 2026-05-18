@@ -266,7 +266,9 @@ Status on 2026-05-18: partially implemented. The table now defaults to an
 actionable browser-record filter so live, degraded, and otherwise inspectable
 records stay in the primary scan path while inert `not_started` placeholders
 move behind retained or all-record filters. Column visibility controls let an
-operator hide secondary fields without losing row inspection.
+operator hide secondary fields without losing row inspection. Lifecycle and
+column choices persist in the dashboard's local browser storage so operators
+can keep a compact table layout across refreshes.
 
 ### Slice 4: Secondary Work Surfaces
 

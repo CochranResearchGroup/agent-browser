@@ -1681,6 +1681,40 @@ const BROWSER_TABLE_COLUMNS: { key: BrowserTableColumnKey; label: string }[] = [
 ];
 
 const DEFAULT_BROWSER_TABLE_COLUMNS = BROWSER_TABLE_COLUMNS.map((column) => column.key);
+const BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY = "agent-browser-dashboard-browser-table-lifecycle-filter";
+const BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY = "agent-browser-dashboard-browser-table-visible-columns";
+
+function isBrowserLifecycleFilter(value: string | null): value is BrowserLifecycleFilter {
+  return value === "actionable" || value === "all" || value === "live" || value === "retained";
+}
+
+function isBrowserTableColumnKey(value: unknown): value is BrowserTableColumnKey {
+  return typeof value === "string" && BROWSER_TABLE_COLUMNS.some((column) => column.key === value);
+}
+
+function initialBrowserLifecycleFilter(): BrowserLifecycleFilter {
+  if (typeof window === "undefined") return "actionable";
+  try {
+    const stored = window.localStorage.getItem(BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY);
+    return isBrowserLifecycleFilter(stored) ? stored : "actionable";
+  } catch {
+    return "actionable";
+  }
+}
+
+function initialBrowserTableColumns(): BrowserTableColumnKey[] {
+  if (typeof window === "undefined") return DEFAULT_BROWSER_TABLE_COLUMNS;
+  try {
+    const stored = window.localStorage.getItem(BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY);
+    if (!stored) return DEFAULT_BROWSER_TABLE_COLUMNS;
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return DEFAULT_BROWSER_TABLE_COLUMNS;
+    const columns = parsed.filter(isBrowserTableColumnKey);
+    return columns.length > 0 ? columns : DEFAULT_BROWSER_TABLE_COLUMNS;
+  } catch {
+    return DEFAULT_BROWSER_TABLE_COLUMNS;
+  }
+}
 
 function browserSearchText(browser: ServiceBrowser): string {
   return [
@@ -1778,13 +1812,30 @@ function BrowserTable({
   onSelect: (browser: ServiceBrowser) => void;
 }) {
   const [filter, setFilter] = useState("");
-  const [lifecycleFilter, setLifecycleFilter] = useState<BrowserLifecycleFilter>("actionable");
-  const [visibleColumns, setVisibleColumns] = useState<BrowserTableColumnKey[]>(DEFAULT_BROWSER_TABLE_COLUMNS);
+  const [lifecycleFilter, setLifecycleFilter] = useState<BrowserLifecycleFilter>(initialBrowserLifecycleFilter);
+  const [visibleColumns, setVisibleColumns] = useState<BrowserTableColumnKey[]>(initialBrowserTableColumns);
   const [sortKey, setSortKey] = useState<BrowserSortKey>("health");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const visibleColumnSet = useMemo(() => new Set(visibleColumns), [visibleColumns]);
   const liveCount = useMemo(() => browsers.filter(isLiveBrowserRecord).length, [browsers]);
   const inertCount = useMemo(() => browsers.filter(isInertRetainedBrowserRecord).length, [browsers]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY, lifecycleFilter);
+    } catch {
+      // Restricted storage should not break the live service dashboard.
+    }
+  }, [lifecycleFilter]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+    } catch {
+      // Restricted storage should not break the live service dashboard.
+    }
+  }, [visibleColumns]);
+
   const filteredBrowsers = useMemo(() => {
     const query = filter.trim().toLowerCase();
     const rows = browsers.filter((browser) => {

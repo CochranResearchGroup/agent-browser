@@ -15,8 +15,50 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const \[lifecycleFilter, setLifecycleFilter\] = useState<BrowserLifecycleFilter>\("actionable"\);/,
-  'Browser table must default to actionable records instead of showing all inert retained records first',
+  /BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY = "agent-browser-dashboard-browser-table-lifecycle-filter"/,
+  'Browser table must persist the selected lifecycle filter under a stable localStorage key',
+);
+
+assert.match(
+  servicePanel,
+  /BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY = "agent-browser-dashboard-browser-table-visible-columns"/,
+  'Browser table must persist visible column preferences under a stable localStorage key',
+);
+
+assert.match(
+  servicePanel,
+  /function initialBrowserLifecycleFilter\(\): BrowserLifecycleFilter[\s\S]*return isBrowserLifecycleFilter\(stored\) \? stored : "actionable";/,
+  'Browser table must validate persisted lifecycle filters and default to actionable records',
+);
+
+assert.match(
+  servicePanel,
+  /function initialBrowserTableColumns\(\): BrowserTableColumnKey\[\][\s\S]*parsed\.filter\(isBrowserTableColumnKey\)[\s\S]*DEFAULT_BROWSER_TABLE_COLUMNS/,
+  'Browser table must validate persisted visible columns before applying them',
+);
+
+assert.match(
+  servicePanel,
+  /const \[lifecycleFilter, setLifecycleFilter\] = useState<BrowserLifecycleFilter>\(initialBrowserLifecycleFilter\);/,
+  'Browser table lifecycle state must use the persisted preference initializer',
+);
+
+assert.match(
+  servicePanel,
+  /const \[visibleColumns, setVisibleColumns\] = useState<BrowserTableColumnKey\[\]>\(initialBrowserTableColumns\);/,
+  'Browser table visible columns state must use the persisted preference initializer',
+);
+
+assert.match(
+  servicePanel,
+  /localStorage\.setItem\(BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY, lifecycleFilter\)/,
+  'Browser table must save lifecycle filter changes locally',
+);
+
+assert.match(
+  servicePanel,
+  /localStorage\.setItem\(BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY, JSON\.stringify\(visibleColumns\)\)/,
+  'Browser table must save visible column changes locally',
 );
 
 assert.match(
