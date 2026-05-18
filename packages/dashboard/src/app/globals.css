@@ -797,6 +797,106 @@ body {
   gap: 0.25rem;
 }
 
+.service-workspace-card {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.78rem;
+  background: color-mix(in srgb, var(--dashboard-panel) 92%, transparent);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 1.5%),
+    0 1px 2px -1px rgb(0 0 0 / 8%);
+  animation: dashboard-rise 460ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+}
+
+.service-workspace-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  background: color-mix(in srgb, var(--background) 24%, transparent);
+  padding: 0.55rem 0.65rem 0;
+}
+
+.service-workspace-title {
+  color: var(--foreground);
+  font-size: 0.74rem;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.service-workspace-detail {
+  margin-top: 0.08rem;
+  color: var(--muted-foreground);
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.service-workspace-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  justify-content: flex-start;
+  background: transparent;
+}
+
+.service-workspace-tab {
+  min-width: 5.2rem;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  padding-inline: 0.45rem;
+  font-size: 0.68rem;
+}
+
+.service-workspace-tab-bad {
+  color: color-mix(in srgb, var(--destructive) 76%, var(--foreground));
+}
+
+.service-workspace-tab-warn {
+  color: color-mix(in srgb, var(--warning) 76%, var(--foreground));
+}
+
+.service-workspace-tab-count {
+  min-width: 1.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  padding: 0.05rem 0.35rem;
+  color: var(--foreground);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+}
+
+.service-workspace-content {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.6rem;
+}
+
+.service-workspace-pane-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+
+.service-workspace-pane-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+@media (min-width: 1120px) {
+  .service-workspace-pane-grid {
+    grid-template-columns: minmax(18rem, 0.8fr) minmax(24rem, 1.2fr);
+  }
+}
+
 .service-record-controls {
   display: flex;
   flex-wrap: wrap;

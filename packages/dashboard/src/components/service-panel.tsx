@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
   Clock3,
   Eye,
   ExternalLink,
@@ -26,11 +25,6 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -38,6 +32,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -352,6 +352,7 @@ type EventWindowFilter = "all" | "15m" | "1h" | "24h";
 type EventLimit = 8 | 20 | 50;
 type ServiceRecordLimit = 12 | 24 | 50 | 100;
 type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
+type ServiceWorkspaceTab = "profiles" | "incidents" | "sessions" | "jobs" | "events";
 type TraceFilters = {
   serviceName: string;
   agentName: string;
@@ -899,45 +900,6 @@ function EntityCountChip({
         <p>{detail}</p>
       </TooltipContent>
     </Tooltip>
-  );
-}
-
-function ServiceSection({
-  title,
-  detail,
-  count,
-  icon: Icon,
-  tone = "neutral",
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  detail: string;
-  count?: string | number;
-  icon: typeof ServerCog;
-  tone?: ServiceStatusTone;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Collapsible defaultOpen={defaultOpen} className={cn("service-section", `service-section-${tone}`)}>
-      <CollapsibleTrigger className="service-section-trigger">
-        <span className="service-section-icon">
-          <Icon className="size-3.5" />
-        </span>
-        <span className="min-w-0 flex-1 text-left">
-          <span className="service-section-title">{title}</span>
-          <span className="service-section-detail">{detail}</span>
-        </span>
-        {count !== undefined && (
-          <span className="service-section-count">{count}</span>
-        )}
-        <ChevronDown className="service-section-chevron size-4" />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="service-section-content">
-        {children}
-      </CollapsibleContent>
-    </Collapsible>
   );
 }
 
@@ -2840,6 +2802,7 @@ export function ServicePanel() {
   const [profileAllocationLimit, setProfileAllocationLimit] = useState<ServiceRecordLimit>(24);
   const [incidentQuery, setIncidentQuery] = useState("");
   const [incidentLimit, setIncidentLimit] = useState<ServiceRecordLimit>(24);
+  const [workspaceTab, setWorkspaceTab] = useState<ServiceWorkspaceTab>("incidents");
   const [cleanupLoading, setCleanupLoading] = useState<RetainedCleanupKind | null>(null);
   const [cleanupApplying, setCleanupApplying] = useState<RetainedCleanupKind | null>(null);
   const [cleanupKind, setCleanupKind] = useState<RetainedCleanupKind | null>(null);
@@ -3398,6 +3361,49 @@ export function ServicePanel() {
   const cleanupAppliedTotal = cleanupKind === "repair"
     ? cleanupTotal(cleanupResult?.repairedCounts)
     : cleanupTotal(cleanupResult?.removed);
+  const workspaceTabs = useMemo(() => [
+    {
+      value: "profiles" as const,
+      label: "Profiles",
+      count: filteredProfileAllocations.length,
+      detail: "profile routing rows",
+    },
+    {
+      value: "incidents" as const,
+      label: "Incidents",
+      count: filteredIncidentRecords.length,
+      detail: "grouped incident records",
+      tone: incidentHandlingSummary.unacknowledged > 0 ? "bad" : "neutral",
+    },
+    {
+      value: "sessions" as const,
+      label: "Sessions",
+      count: filteredSessionRecords.length + filteredTabRecords.length,
+      detail: "sessions plus tracked tabs",
+    },
+    {
+      value: "jobs" as const,
+      label: "Jobs",
+      count: recentJobs.length,
+      detail: "recent control jobs",
+    },
+    {
+      value: "events" as const,
+      label: "Events",
+      count: visibleEvents.length,
+      detail: "events, health, and trace",
+      tone: incidentOnly ? "warn" : "neutral",
+    },
+  ], [
+    filteredIncidentRecords.length,
+    filteredProfileAllocations.length,
+    filteredSessionRecords.length,
+    filteredTabRecords.length,
+    incidentHandlingSummary.unacknowledged,
+    incidentOnly,
+    recentJobs.length,
+    visibleEvents.length,
+  ]);
 
   if (!canFetch) {
     return (
@@ -3708,290 +3714,308 @@ export function ServicePanel() {
             </div>
           </div>
 
-          <ServiceSection
-            title="Profile allocation"
-            detail={`${filteredProfileAllocations.length} of ${profileAllocations.length} backend-owned profile routing rows`}
-            count={visibleProfileAllocations.length}
-            icon={ShieldCheck}
-            defaultOpen={profileAllocations.length > 0 && profileAllocations.length <= 12}
+          <Tabs
+            value={workspaceTab}
+            onValueChange={(value) => setWorkspaceTab(value as ServiceWorkspaceTab)}
+            className="service-workspace-card"
           >
-            <div className="service-record-controls">
-              <label className="service-browser-filter service-record-filter">
-                <Filter className="size-3.5" />
-                <span className="sr-only">Filter profile allocation rows</span>
-                <input
-                  value={profileAllocationQuery}
-                  onChange={(event) => setProfileAllocationQuery(event.target.value)}
-                  placeholder="Filter profiles, services, holders, tasks"
-                />
-              </label>
-              <div className="service-record-limit-groups">
-                <div className="service-filter-group" aria-label="Profile allocation display limit">
-                  <span className="service-record-limit-label">Profiles</span>
-                  {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
-                    <button
-                      key={`profile-allocation-limit-${limit}`}
-                      type="button"
-                      className={cn("service-filter-chip", profileAllocationLimit === limit && "service-filter-chip-active")}
-                      onClick={() => setProfileAllocationLimit(limit)}
-                    >
-                      {limit}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="service-section-list">
-              <p className="service-record-list-heading">
-                Profile rows: {visibleProfileAllocations.length} shown
-                {hiddenProfileAllocationCount > 0 ? ` / ${hiddenProfileAllocationCount} hidden` : ""}
-              </p>
-              {filteredProfileAllocations.length === 0 ? (
-                <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
-                  {profileAllocations.length === 0 ? "No profile allocation rows yet." : "No profile allocation rows match the current filter."}
+            <div className="service-workspace-header">
+              <div className="min-w-0">
+                <p className="service-workspace-title">Secondary work surfaces</p>
+                <p className="service-workspace-detail">
+                  Browser records stay primary. Use these tabs for routing, sessions, incidents, jobs, and trace.
                 </p>
-              ) : (
-                visibleProfileAllocations.map((allocation, index) => (
-                  <ProfileAllocationRow
-                    key={allocation.profileId || `profile-allocation-${index}`}
-                    allocation={allocation}
-                    onSelect={inspectProfileAllocation}
-                  />
-                ))
-              )}
-            </div>
-          </ServiceSection>
-
-          <HealthTransitionTimeline
-            events={healthTransitionEvents}
-            onSelect={setSelectedEvent}
-          />
-
-          <TraceExplorer
-            filters={traceFilters}
-            trace={trace}
-            loading={traceLoading}
-            error={traceError}
-            timeline={traceTimeline}
-            onFiltersChange={setTraceFilters}
-            onLoad={loadTrace}
-            onClear={clearTrace}
-          />
-
-          <ServiceSection
-            title="Incident browsers"
-            detail={`${filteredIncidentRecords.length} filtered; ${incidentHandlingSummary.unacknowledged} unacknowledged / ${incidentHandlingSummary.acknowledged} acknowledged / ${incidentHandlingSummary.resolved} resolved`}
-            count={visibleIncidentRecords.length}
-            icon={AlertTriangle}
-            tone={incidentHandlingSummary.unacknowledged > 0 ? "bad" : "neutral"}
-            defaultOpen={visibleIncidentRecords.length > 0}
-          >
-            <div className="service-incident-summary">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
-                  Remedy groups
-                </p>
-                <span className="text-[10px] font-bold text-muted-foreground">
-                  {incidents?.summary?.groupCount ?? incidentSummaryGroups.length} groups / {incidents?.matched ?? 0} matched
-                </span>
               </div>
-              <div className="mt-2 space-y-1.5">
-                {incidentSummaryGroups.length === 0 ? (
-                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-center text-xs text-muted-foreground">
-                    No incident remedy groups yet.
-                  </p>
-                ) : (
-                  incidentSummaryGroups.slice(0, 4).map((group) => (
-                    <IncidentSummaryGroupRow
-                      key={group.key}
-                      group={group}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="service-filter-bar" aria-label="Incident handling filters">
-              <div className="service-filter-group">
-                <Filter className="size-3.5 text-muted-foreground" />
-                {INCIDENT_HANDLING_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
+              <TabsList className="service-workspace-tabs" variant="line">
+                {workspaceTabs.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
                     className={cn(
-                      "service-filter-chip",
-                      incidentHandlingFilter === option.value && "service-filter-chip-active",
-                      option.value === "unacknowledged" && incidentHandlingFilter === option.value && "service-filter-chip-incident",
+                      "service-workspace-tab",
+                      tab.tone === "bad" && "service-workspace-tab-bad",
+                      tab.tone === "warn" && "service-workspace-tab-warn",
                     )}
-                    onClick={() => setIncidentHandlingFilter(option.value)}
                   >
-                    {option.label}
-                  </button>
+                    <span>{tab.label}</span>
+                    <span className="service-workspace-tab-count">{tab.count}</span>
+                  </TabsTrigger>
                 ))}
-              </div>
-              <label className="service-browser-filter service-record-filter">
-                <span className="sr-only">Filter incidents</span>
-                <input
-                  value={incidentQuery}
-                  onChange={(event) => setIncidentQuery(event.target.value)}
-                  placeholder="filter incidents, browsers, remedies"
-                />
-              </label>
-              <div className="service-filter-group" aria-label="Incident display limit">
-                <span className="service-record-limit-label">Show</span>
-                {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
-                  <button
-                    key={`incident-limit-${limit}`}
-                    type="button"
-                    className={cn("service-filter-chip", incidentLimit === limit && "service-filter-chip-active")}
-                    onClick={() => setIncidentLimit(limit)}
-                  >
-                    {limit}
-                  </button>
-                ))}
-              </div>
+              </TabsList>
             </div>
-            <div className="service-section-list">
-              <p className="service-record-list-heading">
-                Incidents: {visibleIncidentRecords.length} shown
-                {hiddenIncidentCount > 0 ? ` / ${hiddenIncidentCount} hidden` : ""}
-              </p>
-              {filteredIncidentRecords.length === 0 ? (
-                <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
-                  {incidentRecords.length === 0
-                    ? "No grouped incidents for this session yet."
-                    : "No grouped incidents matched the current handling filter."}
-                </p>
-              ) : (
-                visibleIncidentRecords.map((incident) => (
-                  <IncidentRow
-                    key={incident.id}
-                    incident={incident}
-                    onSelect={setSelectedIncident}
+
+            <TabsContent value="profiles" className="service-workspace-content">
+              <div className="service-workspace-pane-heading">
+                <ShieldCheck className="size-3.5 text-muted-foreground" />
+                <span>{filteredProfileAllocations.length} of {profileAllocations.length} profile allocation rows</span>
+              </div>
+              <div className="service-record-controls">
+                <label className="service-browser-filter service-record-filter">
+                  <Filter className="size-3.5" />
+                  <span className="sr-only">Filter profile allocation rows</span>
+                  <input
+                    value={profileAllocationQuery}
+                    onChange={(event) => setProfileAllocationQuery(event.target.value)}
+                    placeholder="Filter profiles, services, holders, tasks"
                   />
-                ))
-              )}
-            </div>
-          </ServiceSection>
+                </label>
+                <div className="service-record-limit-groups">
+                  <div className="service-filter-group" aria-label="Profile allocation display limit">
+                    <span className="service-record-limit-label">Profiles</span>
+                    {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
+                      <button
+                        key={`profile-allocation-limit-${limit}`}
+                        type="button"
+                        className={cn("service-filter-chip", profileAllocationLimit === limit && "service-filter-chip-active")}
+                        onClick={() => setProfileAllocationLimit(limit)}
+                      >
+                        {limit}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="service-section-list">
+                <p className="service-record-list-heading">
+                  Profile rows: {visibleProfileAllocations.length} shown
+                  {hiddenProfileAllocationCount > 0 ? ` / ${hiddenProfileAllocationCount} hidden` : ""}
+                </p>
+                {filteredProfileAllocations.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                    {profileAllocations.length === 0 ? "No profile allocation rows yet." : "No profile allocation rows match the current filter."}
+                  </p>
+                ) : (
+                  visibleProfileAllocations.map((allocation, index) => (
+                    <ProfileAllocationRow
+                      key={allocation.profileId || `profile-allocation-${index}`}
+                      allocation={allocation}
+                      onSelect={inspectProfileAllocation}
+                    />
+                  ))
+                )}
+              </div>
+            </TabsContent>
 
-          <ServiceSection
-            title="Sessions and tabs"
-            detail={`${filteredSessionRecords.length} of ${sessionRecords.length} sessions / ${filteredTabRecords.length} of ${tabRecords.length} tabs`}
-            count={visibleSessionRecords.length + visibleTabRecords.length}
-            icon={GitBranch}
-            defaultOpen={(sessionRecords.length + tabRecords.length) > 0 && (sessionRecords.length + tabRecords.length) <= 20}
-          >
-            <div className="service-record-controls">
-              <label className="service-browser-filter service-record-filter">
-                <Filter className="size-3.5" />
-                <span className="sr-only">Filter sessions and tabs</span>
-                <input
-                  value={sessionTabQuery}
-                  onChange={(event) => setSessionTabQuery(event.target.value)}
-                  placeholder="Filter sessions, tabs, profiles, URLs"
+            <TabsContent value="incidents" className="service-workspace-content">
+              <div className="service-workspace-pane-heading">
+                <AlertTriangle className="size-3.5 text-muted-foreground" />
+                <span>{incidentHandlingSummary.unacknowledged} unacknowledged / {incidentHandlingSummary.acknowledged} acknowledged / {incidentHandlingSummary.resolved} resolved</span>
+              </div>
+              <div className="service-incident-summary">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                    Remedy groups
+                  </p>
+                  <span className="text-[10px] font-bold text-muted-foreground">
+                    {incidents?.summary?.groupCount ?? incidentSummaryGroups.length} groups / {incidents?.matched ?? 0} matched
+                  </span>
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {incidentSummaryGroups.length === 0 ? (
+                    <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-center text-xs text-muted-foreground">
+                      No incident remedy groups yet.
+                    </p>
+                  ) : (
+                    incidentSummaryGroups.slice(0, 4).map((group) => (
+                      <IncidentSummaryGroupRow
+                        key={group.key}
+                        group={group}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="service-filter-bar" aria-label="Incident handling filters">
+                <div className="service-filter-group">
+                  <Filter className="size-3.5 text-muted-foreground" />
+                  {INCIDENT_HANDLING_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "service-filter-chip",
+                        incidentHandlingFilter === option.value && "service-filter-chip-active",
+                        option.value === "unacknowledged" && incidentHandlingFilter === option.value && "service-filter-chip-incident",
+                      )}
+                      onClick={() => setIncidentHandlingFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <label className="service-browser-filter service-record-filter">
+                  <span className="sr-only">Filter incidents</span>
+                  <input
+                    value={incidentQuery}
+                    onChange={(event) => setIncidentQuery(event.target.value)}
+                    placeholder="filter incidents, browsers, remedies"
+                  />
+                </label>
+                <div className="service-filter-group" aria-label="Incident display limit">
+                  <span className="service-record-limit-label">Show</span>
+                  {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
+                    <button
+                      key={`incident-limit-${limit}`}
+                      type="button"
+                      className={cn("service-filter-chip", incidentLimit === limit && "service-filter-chip-active")}
+                      onClick={() => setIncidentLimit(limit)}
+                    >
+                      {limit}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="service-section-list">
+                <p className="service-record-list-heading">
+                  Incidents: {visibleIncidentRecords.length} shown
+                  {hiddenIncidentCount > 0 ? ` / ${hiddenIncidentCount} hidden` : ""}
+                </p>
+                {filteredIncidentRecords.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                    {incidentRecords.length === 0
+                      ? "No grouped incidents for this session yet."
+                      : "No grouped incidents matched the current handling filter."}
+                  </p>
+                ) : (
+                  visibleIncidentRecords.map((incident) => (
+                    <IncidentRow
+                      key={incident.id}
+                      incident={incident}
+                      onSelect={setSelectedIncident}
+                    />
+                  ))
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="sessions" className="service-workspace-content">
+              <div className="service-workspace-pane-heading">
+                <GitBranch className="size-3.5 text-muted-foreground" />
+                <span>{filteredSessionRecords.length} of {sessionRecords.length} sessions / {filteredTabRecords.length} of {tabRecords.length} tabs</span>
+              </div>
+              <div className="service-record-controls">
+                <label className="service-browser-filter service-record-filter">
+                  <Filter className="size-3.5" />
+                  <span className="sr-only">Filter sessions and tabs</span>
+                  <input
+                    value={sessionTabQuery}
+                    onChange={(event) => setSessionTabQuery(event.target.value)}
+                    placeholder="Filter sessions, tabs, profiles, URLs"
+                  />
+                </label>
+                <div className="service-record-limit-groups">
+                  <div className="service-filter-group" aria-label="Session display limit">
+                    <span className="service-record-limit-label">Sessions</span>
+                    {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
+                      <button
+                        key={`session-limit-${limit}`}
+                        type="button"
+                        className={cn("service-filter-chip", sessionLimit === limit && "service-filter-chip-active")}
+                        onClick={() => setSessionLimit(limit)}
+                      >
+                        {limit}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="service-filter-group" aria-label="Tab display limit">
+                    <span className="service-record-limit-label">Tabs</span>
+                    {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
+                      <button
+                        key={`tab-limit-${limit}`}
+                        type="button"
+                        className={cn("service-filter-chip", tabLimit === limit && "service-filter-chip-active")}
+                        onClick={() => setTabLimit(limit)}
+                      >
+                        {limit}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="service-split-records">
+                <div className="service-section-list">
+                  <p className="service-record-list-heading">
+                    Sessions: {visibleSessionRecords.length} shown
+                    {hiddenSessionCount > 0 ? ` / ${hiddenSessionCount} hidden` : ""}
+                  </p>
+                  {filteredSessionRecords.length === 0 ? (
+                    <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                      {sessionRecords.length === 0 ? "No service sessions yet." : "No sessions match the current filter."}
+                    </p>
+                  ) : (
+                    visibleSessionRecords.map((session, index) => (
+                      <ServiceSessionRow
+                        key={session.id || `session-${index}`}
+                        session={session}
+                        onSelect={setSelectedSession}
+                      />
+                    ))
+                  )}
+                </div>
+                <div className="service-section-list">
+                  <p className="service-record-list-heading">
+                    Tabs: {visibleTabRecords.length} shown
+                    {hiddenTabCount > 0 ? ` / ${hiddenTabCount} hidden` : ""}
+                  </p>
+                  {filteredTabRecords.length === 0 ? (
+                    <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                      {tabRecords.length === 0 ? "No service tabs yet." : "No tabs match the current filter."}
+                    </p>
+                  ) : (
+                    visibleTabRecords.map((tab, index) => (
+                      <ServiceTabRow
+                        key={tab.id || tab.targetId || `tab-${index}`}
+                        tab={tab}
+                        viewStreamAvailable={Boolean(tab.browserId && browserPrimaryViewStream(browserById.get(tab.browserId)))}
+                        onInspect={inspectTabViewStream}
+                        onSelect={setSelectedTab}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="jobs" className="service-workspace-content">
+              <div className="service-workspace-pane-heading">
+                <ServerCog className="size-3.5 text-muted-foreground" />
+                <span>{jobSummary}</span>
+                {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+              </div>
+              <div className="service-section-list">
+                {recentJobs.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
+                    No service jobs yet.
+                  </p>
+                ) : (
+                  recentJobs.map((job) => <JobRow key={job.id} job={job} onSelect={inspectJob} />)
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="events" className="service-workspace-content">
+              <div className="service-workspace-pane-grid">
+                <HealthTransitionTimeline
+                  events={healthTransitionEvents}
+                  onSelect={setSelectedEvent}
                 />
-              </label>
-              <div className="service-record-limit-groups">
-                <div className="service-filter-group" aria-label="Session display limit">
-                  <span className="service-record-limit-label">Sessions</span>
-                  {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
-                    <button
-                      key={`session-limit-${limit}`}
-                      type="button"
-                      className={cn("service-filter-chip", sessionLimit === limit && "service-filter-chip-active")}
-                      onClick={() => setSessionLimit(limit)}
-                    >
-                      {limit}
-                    </button>
-                  ))}
-                </div>
-                <div className="service-filter-group" aria-label="Tab display limit">
-                  <span className="service-record-limit-label">Tabs</span>
-                  {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
-                    <button
-                      key={`tab-limit-${limit}`}
-                      type="button"
-                      className={cn("service-filter-chip", tabLimit === limit && "service-filter-chip-active")}
-                      onClick={() => setTabLimit(limit)}
-                    >
-                      {limit}
-                    </button>
-                  ))}
-                </div>
+                <TraceExplorer
+                  filters={traceFilters}
+                  trace={trace}
+                  loading={traceLoading}
+                  error={traceError}
+                  timeline={traceTimeline}
+                  onFiltersChange={setTraceFilters}
+                  onLoad={loadTrace}
+                  onClear={clearTrace}
+                />
               </div>
-            </div>
-            <div className="service-split-records">
-              <div className="service-section-list">
-                <p className="service-record-list-heading">
-                  Sessions: {visibleSessionRecords.length} shown
-                  {hiddenSessionCount > 0 ? ` / ${hiddenSessionCount} hidden` : ""}
-                </p>
-                {filteredSessionRecords.length === 0 ? (
-                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
-                    {sessionRecords.length === 0 ? "No service sessions yet." : "No sessions match the current filter."}
-                  </p>
-                ) : (
-                  visibleSessionRecords.map((session, index) => (
-                    <ServiceSessionRow
-                      key={session.id || `session-${index}`}
-                      session={session}
-                      onSelect={setSelectedSession}
-                    />
-                  ))
-                )}
+              <div className="service-workspace-pane-heading">
+                <CheckCircle2 className="size-3.5 text-muted-foreground" />
+                <span>{eventSummary}</span>
+                {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
               </div>
-              <div className="service-section-list">
-                <p className="service-record-list-heading">
-                  Tabs: {visibleTabRecords.length} shown
-                  {hiddenTabCount > 0 ? ` / ${hiddenTabCount} hidden` : ""}
-                </p>
-                {filteredTabRecords.length === 0 ? (
-                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
-                    {tabRecords.length === 0 ? "No service tabs yet." : "No tabs match the current filter."}
-                  </p>
-                ) : (
-                  visibleTabRecords.map((tab, index) => (
-                    <ServiceTabRow
-                      key={tab.id || tab.targetId || `tab-${index}`}
-                      tab={tab}
-                      viewStreamAvailable={Boolean(tab.browserId && browserPrimaryViewStream(browserById.get(tab.browserId)))}
-                      onInspect={inspectTabViewStream}
-                      onSelect={setSelectedTab}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-          </ServiceSection>
-
-          <ServiceSection
-            title="Recent jobs"
-            detail={jobSummary}
-            count={recentJobs.length}
-            icon={ServerCog}
-            defaultOpen={recentJobs.length > 0 && recentJobs.length <= 8}
-          >
-            {loading && <Loader2 className="mb-2 size-3.5 animate-spin text-muted-foreground" />}
-            <div className="service-section-list">
-              {recentJobs.length === 0 ? (
-                <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
-                  No service jobs yet.
-                </p>
-              ) : (
-                recentJobs.map((job) => <JobRow key={job.id} job={job} onSelect={inspectJob} />)
-              )}
-            </div>
-          </ServiceSection>
-
-          <ServiceSection
-            title="Recent events"
-            detail={eventSummary}
-            count={visibleEvents.length}
-            icon={CheckCircle2}
-            tone={incidentOnly ? "warn" : "neutral"}
-            defaultOpen={visibleEvents.length > 0}
-          >
-            {loading && <Loader2 className="mb-2 size-3.5 animate-spin text-muted-foreground" />}
-            <div className="service-filter-bar" aria-label="Event filters">
+              <div className="service-filter-bar" aria-label="Event filters">
               <div className="service-filter-group">
                 <Filter className="size-3.5 text-muted-foreground" />
                 <button
@@ -4070,7 +4094,8 @@ export function ServicePanel() {
                 ))
               )}
             </div>
-          </ServiceSection>
+            </TabsContent>
+          </Tabs>
         </div>
       </ScrollArea>
     </div>

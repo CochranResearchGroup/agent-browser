@@ -276,6 +276,11 @@ Validation:
 - live smoke against profiles, sessions, jobs, incidents, events, and trace
   endpoints
 
+Status on 2026-05-18: implemented as a compact tabbed workspace below the
+managed browser table. Profiles, incidents, sessions and tabs, jobs, and
+events or trace now share one secondary surface so browser records remain the
+primary scan path.
+
 ### Slice 5: Retained-State Cleanup UX
 
 - Add warnings when retained-state counts are dominated by inert records.
