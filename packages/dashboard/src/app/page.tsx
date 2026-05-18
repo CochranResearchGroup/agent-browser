@@ -19,9 +19,9 @@ import { NetworkPanel } from "@/components/network-panel";
 import { SessionTree } from "@/components/session-tree";
 import { AppShell, type DashboardSection } from "@/components/app-shell";
 import {
-  ServiceBrowserInspector,
+  ServiceDetailInspector,
   ServicePanel,
-  type ServiceBrowser,
+  type ServiceInspectorSelection,
 } from "@/components/service-panel";
 import {
   ResizablePanelGroup,
@@ -61,7 +61,7 @@ export default function DashboardPage() {
   const [rightPaneCollapsed, setRightPaneCollapsed] = useState(() =>
     readStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, true),
   );
-  const [serviceInspectorBrowser, setServiceInspectorBrowser] = useState<ServiceBrowser | null>(null);
+  const [serviceInspectorSelection, setServiceInspectorSelection] = useState<ServiceInspectorSelection | null>(null);
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -78,8 +78,8 @@ export default function DashboardPage() {
     setRightPaneCollapsed(false);
     writeStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, false);
   }, []);
-  const inspectServiceBrowser = useCallback((browser: ServiceBrowser) => {
-    setServiceInspectorBrowser(browser);
+  const inspectServiceSelection = useCallback((selection: ServiceInspectorSelection) => {
+    setServiceInspectorSelection(selection);
     openRightPane();
   }, [openRightPane]);
   const toggleLeftPane = () => {
@@ -119,11 +119,11 @@ export default function DashboardPage() {
     </Button>
   );
   const primaryPanel = activeSection === "service"
-    ? <ServicePanel onBrowserInspect={inspectServiceBrowser} />
+    ? <ServicePanel onInspectSelection={inspectServiceSelection} />
     : activeSection === "activity"
       ? <ActivityFeed />
       : <Viewport />;
-  const serviceInspectorPanel = <ServiceBrowserInspector browser={serviceInspectorBrowser} />;
+  const serviceInspectorPanel = <ServiceDetailInspector selection={serviceInspectorSelection} />;
 
   const sidePanel = (
     <Tabs defaultValue="chat" className="flex h-full flex-col">
@@ -248,7 +248,7 @@ export default function DashboardPage() {
               <div className="dashboard-pane dashboard-pane-viewport dashboard-pane-with-rails">
                 {leftPaneCollapsed && leftPaneToggle}
                 {rightPaneCollapsed && rightPaneToggle}
-                <ServicePanel onBrowserInspect={inspectServiceBrowser} />
+                <ServicePanel onInspectSelection={inspectServiceSelection} />
               </div>
             </ResizablePanel>
             {!rightPaneCollapsed && (

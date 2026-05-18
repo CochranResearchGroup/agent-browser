@@ -135,9 +135,10 @@ export type ServiceBrowser = {
 
 type ServicePanelProps = {
   onBrowserInspect?: (browser: ServiceBrowser) => void;
+  onInspectSelection?: (selection: ServiceInspectorSelection) => void;
 };
 
-type ServiceSession = {
+export type ServiceSession = {
   id: string;
   owner?: unknown;
   lease?: string;
@@ -186,7 +187,7 @@ type ServiceProfileTargetReadiness = {
   freshnessExpiresAt?: string | null;
 };
 
-type ServiceTab = {
+export type ServiceTab = {
   id: string;
   browserId?: string;
   targetId?: string | null;
@@ -207,7 +208,7 @@ type SelectedViewStream = {
   focusMessage?: string | null;
 };
 
-type ServiceJob = {
+export type ServiceJob = {
   id: string;
   action?: string;
   state?: string;
@@ -228,6 +229,12 @@ type ServiceJob = {
   completedAt?: string | null;
   error?: string | null;
 };
+
+export type ServiceInspectorSelection =
+  | { kind: "browser"; browser: ServiceBrowser }
+  | { kind: "session"; session: ServiceSession }
+  | { kind: "tab"; tab: ServiceTab; viewStreamAvailable?: boolean }
+  | { kind: "job"; job: ServiceJob };
 
 type RetainedCleanupKind = "prune" | "repair";
 
@@ -2009,36 +2016,84 @@ function BrowserDetailContent({
   );
 }
 
-export function ServiceBrowserInspector({ browser }: { browser: ServiceBrowser | null }) {
-  if (!browser) {
+export function ServiceDetailInspector({ selection }: { selection: ServiceInspectorSelection | null }) {
+  if (!selection) {
     return (
       <div className="service-inspector-empty">
         <div className="service-inspector-empty-card">
           <RadioTower className="size-6 text-muted-foreground" />
           <div>
-            <p>Select a managed browser</p>
-            <span>Choose a browser row to inspect profile, health, sessions, and view streams here.</span>
+            <p>Select a service record</p>
+            <span>Choose a browser, session, tab, or job row to inspect operational details here.</span>
           </div>
         </div>
       </div>
     );
   }
+  const header = serviceInspectorHeader(selection);
 
   return (
     <ScrollArea className="h-full">
       <div className="service-inspector">
         <div className="service-inspector-header">
           <div className="min-w-0">
-            <p className="service-inspector-kicker">Browser inspector</p>
-            <h2>{browser.id || "Browser process"}</h2>
-            <span>{browser.host ?? "unknown host"} / {browser.health ?? "unknown health"}</span>
+            <p className="service-inspector-kicker">{header.kicker}</p>
+            <h2>{header.title}</h2>
+            <span>{header.description}</span>
           </div>
-          <span className={cn("service-browser-health-dot", `service-browser-health-${healthTone(browser.health)}`)} />
+          <span className={cn("service-browser-health-dot", `service-browser-health-${header.tone}`)} />
         </div>
-        <BrowserDetailContent browser={browser} />
+        {selection.kind === "browser" && <BrowserDetailContent browser={selection.browser} />}
+        {selection.kind === "session" && <SessionDetailContent session={selection.session} />}
+        {selection.kind === "tab" && (
+          <TabDetailContent tab={selection.tab} viewStreamAvailable={selection.viewStreamAvailable} />
+        )}
+        {selection.kind === "job" && <JobDetailContent job={selection.job} />}
       </div>
     </ScrollArea>
   );
+}
+
+function serviceInspectorHeader(selection: ServiceInspectorSelection): {
+  kicker: string;
+  title: string;
+  description: string;
+  tone: ReturnType<typeof healthTone>;
+} {
+  if (selection.kind === "browser") {
+    return {
+      kicker: "Browser inspector",
+      title: selection.browser.id || "Browser process",
+      description: `${selection.browser.host ?? "unknown host"} / ${selection.browser.health ?? "unknown health"}`,
+      tone: healthTone(selection.browser.health),
+    };
+  }
+  if (selection.kind === "session") {
+    return {
+      kicker: "Session inspector",
+      title: selection.session.id || "Service session",
+      description: `${selection.session.lease ?? "shared"} / ${formatActor(selection.session.owner)}`,
+      tone: "good",
+    };
+  }
+  if (selection.kind === "tab") {
+    return {
+      kicker: "Tab inspector",
+      title: selection.tab.title || selection.tab.id || "Browser tab",
+      description: `${selection.tab.lifecycle ?? "unknown"} / ${selection.tab.browserId ?? "unknown browser"}`,
+      tone: selection.tab.lifecycle === "crashed" ? "bad" : selection.tab.lifecycle === "ready" ? "good" : "neutral",
+    };
+  }
+  return {
+    kicker: "Job inspector",
+    title: selection.job.action ?? "Service job",
+    description: `${selection.job.state ?? "unknown"} / ${formatRelativeTime(selection.job.submittedAt)}`,
+    tone: selection.job.state === "succeeded"
+      ? "good"
+      : selection.job.state === "failed" || selection.job.state === "timed_out" || selection.job.state === "cancelled"
+        ? "bad"
+        : "neutral",
+  };
 }
 
 function JobDetailDialog({
@@ -2050,11 +2105,6 @@ function JobDetailDialog({
   onOpenChange: (open: boolean) => void;
   onCancel: (job: ServiceJob) => void;
 }) {
-  const request = formatDetails(job?.request);
-  const response = formatDetails(job?.response ?? job?.result);
-  const target = formatDetails(job?.target);
-  const canCancel = job?.state === "queued" || job?.state === "running";
-  const namingWarning = serviceJobNamingWarningLabel(job?.namingWarnings);
   return (
     <Dialog open={!!job} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -2068,69 +2118,86 @@ function JobDetailDialog({
                 {job.state ?? "unknown"} / {formatRelativeTime(job.submittedAt)}
               </DialogDescription>
             </DialogHeader>
-            <div className="service-event-dialog-body">
-              {job.error && (
-                <div className="service-browser-error">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>{job.error}</span>
-                </div>
-              )}
-              {namingWarning && (
-                <div className="service-browser-error">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>{namingWarning} name metadata. Add serviceName, agentName, and taskName for traceable jobs.</span>
-                </div>
-              )}
-              <div className="service-event-detail-grid">
-                <EventDetailItem label="Job ID" value={job.id} />
-                <EventDetailItem label="Action" value={job.action} />
-                <EventDetailItem label="State" value={job.state} />
-                <EventDetailItem label="Priority" value={job.priority} />
-                <EventDetailItem label="Owner" value={job.owner ? formatActor(job.owner) : null} />
-                <EventDetailItem label="Timeout" value={job.timeoutMs ? `${job.timeoutMs} ms` : null} />
-                <EventDetailItem label="Submitted" value={job.submittedAt ? formatAbsoluteTime(job.submittedAt) : null} />
-                <EventDetailItem label="Started" value={job.startedAt ? formatAbsoluteTime(job.startedAt) : null} />
-                <EventDetailItem label="Completed" value={job.completedAt ? formatAbsoluteTime(job.completedAt) : null} />
-              </div>
-              {target && (
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    Target
-                  </p>
-                  <pre className="service-event-details-json">{target}</pre>
-                </div>
-              )}
-              {request && (
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    Request
-                  </p>
-                  <pre className="service-event-details-json">{request}</pre>
-                </div>
-              )}
-              {response && (
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    Response
-                  </p>
-                  <pre className="service-event-details-json">{response}</pre>
-                </div>
-              )}
-              {canCancel && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="rounded-full"
-                  onClick={() => onCancel(job)}
-                >
-                  {job.state === "running" ? "Cancel running job" : "Cancel queued job"}
-                </Button>
-              )}
-            </div>
+            <JobDetailContent job={job} onCancel={onCancel} />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function JobDetailContent({
+  job,
+  onCancel,
+}: {
+  job: ServiceJob;
+  onCancel?: (job: ServiceJob) => void;
+}) {
+  const request = formatDetails(job.request);
+  const response = formatDetails(job.response ?? job.result);
+  const target = formatDetails(job.target);
+  const canCancel = job.state === "queued" || job.state === "running";
+  const namingWarning = serviceJobNamingWarningLabel(job.namingWarnings);
+  return (
+    <div className="service-event-dialog-body">
+      {job.error && (
+        <div className="service-browser-error">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{job.error}</span>
+        </div>
+      )}
+      {namingWarning && (
+        <div className="service-browser-error">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{namingWarning} name metadata. Add serviceName, agentName, and taskName for traceable jobs.</span>
+        </div>
+      )}
+      <div className="service-event-detail-grid">
+        <EventDetailItem label="Job ID" value={job.id} />
+        <EventDetailItem label="Action" value={job.action} />
+        <EventDetailItem label="State" value={job.state} />
+        <EventDetailItem label="Priority" value={job.priority} />
+        <EventDetailItem label="Owner" value={job.owner ? formatActor(job.owner) : null} />
+        <EventDetailItem label="Timeout" value={job.timeoutMs ? `${job.timeoutMs} ms` : null} />
+        <EventDetailItem label="Submitted" value={job.submittedAt ? formatAbsoluteTime(job.submittedAt) : null} />
+        <EventDetailItem label="Started" value={job.startedAt ? formatAbsoluteTime(job.startedAt) : null} />
+        <EventDetailItem label="Completed" value={job.completedAt ? formatAbsoluteTime(job.completedAt) : null} />
+      </div>
+      {target && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Target
+          </p>
+          <pre className="service-event-details-json">{target}</pre>
+        </div>
+      )}
+      {request && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Request
+          </p>
+          <pre className="service-event-details-json">{request}</pre>
+        </div>
+      )}
+      {response && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Response
+          </p>
+          <pre className="service-event-details-json">{response}</pre>
+        </div>
+      )}
+      {canCancel && onCancel && (
+        <Button
+          type="button"
+          variant="destructive"
+          className="rounded-full"
+          onClick={() => onCancel(job)}
+        >
+          {job.state === "running" ? "Cancel running job" : "Cancel queued job"}
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -2405,49 +2472,55 @@ function SessionDetailDialog({
                 {session.lease ?? "shared"} / {formatActor(session.owner)}
               </DialogDescription>
             </DialogHeader>
-            <div className="service-event-dialog-body">
-              <div className="service-event-detail-grid">
-                <EventDetailItem label="Session ID" value={session.id} />
-                <EventDetailItem label="Owner" value={formatActor(session.owner)} />
-                <EventDetailItem label="Lease" value={session.lease} />
-                <EventDetailItem label="Created" value={session.createdAt ? formatAbsoluteTime(session.createdAt) : null} />
-                <EventDetailItem label="Expires" value={session.expiresAt ? formatAbsoluteTime(session.expiresAt) : null} />
-                <EventDetailItem label="Browsers" value={String(session.browserIds?.length ?? 0)} />
-                <EventDetailItem label="Tabs" value={String(session.tabIds?.length ?? 0)} />
-              </div>
-              {!!session.browserIds?.length && (
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    Browser IDs
-                  </p>
-                  <div className="service-token-list">
-                    {session.browserIds.map((browserId) => (
-                      <Badge key={browserId} variant="outline" className="max-w-full truncate">
-                        {browserId}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {!!session.tabIds?.length && (
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    Tab IDs
-                  </p>
-                  <div className="service-token-list">
-                    {session.tabIds.map((tabId) => (
-                      <Badge key={tabId} variant="outline" className="max-w-full truncate">
-                        {tabId}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <SessionDetailContent session={session} />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SessionDetailContent({ session }: { session: ServiceSession }) {
+  return (
+    <div className="service-event-dialog-body">
+      <div className="service-event-detail-grid">
+        <EventDetailItem label="Session ID" value={session.id} />
+        <EventDetailItem label="Owner" value={formatActor(session.owner)} />
+        <EventDetailItem label="Lease" value={session.lease} />
+        <EventDetailItem label="Created" value={session.createdAt ? formatAbsoluteTime(session.createdAt) : null} />
+        <EventDetailItem label="Expires" value={session.expiresAt ? formatAbsoluteTime(session.expiresAt) : null} />
+        <EventDetailItem label="Browsers" value={String(session.browserIds?.length ?? 0)} />
+        <EventDetailItem label="Tabs" value={String(session.tabIds?.length ?? 0)} />
+      </div>
+      {!!session.browserIds?.length && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Browser IDs
+          </p>
+          <div className="service-token-list">
+            {session.browserIds.map((browserId) => (
+              <Badge key={browserId} variant="outline" className="max-w-full truncate">
+                {browserId}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+      {!!session.tabIds?.length && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Tab IDs
+          </p>
+          <div className="service-token-list">
+            {session.tabIds.map((tabId) => (
+              <Badge key={tabId} variant="outline" className="max-w-full truncate">
+                {tabId}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2475,30 +2548,44 @@ function TabDetailDialog({
                 {tab.lifecycle ?? "unknown"} / {tab.browserId ?? "unknown browser"}
               </DialogDescription>
             </DialogHeader>
-            <div className="service-event-dialog-body">
-              {tab.url && <p className="service-event-dialog-message">{tab.url}</p>}
-              <div className="service-event-detail-grid">
-                <EventDetailItem label="Tab ID" value={tab.id} />
-                <EventDetailItem label="Browser ID" value={tab.browserId} />
-                <EventDetailItem label="Target ID" value={tab.targetId} />
-                <EventDetailItem label="Session ID" value={tab.sessionId} />
-                <EventDetailItem label="Owner session" value={tab.ownerSessionId} />
-                <EventDetailItem label="Lifecycle" value={tab.lifecycle} />
-                <EventDetailItem label="Snapshot" value={tab.latestSnapshotId} />
-                <EventDetailItem label="Screenshot" value={tab.latestScreenshotId} />
-                <EventDetailItem label="Challenge" value={tab.challengeId} />
-              </div>
-              {viewStreamAvailable && onInspect && (
-                <Button className="w-fit gap-1.5" size="sm" onClick={() => onInspect(tab)}>
-                  <Eye className="size-3.5" />
-                  Inspect remote view
-                </Button>
-              )}
-            </div>
+            <TabDetailContent tab={tab} viewStreamAvailable={viewStreamAvailable} onInspect={onInspect} />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TabDetailContent({
+  tab,
+  viewStreamAvailable,
+  onInspect,
+}: {
+  tab: ServiceTab;
+  viewStreamAvailable?: boolean;
+  onInspect?: (tab: ServiceTab) => void;
+}) {
+  return (
+    <div className="service-event-dialog-body">
+      {tab.url && <p className="service-event-dialog-message">{tab.url}</p>}
+      <div className="service-event-detail-grid">
+        <EventDetailItem label="Tab ID" value={tab.id} />
+        <EventDetailItem label="Browser ID" value={tab.browserId} />
+        <EventDetailItem label="Target ID" value={tab.targetId} />
+        <EventDetailItem label="Session ID" value={tab.sessionId} />
+        <EventDetailItem label="Owner session" value={tab.ownerSessionId} />
+        <EventDetailItem label="Lifecycle" value={tab.lifecycle} />
+        <EventDetailItem label="Snapshot" value={tab.latestSnapshotId} />
+        <EventDetailItem label="Screenshot" value={tab.latestScreenshotId} />
+        <EventDetailItem label="Challenge" value={tab.challengeId} />
+      </div>
+      {viewStreamAvailable && onInspect && (
+        <Button className="w-fit gap-1.5" size="sm" onClick={() => onInspect(tab)}>
+          <Eye className="size-3.5" />
+          Inspect remote view
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -2816,7 +2903,7 @@ function IncidentDetailDialog({
   );
 }
 
-export function ServicePanel({ onBrowserInspect }: ServicePanelProps = {}) {
+export function ServicePanel({ onBrowserInspect, onInspectSelection }: ServicePanelProps = {}) {
   const activePort = useAtomValue(activePortAtom);
   const activeSession = useAtomValue(activeSessionNameAtom);
   const [status, setStatus] = useState<ServiceStatusData | null>(null);
@@ -3036,7 +3123,11 @@ export function ServicePanel({ onBrowserInspect }: ServicePanelProps = {}) {
 
   const inspectJob = useCallback(async (job: ServiceJob) => {
     if (!canFetch || !job.id) {
-      setSelectedJob(job);
+      if (onInspectSelection) {
+        onInspectSelection({ kind: "job", job });
+      } else {
+        setSelectedJob(job);
+      }
       return;
     }
     setError("");
@@ -3044,12 +3135,21 @@ export function ServicePanel({ onBrowserInspect }: ServicePanelProps = {}) {
       const resp = await fetch(`${serviceBase(activePort)}/jobs/${encodeURIComponent(job.id)}`);
       const json = (await resp.json()) as ApiResponse<ServiceJobsData>;
       if (!json.success) throw new Error(json.error || "Service job lookup failed");
-      setSelectedJob(json.data?.job ?? job);
+      const selected = json.data?.job ?? job;
+      if (onInspectSelection) {
+        onInspectSelection({ kind: "job", job: selected });
+      } else {
+        setSelectedJob(selected);
+      }
     } catch (err) {
-      setSelectedJob(job);
+      if (onInspectSelection) {
+        onInspectSelection({ kind: "job", job });
+      } else {
+        setSelectedJob(job);
+      }
       setError(err instanceof Error ? err.message : "Service job lookup unavailable");
     }
-  }, [activePort, canFetch]);
+  }, [activePort, canFetch, onInspectSelection]);
 
   const inspectProfileAllocation = useCallback(async (allocation: ServiceProfileAllocation) => {
     const lookupId = profileAllocationLookupId.current + 1;
@@ -3319,12 +3419,31 @@ export function ServicePanel({ onBrowserInspect }: ServicePanelProps = {}) {
     [],
   );
   const inspectBrowser = useCallback((browser: ServiceBrowser) => {
+    if (onInspectSelection) {
+      onInspectSelection({ kind: "browser", browser });
+      return;
+    }
     if (onBrowserInspect) {
       onBrowserInspect(browser);
       return;
     }
     setSelectedBrowser(browser);
-  }, [onBrowserInspect]);
+  }, [onBrowserInspect, onInspectSelection]);
+  const inspectSession = useCallback((session: ServiceSession) => {
+    if (onInspectSelection) {
+      onInspectSelection({ kind: "session", session });
+      return;
+    }
+    setSelectedSession(session);
+  }, [onInspectSelection]);
+  const inspectTab = useCallback((tab: ServiceTab) => {
+    const viewStreamAvailable = Boolean(tab.browserId && browserPrimaryViewStream(browserById.get(tab.browserId)));
+    if (onInspectSelection) {
+      onInspectSelection({ kind: "tab", tab, viewStreamAvailable });
+      return;
+    }
+    setSelectedTab(tab);
+  }, [browserById, onInspectSelection]);
   const inspectTabViewStream = useCallback(async (tab: ServiceTab) => {
     const browser = tab.browserId ? browserById.get(tab.browserId) : null;
     const stream = browserPrimaryViewStream(browser);
@@ -4002,7 +4121,7 @@ export function ServicePanel({ onBrowserInspect }: ServicePanelProps = {}) {
                       <ServiceSessionRow
                         key={session.id || `session-${index}`}
                         session={session}
-                        onSelect={setSelectedSession}
+                        onSelect={inspectSession}
                       />
                     ))
                   )}
@@ -4023,7 +4142,7 @@ export function ServicePanel({ onBrowserInspect }: ServicePanelProps = {}) {
                         tab={tab}
                         viewStreamAvailable={Boolean(tab.browserId && browserPrimaryViewStream(browserById.get(tab.browserId)))}
                         onInspect={inspectTabViewStream}
-                        onSelect={setSelectedTab}
+                        onSelect={inspectTab}
                       />
                     ))
                   )}
