@@ -121,7 +121,7 @@ type ServiceEvent = {
   details?: unknown;
 };
 
-type ServiceBrowser = {
+export type ServiceBrowser = {
   id: string;
   profileId?: string | null;
   host?: string;
@@ -131,6 +131,10 @@ type ServiceBrowser = {
   viewStreams?: ServiceViewStream[];
   activeSessionIds?: string[];
   lastError?: string | null;
+};
+
+type ServicePanelProps = {
+  onBrowserInspect?: (browser: ServiceBrowser) => void;
 };
 
 type ServiceSession = {
@@ -1921,10 +1925,9 @@ function BrowserDetailDialog({
   onOpenChange,
 }: {
   browser: ServiceBrowser | null;
-  onInspectViewStream: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
+  onInspectViewStream?: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
   onOpenChange: (open: boolean) => void;
 }) {
-  const viewStreamCount = browser?.viewStreams?.length ?? 0;
   return (
     <Dialog open={!!browser} onOpenChange={onOpenChange}>
       <DialogContent className="service-event-dialog">
@@ -1938,58 +1941,103 @@ function BrowserDetailDialog({
                 {browser.host ?? "unknown host"} / {browser.health ?? "unknown health"}
               </DialogDescription>
             </DialogHeader>
-            <div className="service-event-dialog-body">
-              {browser.lastError && (
-                <div className="service-browser-error">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>{browser.lastError}</span>
-                </div>
-              )}
-              <div className="service-event-detail-grid">
-                <EventDetailItem label="Browser ID" value={browser.id} />
-                <EventDetailItem label="Profile" value={browser.profileId} />
-                <EventDetailItem label="Host" value={browser.host} />
-                <EventDetailItem label="Health" value={browser.health} />
-                <EventDetailItem label="PID" value={browser.pid ? String(browser.pid) : null} />
-                <EventDetailItem label="CDP endpoint" value={browser.cdpEndpoint} />
-                <EventDetailItem label="Active sessions" value={String(browser.activeSessionIds?.length ?? 0)} />
-                <EventDetailItem label="View streams" value={String(viewStreamCount)} />
-              </div>
-              {!!browser.activeSessionIds?.length && (
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    Attached sessions
-                  </p>
-                  <div className="service-token-list">
-                    {browser.activeSessionIds.map((sessionId) => (
-                      <Badge key={sessionId} variant="outline" className="max-w-full truncate">
-                        {sessionId}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {!!browser.viewStreams?.length && (
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-                    View streams
-                  </p>
-                  <div className="grid gap-3">
-                    {browser.viewStreams.map((stream, index) => (
-                      <ViewStreamCard
-                        key={`${stream.id ?? stream.provider ?? "stream"}-${index}`}
-                        stream={stream}
-                        onInspect={(selectedStream) => onInspectViewStream(selectedStream, browser)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <BrowserDetailContent browser={browser} onInspectViewStream={onInspectViewStream} />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function BrowserDetailContent({
+  browser,
+  onInspectViewStream,
+}: {
+  browser: ServiceBrowser;
+  onInspectViewStream?: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
+}) {
+  const viewStreamCount = browser.viewStreams?.length ?? 0;
+  return (
+    <div className="service-event-dialog-body">
+      {browser.lastError && (
+        <div className="service-browser-error">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{browser.lastError}</span>
+        </div>
+      )}
+      <div className="service-event-detail-grid">
+        <EventDetailItem label="Browser ID" value={browser.id} />
+        <EventDetailItem label="Profile" value={browser.profileId} />
+        <EventDetailItem label="Host" value={browser.host} />
+        <EventDetailItem label="Health" value={browser.health} />
+        <EventDetailItem label="PID" value={browser.pid ? String(browser.pid) : null} />
+        <EventDetailItem label="CDP endpoint" value={browser.cdpEndpoint} />
+        <EventDetailItem label="Active sessions" value={String(browser.activeSessionIds?.length ?? 0)} />
+        <EventDetailItem label="View streams" value={String(viewStreamCount)} />
+      </div>
+      {!!browser.activeSessionIds?.length && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Attached sessions
+          </p>
+          <div className="service-token-list">
+            {browser.activeSessionIds.map((sessionId) => (
+              <Badge key={sessionId} variant="outline" className="max-w-full truncate">
+                {sessionId}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+      {!!browser.viewStreams?.length && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            View streams
+          </p>
+          <div className="grid gap-3">
+            {browser.viewStreams.map((stream, index) => (
+              <ViewStreamCard
+                key={`${stream.id ?? stream.provider ?? "stream"}-${index}`}
+                stream={stream}
+                onInspect={onInspectViewStream ? (selectedStream) => onInspectViewStream(selectedStream, browser) : undefined}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ServiceBrowserInspector({ browser }: { browser: ServiceBrowser | null }) {
+  if (!browser) {
+    return (
+      <div className="service-inspector-empty">
+        <div className="service-inspector-empty-card">
+          <RadioTower className="size-6 text-muted-foreground" />
+          <div>
+            <p>Select a managed browser</p>
+            <span>Choose a browser row to inspect profile, health, sessions, and view streams here.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ScrollArea className="h-full">
+      <div className="service-inspector">
+        <div className="service-inspector-header">
+          <div className="min-w-0">
+            <p className="service-inspector-kicker">Browser inspector</p>
+            <h2>{browser.id || "Browser process"}</h2>
+            <span>{browser.host ?? "unknown host"} / {browser.health ?? "unknown health"}</span>
+          </div>
+          <span className={cn("service-browser-health-dot", `service-browser-health-${healthTone(browser.health)}`)} />
+        </div>
+        <BrowserDetailContent browser={browser} />
+      </div>
+    </ScrollArea>
   );
 }
 
@@ -2768,7 +2816,7 @@ function IncidentDetailDialog({
   );
 }
 
-export function ServicePanel() {
+export function ServicePanel({ onBrowserInspect }: ServicePanelProps = {}) {
   const activePort = useAtomValue(activePortAtom);
   const activeSession = useAtomValue(activeSessionNameAtom);
   const [status, setStatus] = useState<ServiceStatusData | null>(null);
@@ -3270,6 +3318,13 @@ export function ServicePanel() {
     },
     [],
   );
+  const inspectBrowser = useCallback((browser: ServiceBrowser) => {
+    if (onBrowserInspect) {
+      onBrowserInspect(browser);
+      return;
+    }
+    setSelectedBrowser(browser);
+  }, [onBrowserInspect]);
   const inspectTabViewStream = useCallback(async (tab: ServiceTab) => {
     const browser = tab.browserId ? browserById.get(tab.browserId) : null;
     const stream = browserPrimaryViewStream(browser);
@@ -3709,7 +3764,7 @@ export function ServicePanel() {
                   No browser records yet.
                 </p>
               ) : (
-                <BrowserTable browsers={browserRecords} onSelect={setSelectedBrowser} />
+                <BrowserTable browsers={browserRecords} onSelect={inspectBrowser} />
               )}
             </div>
           </div>

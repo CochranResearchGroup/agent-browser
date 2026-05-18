@@ -2167,6 +2167,75 @@ body {
   gap: 0.4rem;
 }
 
+.service-inspector {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.85rem;
+}
+
+.service-inspector-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding-bottom: 0.85rem;
+}
+
+.service-inspector-kicker {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.service-inspector-header h2 {
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-size: 1.05rem;
+  font-weight: 950;
+  letter-spacing: -0.045em;
+}
+
+.service-inspector-header span:not(.service-browser-health-dot) {
+  display: block;
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+  font-size: 0.74rem;
+}
+
+.service-inspector-empty {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  padding: 1rem;
+}
+
+.service-inspector-empty-card {
+  display: grid;
+  max-width: 18rem;
+  justify-items: center;
+  gap: 0.75rem;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+.service-inspector-empty-card p {
+  color: var(--foreground);
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.service-inspector-empty-card span {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .service-panel-empty {
   display: grid;
   height: 100%;

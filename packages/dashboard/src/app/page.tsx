@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import { activePortAtom, sessionsAtom, newSessionDialogAtom } from "@/store/sessions";
 import { useSessionsSync } from "@/store/sessions";
@@ -18,7 +18,11 @@ import { ExtensionsPanel } from "@/components/extensions-panel";
 import { NetworkPanel } from "@/components/network-panel";
 import { SessionTree } from "@/components/session-tree";
 import { AppShell, type DashboardSection } from "@/components/app-shell";
-import { ServicePanel } from "@/components/service-panel";
+import {
+  ServiceBrowserInspector,
+  ServicePanel,
+  type ServiceBrowser,
+} from "@/components/service-panel";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -57,6 +61,7 @@ export default function DashboardPage() {
   const [rightPaneCollapsed, setRightPaneCollapsed] = useState(() =>
     readStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, true),
   );
+  const [serviceInspectorBrowser, setServiceInspectorBrowser] = useState<ServiceBrowser | null>(null);
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -69,11 +74,14 @@ export default function DashboardPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const hasConsoleErrors = useAtomValue(hasConsoleErrorsAtom);
   const activeExtensions = useAtomValue(activeExtensionsAtom);
-  const primaryPanel = activeSection === "service"
-    ? <ServicePanel />
-    : activeSection === "activity"
-      ? <ActivityFeed />
-      : <Viewport />;
+  const openRightPane = useCallback(() => {
+    setRightPaneCollapsed(false);
+    writeStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, false);
+  }, []);
+  const inspectServiceBrowser = useCallback((browser: ServiceBrowser) => {
+    setServiceInspectorBrowser(browser);
+    openRightPane();
+  }, [openRightPane]);
   const toggleLeftPane = () => {
     const next = !leftPaneCollapsed;
     setLeftPaneCollapsed(next);
@@ -110,6 +118,12 @@ export default function DashboardPage() {
       {rightPaneCollapsed ? <PanelRightOpen className="size-4" /> : <PanelRightClose className="size-4" />}
     </Button>
   );
+  const primaryPanel = activeSection === "service"
+    ? <ServicePanel onBrowserInspect={inspectServiceBrowser} />
+    : activeSection === "activity"
+      ? <ActivityFeed />
+      : <Viewport />;
+  const serviceInspectorPanel = <ServiceBrowserInspector browser={serviceInspectorBrowser} />;
 
   const sidePanel = (
     <Tabs defaultValue="chat" className="flex h-full flex-col">
@@ -230,13 +244,24 @@ export default function DashboardPage() {
                 <ResizableHandle />
               </>
             )}
-            <ResizablePanel id="service" defaultSize="85%">
+            <ResizablePanel id="service" defaultSize={rightPaneCollapsed ? "85%" : "55%"} minSize="30%">
               <div className="dashboard-pane dashboard-pane-viewport dashboard-pane-with-rails">
                 {leftPaneCollapsed && leftPaneToggle}
                 {rightPaneCollapsed && rightPaneToggle}
-                <ServicePanel />
+                <ServicePanel onBrowserInspect={inspectServiceBrowser} />
               </div>
             </ResizablePanel>
+            {!rightPaneCollapsed && (
+              <>
+                <ResizableHandle />
+                <ResizablePanel id="service-inspector" defaultSize="30%" minSize="18%" maxSize="50%">
+                  <div className="dashboard-pane dashboard-pane-right dashboard-pane-with-toggle">
+                    {rightPaneToggle}
+                    {serviceInspectorPanel}
+                  </div>
+                </ResizablePanel>
+              </>
+            )}
           </ResizablePanelGroup>
         </AppShell>
       );
@@ -272,7 +297,7 @@ export default function DashboardPage() {
               <ResizablePanel id="activity" defaultSize="30%" minSize="15%" maxSize="50%">
                 <div className="dashboard-pane dashboard-pane-right dashboard-pane-with-toggle">
                   {rightPaneToggle}
-                  {sidePanel}
+                  {activeSection === "service" ? serviceInspectorPanel : sidePanel}
                 </div>
               </ResizablePanel>
             </>
