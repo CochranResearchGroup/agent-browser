@@ -51,9 +51,11 @@ import {
 } from "@/components/ui/tabs";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -1657,6 +1659,8 @@ function browserPrimaryViewStream(browser?: ServiceBrowser | null): ServiceViewS
 
 type BrowserSortKey = "health" | "id" | "profile" | "host" | "sessions" | "streams";
 type SortDirection = "asc" | "desc";
+type BrowserLifecycleFilter = "actionable" | "all" | "live" | "retained";
+type BrowserTableColumnKey = "health" | "profile" | "host" | "sessions" | "streams" | "lastError";
 
 const BROWSER_SORT_LABELS: Record<BrowserSortKey, string> = {
   health: "Health",
@@ -1666,6 +1670,17 @@ const BROWSER_SORT_LABELS: Record<BrowserSortKey, string> = {
   sessions: "Sessions",
   streams: "Streams",
 };
+
+const BROWSER_TABLE_COLUMNS: { key: BrowserTableColumnKey; label: string }[] = [
+  { key: "health", label: "Health" },
+  { key: "profile", label: "Profile" },
+  { key: "host", label: "Host" },
+  { key: "sessions", label: "Sessions" },
+  { key: "streams", label: "Streams" },
+  { key: "lastError", label: "Last error" },
+];
+
+const DEFAULT_BROWSER_TABLE_COLUMNS = BROWSER_TABLE_COLUMNS.map((column) => column.key);
 
 function browserSearchText(browser: ServiceBrowser): string {
   return [
@@ -1692,6 +1707,42 @@ function browserSortValue(browser: ServiceBrowser, sortKey: BrowserSortKey): str
 function compareBrowserValues(left: string | number, right: string | number): number {
   if (typeof left === "number" && typeof right === "number") return left - right;
   return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function isLiveBrowserRecord(browser: ServiceBrowser): boolean {
+  return Boolean(
+    browser.pid ||
+      browser.cdpEndpoint ||
+      (browser.activeSessionIds?.length ?? 0) > 0 ||
+      (browser.viewStreams?.length ?? 0) > 0 ||
+      ["launching", "ready", "degraded", "cdp_disconnected", "reconnecting", "closing", "faulted"].includes(browser.health ?? ""),
+  );
+}
+
+function isInertRetainedBrowserRecord(browser: ServiceBrowser): boolean {
+  return (
+    !browser.pid &&
+    !browser.cdpEndpoint &&
+    (browser.activeSessionIds?.length ?? 0) === 0 &&
+    (browser.viewStreams?.length ?? 0) === 0 &&
+    !browser.lastError &&
+    (browser.health ?? "not_started") === "not_started"
+  );
+}
+
+function browserMatchesLifecycleFilter(browser: ServiceBrowser, filter: BrowserLifecycleFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "live") return isLiveBrowserRecord(browser);
+  if (filter === "retained") return !isLiveBrowserRecord(browser);
+  return !isInertRetainedBrowserRecord(browser);
+}
+
+function browserDefaultRank(browser: ServiceBrowser): number {
+  if ((browser.health ?? "") === "faulted") return 0;
+  if (["degraded", "cdp_disconnected", "unreachable", "process_exited"].includes(browser.health ?? "")) return 1;
+  if (isLiveBrowserRecord(browser)) return 2;
+  if (!isInertRetainedBrowserRecord(browser)) return 3;
+  return 4;
 }
 
 function BrowserSortButton({
@@ -1727,14 +1778,22 @@ function BrowserTable({
   onSelect: (browser: ServiceBrowser) => void;
 }) {
   const [filter, setFilter] = useState("");
+  const [lifecycleFilter, setLifecycleFilter] = useState<BrowserLifecycleFilter>("actionable");
+  const [visibleColumns, setVisibleColumns] = useState<BrowserTableColumnKey[]>(DEFAULT_BROWSER_TABLE_COLUMNS);
   const [sortKey, setSortKey] = useState<BrowserSortKey>("health");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const visibleColumnSet = useMemo(() => new Set(visibleColumns), [visibleColumns]);
+  const liveCount = useMemo(() => browsers.filter(isLiveBrowserRecord).length, [browsers]);
+  const inertCount = useMemo(() => browsers.filter(isInertRetainedBrowserRecord).length, [browsers]);
   const filteredBrowsers = useMemo(() => {
     const query = filter.trim().toLowerCase();
-    const rows = query
-      ? browsers.filter((browser) => browserSearchText(browser).includes(query))
-      : [...browsers];
+    const rows = browsers.filter((browser) => {
+      if (!browserMatchesLifecycleFilter(browser, lifecycleFilter)) return false;
+      return query ? browserSearchText(browser).includes(query) : true;
+    });
     rows.sort((left, right) => {
+      const defaultOrder = browserDefaultRank(left) - browserDefaultRank(right);
+      if (defaultOrder !== 0) return defaultOrder;
       const order = compareBrowserValues(
         browserSortValue(left, sortKey),
         browserSortValue(right, sortKey),
@@ -1742,7 +1801,7 @@ function BrowserTable({
       return sortDirection === "asc" ? order : -order;
     });
     return rows;
-  }, [browsers, filter, sortDirection, sortKey]);
+  }, [browsers, filter, lifecycleFilter, sortDirection, sortKey]);
 
   const toggleSort = (nextSortKey: BrowserSortKey) => {
     if (nextSortKey === sortKey) {
@@ -1752,6 +1811,16 @@ function BrowserTable({
     setSortKey(nextSortKey);
     setSortDirection("asc");
   };
+
+  const toggleColumn = (column: BrowserTableColumnKey, nextVisible: boolean) => {
+    setVisibleColumns((current) => {
+      if (nextVisible) return current.includes(column) ? current : [...current, column];
+      return current.filter((item) => item !== column);
+    });
+  };
+
+  const resetColumns = () => setVisibleColumns(DEFAULT_BROWSER_TABLE_COLUMNS);
+  const tableColumnSpan = visibleColumns.length + 2;
 
   return (
     <div className="service-browser-table-shell">
@@ -1766,39 +1835,88 @@ function BrowserTable({
           />
         </label>
         <span className="service-browser-table-count">
-          {filteredBrowsers.length} of {browsers.length} shown
+          {filteredBrowsers.length} of {browsers.length} shown; {liveCount} live, {inertCount} inert retained
         </span>
+        <div className="service-filter-group service-browser-table-controls" aria-label="Browser record lifecycle filters">
+          {[
+            { value: "actionable", label: "Actionable" },
+            { value: "live", label: "Live" },
+            { value: "retained", label: "Retained" },
+            { value: "all", label: "All records" },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={cn("service-filter-chip", lifecycleFilter === option.value && "service-filter-chip-active")}
+              onClick={() => setLifecycleFilter(option.value as BrowserLifecycleFilter)}
+            >
+              {option.label}
+            </button>
+          ))}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="h-7 gap-1.5 rounded-full px-2 text-[11px]">
+                <MoreHorizontal className="size-3" />
+                Columns
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuLabel>Visible columns</DropdownMenuLabel>
+              {BROWSER_TABLE_COLUMNS.map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.key}
+                  checked={visibleColumnSet.has(column.key)}
+                  onCheckedChange={(checked) => toggleColumn(column.key, checked === true)}
+                >
+                  {column.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={resetColumns}>Reset columns</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       <div className="service-browser-table-scroll">
         <table className="service-browser-table">
           <thead>
             <tr>
-              <th>
-                <BrowserSortButton sortKey="health" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-              </th>
+              {visibleColumnSet.has("health") && (
+                <th>
+                  <BrowserSortButton sortKey="health" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+                </th>
+              )}
               <th>
                 <BrowserSortButton sortKey="id" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
               </th>
-              <th>
-                <BrowserSortButton sortKey="profile" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-              </th>
-              <th>
-                <BrowserSortButton sortKey="host" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-              </th>
-              <th>
-                <BrowserSortButton sortKey="sessions" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-              </th>
-              <th>
-                <BrowserSortButton sortKey="streams" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-              </th>
-              <th>Last error</th>
+              {visibleColumnSet.has("profile") && (
+                <th>
+                  <BrowserSortButton sortKey="profile" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+                </th>
+              )}
+              {visibleColumnSet.has("host") && (
+                <th>
+                  <BrowserSortButton sortKey="host" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+                </th>
+              )}
+              {visibleColumnSet.has("sessions") && (
+                <th>
+                  <BrowserSortButton sortKey="sessions" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+                </th>
+              )}
+              {visibleColumnSet.has("streams") && (
+                <th>
+                  <BrowserSortButton sortKey="streams" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+                </th>
+              )}
+              {visibleColumnSet.has("lastError") && <th>Last error</th>}
               <th aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
             {filteredBrowsers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="service-browser-table-empty">
+                <td colSpan={tableColumnSpan} className="service-browser-table-empty">
                   No browser records match the current filter.
                 </td>
               </tr>
@@ -1807,6 +1925,7 @@ function BrowserTable({
                 <BrowserTableRow
                   key={browser.id || browser.cdpEndpoint || `browser-${index}`}
                   browser={browser}
+                  visibleColumns={visibleColumnSet}
                   onSelect={onSelect}
                 />
               ))
@@ -1818,21 +1937,31 @@ function BrowserTable({
   );
 }
 
-function BrowserTableRow({ browser, onSelect }: { browser: ServiceBrowser; onSelect: (browser: ServiceBrowser) => void }) {
+function BrowserTableRow({
+  browser,
+  visibleColumns,
+  onSelect,
+}: {
+  browser: ServiceBrowser;
+  visibleColumns: Set<BrowserTableColumnKey>;
+  onSelect: (browser: ServiceBrowser) => void;
+}) {
   const tone = healthTone(browser.health);
   const sessionCount = browser.activeSessionIds?.length ?? 0;
   const viewStreamCount = browser.viewStreams?.length ?? 0;
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
     <tr className="service-browser-table-row">
-      <td>
-        <div className="service-browser-table-health">
-          <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
-          <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
-            {browser.health ?? "unknown"}
-          </Badge>
-        </div>
-      </td>
+      {visibleColumns.has("health") && (
+        <td>
+          <div className="service-browser-table-health">
+            <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
+            <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
+              {browser.health ?? "unknown"}
+            </Badge>
+          </div>
+        </td>
+      )}
       <td>
         <button
           type="button"
@@ -1843,20 +1972,26 @@ function BrowserTableRow({ browser, onSelect }: { browser: ServiceBrowser; onSel
           {browser.id || "unnamed browser"}
         </button>
       </td>
-      <td className="service-browser-table-cell-muted">
-        {browser.profileId || "unassigned"}
-      </td>
-      <td>
-        <div className="service-browser-table-host">
-          <span>{browser.host ?? "unknown host"}</span>
-          <span>{processLabel}</span>
-        </div>
-      </td>
-      <td className="service-browser-table-number">{sessionCount}</td>
-      <td className="service-browser-table-number">{viewStreamCount}</td>
-      <td className={cn("service-browser-table-error", !browser.lastError && "service-browser-table-cell-muted")}>
-        {browser.lastError || "none"}
-      </td>
+      {visibleColumns.has("profile") && (
+        <td className="service-browser-table-cell-muted">
+          {browser.profileId || "unassigned"}
+        </td>
+      )}
+      {visibleColumns.has("host") && (
+        <td>
+          <div className="service-browser-table-host">
+            <span>{browser.host ?? "unknown host"}</span>
+            <span>{processLabel}</span>
+          </div>
+        </td>
+      )}
+      {visibleColumns.has("sessions") && <td className="service-browser-table-number">{sessionCount}</td>}
+      {visibleColumns.has("streams") && <td className="service-browser-table-number">{viewStreamCount}</td>}
+      {visibleColumns.has("lastError") && (
+        <td className={cn("service-browser-table-error", !browser.lastError && "service-browser-table-cell-muted")}>
+          {browser.lastError || "none"}
+        </td>
+      )}
       <td>
         <Button
           type="button"

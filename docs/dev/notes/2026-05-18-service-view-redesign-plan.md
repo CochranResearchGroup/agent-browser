@@ -262,6 +262,12 @@ Validation:
 - unit or script smoke for sort/filter behavior
 - live smoke with current retained browser records
 
+Status on 2026-05-18: partially implemented. The table now defaults to an
+actionable browser-record filter so live, degraded, and otherwise inspectable
+records stay in the primary scan path while inert `not_started` placeholders
+move behind retained or all-record filters. Column visibility controls let an
+operator hide secondary fields without losing row inspection.
+
 ### Slice 4: Secondary Work Surfaces
 
 - Move profiles, sessions, jobs, incidents, events, and trace into deliberate

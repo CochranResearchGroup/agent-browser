@@ -117,6 +117,9 @@ function selectRecommendations(files, base) {
     if (files.some((file) => file.includes('view-stream') || file === 'packages/dashboard/src/components/service-panel.tsx')) {
       add('pnpm test:dashboard-view-streams', 'dashboard view stream provider handling changed');
     }
+    if (files.some((file) => file === 'packages/dashboard/src/components/service-panel.tsx' || file === 'packages/dashboard/src/app/globals.css')) {
+      add('pnpm test:dashboard-browser-table', 'dashboard browser table filtering or visibility changed');
+    }
     if (files.some((file) => file === 'packages/dashboard/src/components/service-panel.tsx' || file === 'packages/dashboard/src/app/page.tsx')) {
       add('pnpm test:dashboard-inspector-actions', 'dashboard service inspector action wiring changed');
     }
