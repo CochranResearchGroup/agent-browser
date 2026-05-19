@@ -140,6 +140,7 @@ export type ServiceBrowser = {
   profileId?: string | null;
   host?: string;
   health?: string;
+  browserBuild?: string | null;
   pid?: number | null;
   cdpEndpoint?: string | null;
   viewStreams?: ServiceViewStream[];
@@ -1656,6 +1657,7 @@ type BrowserLifecycleFilter = "actionable" | "all" | "live" | "retained";
 type BrowserTableColumnKey = "health" | "profile" | "host" | "sessions" | "streams" | "lastError";
 type BrowserTableColumnId = BrowserTableColumnKey | "id" | "actions";
 type BrowserTableDensity = "compact" | "standard" | "expanded";
+type BrowserStreamFilter = "all" | "with_stream" | "without_stream";
 
 const BROWSER_SORT_LABELS: Record<BrowserSortKey, string> = {
   health: "Health",
@@ -1781,11 +1783,20 @@ function browserSearchText(browser: ServiceBrowser): string {
     browser.profileId,
     browser.host,
     browser.health,
+    browser.browserBuild,
     browser.pid ? `pid ${browser.pid}` : "retained",
     browser.cdpEndpoint,
     browser.lastError,
     ...(browser.activeSessionIds ?? []),
   ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function browserFilterOptionValues(browsers: ServiceBrowser[], field: "health" | "host" | "browserBuild"): string[] {
+  return Array.from(new Set(
+    browsers
+      .map((browser) => browser[field])
+      .filter((value): value is string => Boolean(value)),
+  )).sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }));
 }
 
 function browserSortValue(browser: ServiceBrowser, sortKey: BrowserSortKey): string | number {
@@ -1911,10 +1922,17 @@ function BrowserTable({
   const [sortKey, setSortKey] = useState<BrowserSortKey>("health");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [rowLimit, setRowLimit] = useState(BROWSER_TABLE_INITIAL_ROW_LIMIT);
+  const [healthFilter, setHealthFilter] = useState("all");
+  const [hostFilter, setHostFilter] = useState("all");
+  const [browserBuildFilter, setBrowserBuildFilter] = useState("all");
+  const [streamFilter, setStreamFilter] = useState<BrowserStreamFilter>("all");
   const resizeStateRef = useRef<{ column: BrowserTableColumnId; startX: number; startWidth: number } | null>(null);
   const visibleColumnSet = useMemo(() => new Set(visibleColumns), [visibleColumns]);
   const liveCount = useMemo(() => browsers.filter(isLiveBrowserRecord).length, [browsers]);
   const inertCount = useMemo(() => browsers.filter(isInertRetainedBrowserRecord).length, [browsers]);
+  const healthOptions = useMemo(() => browserFilterOptionValues(browsers, "health"), [browsers]);
+  const hostOptions = useMemo(() => browserFilterOptionValues(browsers, "host"), [browsers]);
+  const browserBuildOptions = useMemo(() => browserFilterOptionValues(browsers, "browserBuild"), [browsers]);
   const activeTableColumns = useMemo(
     () => (["health", "id", "profile", "host", "sessions", "streams", "lastError", "actions"] as BrowserTableColumnId[])
       .filter((column) => column === "id" || column === "actions" || visibleColumnSet.has(column as BrowserTableColumnKey)),
@@ -1958,6 +1976,12 @@ function BrowserTable({
     const query = filter.trim().toLowerCase();
     const rows = browsers.filter((browser) => {
       if (!browserMatchesLifecycleFilter(browser, lifecycleFilter)) return false;
+      if (healthFilter !== "all" && browser.health !== healthFilter) return false;
+      if (hostFilter !== "all" && browser.host !== hostFilter) return false;
+      if (browserBuildFilter !== "all" && browser.browserBuild !== browserBuildFilter) return false;
+      const hasViewStream = (browser.viewStreams?.length ?? 0) > 0;
+      if (streamFilter === "with_stream" && !hasViewStream) return false;
+      if (streamFilter === "without_stream" && hasViewStream) return false;
       return query ? browserSearchText(browser).includes(query) : true;
     });
     rows.sort((left, right) => {
@@ -1970,7 +1994,7 @@ function BrowserTable({
       return sortDirection === "asc" ? order : -order;
     });
     return rows;
-  }, [browsers, filter, lifecycleFilter, sortDirection, sortKey]);
+  }, [browserBuildFilter, browsers, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter]);
   const visibleBrowsers = useMemo(
     () => filteredBrowsers.slice(0, rowLimit),
     [filteredBrowsers, rowLimit],
@@ -1979,7 +2003,7 @@ function BrowserTable({
 
   useEffect(() => {
     setRowLimit(BROWSER_TABLE_INITIAL_ROW_LIMIT);
-  }, [filter, lifecycleFilter, sortDirection, sortKey]);
+  }, [browserBuildFilter, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter]);
 
   const toggleSort = (nextSortKey: BrowserSortKey) => {
     if (nextSortKey === sortKey) {
@@ -2001,6 +2025,10 @@ function BrowserTable({
   const resetColumnWidths = () => setColumnWidths(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS);
   const resetTableView = () => {
     setLifecycleFilter("actionable");
+    setHealthFilter("all");
+    setHostFilter("all");
+    setBrowserBuildFilter("all");
+    setStreamFilter("all");
     setVisibleColumns(DEFAULT_BROWSER_TABLE_COLUMNS);
     setColumnWidths(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS);
     setDensity("standard");
@@ -2118,6 +2146,39 @@ function BrowserTable({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+        </div>
+        <div className="service-browser-table-advanced-filters" aria-label="Browser table field filters">
+          <label>
+            <span>Health</span>
+            <select value={healthFilter} onChange={(event) => setHealthFilter(event.target.value)}>
+              <option value="all">All health states</option>
+              {healthOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Host</span>
+            <select value={hostFilter} onChange={(event) => setHostFilter(event.target.value)}>
+              <option value="all">All hosts</option>
+              {hostOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          {browserBuildOptions.length > 0 && (
+            <label>
+              <span>Build</span>
+              <select value={browserBuildFilter} onChange={(event) => setBrowserBuildFilter(event.target.value)}>
+                <option value="all">All builds</option>
+                {browserBuildOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          )}
+          <label>
+            <span>Streams</span>
+            <select value={streamFilter} onChange={(event) => setStreamFilter(event.target.value as BrowserStreamFilter)}>
+              <option value="all">Any stream state</option>
+              <option value="with_stream">View stream available</option>
+              <option value="without_stream">No view stream</option>
+            </select>
+          </label>
         </div>
       </div>
       <div className="service-browser-table-scroll">

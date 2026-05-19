@@ -550,3 +550,38 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-table-row-window-phase2.png`
+
+### 2026-05-19 Phase 2 Service-Backed Field Filters
+
+Continued the table-scale slice by adding field filters that are backed by
+service browser records:
+
+- added native select filters for browser health, browser host, and view-stream
+  availability
+- added a browser-build filter only when service browser records expose
+  `browserBuild` values
+- included `browserBuild` in browser search text when the field exists
+- reset the row window when any field filter changes
+- kept browser-build semantics service-owned rather than inferring build from
+  host, executable path, or profile name
+- added contract assertions for filter state, option derivation, filter logic,
+  conditional browser-build rendering, and compact select styling
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` confirmed health, host,
+  and stream filters rendered from current service data. Browser-build filter
+  was correctly hidden because current browser records did not expose
+  `browserBuild`. Selecting health `faulted` reduced the table count from
+  `50 of 180 filtered` to `1 of 1 filtered`; selecting `View stream available`
+  after that reduced it to `0 of 0 filtered`.
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-table-field-filters-phase2.png`

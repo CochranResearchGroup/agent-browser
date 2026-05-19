@@ -15,6 +15,18 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /type BrowserStreamFilter = "all" \| "with_stream" \| "without_stream";/,
+  'Browser table must keep an explicit view-stream availability filter type',
+);
+
+assert.match(
+  servicePanel,
+  /browserBuild\?: string \| null;/,
+  'Browser table must accept service-provided browserBuild when the browser record exposes it',
+);
+
+assert.match(
+  servicePanel,
   /BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY = "agent-browser-dashboard-browser-table-lifecycle-filter"/,
   'Browser table must persist the selected lifecycle filter under a stable localStorage key',
 );
@@ -99,8 +111,20 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const \[healthFilter, setHealthFilter\] = useState\("all"\);[\s\S]*const \[hostFilter, setHostFilter\] = useState\("all"\);[\s\S]*const \[browserBuildFilter, setBrowserBuildFilter\] = useState\("all"\);[\s\S]*const \[streamFilter, setStreamFilter\] = useState<BrowserStreamFilter>\("all"\);/,
+  'Browser table must track health, host, browser-build, and stream filters',
+);
+
+assert.match(
+  servicePanel,
   /const \[visibleColumns, setVisibleColumns\] = useState<BrowserTableColumnKey\[\]>\(initialBrowserTableColumns\);/,
   'Browser table visible columns state must use the persisted preference initializer',
+);
+
+assert.match(
+  servicePanel,
+  /const healthOptions = useMemo\(\(\) => browserFilterOptionValues\(browsers, "health"\)[\s\S]*const hostOptions = useMemo\(\(\) => browserFilterOptionValues\(browsers, "host"\)[\s\S]*const browserBuildOptions = useMemo\(\(\) => browserFilterOptionValues\(browsers, "browserBuild"\)/,
+  'Browser table must derive health, host, and browser-build filter options from records',
 );
 
 assert.match(
@@ -153,13 +177,13 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const resetTableView = \(\) => \{[\s\S]*setLifecycleFilter\("actionable"\)[\s\S]*setVisibleColumns\(DEFAULT_BROWSER_TABLE_COLUMNS\)[\s\S]*setColumnWidths\(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS\)[\s\S]*setDensity\("standard"\)[\s\S]*localStorage\.removeItem\(key\)/,
+  /const resetTableView = \(\) => \{[\s\S]*setLifecycleFilter\("actionable"\)[\s\S]*setHealthFilter\("all"\)[\s\S]*setHostFilter\("all"\)[\s\S]*setBrowserBuildFilter\("all"\)[\s\S]*setStreamFilter\("all"\)[\s\S]*setVisibleColumns\(DEFAULT_BROWSER_TABLE_COLUMNS\)[\s\S]*setColumnWidths\(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS\)[\s\S]*setDensity\("standard"\)[\s\S]*localStorage\.removeItem\(key\)/,
   'Browser table must reset all persisted view state at once',
 );
 
 assert.match(
   servicePanel,
-  /useEffect\(\(\) => \{[\s\S]*setRowLimit\(BROWSER_TABLE_INITIAL_ROW_LIMIT\);[\s\S]*\}, \[filter, lifecycleFilter, sortDirection, sortKey\]\);/,
+  /useEffect\(\(\) => \{[\s\S]*setRowLimit\(BROWSER_TABLE_INITIAL_ROW_LIMIT\);[\s\S]*\}, \[browserBuildFilter, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter\]\);/,
   'Browser table must reset the row window when filtering or sorting changes',
 );
 
@@ -273,6 +297,18 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /if \(healthFilter !== "all" && browser\.health !== healthFilter\) return false;[\s\S]*if \(hostFilter !== "all" && browser\.host !== hostFilter\) return false;[\s\S]*if \(browserBuildFilter !== "all" && browser\.browserBuild !== browserBuildFilter\) return false;/,
+  'Browser table must apply service-backed health, host, and browser-build filters before rendering',
+);
+
+assert.match(
+  servicePanel,
+  /const hasViewStream = \(browser\.viewStreams\?\.length \?\? 0\) > 0;[\s\S]*streamFilter === "with_stream"[\s\S]*streamFilter === "without_stream"/,
+  'Browser table must filter by service-backed view-stream availability',
+);
+
+assert.match(
+  servicePanel,
   /const visibleBrowsers = useMemo\([\s\S]*filteredBrowsers\.slice\(0, rowLimit\)[\s\S]*const hiddenBrowserCount = Math\.max\(0, filteredBrowsers\.length - visibleBrowsers\.length\)/,
   'Browser table must render a row window and compute hidden matching rows',
 );
@@ -323,6 +359,24 @@ assert.match(
   dashboardCss,
   /\.service-browser-table-controls[\s\S]*flex: 1 1 100%[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end/,
   'Browser table control groups must wrap as a full-width trailing control row',
+);
+
+assert.match(
+  servicePanel,
+  /service-browser-table-advanced-filters" aria-label="Browser table field filters"[\s\S]*Health[\s\S]*All health states[\s\S]*Host[\s\S]*All hosts[\s\S]*Build[\s\S]*All builds[\s\S]*Streams[\s\S]*View stream available[\s\S]*No view stream/,
+  'Browser table must expose compact service-backed health, host, browser-build, and stream filters',
+);
+
+assert.match(
+  servicePanel,
+  /\{browserBuildOptions\.length > 0 && \([\s\S]*<span>Build<\/span>/,
+  'Browser table must only show the build filter when service browser records expose build values',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-table-advanced-filters[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(9\.5rem, 1fr\)\)[\s\S]*\.service-browser-table-advanced-filters select[\s\S]*min-height: 1\.8rem/,
+  'Browser table field filters must use compact responsive native select controls',
 );
 
 assert.match(
