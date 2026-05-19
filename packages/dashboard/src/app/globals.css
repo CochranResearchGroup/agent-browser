@@ -1658,6 +1658,22 @@ body {
   justify-content: flex-end;
 }
 
+.service-browser-table-density {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-left: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  padding-left: 0.45rem;
+}
+
+.service-browser-table-density > span {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .service-browser-table-scroll {
   overflow-x: auto;
   border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
@@ -1694,6 +1710,24 @@ body {
   padding: 0.42rem 0.45rem;
   color: var(--foreground);
   font-size: 0.72rem;
+}
+
+.service-browser-table-density-compact th {
+  padding: 0.24rem 0.38rem;
+}
+
+.service-browser-table-density-compact td {
+  padding: 0.28rem 0.38rem;
+  font-size: 0.68rem;
+}
+
+.service-browser-table-density-expanded th {
+  padding: 0.5rem 0.55rem;
+}
+
+.service-browser-table-density-expanded td {
+  padding: 0.62rem 0.55rem;
+  font-size: 0.76rem;
 }
 
 .service-browser-table tbody tr:last-child td {

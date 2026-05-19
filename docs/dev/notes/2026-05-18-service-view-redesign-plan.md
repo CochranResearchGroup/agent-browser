@@ -270,7 +270,9 @@ operator hide secondary fields without losing row inspection. Lifecycle and
 column choices persist in the dashboard's local browser storage so operators
 can keep a compact table layout across refreshes. Header resize handles now
 let operators tune visible column widths, with reset controls for returning to
-the default table proportions.
+the default table proportions. Row density controls let operators choose
+compact, standard, or expanded spacing without changing the service-owned
+browser records.
 
 ### Slice 4: Secondary Work Surfaces
 

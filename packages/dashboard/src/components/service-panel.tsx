@@ -1663,6 +1663,7 @@ type SortDirection = "asc" | "desc";
 type BrowserLifecycleFilter = "actionable" | "all" | "live" | "retained";
 type BrowserTableColumnKey = "health" | "profile" | "host" | "sessions" | "streams" | "lastError";
 type BrowserTableColumnId = BrowserTableColumnKey | "id" | "actions";
+type BrowserTableDensity = "compact" | "standard" | "expanded";
 
 const BROWSER_SORT_LABELS: Record<BrowserSortKey, string> = {
   health: "Health",
@@ -1686,6 +1687,7 @@ const DEFAULT_BROWSER_TABLE_COLUMNS = BROWSER_TABLE_COLUMNS.map((column) => colu
 const BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY = "agent-browser-dashboard-browser-table-lifecycle-filter";
 const BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY = "agent-browser-dashboard-browser-table-visible-columns";
 const BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY = "agent-browser-dashboard-browser-table-column-widths";
+const BROWSER_TABLE_DENSITY_STORAGE_KEY = "agent-browser-dashboard-browser-table-density";
 const BROWSER_TABLE_MIN_COLUMN_WIDTH = 72;
 const BROWSER_TABLE_MAX_COLUMN_WIDTH = 420;
 const DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number> = {
@@ -1709,6 +1711,10 @@ function isBrowserTableColumnKey(value: unknown): value is BrowserTableColumnKey
 
 function isBrowserTableColumnId(value: unknown): value is BrowserTableColumnId {
   return typeof value === "string" && value in DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS;
+}
+
+function isBrowserTableDensity(value: string | null): value is BrowserTableDensity {
+  return value === "compact" || value === "standard" || value === "expanded";
 }
 
 function clampBrowserTableColumnWidth(value: unknown): number | null {
@@ -1756,6 +1762,16 @@ function initialBrowserTableColumnWidths(): Record<BrowserTableColumnId, number>
     return widths;
   } catch {
     return DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS;
+  }
+}
+
+function initialBrowserTableDensity(): BrowserTableDensity {
+  if (typeof window === "undefined") return "standard";
+  try {
+    const stored = window.localStorage.getItem(BROWSER_TABLE_DENSITY_STORAGE_KEY);
+    return isBrowserTableDensity(stored) ? stored : "standard";
+  } catch {
+    return "standard";
   }
 }
 
@@ -1889,6 +1905,7 @@ function BrowserTable({
   const [lifecycleFilter, setLifecycleFilter] = useState<BrowserLifecycleFilter>(initialBrowserLifecycleFilter);
   const [visibleColumns, setVisibleColumns] = useState<BrowserTableColumnKey[]>(initialBrowserTableColumns);
   const [columnWidths, setColumnWidths] = useState<Record<BrowserTableColumnId, number>>(initialBrowserTableColumnWidths);
+  const [density, setDensity] = useState<BrowserTableDensity>(initialBrowserTableDensity);
   const [sortKey, setSortKey] = useState<BrowserSortKey>("health");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const resizeStateRef = useRef<{ column: BrowserTableColumnId; startX: number; startWidth: number } | null>(null);
@@ -1925,6 +1942,14 @@ function BrowserTable({
       // Restricted storage should not break the live service dashboard.
     }
   }, [columnWidths]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(BROWSER_TABLE_DENSITY_STORAGE_KEY, density);
+    } catch {
+      // Restricted storage should not break the live service dashboard.
+    }
+  }, [density]);
 
   const filteredBrowsers = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -2022,6 +2047,23 @@ function BrowserTable({
               {option.label}
             </button>
           ))}
+          <div className="service-browser-table-density" aria-label="Browser table density">
+            <span>Density</span>
+            {[
+              { value: "compact", label: "Compact" },
+              { value: "standard", label: "Standard" },
+              { value: "expanded", label: "Expanded" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={cn("service-filter-chip", density === option.value && "service-filter-chip-active")}
+                onClick={() => setDensity(option.value as BrowserTableDensity)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" className="h-7 gap-1.5 rounded-full px-2 text-[11px]">
@@ -2048,7 +2090,7 @@ function BrowserTable({
         </div>
       </div>
       <div className="service-browser-table-scroll">
-        <table className="service-browser-table" style={{ minWidth: tableMinWidth }}>
+        <table className={cn("service-browser-table", `service-browser-table-density-${density}`)} style={{ minWidth: tableMinWidth }}>
           <colgroup>
             {activeTableColumns.map((column) => (
               <col key={column} style={{ width: columnWidths[column] }} />
@@ -2106,6 +2148,7 @@ function BrowserTable({
                   browser={browser}
                   visibleColumns={visibleColumnSet}
                   onSelect={onSelect}
+                  density={density}
                 />
               ))
             )}
@@ -2120,10 +2163,12 @@ function BrowserTableRow({
   browser,
   visibleColumns,
   onSelect,
+  density,
 }: {
   browser: ServiceBrowser;
   visibleColumns: Set<BrowserTableColumnKey>;
   onSelect: (browser: ServiceBrowser) => void;
+  density: BrowserTableDensity;
 }) {
   const tone = healthTone(browser.health);
   const sessionCount = browser.activeSessionIds?.length ?? 0;
@@ -2135,7 +2180,7 @@ function BrowserTableRow({
         <td>
           <div className="service-browser-table-health">
             <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
-            <Badge variant="outline" className="h-4 max-w-28 truncate px-1.5 text-[9px]">
+            <Badge variant="outline" className={cn("max-w-28 truncate px-1.5 text-[9px]", density === "compact" ? "h-3.5" : "h-4")}>
               {browser.health ?? "unknown"}
             </Badge>
           </div>
@@ -2176,7 +2221,7 @@ function BrowserTableRow({
           type="button"
           size="sm"
           variant="outline"
-          className="h-7 px-2 text-[10px]"
+          className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
           onClick={() => onSelect(browser)}
         >
           Inspect
