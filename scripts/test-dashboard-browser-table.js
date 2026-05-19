@@ -27,6 +27,18 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY = "agent-browser-dashboard-browser-table-column-widths"/,
+  'Browser table must persist adjusted column widths under a stable localStorage key',
+);
+
+assert.match(
+  servicePanel,
+  /DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number>/,
+  'Browser table must define default widths for every adjustable column',
+);
+
+assert.match(
+  servicePanel,
   /function initialBrowserLifecycleFilter\(\): BrowserLifecycleFilter[\s\S]*return isBrowserLifecycleFilter\(stored\) \? stored : "actionable";/,
   'Browser table must validate persisted lifecycle filters and default to actionable records',
 );
@@ -35,6 +47,12 @@ assert.match(
   servicePanel,
   /function initialBrowserTableColumns\(\): BrowserTableColumnKey\[\][\s\S]*parsed\.filter\(isBrowserTableColumnKey\)[\s\S]*DEFAULT_BROWSER_TABLE_COLUMNS/,
   'Browser table must validate persisted visible columns before applying them',
+);
+
+assert.match(
+  servicePanel,
+  /function initialBrowserTableColumnWidths\(\): Record<BrowserTableColumnId, number>[\s\S]*clampBrowserTableColumnWidth\(value\)/,
+  'Browser table must validate persisted column widths before applying them',
 );
 
 assert.match(
@@ -63,14 +81,38 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /localStorage\.setItem\(BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY, JSON\.stringify\(columnWidths\)\)/,
+  'Browser table must save column width changes locally',
+);
+
+assert.match(
+  servicePanel,
+  /function BrowserTableHeaderCell\([\s\S]*service-browser-table-resize[\s\S]*onMouseDown=\{\(event\) => onResizeStart\(column, event\)\}/,
+  'Browser table headers must expose resize handles',
+);
+
+assert.match(
+  servicePanel,
+  /window\.addEventListener\("mousemove", handleMouseMove\)/,
+  'Browser table column resizing must attach mousemove listeners',
+);
+
+assert.match(
+  servicePanel,
+  /window\.removeEventListener\("mousemove", handleMouseMove\)/,
+  'Browser table column resizing must remove mousemove listeners',
+);
+
+assert.match(
+  servicePanel,
   /function isInertRetainedBrowserRecord\(browser: ServiceBrowser\): boolean[\s\S]*browser\.health[\s\S]*"not_started"/,
   'Browser table must classify inert retained not_started browser records explicitly',
 );
 
 assert.match(
   servicePanel,
-  /DropdownMenuCheckboxItem[\s\S]*Visible columns[\s\S]*Reset columns/,
-  'Browser table must expose column visibility controls',
+  /DropdownMenuCheckboxItem[\s\S]*Visible columns[\s\S]*Reset columns[\s\S]*Reset widths/,
+  'Browser table must expose column visibility and width reset controls',
 );
 
 assert.match(
@@ -83,6 +125,12 @@ assert.match(
   dashboardCss,
   /\.service-browser-table-controls/,
   'Browser table lifecycle and column controls must have an explicit layout hook',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-table-resize[\s\S]*cursor: col-resize/,
+  'Browser table resize handles must have an explicit resize affordance',
 );
 
 assert.match(

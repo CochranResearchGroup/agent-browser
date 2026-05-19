@@ -1,5 +1,6 @@
 "use client";
 
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import {
@@ -1661,6 +1662,7 @@ type BrowserSortKey = "health" | "id" | "profile" | "host" | "sessions" | "strea
 type SortDirection = "asc" | "desc";
 type BrowserLifecycleFilter = "actionable" | "all" | "live" | "retained";
 type BrowserTableColumnKey = "health" | "profile" | "host" | "sessions" | "streams" | "lastError";
+type BrowserTableColumnId = BrowserTableColumnKey | "id" | "actions";
 
 const BROWSER_SORT_LABELS: Record<BrowserSortKey, string> = {
   health: "Health",
@@ -1683,6 +1685,19 @@ const BROWSER_TABLE_COLUMNS: { key: BrowserTableColumnKey; label: string }[] = [
 const DEFAULT_BROWSER_TABLE_COLUMNS = BROWSER_TABLE_COLUMNS.map((column) => column.key);
 const BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY = "agent-browser-dashboard-browser-table-lifecycle-filter";
 const BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY = "agent-browser-dashboard-browser-table-visible-columns";
+const BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY = "agent-browser-dashboard-browser-table-column-widths";
+const BROWSER_TABLE_MIN_COLUMN_WIDTH = 72;
+const BROWSER_TABLE_MAX_COLUMN_WIDTH = 420;
+const DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number> = {
+  health: 132,
+  id: 220,
+  profile: 180,
+  host: 190,
+  sessions: 98,
+  streams: 92,
+  lastError: 260,
+  actions: 108,
+};
 
 function isBrowserLifecycleFilter(value: string | null): value is BrowserLifecycleFilter {
   return value === "actionable" || value === "all" || value === "live" || value === "retained";
@@ -1690,6 +1705,15 @@ function isBrowserLifecycleFilter(value: string | null): value is BrowserLifecyc
 
 function isBrowserTableColumnKey(value: unknown): value is BrowserTableColumnKey {
   return typeof value === "string" && BROWSER_TABLE_COLUMNS.some((column) => column.key === value);
+}
+
+function isBrowserTableColumnId(value: unknown): value is BrowserTableColumnId {
+  return typeof value === "string" && value in DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS;
+}
+
+function clampBrowserTableColumnWidth(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(BROWSER_TABLE_MIN_COLUMN_WIDTH, Math.min(BROWSER_TABLE_MAX_COLUMN_WIDTH, Math.round(value)));
 }
 
 function initialBrowserLifecycleFilter(): BrowserLifecycleFilter {
@@ -1713,6 +1737,25 @@ function initialBrowserTableColumns(): BrowserTableColumnKey[] {
     return columns.length > 0 ? columns : DEFAULT_BROWSER_TABLE_COLUMNS;
   } catch {
     return DEFAULT_BROWSER_TABLE_COLUMNS;
+  }
+}
+
+function initialBrowserTableColumnWidths(): Record<BrowserTableColumnId, number> {
+  if (typeof window === "undefined") return DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS;
+  try {
+    const stored = window.localStorage.getItem(BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY);
+    if (!stored) return DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS;
+    const parsed = JSON.parse(stored);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS;
+    const widths = { ...DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS };
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!isBrowserTableColumnId(key)) continue;
+      const width = clampBrowserTableColumnWidth(value);
+      if (width) widths[key] = width;
+    }
+    return widths;
+  } catch {
+    return DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS;
   }
 }
 
@@ -1804,6 +1847,37 @@ function BrowserSortButton({
   );
 }
 
+function BrowserTableHeaderCell({
+  column,
+  width,
+  onResizeStart,
+  onResetWidth,
+  children,
+  label,
+}: {
+  column: BrowserTableColumnId;
+  width: number;
+  onResizeStart: (column: BrowserTableColumnId, event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onResetWidth: (column: BrowserTableColumnId) => void;
+  children?: ReactNode;
+  label: string;
+}) {
+  return (
+    <th style={{ width }}>
+      <div className="service-browser-table-header">
+        {children}
+        <button
+          type="button"
+          className="service-browser-table-resize"
+          aria-label={`Resize ${label} column`}
+          onMouseDown={(event) => onResizeStart(column, event)}
+          onDoubleClick={() => onResetWidth(column)}
+        />
+      </div>
+    </th>
+  );
+}
+
 function BrowserTable({
   browsers,
   onSelect,
@@ -1814,11 +1888,19 @@ function BrowserTable({
   const [filter, setFilter] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState<BrowserLifecycleFilter>(initialBrowserLifecycleFilter);
   const [visibleColumns, setVisibleColumns] = useState<BrowserTableColumnKey[]>(initialBrowserTableColumns);
+  const [columnWidths, setColumnWidths] = useState<Record<BrowserTableColumnId, number>>(initialBrowserTableColumnWidths);
   const [sortKey, setSortKey] = useState<BrowserSortKey>("health");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const resizeStateRef = useRef<{ column: BrowserTableColumnId; startX: number; startWidth: number } | null>(null);
   const visibleColumnSet = useMemo(() => new Set(visibleColumns), [visibleColumns]);
   const liveCount = useMemo(() => browsers.filter(isLiveBrowserRecord).length, [browsers]);
   const inertCount = useMemo(() => browsers.filter(isInertRetainedBrowserRecord).length, [browsers]);
+  const activeTableColumns = useMemo(
+    () => (["health", "id", "profile", "host", "sessions", "streams", "lastError", "actions"] as BrowserTableColumnId[])
+      .filter((column) => column === "id" || column === "actions" || visibleColumnSet.has(column as BrowserTableColumnKey)),
+    [visibleColumnSet],
+  );
+  const tableMinWidth = activeTableColumns.reduce((width, column) => width + columnWidths[column], 0);
 
   useEffect(() => {
     try {
@@ -1835,6 +1917,14 @@ function BrowserTable({
       // Restricted storage should not break the live service dashboard.
     }
   }, [visibleColumns]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
+    } catch {
+      // Restricted storage should not break the live service dashboard.
+    }
+  }, [columnWidths]);
 
   const filteredBrowsers = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -1871,6 +1961,34 @@ function BrowserTable({
   };
 
   const resetColumns = () => setVisibleColumns(DEFAULT_BROWSER_TABLE_COLUMNS);
+  const resetColumnWidths = () => setColumnWidths(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS);
+  const resetColumnWidth = (column: BrowserTableColumnId) => {
+    setColumnWidths((current) => ({
+      ...current,
+      [column]: DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS[column],
+    }));
+  };
+  const startColumnResize = (column: BrowserTableColumnId, event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    resizeStateRef.current = { column, startX: event.clientX, startWidth: columnWidths[column] };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState) return;
+      const width = clampBrowserTableColumnWidth(resizeState.startWidth + moveEvent.clientX - resizeState.startX);
+      if (!width) return;
+      setColumnWidths((current) => ({ ...current, [resizeState.column]: width }));
+    };
+
+    const handleMouseUp = () => {
+      resizeStateRef.current = null;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
   const tableColumnSpan = visibleColumns.length + 2;
 
   return (
@@ -1924,44 +2042,54 @@ function BrowserTable({
               ))}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={resetColumns}>Reset columns</DropdownMenuItem>
+              <DropdownMenuItem onClick={resetColumnWidths}>Reset widths</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
       <div className="service-browser-table-scroll">
-        <table className="service-browser-table">
+        <table className="service-browser-table" style={{ minWidth: tableMinWidth }}>
+          <colgroup>
+            {activeTableColumns.map((column) => (
+              <col key={column} style={{ width: columnWidths[column] }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               {visibleColumnSet.has("health") && (
-                <th>
+                <BrowserTableHeaderCell column="health" width={columnWidths.health} label="Health" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
                   <BrowserSortButton sortKey="health" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-                </th>
+                </BrowserTableHeaderCell>
               )}
-              <th>
+              <BrowserTableHeaderCell column="id" width={columnWidths.id} label="Browser" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
                 <BrowserSortButton sortKey="id" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-              </th>
+              </BrowserTableHeaderCell>
               {visibleColumnSet.has("profile") && (
-                <th>
+                <BrowserTableHeaderCell column="profile" width={columnWidths.profile} label="Profile" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
                   <BrowserSortButton sortKey="profile" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-                </th>
+                </BrowserTableHeaderCell>
               )}
               {visibleColumnSet.has("host") && (
-                <th>
+                <BrowserTableHeaderCell column="host" width={columnWidths.host} label="Host" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
                   <BrowserSortButton sortKey="host" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-                </th>
+                </BrowserTableHeaderCell>
               )}
               {visibleColumnSet.has("sessions") && (
-                <th>
+                <BrowserTableHeaderCell column="sessions" width={columnWidths.sessions} label="Sessions" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
                   <BrowserSortButton sortKey="sessions" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-                </th>
+                </BrowserTableHeaderCell>
               )}
               {visibleColumnSet.has("streams") && (
-                <th>
+                <BrowserTableHeaderCell column="streams" width={columnWidths.streams} label="Streams" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
                   <BrowserSortButton sortKey="streams" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
-                </th>
+                </BrowserTableHeaderCell>
               )}
-              {visibleColumnSet.has("lastError") && <th>Last error</th>}
-              <th aria-label="Actions" />
+              {visibleColumnSet.has("lastError") && (
+                <BrowserTableHeaderCell column="lastError" width={columnWidths.lastError} label="Last error" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
+                  Last error
+                </BrowserTableHeaderCell>
+              )}
+              <BrowserTableHeaderCell column="actions" width={columnWidths.actions} label="Actions" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth} />
             </tr>
           </thead>
           <tbody>

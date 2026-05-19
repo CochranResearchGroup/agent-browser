@@ -1669,6 +1669,7 @@ body {
   width: 100%;
   min-width: 58rem;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .service-browser-table th {
@@ -1683,6 +1684,7 @@ body {
 
 .service-browser-table th,
 .service-browser-table td {
+  overflow: hidden;
   vertical-align: middle;
 }
 
@@ -1729,6 +1731,49 @@ body {
 .service-browser-table-sort:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--ring) 72%, transparent);
   outline-offset: 2px;
+}
+
+.service-browser-table-header {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding-right: 0.55rem;
+}
+
+.service-browser-table-resize {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.4rem;
+  bottom: -0.25rem;
+  width: 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: col-resize;
+}
+
+.service-browser-table-resize::after {
+  position: absolute;
+  top: 22%;
+  right: 0.23rem;
+  bottom: 22%;
+  width: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+  content: "";
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.service-browser-table-resize:hover::after,
+.service-browser-table-resize:focus-visible::after {
+  background: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.service-browser-table-resize:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 72%, transparent);
+  outline-offset: 1px;
 }
 
 .service-browser-table-health,

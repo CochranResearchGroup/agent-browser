@@ -268,7 +268,9 @@ records stay in the primary scan path while inert `not_started` placeholders
 move behind retained or all-record filters. Column visibility controls let an
 operator hide secondary fields without losing row inspection. Lifecycle and
 column choices persist in the dashboard's local browser storage so operators
-can keep a compact table layout across refreshes.
+can keep a compact table layout across refreshes. Header resize handles now
+let operators tune visible column widths, with reset controls for returning to
+the default table proportions.
 
 ### Slice 4: Secondary Work Surfaces
 
