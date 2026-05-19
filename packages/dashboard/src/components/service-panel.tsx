@@ -173,8 +173,10 @@ export type ServiceProfileAllocation = {
   profileName?: string;
   allocation?: string;
   keyring?: string;
+  browserBuild?: string | null;
   targetServiceIds?: string[];
   authenticatedServiceIds?: string[];
+  accountIds?: string[];
   targetReadiness?: ServiceProfileTargetReadiness[];
   sharedServiceIds?: string[];
   holderSessionIds?: string[];
@@ -189,7 +191,17 @@ export type ServiceProfileAllocation = {
   agentNames?: string[];
   taskNames?: string[];
   browserIds?: string[];
+  browserSummaries?: ServiceProfileAllocationBrowserSummary[];
   tabIds?: string[];
+};
+
+type ServiceProfileAllocationBrowserSummary = {
+  browserId?: string;
+  host?: string;
+  health?: string;
+  pid?: number | null;
+  hasCdpEndpoint?: boolean;
+  activeSessionIds?: string[];
 };
 
 type ServiceProfileTargetReadiness = {
@@ -508,10 +520,12 @@ function profileAllocationSearchText(allocation: ServiceProfileAllocation): stri
     allocation.profileName,
     allocation.allocation,
     allocation.keyring,
+    allocation.browserBuild,
     allocation.leaseState,
     allocation.recommendedAction,
     ...(allocation.targetServiceIds ?? []),
     ...(allocation.authenticatedServiceIds ?? []),
+    ...(allocation.accountIds ?? []),
     ...(allocation.sharedServiceIds ?? []),
     ...(allocation.holderSessionIds ?? []),
     ...(allocation.exclusiveHolderSessionIds ?? []),
@@ -521,6 +535,13 @@ function profileAllocationSearchText(allocation: ServiceProfileAllocation): stri
     ...(allocation.agentNames ?? []),
     ...(allocation.taskNames ?? []),
     ...(allocation.browserIds ?? []),
+    ...(allocation.browserSummaries ?? []).flatMap((browser) => [
+      browser.browserId,
+      browser.host,
+      browser.health,
+      browser.pid ? String(browser.pid) : "",
+      ...(browser.activeSessionIds ?? []),
+    ]),
     ...(allocation.tabIds ?? []),
     ...(allocation.targetReadiness ?? []).flatMap((readiness) => [
       readiness.targetServiceId,
@@ -665,6 +686,42 @@ function profileAllocationTone(value?: string): "good" | "warn" | "bad" | "neutr
 function formatStringList(values?: string[], fallback = "none"): string {
   const normalized = values?.filter((value) => value.trim().length > 0) ?? [];
   return normalized.length > 0 ? normalized.join(", ") : fallback;
+}
+
+function firstStringValue(values?: (string | null | undefined)[], fallback = "unknown"): string {
+  return values?.find((value) => value?.trim())?.trim() ?? fallback;
+}
+
+function profileAllocationPrimaryTarget(allocation: ServiceProfileAllocation): string {
+  return firstStringValue([
+    allocation.targetReadiness?.find((row) => row.targetServiceId?.trim())?.targetServiceId,
+    allocation.targetServiceIds?.find((value) => value.trim()),
+    allocation.authenticatedServiceIds?.find((value) => value.trim()),
+  ]);
+}
+
+function profileAllocationPrimaryLogin(allocation: ServiceProfileAllocation): string {
+  return firstStringValue([
+    allocation.targetReadiness?.find((row) => row.loginId?.trim())?.loginId,
+    allocation.accountIds?.find((value) => value.trim()),
+  ], "default identity");
+}
+
+function profileAllocationPrimaryBrowser(allocation: ServiceProfileAllocation): string {
+  const summary = allocation.browserSummaries?.find((browser) => browser.browserId?.trim());
+  if (summary?.browserId) {
+    const host = summary.host ? ` on ${summary.host}` : "";
+    const health = summary.health ? `, ${formatHealthLabel(summary.health)}` : "";
+    return `${summary.browserId}${host}${health}`;
+  }
+  return firstStringValue(allocation.browserIds, "no browser assigned");
+}
+
+function profileReadinessNeedsAttention(rows?: ServiceProfileTargetReadiness[]): boolean {
+  return Boolean(rows?.some((row) =>
+    row.manualSeedingRequired ||
+    ["needs_manual_seeding", "stale", "failed", "unverified", "seeding_closed_unverified"].includes((row.state ?? "").toLowerCase())
+  ));
 }
 
 function formatHealthLabel(value?: string | null): string {
@@ -2791,10 +2848,14 @@ function ProfileAllocationRow({
   const tone = profileAllocationTone(allocation.leaseState);
   const holderCount = allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0;
   const waitingCount = allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0;
+  const primaryTarget = profileAllocationPrimaryTarget(allocation);
+  const primaryLogin = profileAllocationPrimaryLogin(allocation);
+  const primaryBrowser = profileAllocationPrimaryBrowser(allocation);
+  const readinessAttention = profileReadinessNeedsAttention(allocation.targetReadiness);
   return (
     <button
       type="button"
-      className="service-browser-row"
+      className="service-browser-row service-profile-allocation-row"
       onClick={() => onSelect(allocation)}
       aria-label={`Inspect profile allocation ${allocation.profileId}`}
     >
@@ -2810,14 +2871,40 @@ function ProfileAllocationRow({
           <Badge variant="outline" className="h-4 max-w-32 truncate px-1.5 text-[9px]">
             {allocation.recommendedAction ?? "inspect"}
           </Badge>
+          {readinessAttention && (
+            <Badge variant="outline" className="service-profile-attention-badge h-4 max-w-36 truncate px-1.5 text-[9px]">
+              readiness attention
+            </Badge>
+          )}
         </div>
-        <p className="mt-1 truncate text-xs text-muted-foreground">
-          {holderCount} holders / {waitingCount} waiting / {allocation.browserIds?.length ?? 0} browsers / {allocation.tabIds?.length ?? 0} tabs
-        </p>
+        <div className="service-profile-route-grid">
+          <span className="service-profile-route-cell">
+            <strong>Target</strong>
+            <span>{primaryTarget}</span>
+          </span>
+          <span className="service-profile-route-cell">
+            <strong>Login</strong>
+            <span>{primaryLogin}</span>
+          </span>
+          <span className="service-profile-route-cell">
+            <strong>Browser build</strong>
+            <span>{allocation.browserBuild ?? "service default"}</span>
+          </span>
+          <span className="service-profile-route-cell">
+            <strong>Keyring</strong>
+            <span>{allocation.keyring ?? "default policy"}</span>
+          </span>
+        </div>
+        <div className="service-profile-route-detail">
+          <span>Browser: {primaryBrowser}</span>
+          <span>{holderCount} holders</span>
+          <span>{waitingCount} waiting</span>
+          <span>{allocation.tabIds?.length ?? 0} tabs</span>
+        </div>
         <div className="mt-2 grid gap-1 text-[10px] text-muted-foreground sm:grid-cols-2">
           <span className="truncate">service: {formatStringList(allocation.serviceNames)}</span>
+          <span className="truncate">agent: {formatStringList(allocation.agentNames)}</span>
           <span className="truncate">task: {formatStringList(allocation.taskNames)}</span>
-          <span className="truncate">holders: {formatStringList(allocation.holderSessionIds)}</span>
           <span className="truncate">conflicts: {formatStringList(allocation.conflictSessionIds)}</span>
         </div>
       </div>
@@ -2890,6 +2977,10 @@ function ProfileAllocationDetailContent({
         <EventDetailItem label="Recommended action" value={allocation.recommendedAction} />
         <EventDetailItem label="Allocation" value={allocation.allocation} />
         <EventDetailItem label="Keyring" value={allocation.keyring} />
+        <EventDetailItem label="Browser build" value={allocation.browserBuild} />
+        <EventDetailItem label="Primary target" value={profileAllocationPrimaryTarget(allocation)} />
+        <EventDetailItem label="Primary login" value={profileAllocationPrimaryLogin(allocation)} />
+        <EventDetailItem label="Primary browser" value={profileAllocationPrimaryBrowser(allocation)} />
         <EventDetailItem label="Holder count" value={String(allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0)} />
         <EventDetailItem label="Waiting job count" value={String(allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0)} />
         <EventDetailItem label="Browser count" value={String(allocation.browserIds?.length ?? 0)} />
@@ -2902,10 +2993,12 @@ function ProfileAllocationDetailContent({
       <ProfileAllocationTokenSection title="Services" values={allocation.serviceNames} />
       <ProfileAllocationTokenSection title="Agents" values={allocation.agentNames} />
       <ProfileAllocationTokenSection title="Tasks" values={allocation.taskNames} />
+      <ProfileAllocationTokenSection title="Account identities" values={allocation.accountIds} />
       <ProfileAllocationTokenSection title="Target services" values={allocation.targetServiceIds} />
       <ProfileAllocationTokenSection title="Authenticated services" values={allocation.authenticatedServiceIds} />
       <ProfileReadinessSection rows={allocation.targetReadiness} />
       <ProfileAllocationTokenSection title="Shared services" values={allocation.sharedServiceIds} />
+      <ProfileBrowserSummarySection rows={allocation.browserSummaries} />
       <ProfileAllocationTokenSection title="Browsers" values={allocation.browserIds} />
       <ProfileAllocationTokenSection title="Tabs" values={allocation.tabIds} />
       {raw && (
@@ -2940,6 +3033,36 @@ function ProfileReadinessSection({ rows }: { rows?: ServiceProfileTargetReadines
             </div>
             <div className="mt-1 text-muted-foreground">
               {row.state ?? "unknown"} / {row.recommendedAction ?? "inspect"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProfileBrowserSummarySection({ rows }: { rows?: ServiceProfileAllocationBrowserSummary[] }) {
+  const items = rows?.filter((row) => row.browserId?.trim()) ?? [];
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+        Browser summaries
+      </p>
+      <div className="flex flex-col gap-2">
+        {items.map((row, index) => (
+          <div
+            key={`${row.browserId}-${index}`}
+            className="rounded-2xl border border-border/70 bg-foreground/[0.03] px-3 py-2 text-xs"
+          >
+            <div className="font-black text-foreground">
+              {row.browserId}
+            </div>
+            <div className="mt-1 text-muted-foreground">
+              {row.host ?? "unknown host"} / {formatHealthLabel(row.health)} / {row.pid ? `pid ${row.pid}` : "retained"}
+            </div>
+            <div className="mt-1 text-muted-foreground">
+              {row.hasCdpEndpoint ? "CDP endpoint known" : "no CDP endpoint"} / {row.activeSessionIds?.length ?? 0} active sessions
             </div>
           </div>
         ))}
@@ -4279,6 +4402,38 @@ export function ServicePanel({
     [filteredProfileAllocations, profileAllocationLimit],
   );
   const hiddenProfileAllocationCount = Math.max(0, filteredProfileAllocations.length - visibleProfileAllocations.length);
+  const profileRoutingSummary = useMemo(() => {
+    const targets = new Set<string>();
+    const accounts = new Set<string>();
+    let authenticatedTargets = 0;
+    let readinessAttention = 0;
+    let explicitBrowserBuilds = 0;
+    let profilesWithBrowsers = 0;
+    for (const allocation of profileAllocations) {
+      for (const target of allocation.targetServiceIds ?? []) {
+        if (target.trim()) targets.add(target);
+      }
+      for (const row of allocation.targetReadiness ?? []) {
+        if (row.targetServiceId?.trim()) targets.add(row.targetServiceId);
+        if (row.loginId?.trim()) accounts.add(row.loginId);
+      }
+      for (const account of allocation.accountIds ?? []) {
+        if (account.trim()) accounts.add(account);
+      }
+      authenticatedTargets += allocation.authenticatedServiceIds?.length ?? 0;
+      if (profileReadinessNeedsAttention(allocation.targetReadiness)) readinessAttention += 1;
+      if (allocation.browserBuild?.trim()) explicitBrowserBuilds += 1;
+      if ((allocation.browserSummaries?.length ?? allocation.browserIds?.length ?? 0) > 0) profilesWithBrowsers += 1;
+    }
+    return {
+      targets: targets.size,
+      accounts: accounts.size,
+      authenticatedTargets,
+      readinessAttention,
+      explicitBrowserBuilds,
+      profilesWithBrowsers,
+    };
+  }, [profileAllocations]);
   const tabRecords = useMemo(
     () => Object.values(serviceState?.tabs ?? {}),
     [serviceState?.tabs],
@@ -4848,7 +5003,33 @@ export function ServicePanel({
             <TabsContent value="profiles" className="service-workspace-content">
               <div className="service-workspace-pane-heading">
                 <ShieldCheck className="size-3.5 text-muted-foreground" />
-                <span>{filteredProfileAllocations.length} of {profileAllocations.length} profile allocation rows</span>
+                <span>{filteredProfileAllocations.length} of {profileAllocations.length} identity and routing rows</span>
+              </div>
+              <div className="service-profile-routing-strip" aria-label="Profile identity and routing summary">
+                <span>
+                  <strong>{profileRoutingSummary.targets}</strong>
+                  target identities
+                </span>
+                <span>
+                  <strong>{profileRoutingSummary.accounts}</strong>
+                  login identities
+                </span>
+                <span>
+                  <strong>{profileRoutingSummary.authenticatedTargets}</strong>
+                  authenticated targets
+                </span>
+                <span>
+                  <strong>{profileRoutingSummary.profilesWithBrowsers}</strong>
+                  profiles with browsers
+                </span>
+                <span>
+                  <strong>{profileRoutingSummary.explicitBrowserBuilds}</strong>
+                  pinned builds
+                </span>
+                <span className={profileRoutingSummary.readinessAttention > 0 ? "service-profile-routing-strip-attention" : undefined}>
+                  <strong>{profileRoutingSummary.readinessAttention}</strong>
+                  readiness attention
+                </span>
               </div>
               <div className="service-record-controls">
                 <label className="service-browser-filter service-record-filter">
@@ -4857,7 +5038,7 @@ export function ServicePanel({
                   <input
                     value={profileAllocationQuery}
                     onChange={(event) => setProfileAllocationQuery(event.target.value)}
-                    placeholder="Filter profiles, services, holders, tasks"
+                    placeholder="Filter profiles, target identities, login identities, browsers, tasks"
                   />
                 </label>
                 <div className="service-record-limit-groups">
@@ -4878,7 +5059,7 @@ export function ServicePanel({
               </div>
               <div className="service-section-list">
                 <p className="service-record-list-heading">
-                  Profile rows: {visibleProfileAllocations.length} shown
+                  Identity routes: {visibleProfileAllocations.length} shown
                   {hiddenProfileAllocationCount > 0 ? ` / ${hiddenProfileAllocationCount} hidden` : ""}
                 </p>
                 {filteredProfileAllocations.length === 0 ? (

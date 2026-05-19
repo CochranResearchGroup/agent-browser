@@ -619,3 +619,43 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-table-keyboard-phase2.png`
+
+### 2026-05-19 Phase 3 Profile Identity And Routing
+
+Started the Profiles workspace product-model slice using service-owned profile
+allocation fields:
+
+- renamed the visible Profiles count from allocation rows to identity and
+  routing rows
+- added a compact profile routing strip for target identities, login
+  identities, authenticated targets, profiles with browsers, pinned browser
+  builds, and readiness attention
+- extended dashboard profile allocation typing to include service contract
+  fields for browser build, account identities, and browser summaries
+- changed each profile row from a generic holder summary into a routing row
+  that shows target identity, login identity, browser build, keyring policy,
+  primary browser, holder count, waiting count, tab count, service, agent,
+  task, and conflicts
+- added a readiness attention badge when service readiness indicates manual
+  seeding, stale state, failed verification, or unverified post-close state
+- extended profile allocation detail with primary target, primary login,
+  primary browser, account identities, browser build, and browser summaries
+- kept the dashboard as a consumer of authoritative service allocation data
+  rather than deriving profile suitability from profile names or browser paths
+
+Validation:
+
+- `pnpm test:dashboard-profile-allocation`
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` confirmed the Profiles
+  tab rendered the identity and routing strip plus routing cells for target,
+  login, browser build, and keyring
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-profile-routing-phase3.png`

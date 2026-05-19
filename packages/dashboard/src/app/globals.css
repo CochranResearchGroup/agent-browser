@@ -1597,6 +1597,103 @@ body {
   outline-offset: 2px;
 }
 
+.service-profile-routing-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.35rem;
+}
+
+.service-profile-routing-strip span {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+  border: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--background) 34%, transparent);
+  padding: 0.42rem 0.55rem;
+  color: var(--muted-foreground);
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.service-profile-routing-strip strong {
+  color: var(--foreground);
+  font-size: 0.95rem;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.service-profile-routing-strip-attention {
+  border-color: color-mix(in srgb, var(--warning) 42%, var(--border)) !important;
+  background: color-mix(in srgb, var(--warning) 10%, transparent) !important;
+}
+
+.service-profile-allocation-row {
+  align-items: flex-start;
+}
+
+.service-profile-route-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.32rem;
+  margin-top: 0.55rem;
+}
+
+.service-profile-route-cell {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.38rem 0.48rem;
+}
+
+.service-profile-route-cell strong {
+  color: var(--muted-foreground);
+  font-size: 0.55rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.service-profile-route-cell span {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-profile-route-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  margin-top: 0.45rem;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.service-profile-route-detail span {
+  max-width: min(100%, 18rem);
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.16rem 0.46rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-profile-attention-badge {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--border));
+  color: color-mix(in srgb, var(--warning) 88%, var(--foreground));
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+
 .service-browser-table-shell {
   display: grid;
   min-height: 0;
