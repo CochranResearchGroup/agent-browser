@@ -869,6 +869,12 @@ body {
   font-weight: 950;
 }
 
+.service-workspace-tab-detail {
+  color: var(--muted-foreground);
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
 .service-workspace-content {
   display: grid;
   gap: 0.55rem;
@@ -883,6 +889,22 @@ body {
   gap: 0.4rem;
   color: var(--muted-foreground);
   font-size: 0.68rem;
+  font-weight: 850;
+}
+
+.service-workspace-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.service-workspace-summary-chips span {
+  border: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 36%, transparent);
+  padding: 0.18rem 0.48rem;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
   font-weight: 850;
 }
 

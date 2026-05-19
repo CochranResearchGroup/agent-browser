@@ -302,6 +302,12 @@ managed browser table. Profiles, incidents, sessions and tabs, jobs, and
 events or trace now share one secondary surface so browser records remain the
 primary scan path.
 
+Follow-up status: the Sessions and Jobs workspace tabs now separate active
+work from retained history in the tab badge and pane heading. Sessions counts
+active sessions and ready or loading tabs separately from retained rows. Jobs
+counts queued or running work separately from terminal retained jobs and keeps
+the recent retained job list as history.
+
 ### Slice 5: Retained-State Cleanup UX
 
 - Add warnings when retained-state counts are dominated by inert records.

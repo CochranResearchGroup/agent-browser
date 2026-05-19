@@ -189,6 +189,42 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /function isActiveServiceJob\(job: ServiceJob\): boolean[\s\S]*state === "queued" \|\| state === "running"/,
+  'Service dashboard must classify queued and running jobs as active work',
+);
+
+assert.match(
+  servicePanel,
+  /function isActiveServiceSession\(session: ServiceSession\): boolean[\s\S]*session\.browserIds\?\.length[\s\S]*session\.tabIds\?\.length/,
+  'Service dashboard must classify sessions with browsers or tabs as active work',
+);
+
+assert.match(
+  servicePanel,
+  /const sessionActivitySummary = useMemo\(\(\) => \{[\s\S]*activeSessions[\s\S]*retainedSessions[\s\S]*activeTabs[\s\S]*retainedTabs/,
+  'Service dashboard must derive active and retained summaries for sessions and tabs',
+);
+
+assert.match(
+  servicePanel,
+  /const jobActivitySummary = useMemo\(\(\) => \{[\s\S]*active = retainedServiceJobs\.filter\(isActiveServiceJob\)\.length[\s\S]*terminal = retainedServiceJobs\.filter\(isRetainedTerminalServiceJob\)\.length[\s\S]*retained/,
+  'Service dashboard must derive active, terminal, and retained summaries for service jobs',
+);
+
+assert.match(
+  servicePanel,
+  /label: "Sessions"[\s\S]*count: sessionActivitySummary\.activeSessions \+ sessionActivitySummary\.activeTabs[\s\S]*detail: `\$\{sessionActivitySummary\.retainedSessions \+ sessionActivitySummary\.retainedTabs\} retained`/,
+  'Service workspace Sessions tab must badge active work and label retained history separately',
+);
+
+assert.match(
+  servicePanel,
+  /label: "Jobs"[\s\S]*count: jobActivitySummary\.active[\s\S]*detail: `\$\{jobActivitySummary\.retained\} retained`/,
+  'Service workspace Jobs tab must badge queued or running jobs and label retained history separately',
+);
+
+assert.match(
+  servicePanel,
   /<ServiceStatusLight[\s\S]*label="Records"[\s\S]*value=\{`\$\{entityCounts\.browsers\} browsers`\}[\s\S]*detail=\{`Retained service-state counts: \$\{managedRecordDetail\}`\}[\s\S]*icon=\{GitBranch\}/,
   'Service dashboard must expose retained record counts as a compact Records status light',
 );
@@ -227,6 +263,12 @@ assert.match(
   dashboardCss,
   /\.service-state-alerts[\s\S]*\.service-state-alert[\s\S]*\.service-state-alert-error[\s\S]*\.service-retained-state-hint/,
   'Service dashboard must style exceptional managed-state alerts separately from the compact status strip',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-workspace-tab-detail[\s\S]*\.service-workspace-summary-chips[\s\S]*\.service-workspace-summary-chips span/,
+  'Service workspace must style retained-history tab details and job summary chips',
 );
 
 assert.doesNotMatch(

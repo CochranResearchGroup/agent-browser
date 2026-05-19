@@ -634,6 +634,25 @@ function healthTone(value?: string): "good" | "warn" | "bad" | "neutral" {
   return "warn";
 }
 
+function isActiveServiceJob(job: ServiceJob): boolean {
+  const state = (job.state ?? "").toLowerCase();
+  return state === "queued" || state === "running";
+}
+
+function isRetainedTerminalServiceJob(job: ServiceJob): boolean {
+  const state = (job.state ?? "").toLowerCase();
+  return ["succeeded", "failed", "timed_out", "cancelled"].includes(state);
+}
+
+function isActiveServiceSession(session: ServiceSession): boolean {
+  return (session.browserIds?.length ?? 0) > 0 || (session.tabIds?.length ?? 0) > 0;
+}
+
+function isActiveServiceTab(tab: ServiceTab): boolean {
+  const lifecycle = (tab.lifecycle ?? "").toLowerCase();
+  return lifecycle === "ready" || lifecycle === "loading" || lifecycle === "active";
+}
+
 function profileAllocationTone(value?: string): "good" | "warn" | "bad" | "neutral" {
   const normalized = (value ?? "").toLowerCase();
   if (normalized === "available" || normalized === "shared") return "good";
@@ -4011,7 +4030,11 @@ export function ServicePanel({
   const serviceJobTimeoutMs =
     control?.service_job_timeout_ms ?? serviceState?.controlPlane?.serviceJobTimeoutMs ?? null;
   const reconciliation = serviceState?.reconciliation;
-  const recentJobs = jobs?.jobs ?? Object.values(serviceState?.jobs ?? {}).slice(-8);
+  const retainedServiceJobs = useMemo(
+    () => Object.values(serviceState?.jobs ?? {}),
+    [serviceState?.jobs],
+  );
+  const recentJobs = jobs?.jobs ?? retainedServiceJobs.slice(-8);
   const recentEvents = events?.events ?? serviceState?.events?.slice(-8) ?? [];
   const jobIncidentEvents = useMemo(() => deriveJobIncidentEvents(recentJobs), [recentJobs]);
   const visibleEvents = useMemo(() => {
@@ -4032,6 +4055,12 @@ export function ServicePanel({
     jobs?.matched !== undefined && jobs?.total !== undefined
       ? `${jobs.matched} of ${jobs.total} matched`
       : `Last ${recentJobs.length} retained service jobs`;
+  const jobActivitySummary = useMemo(() => {
+    const active = retainedServiceJobs.filter(isActiveServiceJob).length;
+    const terminal = retainedServiceJobs.filter(isRetainedTerminalServiceJob).length;
+    const retained = Math.max(0, retainedServiceJobs.length - active);
+    return { active, terminal, retained };
+  }, [retainedServiceJobs]);
   const eventSummary =
     incidentOnly
       ? `${visibleEvents.length} incident events shown`
@@ -4041,10 +4070,6 @@ export function ServicePanel({
   const browserRecords = useMemo(
     () => Object.values(serviceState?.browsers ?? {}),
     [serviceState?.browsers],
-  );
-  const retainedServiceJobs = useMemo(
-    () => Object.values(serviceState?.jobs ?? {}),
-    [serviceState?.jobs],
   );
   const traceTimeline = useMemo(() => traceTimelineItems(trace), [trace]);
   const incidentRecords = useMemo(
@@ -4129,6 +4154,16 @@ export function ServicePanel({
   );
   const hiddenSessionCount = Math.max(0, filteredSessionRecords.length - visibleSessionRecords.length);
   const hiddenTabCount = Math.max(0, filteredTabRecords.length - visibleTabRecords.length);
+  const sessionActivitySummary = useMemo(() => {
+    const activeSessions = filteredSessionRecords.filter(isActiveServiceSession).length;
+    const activeTabs = filteredTabRecords.filter(isActiveServiceTab).length;
+    return {
+      activeSessions,
+      retainedSessions: Math.max(0, filteredSessionRecords.length - activeSessions),
+      activeTabs,
+      retainedTabs: Math.max(0, filteredTabRecords.length - activeTabs),
+    };
+  }, [filteredSessionRecords, filteredTabRecords]);
   const browserById = useMemo(
     () => new Map(browserRecords.map((browser) => [browser.id, browser])),
     [browserRecords],
@@ -4270,14 +4305,15 @@ export function ServicePanel({
     {
       value: "sessions" as const,
       label: "Sessions",
-      count: filteredSessionRecords.length + filteredTabRecords.length,
-      detail: "sessions plus tracked tabs",
+      count: sessionActivitySummary.activeSessions + sessionActivitySummary.activeTabs,
+      detail: `${sessionActivitySummary.retainedSessions + sessionActivitySummary.retainedTabs} retained`,
     },
     {
       value: "jobs" as const,
       label: "Jobs",
-      count: recentJobs.length,
-      detail: "recent control jobs",
+      count: jobActivitySummary.active,
+      detail: `${jobActivitySummary.retained} retained`,
+      tone: jobActivitySummary.active > 0 ? "warn" : "neutral",
     },
     {
       value: "events" as const,
@@ -4289,11 +4325,14 @@ export function ServicePanel({
   ], [
     filteredIncidentRecords.length,
     filteredProfileAllocations.length,
-    filteredSessionRecords.length,
-    filteredTabRecords.length,
     incidentHandlingSummary.unacknowledged,
     incidentOnly,
-    recentJobs.length,
+    jobActivitySummary.active,
+    jobActivitySummary.retained,
+    sessionActivitySummary.activeSessions,
+    sessionActivitySummary.activeTabs,
+    sessionActivitySummary.retainedSessions,
+    sessionActivitySummary.retainedTabs,
     visibleEvents.length,
   ]);
 
@@ -4650,6 +4689,7 @@ export function ServicePanel({
                   >
                     <span>{tab.label}</span>
                     <span className="service-workspace-tab-count">{tab.count}</span>
+                    <span className="service-workspace-tab-detail">{tab.detail}</span>
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -4802,7 +4842,11 @@ export function ServicePanel({
             <TabsContent value="sessions" className="service-workspace-content">
               <div className="service-workspace-pane-heading">
                 <GitBranch className="size-3.5 text-muted-foreground" />
-                <span>{filteredSessionRecords.length} of {sessionRecords.length} sessions / {filteredTabRecords.length} of {tabRecords.length} tabs</span>
+                <span>
+                  {sessionActivitySummary.activeSessions} active sessions / {sessionActivitySummary.retainedSessions} retained;
+                  {" "}
+                  {sessionActivitySummary.activeTabs} active tabs / {sessionActivitySummary.retainedTabs} retained
+                </span>
               </div>
               <div className="service-record-controls">
                 <label className="service-browser-filter service-record-filter">
@@ -4846,7 +4890,7 @@ export function ServicePanel({
               <div className="service-split-records">
                 <div className="service-section-list">
                   <p className="service-record-list-heading">
-                    Sessions: {visibleSessionRecords.length} shown
+                    Sessions: {sessionActivitySummary.activeSessions} active / {sessionActivitySummary.retainedSessions} retained; {visibleSessionRecords.length} shown
                     {hiddenSessionCount > 0 ? ` / ${hiddenSessionCount} hidden` : ""}
                   </p>
                   {filteredSessionRecords.length === 0 ? (
@@ -4865,7 +4909,7 @@ export function ServicePanel({
                 </div>
                 <div className="service-section-list">
                   <p className="service-record-list-heading">
-                    Tabs: {visibleTabRecords.length} shown
+                    Tabs: {sessionActivitySummary.activeTabs} active / {sessionActivitySummary.retainedTabs} retained; {visibleTabRecords.length} shown
                     {hiddenTabCount > 0 ? ` / ${hiddenTabCount} hidden` : ""}
                   </p>
                   {filteredTabRecords.length === 0 ? (
@@ -4890,8 +4934,13 @@ export function ServicePanel({
             <TabsContent value="jobs" className="service-workspace-content">
               <div className="service-workspace-pane-heading">
                 <ServerCog className="size-3.5 text-muted-foreground" />
-                <span>{jobSummary}</span>
+                <span>{jobActivitySummary.active} active / {jobActivitySummary.retained} retained; {jobSummary}</span>
                 {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+              </div>
+              <div className="service-workspace-summary-chips" aria-label="Service job activity summary">
+                <span>{jobActivitySummary.active} queued or running</span>
+                <span>{jobActivitySummary.terminal} terminal</span>
+                <span>{recentJobs.length} recent shown</span>
               </div>
               <div className="service-section-list">
                 {recentJobs.length === 0 ? (
