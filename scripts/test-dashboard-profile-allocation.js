@@ -79,14 +79,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function profileAllocationPrimaryTarget\(allocation: ServiceProfileAllocation\): string[\s\S]*allocation\.targetReadiness\?\.find[\s\S]*allocation\.targetServiceIds\?\.find[\s\S]*allocation\.authenticatedServiceIds\?\.find/,
-  'Profile allocation rows must derive primary target identity from service-owned readiness and target fields',
+  /function profileAllocationTargetValues\(allocation: ServiceProfileAllocation\): string\[\][\s\S]*allocation\.targetReadiness[\s\S]*allocation\.targetServiceIds[\s\S]*allocation\.authenticatedServiceIds/,
+  'Profile allocation rows and filters must derive target identities from service-owned readiness and target fields',
 );
 
 assert.match(
   servicePanel,
-  /function profileAllocationPrimaryLogin\(allocation: ServiceProfileAllocation\): string[\s\S]*allocation\.targetReadiness\?\.find[\s\S]*allocation\.accountIds\?\.find/,
-  'Profile allocation rows must derive primary login identity from service-owned readiness and account fields',
+  /function profileAllocationLoginValues\(allocation: ServiceProfileAllocation\): string\[\][\s\S]*allocation\.targetReadiness[\s\S]*allocation\.accountIds/,
+  'Profile allocation rows and filters must derive login identities from service-owned readiness and account fields',
 );
 
 assert.match(
@@ -97,8 +97,32 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const \[profileTargetFilter, setProfileTargetFilter\] = useState\("all"\);[\s\S]*const \[profileLoginFilter, setProfileLoginFilter\] = useState\("all"\);[\s\S]*const \[profileBrowserBuildFilter, setProfileBrowserBuildFilter\] = useState\("all"\);[\s\S]*const \[profileReadinessFilter, setProfileReadinessFilter\] = useState<ProfileReadinessFilter>\("all"\);/,
+  'Profiles workspace must track target, login, browser-build, and readiness filters',
+);
+
+assert.match(
+  servicePanel,
+  /const profileTargetOptions = useMemo\([\s\S]*profileAllocations\.flatMap\(profileAllocationTargetValues\)[\s\S]*const profileLoginOptions = useMemo\([\s\S]*profileAllocations\.flatMap\(profileAllocationLoginValues\)[\s\S]*const profileBrowserBuildOptions = useMemo\([\s\S]*profileAllocations\.map\(\(allocation\) => allocation\.browserBuild\)/,
+  'Profiles workspace must derive target, login, and browser-build filter options from profile allocations',
+);
+
+assert.match(
+  servicePanel,
+  /profileTargetFilter !== "all"[\s\S]*profileAllocationTargetValues\(allocation\)\.includes\(profileTargetFilter\)[\s\S]*profileLoginFilter !== "all"[\s\S]*profileAllocationLoginValues\(allocation\)\.includes\(profileLoginFilter\)[\s\S]*profileBrowserBuildFilter !== "all"[\s\S]*allocation\.browserBuild !== profileBrowserBuildFilter[\s\S]*profileReadinessFilter === "needs_attention"[\s\S]*profileReadinessFilter === "normal"/,
+  'Profiles workspace must apply service-backed profile field filters before text search',
+);
+
+assert.match(
+  servicePanel,
   /service-profile-routing-strip" aria-label="Profile identity and routing summary"[\s\S]*target identities[\s\S]*login identities[\s\S]*authenticated targets[\s\S]*profiles with browsers[\s\S]*pinned builds[\s\S]*readiness attention/,
   'Profiles workspace must render the identity and routing summary labels',
+);
+
+assert.match(
+  servicePanel,
+  /service-profile-field-filters" aria-label="Profile routing field filters"[\s\S]*All target identities[\s\S]*All login identities[\s\S]*All browser builds[\s\S]*Needs attention[\s\S]*No readiness attention/,
+  'Profiles workspace must render target, login, browser-build, and readiness filters',
 );
 
 assert.match(
@@ -115,7 +139,7 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-profile-routing-strip[\s\S]*\.service-profile-route-grid[\s\S]*\.service-profile-route-cell[\s\S]*\.service-profile-route-detail[\s\S]*\.service-profile-attention-badge/,
+  /\.service-profile-routing-strip[\s\S]*\.service-profile-field-filters[\s\S]*\.service-profile-route-grid[\s\S]*\.service-profile-route-cell[\s\S]*\.service-profile-route-detail[\s\S]*\.service-profile-attention-badge/,
   'Profiles routing UI must keep dedicated compact styling',
 );
 

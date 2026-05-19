@@ -659,3 +659,41 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-profile-routing-phase3.png`
+
+### 2026-05-19 Phase 3 Profile Routing Filters
+
+Continued the Profiles workspace findability slice:
+
+- added native select filters for target identity, login identity, browser
+  build, and readiness attention
+- derived target identity options from service profile readiness, target
+  service IDs, and authenticated service IDs
+- derived login identity options from service profile readiness login IDs and
+  account identity fields
+- kept browser-build filtering conditional on service allocations exposing a
+  `browserBuild` value
+- applied profile field filters before text search so the free-text query
+  remains a secondary narrowing tool
+- preserved the dashboard as a service-owned-state consumer and avoided
+  profile-name or path-based routing inference
+- added contract assertions for profile filter state, option derivation,
+  filter logic, rendered labels, and compact filter styling
+
+Validation:
+
+- `pnpm test:dashboard-profile-allocation`
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` confirmed target,
+  login, readiness, and conditional browser-build filters rendered in the
+  Profiles tab. The current service data exposed no target or login identity
+  option values, but did expose one browser build option and the readiness
+  filter labels.
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-profile-filters-phase3.png`

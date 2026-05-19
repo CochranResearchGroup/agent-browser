@@ -399,6 +399,7 @@ type EventKindFilter =
 type EventWindowFilter = "all" | "15m" | "1h" | "24h";
 type EventLimit = 8 | 20 | 50;
 type ServiceRecordLimit = 12 | 24 | 50 | 100;
+type ProfileReadinessFilter = "all" | "needs_attention" | "normal";
 type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
 type ServiceWorkspaceTab = "profiles" | "incidents" | "sessions" | "jobs" | "events";
 type TraceFilters = {
@@ -688,8 +689,29 @@ function formatStringList(values?: string[], fallback = "none"): string {
   return normalized.length > 0 ? normalized.join(", ") : fallback;
 }
 
+function uniqueStringValues(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])).sort((left, right) =>
+    left.localeCompare(right),
+  );
+}
+
 function firstStringValue(values?: (string | null | undefined)[], fallback = "unknown"): string {
   return values?.find((value) => value?.trim())?.trim() ?? fallback;
+}
+
+function profileAllocationTargetValues(allocation: ServiceProfileAllocation): string[] {
+  return uniqueStringValues([
+    ...(allocation.targetReadiness ?? []).map((row) => row.targetServiceId),
+    ...(allocation.targetServiceIds ?? []),
+    ...(allocation.authenticatedServiceIds ?? []),
+  ]);
+}
+
+function profileAllocationLoginValues(allocation: ServiceProfileAllocation): string[] {
+  return uniqueStringValues([
+    ...(allocation.targetReadiness ?? []).map((row) => row.loginId),
+    ...(allocation.accountIds ?? []),
+  ]);
 }
 
 function profileAllocationPrimaryTarget(allocation: ServiceProfileAllocation): string {
@@ -3878,6 +3900,10 @@ export function ServicePanel({
   const [tabLimit, setTabLimit] = useState<ServiceRecordLimit>(24);
   const [profileAllocationQuery, setProfileAllocationQuery] = useState("");
   const [profileAllocationLimit, setProfileAllocationLimit] = useState<ServiceRecordLimit>(24);
+  const [profileTargetFilter, setProfileTargetFilter] = useState("all");
+  const [profileLoginFilter, setProfileLoginFilter] = useState("all");
+  const [profileBrowserBuildFilter, setProfileBrowserBuildFilter] = useState("all");
+  const [profileReadinessFilter, setProfileReadinessFilter] = useState<ProfileReadinessFilter>("all");
   const [incidentQuery, setIncidentQuery] = useState("");
   const [incidentLimit, setIncidentLimit] = useState<ServiceRecordLimit>(24);
   const [workspaceTab, setWorkspaceTab] = useState<ServiceWorkspaceTab>("incidents");
@@ -4389,14 +4415,40 @@ export function ServicePanel({
     () => status?.profileAllocations ?? [],
     [status?.profileAllocations],
   );
-  const profileAllocationQueryText = profileAllocationQuery.trim().toLowerCase();
-  const filteredProfileAllocations = useMemo(
-    () =>
-      profileAllocationQueryText
-        ? profileAllocations.filter((allocation) => includesQuery(profileAllocationSearchText(allocation), profileAllocationQueryText))
-        : profileAllocations,
-    [profileAllocationQueryText, profileAllocations],
+  const profileTargetOptions = useMemo(
+    () => uniqueStringValues(profileAllocations.flatMap(profileAllocationTargetValues)),
+    [profileAllocations],
   );
+  const profileLoginOptions = useMemo(
+    () => uniqueStringValues(profileAllocations.flatMap(profileAllocationLoginValues)),
+    [profileAllocations],
+  );
+  const profileBrowserBuildOptions = useMemo(
+    () => uniqueStringValues(profileAllocations.map((allocation) => allocation.browserBuild)),
+    [profileAllocations],
+  );
+  const profileAllocationQueryText = profileAllocationQuery.trim().toLowerCase();
+  const filteredProfileAllocations = useMemo(() => {
+    const fieldFiltered = profileAllocations.filter((allocation) => {
+      if (profileTargetFilter !== "all" && !profileAllocationTargetValues(allocation).includes(profileTargetFilter)) return false;
+      if (profileLoginFilter !== "all" && !profileAllocationLoginValues(allocation).includes(profileLoginFilter)) return false;
+      if (profileBrowserBuildFilter !== "all" && allocation.browserBuild !== profileBrowserBuildFilter) return false;
+      const needsAttention = profileReadinessNeedsAttention(allocation.targetReadiness);
+      if (profileReadinessFilter === "needs_attention" && !needsAttention) return false;
+      if (profileReadinessFilter === "normal" && needsAttention) return false;
+      return true;
+    });
+    return profileAllocationQueryText
+      ? fieldFiltered.filter((allocation) => includesQuery(profileAllocationSearchText(allocation), profileAllocationQueryText))
+      : fieldFiltered;
+  }, [
+    profileAllocationQueryText,
+    profileAllocations,
+    profileBrowserBuildFilter,
+    profileLoginFilter,
+    profileReadinessFilter,
+    profileTargetFilter,
+  ]);
   const visibleProfileAllocations = useMemo(
     () => filteredProfileAllocations.slice(0, profileAllocationLimit),
     [filteredProfileAllocations, profileAllocationLimit],
@@ -5041,6 +5093,39 @@ export function ServicePanel({
                     placeholder="Filter profiles, target identities, login identities, browsers, tasks"
                   />
                 </label>
+                <div className="service-profile-field-filters" aria-label="Profile routing field filters">
+                  <label>
+                    <span>Target</span>
+                    <select value={profileTargetFilter} onChange={(event) => setProfileTargetFilter(event.target.value)}>
+                      <option value="all">All target identities</option>
+                      {profileTargetOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Login</span>
+                    <select value={profileLoginFilter} onChange={(event) => setProfileLoginFilter(event.target.value)}>
+                      <option value="all">All login identities</option>
+                      {profileLoginOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                    </select>
+                  </label>
+                  {profileBrowserBuildOptions.length > 0 && (
+                    <label>
+                      <span>Build</span>
+                      <select value={profileBrowserBuildFilter} onChange={(event) => setProfileBrowserBuildFilter(event.target.value)}>
+                        <option value="all">All browser builds</option>
+                        {profileBrowserBuildOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  <label>
+                    <span>Readiness</span>
+                    <select value={profileReadinessFilter} onChange={(event) => setProfileReadinessFilter(event.target.value as ProfileReadinessFilter)}>
+                      <option value="all">Any readiness</option>
+                      <option value="needs_attention">Needs attention</option>
+                      <option value="normal">No readiness attention</option>
+                    </select>
+                  </label>
+                </div>
                 <div className="service-record-limit-groups">
                   <div className="service-filter-group" aria-label="Profile allocation display limit">
                     <span className="service-record-limit-label">Profiles</span>

@@ -1631,6 +1631,44 @@ body {
   background: color-mix(in srgb, var(--warning) 10%, transparent) !important;
 }
 
+.service-profile-field-filters {
+  display: grid;
+  flex: 1 1 100%;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.35rem;
+}
+
+.service-profile-field-filters label {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.service-profile-field-filters span {
+  color: var(--muted-foreground);
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.service-profile-field-filters select {
+  min-height: 1.8rem;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--background) 44%, transparent);
+  color: var(--foreground);
+  padding: 0.22rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 750;
+  outline: none;
+}
+
+.service-profile-field-filters select:focus-visible {
+  border-color: color-mix(in srgb, var(--ring) 58%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent);
+}
+
 .service-profile-allocation-row {
   align-items: flex-start;
 }
