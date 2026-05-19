@@ -183,6 +183,30 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const managedRecordDetail = useMemo\(\(\) => \[[\s\S]*retained browser records[\s\S]*managed profile records[\s\S]*service sessions[\s\S]*tracked tabs[\s\S]*site policies[\s\S]*providers/,
+  'Service dashboard must explain retained managed-state counts through one compact record detail summary',
+);
+
+assert.match(
+  servicePanel,
+  /<ServiceStatusLight[\s\S]*label="Records"[\s\S]*value=\{`\$\{entityCounts\.browsers\} browsers`\}[\s\S]*detail=\{`Retained service-state counts: \$\{managedRecordDetail\}`\}[\s\S]*icon=\{GitBranch\}/,
+  'Service dashboard must expose retained record counts as a compact Records status light',
+);
+
+assert.match(
+  servicePanel,
+  /\{\(reconciliation\?\.lastError \|\| retainedStateCleanupNeeded\) && \([\s\S]*service-state-alerts[\s\S]*service-state-alert-error[\s\S]*service-retained-state-hint/,
+  'Service dashboard must only show managed-state alert rows when reconciliation or retained cleanup needs attention',
+);
+
+assert.doesNotMatch(
+  servicePanel,
+  /service-entity-strip/,
+  'Service dashboard must not reintroduce the bulky managed entity strip in the primary scan path',
+);
+
+assert.match(
+  servicePanel,
   /browserDefaultRank\(left\) - browserDefaultRank\(right\)/,
   'Browser table sorting must keep non-ready or live records ahead of inert retained records',
 );
@@ -191,6 +215,24 @@ assert.match(
   dashboardCss,
   /\.service-browser-table-controls/,
   'Browser table lifecycle and column controls must have an explicit layout hook',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-status-strip[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(7\.8rem, 1fr\)\)/,
+  'Service status strip must stay dense enough to include retained record status without another summary row',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-state-alerts[\s\S]*\.service-state-alert[\s\S]*\.service-state-alert-error[\s\S]*\.service-retained-state-hint/,
+  'Service dashboard must style exceptional managed-state alerts separately from the compact status strip',
+);
+
+assert.doesNotMatch(
+  dashboardCss,
+  /\.service-entity-strip|\.service-entity-count-chip/,
+  'Dashboard CSS must not keep the removed bulky managed entity strip styles',
 );
 
 assert.match(

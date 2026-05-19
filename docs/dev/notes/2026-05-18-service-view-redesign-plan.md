@@ -277,6 +277,12 @@ column, and column-width preferences together. The browser table toolbar now
 uses compact labeled groups for record lifecycle, density, and layout controls
 instead of one undifferentiated control strip.
 
+The always-visible managed-state strip has been folded into a compact
+`Records` status light. Hover details explain retained browser, profile,
+session, tab, job, site-policy, and provider counts. The larger retained-state
+row appears only when reconciliation fails or retained state is large enough
+to need a dry-run prune or repair.
+
 ### Slice 4: Secondary Work Surfaces
 
 - Move profiles, sessions, jobs, incidents, events, and trace into deliberate
