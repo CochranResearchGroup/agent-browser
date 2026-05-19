@@ -491,3 +491,32 @@ bounded browser table, reachable operational records, compact audit actor, and
 explicit selected-row to right-inspector behavior. This directly addresses the
 current UX failure while preserving the roadmap rule that the dashboard consumes
 service-owned state.
+
+## Progress
+
+### 2026-05-19 Phase 1 Start
+
+Implemented the first workbench-layout slice:
+
+- moved the full-width operator identity row into the Service actions menu as
+  an `Audit actor` control
+- renamed `Secondary work surfaces` to `Operational records`
+- bounded the browser table viewport so operational records remain reachable
+- made the status strip sticky and visually quieter
+- added selected browser-row state so the table reflects right-pane inspection
+- added dashboard contract assertions for the table bound, selected-row wiring,
+  operational-record copy, and removed operator card
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm build:dashboard`
+- live dashboard DOM smoke at `http://127.0.0.1:4850` with an isolated profile
+  confirmed the Service tab rendered, `Operational records` was visible, the
+  full-width operator card was absent, the status strip was sticky, and the
+  browser table used a bounded auto-scroll viewport
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-workbench-phase1.png`

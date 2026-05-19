@@ -910,6 +910,7 @@ function ServiceStatusLight({
       <TooltipTrigger asChild>
         <div
           className={cn("service-status-light", `service-health-${tone}`)}
+          role="status"
           tabIndex={0}
           aria-label={`${label}: ${value}. ${detail}`}
         >
@@ -1894,9 +1895,11 @@ function BrowserTableHeaderCell({
 function BrowserTable({
   browsers,
   onSelect,
+  selectedBrowserId,
 }: {
   browsers: ServiceBrowser[];
   onSelect: (browser: ServiceBrowser) => void;
+  selectedBrowserId?: string | null;
 }) {
   const [filter, setFilter] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState<BrowserLifecycleFilter>(initialBrowserLifecycleFilter);
@@ -2161,6 +2164,7 @@ function BrowserTable({
                 <BrowserTableRow
                   key={browser.id || browser.cdpEndpoint || `browser-${index}`}
                   browser={browser}
+                  selected={Boolean(browser.id && browser.id === selectedBrowserId)}
                   visibleColumns={visibleColumnSet}
                   onSelect={onSelect}
                   density={density}
@@ -2176,11 +2180,13 @@ function BrowserTable({
 
 function BrowserTableRow({
   browser,
+  selected,
   visibleColumns,
   onSelect,
   density,
 }: {
   browser: ServiceBrowser;
+  selected: boolean;
   visibleColumns: Set<BrowserTableColumnKey>;
   onSelect: (browser: ServiceBrowser) => void;
   density: BrowserTableDensity;
@@ -2190,7 +2196,7 @@ function BrowserTableRow({
   const viewStreamCount = browser.viewStreams?.length ?? 0;
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
-    <tr className="service-browser-table-row">
+    <tr className={cn("service-browser-table-row", selected && "service-browser-table-row-selected")} aria-selected={selected}>
       {visibleColumns.has("health") && (
         <td>
           <div className="service-browser-table-health">
@@ -2204,9 +2210,10 @@ function BrowserTableRow({
       <td>
         <button
           type="button"
-          className="service-browser-table-id"
+          className={cn("service-browser-table-id", selected && "service-browser-table-id-selected")}
           onClick={() => onSelect(browser)}
           aria-label={`Inspect browser ${browser.id}`}
+          aria-current={selected ? "true" : undefined}
         >
           {browser.id || "unnamed browser"}
         </button>
@@ -3620,6 +3627,7 @@ export function ServicePanel({
   const [selectedIncidentActivityError, setSelectedIncidentActivityError] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
+  const [selectedBrowserId, setSelectedBrowserId] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
   const [selectedTab, setSelectedTab] = useState<ServiceTab | null>(null);
   const [selectedViewStream, setSelectedViewStream] = useState<SelectedViewStream | null>(null);
@@ -4188,6 +4196,7 @@ export function ServicePanel({
     [],
   );
   const inspectBrowser = useCallback((browser: ServiceBrowser) => {
+    setSelectedBrowserId(browser.id || null);
     if (onInspectSelection) {
       onInspectSelection({ kind: "browser", browser });
       return;
@@ -4448,30 +4457,25 @@ export function ServicePanel({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Service actions</DropdownMenuLabel>
+            <div className="service-operator-menu" onKeyDown={(event) => event.stopPropagation()}>
+              <label htmlFor="service-audit-actor">Audit actor</label>
+              <input
+                id="service-audit-actor"
+                aria-label="Audit actor for incident actions"
+                className="service-operator-input"
+                placeholder={activeSession || "dashboard"}
+                value={operatorIdentity}
+                onChange={(event) => setOperatorIdentity(event.target.value)}
+              />
+              <p>Incident and cleanup actions are recorded as this actor.</p>
+            </div>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={reconcile} disabled={reconciling || loading}>
               <RefreshCw className="size-3.5" />
               Reconcile retained state
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
-
-      <div className="service-operator-card">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Operator identity
-          </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Incident actions are recorded as this actor.
-          </p>
-        </div>
-        <input
-          aria-label="Operator identity for incident actions"
-          className="service-operator-input"
-          placeholder={activeSession || "dashboard"}
-          value={operatorIdentity}
-          onChange={(event) => setOperatorIdentity(event.target.value)}
-        />
       </div>
 
       {error && (
@@ -4481,7 +4485,7 @@ export function ServicePanel({
         </div>
       )}
 
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="service-panel-workbench">
         <div className="service-panel-body">
           <div className="service-status-strip">
             <ServiceStatusLight
@@ -4653,13 +4657,13 @@ export function ServicePanel({
                 </p>
               </div>
             </div>
-            <div className="mt-3">
+            <div className="service-browser-table-region">
               {browserRecords.length === 0 ? (
                 <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
                   No browser records yet.
                 </p>
               ) : (
-                <BrowserTable browsers={browserRecords} onSelect={inspectBrowser} />
+                <BrowserTable browsers={browserRecords} onSelect={inspectBrowser} selectedBrowserId={selectedBrowserId} />
               )}
             </div>
           </div>
@@ -4671,9 +4675,9 @@ export function ServicePanel({
           >
             <div className="service-workspace-header">
               <div className="min-w-0">
-                <p className="service-workspace-title">Secondary work surfaces</p>
+                <p className="service-workspace-title">Operational records</p>
                 <p className="service-workspace-detail">
-                  Browser records stay primary. Use these tabs for routing, sessions, incidents, jobs, and trace.
+                  Inspect profile routing, incidents, leases, queue history, and trace without leaving the browser table.
                 </p>
               </div>
               <TabsList className="service-workspace-tabs" variant="line">
@@ -5057,7 +5061,7 @@ export function ServicePanel({
             </TabsContent>
           </Tabs>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

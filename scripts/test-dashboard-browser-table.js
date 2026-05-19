@@ -302,6 +302,30 @@ assert.match(
 );
 
 assert.match(
+  servicePanel,
+  /selectedBrowserId[\s\S]*<BrowserTable browsers=\{browserRecords\} onSelect=\{inspectBrowser\} selectedBrowserId=\{selectedBrowserId\}/,
+  'Service browser table must receive selected browser state for right-pane list-detail feedback',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-table-scroll[\s\S]*max-height: clamp\(16rem, 42vh, 34rem\)[\s\S]*overflow: auto/,
+  'Browser table must be vertically bounded so operational records remain reachable',
+);
+
+assert.match(
+  servicePanel,
+  /<p className="service-workspace-title">Operational records<\/p>/,
+  'Service workspace copy must describe operator records instead of generic secondary surfaces',
+);
+
+assert.doesNotMatch(
+  servicePanel + dashboardCss,
+  /service-operator-card|Operator identity/,
+  'Audit actor controls must not reintroduce a full-width operator identity row',
+);
+
+assert.match(
   dashboardCss,
   /\.service-browser-table-density-compact[\s\S]*\.service-browser-table-density-expanded/,
   'Browser table density modes must have explicit compact and expanded CSS hooks',
