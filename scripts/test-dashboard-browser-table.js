@@ -39,6 +39,18 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const BROWSER_TABLE_INITIAL_ROW_LIMIT = 50;/,
+  'Browser table must keep an explicit initial row window for large retained-state sets',
+);
+
+assert.match(
+  servicePanel,
+  /const BROWSER_TABLE_ROW_LIMIT_STEP = 50;/,
+  'Browser table must keep an explicit row-window expansion step',
+);
+
+assert.match(
+  servicePanel,
   /DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number>/,
   'Browser table must define default widths for every adjustable column',
 );
@@ -77,6 +89,12 @@ assert.match(
   servicePanel,
   /const \[lifecycleFilter, setLifecycleFilter\] = useState<BrowserLifecycleFilter>\(initialBrowserLifecycleFilter\);/,
   'Browser table lifecycle state must use the persisted preference initializer',
+);
+
+assert.match(
+  servicePanel,
+  /const \[rowLimit, setRowLimit\] = useState\(BROWSER_TABLE_INITIAL_ROW_LIMIT\);/,
+  'Browser table must track the visible row window in component state',
 );
 
 assert.match(
@@ -137,6 +155,12 @@ assert.match(
   servicePanel,
   /const resetTableView = \(\) => \{[\s\S]*setLifecycleFilter\("actionable"\)[\s\S]*setVisibleColumns\(DEFAULT_BROWSER_TABLE_COLUMNS\)[\s\S]*setColumnWidths\(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS\)[\s\S]*setDensity\("standard"\)[\s\S]*localStorage\.removeItem\(key\)/,
   'Browser table must reset all persisted view state at once',
+);
+
+assert.match(
+  servicePanel,
+  /useEffect\(\(\) => \{[\s\S]*setRowLimit\(BROWSER_TABLE_INITIAL_ROW_LIMIT\);[\s\S]*\}, \[filter, lifecycleFilter, sortDirection, sortKey\]\);/,
+  'Browser table must reset the row window when filtering or sorting changes',
 );
 
 assert.match(
@@ -248,6 +272,18 @@ assert.match(
 );
 
 assert.match(
+  servicePanel,
+  /const visibleBrowsers = useMemo\([\s\S]*filteredBrowsers\.slice\(0, rowLimit\)[\s\S]*const hiddenBrowserCount = Math\.max\(0, filteredBrowsers\.length - visibleBrowsers\.length\)/,
+  'Browser table must render a row window and compute hidden matching rows',
+);
+
+assert.match(
+  servicePanel,
+  /visibleBrowsers\.map\(\(browser, index\) => \(/,
+  'Browser table body must render the bounded visible browser row window',
+);
+
+assert.match(
   dashboardCss,
   /\.service-browser-table-controls/,
   'Browser table lifecycle and column controls must have an explicit layout hook',
@@ -311,6 +347,18 @@ assert.match(
   dashboardCss,
   /\.service-browser-table-scroll[\s\S]*max-height: clamp\(16rem, 42vh, 34rem\)[\s\S]*overflow: auto/,
   'Browser table must be vertically bounded so operational records remain reachable',
+);
+
+assert.match(
+  servicePanel,
+  /hiddenBrowserCount > 0[\s\S]*service-browser-table-window[\s\S]*Show \{Math\.min\(BROWSER_TABLE_ROW_LIMIT_STEP, hiddenBrowserCount\)\} more[\s\S]*Show all/,
+  'Browser table must expose explicit Show more and Show all controls when records are hidden by the row window',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-table-window[\s\S]*justify-content: flex-end[\s\S]*\.service-browser-table-window span[\s\S]*margin-right: auto/,
+  'Browser table row-window controls must have a compact trailing layout',
 );
 
 assert.match(

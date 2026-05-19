@@ -520,3 +520,33 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-workbench-phase1.png`
+
+### 2026-05-19 Phase 2 Table Windowing
+
+Implemented the first table-scale slice without adding a frontend-only data
+model:
+
+- added an initial 50-row browser table window for large retained-state sets
+- added explicit hidden-row feedback with `Show more` and `Show all` controls
+- reset the row window when filtering or sorting changes
+- kept selected-row, sorting, resizing, density, and column visibility behavior
+  on the same table path
+- added contract assertions for the row limit constants, visible row window,
+  hidden-row controls, and compact row-window layout
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` with an isolated profile
+  confirmed 50 visible browser rows from 180 filtered records, row-window
+  controls showing 130 hidden records, and the bounded table viewport still
+  using auto scroll
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-table-row-window-phase2.png`

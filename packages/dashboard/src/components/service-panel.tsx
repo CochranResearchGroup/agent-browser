@@ -1682,6 +1682,8 @@ const BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY = "agent-browser-dashboard-browser
 const BROWSER_TABLE_DENSITY_STORAGE_KEY = "agent-browser-dashboard-browser-table-density";
 const BROWSER_TABLE_MIN_COLUMN_WIDTH = 72;
 const BROWSER_TABLE_MAX_COLUMN_WIDTH = 420;
+const BROWSER_TABLE_INITIAL_ROW_LIMIT = 50;
+const BROWSER_TABLE_ROW_LIMIT_STEP = 50;
 const DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number> = {
   health: 132,
   id: 220,
@@ -1908,6 +1910,7 @@ function BrowserTable({
   const [density, setDensity] = useState<BrowserTableDensity>(initialBrowserTableDensity);
   const [sortKey, setSortKey] = useState<BrowserSortKey>("health");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [rowLimit, setRowLimit] = useState(BROWSER_TABLE_INITIAL_ROW_LIMIT);
   const resizeStateRef = useRef<{ column: BrowserTableColumnId; startX: number; startWidth: number } | null>(null);
   const visibleColumnSet = useMemo(() => new Set(visibleColumns), [visibleColumns]);
   const liveCount = useMemo(() => browsers.filter(isLiveBrowserRecord).length, [browsers]);
@@ -1968,6 +1971,15 @@ function BrowserTable({
     });
     return rows;
   }, [browsers, filter, lifecycleFilter, sortDirection, sortKey]);
+  const visibleBrowsers = useMemo(
+    () => filteredBrowsers.slice(0, rowLimit),
+    [filteredBrowsers, rowLimit],
+  );
+  const hiddenBrowserCount = Math.max(0, filteredBrowsers.length - visibleBrowsers.length);
+
+  useEffect(() => {
+    setRowLimit(BROWSER_TABLE_INITIAL_ROW_LIMIT);
+  }, [filter, lifecycleFilter, sortDirection, sortKey]);
 
   const toggleSort = (nextSortKey: BrowserSortKey) => {
     if (nextSortKey === sortKey) {
@@ -1992,6 +2004,7 @@ function BrowserTable({
     setVisibleColumns(DEFAULT_BROWSER_TABLE_COLUMNS);
     setColumnWidths(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS);
     setDensity("standard");
+    setRowLimit(BROWSER_TABLE_INITIAL_ROW_LIMIT);
     try {
       BROWSER_TABLE_VIEW_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
     } catch {
@@ -2040,7 +2053,7 @@ function BrowserTable({
           />
         </label>
         <span className="service-browser-table-count">
-          {filteredBrowsers.length} of {browsers.length} shown; {liveCount} live, {inertCount} inert retained
+          {visibleBrowsers.length} of {filteredBrowsers.length} filtered; {browsers.length} total, {liveCount} live, {inertCount} inert retained
         </span>
         <div className="service-browser-table-controls" aria-label="Browser table controls">
           <div className="service-browser-table-control-group" aria-label="Browser record lifecycle filters">
@@ -2160,7 +2173,7 @@ function BrowserTable({
                 </td>
               </tr>
             ) : (
-              filteredBrowsers.map((browser, index) => (
+              visibleBrowsers.map((browser, index) => (
                 <BrowserTableRow
                   key={browser.id || browser.cdpEndpoint || `browser-${index}`}
                   browser={browser}
@@ -2174,6 +2187,25 @@ function BrowserTable({
           </tbody>
         </table>
       </div>
+      {hiddenBrowserCount > 0 && (
+        <div className="service-browser-table-window" aria-live="polite">
+          <span>{hiddenBrowserCount} more browser records match this view.</span>
+          <button
+            type="button"
+            className="service-filter-chip"
+            onClick={() => setRowLimit((current) => current + BROWSER_TABLE_ROW_LIMIT_STEP)}
+          >
+            Show {Math.min(BROWSER_TABLE_ROW_LIMIT_STEP, hiddenBrowserCount)} more
+          </button>
+          <button
+            type="button"
+            className="service-filter-chip"
+            onClick={() => setRowLimit(filteredBrowsers.length)}
+          >
+            Show all
+          </button>
+        </div>
+      )}
     </div>
   );
 }

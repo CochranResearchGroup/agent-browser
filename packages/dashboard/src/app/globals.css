@@ -1683,6 +1683,21 @@ body {
   background: color-mix(in srgb, var(--background) 30%, transparent);
 }
 
+.service-browser-table-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+
+.service-browser-table-window span {
+  margin-right: auto;
+}
+
 .service-browser-table-region {
   min-height: 0;
   margin-top: 0.65rem;
