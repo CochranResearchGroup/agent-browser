@@ -273,7 +273,9 @@ let operators tune visible column widths, with reset controls for returning to
 the default table proportions. Row density controls let operators choose
 compact, standard, or expanded spacing without changing the service-owned
 browser records. A full table-view reset clears lifecycle, density, visible
-column, and column-width preferences together.
+column, and column-width preferences together. The browser table toolbar now
+uses compact labeled groups for record lifecycle, density, and layout controls
+instead of one undifferentiated control strip.
 
 ### Slice 4: Secondary Work Surfaces
 

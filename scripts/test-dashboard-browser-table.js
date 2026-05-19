@@ -153,6 +153,12 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /service-browser-table-control-group[\s\S]*Records[\s\S]*service-browser-table-density[\s\S]*Density[\s\S]*service-browser-table-column-menu[\s\S]*Layout/,
+  'Browser table toolbar must group record, density, and layout controls explicitly',
+);
+
+assert.match(
+  servicePanel,
   /service-browser-table-density-\$\{density\}/,
   'Browser table must apply the selected density as a table class',
 );
@@ -167,6 +173,12 @@ assert.match(
   dashboardCss,
   /\.service-browser-table-controls/,
   'Browser table lifecycle and column controls must have an explicit layout hook',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-table-control-group,[\s\S]*\.service-browser-table-density[\s\S]*border-radius: 999px/,
+  'Browser table toolbar groups must have compact pill styling',
 );
 
 assert.match(

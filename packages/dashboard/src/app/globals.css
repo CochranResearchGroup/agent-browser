@@ -1654,19 +1654,28 @@ body {
 }
 
 .service-browser-table-controls {
+  display: flex;
   flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
   justify-content: flex-end;
 }
 
+.service-browser-table-control-group,
 .service-browser-table-density {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  border-left: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
-  padding-left: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 36%, transparent);
+  padding: 0.18rem;
 }
 
+.service-browser-table-control-group > span,
 .service-browser-table-density > span {
+  padding-inline: 0.34rem 0.16rem;
   color: var(--muted-foreground);
   font-size: 0.62rem;
   font-weight: 950;

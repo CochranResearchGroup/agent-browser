@@ -2048,22 +2048,25 @@ function BrowserTable({
         <span className="service-browser-table-count">
           {filteredBrowsers.length} of {browsers.length} shown; {liveCount} live, {inertCount} inert retained
         </span>
-        <div className="service-filter-group service-browser-table-controls" aria-label="Browser record lifecycle filters">
-          {[
-            { value: "actionable", label: "Actionable" },
-            { value: "live", label: "Live" },
-            { value: "retained", label: "Retained" },
-            { value: "all", label: "All records" },
-          ].map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={cn("service-filter-chip", lifecycleFilter === option.value && "service-filter-chip-active")}
-              onClick={() => setLifecycleFilter(option.value as BrowserLifecycleFilter)}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="service-browser-table-controls" aria-label="Browser table controls">
+          <div className="service-browser-table-control-group" aria-label="Browser record lifecycle filters">
+            <span>Records</span>
+            {[
+              { value: "actionable", label: "Actionable" },
+              { value: "live", label: "Live" },
+              { value: "retained", label: "Retained" },
+              { value: "all", label: "All records" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={cn("service-filter-chip", lifecycleFilter === option.value && "service-filter-chip-active")}
+                onClick={() => setLifecycleFilter(option.value as BrowserLifecycleFilter)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <div className="service-browser-table-density" aria-label="Browser table density">
             <span>Density</span>
             {[
@@ -2081,30 +2084,33 @@ function BrowserTable({
               </button>
             ))}
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="h-7 gap-1.5 rounded-full px-2 text-[11px]">
-                <MoreHorizontal className="size-3" />
-                Columns
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuLabel>Visible columns</DropdownMenuLabel>
-              {BROWSER_TABLE_COLUMNS.map((column) => (
-                <DropdownMenuCheckboxItem
-                  key={column.key}
-                  checked={visibleColumnSet.has(column.key)}
-                  onCheckedChange={(checked) => toggleColumn(column.key, checked === true)}
-                >
-                  {column.label}
-                </DropdownMenuCheckboxItem>
-              ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={resetColumns}>Reset columns</DropdownMenuItem>
-              <DropdownMenuItem onClick={resetColumnWidths}>Reset widths</DropdownMenuItem>
-              <DropdownMenuItem onClick={resetTableView}>Reset table view</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="service-browser-table-control-group service-browser-table-column-menu">
+            <span>Layout</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 rounded-full px-2 text-[11px]">
+                  <MoreHorizontal className="size-3" />
+                  Columns
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel>Visible columns</DropdownMenuLabel>
+                {BROWSER_TABLE_COLUMNS.map((column) => (
+                  <DropdownMenuCheckboxItem
+                    key={column.key}
+                    checked={visibleColumnSet.has(column.key)}
+                    onCheckedChange={(checked) => toggleColumn(column.key, checked === true)}
+                  >
+                    {column.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={resetColumns}>Reset columns</DropdownMenuItem>
+                <DropdownMenuItem onClick={resetColumnWidths}>Reset widths</DropdownMenuItem>
+                <DropdownMenuItem onClick={resetTableView}>Reset table view</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
       <div className="service-browser-table-scroll">
