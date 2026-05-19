@@ -1700,6 +1700,12 @@ const DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number> 
   lastError: 260,
   actions: 108,
 };
+const BROWSER_TABLE_VIEW_STORAGE_KEYS = [
+  BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY,
+  BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY,
+  BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY,
+  BROWSER_TABLE_DENSITY_STORAGE_KEY,
+];
 
 function isBrowserLifecycleFilter(value: string | null): value is BrowserLifecycleFilter {
   return value === "actionable" || value === "all" || value === "live" || value === "retained";
@@ -1987,6 +1993,17 @@ function BrowserTable({
 
   const resetColumns = () => setVisibleColumns(DEFAULT_BROWSER_TABLE_COLUMNS);
   const resetColumnWidths = () => setColumnWidths(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS);
+  const resetTableView = () => {
+    setLifecycleFilter("actionable");
+    setVisibleColumns(DEFAULT_BROWSER_TABLE_COLUMNS);
+    setColumnWidths(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS);
+    setDensity("standard");
+    try {
+      BROWSER_TABLE_VIEW_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
+    } catch {
+      // Restricted storage should not block the in-memory reset.
+    }
+  };
   const resetColumnWidth = (column: BrowserTableColumnId) => {
     setColumnWidths((current) => ({
       ...current,
@@ -2085,6 +2102,7 @@ function BrowserTable({
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={resetColumns}>Reset columns</DropdownMenuItem>
               <DropdownMenuItem onClick={resetColumnWidths}>Reset widths</DropdownMenuItem>
+              <DropdownMenuItem onClick={resetTableView}>Reset table view</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

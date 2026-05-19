@@ -45,6 +45,12 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /BROWSER_TABLE_VIEW_STORAGE_KEYS = \[[\s\S]*BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY[\s\S]*BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY[\s\S]*BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY[\s\S]*BROWSER_TABLE_DENSITY_STORAGE_KEY[\s\S]*\]/,
+  'Browser table must keep a single reset list for persisted view preference keys',
+);
+
+assert.match(
+  servicePanel,
   /function initialBrowserLifecycleFilter\(\): BrowserLifecycleFilter[\s\S]*return isBrowserLifecycleFilter\(stored\) \? stored : "actionable";/,
   'Browser table must validate persisted lifecycle filters and default to actionable records',
 );
@@ -129,8 +135,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /DropdownMenuCheckboxItem[\s\S]*Visible columns[\s\S]*Reset columns[\s\S]*Reset widths/,
-  'Browser table must expose column visibility and width reset controls',
+  /const resetTableView = \(\) => \{[\s\S]*setLifecycleFilter\("actionable"\)[\s\S]*setVisibleColumns\(DEFAULT_BROWSER_TABLE_COLUMNS\)[\s\S]*setColumnWidths\(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS\)[\s\S]*setDensity\("standard"\)[\s\S]*localStorage\.removeItem\(key\)/,
+  'Browser table must reset all persisted view state at once',
+);
+
+assert.match(
+  servicePanel,
+  /DropdownMenuCheckboxItem[\s\S]*Visible columns[\s\S]*Reset columns[\s\S]*Reset widths[\s\S]*Reset table view/,
+  'Browser table must expose column visibility plus width and full view reset controls',
 );
 
 assert.match(
