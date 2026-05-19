@@ -585,3 +585,37 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-table-field-filters-phase2.png`
+
+### 2026-05-19 Phase 2 Keyboard Row Navigation
+
+Completed the table-scale keyboard hardening slice for the managed browser
+table:
+
+- added stable row button refs so keyboard focus can move within the current
+  visible row window
+- added Arrow Up and Arrow Down navigation from browser row links, with
+  selection kept in sync with the right-side inspector
+- added Home and End navigation to jump to the first or last visible browser
+  row without escaping the current filtered window
+- added a screen-reader hint that documents the row navigation keys
+- kept field-filter traversal on native select controls in DOM order rather
+  than adding custom keyboard traps
+- added contract assertions for row refs, keyboard handling, and the accessible
+  keyboard hint
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` confirmed the Service
+  tab rendered, browser row links exposed the keyboard hint, and Arrow Down,
+  Arrow Up, End, and Home changed the selected browser within the visible row
+  window
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-table-keyboard-phase2.png`

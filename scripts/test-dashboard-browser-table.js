@@ -117,6 +117,12 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const rowButtonRefs = useRef\(new Map<string, HTMLButtonElement>\(\)\);/,
+  'Browser table must keep stable row button refs for keyboard row navigation',
+);
+
+assert.match(
+  servicePanel,
   /const \[visibleColumns, setVisibleColumns\] = useState<BrowserTableColumnKey\[\]>\(initialBrowserTableColumns\);/,
   'Browser table visible columns state must use the persisted preference initializer',
 );
@@ -185,6 +191,24 @@ assert.match(
   servicePanel,
   /useEffect\(\(\) => \{[\s\S]*setRowLimit\(BROWSER_TABLE_INITIAL_ROW_LIMIT\);[\s\S]*\}, \[browserBuildFilter, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter\]\);/,
   'Browser table must reset the row window when filtering or sorting changes',
+);
+
+assert.match(
+  servicePanel,
+  /const navigateBrowserRows = \(browser: ServiceBrowser, event: ReactKeyboardEvent<HTMLButtonElement>\) => \{[\s\S]*event\.key === "ArrowDown"[\s\S]*event\.key === "ArrowUp"[\s\S]*event\.key === "Home"[\s\S]*event\.key === "End"/,
+  'Browser table must support ArrowUp, ArrowDown, Home, and End row navigation from browser row buttons',
+);
+
+assert.match(
+  servicePanel,
+  /id="service-browser-table-keyboard-hint" className="sr-only"[\s\S]*Arrow Up, Arrow Down, Home, and End/,
+  'Browser table must expose a screen-reader hint for row keyboard navigation',
+);
+
+assert.match(
+  servicePanel,
+  /rowButtonRef=\{browser\.id \? \(node\) => setRowButtonRef\(browser\.id, node\) : undefined\}[\s\S]*onKeyDown=\{\(event\) => onNavigate\(browser, event\)\}[\s\S]*aria-describedby="service-browser-table-keyboard-hint"/,
+  'Browser row buttons must wire refs, keyboard handling, and the keyboard hint together',
 );
 
 assert.match(

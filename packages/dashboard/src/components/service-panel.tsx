@@ -1,6 +1,6 @@
 "use client";
 
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import {
@@ -1927,6 +1927,7 @@ function BrowserTable({
   const [browserBuildFilter, setBrowserBuildFilter] = useState("all");
   const [streamFilter, setStreamFilter] = useState<BrowserStreamFilter>("all");
   const resizeStateRef = useRef<{ column: BrowserTableColumnId; startX: number; startWidth: number } | null>(null);
+  const rowButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const visibleColumnSet = useMemo(() => new Set(visibleColumns), [visibleColumns]);
   const liveCount = useMemo(() => browsers.filter(isLiveBrowserRecord).length, [browsers]);
   const inertCount = useMemo(() => browsers.filter(isInertRetainedBrowserRecord).length, [browsers]);
@@ -2005,6 +2006,46 @@ function BrowserTable({
     setRowLimit(BROWSER_TABLE_INITIAL_ROW_LIMIT);
   }, [browserBuildFilter, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter]);
 
+  const setRowButtonRef = (browserId: string, node: HTMLButtonElement | null) => {
+    if (node) {
+      rowButtonRefs.current.set(browserId, node);
+      return;
+    }
+    rowButtonRefs.current.delete(browserId);
+  };
+
+  const focusBrowserRow = (index: number) => {
+    const nextBrowser = visibleBrowsers[index];
+    if (!nextBrowser?.id) return;
+    onSelect(nextBrowser);
+    rowButtonRefs.current.get(nextBrowser.id)?.focus();
+  };
+
+  const navigateBrowserRows = (browser: ServiceBrowser, event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (!browser.id) return;
+    const currentIndex = visibleBrowsers.findIndex((row) => row.id === browser.id);
+    if (currentIndex < 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusBrowserRow(Math.min(visibleBrowsers.length - 1, currentIndex + 1));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      focusBrowserRow(Math.max(0, currentIndex - 1));
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      focusBrowserRow(0);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      focusBrowserRow(visibleBrowsers.length - 1);
+    }
+  };
+
   const toggleSort = (nextSortKey: BrowserSortKey) => {
     if (nextSortKey === sortKey) {
       setSortDirection((current) => current === "asc" ? "desc" : "asc");
@@ -2070,6 +2111,9 @@ function BrowserTable({
 
   return (
     <div className="service-browser-table-shell">
+      <p id="service-browser-table-keyboard-hint" className="sr-only">
+        Browser row links support Arrow Up, Arrow Down, Home, and End within the visible row window.
+      </p>
       <div className="service-browser-table-toolbar">
         <label className="service-browser-filter">
           <Filter className="size-3.5" />
@@ -2241,6 +2285,8 @@ function BrowserTable({
                   selected={Boolean(browser.id && browser.id === selectedBrowserId)}
                   visibleColumns={visibleColumnSet}
                   onSelect={onSelect}
+                  onNavigate={navigateBrowserRows}
+                  rowButtonRef={browser.id ? (node) => setRowButtonRef(browser.id, node) : undefined}
                   density={density}
                 />
               ))
@@ -2276,12 +2322,16 @@ function BrowserTableRow({
   selected,
   visibleColumns,
   onSelect,
+  onNavigate,
+  rowButtonRef,
   density,
 }: {
   browser: ServiceBrowser;
   selected: boolean;
   visibleColumns: Set<BrowserTableColumnKey>;
   onSelect: (browser: ServiceBrowser) => void;
+  onNavigate: (browser: ServiceBrowser, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  rowButtonRef?: (node: HTMLButtonElement | null) => void;
   density: BrowserTableDensity;
 }) {
   const tone = healthTone(browser.health);
@@ -2303,10 +2353,13 @@ function BrowserTableRow({
       <td>
         <button
           type="button"
+          ref={rowButtonRef}
           className={cn("service-browser-table-id", selected && "service-browser-table-id-selected")}
           onClick={() => onSelect(browser)}
+          onKeyDown={(event) => onNavigate(browser, event)}
           aria-label={`Inspect browser ${browser.id}`}
           aria-current={selected ? "true" : undefined}
+          aria-describedby="service-browser-table-keyboard-hint"
         >
           {browser.id || "unnamed browser"}
         </button>
