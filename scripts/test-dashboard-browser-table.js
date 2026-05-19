@@ -159,6 +159,24 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /service-browser-table-controls" aria-label="Browser table controls"[\s\S]*aria-label="Browser record lifecycle filters"[\s\S]*aria-label="Browser table density"[\s\S]*service-browser-table-column-menu/,
+  'Browser table toolbar groups must expose stable accessibility labels for browser-driven smoke checks',
+);
+
+assert.match(
+  servicePanel,
+  /DropdownMenuTrigger asChild[\s\S]*<Button size="sm" variant="outline"[\s\S]*<MoreHorizontal className="size-3" \/>[\s\S]*Columns[\s\S]*DropdownMenuContent align="end" className="w-44"/,
+  'Browser table column menu must keep a compact accessible trigger and right-aligned menu content',
+);
+
+assert.match(
+  servicePanel,
+  /DropdownMenuLabel>Visible columns<\/DropdownMenuLabel>[\s\S]*BROWSER_TABLE_COLUMNS\.map[\s\S]*DropdownMenuCheckboxItem[\s\S]*checked=\{visibleColumnSet\.has\(column\.key\)\}/,
+  'Browser table column menu must render the configured visible columns as checked menu items',
+);
+
+assert.match(
+  servicePanel,
   /service-browser-table-density-\$\{density\}/,
   'Browser table must apply the selected density as a table class',
 );
@@ -173,6 +191,18 @@ assert.match(
   dashboardCss,
   /\.service-browser-table-controls/,
   'Browser table lifecycle and column controls must have an explicit layout hook',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-table-toolbar[\s\S]*flex-wrap: wrap[\s\S]*justify-content: space-between/,
+  'Browser table toolbar must wrap instead of crowding the filter and count at narrower widths',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-table-controls[\s\S]*flex: 1 1 100%[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end/,
+  'Browser table control groups must wrap as a full-width trailing control row',
 );
 
 assert.match(
