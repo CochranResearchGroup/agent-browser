@@ -96,6 +96,10 @@ import {
   viewStreamLabel,
   type ServiceViewStream,
 } from "@/lib/service-view-streams";
+import {
+  browserRowCloseTitle,
+  browserRowRepairTitle,
+} from "@/lib/service-browser-row-actions";
 
 type ControlPlaneSnapshot = {
   worker_state?: string;
@@ -2583,16 +2587,14 @@ function BrowserTableRow({
   const viewStreamAvailable = Boolean(browserPrimaryViewStream(browser));
   const closeAvailable = Boolean(closeSupported && onCloseBrowser && activeSessionName && browser.id === `session:${activeSessionName}`);
   const repairAvailable = Boolean(repairSupported && onRepairBrowser && ["degraded", "faulted"].includes((browser.health ?? "").toLowerCase()));
-  const closeTitle = closeAvailable
-    ? "Queue polite close for this service browser."
-    : !closeSupported
-      ? "This service does not advertise row-scoped browser close support."
-      : "Only the active service browser can be closed from this row.";
-  const repairTitle = repairAvailable
-    ? "Mark this degraded or faulted browser retryable."
-    : !repairSupported
-      ? "This service does not advertise row-scoped browser repair support."
-      : "Repair is available for degraded or faulted browser records.";
+  const closeTitle = browserRowCloseTitle({
+    available: closeAvailable,
+    supported: Boolean(closeSupported),
+  });
+  const repairTitle = browserRowRepairTitle({
+    available: repairAvailable,
+    supported: Boolean(repairSupported),
+  });
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
     <tr className={cn("service-browser-table-row", selected && "service-browser-table-row-selected")} aria-selected={selected}>

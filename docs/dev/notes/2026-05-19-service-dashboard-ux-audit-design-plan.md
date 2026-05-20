@@ -996,3 +996,26 @@ Validation:
 - `pnpm test:dashboard-inspector-actions`
 - `pnpm build:dashboard`
 - git whitespace check
+
+### 2026-05-20 Phase 4 Row Remedy Rendered Title Smoke
+
+Added a rendered-title guard for the browser row remedy disabled reasons:
+
+- extracted the `Close` and `Repair` row-action title decisions into
+  `packages/dashboard/src/lib/service-browser-row-actions.ts`
+- updated the Service panel row actions to consume the shared title helpers
+- added `pnpm test:dashboard-browser-row-actions-render`, which renders button
+  markup with `react-dom/server` and asserts the unsupported, ineligible, and
+  available titles for both row remedies
+- kept the existing browser-table source contract focused on wiring the
+  Service panel to the shared title helpers
+
+Validation:
+
+- `pnpm test:dashboard-browser-row-actions-render`
+- `pnpm test:dashboard-browser-table`
+- `pnpm validation:select -- --base HEAD --json`
+- `pnpm test:dashboard-view-streams`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm build:dashboard`
+- git whitespace check

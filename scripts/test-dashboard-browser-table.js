@@ -357,13 +357,19 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const closeTitle = closeAvailable[\s\S]*"Queue polite close for this service browser\."[\s\S]*!closeSupported[\s\S]*"This service does not advertise row-scoped browser close support\."[\s\S]*"Only the active service browser can be closed from this row\.";/,
-  'Browser row Close must distinguish unsupported backend capability from row ineligibility',
+  /browserRowCloseTitle,[\s\S]*browserRowRepairTitle,[\s\S]*from "@\/lib\/service-browser-row-actions";/,
+  'Browser row remedy disabled titles must come from the shared rendered-title helper',
 );
 
 assert.match(
   servicePanel,
-  /const repairTitle = repairAvailable[\s\S]*"Mark this degraded or faulted browser retryable\."[\s\S]*!repairSupported[\s\S]*"This service does not advertise row-scoped browser repair support\."[\s\S]*"Repair is available for degraded or faulted browser records\.";/,
+  /const closeTitle = browserRowCloseTitle\(\{[\s\S]*available: closeAvailable,[\s\S]*supported: Boolean\(closeSupported\),[\s\S]*\}\);/,
+  'Browser row Close must derive rendered disabled reasons from support and eligibility',
+);
+
+assert.match(
+  servicePanel,
+  /const repairTitle = browserRowRepairTitle\(\{[\s\S]*available: repairAvailable,[\s\S]*supported: Boolean\(repairSupported\),[\s\S]*\}\);/,
   'Browser row Repair must distinguish unsupported backend capability from row ineligibility',
 );
 
