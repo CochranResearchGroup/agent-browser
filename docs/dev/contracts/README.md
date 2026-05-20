@@ -329,6 +329,10 @@ apply output or browser retry behavior. It verifies
 `--escalation browser_degraded`, and `--escalation os_degraded_possible` return
 batch apply responses and update persisted monitor or browser state without
 launching Chrome.
+Run `pnpm test:service-browser-row-remedies-no-launch` when changing row-scoped
+browser remedy actions. It verifies HTTP and MCP `service_request` can dispatch
+`service_browser_repair` and safely reject non-active `service_browser_close`
+requests without launching Chrome.
 
 Failed service monitors derive incidents with `monitor_attention` escalation.
 Monitor targets include `url`, `tab`, `site_policy`, and `profile_readiness`.

@@ -882,3 +882,30 @@ Validation:
 Live close was not exercised in this slice because `service_browser_close`
 intentionally closes the active service-owned browser. That should be
 validated after installing a candidate service in a disposable session.
+
+### 2026-05-20 Phase 4 Browser Row Remedy No-Launch Guard
+
+Added the no-launch regression guard for the row-scoped browser remedy
+actions:
+
+- added `pnpm test:service-browser-row-remedies-no-launch`
+- seeded retained degraded and faulted browser records in an isolated
+  user-scoped smoke home
+- exercised `service_browser_repair` through HTTP `POST /api/service/request`
+  and MCP `service_request`
+- verified non-active `service_browser_close` requests are rejected through
+  HTTP and MCP without starting Chrome
+- verified repair emits `browser_recovery_override` evidence and moves the
+  retained browser record back to `process_exited`
+- verified the smoke state contains no browser-launching jobs and no browser
+  PID, CDP port, or CDP URL after the HTTP and MCP requests
+- documented the new guard in `docs/dev/contracts/README.md`
+
+Validation:
+
+- `pnpm test:service-browser-row-remedies-no-launch`
+- `pnpm validation:select -- --base HEAD --json`
+- `pnpm test:service-client-contract`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:service-client-types`
+- git whitespace check
