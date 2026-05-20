@@ -339,8 +339,26 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const closeAvailable = Boolean\(closeSupported && onCloseBrowser && activeSessionName && browser\.id === `session:\$\{activeSessionName\}`\);/,
+  'Browser row Close must only enable for the active service browser row',
+);
+
+assert.match(
+  servicePanel,
+  /const repairAvailable = Boolean\(repairSupported && onRepairBrowser && \["degraded", "faulted"\]\.includes\(\(browser\.health \?\? ""\)\.toLowerCase\(\)\)\);/,
+  'Browser row Repair must only enable for degraded or faulted browser rows',
+);
+
+assert.match(
+  servicePanel,
   /service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*View[\s\S]*disabled=\{!viewStreamAvailable \|\| !onFocusViewStream\}[\s\S]*Focus[\s\S]*AlertDialog[\s\S]*disabled=\{!closeAvailable \|\| acting\}[\s\S]*Close[\s\S]*disabled=\{!repairAvailable \|\| acting\}[\s\S]*Repair/,
   'Browser row actions must expose Inspect, View, Focus, Close, and Repair with eligibility gates',
+);
+
+assert.match(
+  servicePanel,
+  /title=\{closeAvailable \? "Queue polite close for this service browser\." : "Only the active service browser can be closed from this row\."\}/,
+  'Browser row Close must explain the active-service-browser safety rail when disabled',
 );
 
 assert.match(

@@ -941,3 +941,21 @@ Validation:
 - `pnpm test:service-client-contract`
 - `pnpm test:service-client-types`
 - git whitespace check
+
+### 2026-05-20 Phase 4 Browser Row Action Safety Contract
+
+Hardened the dashboard browser-row action contract test around the validated
+backend close path:
+
+- asserted `Close` only enables when `browser.id` matches the active service
+  browser ID derived from the active session name
+- asserted `Repair` only enables for `degraded` or `faulted` browser health
+  when the backend advertises row-scoped repair support
+- asserted the disabled `Close` tooltip explains the active-service-browser
+  safety rail
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm validation:select -- --base HEAD --json`
+- git whitespace check
