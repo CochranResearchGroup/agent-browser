@@ -123,8 +123,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const \[healthFilter, setHealthFilter\] = useState\("all"\);[\s\S]*const \[hostFilter, setHostFilter\] = useState\("all"\);[\s\S]*const \[browserBuildFilter, setBrowserBuildFilter\] = useState\("all"\);[\s\S]*const \[streamFilter, setStreamFilter\] = useState<BrowserStreamFilter>\("all"\);/,
-  'Browser table must track health, host, browser-build, and stream filters',
+  /const \[healthFilter, setHealthFilter\] = useState\("all"\);[\s\S]*const \[hostFilter, setHostFilter\] = useState\("all"\);[\s\S]*const \[browserBuildFilter, setBrowserBuildFilter\] = useState\("all"\);[\s\S]*const \[streamFilter, setStreamFilter\] = useState<BrowserStreamFilter>\("all"\);[\s\S]*const \[ownershipServiceFilter, setOwnershipServiceFilter\] = useState\("all"\);[\s\S]*const \[ownershipAgentFilter, setOwnershipAgentFilter\] = useState\("all"\);[\s\S]*const \[ownershipTaskFilter, setOwnershipTaskFilter\] = useState\("all"\);/,
+  'Browser table must track health, host, browser-build, stream, and ownership filters',
 );
 
 assert.match(
@@ -167,6 +167,18 @@ assert.match(
   servicePanel,
   /const browserOwnershipById = useMemo\([\s\S]*new Map\(browsers\.map\(\(browser\) => \[browser\.id, browserOwnershipSummary\(browser, sessions\)\]\)\)[\s\S]*\[browsers, sessions\]/,
   'Browser table must memoize ownership summaries from browsers and sessions',
+);
+
+assert.match(
+  servicePanel,
+  /const browserOwnershipValues = useMemo\(\(\) => Array\.from\(browserOwnershipById\.values\(\)\), \[browserOwnershipById\]\);[\s\S]*const ownershipServiceOptions = useMemo\([\s\S]*ownership\.serviceNames[\s\S]*const ownershipAgentOptions = useMemo\([\s\S]*ownership\.agentNames[\s\S]*const ownershipTaskOptions = useMemo\([\s\S]*ownership\.taskNames/,
+  'Browser table must derive service, agent, and task filter options from ownership summaries',
+);
+
+assert.match(
+  servicePanel,
+  /ownershipServiceFilter !== "all"[\s\S]*ownership\.serviceNames\.includes\(ownershipServiceFilter\)[\s\S]*ownershipAgentFilter !== "all"[\s\S]*ownership\.agentNames\.includes\(ownershipAgentFilter\)[\s\S]*ownershipTaskFilter !== "all"[\s\S]*ownership\.taskNames\.includes\(ownershipTaskFilter\)/,
+  'Browser table must apply service, agent, and task ownership filters before text search',
 );
 
 assert.match(
@@ -225,13 +237,13 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const resetTableView = \(\) => \{[\s\S]*setLifecycleFilter\("actionable"\)[\s\S]*setHealthFilter\("all"\)[\s\S]*setHostFilter\("all"\)[\s\S]*setBrowserBuildFilter\("all"\)[\s\S]*setStreamFilter\("all"\)[\s\S]*setVisibleColumns\(DEFAULT_BROWSER_TABLE_COLUMNS\)[\s\S]*setColumnWidths\(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS\)[\s\S]*setDensity\("standard"\)[\s\S]*localStorage\.removeItem\(key\)/,
+  /const resetTableView = \(\) => \{[\s\S]*setLifecycleFilter\("actionable"\)[\s\S]*setHealthFilter\("all"\)[\s\S]*setHostFilter\("all"\)[\s\S]*setBrowserBuildFilter\("all"\)[\s\S]*setStreamFilter\("all"\)[\s\S]*setOwnershipServiceFilter\("all"\)[\s\S]*setOwnershipAgentFilter\("all"\)[\s\S]*setOwnershipTaskFilter\("all"\)[\s\S]*setVisibleColumns\(DEFAULT_BROWSER_TABLE_COLUMNS\)[\s\S]*setColumnWidths\(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS\)[\s\S]*setDensity\("standard"\)[\s\S]*localStorage\.removeItem\(key\)/,
   'Browser table must reset all persisted view state at once',
 );
 
 assert.match(
   servicePanel,
-  /useEffect\(\(\) => \{[\s\S]*setRowLimit\(BROWSER_TABLE_INITIAL_ROW_LIMIT\);[\s\S]*\}, \[browserBuildFilter, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter\]\);/,
+  /useEffect\(\(\) => \{[\s\S]*setRowLimit\(BROWSER_TABLE_INITIAL_ROW_LIMIT\);[\s\S]*\}, \[browserBuildFilter, filter, healthFilter, hostFilter, lifecycleFilter, ownershipAgentFilter, ownershipServiceFilter, ownershipTaskFilter, sortDirection, sortKey, streamFilter\]\);/,
   'Browser table must reset the row window when filtering or sorting changes',
 );
 
@@ -461,6 +473,12 @@ assert.match(
   servicePanel,
   /service-browser-table-advanced-filters" aria-label="Browser table field filters"[\s\S]*Health[\s\S]*All health states[\s\S]*Host[\s\S]*All hosts[\s\S]*Build[\s\S]*All builds[\s\S]*Streams[\s\S]*View stream available[\s\S]*No view stream/,
   'Browser table must expose compact service-backed health, host, browser-build, and stream filters',
+);
+
+assert.match(
+  servicePanel,
+  /ownershipServiceOptions\.length > 0[\s\S]*<span>Service<\/span>[\s\S]*All services[\s\S]*ownershipAgentOptions\.length > 0[\s\S]*<span>Agent<\/span>[\s\S]*All agents[\s\S]*ownershipTaskOptions\.length > 0[\s\S]*<span>Task<\/span>[\s\S]*All tasks/,
+  'Browser table must expose conditional service, agent, and task ownership filters',
 );
 
 assert.match(

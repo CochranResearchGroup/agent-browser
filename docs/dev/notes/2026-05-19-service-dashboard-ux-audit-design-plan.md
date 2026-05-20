@@ -765,3 +765,37 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-browser-ownership-phase4.png`
+
+### 2026-05-19 Phase 4 Browser Ownership Filters
+
+Completed the ownership filter follow-up for the primary browser table:
+
+- added service, agent, and task filters to the compact browser table field
+  filter row
+- derived ownership filter options from service-session-linked browser
+  ownership summaries
+- applied ownership filters before free-text search so operators can isolate a
+  single service, agent, or task quickly
+- reset the visible row window when ownership filters change
+- cleared ownership filters through the existing reset table view control
+- rendered ownership filters only when service-owned ownership values are
+  present in the current service state
+- kept the filters service-backed and avoided frontend inference from browser
+  names, profile IDs, or paths
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-profile-allocation`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` confirmed service,
+  agent, and task filters rendered from current service ownership data, and
+  selecting service `DashboardSmoke` narrowed the table to `1 of 1 filtered`
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-browser-ownership-filters-phase4.png`

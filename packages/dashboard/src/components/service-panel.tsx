@@ -2046,6 +2046,9 @@ function BrowserTable({
   const [hostFilter, setHostFilter] = useState("all");
   const [browserBuildFilter, setBrowserBuildFilter] = useState("all");
   const [streamFilter, setStreamFilter] = useState<BrowserStreamFilter>("all");
+  const [ownershipServiceFilter, setOwnershipServiceFilter] = useState("all");
+  const [ownershipAgentFilter, setOwnershipAgentFilter] = useState("all");
+  const [ownershipTaskFilter, setOwnershipTaskFilter] = useState("all");
   const resizeStateRef = useRef<{ column: BrowserTableColumnId; startX: number; startWidth: number } | null>(null);
   const rowButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const visibleColumnSet = useMemo(() => new Set(visibleColumns), [visibleColumns]);
@@ -2057,6 +2060,19 @@ function BrowserTable({
   const browserOwnershipById = useMemo(
     () => new Map(browsers.map((browser) => [browser.id, browserOwnershipSummary(browser, sessions)])),
     [browsers, sessions],
+  );
+  const browserOwnershipValues = useMemo(() => Array.from(browserOwnershipById.values()), [browserOwnershipById]);
+  const ownershipServiceOptions = useMemo(
+    () => uniqueStringValues(browserOwnershipValues.flatMap((ownership) => ownership.serviceNames)),
+    [browserOwnershipValues],
+  );
+  const ownershipAgentOptions = useMemo(
+    () => uniqueStringValues(browserOwnershipValues.flatMap((ownership) => ownership.agentNames)),
+    [browserOwnershipValues],
+  );
+  const ownershipTaskOptions = useMemo(
+    () => uniqueStringValues(browserOwnershipValues.flatMap((ownership) => ownership.taskNames)),
+    [browserOwnershipValues],
   );
   const activeTableColumns = useMemo(
     () => (["health", "id", "profile", "host", "ownership", "sessions", "streams", "lastError", "actions"] as BrowserTableColumnId[])
@@ -2108,6 +2124,9 @@ function BrowserTable({
       if (streamFilter === "with_stream" && !hasViewStream) return false;
       if (streamFilter === "without_stream" && hasViewStream) return false;
       const ownership = browserOwnershipById.get(browser.id) ?? EMPTY_BROWSER_OWNERSHIP;
+      if (ownershipServiceFilter !== "all" && !ownership.serviceNames.includes(ownershipServiceFilter)) return false;
+      if (ownershipAgentFilter !== "all" && !ownership.agentNames.includes(ownershipAgentFilter)) return false;
+      if (ownershipTaskFilter !== "all" && !ownership.taskNames.includes(ownershipTaskFilter)) return false;
       return query ? `${browserSearchText(browser)} ${browserOwnershipSearchText(ownership)}`.includes(query) : true;
     });
     rows.sort((left, right) => {
@@ -2120,7 +2139,7 @@ function BrowserTable({
       return sortDirection === "asc" ? order : -order;
     });
     return rows;
-  }, [browserBuildFilter, browserOwnershipById, browsers, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter]);
+  }, [browserBuildFilter, browserOwnershipById, browsers, filter, healthFilter, hostFilter, lifecycleFilter, ownershipAgentFilter, ownershipServiceFilter, ownershipTaskFilter, sortDirection, sortKey, streamFilter]);
   const visibleBrowsers = useMemo(
     () => filteredBrowsers.slice(0, rowLimit),
     [filteredBrowsers, rowLimit],
@@ -2129,7 +2148,7 @@ function BrowserTable({
 
   useEffect(() => {
     setRowLimit(BROWSER_TABLE_INITIAL_ROW_LIMIT);
-  }, [browserBuildFilter, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter]);
+  }, [browserBuildFilter, filter, healthFilter, hostFilter, lifecycleFilter, ownershipAgentFilter, ownershipServiceFilter, ownershipTaskFilter, sortDirection, sortKey, streamFilter]);
 
   const setRowButtonRef = (browserId: string, node: HTMLButtonElement | null) => {
     if (node) {
@@ -2195,6 +2214,9 @@ function BrowserTable({
     setHostFilter("all");
     setBrowserBuildFilter("all");
     setStreamFilter("all");
+    setOwnershipServiceFilter("all");
+    setOwnershipAgentFilter("all");
+    setOwnershipTaskFilter("all");
     setVisibleColumns(DEFAULT_BROWSER_TABLE_COLUMNS);
     setColumnWidths(DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS);
     setDensity("standard");
@@ -2348,6 +2370,33 @@ function BrowserTable({
               <option value="without_stream">No view stream</option>
             </select>
           </label>
+          {ownershipServiceOptions.length > 0 && (
+            <label>
+              <span>Service</span>
+              <select value={ownershipServiceFilter} onChange={(event) => setOwnershipServiceFilter(event.target.value)}>
+                <option value="all">All services</option>
+                {ownershipServiceOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          )}
+          {ownershipAgentOptions.length > 0 && (
+            <label>
+              <span>Agent</span>
+              <select value={ownershipAgentFilter} onChange={(event) => setOwnershipAgentFilter(event.target.value)}>
+                <option value="all">All agents</option>
+                {ownershipAgentOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          )}
+          {ownershipTaskOptions.length > 0 && (
+            <label>
+              <span>Task</span>
+              <select value={ownershipTaskFilter} onChange={(event) => setOwnershipTaskFilter(event.target.value)}>
+                <option value="all">All tasks</option>
+                {ownershipTaskOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          )}
         </div>
       </div>
       <div className="service-browser-table-scroll">
