@@ -731,3 +731,37 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-profile-selection-phase3.png`
+
+### 2026-05-19 Phase 4 Browser Ownership Chips
+
+Started the primary browser table ownership slice:
+
+- added an `Ownership` browser table column for service, agent, and task
+  evidence
+- derived browser ownership from service sessions linked by `browserIds` and
+  browser `activeSessionIds`
+- included ownership evidence in browser table text search
+- added compact ownership chips for service, agent, and task values
+- passed service sessions into the browser table instead of inferring ownership
+  from browser names, profile IDs, or paths
+- kept ownership as a visible-table column that can still be hidden through the
+  existing column layout menu
+- added contract assertions for service-backed ownership derivation, ownership
+  search, table column wiring, row props, and chip styling
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-profile-allocation`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` confirmed the
+  `Ownership` header rendered after resetting the table view, 50 ownership
+  cells rendered, and ownership search could find a service-owned browser row
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-browser-ownership-phase4.png`

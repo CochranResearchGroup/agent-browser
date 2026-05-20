@@ -21,6 +21,18 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /type BrowserTableColumnKey = "health" \| "profile" \| "host" \| "ownership" \| "sessions" \| "streams" \| "lastError";/,
+  'Browser table must keep ownership as a first-class visible column',
+);
+
+assert.match(
+  servicePanel,
+  /type BrowserOwnershipSummary = \{[\s\S]*serviceNames: string\[\];[\s\S]*agentNames: string\[\];[\s\S]*taskNames: string\[\];[\s\S]*sessionIds: string\[\];/,
+  'Browser table ownership summaries must expose service, agent, task, and session evidence',
+);
+
+assert.match(
+  servicePanel,
   /browserBuild\?: string \| null;/,
   'Browser table must accept service-provided browserBuild when the browser record exposes it',
 );
@@ -129,8 +141,38 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /function browserOwnershipSummary\(browser: ServiceBrowser, sessions: ServiceSession\[\]\): BrowserOwnershipSummary[\s\S]*session\.browserIds\?\.includes\(browser\.id\)[\s\S]*browser\.activeSessionIds\?\.includes\(session\.id\)[\s\S]*serviceNames: uniqueStringValues\(linkedSessions\.map\(\(session\) => session\.serviceName\)\)[\s\S]*agentNames: uniqueStringValues\(linkedSessions\.map\(\(session\) => session\.agentName\)\)[\s\S]*taskNames: uniqueStringValues\(linkedSessions\.map\(\(session\) => session\.taskName\)\)/,
+  'Browser table ownership must derive from service session links instead of frontend guesses',
+);
+
+assert.match(
+  servicePanel,
+  /function browserOwnershipSearchText\(ownership: BrowserOwnershipSummary\): string[\s\S]*ownership\.serviceNames[\s\S]*ownership\.agentNames[\s\S]*ownership\.taskNames[\s\S]*ownership\.sessionIds/,
+  'Browser table text search must include service-owned browser ownership evidence',
+);
+
+assert.match(
+  servicePanel,
   /const healthOptions = useMemo\(\(\) => browserFilterOptionValues\(browsers, "health"\)[\s\S]*const hostOptions = useMemo\(\(\) => browserFilterOptionValues\(browsers, "host"\)[\s\S]*const browserBuildOptions = useMemo\(\(\) => browserFilterOptionValues\(browsers, "browserBuild"\)/,
   'Browser table must derive health, host, and browser-build filter options from records',
+);
+
+assert.match(
+  servicePanel,
+  /function BrowserTable\(\{[\s\S]*browsers,[\s\S]*sessions,[\s\S]*onSelect,[\s\S]*selectedBrowserId,[\s\S]*\}: \{[\s\S]*browsers: ServiceBrowser\[\];[\s\S]*sessions: ServiceSession\[\];/,
+  'Browser table must accept service sessions so ownership can stay service-backed',
+);
+
+assert.match(
+  servicePanel,
+  /const browserOwnershipById = useMemo\([\s\S]*new Map\(browsers\.map\(\(browser\) => \[browser\.id, browserOwnershipSummary\(browser, sessions\)\]\)\)[\s\S]*\[browsers, sessions\]/,
+  'Browser table must memoize ownership summaries from browsers and sessions',
+);
+
+assert.match(
+  servicePanel,
+  /\["health", "id", "profile", "host", "ownership", "sessions", "streams", "lastError", "actions"\] as BrowserTableColumnId\[\]/,
+  'Browser table must include ownership in the active column ordering',
 );
 
 assert.match(
@@ -209,6 +251,36 @@ assert.match(
   servicePanel,
   /rowButtonRef=\{browser\.id \? \(node\) => setRowButtonRef\(browser\.id, node\) : undefined\}[\s\S]*onKeyDown=\{\(event\) => onNavigate\(browser, event\)\}[\s\S]*aria-describedby="service-browser-table-keyboard-hint"/,
   'Browser row buttons must wire refs, keyboard handling, and the keyboard hint together',
+);
+
+assert.match(
+  servicePanel,
+  /<BrowserTableHeaderCell column="ownership"[\s\S]*Ownership[\s\S]*<\/BrowserTableHeaderCell>/,
+  'Browser table must render an ownership column header',
+);
+
+assert.match(
+  servicePanel,
+  /ownership=\{browserOwnershipById\.get\(browser\.id\) \?\? EMPTY_BROWSER_OWNERSHIP\}/,
+  'Browser table rows must receive service-derived ownership summaries',
+);
+
+assert.match(
+  servicePanel,
+  /function BrowserOwnershipCell\(\{ ownership \}: \{ ownership: BrowserOwnershipSummary \}\)[\s\S]*svc \{formatStringList\(ownership\.serviceNames, "unknown"\)\}[\s\S]*agent \{formatStringList\(ownership\.agentNames, "unknown"\)\}[\s\S]*task \{formatStringList\(ownership\.taskNames, "unknown"\)\}/,
+  'Browser table ownership cell must show service, agent, and task chips',
+);
+
+assert.match(
+  servicePanel,
+  /<BrowserTable browsers=\{browserRecords\} sessions=\{sessionRecords\} onSelect=\{inspectBrowser\} selectedBrowserId=\{selectedBrowserId\} \/>/,
+  'Service dashboard must pass service sessions into the browser table',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-ownership-cell[\s\S]*\.service-browser-ownership-chip[\s\S]*\.service-browser-ownership-service/,
+  'Browser ownership chips must keep compact dedicated styling',
 );
 
 assert.match(
@@ -417,8 +489,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /selectedBrowserId[\s\S]*<BrowserTable browsers=\{browserRecords\} onSelect=\{inspectBrowser\} selectedBrowserId=\{selectedBrowserId\}/,
-  'Service browser table must receive selected browser state for right-pane list-detail feedback',
+  /selectedBrowserId[\s\S]*<BrowserTable browsers=\{browserRecords\} sessions=\{sessionRecords\} onSelect=\{inspectBrowser\} selectedBrowserId=\{selectedBrowserId\}/,
+  'Service browser table must receive service sessions and selected browser state for right-pane list-detail feedback',
 );
 
 assert.match(

@@ -2053,6 +2053,33 @@ body {
   color: var(--muted-foreground);
 }
 
+.service-browser-ownership-cell {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.22rem;
+}
+
+.service-browser-ownership-chip {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.12rem 0.38rem;
+  color: var(--muted-foreground);
+  font-size: 0.6rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-browser-ownership-service {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  color: color-mix(in srgb, var(--primary) 84%, var(--foreground));
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
 .service-browser-table-id {
   display: block;
   max-width: 14rem;

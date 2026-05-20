@@ -1733,10 +1733,23 @@ function browserPrimaryViewStream(browser?: ServiceBrowser | null): ServiceViewS
 type BrowserSortKey = "health" | "id" | "profile" | "host" | "sessions" | "streams";
 type SortDirection = "asc" | "desc";
 type BrowserLifecycleFilter = "actionable" | "all" | "live" | "retained";
-type BrowserTableColumnKey = "health" | "profile" | "host" | "sessions" | "streams" | "lastError";
+type BrowserTableColumnKey = "health" | "profile" | "host" | "ownership" | "sessions" | "streams" | "lastError";
 type BrowserTableColumnId = BrowserTableColumnKey | "id" | "actions";
 type BrowserTableDensity = "compact" | "standard" | "expanded";
 type BrowserStreamFilter = "all" | "with_stream" | "without_stream";
+type BrowserOwnershipSummary = {
+  serviceNames: string[];
+  agentNames: string[];
+  taskNames: string[];
+  sessionIds: string[];
+};
+
+const EMPTY_BROWSER_OWNERSHIP: BrowserOwnershipSummary = {
+  serviceNames: [],
+  agentNames: [],
+  taskNames: [],
+  sessionIds: [],
+};
 
 const BROWSER_SORT_LABELS: Record<BrowserSortKey, string> = {
   health: "Health",
@@ -1751,6 +1764,7 @@ const BROWSER_TABLE_COLUMNS: { key: BrowserTableColumnKey; label: string }[] = [
   { key: "health", label: "Health" },
   { key: "profile", label: "Profile" },
   { key: "host", label: "Host" },
+  { key: "ownership", label: "Ownership" },
   { key: "sessions", label: "Sessions" },
   { key: "streams", label: "Streams" },
   { key: "lastError", label: "Last error" },
@@ -1770,6 +1784,7 @@ const DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number> 
   id: 220,
   profile: 180,
   host: 190,
+  ownership: 230,
   sessions: 98,
   streams: 92,
   lastError: 260,
@@ -1868,6 +1883,30 @@ function browserSearchText(browser: ServiceBrowser): string {
     browser.lastError,
     ...(browser.activeSessionIds ?? []),
   ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function browserOwnershipSummary(browser: ServiceBrowser, sessions: ServiceSession[]): BrowserOwnershipSummary {
+  const linkedSessions = sessions.filter((session) =>
+    Boolean(
+      (browser.id && session.browserIds?.includes(browser.id)) ||
+        (session.id && browser.activeSessionIds?.includes(session.id)),
+    ),
+  );
+  return {
+    serviceNames: uniqueStringValues(linkedSessions.map((session) => session.serviceName)),
+    agentNames: uniqueStringValues(linkedSessions.map((session) => session.agentName)),
+    taskNames: uniqueStringValues(linkedSessions.map((session) => session.taskName)),
+    sessionIds: uniqueStringValues(linkedSessions.map((session) => session.id)),
+  };
+}
+
+function browserOwnershipSearchText(ownership: BrowserOwnershipSummary): string {
+  return [
+    ...ownership.serviceNames,
+    ...ownership.agentNames,
+    ...ownership.taskNames,
+    ...ownership.sessionIds,
+  ].join(" ").toLowerCase();
 }
 
 function browserFilterOptionValues(browsers: ServiceBrowser[], field: "health" | "host" | "browserBuild"): string[] {
@@ -1986,10 +2025,12 @@ function BrowserTableHeaderCell({
 
 function BrowserTable({
   browsers,
+  sessions,
   onSelect,
   selectedBrowserId,
 }: {
   browsers: ServiceBrowser[];
+  sessions: ServiceSession[];
   onSelect: (browser: ServiceBrowser) => void;
   selectedBrowserId?: string | null;
 }) {
@@ -2013,8 +2054,12 @@ function BrowserTable({
   const healthOptions = useMemo(() => browserFilterOptionValues(browsers, "health"), [browsers]);
   const hostOptions = useMemo(() => browserFilterOptionValues(browsers, "host"), [browsers]);
   const browserBuildOptions = useMemo(() => browserFilterOptionValues(browsers, "browserBuild"), [browsers]);
+  const browserOwnershipById = useMemo(
+    () => new Map(browsers.map((browser) => [browser.id, browserOwnershipSummary(browser, sessions)])),
+    [browsers, sessions],
+  );
   const activeTableColumns = useMemo(
-    () => (["health", "id", "profile", "host", "sessions", "streams", "lastError", "actions"] as BrowserTableColumnId[])
+    () => (["health", "id", "profile", "host", "ownership", "sessions", "streams", "lastError", "actions"] as BrowserTableColumnId[])
       .filter((column) => column === "id" || column === "actions" || visibleColumnSet.has(column as BrowserTableColumnKey)),
     [visibleColumnSet],
   );
@@ -2062,7 +2107,8 @@ function BrowserTable({
       const hasViewStream = (browser.viewStreams?.length ?? 0) > 0;
       if (streamFilter === "with_stream" && !hasViewStream) return false;
       if (streamFilter === "without_stream" && hasViewStream) return false;
-      return query ? browserSearchText(browser).includes(query) : true;
+      const ownership = browserOwnershipById.get(browser.id) ?? EMPTY_BROWSER_OWNERSHIP;
+      return query ? `${browserSearchText(browser)} ${browserOwnershipSearchText(ownership)}`.includes(query) : true;
     });
     rows.sort((left, right) => {
       const defaultOrder = browserDefaultRank(left) - browserDefaultRank(right);
@@ -2074,7 +2120,7 @@ function BrowserTable({
       return sortDirection === "asc" ? order : -order;
     });
     return rows;
-  }, [browserBuildFilter, browsers, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter]);
+  }, [browserBuildFilter, browserOwnershipById, browsers, filter, healthFilter, hostFilter, lifecycleFilter, sortDirection, sortKey, streamFilter]);
   const visibleBrowsers = useMemo(
     () => filteredBrowsers.slice(0, rowLimit),
     [filteredBrowsers, rowLimit],
@@ -2331,6 +2377,11 @@ function BrowserTable({
                   <BrowserSortButton sortKey="host" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
                 </BrowserTableHeaderCell>
               )}
+              {visibleColumnSet.has("ownership") && (
+                <BrowserTableHeaderCell column="ownership" width={columnWidths.ownership} label="Ownership" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
+                  Ownership
+                </BrowserTableHeaderCell>
+              )}
               {visibleColumnSet.has("sessions") && (
                 <BrowserTableHeaderCell column="sessions" width={columnWidths.sessions} label="Sessions" onResizeStart={startColumnResize} onResetWidth={resetColumnWidth}>
                   <BrowserSortButton sortKey="sessions" activeSortKey={sortKey} direction={sortDirection} onSort={toggleSort} />
@@ -2361,6 +2412,7 @@ function BrowserTable({
                 <BrowserTableRow
                   key={browser.id || browser.cdpEndpoint || `browser-${index}`}
                   browser={browser}
+                  ownership={browserOwnershipById.get(browser.id) ?? EMPTY_BROWSER_OWNERSHIP}
                   selected={Boolean(browser.id && browser.id === selectedBrowserId)}
                   visibleColumns={visibleColumnSet}
                   onSelect={onSelect}
@@ -2398,6 +2450,7 @@ function BrowserTable({
 
 function BrowserTableRow({
   browser,
+  ownership,
   selected,
   visibleColumns,
   onSelect,
@@ -2406,6 +2459,7 @@ function BrowserTableRow({
   density,
 }: {
   browser: ServiceBrowser;
+  ownership: BrowserOwnershipSummary;
   selected: boolean;
   visibleColumns: Set<BrowserTableColumnKey>;
   onSelect: (browser: ServiceBrowser) => void;
@@ -2456,6 +2510,11 @@ function BrowserTableRow({
           </div>
         </td>
       )}
+      {visibleColumns.has("ownership") && (
+        <td>
+          <BrowserOwnershipCell ownership={ownership} />
+        </td>
+      )}
       {visibleColumns.has("sessions") && <td className="service-browser-table-number">{sessionCount}</td>}
       {visibleColumns.has("streams") && <td className="service-browser-table-number">{viewStreamCount}</td>}
       {visibleColumns.has("lastError") && (
@@ -2475,6 +2534,29 @@ function BrowserTableRow({
         </Button>
       </td>
     </tr>
+  );
+}
+
+function BrowserOwnershipCell({ ownership }: { ownership: BrowserOwnershipSummary }) {
+  const hasOwnership =
+    ownership.serviceNames.length > 0 ||
+    ownership.agentNames.length > 0 ||
+    ownership.taskNames.length > 0;
+  if (!hasOwnership) {
+    return <span className="service-browser-table-cell-muted">unassigned</span>;
+  }
+  return (
+    <div className="service-browser-ownership-cell">
+      <span className="service-browser-ownership-chip service-browser-ownership-service">
+        svc {formatStringList(ownership.serviceNames, "unknown")}
+      </span>
+      <span className="service-browser-ownership-chip">
+        agent {formatStringList(ownership.agentNames, "unknown")}
+      </span>
+      <span className="service-browser-ownership-chip">
+        task {formatStringList(ownership.taskNames, "unknown")}
+      </span>
+    </div>
   );
 }
 
@@ -5067,7 +5149,7 @@ export function ServicePanel({
                   No browser records yet.
                 </p>
               ) : (
-                <BrowserTable browsers={browserRecords} onSelect={inspectBrowser} selectedBrowserId={selectedBrowserId} />
+                <BrowserTable browsers={browserRecords} sessions={sessionRecords} onSelect={inspectBrowser} selectedBrowserId={selectedBrowserId} />
               )}
             </div>
           </div>
