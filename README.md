@@ -1581,6 +1581,13 @@ AGENT_BROWSER_STREAM_PORT=9223 agent-browser open example.com
 Service requests that use `params.browserHost=remote_headed` launch a headed
 browser for CDP control while keeping it off the operator desktop on Linux when
 `DISPLAY` is unset. In that case agent-browser starts a private Xvfb display.
+Access-plan `decision.launchPosture` now reports the service-selected
+`viewStreamProvider` and `controlInputProvider`, and copied service requests
+carry those hints in `params` so dashboards and software clients do not infer
+remote-view posture locally. The shipped UPS policy selects
+`stealthcdp_chromium`, `remote_headed`, `rdp_gateway`, and
+`manual_attached_desktop` because headed stealth Chromium loaded UPS tracking
+where true headless did not.
 Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` to reuse an existing virtual display,
 and set `AGENT_BROWSER_REMOTE_VIEW_URL` when an external noVNC, RDP gateway,
 WebRTC, or dashboard view URL should be recorded on the service browser record.

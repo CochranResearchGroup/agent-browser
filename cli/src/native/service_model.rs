@@ -2717,6 +2717,8 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             origin_pattern: "https://www.ups.com".to_string(),
             browser_host: Some(BrowserHost::RemoteHeaded),
             browser_build: Some(BrowserBuild::StealthcdpChromium),
+            view_stream: Some(ViewStreamProvider::RdpGateway),
+            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
             interaction_mode: InteractionMode::HumanLikeInput,
             rate_limit: RateLimitPolicy {
                 min_action_delay_ms: Some(500),

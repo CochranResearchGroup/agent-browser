@@ -15,10 +15,11 @@ use super::service_lifecycle::{select_service_profile_for_request, ProfileSelect
 use super::service_model::{
     builtin_site_policy, service_profile_seeding_handoff, service_site_policy_id_for_url,
     BrowserBuild, BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy,
-    ChallengeState, InteractionMode, ProfileSelectionReason, ProviderCapability,
-    ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState, ServiceProvider,
-    ServiceState, SitePolicy, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    ChallengeState, ControlInputProvider, InteractionMode, ProfileSelectionReason,
+    ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState,
+    ServiceProvider, ServiceState, SitePolicy, ViewStreamProvider,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -1447,12 +1448,20 @@ fn service_request_decision(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let browser_host = launch_posture.get("browserHost").cloned();
+    let view_stream_provider = launch_posture.get("viewStreamProvider").cloned();
+    let control_input_provider = launch_posture.get("controlInputProvider").cloned();
     let mut request_params = Map::new();
     if headed {
         request_params.insert("headless".to_string(), json!(false));
     }
     if let Some(browser_host) = browser_host {
         request_params.insert("browserHost".to_string(), browser_host);
+    }
+    if let Some(view_stream_provider) = view_stream_provider {
+        request_params.insert("viewStreamProvider".to_string(), view_stream_provider);
+    }
+    if let Some(control_input_provider) = control_input_provider {
+        request_params.insert("controlInputProvider".to_string(), control_input_provider);
     }
     if !request_params.is_empty() {
         service_request.insert("params".to_string(), Value::Object(request_params));
@@ -1615,6 +1624,10 @@ fn launch_posture_decision(
         browser_host,
         BrowserHost::DockerHeaded | BrowserHost::RemoteHeaded | BrowserHost::CloudProvider
     );
+    let (view_stream_provider, view_stream_provider_source) =
+        launch_view_stream_provider_decision(browser_host, site_policy);
+    let (control_input_provider, control_input_provider_source) =
+        launch_control_input_provider_decision(view_stream_provider, site_policy);
     let requires_cdp_free = site_policy
         .map(|policy| policy.requires_cdp_free)
         .unwrap_or(false);
@@ -1638,6 +1651,14 @@ fn launch_posture_decision(
     }
     if remote_view_recommended {
         rationale.push("remote_view_capable_host");
+    }
+    match view_stream_provider_source {
+        "site_policy" => rationale.push("view_stream_from_site_policy"),
+        _ => rationale.push("view_stream_from_service_default"),
+    }
+    match control_input_provider_source {
+        "site_policy" => rationale.push("control_input_from_site_policy"),
+        _ => rationale.push("control_input_from_view_stream"),
     }
     if manual_seeding_required {
         rationale.push("detached_first_login_required");
@@ -1689,6 +1710,10 @@ fn launch_posture_decision(
             "browserBuild": browser_build,
             "browserBuildSource": browser_build_source,
             "source": source,
+            "viewStreamProvider": view_stream_provider,
+            "viewStreamProviderSource": view_stream_provider_source,
+            "controlInputProvider": control_input_provider,
+            "controlInputProviderSource": control_input_provider_source,
             "headed": headed,
             "remoteViewRecommended": remote_view_recommended,
             "requiresCdpFree": requires_cdp_free,
@@ -1699,6 +1724,46 @@ fn launch_posture_decision(
             "browserBuildSelection": browser_build_selection,
         }),
     }
+}
+
+fn launch_view_stream_provider_decision(
+    browser_host: BrowserHost,
+    site_policy: Option<&SitePolicy>,
+) -> (ViewStreamProvider, &'static str) {
+    if let Some(view_stream) = site_policy.and_then(|policy| policy.view_stream) {
+        return (view_stream, "site_policy");
+    }
+
+    let provider = match browser_host {
+        BrowserHost::RemoteHeaded => ViewStreamProvider::RdpGateway,
+        BrowserHost::DockerHeaded => ViewStreamProvider::Novnc,
+        BrowserHost::CloudProvider => ViewStreamProvider::ExternalUrl,
+        BrowserHost::LocalHeadless | BrowserHost::LocalHeaded | BrowserHost::AttachedExisting => {
+            ViewStreamProvider::CdpScreencast
+        }
+    };
+    (provider, "service_default")
+}
+
+fn launch_control_input_provider_decision(
+    view_stream_provider: ViewStreamProvider,
+    site_policy: Option<&SitePolicy>,
+) -> (ControlInputProvider, &'static str) {
+    if let Some(control_input) = site_policy.and_then(|policy| policy.control_input) {
+        return (control_input, "site_policy");
+    }
+
+    let provider = match view_stream_provider {
+        ViewStreamProvider::CdpScreencast => ControlInputProvider::CdpInput,
+        ViewStreamProvider::ChromeTabWebrtc | ViewStreamProvider::VirtualDisplayWebrtc => {
+            ControlInputProvider::WebrtcInput
+        }
+        ViewStreamProvider::Novnc => ControlInputProvider::VncInput,
+        ViewStreamProvider::RdpGateway | ViewStreamProvider::ExternalUrl => {
+            ControlInputProvider::ManualAttachedDesktop
+        }
+    };
+    (provider, "view_stream")
 }
 
 fn browser_build_selection_decision(
@@ -3769,6 +3834,22 @@ mod tests {
             true
         );
         assert_eq!(
+            plan["decision"]["launchPosture"]["viewStreamProvider"],
+            "rdp_gateway"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["viewStreamProviderSource"],
+            "service_default"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["controlInputProvider"],
+            "manual_attached_desktop"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["controlInputProviderSource"],
+            "view_stream"
+        );
+        assert_eq!(
             plan["decision"]["launchPosture"]["cdpAttachmentAllowed"],
             true
         );
@@ -3946,6 +4027,11 @@ mod tests {
         assert_eq!(plan["sitePolicySource"]["matchedBy"], "target_service_id");
         assert_eq!(plan["sitePolicy"]["browserHost"], "remote_headed");
         assert_eq!(plan["sitePolicy"]["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(plan["sitePolicy"]["viewStream"], "rdp_gateway");
+        assert_eq!(
+            plan["sitePolicy"]["controlInput"],
+            "manual_attached_desktop"
+        );
         assert_eq!(plan["decision"]["browserHost"], "remote_headed");
         assert_eq!(plan["decision"]["launchPosture"]["headed"], true);
         assert_eq!(
@@ -3961,12 +4047,36 @@ mod tests {
             "site_policy"
         );
         assert_eq!(
+            plan["decision"]["launchPosture"]["viewStreamProvider"],
+            "rdp_gateway"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["viewStreamProviderSource"],
+            "site_policy"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["controlInputProvider"],
+            "manual_attached_desktop"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["controlInputProviderSource"],
+            "site_policy"
+        );
+        assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["params"]["headless"],
             false
         );
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["params"]["browserHost"],
             "remote_headed"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["viewStreamProvider"],
+            "rdp_gateway"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["controlInputProvider"],
+            "manual_attached_desktop"
         );
     }
 

@@ -603,6 +603,10 @@
             "browserBuild",
             "browserBuildSource",
             "source",
+            "viewStreamProvider",
+            "viewStreamProviderSource",
+            "controlInputProvider",
+            "controlInputProviderSource",
             "headed",
             "remoteViewRecommended",
             "requiresCdpFree",
@@ -646,6 +650,34 @@
             "source": {
               "type": "string",
               "enum": ["site_policy", "profile_default", "service_default"]
+            },
+            "viewStreamProvider": {
+              "type": "string",
+              "enum": [
+                "cdp_screencast",
+                "chrome_tab_webrtc",
+                "virtual_display_webrtc",
+                "novnc",
+                "rdp_gateway",
+                "external_url"
+              ]
+            },
+            "viewStreamProviderSource": {
+              "type": "string",
+              "enum": ["site_policy", "service_default"]
+            },
+            "controlInputProvider": {
+              "type": "string",
+              "enum": [
+                "cdp_input",
+                "webrtc_input",
+                "vnc_input",
+                "manual_attached_desktop"
+              ]
+            },
+            "controlInputProviderSource": {
+              "type": "string",
+              "enum": ["site_policy", "view_stream"]
             },
             "headed": {
               "type": "boolean"

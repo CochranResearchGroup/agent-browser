@@ -1425,6 +1425,22 @@ export interface ServiceAccessPlanLaunchPosture {
     | 'service_default'
     | string;
   source: 'site_policy' | 'profile_default' | 'service_default' | string;
+  viewStreamProvider:
+    | 'cdp_screencast'
+    | 'chrome_tab_webrtc'
+    | 'virtual_display_webrtc'
+    | 'novnc'
+    | 'rdp_gateway'
+    | 'external_url'
+    | string;
+  viewStreamProviderSource: 'site_policy' | 'service_default' | string;
+  controlInputProvider:
+    | 'cdp_input'
+    | 'webrtc_input'
+    | 'vnc_input'
+    | 'manual_attached_desktop'
+    | string;
+  controlInputProviderSource: 'site_policy' | 'view_stream' | string;
   headed: boolean;
   remoteViewRecommended: boolean;
   requiresCdpFree: boolean;
