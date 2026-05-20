@@ -697,3 +697,37 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-profile-filters-phase3.png`
+
+### 2026-05-19 Phase 3 Profile Row Selection
+
+Completed the Profiles workspace list-detail behavior slice:
+
+- added selected profile allocation row state so the Profiles workspace mirrors
+  the browser table list-detail pattern
+- kept selected profile rows synchronized with right-inspector profile detail
+  by setting the selected profile ID before profile allocation lookup
+- added stable profile row refs for keyboard focus movement
+- added Arrow Up and Arrow Down navigation between visible profile routing rows
+- added Home and End navigation to jump to the first or last visible profile
+  routing row
+- added a screen-reader hint documenting profile row keyboard navigation
+- added selected-row styling for profile allocation rows
+- added contract assertions for selected state, row refs, keyboard handling,
+  rendered accessibility hooks, and selected-row styling
+
+Validation:
+
+- `pnpm test:dashboard-profile-allocation`
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` confirmed profile row
+  selection, selected-row styling, `aria-current`, and Arrow Down, Arrow Up,
+  End, and Home keyboard navigation within the visible profile row window
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-profile-selection-phase3.png`

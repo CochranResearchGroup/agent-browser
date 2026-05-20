@@ -1673,6 +1673,19 @@ body {
   align-items: flex-start;
 }
 
+.service-profile-allocation-row-selected {
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 42%),
+    color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.service-profile-allocation-row-selected:hover,
+.service-profile-allocation-row-selected:focus-visible {
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 42%),
+    color-mix(in srgb, var(--primary) 11%, transparent);
+}
+
 .service-profile-route-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));

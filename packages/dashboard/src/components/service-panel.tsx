@@ -2863,9 +2863,15 @@ function JobDetailContent({
 function ProfileAllocationRow({
   allocation,
   onSelect,
+  onNavigate,
+  rowRef,
+  selected,
 }: {
   allocation: ServiceProfileAllocation;
   onSelect: (allocation: ServiceProfileAllocation) => void;
+  onNavigate: (allocation: ServiceProfileAllocation, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  rowRef?: (node: HTMLButtonElement | null) => void;
+  selected: boolean;
 }) {
   const tone = profileAllocationTone(allocation.leaseState);
   const holderCount = allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0;
@@ -2877,9 +2883,13 @@ function ProfileAllocationRow({
   return (
     <button
       type="button"
-      className="service-browser-row service-profile-allocation-row"
+      ref={rowRef}
+      className={cn("service-browser-row service-profile-allocation-row", selected && "service-profile-allocation-row-selected")}
       onClick={() => onSelect(allocation)}
+      onKeyDown={(event) => onNavigate(allocation, event)}
       aria-label={`Inspect profile allocation ${allocation.profileId}`}
+      aria-current={selected ? "true" : undefined}
+      aria-describedby="service-profile-allocation-keyboard-hint"
     >
       <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
       <div className="min-w-0 flex-1">
@@ -3923,6 +3933,7 @@ export function ServicePanel({
   const [selectedEvent, setSelectedEvent] = useState<ServiceEvent | null>(null);
   const [selectedBrowser, setSelectedBrowser] = useState<ServiceBrowser | null>(null);
   const [selectedBrowserId, setSelectedBrowserId] = useState<string | null>(null);
+  const [selectedProfileAllocationId, setSelectedProfileAllocationId] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
   const [selectedTab, setSelectedTab] = useState<ServiceTab | null>(null);
   const [selectedViewStream, setSelectedViewStream] = useState<SelectedViewStream | null>(null);
@@ -3932,6 +3943,7 @@ export function ServicePanel({
   const [selectedProfileAllocationLoading, setSelectedProfileAllocationLoading] = useState(false);
   const [selectedProfileAllocationError, setSelectedProfileAllocationError] = useState("");
   const profileAllocationLookupId = useRef(0);
+  const profileAllocationRowRefs = useRef(new Map<string, HTMLButtonElement>());
 
   const canFetch = typeof window !== "undefined";
   const activeFilterCount =
@@ -4124,6 +4136,7 @@ export function ServicePanel({
   const inspectProfileAllocation = useCallback(async (allocation: ServiceProfileAllocation) => {
     const lookupId = profileAllocationLookupId.current + 1;
     profileAllocationLookupId.current = lookupId;
+    setSelectedProfileAllocationId(allocation.profileId || null);
     if (onInspectSelection) {
       onInspectSelection({ kind: "profile", allocation });
     } else {
@@ -4454,6 +4467,44 @@ export function ServicePanel({
     [filteredProfileAllocations, profileAllocationLimit],
   );
   const hiddenProfileAllocationCount = Math.max(0, filteredProfileAllocations.length - visibleProfileAllocations.length);
+  const setProfileAllocationRowRef = (profileId: string, node: HTMLButtonElement | null) => {
+    if (node) {
+      profileAllocationRowRefs.current.set(profileId, node);
+      return;
+    }
+    profileAllocationRowRefs.current.delete(profileId);
+  };
+  const focusProfileAllocationRow = useCallback((index: number) => {
+    const nextAllocation = visibleProfileAllocations[index];
+    if (!nextAllocation?.profileId) return;
+    setSelectedProfileAllocationId(nextAllocation.profileId);
+    void inspectProfileAllocation(nextAllocation);
+    profileAllocationRowRefs.current.get(nextAllocation.profileId)?.focus();
+  }, [inspectProfileAllocation, visibleProfileAllocations]);
+  const navigateProfileAllocationRows = useCallback((allocation: ServiceProfileAllocation, event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (!allocation.profileId) return;
+    const currentIndex = visibleProfileAllocations.findIndex((row) => row.profileId === allocation.profileId);
+    if (currentIndex < 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusProfileAllocationRow(Math.min(visibleProfileAllocations.length - 1, currentIndex + 1));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      focusProfileAllocationRow(Math.max(0, currentIndex - 1));
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      focusProfileAllocationRow(0);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      focusProfileAllocationRow(visibleProfileAllocations.length - 1);
+    }
+  }, [focusProfileAllocationRow, visibleProfileAllocations]);
   const profileRoutingSummary = useMemo(() => {
     const targets = new Set<string>();
     const accounts = new Set<string>();
@@ -5143,6 +5194,9 @@ export function ServicePanel({
                 </div>
               </div>
               <div className="service-section-list">
+                <p id="service-profile-allocation-keyboard-hint" className="sr-only">
+                  Profile routing rows support Arrow Up, Arrow Down, Home, and End within the visible row window.
+                </p>
                 <p className="service-record-list-heading">
                   Identity routes: {visibleProfileAllocations.length} shown
                   {hiddenProfileAllocationCount > 0 ? ` / ${hiddenProfileAllocationCount} hidden` : ""}
@@ -5157,6 +5211,9 @@ export function ServicePanel({
                       key={allocation.profileId || `profile-allocation-${index}`}
                       allocation={allocation}
                       onSelect={inspectProfileAllocation}
+                      onNavigate={navigateProfileAllocationRows}
+                      rowRef={allocation.profileId ? (node) => setProfileAllocationRowRef(allocation.profileId, node) : undefined}
+                      selected={Boolean(allocation.profileId && allocation.profileId === selectedProfileAllocationId)}
                     />
                   ))
                 )}

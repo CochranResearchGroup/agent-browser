@@ -103,6 +103,12 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const \[selectedProfileAllocationId, setSelectedProfileAllocationId\] = useState<string \| null>\(null\);[\s\S]*const profileAllocationRowRefs = useRef\(new Map<string, HTMLButtonElement>\(\)\);/,
+  'Profiles workspace must track selected profile row state and stable row refs',
+);
+
+assert.match(
+  servicePanel,
   /const profileTargetOptions = useMemo\([\s\S]*profileAllocations\.flatMap\(profileAllocationTargetValues\)[\s\S]*const profileLoginOptions = useMemo\([\s\S]*profileAllocations\.flatMap\(profileAllocationLoginValues\)[\s\S]*const profileBrowserBuildOptions = useMemo\([\s\S]*profileAllocations\.map\(\(allocation\) => allocation\.browserBuild\)/,
   'Profiles workspace must derive target, login, and browser-build filter options from profile allocations',
 );
@@ -111,6 +117,18 @@ assert.match(
   servicePanel,
   /profileTargetFilter !== "all"[\s\S]*profileAllocationTargetValues\(allocation\)\.includes\(profileTargetFilter\)[\s\S]*profileLoginFilter !== "all"[\s\S]*profileAllocationLoginValues\(allocation\)\.includes\(profileLoginFilter\)[\s\S]*profileBrowserBuildFilter !== "all"[\s\S]*allocation\.browserBuild !== profileBrowserBuildFilter[\s\S]*profileReadinessFilter === "needs_attention"[\s\S]*profileReadinessFilter === "normal"/,
   'Profiles workspace must apply service-backed profile field filters before text search',
+);
+
+assert.match(
+  servicePanel,
+  /const navigateProfileAllocationRows = useCallback\(\(allocation: ServiceProfileAllocation, event: ReactKeyboardEvent<HTMLButtonElement>\) => \{[\s\S]*event\.key === "ArrowDown"[\s\S]*event\.key === "ArrowUp"[\s\S]*event\.key === "Home"[\s\S]*event\.key === "End"/,
+  'Profiles workspace must support ArrowUp, ArrowDown, Home, and End row navigation',
+);
+
+assert.match(
+  servicePanel,
+  /id="service-profile-allocation-keyboard-hint" className="sr-only"[\s\S]*Arrow Up, Arrow Down, Home, and End/,
+  'Profiles workspace must expose a screen-reader hint for profile row keyboard navigation',
 );
 
 assert.match(
@@ -133,13 +151,19 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /className=\{cn\("service-browser-row service-profile-allocation-row", selected && "service-profile-allocation-row-selected"\)\}[\s\S]*onKeyDown=\{\(event\) => onNavigate\(allocation, event\)\}[\s\S]*aria-current=\{selected \? "true" : undefined\}[\s\S]*aria-describedby="service-profile-allocation-keyboard-hint"/,
+  'Profile allocation rows must expose selected state, keyboard handling, and the keyboard hint',
+);
+
+assert.match(
+  servicePanel,
   /<EventDetailItem label="Browser build" value=\{allocation\.browserBuild\} \/>[\s\S]*<EventDetailItem label="Primary target" value=\{profileAllocationPrimaryTarget\(allocation\)\} \/>[\s\S]*<EventDetailItem label="Primary login" value=\{profileAllocationPrimaryLogin\(allocation\)\} \/>[\s\S]*<ProfileAllocationTokenSection title="Account identities" values=\{allocation\.accountIds\} \/>[\s\S]*<ProfileBrowserSummarySection rows=\{allocation\.browserSummaries\} \/>/,
   'Profile allocation detail must include browser-build, identity, account, and browser-summary routing evidence',
 );
 
 assert.match(
   dashboardCss,
-  /\.service-profile-routing-strip[\s\S]*\.service-profile-field-filters[\s\S]*\.service-profile-route-grid[\s\S]*\.service-profile-route-cell[\s\S]*\.service-profile-route-detail[\s\S]*\.service-profile-attention-badge/,
+  /\.service-profile-routing-strip[\s\S]*\.service-profile-field-filters[\s\S]*\.service-profile-allocation-row-selected[\s\S]*\.service-profile-route-grid[\s\S]*\.service-profile-route-cell[\s\S]*\.service-profile-route-detail[\s\S]*\.service-profile-attention-badge/,
   'Profiles routing UI must keep dedicated compact styling',
 );
 
