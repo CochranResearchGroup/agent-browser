@@ -357,14 +357,32 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const closeTitle = closeAvailable[\s\S]*"Queue polite close for this service browser\."[\s\S]*!closeSupported[\s\S]*"This service does not advertise row-scoped browser close support\."[\s\S]*"Only the active service browser can be closed from this row\.";/,
+  'Browser row Close must distinguish unsupported backend capability from row ineligibility',
+);
+
+assert.match(
+  servicePanel,
+  /const repairTitle = repairAvailable[\s\S]*"Mark this degraded or faulted browser retryable\."[\s\S]*!repairSupported[\s\S]*"This service does not advertise row-scoped browser repair support\."[\s\S]*"Repair is available for degraded or faulted browser records\.";/,
+  'Browser row Repair must distinguish unsupported backend capability from row ineligibility',
+);
+
+assert.match(
+  servicePanel,
   /service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*View[\s\S]*disabled=\{!viewStreamAvailable \|\| !onFocusViewStream\}[\s\S]*Focus[\s\S]*AlertDialog[\s\S]*disabled=\{!closeAvailable \|\| acting\}[\s\S]*Close[\s\S]*disabled=\{!repairAvailable \|\| acting\}[\s\S]*Repair/,
   'Browser row actions must expose Inspect, View, Focus, Close, and Repair with eligibility gates',
 );
 
 assert.match(
   servicePanel,
-  /title=\{closeAvailable \? "Queue polite close for this service browser\." : "Only the active service browser can be closed from this row\."\}/,
+  /title=\{closeTitle\}/,
   'Browser row Close must explain the active-service-browser safety rail when disabled',
+);
+
+assert.match(
+  servicePanel,
+  /title=\{repairTitle\}/,
+  'Browser row Repair must explain backend support or health-state eligibility when disabled',
 );
 
 assert.match(

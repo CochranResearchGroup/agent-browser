@@ -2583,6 +2583,16 @@ function BrowserTableRow({
   const viewStreamAvailable = Boolean(browserPrimaryViewStream(browser));
   const closeAvailable = Boolean(closeSupported && onCloseBrowser && activeSessionName && browser.id === `session:${activeSessionName}`);
   const repairAvailable = Boolean(repairSupported && onRepairBrowser && ["degraded", "faulted"].includes((browser.health ?? "").toLowerCase()));
+  const closeTitle = closeAvailable
+    ? "Queue polite close for this service browser."
+    : !closeSupported
+      ? "This service does not advertise row-scoped browser close support."
+      : "Only the active service browser can be closed from this row.";
+  const repairTitle = repairAvailable
+    ? "Mark this degraded or faulted browser retryable."
+    : !repairSupported
+      ? "This service does not advertise row-scoped browser repair support."
+      : "Repair is available for degraded or faulted browser records.";
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
     <tr className={cn("service-browser-table-row", selected && "service-browser-table-row-selected")} aria-selected={selected}>
@@ -2674,7 +2684,7 @@ function BrowserTableRow({
                 variant="outline"
                 className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
                 disabled={!closeAvailable || acting}
-                title={closeAvailable ? "Queue polite close for this service browser." : "Only the active service browser can be closed from this row."}
+                title={closeTitle}
               >
                 Close
               </Button>
@@ -2698,7 +2708,7 @@ function BrowserTableRow({
             variant="outline"
             className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
             disabled={!repairAvailable || acting}
-            title={repairAvailable ? "Mark this degraded or faulted browser retryable." : "Repair is available for degraded or faulted browser records."}
+            title={repairTitle}
             onClick={() => onRepairBrowser?.(browser)}
           >
             Repair

@@ -975,3 +975,24 @@ Validation:
 - `pnpm test:dashboard-browser-table`
 - `pnpm validation:select -- --base HEAD --json`
 - git whitespace check
+
+### 2026-05-20 Phase 4 Row Remedy Disabled Reasons
+
+Improved the browser row remedy disabled copy so operators can tell why a row
+action is unavailable:
+
+- `Close` now distinguishes missing backend support from a non-active browser
+  row
+- `Repair` now distinguishes missing backend support from a browser health
+  state that is not degraded or faulted
+- the dashboard browser-table contract asserts the distinct disabled titles so
+  optional contracts compatibility cannot silently regress into generic copy
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm validation:select -- --base HEAD --json`
+- `pnpm test:dashboard-view-streams`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm build:dashboard`
+- git whitespace check
