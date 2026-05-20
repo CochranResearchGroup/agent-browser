@@ -1019,3 +1019,23 @@ Validation:
 - `pnpm test:dashboard-inspector-actions`
 - `pnpm build:dashboard`
 - git whitespace check
+
+### 2026-05-20 Phase 4 Row Action Validation Selector
+
+Updated the validation selector so future dashboard row-action title changes
+recommend the rendered-title smoke automatically:
+
+- added a dashboard row-action surface predicate covering the Service panel,
+  the shared row-action title helper, and the rendered-title smoke itself
+- added `pnpm test:dashboard-browser-row-actions-render` to selector output
+  when those files change
+- verified the selector recommends the rendered-title smoke when evaluated
+  against the prior row-action title slice
+
+Validation:
+
+- `pnpm validation:select -- --base HEAD --json`
+- `pnpm validation:select -- --base 8f6a32f5 --json`
+- `pnpm test:dashboard-browser-row-actions-render`
+- `node --check scripts/dev/select-validation.js`
+- git whitespace check

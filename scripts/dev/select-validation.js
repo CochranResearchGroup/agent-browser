@@ -117,6 +117,12 @@ function selectRecommendations(files, base) {
     if (files.some((file) => file.includes('view-stream') || file === 'packages/dashboard/src/components/service-panel.tsx')) {
       add('pnpm test:dashboard-view-streams', 'dashboard view stream provider handling changed');
     }
+    if (files.some(isDashboardBrowserRowActionSurface)) {
+      add(
+        'pnpm test:dashboard-browser-row-actions-render',
+        'dashboard browser row action rendered titles changed',
+      );
+    }
     if (files.some((file) => file === 'packages/dashboard/src/components/service-panel.tsx' || file === 'packages/dashboard/src/app/globals.css')) {
       add('pnpm test:dashboard-browser-table', 'dashboard browser table filtering or visibility changed');
     }
@@ -204,6 +210,14 @@ function isBrowserCapabilityRegistryDraftSurface(file) {
     file === 'docs/dev/contracts/service-browser-capability-registry.v1.schema.json' ||
     file === 'docs/dev/contracts/examples/browser-capability-registry.sample.json' ||
     file === 'scripts/smoke-browser-capability-registry-draft.js'
+  );
+}
+
+function isDashboardBrowserRowActionSurface(file) {
+  return (
+    file === 'packages/dashboard/src/components/service-panel.tsx' ||
+    file === 'packages/dashboard/src/lib/service-browser-row-actions.ts' ||
+    file === 'scripts/test-dashboard-browser-row-actions-render.js'
   );
 }
 
