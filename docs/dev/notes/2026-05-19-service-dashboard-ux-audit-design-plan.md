@@ -959,3 +959,19 @@ Validation:
 - `pnpm test:dashboard-browser-table`
 - `pnpm validation:select -- --base HEAD --json`
 - git whitespace check
+
+### 2026-05-20 Phase 4 Optional Contracts Compatibility
+
+Hardened the dashboard compatibility contract for older installed services:
+
+- asserted `GET /api/service/contracts` is treated as optional discovery
+- asserted failed or missing contracts responses set contracts state to `null`
+  rather than failing the whole Service tab fetch
+- preserved the remedy behavior that `Close` and `Repair` remain disabled when
+  the service does not advertise the corresponding service-request actions
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm validation:select -- --base HEAD --json`
+- git whitespace check

@@ -333,6 +333,12 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const contractsPromise = fetch\(`\$\{serviceBase\(activePort\)\}\/contracts`\)\.catch\(\(\) => null\);[\s\S]*contractsPromise,[\s\S]*const contractsJson = contractsResp\?\.ok[\s\S]*: null;[\s\S]*setContracts\(contractsJson\?\.success \? contractsJson\.data \?\? null : null\);/,
+  'Service contracts discovery must be optional so older services render with row remedies disabled',
+);
+
+assert.match(
+  servicePanel,
   /function BrowserTableRow\([\s\S]*onViewStream,[\s\S]*onFocusViewStream,[\s\S]*onCloseBrowser,[\s\S]*onRepairBrowser,[\s\S]*closeSupported,[\s\S]*repairSupported,[\s\S]*activeSessionName,[\s\S]*acting,[\s\S]*onViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onFocusViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onCloseBrowser\?: \(browser: ServiceBrowser\) => void;[\s\S]*onRepairBrowser\?: \(browser: ServiceBrowser\) => void;/,
   'Browser table rows must receive view, focus, close, and repair action callbacks explicitly',
 );
