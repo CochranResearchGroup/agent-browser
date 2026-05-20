@@ -909,3 +909,35 @@ Validation:
 - `pnpm test:service-api-mcp-parity`
 - `pnpm test:service-client-types`
 - git whitespace check
+
+### 2026-05-20 Phase 4 Browser Row Close Live Guard
+
+Added the isolated live guard for the successful row-scoped close path:
+
+- added `pnpm test:service-browser-row-close-live`
+- launched one isolated data URL browser session with a smoke-only home and
+  socket directory
+- submitted `service_browser_close` through HTTP `POST /api/service/request`
+  against the active service browser ID
+- verified the response reports `closed`, `browserId`, `requestedBrowserId`,
+  and `serviceOwned`
+- verified retained browser health becomes `not_started` without a retained
+  `lastError`
+- verified the session lease is released and profile lease conflicts are
+  cleared
+- verified the retained health event records `operator_requested_close`,
+  `shutdownRequested`, and successful polite-close metadata
+
+The smoke confirms the existing clean-close contract: successful operator
+requested close stores shutdown detail on the health event, while
+`lastHealthObservation` remains reserved for degraded, faulted, stale, or
+retryable browser records.
+
+Validation:
+
+- `pnpm test:service-browser-row-close-live`
+- `pnpm validation:select -- --base HEAD --json`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:service-client-contract`
+- `pnpm test:service-client-types`
+- git whitespace check

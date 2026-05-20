@@ -61,6 +61,7 @@
     "test:service-request-cdp-free-no-launch": "node scripts/smoke-service-request-cdp-free-no-launch.js",
     "test:service-request-lease-reject-no-launch": "node scripts/smoke-service-request-lease-reject.js",
     "test:service-browser-row-remedies-no-launch": "node scripts/smoke-service-browser-row-remedies-no-launch.js",
+    "test:service-browser-row-close-live": "node scripts/smoke-service-browser-row-close-live.js",
     "test:service-request-live": "node scripts/smoke-service-request.js",
     "test:service-status-no-launch": "node scripts/smoke-service-status-no-launch.js",
     "test:service-contracts-no-launch": "node scripts/smoke-service-contracts-no-launch.js",

@@ -333,6 +333,11 @@ Run `pnpm test:service-browser-row-remedies-no-launch` when changing row-scoped
 browser remedy actions. It verifies HTTP and MCP `service_request` can dispatch
 `service_browser_repair` and safely reject non-active `service_browser_close`
 requests without launching Chrome.
+Run `pnpm test:service-browser-row-close-live` before release gating changes to
+the successful row-scoped close path. It launches one isolated browser session,
+submits `service_browser_close` through HTTP `service_request`, and verifies
+operator-requested close health plus lease release without touching the
+operator's default runtime profile.
 
 Failed service monitors derive incidents with `monitor_attention` escalation.
 Monitor targets include `url`, `tab`, `site_policy`, and `profile_readiness`.
