@@ -2122,6 +2122,19 @@ body {
   text-align: center;
 }
 
+.service-browser-row-actions {
+  display: flex;
+  min-width: 20rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.28rem;
+}
+
+.service-browser-row-actions button:disabled {
+  border-color: color-mix(in srgb, var(--border) 46%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 64%, transparent);
+}
+
 .service-browser-row-composite {
   cursor: default;
 }

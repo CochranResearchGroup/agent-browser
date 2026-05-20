@@ -159,8 +159,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function BrowserTable\(\{[\s\S]*browsers,[\s\S]*sessions,[\s\S]*onSelect,[\s\S]*selectedBrowserId,[\s\S]*\}: \{[\s\S]*browsers: ServiceBrowser\[\];[\s\S]*sessions: ServiceSession\[\];/,
-  'Browser table must accept service sessions so ownership can stay service-backed',
+  /function BrowserTable\(\{[\s\S]*browsers,[\s\S]*sessions,[\s\S]*onSelect,[\s\S]*onViewStream,[\s\S]*onFocusViewStream,[\s\S]*selectedBrowserId,[\s\S]*\}: \{[\s\S]*browsers: ServiceBrowser\[\];[\s\S]*sessions: ServiceSession\[\];[\s\S]*onSelect: \(browser: ServiceBrowser\) => void;[\s\S]*onViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onFocusViewStream\?: \(browser: ServiceBrowser\) => void;/,
+  'Browser table must accept service sessions and row action callbacks',
 );
 
 assert.match(
@@ -285,14 +285,50 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<BrowserTable browsers=\{browserRecords\} sessions=\{sessionRecords\} onSelect=\{inspectBrowser\} selectedBrowserId=\{selectedBrowserId\} \/>/,
-  'Service dashboard must pass service sessions into the browser table',
+  /<BrowserTable[\s\S]*browsers=\{browserRecords\}[\s\S]*sessions=\{sessionRecords\}[\s\S]*onSelect=\{inspectBrowser\}[\s\S]*onViewStream=\{openBrowserViewStream\}[\s\S]*onFocusViewStream=\{focusBrowserViewStream\}[\s\S]*selectedBrowserId=\{selectedBrowserId\}/,
+  'Service dashboard must pass service sessions and row action callbacks into the browser table',
 );
 
 assert.match(
   dashboardCss,
   /\.service-browser-ownership-cell[\s\S]*\.service-browser-ownership-chip[\s\S]*\.service-browser-ownership-service/,
   'Browser ownership chips must keep compact dedicated styling',
+);
+
+assert.match(
+  servicePanel,
+  /const browserTabsById = useMemo\(\(\) => \{[\s\S]*new Map<string, ServiceTab\[\]>\(\)[\s\S]*tab\.browserId[\s\S]*grouped\.set\(tab\.browserId/,
+  'Service dashboard must group service-owned tabs by browser for browser-row focus actions',
+);
+
+assert.match(
+  servicePanel,
+  /const openBrowserViewStream = useCallback\(\(browser: ServiceBrowser\) => \{[\s\S]*browserPrimaryViewStream\(browser\)[\s\S]*openViewStream\(stream, browser\)/,
+  'Browser row View must open the service-owned primary view stream',
+);
+
+assert.match(
+  servicePanel,
+  /const focusBrowserViewStream = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*browserPrimaryViewStream\(browser\)[\s\S]*action: "view_focus"[\s\S]*taskName: "focus-browser-row-view"[\s\S]*params: \{ index: tabIndex, maximize: true \}[\s\S]*openViewStream\(stream, browser, primaryTab, focusMessage\)/,
+  'Browser row Focus must queue the existing service-owned view_focus action before opening the stream',
+);
+
+assert.match(
+  servicePanel,
+  /function BrowserTableRow\([\s\S]*onViewStream,[\s\S]*onFocusViewStream,[\s\S]*onViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onFocusViewStream\?: \(browser: ServiceBrowser\) => void;/,
+  'Browser table rows must receive view and focus action callbacks explicitly',
+);
+
+assert.match(
+  servicePanel,
+  /service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*View[\s\S]*disabled=\{!viewStreamAvailable \|\| !onFocusViewStream\}[\s\S]*Focus[\s\S]*Row-scoped browser close is pending a service-owned remedy action[\s\S]*Close[\s\S]*Row-scoped browser repair is pending a service-owned remedy action[\s\S]*Repair/,
+  'Browser row actions must expose Inspect, View, Focus, Close, and Repair without enabling unsupported remedies',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-browser-row-actions[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end[\s\S]*\.service-browser-row-actions button:disabled/,
+  'Browser row actions must keep compact wrapping action-group styling',
 );
 
 assert.match(
@@ -507,7 +543,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /selectedBrowserId[\s\S]*<BrowserTable browsers=\{browserRecords\} sessions=\{sessionRecords\} onSelect=\{inspectBrowser\} selectedBrowserId=\{selectedBrowserId\}/,
+  /selectedBrowserId[\s\S]*<BrowserTable[\s\S]*browsers=\{browserRecords\}[\s\S]*sessions=\{sessionRecords\}[\s\S]*onSelect=\{inspectBrowser\}[\s\S]*selectedBrowserId=\{selectedBrowserId\}/,
   'Service browser table must receive service sessions and selected browser state for right-pane list-detail feedback',
 );
 

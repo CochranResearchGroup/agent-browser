@@ -799,3 +799,37 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-browser-ownership-filters-phase4.png`
+
+### 2026-05-19 Phase 4 Browser Row Action Group
+
+Completed the first browser row action-group slice:
+
+- replaced the single row `Inspect` button with a compact action group for
+  `Inspect`, `View`, `Focus`, `Close`, and `Repair`
+- wired `Inspect` to the existing browser inspector selection path
+- wired `View` to the service-owned primary view stream for the browser
+- wired `Focus` through the existing queued `view_focus` service request before
+  opening the primary view stream
+- derived the focus target from service-owned tab records grouped by browser ID
+- kept `Close` and `Repair` visible but disabled until backend row-scoped
+  remedy actions exist
+- added contract assertions for row action callbacks, view/focus wiring,
+  disabled unsupported remedies, and compact action styling
+
+Validation:
+
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-profile-allocation`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm build:dashboard`
+- git whitespace check
+- validation selector JSON mode
+- live dashboard DOM smoke at `http://127.0.0.1:4850` confirmed browser row
+  action groups rendered, `Inspect` was enabled, `View` and `Focus` were
+  disabled when no service-owned view stream was present, and unsupported
+  `Close` and `Repair` remedies remained disabled
+
+Visual evidence:
+
+- `/tmp/agent-browser-service-browser-row-actions-phase4.png`

@@ -2027,11 +2027,15 @@ function BrowserTable({
   browsers,
   sessions,
   onSelect,
+  onViewStream,
+  onFocusViewStream,
   selectedBrowserId,
 }: {
   browsers: ServiceBrowser[];
   sessions: ServiceSession[];
   onSelect: (browser: ServiceBrowser) => void;
+  onViewStream?: (browser: ServiceBrowser) => void;
+  onFocusViewStream?: (browser: ServiceBrowser) => void;
   selectedBrowserId?: string | null;
 }) {
   const [filter, setFilter] = useState("");
@@ -2465,6 +2469,8 @@ function BrowserTable({
                   selected={Boolean(browser.id && browser.id === selectedBrowserId)}
                   visibleColumns={visibleColumnSet}
                   onSelect={onSelect}
+                  onViewStream={onViewStream}
+                  onFocusViewStream={onFocusViewStream}
                   onNavigate={navigateBrowserRows}
                   rowButtonRef={browser.id ? (node) => setRowButtonRef(browser.id, node) : undefined}
                   density={density}
@@ -2503,6 +2509,8 @@ function BrowserTableRow({
   selected,
   visibleColumns,
   onSelect,
+  onViewStream,
+  onFocusViewStream,
   onNavigate,
   rowButtonRef,
   density,
@@ -2512,6 +2520,8 @@ function BrowserTableRow({
   selected: boolean;
   visibleColumns: Set<BrowserTableColumnKey>;
   onSelect: (browser: ServiceBrowser) => void;
+  onViewStream?: (browser: ServiceBrowser) => void;
+  onFocusViewStream?: (browser: ServiceBrowser) => void;
   onNavigate: (browser: ServiceBrowser, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   rowButtonRef?: (node: HTMLButtonElement | null) => void;
   density: BrowserTableDensity;
@@ -2519,6 +2529,7 @@ function BrowserTableRow({
   const tone = healthTone(browser.health);
   const sessionCount = browser.activeSessionIds?.length ?? 0;
   const viewStreamCount = browser.viewStreams?.length ?? 0;
+  const viewStreamAvailable = Boolean(browserPrimaryViewStream(browser));
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
     <tr className={cn("service-browser-table-row", selected && "service-browser-table-row-selected")} aria-selected={selected}>
@@ -2572,15 +2583,57 @@ function BrowserTableRow({
         </td>
       )}
       <td>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-          onClick={() => onSelect(browser)}
-        >
-          Inspect
-        </Button>
+        <div className="service-browser-row-actions" aria-label={`Browser actions for ${browser.id || "unnamed browser"}`}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+            onClick={() => onSelect(browser)}
+          >
+            Inspect
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+            disabled={!viewStreamAvailable || !onViewStream}
+            onClick={() => onViewStream?.(browser)}
+          >
+            View
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+            disabled={!viewStreamAvailable || !onFocusViewStream}
+            onClick={() => onFocusViewStream?.(browser)}
+          >
+            Focus
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+            disabled
+            title="Row-scoped browser close is pending a service-owned remedy action."
+          >
+            Close
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+            disabled
+            title="Row-scoped browser repair is pending a service-owned remedy action."
+          >
+            Repair
+          </Button>
+        </div>
       </td>
     </tr>
   );
@@ -4711,6 +4764,14 @@ export function ServicePanel({
     () => new Map(browserRecords.map((browser) => [browser.id, browser])),
     [browserRecords],
   );
+  const browserTabsById = useMemo(() => {
+    const grouped = new Map<string, ServiceTab[]>();
+    for (const tab of tabRecords) {
+      if (!tab.browserId) continue;
+      grouped.set(tab.browserId, [...(grouped.get(tab.browserId) ?? []), tab]);
+    }
+    return grouped;
+  }, [tabRecords]);
   const tabIndexById = useMemo(() => {
     const grouped = new Map<string, ServiceTab[]>();
     for (const tab of tabRecords) {
@@ -4757,6 +4818,54 @@ export function ServicePanel({
     }
     setSelectedTab(tab);
   }, [browserById, onInspectSelection]);
+  const openBrowserViewStream = useCallback((browser: ServiceBrowser) => {
+    const stream = browserPrimaryViewStream(browser);
+    if (!stream) {
+      setError("No view stream is registered for this browser.");
+      return;
+    }
+    openViewStream(stream, browser);
+  }, [openViewStream]);
+  const focusBrowserViewStream = useCallback(async (browser: ServiceBrowser) => {
+    const stream = browserPrimaryViewStream(browser);
+    if (!stream) {
+      setError("No view stream is registered for this browser.");
+      return;
+    }
+
+    let focusMessage: string | null = null;
+    const browserTabs = browser.id ? browserTabsById.get(browser.id) : null;
+    const primaryTab = browserTabs?.find((tab) => isActiveServiceTab(tab)) ?? browserTabs?.[0] ?? null;
+    const tabIndex = primaryTab?.id ? tabIndexById.get(primaryTab.id) : undefined;
+    if (canFetch && tabIndex !== undefined) {
+      try {
+        const resp = await fetch(`${serviceBase(activePort)}/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "view_focus",
+            serviceName: "agent-browser-dashboard",
+            agentName: operatorIdentity.trim() || activeSession || "operator",
+            taskName: "focus-browser-row-view",
+            params: { index: tabIndex, maximize: true },
+            jobTimeoutMs: 5000,
+          }),
+        });
+        const json = (await resp.json()) as ApiResponse<ServiceJobsData>;
+        if (!json.success) {
+          focusMessage = json.error || "Remote-view focus request was not accepted; opening the stream anyway.";
+        }
+      } catch (err) {
+        focusMessage = err instanceof Error
+          ? `Remote-view focus request failed: ${err.message}`
+          : "Remote-view focus request failed; opening the stream anyway.";
+      }
+    } else {
+      focusMessage = "No stable tab index was available; opening the stream without a queued focus request.";
+    }
+
+    openViewStream(stream, browser, primaryTab, focusMessage);
+  }, [activePort, activeSession, browserTabsById, canFetch, openViewStream, operatorIdentity, tabIndexById]);
   const inspectTabViewStream = useCallback(async (tab: ServiceTab) => {
     const browser = tab.browserId ? browserById.get(tab.browserId) : null;
     const stream = browserPrimaryViewStream(browser);
@@ -5198,7 +5307,14 @@ export function ServicePanel({
                   No browser records yet.
                 </p>
               ) : (
-                <BrowserTable browsers={browserRecords} sessions={sessionRecords} onSelect={inspectBrowser} selectedBrowserId={selectedBrowserId} />
+                <BrowserTable
+                  browsers={browserRecords}
+                  sessions={sessionRecords}
+                  onSelect={inspectBrowser}
+                  onViewStream={openBrowserViewStream}
+                  onFocusViewStream={focusBrowserViewStream}
+                  selectedBrowserId={selectedBrowserId}
+                />
               )}
             </div>
           </div>
