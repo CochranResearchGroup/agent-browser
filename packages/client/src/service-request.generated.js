@@ -70,6 +70,8 @@ export const SERVICE_REQUEST_ACTIONS = [
   "scrollintoview",
   "focus",
   "clear",
+  "service_browser_close",
+  "service_browser_repair",
   "service_prune_retained",
   "service_repair_retained"
 ];

@@ -159,7 +159,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function BrowserTable\(\{[\s\S]*browsers,[\s\S]*sessions,[\s\S]*onSelect,[\s\S]*onViewStream,[\s\S]*onFocusViewStream,[\s\S]*selectedBrowserId,[\s\S]*\}: \{[\s\S]*browsers: ServiceBrowser\[\];[\s\S]*sessions: ServiceSession\[\];[\s\S]*onSelect: \(browser: ServiceBrowser\) => void;[\s\S]*onViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onFocusViewStream\?: \(browser: ServiceBrowser\) => void;/,
+  /function BrowserTable\(\{[\s\S]*browsers,[\s\S]*sessions,[\s\S]*onSelect,[\s\S]*onViewStream,[\s\S]*onFocusViewStream,[\s\S]*onCloseBrowser,[\s\S]*onRepairBrowser,[\s\S]*closeSupported,[\s\S]*repairSupported,[\s\S]*activeSessionName,[\s\S]*actingBrowserActionId,[\s\S]*selectedBrowserId,[\s\S]*\}: \{[\s\S]*browsers: ServiceBrowser\[\];[\s\S]*sessions: ServiceSession\[\];[\s\S]*onSelect: \(browser: ServiceBrowser\) => void;[\s\S]*onViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onFocusViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onCloseBrowser\?: \(browser: ServiceBrowser\) => void;[\s\S]*onRepairBrowser\?: \(browser: ServiceBrowser\) => void;/,
   'Browser table must accept service sessions and row action callbacks',
 );
 
@@ -285,7 +285,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<BrowserTable[\s\S]*browsers=\{browserRecords\}[\s\S]*sessions=\{sessionRecords\}[\s\S]*onSelect=\{inspectBrowser\}[\s\S]*onViewStream=\{openBrowserViewStream\}[\s\S]*onFocusViewStream=\{focusBrowserViewStream\}[\s\S]*selectedBrowserId=\{selectedBrowserId\}/,
+  /<BrowserTable[\s\S]*browsers=\{browserRecords\}[\s\S]*sessions=\{sessionRecords\}[\s\S]*onSelect=\{inspectBrowser\}[\s\S]*onViewStream=\{openBrowserViewStream\}[\s\S]*onFocusViewStream=\{focusBrowserViewStream\}[\s\S]*onCloseBrowser=\{closeServiceBrowser\}[\s\S]*onRepairBrowser=\{repairServiceBrowser\}[\s\S]*closeSupported=\{browserCloseSupported\}[\s\S]*repairSupported=\{browserRepairSupported\}[\s\S]*activeSessionName=\{activeSession\}[\s\S]*actingBrowserActionId=\{actingBrowserActionId\}[\s\S]*selectedBrowserId=\{selectedBrowserId\}/,
   'Service dashboard must pass service sessions and row action callbacks into the browser table',
 );
 
@@ -315,14 +315,32 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function BrowserTableRow\([\s\S]*onViewStream,[\s\S]*onFocusViewStream,[\s\S]*onViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onFocusViewStream\?: \(browser: ServiceBrowser\) => void;/,
-  'Browser table rows must receive view and focus action callbacks explicitly',
+  /const closeServiceBrowser = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*action: "service_browser_close"[\s\S]*taskName: "close-browser-row"[\s\S]*params: \{ browserId: browser\.id \}[\s\S]*await fetchService\(false\)/,
+  'Browser row Close must queue the service-owned browser close request and refresh service state',
 );
 
 assert.match(
   servicePanel,
-  /service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*View[\s\S]*disabled=\{!viewStreamAvailable \|\| !onFocusViewStream\}[\s\S]*Focus[\s\S]*Row-scoped browser close is pending a service-owned remedy action[\s\S]*Close[\s\S]*Row-scoped browser repair is pending a service-owned remedy action[\s\S]*Repair/,
-  'Browser row actions must expose Inspect, View, Focus, Close, and Repair without enabling unsupported remedies',
+  /const repairServiceBrowser = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*action: "service_browser_repair"[\s\S]*taskName: "repair-browser-row"[\s\S]*browserId: browser\.id[\s\S]*Dashboard row repair requested[\s\S]*await fetchService\(false\)/,
+  'Browser row Repair must queue the service-owned browser repair request and refresh service state',
+);
+
+assert.match(
+  servicePanel,
+  /const serviceRequestActions = useMemo\([\s\S]*contracts\?\.contracts\?\.serviceRequest\?\.actions[\s\S]*const browserCloseSupported = serviceRequestActions\.has\("service_browser_close"\);[\s\S]*const browserRepairSupported = serviceRequestActions\.has\("service_browser_repair"\);/,
+  'Browser row remedies must be gated by advertised service request actions',
+);
+
+assert.match(
+  servicePanel,
+  /function BrowserTableRow\([\s\S]*onViewStream,[\s\S]*onFocusViewStream,[\s\S]*onCloseBrowser,[\s\S]*onRepairBrowser,[\s\S]*closeSupported,[\s\S]*repairSupported,[\s\S]*activeSessionName,[\s\S]*acting,[\s\S]*onViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onFocusViewStream\?: \(browser: ServiceBrowser\) => void;[\s\S]*onCloseBrowser\?: \(browser: ServiceBrowser\) => void;[\s\S]*onRepairBrowser\?: \(browser: ServiceBrowser\) => void;/,
+  'Browser table rows must receive view, focus, close, and repair action callbacks explicitly',
+);
+
+assert.match(
+  servicePanel,
+  /service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*View[\s\S]*disabled=\{!viewStreamAvailable \|\| !onFocusViewStream\}[\s\S]*Focus[\s\S]*AlertDialog[\s\S]*disabled=\{!closeAvailable \|\| acting\}[\s\S]*Close[\s\S]*disabled=\{!repairAvailable \|\| acting\}[\s\S]*Repair/,
+  'Browser row actions must expose Inspect, View, Focus, Close, and Repair with eligibility gates',
 );
 
 assert.match(

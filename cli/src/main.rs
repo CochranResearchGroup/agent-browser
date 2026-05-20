@@ -1662,7 +1662,13 @@ fn main() {
         .get("action")
         .and_then(|value| value.as_str())
         .is_some_and(|action| {
-            matches!(action, "service_prune_retained" | "service_repair_retained")
+            matches!(
+                action,
+                "service_browser_close"
+                    | "service_browser_repair"
+                    | "service_prune_retained"
+                    | "service_repair_retained"
+            )
         })
     {
         let action = cmd.get("action").and_then(|value| value.as_str());

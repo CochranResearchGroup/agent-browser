@@ -683,6 +683,8 @@ Use HTTP `POST /api/service/monitors/<id>`, HTTP `DELETE /api/service/monitors/<
 
 Use `POST /api/service/request` on the stream port when a software client wants to submit one explicit request object with caller context, site or login hints, target-service hints, `action`, `params`, and `jobTimeoutMs`. The route queues the requested browser action through the same service-owned control path as MCP `service_request`.
 
+Browser lifecycle remedies can also go through `service_request`. Use `action: "service_browser_close"` with `params.browserId` to politely close the active service browser and record shutdown health. Use `action: "service_browser_repair"` with `params.browserId` after operator review to make one degraded or faulted retained browser record retryable again. Check `GET /api/service/contracts` or MCP `agent-browser://contracts` before assuming these actions are available.
+
 For software integrations, use one intent object and let agent-browser handle profile selection and queueing:
 
 ```json

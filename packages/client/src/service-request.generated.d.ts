@@ -70,6 +70,8 @@ export type ServiceRequestAction =
   | "scrollintoview"
   | "focus"
   | "clear"
+  | "service_browser_close"
+  | "service_browser_repair"
   | "service_prune_retained"
   | "service_repair_retained";
 
@@ -501,6 +503,20 @@ export interface ServiceRetainedCleanupData {
   recommendedNextStep?: string;
 }
 
+export interface ServiceBrowserCloseData {
+  closed: boolean;
+  browserId: string;
+  requestedBrowserId: string;
+  serviceOwned: boolean;
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserRepairData {
+  repaired: boolean;
+  browser: Record<string, unknown>;
+  incident?: Record<string, unknown> | null;
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   cdp_free_launch: ServiceCdpFreeLaunchData;
@@ -570,6 +586,8 @@ export interface ServiceRequestActionDataMap {
   unroute: ServiceUnrouteData;
   requests: ServiceRequestsData | ServiceClearedData;
   request_detail: ServiceTrackedRequest;
+  service_browser_close: ServiceBrowserCloseData;
+  service_browser_repair: ServiceBrowserRepairData;
   service_prune_retained: ServiceRetainedCleanupData;
   service_repair_retained: ServiceRetainedCleanupData;
 }

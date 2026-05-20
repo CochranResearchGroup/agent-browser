@@ -833,3 +833,52 @@ Validation:
 Visual evidence:
 
 - `/tmp/agent-browser-service-browser-row-actions-phase4.png`
+
+### 2026-05-19 Phase 4 Browser Row Remedies
+
+Started enabling the browser row remedy buttons from service-owned backend
+contracts:
+
+- added `service_browser_close` to the service-request action contract for
+  polite close of the active service browser named by `params.browserId`
+- added `service_browser_repair` to make one degraded or faulted retained
+  browser record retryable again after operator review
+- kept close constrained to the currently controlled service browser so the
+  dashboard cannot pretend to close an arbitrary retained row
+- reused the existing shutdown health model, so polite close failure remains
+  degraded and force-kill failure remains faulted
+- reused the existing browser recovery override event path for row-scoped
+  repair
+- updated generated service clients so software callers get typed action
+  responses
+- updated dashboard row actions to fetch `GET /api/service/contracts` and
+  enable close or repair only when the service advertises the action and the
+  browser row is eligible
+
+Validation:
+
+- `pnpm generate:service-client`
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm test:dashboard-view-streams`
+- `pnpm test:service-client-contract`
+- `pnpm test:service-request-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:service-client`
+- `pnpm build:dashboard`
+- `pnpm --dir docs build`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_browser_repair -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_browser_close -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_request_command_accepts_contract_actions -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_request_schema_and_command_accept_contract_actions -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1`
+- git whitespace check
+- installed shared skill diff check
+- docs note double-hyphen policy check
+
+Live close was not exercised in this slice because `service_browser_close`
+intentionally closes the active service-owned browser. That should be
+validated after installing a candidate service in a disposable session.

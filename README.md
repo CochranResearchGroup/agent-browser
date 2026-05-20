@@ -1681,6 +1681,8 @@ Use `service repair-retained` before abandoned-session cleanup when legacy inert
 
 The Service dashboard shows a retained-state cleanup workflow when persisted state grows large. It queues `service_prune_retained` and `service_repair_retained` through `POST /api/service/request`, runs dry-runs first, and only enables apply after the operator has a reviewed candidate result in view.
 
+Browser row remedies also use `POST /api/service/request`. `service_browser_close` politely closes the active service browser identified by `params.browserId` and records the same shutdown health used by CLI close. `service_browser_repair` makes one degraded or faulted retained browser record retryable again after operator review. Dashboard row buttons enable these actions only when `GET /api/service/contracts` advertises support and the selected browser state matches the action.
+
 Use `service access-plan` before browser work when an operator, agent, or software client needs the same no-launch broker recommendation as HTTP `GET /api/service/access-plan` and MCP `service_access_plan`. Text output includes the selected profile, manual-seeding posture, monitor freshness recommendation, service request availability, and compact `browser_build_summary` explaining which browser build won.
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, profile lease wait pressure, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.

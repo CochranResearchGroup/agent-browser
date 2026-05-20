@@ -288,6 +288,19 @@ type RetainedCleanupResult = {
   after?: Record<string, number>;
 };
 
+type ServiceBrowserCloseData = {
+  closed?: boolean;
+  browserId?: string;
+  requestedBrowserId?: string;
+  serviceOwned?: boolean;
+};
+
+type ServiceBrowserRepairData = {
+  repaired?: boolean;
+  browser?: ServiceBrowser;
+  incident?: IncidentRecord | null;
+};
+
 type ServiceState = {
   controlPlane?: {
     workerState?: string;
@@ -312,6 +325,14 @@ type ServiceStatusData = {
   control_plane?: ControlPlaneSnapshot;
   service_state?: ServiceState;
   profileAllocations?: ServiceProfileAllocation[];
+};
+
+type ServiceContractsData = {
+  contracts?: {
+    serviceRequest?: {
+      actions?: string[];
+    };
+  };
 };
 
 type ServiceProfileAllocationData = {
@@ -2029,6 +2050,12 @@ function BrowserTable({
   onSelect,
   onViewStream,
   onFocusViewStream,
+  onCloseBrowser,
+  onRepairBrowser,
+  closeSupported,
+  repairSupported,
+  activeSessionName,
+  actingBrowserActionId,
   selectedBrowserId,
 }: {
   browsers: ServiceBrowser[];
@@ -2036,6 +2063,12 @@ function BrowserTable({
   onSelect: (browser: ServiceBrowser) => void;
   onViewStream?: (browser: ServiceBrowser) => void;
   onFocusViewStream?: (browser: ServiceBrowser) => void;
+  onCloseBrowser?: (browser: ServiceBrowser) => void;
+  onRepairBrowser?: (browser: ServiceBrowser) => void;
+  closeSupported?: boolean;
+  repairSupported?: boolean;
+  activeSessionName?: string | null;
+  actingBrowserActionId?: string | null;
   selectedBrowserId?: string | null;
 }) {
   const [filter, setFilter] = useState("");
@@ -2471,6 +2504,12 @@ function BrowserTable({
                   onSelect={onSelect}
                   onViewStream={onViewStream}
                   onFocusViewStream={onFocusViewStream}
+                  onCloseBrowser={onCloseBrowser}
+                  onRepairBrowser={onRepairBrowser}
+                  closeSupported={closeSupported}
+                  repairSupported={repairSupported}
+                  activeSessionName={activeSessionName}
+                  acting={Boolean(actingBrowserActionId && browser.id === actingBrowserActionId)}
                   onNavigate={navigateBrowserRows}
                   rowButtonRef={browser.id ? (node) => setRowButtonRef(browser.id, node) : undefined}
                   density={density}
@@ -2511,6 +2550,12 @@ function BrowserTableRow({
   onSelect,
   onViewStream,
   onFocusViewStream,
+  onCloseBrowser,
+  onRepairBrowser,
+  closeSupported,
+  repairSupported,
+  activeSessionName,
+  acting,
   onNavigate,
   rowButtonRef,
   density,
@@ -2522,6 +2567,12 @@ function BrowserTableRow({
   onSelect: (browser: ServiceBrowser) => void;
   onViewStream?: (browser: ServiceBrowser) => void;
   onFocusViewStream?: (browser: ServiceBrowser) => void;
+  onCloseBrowser?: (browser: ServiceBrowser) => void;
+  onRepairBrowser?: (browser: ServiceBrowser) => void;
+  closeSupported?: boolean;
+  repairSupported?: boolean;
+  activeSessionName?: string | null;
+  acting?: boolean;
   onNavigate: (browser: ServiceBrowser, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   rowButtonRef?: (node: HTMLButtonElement | null) => void;
   density: BrowserTableDensity;
@@ -2530,6 +2581,8 @@ function BrowserTableRow({
   const sessionCount = browser.activeSessionIds?.length ?? 0;
   const viewStreamCount = browser.viewStreams?.length ?? 0;
   const viewStreamAvailable = Boolean(browserPrimaryViewStream(browser));
+  const closeAvailable = Boolean(closeSupported && onCloseBrowser && activeSessionName && browser.id === `session:${activeSessionName}`);
+  const repairAvailable = Boolean(repairSupported && onRepairBrowser && ["degraded", "faulted"].includes((browser.health ?? "").toLowerCase()));
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
     <tr className={cn("service-browser-table-row", selected && "service-browser-table-row-selected")} aria-selected={selected}>
@@ -2613,23 +2666,40 @@ function BrowserTableRow({
           >
             Focus
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+                disabled={!closeAvailable || acting}
+                title={closeAvailable ? "Queue polite close for this service browser." : "Only the active service browser can be closed from this row."}
+              >
+                Close
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Close service browser?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This queues a polite close for {browser.id || "the selected browser"}. If polite close fails, agent-browser records degraded shutdown health.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onCloseBrowser?.(browser)}>Close browser</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Button
             type="button"
             size="sm"
             variant="outline"
             className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-            disabled
-            title="Row-scoped browser close is pending a service-owned remedy action."
-          >
-            Close
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-            disabled
-            title="Row-scoped browser repair is pending a service-owned remedy action."
+            disabled={!repairAvailable || acting}
+            title={repairAvailable ? "Mark this degraded or faulted browser retryable." : "Repair is available for degraded or faulted browser records."}
+            onClick={() => onRepairBrowser?.(browser)}
           >
             Repair
           </Button>
@@ -4069,6 +4139,7 @@ export function ServicePanel({
   const [events, setEvents] = useState<ServiceEventsData | null>(null);
   const [jobs, setJobs] = useState<ServiceJobsData | null>(null);
   const [incidents, setIncidents] = useState<ServiceIncidentsData | null>(null);
+  const [contracts, setContracts] = useState<ServiceContractsData | null>(null);
   const [trace, setTrace] = useState<ServiceTraceData | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceError, setTraceError] = useState("");
@@ -4126,6 +4197,7 @@ export function ServicePanel({
   const [selectedProfileAllocation, setSelectedProfileAllocation] = useState<ServiceProfileAllocation | null>(null);
   const [selectedProfileAllocationLoading, setSelectedProfileAllocationLoading] = useState(false);
   const [selectedProfileAllocationError, setSelectedProfileAllocationError] = useState("");
+  const [actingBrowserActionId, setActingBrowserActionId] = useState<string | null>(null);
   const profileAllocationLookupId = useRef(0);
   const profileAllocationRowRefs = useRef(new Map<string, HTMLButtonElement>());
 
@@ -4149,16 +4221,21 @@ export function ServicePanel({
       if (windowOption?.milliseconds) {
         params.set("since", new Date(Date.now() - windowOption.milliseconds).toISOString());
       }
-      const [statusResp, jobsResp, eventsResp, incidentsResp] = await Promise.all([
+      const contractsPromise = fetch(`${serviceBase(activePort)}/contracts`).catch(() => null);
+      const [statusResp, jobsResp, eventsResp, incidentsResp, contractsResp] = await Promise.all([
         fetch(`${serviceBase(activePort)}/status`),
         fetch(`${serviceBase(activePort)}/jobs?limit=8`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
         fetch(`${serviceBase(activePort)}/incidents?summary=true&limit=50`),
+        contractsPromise,
       ]);
       const statusJson = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
       const jobsJson = (await jobsResp.json()) as ApiResponse<ServiceJobsData>;
       const eventsJson = (await eventsResp.json()) as ApiResponse<ServiceEventsData>;
       const incidentsJson = (await incidentsResp.json()) as ApiResponse<ServiceIncidentsData>;
+      const contractsJson = contractsResp?.ok
+        ? ((await contractsResp.json()) as ApiResponse<ServiceContractsData>)
+        : null;
       if (!statusJson.success) throw new Error(statusJson.error || "Service status failed");
       if (!jobsJson.success) throw new Error(jobsJson.error || "Service jobs failed");
       if (!eventsJson.success) throw new Error(eventsJson.error || "Service events failed");
@@ -4166,6 +4243,7 @@ export function ServicePanel({
       setJobs(jobsJson.data ?? null);
       setEvents(eventsJson.data ?? null);
       setIncidents(incidentsJson.success ? incidentsJson.data ?? null : null);
+      setContracts(contractsJson?.success ? contractsJson.data ?? null : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service API unavailable");
     } finally {
@@ -4526,6 +4604,12 @@ export function ServicePanel({
   ]);
 
   const serviceState = status?.service_state;
+  const serviceRequestActions = useMemo(
+    () => new Set(contracts?.contracts?.serviceRequest?.actions ?? []),
+    [contracts?.contracts?.serviceRequest?.actions],
+  );
+  const browserCloseSupported = serviceRequestActions.has("service_browser_close");
+  const browserRepairSupported = serviceRequestActions.has("service_browser_repair");
   const control = status?.control_plane;
   const serviceJobTimeoutMs =
     control?.service_job_timeout_ms ?? serviceState?.controlPlane?.serviceJobTimeoutMs ?? null;
@@ -4866,6 +4950,62 @@ export function ServicePanel({
 
     openViewStream(stream, browser, primaryTab, focusMessage);
   }, [activePort, activeSession, browserTabsById, canFetch, openViewStream, operatorIdentity, tabIndexById]);
+  const closeServiceBrowser = useCallback(async (browser: ServiceBrowser) => {
+    if (!canFetch || !browser.id) return;
+    setActingBrowserActionId(browser.id);
+    setError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "service_browser_close",
+          serviceName: "agent-browser-dashboard",
+          agentName: operatorIdentity.trim() || activeSession || "operator",
+          taskName: "close-browser-row",
+          params: { browserId: browser.id },
+          jobTimeoutMs: 10000,
+        }),
+      });
+      const json = (await resp.json()) as ApiResponse<ServiceBrowserCloseData>;
+      if (!json.success) throw new Error(json.error || "Service browser close request failed");
+      await fetchService(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Service browser close request failed");
+    } finally {
+      setActingBrowserActionId(null);
+    }
+  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
+  const repairServiceBrowser = useCallback(async (browser: ServiceBrowser) => {
+    if (!canFetch || !browser.id) return;
+    setActingBrowserActionId(browser.id);
+    setError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "service_browser_repair",
+          serviceName: "agent-browser-dashboard",
+          agentName: operatorIdentity.trim() || activeSession || "operator",
+          taskName: "repair-browser-row",
+          params: {
+            browserId: browser.id,
+            by: operatorIdentity.trim() || activeSession || "operator",
+            note: "Dashboard row repair requested",
+          },
+          jobTimeoutMs: 10000,
+        }),
+      });
+      const json = (await resp.json()) as ApiResponse<ServiceBrowserRepairData>;
+      if (!json.success) throw new Error(json.error || "Service browser repair request failed");
+      await fetchService(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Service browser repair request failed");
+    } finally {
+      setActingBrowserActionId(null);
+    }
+  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
   const inspectTabViewStream = useCallback(async (tab: ServiceTab) => {
     const browser = tab.browserId ? browserById.get(tab.browserId) : null;
     const stream = browserPrimaryViewStream(browser);
@@ -5313,6 +5453,12 @@ export function ServicePanel({
                   onSelect={inspectBrowser}
                   onViewStream={openBrowserViewStream}
                   onFocusViewStream={focusBrowserViewStream}
+                  onCloseBrowser={closeServiceBrowser}
+                  onRepairBrowser={repairServiceBrowser}
+                  closeSupported={browserCloseSupported}
+                  repairSupported={browserRepairSupported}
+                  activeSessionName={activeSession}
+                  actingBrowserActionId={actingBrowserActionId}
                   selectedBrowserId={selectedBrowserId}
                 />
               )}

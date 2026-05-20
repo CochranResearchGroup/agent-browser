@@ -53,7 +53,8 @@ use super::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
     persist_current_browser_stale_health_in_repository,
     persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
-    reconcile_service_state, retry_persisted_service_browser_in_repository,
+    reconcile_service_state, retry_degraded_service_browser_in_state,
+    retry_persisted_service_browser_in_repository, retry_service_browser_in_state,
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
@@ -215,6 +216,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "stream_status"
             | "service_status"
             | "service_reconcile"
+            | "service_browser_close"
+            | "service_browser_repair"
             | "service_prune_retained"
             | "service_repair_retained"
             | "service_access_plan"
@@ -3183,6 +3186,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "stream_status" => handle_stream_status(state).await,
         "service_status" => handle_service_status(cmd).await,
         "service_reconcile" => handle_service_reconcile(cmd).await,
+        "service_browser_close" => handle_service_browser_close(cmd, state).await,
+        "service_browser_repair" => handle_service_browser_repair(cmd).await,
         "service_prune_retained" => handle_service_prune_retained(cmd).await,
         "service_repair_retained" => handle_service_repair_retained(cmd).await,
         "service_access_plan" => handle_service_access_plan(cmd).await,
@@ -8303,6 +8308,106 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
         "changedBrowsers": summary.changed_browsers,
         "service_state": service_state,
     }))
+}
+
+async fn handle_service_browser_close(
+    cmd: &Value,
+    state: &mut DaemonState,
+) -> Result<Value, String> {
+    let browser_id = cmd
+        .get("browserId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("Missing browserId")?;
+    let active_browser_id = service_browser_id(&state.session_id);
+    if browser_id != active_browser_id {
+        return Err(format!(
+            "service_browser_close can only close the active service browser {}; requested {}",
+            active_browser_id, browser_id
+        ));
+    }
+    if state.browser.is_none() {
+        return Err(format!(
+            "Service browser {} is not attached to this control plane",
+            browser_id
+        ));
+    }
+
+    let mut result = handle_close(state).await?;
+    result["browserId"] = json!(browser_id);
+    result["requestedBrowserId"] = json!(browser_id);
+    result["serviceOwned"] = json!(true);
+    Ok(result)
+}
+
+async fn handle_service_browser_repair(cmd: &Value) -> Result<Value, String> {
+    let browser_id = cmd
+        .get("browserId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("Missing browserId")?;
+    let by = cmd.get("by").and_then(Value::as_str);
+    let note = cmd.get("note").and_then(Value::as_str);
+    let service_name = optional_command_string(cmd, "serviceName");
+    let agent_name = optional_command_string(cmd, "agentName");
+    let task_name = optional_command_string(cmd, "taskName");
+    let actor = normalized_operator(by);
+    let note = normalized_note(note);
+    let timestamp = service_now_timestamp();
+    let repository = LockedServiceStateRepository::default_json().map_err(|err| {
+        if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+            format!("Unable to load service state: {}", err)
+        } else {
+            err
+        }
+    })?;
+    let (browser, incident) = repository.mutate(|state| {
+        let health = state
+            .browsers
+            .get(browser_id)
+            .map(|browser| browser.health)
+            .ok_or_else(|| format!("Service browser not found: {}", browser_id))?;
+        match health {
+            ServiceBrowserHealth::Faulted => retry_service_browser_in_state(
+                state,
+                browser_id,
+                timestamp.as_str(),
+                actor.as_str(),
+                note.as_deref(),
+                service_name.as_deref(),
+                agent_name.as_deref(),
+                task_name.as_deref(),
+            ),
+            ServiceBrowserHealth::Degraded => retry_degraded_service_browser_in_state(
+                state,
+                browser_id,
+                timestamp.as_str(),
+                actor.as_str(),
+                note.as_deref(),
+                service_name.as_deref(),
+                agent_name.as_deref(),
+                task_name.as_deref(),
+            ),
+            _ => Err(format!(
+                "Service browser {} is not degraded or faulted; current health is {}",
+                browser_id,
+                service_browser_health_label(health)
+            )),
+        }
+    })?;
+
+    Ok(json!({
+        "repaired": true,
+        "browser": browser,
+        "incident": incident,
+    }))
+}
+
+fn service_browser_health_label(health: ServiceBrowserHealth) -> String {
+    serde_json::to_value(health)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -18117,6 +18222,139 @@ mod tests {
         }));
 
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_browser_repair_retries_degraded_browser() {
+        let home = unique_socket_dir("service-browser-repair-degraded-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let browser_id = "session:degraded-session";
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        health: ServiceBrowserHealth::Degraded,
+                        active_session_ids: vec!["degraded-session".to_string()],
+                        last_error: Some(
+                            "Polite browser close failed; force kill was required".to_string(),
+                        ),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut daemon_state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "id": "service-browser-repair-1",
+                "action": "service_browser_repair",
+                "browserId": browser_id,
+                "by": "operator",
+                "note": "operator reviewed shutdown outcome",
+                "serviceName": "JournalDownloader",
+                "agentName": "codex",
+                "taskName": "probeACSwebsite"
+            }),
+            &mut daemon_state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["repaired"], true);
+        assert_eq!(result["data"]["browser"]["health"], "process_exited");
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.browsers[browser_id].health,
+            ServiceBrowserHealth::ProcessExited
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::BrowserRecoveryOverride
+                && event.browser_id.as_deref() == Some(browser_id)
+                && event.service_name.as_deref() == Some("JournalDownloader")
+                && event.agent_name.as_deref() == Some("codex")
+                && event.task_name.as_deref() == Some("probeACSwebsite")
+        }));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_browser_repair_rejects_ready_browser() {
+        let home = unique_socket_dir("service-browser-repair-ready-home");
+        fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let browser_id = "session:ready-session";
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    browser_id.to_string(),
+                    BrowserProcess {
+                        id: browser_id.to_string(),
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["ready-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut daemon_state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "id": "service-browser-repair-ready",
+                "action": "service_browser_repair",
+                "browserId": browser_id
+            }),
+            &mut daemon_state,
+        )
+        .await;
+
+        assert_eq!(result["success"], false);
+        assert!(result["error"]
+            .as_str()
+            .unwrap()
+            .contains("is not degraded or faulted"));
+        assert_eq!(
+            store.load().unwrap().browsers[browser_id].health,
+            ServiceBrowserHealth::Ready
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_browser_close_rejects_non_active_browser_without_launch() {
+        let mut daemon_state = DaemonState::new();
+        daemon_state.session_id = "active-session".to_string();
+
+        let result = execute_command(
+            &json!({
+                "id": "service-browser-close-wrong",
+                "action": "service_browser_close",
+                "browserId": "session:other-session"
+            }),
+            &mut daemon_state,
+        )
+        .await;
+
+        assert_eq!(result["success"], false);
+        assert!(result["error"]
+            .as_str()
+            .unwrap()
+            .contains("can only close the active service browser"));
+        assert!(daemon_state.browser.is_none());
     }
 
     #[test]

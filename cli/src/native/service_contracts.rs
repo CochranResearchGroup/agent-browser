@@ -145,6 +145,8 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "scrollintoview",
     "focus",
     "clear",
+    "service_browser_close",
+    "service_browser_repair",
     "service_prune_retained",
     "service_repair_retained",
 ];
