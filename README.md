@@ -1580,7 +1580,12 @@ AGENT_BROWSER_STREAM_PORT=9223 agent-browser open example.com
 
 Service requests that use `params.browserHost=remote_headed` launch a headed
 browser for CDP control while keeping it off the operator desktop on Linux when
-`DISPLAY` is unset. In that case agent-browser starts a private Xvfb display.
+`DISPLAY` is unset. In that case agent-browser starts a private Xvfb display
+for that browser process. This per-browser display isolation is the preferred
+service mode because focus, window geometry, input injection, streaming,
+recording, crash recovery, and repair are scoped to one managed browser instead
+of one shared desktop. A shared display is available only as an explicit
+operator optimization.
 Access-plan `decision.launchPosture` now reports the service-selected
 `viewStreamProvider` and `controlInputProvider`, and copied service requests
 carry those hints in `params` so dashboards and software clients do not infer
@@ -1596,6 +1601,8 @@ provider, with disabled-state explanations sourced from the stream metadata.
 Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` to reuse an existing virtual display,
 and set `AGENT_BROWSER_REMOTE_VIEW_URL` when an external noVNC, RDP gateway,
 WebRTC, or dashboard view URL should be recorded on the service browser record.
+Use the shared display override only for trusted low-contention workloads,
+because focus and native-window state become shared mutable resources.
 Set `AGENT_BROWSER_REMOTE_VIEW_PROVIDER=rdp_gateway` when the URL points to an
 HTML5 RDP gateway that should be embedded in the dashboard browser details.
 Use `pnpm test:rdp-gateway-readiness-live` on operator workstations to check
@@ -2106,7 +2113,10 @@ not accidentally launch true headless Chrome or discard the host selected by a
 site policy. A copied `remote_headed` request is actionable in the daemon: on
 Linux it starts a hidden Xvfb-backed headed browser when no display is supplied,
 keeps CDP control available, and records a view stream entry for dashboard or
-operator surfaces. The shipped Canva
+operator surfaces. Treat that private display as the default browser isolation
+boundary. Supplying `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` intentionally moves
+the browser into a shared display pool where focus and window state must be
+coordinated by the service queue. The shipped Canva
 site policy recommends `cdp_free_headed` by default because some Canva sessions
 can fail before the page loads when DevTools is attached. The shipped UPS site
 policy recommends `stealthcdp_chromium` with a remote-view-capable headed host
