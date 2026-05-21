@@ -279,6 +279,7 @@ export type ServiceInspectorSelection =
 
 export type ServiceInspectorActions = {
   actingIncidentId?: string | null;
+  onControlBrowser?: (browser: ServiceBrowser) => void;
   onAcknowledgeIncident?: (incident: IncidentRecord, note: string) => void;
   onResolveIncident?: (incident: IncidentRecord, note: string) => void;
   onCancelJob?: (job: ServiceJob) => void;
@@ -2926,12 +2927,15 @@ function BrowserDetailDialog({
 function BrowserDetailContent({
   browser,
   onInspectViewStream,
+  onControlBrowser,
 }: {
   browser: ServiceBrowser;
   onInspectViewStream?: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
+  onControlBrowser?: (browser: ServiceBrowser) => void;
 }) {
   const viewStreamCount = browser.viewStreams?.length ?? 0;
   const primaryViewStream = browserPrimaryViewStream(browser);
+  const controlAvailable = canOpenControlViewStream(primaryViewStream);
   return (
     <div className="service-event-dialog-body">
       {browser.lastError && (
@@ -2953,6 +2957,19 @@ function BrowserDetailContent({
         <EventDetailItem label="Primary input" value={primaryViewStream ? controlInputLabel(primaryViewStream) : null} />
       </div>
       <RemoteViewReadinessStrip stream={primaryViewStream} />
+      {onControlBrowser && (
+        <Button
+          type="button"
+          size="sm"
+          className="w-fit gap-1.5 rounded-full"
+          disabled={!controlAvailable}
+          title={viewStreamControlTitle(primaryViewStream)}
+          onClick={() => onControlBrowser(browser)}
+        >
+          <Eye className="size-3.5" />
+          Open remote control
+        </Button>
+      )}
       {!!browser.activeSessionIds?.length && (
         <div>
           <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
@@ -3020,7 +3037,9 @@ export function ServiceDetailInspector({
           </div>
           <span className={cn("service-browser-health-dot", `service-browser-health-${header.tone}`)} />
         </div>
-        {selection.kind === "browser" && <BrowserDetailContent browser={selection.browser} />}
+        {selection.kind === "browser" && (
+          <BrowserDetailContent browser={selection.browser} onControlBrowser={actions.onControlBrowser} />
+        )}
         {selection.kind === "profile" && <ProfileAllocationDetailContent allocation={selection.allocation} />}
         {selection.kind === "incident" && (
           <IncidentDetailContent
@@ -4677,22 +4696,6 @@ export function ServicePanel({
     }
   }, [handleIncident, updateInspectorIncident]);
 
-  useEffect(() => {
-    if (!onInspectorActionsChange) return;
-    onInspectorActionsChange({
-      actingIncidentId,
-      onAcknowledgeIncident: acknowledgeInspectorIncident,
-      onResolveIncident: resolveInspectorIncident,
-      onCancelJob: cancelInspectorJob,
-    });
-  }, [
-    acknowledgeInspectorIncident,
-    actingIncidentId,
-    cancelInspectorJob,
-    onInspectorActionsChange,
-    resolveInspectorIncident,
-  ]);
-
   const serviceState = status?.service_state;
   const serviceRequestActions = useMemo(
     () => new Set(contracts?.contracts?.serviceRequest?.actions ?? []),
@@ -5048,6 +5051,25 @@ export function ServicePanel({
 
     openViewStream(stream, browser, primaryTab, focusMessage);
   }, [activePort, activeSession, browserTabsById, canFetch, openViewStream, operatorIdentity, tabIndexById]);
+
+  useEffect(() => {
+    if (!onInspectorActionsChange) return;
+    onInspectorActionsChange({
+      actingIncidentId,
+      onControlBrowser: focusBrowserViewStream,
+      onAcknowledgeIncident: acknowledgeInspectorIncident,
+      onResolveIncident: resolveInspectorIncident,
+      onCancelJob: cancelInspectorJob,
+    });
+  }, [
+    acknowledgeInspectorIncident,
+    actingIncidentId,
+    cancelInspectorJob,
+    focusBrowserViewStream,
+    onInspectorActionsChange,
+    resolveInspectorIncident,
+  ]);
+
   const closeServiceBrowser = useCallback(async (browser: ServiceBrowser) => {
     if (!canFetch || !browser.id) return;
     setActingBrowserActionId(browser.id);

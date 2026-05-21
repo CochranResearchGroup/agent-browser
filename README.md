@@ -1611,7 +1611,9 @@ and closes the browser through the service-owned control path.
 The Service inspector also shows a compact readiness strip for the selected
 browser with remote view readiness, control readiness, provider, input, and
 gateway URL so operators can diagnose missing stream metadata before opening a
-remote desktop.
+remote desktop. The selected-browser inspector exposes the same **Open remote
+control** path as browser rows, so it queues `view_focus` before opening the
+embedded stream when the service reports a controllable input provider.
 
 You can also manage streaming at runtime with `stream enable`, `stream disable`, and `stream status`:
 

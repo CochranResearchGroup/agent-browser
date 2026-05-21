@@ -15,14 +15,20 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /export type ServiceInspectorActions = \{[\s\S]*onAcknowledgeIncident\?:[\s\S]*onResolveIncident\?:[\s\S]*onCancelJob\?:/,
-  'ServiceInspectorActions must expose incident acknowledge, incident resolve, and job cancel callbacks separately',
+  /export type ServiceInspectorActions = \{[\s\S]*onControlBrowser\?:[\s\S]*onAcknowledgeIncident\?:[\s\S]*onResolveIncident\?:[\s\S]*onCancelJob\?:/,
+  'ServiceInspectorActions must expose browser control, incident acknowledge, incident resolve, and job cancel callbacks separately',
 );
 
 assert.match(
   servicePanel,
   /export function ServiceDetailInspector\(\{[\s\S]*selection,[\s\S]*actions = \{\},/,
   'ServiceDetailInspector must accept actions separately from selected-record state',
+);
+
+assert.match(
+  servicePanel,
+  /selection\.kind === "browser"[\s\S]*<BrowserDetailContent browser=\{selection\.browser\} onControlBrowser=\{actions\.onControlBrowser\} \/>/,
+  'Browser inspector must receive the remote-control callback from inspector actions',
 );
 
 assert.match(
@@ -39,8 +45,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /onInspectorActionsChange\(\{[\s\S]*actingIncidentId,[\s\S]*onAcknowledgeIncident: acknowledgeInspectorIncident,[\s\S]*onResolveIncident: resolveInspectorIncident,[\s\S]*onCancelJob: cancelInspectorJob,[\s\S]*\}\);/,
+  /onInspectorActionsChange\(\{[\s\S]*actingIncidentId,[\s\S]*onControlBrowser: focusBrowserViewStream,[\s\S]*onAcknowledgeIncident: acknowledgeInspectorIncident,[\s\S]*onResolveIncident: resolveInspectorIncident,[\s\S]*onCancelJob: cancelInspectorJob,[\s\S]*\}\);/,
   'ServicePanel must publish right-pane action handlers through onInspectorActionsChange',
+);
+
+assert.match(
+  servicePanel,
+  /const controlAvailable = canOpenControlViewStream\(primaryViewStream\);[\s\S]*disabled=\{!controlAvailable\}[\s\S]*title=\{viewStreamControlTitle\(primaryViewStream\)\}[\s\S]*onClick=\{\(\) => onControlBrowser\(browser\)\}[\s\S]*Open remote control/,
+  'Browser inspector remote-control action must use service stream control metadata for gating and disabled copy',
 );
 
 assert.match(

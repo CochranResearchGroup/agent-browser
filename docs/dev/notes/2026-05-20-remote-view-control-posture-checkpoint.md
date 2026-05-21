@@ -42,7 +42,9 @@ comes from the stream metadata.
 The browser detail inspector now shows a compact remote-view readiness strip
 for the selected browser. It reports view readiness, control readiness,
 provider, input, and gateway URL from the same retained stream metadata the row
-actions use.
+actions use. The right-pane selected-browser inspector also exposes **Open
+remote control**, gated by the same control metadata, and routes through the
+existing queued `view_focus` path before opening the embedded stream.
 
 The reusable live smoke for this contract is:
 
