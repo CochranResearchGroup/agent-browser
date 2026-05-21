@@ -57,6 +57,18 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /function ServiceTabRow\(\{[\s\S]*viewStreamAvailable,[\s\S]*onInspect,[\s\S]*onSelect,[\s\S]*\}: \{[\s\S]*viewStreamAvailable\?: boolean;[\s\S]*onInspect\?: \(tab: ServiceTab\) => void;[\s\S]*onSelect: \(tab: ServiceTab\) => void;[\s\S]*\}\) \{[\s\S]*aria-label=\{`Inspect tab \$\{tab\.id\}`\}[\s\S]*\{viewStreamAvailable && onInspect && \([\s\S]*onClick=\{\(\) => onInspect\(tab\)\}[\s\S]*Control/,
+  'Service tab rows must keep a gated Control action wired to the tab inspect callback',
+);
+
+assert.match(
+  servicePanel,
+  /const inspectTabViewStream = useCallback\(async \(tab: ServiceTab\) => \{[\s\S]*const browser = tab\.browserId \? browserById\.get\(tab\.browserId\) : null;[\s\S]*const stream = browserPrimaryViewStream\(browser\);[\s\S]*if \(!canOpenControlViewStream\(stream\)\)[\s\S]*const tabIndex = tabIndexById\.get\(tab\.id\);[\s\S]*action: "view_focus"[\s\S]*taskName: "inspect-hidden-rdp-tab"[\s\S]*params: \{ index: tabIndex, maximize: true \}[\s\S]*openViewStream\(stream, browser, tab, focusMessage\);/,
+  'Service tab remote-control action must queue tab-specific view_focus before opening the stream',
+);
+
+assert.match(
+  servicePanel,
   /await handleIncident\(incident, "acknowledge", note, false\)/,
   'Right-pane acknowledge must keep the inspector open while applying the service action',
 );
