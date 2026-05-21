@@ -1614,6 +1614,11 @@ gateway URL so operators can diagnose missing stream metadata before opening a
 remote desktop. The selected-browser inspector exposes the same **Open remote
 control** path as browser rows, so it queues `view_focus` before opening the
 embedded stream when the service reports a controllable input provider.
+Use `pnpm test:service-dashboard-remote-control-ui-live` when changing the
+selected-browser inspector or embedded remote-control dialog; it drives the
+real dashboard UI with `agent-browser`, selects the remote-headed browser row,
+clicks the right-pane **Open remote control** action, verifies the iframe URL,
+and confirms a dashboard-owned `view_focus` job was queued.
 
 You can also manage streaming at runtime with `stream enable`, `stream disable`, and `stream status`:
 

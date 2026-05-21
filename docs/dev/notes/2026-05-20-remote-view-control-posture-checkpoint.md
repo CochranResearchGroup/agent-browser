@@ -46,6 +46,17 @@ actions use. The right-pane selected-browser inspector also exposes **Open
 remote control**, gated by the same control metadata, and routes through the
 existing queued `view_focus` path before opening the embedded stream.
 
+The reusable live UI smoke for that browser-inspector path is:
+
+```bash
+pnpm test:service-dashboard-remote-control-ui-live
+```
+
+It uses an isolated service home, launches a `remote_headed` browser, opens the
+real dashboard in a separate UI profile, selects the target browser row, clicks
+the right-pane **Open remote control** action, verifies the embedded iframe URL,
+and confirms the dashboard queued `view_focus`.
+
 The reusable live smoke for this contract is:
 
 ```bash
