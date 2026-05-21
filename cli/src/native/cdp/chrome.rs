@@ -394,6 +394,8 @@ pub struct LaunchOptions {
     /// Launch as a service-managed remote-headed browser. On Linux this can
     /// use a private virtual display while keeping CDP available for control.
     pub remote_headed: bool,
+    /// Optional display allocation policy for remote-headed service launches.
+    pub remote_headed_display_isolation: Option<String>,
 }
 
 impl Default for LaunchOptions {
@@ -423,6 +425,7 @@ impl Default for LaunchOptions {
             attachable: false,
             display: None,
             remote_headed: false,
+            remote_headed_display_isolation: None,
         }
     }
 }
@@ -930,10 +933,11 @@ fn try_launch_chrome(
 
     let mut aux_processes = Vec::new();
     #[cfg(target_os = "linux")]
+    let private_remote_display_allowed = private_remote_display_allowed(options);
     let remote_headed_display = if options.remote_headed
         && !options.headless
         && options.display.is_none()
-        && std::env::var_os("DISPLAY").is_none()
+        && private_remote_display_allowed
         && !is_wsl_mounted_windows_executable(chrome_path)
     {
         let (display, child) = start_remote_headed_virtual_display(options.viewport_size)?;
@@ -2085,6 +2089,15 @@ fn headed_display_value(options: &LaunchOptions) -> Option<String> {
     headed_display_value_with_override(options, None)
 }
 
+#[cfg(target_os = "linux")]
+fn private_remote_display_allowed(options: &LaunchOptions) -> bool {
+    match options.remote_headed_display_isolation.as_deref() {
+        Some("private_virtual_display") => true,
+        Some("shared_display") | Some("ambient_display") => false,
+        _ => std::env::var_os("DISPLAY").is_none(),
+    }
+}
+
 fn headed_display_value_with_override(
     options: &LaunchOptions,
     virtual_display: Option<&str>,
@@ -2576,6 +2589,38 @@ mod tests {
             headed_display_value_with_override(&opts, Some(":91")),
             Some(":91".to_string())
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_private_remote_display_policy_controls_xvfb_fallback() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.remove("DISPLAY");
+
+        let default_remote = LaunchOptions {
+            headless: false,
+            remote_headed: true,
+            ..Default::default()
+        };
+        assert!(private_remote_display_allowed(&default_remote));
+
+        let private_remote = LaunchOptions {
+            remote_headed_display_isolation: Some("private_virtual_display".to_string()),
+            ..default_remote.clone()
+        };
+        assert!(private_remote_display_allowed(&private_remote));
+
+        let shared_remote = LaunchOptions {
+            remote_headed_display_isolation: Some("shared_display".to_string()),
+            ..default_remote.clone()
+        };
+        assert!(!private_remote_display_allowed(&shared_remote));
+
+        let ambient_remote = LaunchOptions {
+            remote_headed_display_isolation: Some("ambient_display".to_string()),
+            ..default_remote
+        };
+        assert!(!private_remote_display_allowed(&ambient_remote));
     }
 
     #[cfg(target_os = "linux")]

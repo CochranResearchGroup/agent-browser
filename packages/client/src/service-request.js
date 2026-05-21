@@ -11,6 +11,11 @@ import {
 } from './service-request.generated.js';
 
 const actionSet = new Set(SERVICE_REQUEST_ACTIONS);
+const displayIsolationSet = new Set([
+  'private_virtual_display',
+  'shared_display',
+  'ambient_display',
+]);
 
 /**
  * @typedef {import('./service-request.generated.js').ServiceRequest} ServiceRequest
@@ -79,6 +84,11 @@ export function createServiceRequest(input) {
   ) {
     throw new TypeError('service request profileLeasePolicy must be reject or wait');
   }
+  if (Object.hasOwn(input, 'displayIsolation') && !displayIsolationSet.has(String(record.displayIsolation))) {
+    throw new TypeError(
+      'service request displayIsolation must be private_virtual_display, shared_display, or ambient_display',
+    );
+  }
   for (const field of SERVICE_REQUEST_STRING_ARRAY_FIELDS) {
     if (Object.hasOwn(input, field)) {
       const value = record[field];
@@ -130,14 +140,15 @@ export function createServiceTabRequest(input) {
   });
   const plannedRequest =
     accessPlan !== undefined ? accessPlanServiceTabRequest(accessPlan, { allowManualAction }) : {};
+  const { params: plannedParams, ...plannedRequestFields } = plannedRequest;
 
-  const tabParams = { ...(params ?? {}) };
+  const tabParams = { ...plainRecordOrEmpty(plannedParams), ...(params ?? {}) };
   if (url !== undefined) {
     tabParams.url = url;
   }
 
   return createServiceRequest({
-    ...plannedRequest,
+    ...plannedRequestFields,
     ...request,
     action: 'tab_new',
     ...(accessPlan !== undefined && allowManualAction === true ? { allowManualAction: true } : {}),
@@ -185,14 +196,15 @@ export function createServiceCdpFreeLaunchRequest(input) {
   });
   const plannedRequest =
     accessPlan !== undefined ? accessPlanServiceCdpFreeLaunchRequest(accessPlan, { allowManualAction }) : {};
+  const { params: plannedParams, ...plannedRequestFields } = plannedRequest;
 
-  const launchParams = { ...(params ?? {}) };
+  const launchParams = { ...plainRecordOrEmpty(plannedParams), ...(params ?? {}) };
   if (url !== undefined) {
     launchParams.url = url;
   }
 
   return createServiceRequest({
-    ...plannedRequest,
+    ...plannedRequestFields,
     ...request,
     action: 'cdp_free_launch',
     requiresCdpFree: true,
@@ -471,4 +483,15 @@ function assertPlainObject(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new TypeError(`${label} must be an object`);
   }
+}
+
+/**
+ * @param {unknown} value
+ * @returns {Record<string, unknown>}
+ */
+function plainRecordOrEmpty(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return /** @type {Record<string, unknown>} */ (value);
 }

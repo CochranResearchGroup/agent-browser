@@ -1450,6 +1450,10 @@ fn service_request_decision(
     let browser_host = launch_posture.get("browserHost").cloned();
     let view_stream_provider = launch_posture.get("viewStreamProvider").cloned();
     let control_input_provider = launch_posture.get("controlInputProvider").cloned();
+    let display_isolation = launch_posture
+        .get("displayIsolation")
+        .and_then(Value::as_str)
+        .map(|value| json!(value));
     let mut request_params = Map::new();
     if headed {
         request_params.insert("headless".to_string(), json!(false));
@@ -1462,6 +1466,9 @@ fn service_request_decision(
     }
     if let Some(control_input_provider) = control_input_provider {
         request_params.insert("controlInputProvider".to_string(), control_input_provider);
+    }
+    if let Some(display_isolation) = display_isolation {
+        request_params.insert("displayIsolation".to_string(), display_isolation);
     }
     if !request_params.is_empty() {
         service_request.insert("params".to_string(), Value::Object(request_params));
@@ -1503,6 +1510,7 @@ fn service_request_decision(
             "targetServiceIds",
             "accountIds",
             "browserBuild",
+            "displayIsolation",
             "profileLeasePolicy",
             "requiresCdpFree",
             "cdpAttachmentAllowed",
@@ -1628,6 +1636,7 @@ fn launch_posture_decision(
         launch_view_stream_provider_decision(browser_host, site_policy);
     let (control_input_provider, control_input_provider_source) =
         launch_control_input_provider_decision(view_stream_provider, site_policy);
+    let display_isolation = launch_display_isolation_decision(browser_host);
     let requires_cdp_free = site_policy
         .map(|policy| policy.requires_cdp_free)
         .unwrap_or(false);
@@ -1651,6 +1660,9 @@ fn launch_posture_decision(
     }
     if remote_view_recommended {
         rationale.push("remote_view_capable_host");
+    }
+    if display_isolation.is_some() {
+        rationale.push("remote_headed_private_display_default");
     }
     match view_stream_provider_source {
         "site_policy" => rationale.push("view_stream_from_site_policy"),
@@ -1714,6 +1726,7 @@ fn launch_posture_decision(
             "viewStreamProviderSource": view_stream_provider_source,
             "controlInputProvider": control_input_provider,
             "controlInputProviderSource": control_input_provider_source,
+            "displayIsolation": display_isolation,
             "headed": headed,
             "remoteViewRecommended": remote_view_recommended,
             "requiresCdpFree": requires_cdp_free,
@@ -1764,6 +1777,13 @@ fn launch_control_input_provider_decision(
         }
     };
     (provider, "view_stream")
+}
+
+fn launch_display_isolation_decision(browser_host: BrowserHost) -> Option<&'static str> {
+    match browser_host {
+        BrowserHost::RemoteHeaded => Some("private_virtual_display"),
+        _ => None,
+    }
 }
 
 fn browser_build_selection_decision(
@@ -3850,6 +3870,14 @@ mod tests {
             "view_stream"
         );
         assert_eq!(
+            plan["decision"]["launchPosture"]["displayIsolation"],
+            "private_virtual_display"
+        );
+        assert!(plan["decision"]["launchPosture"]["rationale"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("remote_headed_private_display_default")));
+        assert_eq!(
             plan["decision"]["launchPosture"]["cdpAttachmentAllowed"],
             true
         );
@@ -4063,6 +4091,10 @@ mod tests {
             "site_policy"
         );
         assert_eq!(
+            plan["decision"]["launchPosture"]["displayIsolation"],
+            "private_virtual_display"
+        );
+        assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["params"]["headless"],
             false
         );
@@ -4077,6 +4109,10 @@ mod tests {
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["params"]["controlInputProvider"],
             "manual_attached_desktop"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["displayIsolation"],
+            "private_virtual_display"
         );
     }
 

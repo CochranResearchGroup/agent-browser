@@ -1502,6 +1502,7 @@ export interface ServiceAccessPlanLaunchPosture {
     | 'manual_attached_desktop'
     | string;
   controlInputProviderSource: 'site_policy' | 'view_stream' | string;
+  displayIsolation: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
   headed: boolean;
   remoteViewRecommended: boolean;
   requiresCdpFree: boolean;

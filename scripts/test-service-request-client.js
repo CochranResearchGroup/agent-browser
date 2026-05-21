@@ -229,6 +229,14 @@ async function main() {
   assert.throws(
     () =>
       createServiceRequest({
+        action: 'tab_new',
+        displayIsolation: 'exclusive',
+      }),
+    /displayIsolation must be private_virtual_display, shared_display, or ambient_display/,
+  );
+  assert.throws(
+    () =>
+      createServiceRequest({
         action: 'navigate',
         loginIds: ['acs', 42],
       }),
@@ -259,6 +267,7 @@ async function main() {
     loginIds: ['acs', 'google'],
     profile: 'journal-acs',
     action: 'navigate',
+    displayIsolation: 'private_virtual_display',
     params: {
       url: 'https://example.com',
       waitUntil: 'load',
@@ -283,6 +292,7 @@ async function main() {
     loginIds: ['acs', 'google'],
     profile: 'journal-acs',
     action: 'navigate',
+    displayIsolation: 'private_virtual_display',
     params: {
       url: 'https://example.com',
       waitUntil: 'load',
@@ -370,6 +380,10 @@ async function main() {
           targetServiceIds: ['acs'],
           profileLeasePolicy: 'wait',
           action: 'tab_new',
+          params: {
+            browserHost: 'remote_headed',
+            displayIsolation: 'private_virtual_display',
+          },
         },
       },
     },
@@ -452,6 +466,8 @@ async function main() {
         recommendedAction: 'use_selected_profile',
       },
       params: {
+        browserHost: 'remote_headed',
+        displayIsolation: 'private_virtual_display',
         url: 'https://example.com/planned',
       },
       jobTimeoutMs: 60_000,
@@ -546,6 +562,8 @@ async function main() {
         recommendedAction: 'probe_target_auth_or_reseed_if_needed',
       },
       params: {
+        browserHost: 'remote_headed',
+        displayIsolation: 'private_virtual_display',
         url: 'https://example.com/planned',
       },
     },
@@ -653,6 +671,8 @@ async function main() {
       profileLeasePolicy: 'wait',
       action: 'tab_new',
       params: {
+        browserHost: 'remote_headed',
+        displayIsolation: 'private_virtual_display',
         url: 'https://example.com/override',
       },
     },
@@ -774,6 +794,8 @@ async function main() {
     profileLeasePolicy: 'wait',
     action: 'tab_new',
     params: {
+      browserHost: 'remote_headed',
+      displayIsolation: 'private_virtual_display',
       url: 'https://example.com/from-plan',
     },
     jobTimeoutMs: 60_000,

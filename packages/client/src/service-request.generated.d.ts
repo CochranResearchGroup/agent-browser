@@ -80,6 +80,7 @@ export interface ServiceRequest {
   params?: Record<string, unknown>;
   profileLeasePolicy?: string;
   browserBuild?: string;
+  displayIsolation?: string;
   serviceName?: string;
   agentName?: string;
   taskName?: string;

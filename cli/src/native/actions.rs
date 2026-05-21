@@ -400,6 +400,7 @@ fn launch_hash(opts: &LaunchOptions) -> u64 {
     opts.manual_login.hash(&mut h);
     opts.display.hash(&mut h);
     opts.remote_headed.hash(&mut h);
+    opts.remote_headed_display_isolation.hash(&mut h);
     h.finish()
 }
 
@@ -1152,6 +1153,9 @@ fn remote_headed_display_isolation(options: &LaunchOptions) -> Option<String> {
     if !options.remote_headed || options.headless {
         return None;
     }
+    if let Some(value) = options.remote_headed_display_isolation.as_ref() {
+        return Some(value.clone());
+    }
     if options.display.is_some() {
         return Some("shared_display".to_string());
     }
@@ -1223,9 +1227,37 @@ fn apply_launch_host_hints(options: &mut LaunchOptions, command: &Value) -> Serv
     }
     if host == ServiceBrowserHost::RemoteHeaded {
         options.remote_headed = true;
-        options.display = remote_headed_display_from_command(command);
+        options.remote_headed_display_isolation =
+            remote_headed_display_isolation_from_command(command);
+        options.display = match options.remote_headed_display_isolation.as_deref() {
+            Some("private_virtual_display") | Some("ambient_display") => None,
+            _ => remote_headed_display_from_command(command),
+        };
     }
     host
+}
+
+fn remote_headed_display_isolation_from_command(command: &Value) -> Option<String> {
+    optional_command_string(command, "displayIsolation")
+        .or_else(|| optional_command_string(command, "displayAllocation"))
+        .or_else(|| optional_command_string(command, "displayAllocationPolicy"))
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(remote_headed_display_isolation_from_command)
+        })
+        .and_then(|value| normalize_remote_headed_display_isolation(&value))
+}
+
+fn normalize_remote_headed_display_isolation(value: &str) -> Option<String> {
+    match value.trim() {
+        "private_virtual_display" | "private-virtual-display" | "private" => {
+            Some("private_virtual_display".to_string())
+        }
+        "shared_display" | "shared-display" | "shared" => Some("shared_display".to_string()),
+        "ambient_display" | "ambient-display" | "ambient" => Some("ambient_display".to_string()),
+        _ => None,
+    }
 }
 
 fn remote_headed_display_from_command(command: &Value) -> Option<String> {
@@ -3660,6 +3692,7 @@ fn launch_options_from_env() -> LaunchOptions {
         attachable: false,
         display: None,
         remote_headed: false,
+        remote_headed_display_isolation: None,
     }
 }
 
@@ -3794,6 +3827,7 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         attachable: false,
         display: None,
         remote_headed: false,
+        remote_headed_display_isolation: None,
     };
     let service_host = apply_launch_host_hints(&mut launch_options, cmd);
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
@@ -4229,6 +4263,7 @@ fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> 
         attachable: false,
         display: None,
         remote_headed: false,
+        remote_headed_display_isolation: None,
     };
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
     let browser_capability_launch =
@@ -12715,6 +12750,79 @@ mod tests {
         assert!(!options.headless);
         assert!(options.remote_headed);
         assert_eq!(options.display.as_deref(), Some(":93"));
+    }
+
+    #[test]
+    fn apply_launch_host_hints_allows_private_remote_headed_display() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_HEADED_DISPLAY"]);
+        guard.set("AGENT_BROWSER_REMOTE_HEADED_DISPLAY", ":93");
+        let command = json!({
+            "action": "tab_new",
+            "displayIsolation": "private_virtual_display",
+            "params": {
+                "browserHost": "remote_headed",
+                "display": ":94"
+            }
+        });
+        let mut options = LaunchOptions::default();
+
+        let host = apply_launch_host_hints(&mut options, &command);
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert!(!options.headless);
+        assert!(options.remote_headed);
+        assert_eq!(
+            options.remote_headed_display_isolation.as_deref(),
+            Some("private_virtual_display")
+        );
+        assert_eq!(options.display, None);
+    }
+
+    #[test]
+    fn apply_launch_host_hints_allows_shared_remote_headed_display() {
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed",
+                "displayIsolation": "shared_display",
+                "remoteHeadedDisplay": ":95"
+            }
+        });
+        let mut options = LaunchOptions::default();
+
+        let host = apply_launch_host_hints(&mut options, &command);
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert!(options.remote_headed);
+        assert_eq!(
+            options.remote_headed_display_isolation.as_deref(),
+            Some("shared_display")
+        );
+        assert_eq!(options.display.as_deref(), Some(":95"));
+    }
+
+    #[test]
+    fn apply_launch_host_hints_allows_ambient_remote_headed_display() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_HEADED_DISPLAY"]);
+        guard.set("AGENT_BROWSER_REMOTE_HEADED_DISPLAY", ":93");
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed",
+                "displayIsolation": "ambient_display"
+            }
+        });
+        let mut options = LaunchOptions::default();
+
+        let host = apply_launch_host_hints(&mut options, &command);
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert!(options.remote_headed);
+        assert_eq!(
+            options.remote_headed_display_isolation.as_deref(),
+            Some("ambient_display")
+        );
+        assert_eq!(options.display, None);
     }
 
     #[test]

@@ -1589,7 +1589,12 @@ operator optimization.
 Access-plan `decision.launchPosture` now reports the service-selected
 `viewStreamProvider` and `controlInputProvider`, and copied service requests
 carry those hints in `params` so dashboards and software clients do not infer
-remote-view posture locally. The shipped UPS policy selects
+remote-view posture locally. Remote-headed access plans also include
+`params.displayIsolation=private_virtual_display` by default. Raw HTTP, MCP,
+and client requests can set `displayIsolation` or `params.displayIsolation` to
+`private_virtual_display`, `shared_display`, or `ambient_display` when a
+caller needs to force an isolated virtual display, reuse a configured shared
+display, or deliberately use the daemon's inherited `DISPLAY`. The shipped UPS policy selects
 `stealthcdp_chromium`, `remote_headed`, `rdp_gateway`, and
 `manual_attached_desktop` because headed stealth Chromium loaded UPS tracking
 where true headless did not. Remote-headed browser records persist the selected
@@ -2065,7 +2070,10 @@ the requested targets. It also includes
 request can be queued immediately. When manual seeding or challenge work must
 finish first, `recommendedAfterManualAction` tells clients to reuse the same
 identity request after the operator completes that step. The service request
-client refuses to post an access-plan-backed tab request while manual profile
+schema accepts `displayIsolation` for remote-headed display allocation policy,
+and access-plan copied requests place the selected policy in `params` next to
+`browserHost`, `viewStreamProvider`, and `controlInputProvider`. The service
+request client refuses to post an access-plan-backed tab request while manual profile
 seeding is still required unless `allowManualAction: true` is supplied. Raw
 HTTP and MCP callers get the same protection when they submit the copied
 `serviceRequest.request`, because requests marked with both

@@ -84,6 +84,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "action",
   "profileLeasePolicy",
   "browserBuild",
+  "displayIsolation",
   "serviceName",
   "agentName",
   "taskName",

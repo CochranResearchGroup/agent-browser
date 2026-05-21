@@ -143,6 +143,11 @@
       "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
       "description": "Optional browser-build preference for profile selection and launch routing."
     },
+    "displayIsolation": {
+      "type": "string",
+      "enum": ["private_virtual_display", "shared_display", "ambient_display"],
+      "description": "Optional remote-headed display allocation policy. private_virtual_display asks agent-browser to allocate an isolated virtual display for the browser process. shared_display uses remoteHeadedDisplay, display, or AGENT_BROWSER_REMOTE_HEADED_DISPLAY. ambient_display deliberately uses the daemon's inherited DISPLAY."
+    },
     "serviceName": {
       "type": "string",
       "description": "Calling service name, for example JournalDownloader."
