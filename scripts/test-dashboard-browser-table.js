@@ -381,19 +381,19 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function RemoteViewReadinessStrip\(\{ stream \}: \{ stream\?: ServiceViewStream \| null \}\)[\s\S]*canOpenViewStream\(stream\)[\s\S]*canOpenControlViewStream\(stream\)[\s\S]*aria-label="Remote view readiness"[\s\S]*Remote view[\s\S]*Remote control[\s\S]*Gateway URL/,
-  'Browser detail inspector must show remote view and control readiness from service stream metadata',
+  /function RemoteViewReadinessStrip\(\{ browser, stream \}: \{ browser: ServiceBrowser; stream\?: ServiceViewStream \| null \}\)[\s\S]*canOpenViewStream\(stream\)[\s\S]*canOpenControlViewStream\(stream\)[\s\S]*aria-label="Remote view readiness"[\s\S]*Remote view[\s\S]*Remote control[\s\S]*Display[\s\S]*Gateway URL/,
+  'Browser detail inspector must show remote view, control, and display readiness from service metadata',
 );
 
 assert.match(
   servicePanel,
-  /<RemoteViewReadinessStrip stream=\{primaryViewStream\} \/>/,
+  /<RemoteViewReadinessStrip browser=\{browser\} stream=\{primaryViewStream\} \/>/,
   'Browser detail content must render the remote view readiness strip for selected browsers',
 );
 
 assert.match(
   dashboardCss,
-  /\.service-remote-view-readiness[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)[\s\S]*\.service-remote-view-readiness p[\s\S]*grid-column: 1 \/ -1/,
+  /\.service-remote-view-readiness[\s\S]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)[\s\S]*\.service-remote-view-readiness p[\s\S]*grid-column: 1 \/ -1/,
   'Remote view readiness strip must use compact multi-column styling with a full-width context line',
 );
 

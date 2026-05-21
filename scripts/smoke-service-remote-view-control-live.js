@@ -91,6 +91,10 @@ try {
   assert(browser, `Service state missing browser ${browserId}: ${JSON.stringify(status.data)}`);
   assert(browser.host === 'remote_headed', `Browser host mismatch: ${JSON.stringify(browser)}`);
   assert(browser.health === 'ready', `Remote-headed browser is not ready: ${JSON.stringify(browser)}`);
+  assert(
+    ['private_virtual_display', 'ambient_display', 'shared_display'].includes(browser.displayIsolation),
+    `Remote-headed browser did not record display isolation: ${JSON.stringify(browser)}`,
+  );
 
   const stream = findPrimaryViewStream(browser);
   assert(stream, `Remote-headed browser did not record a view stream: ${JSON.stringify(browser)}`);

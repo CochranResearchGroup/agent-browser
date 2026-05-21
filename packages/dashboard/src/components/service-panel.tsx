@@ -152,6 +152,8 @@ export type ServiceBrowser = {
   host?: string;
   health?: string;
   browserBuild?: string | null;
+  displayIsolation?: string | null;
+  displayName?: string | null;
   pid?: number | null;
   cdpEndpoint?: string | null;
   viewStreams?: ServiceViewStream[];
@@ -1773,7 +1775,35 @@ function browserViewStreamCapability(browser?: ServiceBrowser | null): string {
   return viewStreamCapabilityLabel(stream);
 }
 
-function RemoteViewReadinessStrip({ stream }: { stream?: ServiceViewStream | null }) {
+function displayIsolationLabel(value?: string | null): string {
+  switch (value) {
+    case "private_virtual_display":
+      return "private display";
+    case "shared_display":
+      return "shared display";
+    case "ambient_display":
+      return "ambient display";
+    default:
+      return "unknown";
+  }
+}
+
+function displayIsolationTitle(browser: ServiceBrowser): string {
+  switch (browser.displayIsolation) {
+    case "private_virtual_display":
+      return "This browser has its own service-managed virtual display.";
+    case "shared_display":
+      return "This browser uses an explicitly configured shared display.";
+    case "ambient_display":
+      return "This browser uses the host DISPLAY inherited by the daemon.";
+    default:
+      return browser.host === "remote_headed"
+        ? "Display isolation was not recorded for this remote-headed browser."
+        : "Display isolation applies to remote-headed browser hosts.";
+  }
+}
+
+function RemoteViewReadinessStrip({ browser, stream }: { browser: ServiceBrowser; stream?: ServiceViewStream | null }) {
   const viewReady = canOpenViewStream(stream);
   const controlReady = canOpenControlViewStream(stream);
   return (
@@ -1794,9 +1824,15 @@ function RemoteViewReadinessStrip({ stream }: { stream?: ServiceViewStream | nul
         <span>Input</span>
         <strong>{stream ? controlInputLabel(stream) : "none"}</strong>
       </div>
+      <div>
+        <span>Display</span>
+        <strong title={displayIsolationTitle(browser)}>
+          {displayIsolationLabel(browser.displayIsolation)}
+        </strong>
+      </div>
       <p>
         {stream?.url
-          ? `Gateway URL: ${stream.url}`
+          ? `Gateway URL: ${stream.url}${browser.displayName ? ` / Display: ${browser.displayName}` : ""}`
           : stream
             ? viewStreamOpenTitle(stream)
             : "No service-owned view stream has been recorded for this browser."}
@@ -2949,6 +2985,8 @@ function BrowserDetailContent({
         <EventDetailItem label="Profile" value={browser.profileId} />
         <EventDetailItem label="Host" value={browser.host} />
         <EventDetailItem label="Health" value={browser.health} />
+        <EventDetailItem label="Display isolation" value={displayIsolationLabel(browser.displayIsolation)} />
+        <EventDetailItem label="Display" value={browser.displayName} />
         <EventDetailItem label="PID" value={browser.pid ? String(browser.pid) : null} />
         <EventDetailItem label="CDP endpoint" value={browser.cdpEndpoint} />
         <EventDetailItem label="Active sessions" value={String(browser.activeSessionIds?.length ?? 0)} />
@@ -2956,7 +2994,7 @@ function BrowserDetailContent({
         <EventDetailItem label="Primary view" value={primaryViewStream ? viewStreamLabel(primaryViewStream) : null} />
         <EventDetailItem label="Primary input" value={primaryViewStream ? controlInputLabel(primaryViewStream) : null} />
       </div>
-      <RemoteViewReadinessStrip stream={primaryViewStream} />
+      <RemoteViewReadinessStrip browser={browser} stream={primaryViewStream} />
       {onControlBrowser && (
         <Button
           type="button"

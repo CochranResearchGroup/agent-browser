@@ -1138,8 +1138,27 @@ impl ServiceLaunchMetadata {
             view_streams: command
                 .map(remote_headed_view_streams_from_command)
                 .unwrap_or_default(),
+            display_isolation: remote_headed_display_isolation(options),
+            display_name: options.display.clone().or_else(|| {
+                (options.remote_headed && !options.headless)
+                    .then(|| env::var("DISPLAY").ok())
+                    .flatten()
+            }),
         }
     }
+}
+
+fn remote_headed_display_isolation(options: &LaunchOptions) -> Option<String> {
+    if !options.remote_headed || options.headless {
+        return None;
+    }
+    if options.display.is_some() {
+        return Some("shared_display".to_string());
+    }
+    if env::var_os("DISPLAY").is_some() {
+        return Some("ambient_display".to_string());
+    }
+    Some("private_virtual_display".to_string())
 }
 
 fn optional_command_string(command: &Value, name: &str) -> Option<String> {
@@ -17854,6 +17873,9 @@ mod tests {
                     "reason": "validated_binding_applied"
                 })),
                 view_streams: Vec::new(),
+                display_isolation: Some("shared_display".to_string()),
+                display_name: Some(":93".to_string()),
+                ..ServiceLaunchMetadata::default()
             }),
         )
         .unwrap();
@@ -17864,6 +17886,8 @@ mod tests {
         assert_eq!(browser.host, ServiceBrowserHost::LocalHeadless);
         assert_eq!(browser.health, ServiceBrowserHealth::Ready);
         assert_eq!(browser.pid, Some(1234));
+        assert_eq!(browser.display_isolation.as_deref(), Some("shared_display"));
+        assert_eq!(browser.display_name.as_deref(), Some(":93"));
         assert_eq!(
             browser.cdp_endpoint.as_deref(),
             Some("http://127.0.0.1:9222")

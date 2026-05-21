@@ -30,6 +30,8 @@ pub(crate) struct ServiceLaunchMetadata {
     pub(crate) browser_stderr_log_path: Option<String>,
     pub(crate) browser_capability_launch: Option<serde_json::Value>,
     pub(crate) view_streams: Vec<ViewStream>,
+    pub(crate) display_isolation: Option<String>,
+    pub(crate) display_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -768,6 +770,7 @@ mod tests {
                 "reason": "test"
             })),
             view_streams: Vec::new(),
+            ..ServiceLaunchMetadata::default()
         };
 
         upsert_service_profile_and_session(

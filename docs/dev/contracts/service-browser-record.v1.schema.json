@@ -49,6 +49,24 @@
         "faulted"
       ]
     },
+    "displayIsolation": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "private_virtual_display",
+            "shared_display",
+            "ambient_display"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "displayName": {
+      "type": ["string", "null"]
+    },
     "pid": {
       "type": ["integer", "null"],
       "minimum": 0

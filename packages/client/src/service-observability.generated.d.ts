@@ -257,6 +257,8 @@ export interface ServiceBrowserRecord {
   id: string;
   profileId: string | null;
   health: ServiceBrowserHealthState;
+  displayIsolation?: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
+  displayName?: string | null;
   [key: string]: unknown;
 }
 

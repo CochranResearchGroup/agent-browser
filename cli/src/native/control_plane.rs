@@ -491,6 +491,12 @@ fn persist_process_exited_browser_health_in_repository(
                 .and_then(|browser| browser.profile_id.clone()),
             host,
             health: ServiceBrowserHealth::ProcessExited,
+            display_isolation: previous
+                .as_ref()
+                .and_then(|browser| browser.display_isolation.clone()),
+            display_name: previous
+                .as_ref()
+                .and_then(|browser| browser.display_name.clone()),
             pid,
             cdp_endpoint,
             view_streams: previous

@@ -1593,9 +1593,12 @@ remote-view posture locally. The shipped UPS policy selects
 `stealthcdp_chromium`, `remote_headed`, `rdp_gateway`, and
 `manual_attached_desktop` because headed stealth Chromium loaded UPS tracking
 where true headless did not. Remote-headed browser records persist the selected
-view stream provider and control input provider on each `viewStreams` entry, so
-the web UX can show whether the stream is merely viewable or operator
-controllable before opening it. Dashboard browser rows enable **View** only for
+view stream provider and control input provider on each `viewStreams` entry.
+They also report `displayIsolation` and `displayName` when the service can tell
+whether the browser is using a private virtual display, an explicitly shared
+display, or the daemon's ambient `DISPLAY`. The web UX can show whether the
+stream is merely viewable or operator controllable and whether display state is
+isolated before opening it. Dashboard browser rows enable **View** only for
 embeddable streams and **Control** only when the service also reports an input
 provider, with disabled-state explanations sourced from the stream metadata.
 Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` to reuse an existing virtual display,

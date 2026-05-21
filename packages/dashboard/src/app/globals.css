@@ -2330,7 +2330,7 @@ body {
 .service-remote-view-readiness {
   display: grid;
   gap: 0.55rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 1.1rem;
   background:

@@ -443,11 +443,29 @@ pub fn persist_service_browser_record_in_repository(
                     .map(|browser| browser.view_streams.clone())
             })
             .unwrap_or_default();
+        let display_isolation = metadata
+            .as_ref()
+            .and_then(|metadata| metadata.display_isolation.clone())
+            .or_else(|| {
+                previous
+                    .as_ref()
+                    .and_then(|browser| browser.display_isolation.clone())
+            });
+        let display_name = metadata
+            .as_ref()
+            .and_then(|metadata| metadata.display_name.clone())
+            .or_else(|| {
+                previous
+                    .as_ref()
+                    .and_then(|browser| browser.display_name.clone())
+            });
         let mut browser = BrowserProcess {
             id: id.clone(),
             profile_id: profile_id.clone(),
             host,
             health,
+            display_isolation,
+            display_name,
             pid,
             cdp_endpoint,
             view_streams,
@@ -627,6 +645,8 @@ pub(crate) fn stale_browser_process_record(
             .map(|browser| browser.host)
             .unwrap_or(BrowserHost::AttachedExisting),
         health,
+        display_isolation: previous.and_then(|browser| browser.display_isolation.clone()),
+        display_name: previous.and_then(|browser| browser.display_name.clone()),
         pid,
         cdp_endpoint,
         view_streams: previous
