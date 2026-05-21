@@ -41,6 +41,7 @@ const timeout = setTimeout(() => {
 
 let streamPort;
 let browserLaunched = false;
+let targetTabId = null;
 
 async function cleanup() {
   clearTimeout(timeout);
@@ -77,20 +78,30 @@ async function waitForDashboardState(predicate, label, timeoutMs = 45000) {
   const started = Date.now();
   let lastState = null;
   while (Date.now() - started < timeoutMs) {
-    lastState = await evalInDashboard(dashboardStateScript(browserId), 30000);
+    lastState = await evalInDashboard(dashboardStateScript(browserId, targetTabId), 30000);
     if (predicate(lastState)) return lastState;
     await new Promise((resolve) => setTimeout(resolve, 750));
   }
   throw new Error(`${label} did not become true. Last dashboard state: ${JSON.stringify(lastState)}`);
 }
 
-function dashboardStateScript(targetBrowserId) {
+function dashboardStateScript(targetBrowserId, targetServiceTabId) {
   return `
 (() => {
   const text = document.body?.innerText || "";
   const buttons = Array.from(document.querySelectorAll("button"));
   const serviceButton = buttons.find((button) => button.textContent?.trim() === "Service");
   const rowButton = buttons.find((button) => button.getAttribute("aria-label") === "Inspect browser ${targetBrowserId}");
+  const workspaceButtons = Array.from(document.querySelectorAll(".service-workspace-tabs button"));
+  const sessionsWorkspaceButton = workspaceButtons.find((button) => button.textContent?.includes("Sessions"));
+  const sessionsFilterInput = document.querySelector('input[placeholder="Filter sessions, tabs, profiles, URLs"]');
+  const targetTabButton = ${JSON.stringify(targetServiceTabId)}
+    ? buttons.find((button) => button.getAttribute("aria-label") === "Inspect tab ${targetServiceTabId}")
+    : null;
+  const targetTabRow = targetTabButton?.closest(".service-browser-row-composite") || null;
+  const targetTabControlButton = targetTabRow
+    ? Array.from(targetTabRow.querySelectorAll("button")).find((button) => button.textContent?.trim() === "Control")
+    : null;
   const rightPane = document.querySelector(".dashboard-pane-right");
   const rightPaneButtons = rightPane ? Array.from(rightPane.querySelectorAll("button")) : [];
   const controlButton = rightPaneButtons.find((button) => button.textContent?.includes("Open remote control"));
@@ -102,6 +113,14 @@ function dashboardStateScript(targetBrowserId) {
     hasServiceButton: Boolean(serviceButton),
     hasTargetBrowserRow: Boolean(rowButton),
     targetBrowserRowText: rowButton?.textContent || "",
+    hasSessionsWorkspaceButton: Boolean(sessionsWorkspaceButton),
+    hasSessionsFilterInput: Boolean(sessionsFilterInput),
+    hasTargetTabRow: Boolean(targetTabButton),
+    targetTabRowText: targetTabRow?.textContent || "",
+    hasTargetTabControlButton: Boolean(targetTabControlButton),
+    targetTabControlDisabled: targetTabControlButton
+      ? (targetTabControlButton.disabled || targetTabControlButton.getAttribute("aria-disabled") === "true")
+      : null,
     hasRightPane: Boolean(rightPane),
     hasReadinessStrip: Boolean(readinessStrip),
     readinessText: readinessStrip?.textContent || "",
@@ -116,6 +135,20 @@ function dashboardStateScript(targetBrowserId) {
   };
 })()
 `;
+}
+
+async function waitForServiceTabRecord(timeoutMs = 30000) {
+  const started = Date.now();
+  let lastTabs = null;
+  while (Date.now() - started < timeoutMs) {
+    const status = await httpJson(streamPort, 'GET', '/api/service/status');
+    assert(status.success === true, `HTTP service status failed: ${JSON.stringify(status)}`);
+    lastTabs = Object.values(status.data?.service_state?.tabs || {});
+    const tab = lastTabs.find((item) => item?.browserId === browserId && item?.lifecycle !== 'closed');
+    if (tab?.id) return tab;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`Service state did not record a live tab for ${browserId}. Last tabs: ${JSON.stringify(lastTabs)}`);
 }
 
 async function clickDashboardServiceTab() {
@@ -144,6 +177,61 @@ async function clickTargetBrowserRow() {
   assert(result?.clicked === true, `Target browser row was not clickable: ${JSON.stringify(result)}`);
 }
 
+async function clickSessionsWorkspaceTab() {
+  const result = await evalInDashboard(`
+(() => {
+  const button = document.querySelector('.service-workspace-tabs button[value="sessions"]')
+    || Array.from(document.querySelectorAll(".service-workspace-tabs button"))
+      .find((item) => item.textContent?.includes("Sessions"));
+  if (!button) return { clicked: false };
+  button.scrollIntoView({ block: "center", inline: "nearest" });
+  button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
+  button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  button.click();
+  return { clicked: true };
+})()
+`);
+  assert(result?.clicked === true, `Sessions workspace tab was not clickable: ${JSON.stringify(result)}`);
+}
+
+async function filterSessionsWorkspace(query) {
+  const result = await evalInDashboard(`
+(() => {
+  const input = document.querySelector('input[placeholder="Filter sessions, tabs, profiles, URLs"]');
+  if (!input) return { changed: false, reason: "missing" };
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  input.focus();
+  setter?.call(input, ${JSON.stringify(query)});
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: ${JSON.stringify(query)} }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return { changed: true, value: input.value };
+})()
+`);
+  assert(result?.changed === true, `Sessions workspace filter was not editable: ${JSON.stringify(result)}`);
+}
+
+async function clickTargetTabControl() {
+  const result = await evalInDashboard(`
+(() => {
+  const tabButton = Array.from(document.querySelectorAll("button"))
+    .find((item) => item.getAttribute("aria-label") === "Inspect tab ${targetTabId}");
+  const row = tabButton?.closest(".service-browser-row-composite");
+  const controlButton = row
+    ? Array.from(row.querySelectorAll("button")).find((item) => item.textContent?.trim() === "Control")
+    : null;
+  if (!controlButton) return { clicked: false, reason: "missing" };
+  if (controlButton.disabled || controlButton.getAttribute("aria-disabled") === "true") {
+    return { clicked: false, reason: "disabled", title: controlButton.getAttribute("title") };
+  }
+  controlButton.scrollIntoView({ block: "center", inline: "nearest" });
+  controlButton.click();
+  return { clicked: true };
+})()
+`);
+  assert(result?.clicked === true, `Target tab Control button was not clickable: ${JSON.stringify(result)}`);
+}
+
 async function clickInspectorRemoteControl() {
   const result = await evalInDashboard(`
 (() => {
@@ -162,7 +250,20 @@ async function clickInspectorRemoteControl() {
   assert(result?.clicked === true, `Inspector remote-control button was not clickable: ${JSON.stringify(result)}`);
 }
 
-async function waitForDashboardFocusJob() {
+async function closeViewStreamDialog() {
+  const result = await evalInDashboard(`
+(() => {
+  const dialog = document.querySelector(".service-view-stream-dialog");
+  const closeButton = dialog?.querySelector('[data-slot="dialog-close"]');
+  if (!closeButton) return { clicked: false };
+  closeButton.click();
+  return { clicked: true };
+})()
+`);
+  assert(result?.clicked === true, `Remote-control dialog close button was not clickable: ${JSON.stringify(result)}`);
+}
+
+async function waitForDashboardFocusJob(taskName) {
   const started = Date.now();
   let lastJobs = null;
   while (Date.now() - started < 30000) {
@@ -172,12 +273,12 @@ async function waitForDashboardFocusJob() {
       (job) =>
         job.action === 'view_focus' &&
         job.serviceName === 'agent-browser-dashboard' &&
-        job.taskName === 'focus-browser-row-view',
+        job.taskName === taskName,
     );
     if (focusJob) return focusJob;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(`Dashboard did not queue a view_focus job. Last jobs: ${JSON.stringify(lastJobs)}`);
+  throw new Error(`Dashboard did not queue ${taskName} view_focus job. Last jobs: ${JSON.stringify(lastJobs)}`);
 }
 
 try {
@@ -193,6 +294,8 @@ try {
     title: 'Dashboard Remote Control UI Smoke',
   });
   browserLaunched = true;
+  const serviceTab = await waitForServiceTabRecord();
+  targetTabId = serviceTab.id;
 
   const dashboardUrl = `http://127.0.0.1:${streamPort}/`;
   const openResult = await runCli(
@@ -232,11 +335,31 @@ try {
     (state) => state?.hasDialog && state?.hasDialogFrame && state?.dialogFrameSrc === remoteConfig.viewStreamUrl,
     'remote-control view stream dialog',
   );
-  const focusJob = await waitForDashboardFocusJob();
+  const focusJob = await waitForDashboardFocusJob('focus-browser-row-view');
+  await closeViewStreamDialog();
+  await waitForDashboardState((state) => !state?.hasDialog, 'closed browser remote-control dialog');
+
+  await waitForDashboardState((state) => state?.hasSessionsWorkspaceButton, 'Sessions workspace navigation');
+  await clickSessionsWorkspaceTab();
+  await waitForDashboardState((state) => state?.hasSessionsFilterInput, 'Sessions workspace filter');
+  await filterSessionsWorkspace(targetTabId);
+  await waitForDashboardState(
+    (state) =>
+      state?.hasTargetTabRow &&
+      state?.hasTargetTabControlButton &&
+      state?.targetTabControlDisabled === false,
+    `tab row ${targetTabId} Control action`,
+  );
+  await clickTargetTabControl();
+  const tabDialogState = await waitForDashboardState(
+    (state) => state?.hasDialog && state?.hasDialogFrame && state?.dialogFrameSrc === remoteConfig.viewStreamUrl,
+    'tab remote-control view stream dialog',
+  );
+  const tabFocusJob = await waitForDashboardFocusJob('inspect-hidden-rdp-tab');
 
   await cleanup();
   console.log(
-    `Service dashboard remote-control UI live smoke passed (${browserId}, dialog=${dialogState.dialogFrameSrc}, job=${focusJob.id})`,
+    `Service dashboard remote-control UI live smoke passed (${browserId}, tab=${targetTabId}, dialog=${dialogState.dialogFrameSrc}, tabDialog=${tabDialogState.dialogFrameSrc}, jobs=${focusJob.id},${tabFocusJob.id})`,
   );
 } catch (err) {
   await fail(err.stack || err.message);
