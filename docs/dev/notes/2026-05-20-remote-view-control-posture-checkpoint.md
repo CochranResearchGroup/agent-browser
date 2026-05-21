@@ -39,6 +39,17 @@ A later dashboard slice split row actions into **View** and **Control**:
 requires the service to report a control input provider. Disabled-state copy now
 comes from the stream metadata.
 
+The reusable live smoke for this contract is:
+
+```bash
+pnpm test:service-remote-view-control-live
+```
+
+It launches an isolated `remote_headed` browser, verifies the retained
+`viewStreams` record has the expected provider, URL, and control input, checks
+the dashboard stream-gating helpers, runs queued `view_focus`, and closes the
+browser through `service_browser_close`.
+
 ## UPS Default Policy
 
 The shipped UPS site policy now makes the remote-view posture explicit:

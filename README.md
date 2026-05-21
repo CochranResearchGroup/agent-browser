@@ -1602,6 +1602,12 @@ Use `pnpm test:rdp-gateway-readiness-live` on operator workstations to check
 the local RDP backend. It verifies `guacd`, `xrdp`, `xfreerdp`, and their TCP
 ports. Add `--require-html5-client` when `AGENT_BROWSER_REMOTE_VIEW_URL` should
 also be reachable before the setup is considered ready.
+Use `pnpm test:service-remote-view-control-live` when changing the
+remote-headed launch, retained browser record, or dashboard stream gating
+contract. It starts an isolated remote-headed browser, verifies the retained
+`rdp_gateway` stream includes a control input provider, checks that the
+dashboard helpers would enable both View and Control, runs queued `view_focus`,
+and closes the browser through the service-owned control path.
 
 You can also manage streaming at runtime with `stream enable`, `stream disable`, and `stream status`:
 
