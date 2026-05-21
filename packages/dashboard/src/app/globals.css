@@ -2135,6 +2135,16 @@ body {
   color: var(--destructive);
 }
 
+.service-browser-control-note {
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.65rem 0.8rem;
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+  font-weight: 720;
+}
+
 .service-browser-table-empty {
   padding: 1.4rem !important;
   color: var(--muted-foreground) !important;

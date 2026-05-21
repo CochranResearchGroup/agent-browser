@@ -375,8 +375,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /service-browser-table-streams[\s\S]*viewStreamCapability[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*View[\s\S]*disabled=\{!viewStreamAvailable \|\| !onFocusViewStream\}[\s\S]*Focus[\s\S]*AlertDialog[\s\S]*disabled=\{!closeAvailable \|\| acting\}[\s\S]*Close[\s\S]*disabled=\{!repairAvailable \|\| acting\}[\s\S]*Repair/,
-  'Browser row actions must expose Inspect, View, Focus, Close, and Repair with eligibility gates',
+  /const viewStreamAvailable = canOpenViewStream\(primaryViewStream\);[\s\S]*const controlAvailable = canOpenControlViewStream\(primaryViewStream\);[\s\S]*service-browser-table-streams[\s\S]*viewStreamCapability[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*title=\{viewStreamOpenTitle\(primaryViewStream\)\}[\s\S]*View[\s\S]*disabled=\{!controlAvailable \|\| !onFocusViewStream\}[\s\S]*title=\{viewStreamControlTitle\(primaryViewStream\)\}[\s\S]*Control[\s\S]*AlertDialog[\s\S]*disabled=\{!closeAvailable \|\| acting\}[\s\S]*Close[\s\S]*disabled=\{!repairAvailable \|\| acting\}[\s\S]*Repair/,
+  'Browser row actions must expose Inspect, View, Control, Close, and Repair with service-owned capability gates',
 );
 
 assert.match(

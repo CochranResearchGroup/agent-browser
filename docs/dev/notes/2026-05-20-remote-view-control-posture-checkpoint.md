@@ -34,6 +34,11 @@ Follow-up implementation in the next slice persisted `controlInput` on browser
 `viewStreams` entries and taught the dashboard to show the view and input
 posture in browser rows, browser details, and the embedded stream dialog.
 
+A later dashboard slice split row actions into **View** and **Control**:
+`View` requires an embeddable view stream, while `Control` additionally
+requires the service to report a control input provider. Disabled-state copy now
+comes from the stream metadata.
+
 ## UPS Default Policy
 
 The shipped UPS site policy now makes the remote-view posture explicit:

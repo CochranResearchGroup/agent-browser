@@ -1590,7 +1590,9 @@ remote-view posture locally. The shipped UPS policy selects
 where true headless did not. Remote-headed browser records persist the selected
 view stream provider and control input provider on each `viewStreams` entry, so
 the web UX can show whether the stream is merely viewable or operator
-controllable before opening it.
+controllable before opening it. Dashboard browser rows enable **View** only for
+embeddable streams and **Control** only when the service also reports an input
+provider, with disabled-state explanations sourced from the stream metadata.
 Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` to reuse an existing virtual display,
 and set `AGENT_BROWSER_REMOTE_VIEW_URL` when an external noVNC, RDP gateway,
 WebRTC, or dashboard view URL should be recorded on the service browser record.

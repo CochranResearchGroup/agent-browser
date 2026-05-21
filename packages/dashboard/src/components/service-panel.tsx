@@ -94,9 +94,13 @@ import {
 import {
   canControlViewStream,
   canEmbedViewStream,
+  canOpenControlViewStream,
+  canOpenViewStream,
   controlInputLabel,
   viewStreamCapabilityLabel,
+  viewStreamControlTitle,
   viewStreamLabel,
+  viewStreamOpenTitle,
   type ServiceViewStream,
 } from "@/lib/service-view-streams";
 import {
@@ -2598,7 +2602,8 @@ function BrowserTableRow({
   const sessionCount = browser.activeSessionIds?.length ?? 0;
   const viewStreamCount = browser.viewStreams?.length ?? 0;
   const primaryViewStream = browserPrimaryViewStream(browser);
-  const viewStreamAvailable = Boolean(primaryViewStream);
+  const viewStreamAvailable = canOpenViewStream(primaryViewStream);
+  const controlAvailable = canOpenControlViewStream(primaryViewStream);
   const viewStreamCapability = browserViewStreamCapability(browser);
   const closeAvailable = Boolean(closeSupported && onCloseBrowser && activeSessionName && browser.id === `session:${activeSessionName}`);
   const repairAvailable = Boolean(repairSupported && onRepairBrowser && ["degraded", "faulted"].includes((browser.health ?? "").toLowerCase()));
@@ -2686,6 +2691,7 @@ function BrowserTableRow({
             variant="outline"
             className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
             disabled={!viewStreamAvailable || !onViewStream}
+            title={viewStreamOpenTitle(primaryViewStream)}
             onClick={() => onViewStream?.(browser)}
           >
             View
@@ -2695,10 +2701,11 @@ function BrowserTableRow({
             size="sm"
             variant="outline"
             className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-            disabled={!viewStreamAvailable || !onFocusViewStream}
+            disabled={!controlAvailable || !onFocusViewStream}
+            title={viewStreamControlTitle(primaryViewStream)}
             onClick={() => onFocusViewStream?.(browser)}
           >
-            Focus
+            Control
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -2821,6 +2828,11 @@ function ViewStreamInspectDialog({
                 <p className="service-browser-error">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                   <span>{selection.focusMessage}</span>
+                </p>
+              )}
+              {!canControlViewStream(stream) && (
+                <p className="service-browser-control-note">
+                  This stream is available for viewing. The service has not marked it as operator-controllable.
                 </p>
               )}
               {embeddable ? (
@@ -3493,7 +3505,7 @@ function ServiceTabRow({
           onClick={() => onInspect(tab)}
         >
           <Eye className="size-3" />
-          View
+          Control
         </Button>
       )}
     </div>
@@ -3630,7 +3642,7 @@ function TabDetailContent({
       {viewStreamAvailable && onInspect && (
         <Button className="w-fit gap-1.5" size="sm" onClick={() => onInspect(tab)}>
           <Eye className="size-3.5" />
-          Inspect remote view
+          Open remote control
         </Button>
       )}
     </div>
@@ -4940,7 +4952,7 @@ export function ServicePanel({
     setSelectedSession(session);
   }, [onInspectSelection]);
   const inspectTab = useCallback((tab: ServiceTab) => {
-    const viewStreamAvailable = Boolean(tab.browserId && browserPrimaryViewStream(browserById.get(tab.browserId)));
+    const viewStreamAvailable = tab.browserId ? canOpenViewStream(browserPrimaryViewStream(browserById.get(tab.browserId))) : false;
     if (onInspectSelection) {
       onInspectSelection({ kind: "tab", tab, viewStreamAvailable });
       return;
@@ -4953,12 +4965,20 @@ export function ServicePanel({
       setError("No view stream is registered for this browser.");
       return;
     }
+    if (!canEmbedViewStream(stream)) {
+      setError(viewStreamOpenTitle(stream));
+      return;
+    }
     openViewStream(stream, browser);
   }, [openViewStream]);
   const focusBrowserViewStream = useCallback(async (browser: ServiceBrowser) => {
     const stream = browserPrimaryViewStream(browser);
     if (!stream) {
       setError("No view stream is registered for this browser.");
+      return;
+    }
+    if (!canOpenControlViewStream(stream)) {
+      setError(viewStreamControlTitle(stream));
       return;
     }
 
@@ -5056,6 +5076,10 @@ export function ServicePanel({
     const stream = browserPrimaryViewStream(browser);
     if (!browser || !stream) {
       setError("No view stream is registered for this tab's browser.");
+      return;
+    }
+    if (!canOpenControlViewStream(stream)) {
+      setError(viewStreamControlTitle(stream));
       return;
     }
 
@@ -5231,7 +5255,7 @@ export function ServicePanel({
       />
       <TabDetailDialog
         tab={selectedTab}
-        viewStreamAvailable={Boolean(selectedTab?.browserId && browserPrimaryViewStream(browserById.get(selectedTab.browserId)))}
+        viewStreamAvailable={selectedTab?.browserId ? canOpenControlViewStream(browserPrimaryViewStream(browserById.get(selectedTab.browserId))) : false}
         onInspect={inspectTabViewStream}
         onOpenChange={(open) => {
           if (!open) setSelectedTab(null);
@@ -5832,7 +5856,7 @@ export function ServicePanel({
                       <ServiceTabRow
                         key={tab.id || tab.targetId || `tab-${index}`}
                         tab={tab}
-                        viewStreamAvailable={Boolean(tab.browserId && browserPrimaryViewStream(browserById.get(tab.browserId)))}
+                        viewStreamAvailable={tab.browserId ? canOpenControlViewStream(browserPrimaryViewStream(browserById.get(tab.browserId))) : false}
                         onInspect={inspectTabViewStream}
                         onSelect={inspectTab}
                       />
