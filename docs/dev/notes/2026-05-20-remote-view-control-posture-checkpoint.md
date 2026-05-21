@@ -39,6 +39,11 @@ A later dashboard slice split row actions into **View** and **Control**:
 requires the service to report a control input provider. Disabled-state copy now
 comes from the stream metadata.
 
+The browser detail inspector now shows a compact remote-view readiness strip
+for the selected browser. It reports view readiness, control readiness,
+provider, input, and gateway URL from the same retained stream metadata the row
+actions use.
+
 The reusable live smoke for this contract is:
 
 ```bash

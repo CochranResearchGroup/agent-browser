@@ -1608,6 +1608,10 @@ contract. It starts an isolated remote-headed browser, verifies the retained
 `rdp_gateway` stream includes a control input provider, checks that the
 dashboard helpers would enable both View and Control, runs queued `view_focus`,
 and closes the browser through the service-owned control path.
+The Service inspector also shows a compact readiness strip for the selected
+browser with remote view readiness, control readiness, provider, input, and
+gateway URL so operators can diagnose missing stream metadata before opening a
+remote desktop.
 
 You can also manage streaming at runtime with `stream enable`, `stream disable`, and `stream status`:
 

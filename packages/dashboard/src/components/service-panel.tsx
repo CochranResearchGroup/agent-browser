@@ -1772,6 +1772,38 @@ function browserViewStreamCapability(browser?: ServiceBrowser | null): string {
   return viewStreamCapabilityLabel(stream);
 }
 
+function RemoteViewReadinessStrip({ stream }: { stream?: ServiceViewStream | null }) {
+  const viewReady = canOpenViewStream(stream);
+  const controlReady = canOpenControlViewStream(stream);
+  return (
+    <div className="service-remote-view-readiness" aria-label="Remote view readiness">
+      <div>
+        <span>Remote view</span>
+        <strong>{viewReady ? "ready" : "not ready"}</strong>
+      </div>
+      <div>
+        <span>Remote control</span>
+        <strong>{controlReady ? "ready" : "view only"}</strong>
+      </div>
+      <div>
+        <span>Provider</span>
+        <strong>{stream ? viewStreamLabel(stream) : "none"}</strong>
+      </div>
+      <div>
+        <span>Input</span>
+        <strong>{stream ? controlInputLabel(stream) : "none"}</strong>
+      </div>
+      <p>
+        {stream?.url
+          ? `Gateway URL: ${stream.url}`
+          : stream
+            ? viewStreamOpenTitle(stream)
+            : "No service-owned view stream has been recorded for this browser."}
+      </p>
+    </div>
+  );
+}
+
 type BrowserSortKey = "health" | "id" | "profile" | "host" | "sessions" | "streams";
 type SortDirection = "asc" | "desc";
 type BrowserLifecycleFilter = "actionable" | "all" | "live" | "retained";
@@ -2920,6 +2952,7 @@ function BrowserDetailContent({
         <EventDetailItem label="Primary view" value={primaryViewStream ? viewStreamLabel(primaryViewStream) : null} />
         <EventDetailItem label="Primary input" value={primaryViewStream ? controlInputLabel(primaryViewStream) : null} />
       </div>
+      <RemoteViewReadinessStrip stream={primaryViewStream} />
       {!!browser.activeSessionIds?.length && (
         <div>
           <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">

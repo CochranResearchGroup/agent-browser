@@ -2327,6 +2327,49 @@ body {
   font-size: 0.78rem;
 }
 
+.service-remote-view-readiness {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 1.1rem;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 9%, transparent), transparent 52%),
+    color-mix(in srgb, var(--background) 58%, transparent);
+  padding: 0.75rem;
+}
+
+.service-remote-view-readiness div {
+  min-width: 0;
+}
+
+.service-remote-view-readiness span {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.service-remote-view-readiness strong {
+  display: block;
+  margin-top: 0.18rem;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.service-remote-view-readiness p {
+  grid-column: 1 / -1;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .service-event-details-json {
   max-height: 14rem;
   overflow: auto;
@@ -2665,6 +2708,10 @@ body {
   .service-trace-wait-grid,
   .service-trace-wait-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .service-remote-view-readiness {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
