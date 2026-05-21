@@ -473,6 +473,10 @@ access-plan resource for agent-facing profile selection because it combines
 profile selection, readiness, site policy, providers, retained challenges,
 monitor findings, seeding handoff, and a copyable queued service request before
 the caller asks for browser control.
+Retained job records also expose requested remote-headed <code>displayIsolation</code>,
+so operators can inspect queued, running, and completed jobs without parsing raw
+request payloads to learn whether the work asked for a private virtual display,
+shared display, or ambient daemon display.
 
 <table>
   <thead>

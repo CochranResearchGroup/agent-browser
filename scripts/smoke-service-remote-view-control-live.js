@@ -95,6 +95,18 @@ try {
     ['private_virtual_display', 'ambient_display', 'shared_display'].includes(browser.displayIsolation),
     `Remote-headed browser did not record display isolation: ${JSON.stringify(browser)}`,
   );
+  assert(
+    browser.displayIsolation === 'private_virtual_display',
+    `Remote-headed browser did not honor requested private display isolation: ${JSON.stringify(browser)}`,
+  );
+
+  const launchJobs = Object.values(status.data?.service_state?.jobs ?? {});
+  const launchJob = launchJobs.find((job) => job.taskName === launchTaskName);
+  assert(launchJob, `Remote-headed launch job missing from service state: ${JSON.stringify(launchJobs)}`);
+  assert(
+    launchJob.displayIsolation === 'private_virtual_display',
+    `Remote-headed launch job did not persist requested display isolation: ${JSON.stringify(launchJob)}`,
+  );
 
   const stream = findPrimaryViewStream(browser);
   assert(stream, `Remote-headed browser did not record a view stream: ${JSON.stringify(browser)}`);

@@ -3925,6 +3925,8 @@ pub struct ServiceJob {
     /// True when this job manages process or profile lifecycle rather than a
     /// CDP-backed tab interaction.
     pub lifecycle_only: bool,
+    /// Remote-headed display allocation requested by the caller or access plan.
+    pub display_isolation: Option<String>,
     pub target: JobTarget,
     pub owner: ServiceActor,
     pub state: JobState,
@@ -3953,6 +3955,7 @@ impl Default for ServiceJob {
             has_naming_warning: false,
             control_plane_mode: JobControlPlaneMode::Cdp,
             lifecycle_only: false,
+            display_isolation: None,
             target: JobTarget::Service,
             owner: ServiceActor::System,
             state: JobState::Queued,
@@ -4539,6 +4542,15 @@ mod tests {
             schema["properties"]["controlPlaneMode"]["enum"],
             json!(SERVICE_JOB_CONTROL_PLANE_MODE_VALUES.to_vec())
         );
+        assert_eq!(
+            schema["properties"]["displayIsolation"]["enum"],
+            json!([
+                "private_virtual_display",
+                "shared_display",
+                "ambient_display",
+                serde_json::Value::Null
+            ])
+        );
         for field in [
             "id",
             "action",
@@ -4560,6 +4572,7 @@ mod tests {
         let job = ServiceJob {
             id: "job-1".to_string(),
             action: "navigate".to_string(),
+            display_isolation: Some("private_virtual_display".to_string()),
             naming_warnings: service_job_naming_warning_values(),
             has_naming_warning: true,
             ..ServiceJob::default()
@@ -4567,6 +4580,7 @@ mod tests {
         let value = serde_json::to_value(job).unwrap();
 
         assert_service_job_naming_warning_contract(&value);
+        assert_eq!(value["displayIsolation"], "private_virtual_display");
     }
 
     #[test]

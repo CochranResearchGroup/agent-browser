@@ -545,6 +545,7 @@ fn persist_service_job_queued(request: &ControlRequest) {
         has_naming_warning: !request.naming_warnings.is_empty(),
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
+        display_isolation: service_job_display_isolation(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Queued,
@@ -575,6 +576,7 @@ fn persist_service_job_waiting_profile_lease(
         has_naming_warning: !request.naming_warnings.is_empty(),
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
+        display_isolation: service_job_display_isolation(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::WaitingProfileLease,
@@ -713,6 +715,7 @@ fn persist_service_job_running(request: &ControlRequest) {
         has_naming_warning: !request.naming_warnings.is_empty(),
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
+        display_isolation: service_job_display_isolation(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Running,
@@ -752,6 +755,7 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         has_naming_warning: !request.naming_warnings.is_empty(),
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
+        display_isolation: service_job_display_isolation(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: if success {
@@ -789,6 +793,7 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         has_naming_warning: !request.naming_warnings.is_empty(),
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
+        display_isolation: service_job_display_isolation(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::TimedOut,
@@ -821,6 +826,7 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
         has_naming_warning: !request.naming_warnings.is_empty(),
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
+        display_isolation: service_job_display_isolation(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Cancelled,
@@ -853,6 +859,7 @@ fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) 
         has_naming_warning: !request.naming_warnings.is_empty(),
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
+        display_isolation: service_job_display_isolation(request),
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Failed,
@@ -961,6 +968,33 @@ fn service_job_lifecycle_only(request: &ControlRequest) -> bool {
         service_job_control_plane_mode(request),
         JobControlPlaneMode::CdpFree | JobControlPlaneMode::Service
     )
+}
+
+fn service_job_display_isolation(request: &ControlRequest) -> Option<String> {
+    service_job_display_isolation_from_command(&request.command)
+}
+
+fn service_job_display_isolation_from_command(command: &Value) -> Option<String> {
+    optional_command_string(command, "displayIsolation")
+        .or_else(|| optional_command_string(command, "displayAllocation"))
+        .or_else(|| optional_command_string(command, "displayAllocationPolicy"))
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(service_job_display_isolation_from_command)
+        })
+        .and_then(|value| normalize_service_job_display_isolation(&value))
+}
+
+fn normalize_service_job_display_isolation(value: &str) -> Option<String> {
+    match value.trim() {
+        "private_virtual_display" | "private-virtual-display" | "private" => {
+            Some("private_virtual_display".to_string())
+        }
+        "shared_display" | "shared-display" | "shared" => Some("shared_display".to_string()),
+        "ambient_display" | "ambient-display" | "ambient" => Some("ambient_display".to_string()),
+        _ => None,
+    }
 }
 
 fn service_job_optional_command_string(request: &ControlRequest, name: &str) -> Option<String> {
@@ -2631,6 +2665,9 @@ mod tests {
                 "serviceName": "JournalDownloader",
                 "agentName": "article-probe-agent",
                 "taskName": "probeACSwebsite",
+                "params": {
+                    "displayIsolation": "private_virtual_display"
+                },
             }))
             .await;
 
@@ -2660,6 +2697,10 @@ mod tests {
         assert_eq!(job.service_name.as_deref(), Some("JournalDownloader"));
         assert_eq!(job.agent_name.as_deref(), Some("article-probe-agent"));
         assert_eq!(job.task_name.as_deref(), Some("probeACSwebsite"));
+        assert_eq!(
+            job.display_isolation.as_deref(),
+            Some("private_virtual_display")
+        );
         assert_eq!(job.error.as_deref(), Some("Control queue is full"));
 
         drop(_permit);

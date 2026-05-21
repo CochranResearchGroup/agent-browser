@@ -261,6 +261,7 @@ export type ServiceJob = {
   taskName?: string | null;
   namingWarnings?: string[];
   hasNamingWarning?: boolean;
+  displayIsolation?: string | null;
   timeoutMs?: number | null;
   request?: unknown;
   response?: unknown;
@@ -1674,6 +1675,15 @@ function JobRow({ job, onSelect }: { job: ServiceJob; onSelect: (job: ServiceJob
               {namingWarning}
             </Badge>
           )}
+          {job.displayIsolation && (
+            <Badge
+              variant="secondary"
+              className="h-4 max-w-32 truncate px-1.5 text-[9px]"
+              title={displayIsolationValueTitle(job.displayIsolation)}
+            >
+              {displayIsolationLabel(job.displayIsolation)}
+            </Badge>
+          )}
           <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
             {formatRelativeTime(job.submittedAt)}
           </span>
@@ -1788,19 +1798,26 @@ function displayIsolationLabel(value?: string | null): string {
   }
 }
 
-function displayIsolationTitle(browser: ServiceBrowser): string {
-  switch (browser.displayIsolation) {
+function displayIsolationValueTitle(value?: string | null): string {
+  switch (value) {
     case "private_virtual_display":
-      return "This browser has its own service-managed virtual display.";
+      return "This request or browser uses its own service-managed virtual display.";
     case "shared_display":
-      return "This browser uses an explicitly configured shared display.";
+      return "This request or browser uses an explicitly configured shared display.";
     case "ambient_display":
-      return "This browser uses the host DISPLAY inherited by the daemon.";
+      return "This request or browser uses the host DISPLAY inherited by the daemon.";
     default:
-      return browser.host === "remote_headed"
-        ? "Display isolation was not recorded for this remote-headed browser."
-        : "Display isolation applies to remote-headed browser hosts.";
+      return "Display allocation was not recorded.";
   }
+}
+
+function displayIsolationTitle(browser: ServiceBrowser): string {
+  if (browser.displayIsolation) {
+    return displayIsolationValueTitle(browser.displayIsolation);
+  }
+  return browser.host === "remote_headed"
+    ? "Display isolation was not recorded for this remote-headed browser."
+    : "Display isolation applies to remote-headed browser hosts.";
 }
 
 function RemoteViewReadinessStrip({ browser, stream }: { browser: ServiceBrowser; stream?: ServiceViewStream | null }) {
@@ -3217,6 +3234,7 @@ function JobDetailContent({
         <EventDetailItem label="Action" value={job.action} />
         <EventDetailItem label="State" value={job.state} />
         <EventDetailItem label="Priority" value={job.priority} />
+        <EventDetailItem label="Display allocation" value={job.displayIsolation ? displayIsolationLabel(job.displayIsolation) : null} />
         <EventDetailItem label="Owner" value={job.owner ? formatActor(job.owner) : null} />
         <EventDetailItem label="Timeout" value={job.timeoutMs ? `${job.timeoutMs} ms` : null} />
         <EventDetailItem label="Submitted" value={job.submittedAt ? formatAbsoluteTime(job.submittedAt) : null} />

@@ -77,6 +77,7 @@ export async function launchRemoteHeadedBrowser({
     taskName,
     params: {
       browserHost: 'remote_headed',
+      displayIsolation: 'private_virtual_display',
       headless: false,
       url: smokeDataUrl(title, heading),
       waitUntil: 'load',

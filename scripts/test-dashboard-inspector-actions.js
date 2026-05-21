@@ -45,6 +45,24 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /export type ServiceJob = \{[\s\S]*displayIsolation\?: string \| null;/,
+  'Service jobs must expose displayIsolation for operator request-intent visibility',
+);
+
+assert.match(
+  servicePanel,
+  /job\.displayIsolation && \([\s\S]*title=\{displayIsolationValueTitle\(job\.displayIsolation\)\}[\s\S]*\{displayIsolationLabel\(job\.displayIsolation\)\}/,
+  'Job rows must show the requested display allocation policy when present',
+);
+
+assert.match(
+  servicePanel,
+  /<EventDetailItem label="Display allocation" value=\{job\.displayIsolation \? displayIsolationLabel\(job\.displayIsolation\) : null\} \/>/,
+  'Job inspector must show requested display allocation policy',
+);
+
+assert.match(
+  servicePanel,
   /onInspectorActionsChange\(\{[\s\S]*actingIncidentId,[\s\S]*onControlBrowser: focusBrowserViewStream,[\s\S]*onAcknowledgeIncident: acknowledgeInspectorIncident,[\s\S]*onResolveIncident: resolveInspectorIncident,[\s\S]*onCancelJob: cancelInspectorJob,[\s\S]*\}\);/,
   'ServicePanel must publish right-pane action handlers through onInspectorActionsChange',
 );

@@ -89,6 +89,16 @@
       "type": "boolean",
       "description": "True when the job manages browser, profile, monitor, or service lifecycle rather than a CDP-backed tab interaction."
     },
+    "displayIsolation": {
+      "type": ["string", "null"],
+      "enum": [
+        "private_virtual_display",
+        "shared_display",
+        "ambient_display",
+        null
+      ],
+      "description": "Remote-headed display allocation policy requested by the caller or copied access plan."
+    },
     "target": {
       "oneOf": [
         {

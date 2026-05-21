@@ -90,6 +90,7 @@ export interface ServiceJobRecord {
   hasNamingWarning: boolean;
   controlPlaneMode: ServiceJobControlPlaneMode;
   lifecycleOnly: boolean;
+  displayIsolation?: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
   target: unknown;
   owner: unknown;
   state: ServiceJobState;
