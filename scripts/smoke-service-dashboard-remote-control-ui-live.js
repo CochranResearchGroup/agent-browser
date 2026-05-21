@@ -1,17 +1,22 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   assert,
-  closeSession,
   createSmokeContext,
   httpJson,
   parseJsonOutput,
   runCli,
-  smokeDataUrl,
 } from './smoke-utils.js';
+import {
+  cleanupSmokeHome,
+  closeRemoteHeadedBrowser,
+  configureRemoteHeadedContext,
+  ensureStreamPort,
+  launchRemoteHeadedBrowser,
+  loadAgentBrowserEnvFromRealHome,
+} from './smoke-remote-headed-utils.js';
 
 loadAgentBrowserEnvFromRealHome();
 
@@ -28,14 +33,7 @@ const agentName = 'smoke-agent';
 const launchTaskName = 'dashboardRemoteHeadedLaunch';
 const closeTaskName = 'dashboardRemoteHeadedClose';
 const browserId = `session:${session}`;
-const viewStreamProvider = process.env.AGENT_BROWSER_REMOTE_VIEW_PROVIDER || 'rdp_gateway';
-const controlInputProvider = process.env.AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER || 'manual_attached_desktop';
-const viewStreamUrl = process.env.AGENT_BROWSER_REMOTE_VIEW_URL || 'http://agent-browser.localhost/guacamole/';
-
-context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
-context.env.AGENT_BROWSER_REMOTE_VIEW_PROVIDER = viewStreamProvider;
-context.env.AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER = controlInputProvider;
-context.env.AGENT_BROWSER_REMOTE_VIEW_URL = viewStreamUrl;
+const remoteConfig = configureRemoteHeadedContext(context);
 
 const timeout = setTimeout(() => {
   fail('Timed out waiting for dashboard remote-control UI live smoke to complete');
@@ -44,74 +42,28 @@ const timeout = setTimeout(() => {
 let streamPort;
 let browserLaunched = false;
 
-function loadAgentBrowserEnvFromRealHome() {
-  const realHome = process.env.HOME || '';
-  const agentHome = process.env.AGENT_BROWSER_HOME || join(realHome, '.agent-browser');
-  const envPath = join(agentHome, '.env');
-  if (!existsSync(envPath)) return;
-
-  const text = readFileSync(envPath, 'utf8');
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const separatorIndex = trimmed.indexOf('=');
-    if (separatorIndex <= 0) continue;
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const value = trimmed.slice(separatorIndex + 1).trim();
-    if (!process.env[key]) process.env[key] = value;
-  }
-}
-
 async function cleanup() {
   clearTimeout(timeout);
-  if (streamPort && browserLaunched) {
-    try {
-      await httpJson(streamPort, 'POST', '/api/service/request', {
-        action: 'service_browser_close',
-        serviceName,
-        agentName,
-        taskName: closeTaskName,
-        params: { browserId },
-        jobTimeoutMs: 30000,
-      });
-    } catch {
-      // The final session close below is the fallback cleanup path.
-    }
-  }
   try {
     await runCli(context, ['--json', '--session', uiSession, 'close']);
   } catch {
     // The UI browser may not have launched if the smoke failed early.
   }
-  await closeSession(context);
-  if (process.env.AGENT_BROWSER_SMOKE_KEEP_HOME === '1') {
-    console.error(`Keeping smoke home: ${tempHome}`);
-  } else {
-    context.cleanupTempHome();
-  }
+  await closeRemoteHeadedBrowser({
+    agentName,
+    browserId: browserLaunched ? browserId : null,
+    context,
+    serviceName,
+    streamPort,
+    taskName: closeTaskName,
+  });
+  cleanupSmokeHome(context);
 }
 
 async function fail(message) {
   console.error(message);
   await cleanup();
   process.exit(1);
-}
-
-async function ensureStreamPort() {
-  const streamStatusResult = await runCli(context, ['--json', '--session', session, 'stream', 'status']);
-  let stream = parseJsonOutput(streamStatusResult.stdout, 'stream status');
-  assert(
-    stream.success === true,
-    `stream status failed: ${streamStatusResult.stdout}${streamStatusResult.stderr}`,
-  );
-  if (!stream.data?.enabled) {
-    const streamResult = await runCli(context, ['--json', '--session', session, 'stream', 'enable']);
-    stream = parseJsonOutput(streamResult.stdout, 'stream enable');
-    assert(stream.success === true, `stream enable failed: ${streamResult.stdout}${streamResult.stderr}`);
-  }
-  const port = stream.data?.port;
-  assert(Number.isInteger(port) && port > 0, `stream status did not return a port: ${JSON.stringify(stream)}`);
-  return port;
 }
 
 async function evalInDashboard(script, timeoutMs = 60000) {
@@ -229,25 +181,17 @@ async function waitForDashboardFocusJob() {
 }
 
 try {
-  streamPort = await ensureStreamPort();
-
-  const launchResponse = await httpJson(streamPort, 'POST', '/api/service/request', {
-    action: 'navigate',
-    serviceName,
+  streamPort = await ensureStreamPort(context);
+  await launchRemoteHeadedBrowser({
     agentName,
+    config: remoteConfig,
+    context,
+    heading: 'Dashboard Remote Control UI Smoke',
+    serviceName,
+    streamPort,
     taskName: launchTaskName,
-    params: {
-      browserHost: 'remote_headed',
-      headless: false,
-      url: smokeDataUrl('Dashboard Remote Control UI Smoke', 'Dashboard Remote Control UI Smoke'),
-      waitUntil: 'load',
-      viewStreamProvider,
-      controlInputProvider,
-      viewStreamUrl,
-    },
-    jobTimeoutMs: 120000,
+    title: 'Dashboard Remote Control UI Smoke',
   });
-  assert(launchResponse.success === true, `remote_headed service request failed: ${JSON.stringify(launchResponse)}`);
   browserLaunched = true;
 
   const dashboardUrl = `http://127.0.0.1:${streamPort}/`;
@@ -285,7 +229,7 @@ try {
 
   await clickInspectorRemoteControl();
   const dialogState = await waitForDashboardState(
-    (state) => state?.hasDialog && state?.hasDialogFrame && state?.dialogFrameSrc === viewStreamUrl,
+    (state) => state?.hasDialog && state?.hasDialogFrame && state?.dialogFrameSrc === remoteConfig.viewStreamUrl,
     'remote-control view stream dialog',
   );
   const focusJob = await waitForDashboardFocusJob();
