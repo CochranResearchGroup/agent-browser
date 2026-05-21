@@ -4182,6 +4182,8 @@ pub enum BrowserHealth {
 pub struct ViewStream {
     pub id: String,
     pub provider: ViewStreamProvider,
+    /// Input transport expected to control this view stream, when known.
+    pub control_input: Option<ControlInputProvider>,
     pub url: Option<String>,
     pub read_only: bool,
 }
@@ -4191,6 +4193,7 @@ impl Default for ViewStream {
         Self {
             id: String::new(),
             provider: ViewStreamProvider::CdpScreencast,
+            control_input: Some(ControlInputProvider::CdpInput),
             url: None,
             read_only: true,
         }

@@ -2111,6 +2111,25 @@ body {
   text-align: right;
 }
 
+.service-browser-table-streams {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.service-browser-table-streams .service-browser-table-number {
+  text-align: left;
+}
+
+.service-browser-table-streams span:last-child {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .service-browser-table-error {
   max-width: 18rem;
   color: var(--destructive);

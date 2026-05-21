@@ -71,10 +71,10 @@ use super::service_lifecycle::{
 use super::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, BrowserSession, JobState as ServiceJobState, LeaseState,
-    MonitorState, ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason,
-    ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider,
+    BrowserHost as ServiceBrowserHost, BrowserSession, ControlInputProvider,
+    JobState as ServiceJobState, LeaseState, MonitorState, ProfileKeyringPolicy,
+    ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
+    SessionCleanupPolicy, TabLifecycle, ViewStream, ViewStreamProvider,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -1244,9 +1244,21 @@ fn remote_headed_view_streams_from_command(command: &Value) -> Vec<ViewStream> {
             })
         })
         .or_else(|| env::var("AGENT_BROWSER_REMOTE_VIEW_URL").ok());
+    let control_input = optional_command_string(command, "controlInput")
+        .or_else(|| optional_command_string(command, "controlInputProvider"))
+        .or_else(|| {
+            command.get("params").and_then(|params| {
+                optional_command_string(params, "controlInput")
+                    .or_else(|| optional_command_string(params, "controlInputProvider"))
+            })
+        })
+        .or_else(|| env::var("AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER").ok())
+        .and_then(|provider| parse_control_input_provider(&provider))
+        .or_else(|| default_control_input_provider(provider));
     vec![ViewStream {
         id: "remote-headed-view".to_string(),
         provider,
+        control_input,
         url,
         read_only: false,
     }]
@@ -1264,6 +1276,34 @@ fn parse_view_stream_provider(value: &str) -> Option<ViewStreamProvider> {
         "external_url" | "external-url" => Some(ViewStreamProvider::ExternalUrl),
         _ => None,
     }
+}
+
+fn parse_control_input_provider(value: &str) -> Option<ControlInputProvider> {
+    match value.trim() {
+        "cdp_input" | "cdp-input" | "cdp" => Some(ControlInputProvider::CdpInput),
+        "webrtc_input" | "webrtc-input" | "webrtc" => Some(ControlInputProvider::WebrtcInput),
+        "vnc_input" | "vnc-input" | "vnc" => Some(ControlInputProvider::VncInput),
+        "manual_attached_desktop"
+        | "manual-attached-desktop"
+        | "manual_desktop"
+        | "manual-desktop"
+        | "manual" => Some(ControlInputProvider::ManualAttachedDesktop),
+        _ => None,
+    }
+}
+
+fn default_control_input_provider(provider: ViewStreamProvider) -> Option<ControlInputProvider> {
+    let input = match provider {
+        ViewStreamProvider::CdpScreencast => ControlInputProvider::CdpInput,
+        ViewStreamProvider::ChromeTabWebrtc | ViewStreamProvider::VirtualDisplayWebrtc => {
+            ControlInputProvider::WebrtcInput
+        }
+        ViewStreamProvider::Novnc => ControlInputProvider::VncInput,
+        ViewStreamProvider::RdpGateway | ViewStreamProvider::ExternalUrl => {
+            ControlInputProvider::ManualAttachedDesktop
+        }
+    };
+    Some(input)
 }
 
 fn service_browser_host_for_launch(cmd: &Value, headless: bool) -> ServiceBrowserHost {
@@ -12671,16 +12711,21 @@ mod tests {
 
         assert_eq!(streams.len(), 1);
         assert_eq!(streams[0].provider, ViewStreamProvider::CdpScreencast);
+        assert_eq!(
+            streams[0].control_input,
+            Some(ControlInputProvider::CdpInput)
+        );
         assert_eq!(streams[0].id, "remote-headed-view");
     }
 
     #[test]
-    fn remote_headed_view_stream_accepts_nested_provider_and_url() {
+    fn remote_headed_view_stream_accepts_nested_provider_url_and_control_input() {
         let command = json!({
             "action": "tab_new",
             "params": {
                 "browserHost": "remote_headed",
                 "viewStreamProvider": "rdp_gateway",
+                "controlInputProvider": "manual_attached_desktop",
                 "viewStreamUrl": "http://127.0.0.1:8080/rdp/session"
             }
         });
@@ -12689,6 +12734,10 @@ mod tests {
 
         assert_eq!(streams.len(), 1);
         assert_eq!(streams[0].provider, ViewStreamProvider::RdpGateway);
+        assert_eq!(
+            streams[0].control_input,
+            Some(ControlInputProvider::ManualAttachedDesktop)
+        );
         assert_eq!(
             streams[0].url.as_deref(),
             Some("http://127.0.0.1:8080/rdp/session")

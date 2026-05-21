@@ -80,6 +80,22 @@
               "external_url"
             ]
           },
+          "controlInput": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cdp_input",
+                  "webrtc_input",
+                  "vnc_input",
+                  "manual_attached_desktop"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "url": {
             "type": [
               "string",

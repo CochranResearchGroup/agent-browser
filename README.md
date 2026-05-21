@@ -1587,7 +1587,10 @@ carry those hints in `params` so dashboards and software clients do not infer
 remote-view posture locally. The shipped UPS policy selects
 `stealthcdp_chromium`, `remote_headed`, `rdp_gateway`, and
 `manual_attached_desktop` because headed stealth Chromium loaded UPS tracking
-where true headless did not.
+where true headless did not. Remote-headed browser records persist the selected
+view stream provider and control input provider on each `viewStreams` entry, so
+the web UX can show whether the stream is merely viewable or operator
+controllable before opening it.
 Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` to reuse an existing virtual display,
 and set `AGENT_BROWSER_REMOTE_VIEW_URL` when an external noVNC, RDP gateway,
 WebRTC, or dashboard view URL should be recorded on the service browser record.

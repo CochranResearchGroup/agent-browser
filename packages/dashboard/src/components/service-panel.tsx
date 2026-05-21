@@ -92,7 +92,10 @@ import {
   serviceProfileAllocationLookupUrl,
 } from "@/lib/service-profile-allocation";
 import {
+  canControlViewStream,
   canEmbedViewStream,
+  controlInputLabel,
+  viewStreamCapabilityLabel,
   viewStreamLabel,
   type ServiceViewStream,
 } from "@/lib/service-view-streams";
@@ -1705,6 +1708,7 @@ function ViewStreamCard({
   onInspect?: (stream: ServiceViewStream) => void;
 }) {
   const embeddable = canEmbedViewStream(stream);
+  const controllable = canControlViewStream(stream);
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card/70">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
@@ -1719,6 +1723,9 @@ function ViewStreamCard({
         )}
         <Badge variant={stream.readOnly ? "secondary" : "default"} className="h-5 px-1.5 text-[9px]">
           {stream.readOnly ? "view only" : "interactive"}
+        </Badge>
+        <Badge variant={controllable ? "default" : "secondary"} className="h-5 px-1.5 text-[9px]">
+          {controlInputLabel(stream)}
         </Badge>
         {embeddable && onInspect && (
           <Button size="sm" variant="default" className="ml-auto h-7 gap-1.5 px-2 text-[10px]" onClick={() => onInspect(stream)}>
@@ -1753,6 +1760,12 @@ function ViewStreamCard({
 
 function browserPrimaryViewStream(browser?: ServiceBrowser | null): ServiceViewStream | null {
   return browser?.viewStreams?.find(canEmbedViewStream) ?? browser?.viewStreams?.[0] ?? null;
+}
+
+function browserViewStreamCapability(browser?: ServiceBrowser | null): string {
+  const stream = browserPrimaryViewStream(browser);
+  if (!stream) return "none";
+  return viewStreamCapabilityLabel(stream);
 }
 
 type BrowserSortKey = "health" | "id" | "profile" | "host" | "sessions" | "streams";
@@ -2584,7 +2597,9 @@ function BrowserTableRow({
   const tone = healthTone(browser.health);
   const sessionCount = browser.activeSessionIds?.length ?? 0;
   const viewStreamCount = browser.viewStreams?.length ?? 0;
-  const viewStreamAvailable = Boolean(browserPrimaryViewStream(browser));
+  const primaryViewStream = browserPrimaryViewStream(browser);
+  const viewStreamAvailable = Boolean(primaryViewStream);
+  const viewStreamCapability = browserViewStreamCapability(browser);
   const closeAvailable = Boolean(closeSupported && onCloseBrowser && activeSessionName && browser.id === `session:${activeSessionName}`);
   const repairAvailable = Boolean(repairSupported && onRepairBrowser && ["degraded", "faulted"].includes((browser.health ?? "").toLowerCase()));
   const closeTitle = browserRowCloseTitle({
@@ -2641,7 +2656,14 @@ function BrowserTableRow({
         </td>
       )}
       {visibleColumns.has("sessions") && <td className="service-browser-table-number">{sessionCount}</td>}
-      {visibleColumns.has("streams") && <td className="service-browser-table-number">{viewStreamCount}</td>}
+      {visibleColumns.has("streams") && (
+        <td>
+          <div className="service-browser-table-streams">
+            <span className="service-browser-table-number">{viewStreamCount}</span>
+            <span>{viewStreamCapability}</span>
+          </div>
+        </td>
+      )}
       {visibleColumns.has("lastError") && (
         <td className={cn("service-browser-table-error", !browser.lastError && "service-browser-table-cell-muted")}>
           {browser.lastError || "none"}
@@ -2773,6 +2795,14 @@ function ViewStreamInspectDialog({
                     {viewStreamLabel(stream)} / {selection.browser.id}
                     {selection.tab?.id ? ` / ${selection.tab.id}` : ""}
                   </DialogDescription>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <Badge variant="outline" className="h-5 px-1.5 text-[9px]">
+                      view {viewStreamLabel(stream)}
+                    </Badge>
+                    <Badge variant={canControlViewStream(stream) ? "default" : "secondary"} className="h-5 px-1.5 text-[9px]">
+                      input {controlInputLabel(stream)}
+                    </Badge>
+                  </div>
                 </div>
                 <Button
                   type="button"
@@ -2857,6 +2887,7 @@ function BrowserDetailContent({
   onInspectViewStream?: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
 }) {
   const viewStreamCount = browser.viewStreams?.length ?? 0;
+  const primaryViewStream = browserPrimaryViewStream(browser);
   return (
     <div className="service-event-dialog-body">
       {browser.lastError && (
@@ -2874,6 +2905,8 @@ function BrowserDetailContent({
         <EventDetailItem label="CDP endpoint" value={browser.cdpEndpoint} />
         <EventDetailItem label="Active sessions" value={String(browser.activeSessionIds?.length ?? 0)} />
         <EventDetailItem label="View streams" value={String(viewStreamCount)} />
+        <EventDetailItem label="Primary view" value={primaryViewStream ? viewStreamLabel(primaryViewStream) : null} />
+        <EventDetailItem label="Primary input" value={primaryViewStream ? controlInputLabel(primaryViewStream) : null} />
       </div>
       {!!browser.activeSessionIds?.length && (
         <div>

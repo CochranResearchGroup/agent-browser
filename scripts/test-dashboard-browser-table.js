@@ -375,7 +375,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*View[\s\S]*disabled=\{!viewStreamAvailable \|\| !onFocusViewStream\}[\s\S]*Focus[\s\S]*AlertDialog[\s\S]*disabled=\{!closeAvailable \|\| acting\}[\s\S]*Close[\s\S]*disabled=\{!repairAvailable \|\| acting\}[\s\S]*Repair/,
+  /service-browser-table-streams[\s\S]*viewStreamCapability[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*View[\s\S]*disabled=\{!viewStreamAvailable \|\| !onFocusViewStream\}[\s\S]*Focus[\s\S]*AlertDialog[\s\S]*disabled=\{!closeAvailable \|\| acting\}[\s\S]*Close[\s\S]*disabled=\{!repairAvailable \|\| acting\}[\s\S]*Repair/,
   'Browser row actions must expose Inspect, View, Focus, Close, and Repair with eligibility gates',
 );
 
@@ -393,8 +393,8 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-browser-row-actions[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end[\s\S]*\.service-browser-row-actions button:disabled/,
-  'Browser row actions must keep compact wrapping action-group styling',
+  /\.service-browser-table-streams[\s\S]*grid[\s\S]*\.service-browser-row-actions[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end[\s\S]*\.service-browser-row-actions button:disabled/,
+  'Browser row actions must keep compact wrapping action-group styling and stream posture labels',
 );
 
 assert.match(

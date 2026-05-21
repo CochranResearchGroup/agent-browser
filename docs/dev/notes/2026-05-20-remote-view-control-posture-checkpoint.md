@@ -30,6 +30,10 @@ The copied queued service request also carries:
 This keeps the dashboard, MCP clients, and software clients aligned with the
 service-owned decision before any browser is launched.
 
+Follow-up implementation in the next slice persisted `controlInput` on browser
+`viewStreams` entries and taught the dashboard to show the view and input
+posture in browser rows, browser details, and the embedded stream dialog.
+
 ## UPS Default Policy
 
 The shipped UPS site policy now makes the remote-view posture explicit:
