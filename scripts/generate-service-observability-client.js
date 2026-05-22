@@ -981,6 +981,26 @@ export interface ServiceTraceBrowserCapabilityLaunchSummary {
   [key: string]: unknown;
 }
 
+export interface ServiceTraceDisplayAllocation {
+  displayIsolation: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string;
+  label: string;
+  count: number;
+  jobIds: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceTraceDisplayAllocationSummary {
+  count: number;
+  recordedCount: number;
+  unrecordedCount: number;
+  privateVirtualDisplayCount: number;
+  sharedDisplayCount: number;
+  ambientDisplayCount: number;
+  allocations: ServiceTraceDisplayAllocation[];
+  unrecordedJobIds: string[];
+  [key: string]: unknown;
+}
+
 export interface ServiceTraceContextAttention {
   required: boolean;
   owner: 'none' | 'operator' | 'service' | string;
@@ -1016,6 +1036,8 @@ export interface ServiceTraceSummaryContext {
   targetIdentityCount: number;
   targetServiceIds: string[];
   controlPlaneModes: ServiceJobControlPlaneMode[];
+  displayAllocations: Array<'private_virtual_display' | 'shared_display' | 'ambient_display' | string>;
+  unrecordedDisplayAllocationJobCount: number;
   lifecycleOnlyJobCount: number;
   attention: ServiceTraceContextAttention;
   latestTimestamp: string | null;
@@ -1027,6 +1049,7 @@ export interface ServiceTraceSummary {
   hasTraceContext: boolean;
   namingWarningCount: number;
   browserCapabilityLaunches: ServiceTraceBrowserCapabilityLaunchSummary;
+  displayAllocations: ServiceTraceDisplayAllocationSummary;
   profileLeaseWaits: ServiceTraceProfileLeaseWaitSummary;
   contexts: ServiceTraceSummaryContext[];
   [key: string]: unknown;

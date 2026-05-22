@@ -192,6 +192,8 @@ struct TraceContextSummary {
     activity_count: usize,
     target_service_ids: Vec<String>,
     control_plane_modes: Vec<String>,
+    display_allocations: Vec<String>,
+    unrecorded_display_allocation_job_count: usize,
     lifecycle_only_job_count: usize,
     latest_timestamp: Option<String>,
 }
@@ -265,6 +267,11 @@ fn service_trace_summary(
         summary.job_count += 1;
         merge_job_target_service_ids(&mut summary.target_service_ids, job);
         merge_control_plane_mode(&mut summary.control_plane_modes, job);
+        if let Some(display_isolation) = job.display_isolation.as_deref() {
+            merge_string_value(&mut summary.display_allocations, display_isolation);
+        } else {
+            summary.unrecorded_display_allocation_job_count += 1;
+        }
         if job.lifecycle_only {
             summary.lifecycle_only_job_count += 1;
         }
@@ -344,6 +351,8 @@ fn service_trace_summary(
                 "targetIdentityCount": summary.target_service_ids.len(),
                 "targetServiceIds": summary.target_service_ids,
                 "controlPlaneModes": summary.control_plane_modes,
+                "displayAllocations": summary.display_allocations,
+                "unrecordedDisplayAllocationJobCount": summary.unrecorded_display_allocation_job_count,
                 "lifecycleOnlyJobCount": summary.lifecycle_only_job_count,
                 "attention": attention,
                 "latestTimestamp": summary.latest_timestamp,
@@ -383,9 +392,77 @@ fn service_trace_summary(
             filters,
             since,
         ),
+        "displayAllocations": service_trace_display_allocation_summary(jobs),
         "profileLeaseWaits": service_trace_profile_lease_wait_summary(events),
         "contexts": contexts,
     })
+}
+
+fn service_trace_display_allocation_summary(jobs: &[ServiceJob]) -> Value {
+    let mut allocations = BTreeMap::<String, Vec<String>>::new();
+    let mut unrecorded_job_ids = Vec::<String>::new();
+
+    for job in jobs {
+        if let Some(display_isolation) = job.display_isolation.as_deref() {
+            allocations
+                .entry(display_isolation.to_string())
+                .or_default()
+                .push(job.id.clone());
+        } else {
+            unrecorded_job_ids.push(job.id.clone());
+        }
+    }
+
+    let allocation_rows = allocations
+        .into_iter()
+        .map(|(display_isolation, job_ids)| {
+            json!({
+                "displayIsolation": display_isolation,
+                "label": service_trace_display_allocation_label(display_isolation.as_str()),
+                "count": job_ids.len(),
+                "jobIds": job_ids,
+            })
+        })
+        .collect::<Vec<_>>();
+    let recorded_count = allocation_rows
+        .iter()
+        .map(|row| {
+            row.get("count")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0)
+        })
+        .sum::<u64>() as usize;
+    let unrecorded_count = unrecorded_job_ids.len();
+
+    json!({
+        "count": jobs.len(),
+        "recordedCount": recorded_count,
+        "unrecordedCount": unrecorded_count,
+        "privateVirtualDisplayCount": service_trace_display_allocation_count(&allocation_rows, "private_virtual_display"),
+        "sharedDisplayCount": service_trace_display_allocation_count(&allocation_rows, "shared_display"),
+        "ambientDisplayCount": service_trace_display_allocation_count(&allocation_rows, "ambient_display"),
+        "allocations": allocation_rows,
+        "unrecordedJobIds": unrecorded_job_ids,
+    })
+}
+
+fn service_trace_display_allocation_count(rows: &[Value], display_isolation: &str) -> u64 {
+    rows.iter()
+        .find(|row| {
+            row.get("displayIsolation").and_then(|value| value.as_str()) == Some(display_isolation)
+        })
+        .and_then(|row| row.get("count"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0)
+}
+
+fn service_trace_display_allocation_label(display_isolation: &str) -> &'static str {
+    match display_isolation {
+        "private_virtual_display" => "private display",
+        "shared_display" => "shared display",
+        "ambient_display" => "ambient display",
+        _ => "unknown display",
+    }
 }
 
 fn service_trace_browser_capability_launch_summary(
@@ -576,6 +653,13 @@ fn merge_control_plane_mode(control_plane_modes: &mut Vec<String>, job: &Service
     if !control_plane_modes.iter().any(|existing| existing == mode) {
         control_plane_modes.push(mode.to_string());
     }
+}
+
+fn merge_string_value(values: &mut Vec<String>, value: &str) {
+    if value.is_empty() || values.iter().any(|existing| existing == value) {
+        return;
+    }
+    values.push(value.to_string());
 }
 
 fn trace_context_attention(incident_count: usize, naming_warnings: &[&str]) -> Value {

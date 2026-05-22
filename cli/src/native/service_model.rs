@@ -767,6 +767,7 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
             "hasTraceContext",
             "namingWarningCount",
             "browserCapabilityLaunches",
+            "displayAllocations",
             "profileLeaseWaits",
             "contexts",
         ],
@@ -836,6 +837,48 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
         ));
         assert!(launch["applied"].is_boolean());
     }
+    let display_allocations = &value["displayAllocations"];
+    assert_record_fields(
+        "trace display allocations",
+        display_allocations,
+        &[
+            "count",
+            "recordedCount",
+            "unrecordedCount",
+            "privateVirtualDisplayCount",
+            "sharedDisplayCount",
+            "ambientDisplayCount",
+            "allocations",
+            "unrecordedJobIds",
+        ],
+        &[
+            "recorded_count",
+            "unrecorded_count",
+            "private_virtual_display_count",
+            "shared_display_count",
+            "ambient_display_count",
+            "unrecorded_job_ids",
+        ],
+    );
+    assert!(display_allocations["count"].is_u64());
+    assert!(display_allocations["recordedCount"].is_u64());
+    assert!(display_allocations["unrecordedCount"].is_u64());
+    assert!(display_allocations["privateVirtualDisplayCount"].is_u64());
+    assert!(display_allocations["sharedDisplayCount"].is_u64());
+    assert!(display_allocations["ambientDisplayCount"].is_u64());
+    assert!(display_allocations["unrecordedJobIds"].is_array());
+    for allocation in display_allocations["allocations"].as_array().unwrap() {
+        assert_record_fields(
+            "trace display allocation",
+            allocation,
+            &["displayIsolation", "label", "count", "jobIds"],
+            &["display_isolation", "job_ids"],
+        );
+        assert!(allocation["displayIsolation"].is_string());
+        assert!(allocation["label"].is_string());
+        assert!(allocation["count"].is_u64());
+        assert!(allocation["jobIds"].is_array());
+    }
     let profile_lease_waits = &value["profileLeaseWaits"];
     assert_record_fields(
         "trace profile lease waits",
@@ -902,6 +945,8 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
                 "targetIdentityCount",
                 "targetServiceIds",
                 "controlPlaneModes",
+                "displayAllocations",
+                "unrecordedDisplayAllocationJobCount",
                 "lifecycleOnlyJobCount",
                 "attention",
                 "latestTimestamp",
@@ -922,6 +967,8 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
                 "target_identity_count",
                 "target_service_ids",
                 "control_plane_modes",
+                "display_allocations",
+                "unrecorded_display_allocation_job_count",
                 "lifecycle_only_job_count",
                 "latest_timestamp",
             ],
@@ -940,6 +987,8 @@ pub fn assert_service_trace_summary_record_contract(value: &serde_json::Value) {
         assert!(context["targetIdentityCount"].is_u64());
         assert!(context["targetServiceIds"].is_array());
         assert!(context["controlPlaneModes"].is_array());
+        assert!(context["displayAllocations"].is_array());
+        assert!(context["unrecordedDisplayAllocationJobCount"].is_u64());
         assert!(context["lifecycleOnlyJobCount"].is_u64());
         assert_record_fields(
             "trace summary context attention",
@@ -5908,6 +5957,7 @@ mod tests {
                 "hasTraceContext",
                 "namingWarningCount",
                 "browserCapabilityLaunches",
+                "displayAllocations",
                 "profileLeaseWaits",
                 "contexts",
             ],
@@ -5926,6 +5976,21 @@ mod tests {
                 "appliedCount": 0,
                 "skippedCount": 0,
                 "launches": [],
+            },
+            "displayAllocations": {
+                "count": 1,
+                "recordedCount": 1,
+                "unrecordedCount": 0,
+                "privateVirtualDisplayCount": 1,
+                "sharedDisplayCount": 0,
+                "ambientDisplayCount": 0,
+                "allocations": [{
+                    "displayIsolation": "private_virtual_display",
+                    "label": "private display",
+                    "count": 1,
+                    "jobIds": ["job-1"],
+                }],
+                "unrecordedJobIds": [],
             },
             "profileLeaseWaits": {
                 "count": 0,
@@ -5949,6 +6014,8 @@ mod tests {
                 "targetIdentityCount": 1,
                 "targetServiceIds": ["acs"],
                 "controlPlaneModes": ["cdp"],
+                "displayAllocations": ["private_virtual_display"],
+                "unrecordedDisplayAllocationJobCount": 0,
                 "lifecycleOnlyJobCount": 0,
                 "attention": {
                     "required": false,

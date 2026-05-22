@@ -16681,6 +16681,7 @@ mod tests {
                         "taskName": "probeACSwebsite",
                         "siteId": "acs",
                         "targetServiceIds": ["acs", "google"],
+                        "displayIsolation": "private_virtual_display",
                         "namingWarnings": service_job_naming_warning_values(),
                         "hasNamingWarning": true,
                         "submittedAt": "2026-04-22T00:02:00Z",
@@ -16694,6 +16695,7 @@ mod tests {
                         "serviceName": "JournalDownloader",
                         "agentName": "codex",
                         "taskName": "probeACSwebsite",
+                        "displayIsolation": "shared_display",
                         "submittedAt": "2026-04-22T00:03:00Z",
                         "error": "Wrong profile"
                     }
@@ -16781,6 +16783,19 @@ mod tests {
             result["data"]["summary"]["browserCapabilityLaunches"]["launches"][0]["reason"],
             "validated_binding_applied"
         );
+        assert_eq!(result["data"]["summary"]["displayAllocations"]["count"], 1);
+        assert_eq!(
+            result["data"]["summary"]["displayAllocations"]["recordedCount"],
+            1
+        );
+        assert_eq!(
+            result["data"]["summary"]["displayAllocations"]["privateVirtualDisplayCount"],
+            1
+        );
+        assert_eq!(
+            result["data"]["summary"]["displayAllocations"]["allocations"][0]["displayIsolation"],
+            "private_virtual_display"
+        );
         assert_eq!(result["data"]["summary"]["profileLeaseWaits"]["count"], 1);
         assert_eq!(
             result["data"]["summary"]["profileLeaseWaits"]["completedCount"],
@@ -16816,6 +16831,14 @@ mod tests {
         assert_eq!(owned_context["activityCount"], 2);
         assert_eq!(owned_context["targetIdentityCount"], 2);
         assert_eq!(owned_context["targetServiceIds"], json!(["acs", "google"]));
+        assert_eq!(
+            owned_context["displayAllocations"],
+            json!(["private_virtual_display"])
+        );
+        assert_eq!(
+            owned_context["unrecordedDisplayAllocationJobCount"],
+            json!(0)
+        );
         assert_eq!(owned_context["hasNamingWarning"], false);
         assert_eq!(owned_context["namingWarnings"].as_array().unwrap().len(), 0);
         assert_eq!(owned_context["attention"]["required"], false);

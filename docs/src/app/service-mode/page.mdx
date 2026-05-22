@@ -57,7 +57,10 @@ the service session and launch-recorded event so operators can see whether a
 binding was applied or skipped and why. Service traces summarize those
 decisions in <code>summary.browserCapabilityLaunches</code> and text output
 prints a <code>Browser capability launches</code> block with the applied state,
-reason, browser build, binding, host, executable, and trace context.
+reason, browser build, binding, host, executable, and trace context. Trace
+summaries also include <code>summary.displayAllocations</code> so operators can
+correlate private, shared, or ambient display requests with launch decisions and
+job outcomes.
 Preference binding filters are conjunctive. A binding with both
 <code>targetServiceIds</code> and <code>accountIds</code> matches only when the
 request includes the matching site and account.

@@ -9,6 +9,7 @@
     "hasTraceContext",
     "namingWarningCount",
     "browserCapabilityLaunches",
+    "displayAllocations",
     "profileLeaseWaits",
     "contexts"
   ],
@@ -139,6 +140,91 @@
       },
       "additionalProperties": true
     },
+    "displayAllocations": {
+      "type": "object",
+      "description": "Display allocation policies observed on retained jobs included in this trace response.",
+      "required": [
+        "count",
+        "recordedCount",
+        "unrecordedCount",
+        "privateVirtualDisplayCount",
+        "sharedDisplayCount",
+        "ambientDisplayCount",
+        "allocations",
+        "unrecordedJobIds"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recordedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unrecordedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "privateVirtualDisplayCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sharedDisplayCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ambientDisplayCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allocations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "displayIsolation",
+              "label",
+              "count",
+              "jobIds"
+            ],
+            "properties": {
+              "displayIsolation": {
+                "type": "string",
+                "enum": [
+                  "private_virtual_display",
+                  "shared_display",
+                  "ambient_display"
+                ]
+              },
+              "label": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "jobIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "unrecordedJobIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
     "profileLeaseWaits": {
       "type": "object",
       "required": [
@@ -245,6 +331,8 @@
           "targetIdentityCount",
           "targetServiceIds",
           "controlPlaneModes",
+          "displayAllocations",
+          "unrecordedDisplayAllocationJobCount",
           "lifecycleOnlyJobCount",
           "attention",
           "latestTimestamp"
@@ -324,6 +412,24 @@
               ]
             },
             "uniqueItems": true
+          },
+          "displayAllocations": {
+            "type": "array",
+            "description": "Requested display allocation policies observed on retained jobs in this trace context.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "private_virtual_display",
+                "shared_display",
+                "ambient_display"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "unrecordedDisplayAllocationJobCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of retained jobs in this trace context that did not record display allocation intent."
           },
           "lifecycleOnlyJobCount": {
             "type": "integer",

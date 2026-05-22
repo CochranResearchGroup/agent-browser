@@ -37,6 +37,7 @@ export type ServiceTraceJob = {
   siteId?: string | null;
   loginId?: string | null;
   targetServiceIds?: string[];
+  displayIsolation?: string | null;
   namingWarnings?: string[];
   hasNamingWarning?: boolean;
 };
@@ -117,6 +118,16 @@ export type ServiceTraceData = {
       skippedCount?: number;
       launches?: ServiceTraceBrowserCapabilityLaunch[];
     };
+    displayAllocations?: {
+      count?: number;
+      recordedCount?: number;
+      unrecordedCount?: number;
+      privateVirtualDisplayCount?: number;
+      sharedDisplayCount?: number;
+      ambientDisplayCount?: number;
+      allocations?: ServiceTraceDisplayAllocation[];
+      unrecordedJobIds?: string[];
+    };
     profileLeaseWaits?: {
       count?: number;
       activeCount?: number;
@@ -136,6 +147,8 @@ export type ServiceTraceData = {
       activityCount?: number;
       targetIdentityCount?: number;
       targetServiceIds?: string[];
+      displayAllocations?: string[];
+      unrecordedDisplayAllocationJobCount?: number;
       latestTimestamp?: string | null;
       attention?: ServiceTraceContextAttention;
       hasNamingWarning?: boolean;
@@ -165,6 +178,13 @@ export type ServiceTraceSummaryContext = NonNullable<
   NonNullable<ServiceTraceData["summary"]>["contexts"]
 >[number];
 
+export type ServiceTraceDisplayAllocation = {
+  displayIsolation?: string | null;
+  label?: string | null;
+  count?: number;
+  jobIds?: string[];
+};
+
 export type ServiceTraceSummaryCard = {
   key: string;
   title: string;
@@ -187,6 +207,13 @@ export type ServiceTraceAttentionSummary = {
   suggestedActions: string[];
   messages: string[];
   contexts: ServiceTraceSummaryContext[];
+};
+
+export type ServiceTraceDisplayAllocationSummary = {
+  total: number;
+  recorded: number;
+  unrecorded: number;
+  allocations: ServiceTraceDisplayAllocation[];
 };
 
 export type ServiceTraceToolPayload = {
@@ -301,6 +328,21 @@ export function traceAttentionSummary(trace: ServiceTraceData | null): ServiceTr
     ),
     messages: uniqueTraceTargets(contexts.map((context) => context.attention?.message ?? "")),
     contexts,
+  };
+}
+
+export function traceDisplayAllocationSummary(trace: ServiceTraceData | null): ServiceTraceDisplayAllocationSummary {
+  const summary = trace?.summary?.displayAllocations;
+  const allocations = [...(summary?.allocations ?? [])].sort((left, right) => {
+    const countOrder = (right.count ?? 0) - (left.count ?? 0);
+    if (countOrder !== 0) return countOrder;
+    return (left.displayIsolation ?? "").localeCompare(right.displayIsolation ?? "");
+  });
+  return {
+    total: summary?.count ?? 0,
+    recorded: summary?.recordedCount ?? 0,
+    unrecorded: summary?.unrecordedCount ?? 0,
+    allocations,
   };
 }
 

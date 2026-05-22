@@ -1205,6 +1205,17 @@ body {
   padding: 0.65rem;
 }
 
+.service-trace-display-summary {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 14% 10%, color-mix(in srgb, var(--success) 14%, transparent), transparent 34%),
+    color-mix(in srgb, var(--background) 42%, transparent);
+  padding: 0.65rem;
+}
+
 .service-trace-contexts-header {
   display: flex;
   align-items: center;
@@ -1232,6 +1243,12 @@ body {
 .service-trace-launch-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.service-trace-display-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.45rem;
 }
 
@@ -1263,6 +1280,43 @@ body {
     linear-gradient(150deg, color-mix(in srgb, var(--dashboard-panel-strong) 82%, transparent), color-mix(in srgb, var(--background) 50%, transparent));
   padding: 0.65rem;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%);
+}
+
+.service-trace-display-card {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border));
+  border-radius: 0.95rem;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--success) 9%, var(--dashboard-panel-strong)), color-mix(in srgb, var(--background) 50%, transparent));
+  padding: 0.65rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%);
+}
+
+.service-trace-display-card span {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.6rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.service-trace-display-card strong {
+  color: var(--foreground);
+  font-size: 1.35rem;
+  font-weight: 950;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+
+.service-trace-display-card small {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 800;
 }
 
 .service-trace-launch-card-applied {
@@ -2737,6 +2791,7 @@ body {
   .service-trace-counts,
   .service-trace-context-grid,
   .service-trace-launch-grid,
+  .service-trace-display-grid,
   .service-trace-wait-grid,
   .service-trace-wait-metrics {
     grid-template-columns: 1fr;

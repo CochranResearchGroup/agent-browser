@@ -67,6 +67,7 @@ import {
 import {
   normalizeServiceTraceData,
   traceBrowserCapabilityLaunches,
+  traceDisplayAllocationSummary,
   traceProfileLeaseWaits,
   traceFilterSummary,
   traceSummaryCards,
@@ -1236,6 +1237,7 @@ function TraceExplorer({
   const summaryCards = traceSummaryCards(trace);
   const browserCapabilityLaunches = traceBrowserCapabilityLaunches(trace);
   const browserCapabilityLaunchSummary = trace?.summary?.browserCapabilityLaunches;
+  const displayAllocationSummary = traceDisplayAllocationSummary(trace);
   const profileLeaseWaits = traceProfileLeaseWaits(trace);
   const profileLeaseWaitSummary = trace?.summary?.profileLeaseWaits;
   const hasFilters =
@@ -1377,6 +1379,40 @@ function TraceExplorer({
         <p className="px-1 text-[10px] leading-4 text-muted-foreground">
           Contract data: events/jobs/incidents/activity. Returned filters: {traceFilterSummary(trace.filters)}
         </p>
+      )}
+      {trace && (
+        <div className="service-trace-display-summary" aria-label="Trace display allocation summary">
+          <div className="service-trace-contexts-header">
+            <span>Display allocation</span>
+            <Badge variant="outline" className="rounded-full px-2 py-0 text-[9px] uppercase">
+              {displayAllocationSummary.recorded} recorded
+            </Badge>
+            {displayAllocationSummary.unrecorded > 0 && (
+              <Badge variant="secondary" className="rounded-full px-2 py-0 text-[9px] uppercase">
+                {displayAllocationSummary.unrecorded} unrecorded
+              </Badge>
+            )}
+          </div>
+          {displayAllocationSummary.allocations.length === 0 ? (
+            <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-center text-xs text-muted-foreground">
+              No display allocation intent was recorded for jobs in this trace.
+            </p>
+          ) : (
+            <div className="service-trace-display-grid">
+              {displayAllocationSummary.allocations.map((allocation) => (
+                <div
+                  key={allocation.displayIsolation ?? "unknown"}
+                  className="service-trace-display-card"
+                  title={displayIsolationValueTitle(allocation.displayIsolation)}
+                >
+                  <span>{allocation.label ?? displayIsolationLabel(allocation.displayIsolation)}</span>
+                  <strong>{allocation.count ?? 0}</strong>
+                  <small>{allocation.jobIds?.length ?? 0} jobs</small>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       {trace && (
         <div className="service-trace-contexts" aria-label="Trace ownership summary">

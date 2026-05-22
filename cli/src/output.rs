@@ -559,6 +559,19 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
                 } else {
                     format!(" control={control_modes}")
                 };
+                let display_allocations = value_string_list(context, "displayAllocations");
+                let unrecorded_display_jobs = context
+                    .get("unrecordedDisplayAllocationJobCount")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let display_text = if display_allocations == "none" && unrecorded_display_jobs == 0
+                {
+                    String::new()
+                } else if unrecorded_display_jobs == 0 {
+                    format!(" display={display_allocations}")
+                } else {
+                    format!(" display={display_allocations} displayUnrecordedJobs={unrecorded_display_jobs}")
+                };
                 let lifecycle_only_jobs = context
                     .get("lifecycleOnlyJobCount")
                     .and_then(|value| value.as_u64())
@@ -613,13 +626,16 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
                     })
                     .unwrap_or_default();
                 lines.push(format!(
-                    "  context{service}{agent}{task}{browser}{profile}{session}{target_text}{control_text}{lifecycle_text}{warning}{attention} events={events} jobs={jobs} incidents={incidents} activity={activity}"
+                    "  context{service}{agent}{task}{browser}{profile}{session}{target_text}{control_text}{display_text}{lifecycle_text}{warning}{attention} events={events} jobs={jobs} incidents={incidents} activity={activity}"
                 ));
             }
         }
     }
     if let Some(binding_text) = format_service_trace_browser_capability_launch_text(data) {
         lines.push(binding_text);
+    }
+    if let Some(display_text) = format_service_trace_display_allocation_text(data) {
+        lines.push(display_text);
     }
     if let Some(wait_text) = format_service_trace_profile_lease_wait_text(data) {
         lines.push(wait_text);
@@ -629,6 +645,40 @@ fn format_service_trace_text(data: &serde_json::Value) -> Option<String> {
             lines.push(activity_text);
         }
     }
+    Some(lines.join("\n"))
+}
+
+fn format_service_trace_display_allocation_text(data: &serde_json::Value) -> Option<String> {
+    let display_allocations = data
+        .get("summary")
+        .and_then(|summary| summary.get("displayAllocations"))?;
+    let allocations = display_allocations
+        .get("allocations")
+        .and_then(|value| value.as_array())
+        .filter(|allocations| !allocations.is_empty())?;
+    let recorded_count = display_allocations
+        .get("recordedCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(allocations.len() as u64);
+    let unrecorded_count = display_allocations
+        .get("unrecordedCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let mut lines = vec![format!(
+        "Display allocations: recorded={recorded_count} unrecorded={unrecorded_count}"
+    )];
+    lines.extend(allocations.iter().map(|allocation| {
+        let display = allocation
+            .get("displayIsolation")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown");
+        let count = allocation
+            .get("count")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        let jobs = value_string_list(allocation, "jobIds");
+        format!("  display={display} count={count} jobs={jobs}")
+    }));
     Some(lines.join("\n"))
 }
 
@@ -6819,6 +6869,21 @@ mod tests {
                         "executablePath": "/opt/chromium-stealthcdp/chrome"
                     }]
                 },
+                "displayAllocations": {
+                    "count": 1,
+                    "recordedCount": 1,
+                    "unrecordedCount": 0,
+                    "privateVirtualDisplayCount": 1,
+                    "sharedDisplayCount": 0,
+                    "ambientDisplayCount": 0,
+                    "allocations": [{
+                        "displayIsolation": "private_virtual_display",
+                        "label": "private display",
+                        "count": 1,
+                        "jobIds": ["job-1"]
+                    }],
+                    "unrecordedJobIds": []
+                },
                 "contexts": [{
                     "serviceName": "JournalDownloader",
                     "agentName": "codex",
@@ -6833,6 +6898,8 @@ mod tests {
                     "targetIdentityCount": 2,
                     "targetServiceIds": ["acs", "google"],
                     "controlPlaneModes": ["cdp", "cdp_free"],
+                    "displayAllocations": ["private_virtual_display"],
+                    "unrecordedDisplayAllocationJobCount": 0,
                     "lifecycleOnlyJobCount": 1,
                     "attention": {
                         "required": true,
@@ -6919,7 +6986,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google control=cdp,cdp_free lifecycleOnlyJobs=1 attention=incidents_present events=1 jobs=1 incidents=1 activity=1\nBrowser capability launches: 1\n  source=session session=session-1 browser=browser-1 profile=work build=stealthcdp_chromium applied=true reason=validated_binding_applied binding=binding-1 host=local executable=stealth-current\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google control=cdp,cdp_free display=private_virtual_display lifecycleOnlyJobs=1 attention=incidents_present events=1 jobs=1 incidents=1 activity=1\nBrowser capability launches: 1\n  source=session session=session-1 browser=browser-1 profile=work build=stealthcdp_chromium applied=true reason=validated_binding_applied binding=binding-1 host=local executable=stealth-current\nDisplay allocations: recorded=1 unrecorded=0\n  display=private_virtual_display count=1 jobs=job-1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 

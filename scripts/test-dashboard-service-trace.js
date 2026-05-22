@@ -5,6 +5,7 @@ import {
   normalizeServiceTraceData,
   traceAttentionSummary,
   traceBrowserCapabilityLaunches,
+  traceDisplayAllocationSummary,
   traceFilterSummary,
   traceProfileLeaseWaits,
   traceSummaryCards,
@@ -58,6 +59,7 @@ const traceData = {
       serviceName: 'JournalDownloader',
       agentName: 'agent-a',
       taskName: 'probeACSwebsite',
+      displayIsolation: 'private_virtual_display',
     },
     {
       id: 'job-standalone',
@@ -68,6 +70,7 @@ const traceData = {
       serviceName: 'JournalDownloader',
       agentName: 'agent-a',
       taskName: 'probeACSwebsite',
+      displayIsolation: 'shared_display',
     },
   ],
   incidents: [],
@@ -144,6 +147,29 @@ const traceData = {
         },
       ],
     },
+    displayAllocations: {
+      count: 2,
+      recordedCount: 2,
+      unrecordedCount: 0,
+      privateVirtualDisplayCount: 1,
+      sharedDisplayCount: 1,
+      ambientDisplayCount: 0,
+      allocations: [
+        {
+          displayIsolation: 'private_virtual_display',
+          label: 'private display',
+          count: 1,
+          jobIds: ['job-seen'],
+        },
+        {
+          displayIsolation: 'shared_display',
+          label: 'shared display',
+          count: 1,
+          jobIds: ['job-standalone'],
+        },
+      ],
+      unrecordedJobIds: [],
+    },
     profileLeaseWaits: {
       count: 2,
       activeCount: 1,
@@ -209,6 +235,8 @@ const traceData = {
         sessionId: 'session-1',
         targetIdentityCount: 3,
         targetServiceIds: ['acs', 'google', 'acs'],
+        displayAllocations: ['private_virtual_display', 'shared_display'],
+        unrecordedDisplayAllocationJobCount: 0,
         hasNamingWarning: false,
         namingWarnings: [],
         eventCount: 2,
@@ -300,6 +328,18 @@ assert.equal(browserCapabilityLaunches[0].applied, true);
 assert.equal(browserCapabilityLaunches[0].bindingId, 'binding-1');
 assert.equal(browserCapabilityLaunches[1].reason, 'profile_compatibility_missing_or_blocked');
 assert.equal(traceBrowserCapabilityLaunches(null).length, 0);
+
+const displayAllocationSummary = traceDisplayAllocationSummary(traceData);
+assert.equal(displayAllocationSummary.total, 2);
+assert.equal(displayAllocationSummary.recorded, 2);
+assert.equal(displayAllocationSummary.unrecorded, 0);
+assert.deepEqual(
+  displayAllocationSummary.allocations.map((allocation) => allocation.displayIsolation),
+  ['private_virtual_display', 'shared_display'],
+  'Trace display allocations should sort by count, then display policy',
+);
+assert.equal(displayAllocationSummary.allocations[0].jobIds[0], 'job-seen');
+assert.equal(traceDisplayAllocationSummary(null).recorded, 0);
 
 const profileLeaseWaits = traceProfileLeaseWaits(traceData);
 assert.deepEqual(
