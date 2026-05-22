@@ -2,6 +2,10 @@
 
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createServiceIncidentHandoff,
+  createServiceTraceHandoff,
+} from "@agent-browser/client/service-observability";
 import { useAtomValue } from "jotai/react";
 import {
   AlertTriangle,
@@ -925,38 +929,54 @@ function incidentTraceFilters(incident: IncidentRecord): TraceFilters {
   };
 }
 
-function traceQueryParams(filters: TraceFilters): URLSearchParams {
-  const params = new URLSearchParams({ limit: String(filters.limit) });
-  if (filters.serviceName.trim()) params.set("service-name", filters.serviceName.trim());
-  if (filters.agentName.trim()) params.set("agent-name", filters.agentName.trim());
-  if (filters.taskName.trim()) params.set("task-name", filters.taskName.trim());
-  if (filters.browserId.trim()) params.set("browser-id", filters.browserId.trim());
-  if (filters.profileId.trim()) params.set("profile-id", filters.profileId.trim());
-  if (filters.sessionId.trim()) params.set("session-id", filters.sessionId.trim());
-  if (filters.since.trim()) params.set("since", filters.since.trim());
-  return params;
+function traceHandoff(filters: TraceFilters) {
+  return createServiceTraceHandoff({
+    serviceName: filters.serviceName,
+    agentName: filters.agentName,
+    taskName: filters.taskName,
+    browserId: filters.browserId,
+    profileId: filters.profileId,
+    sessionId: filters.sessionId,
+    since: filters.since,
+    limit: filters.limit,
+  });
 }
 
-function shellArg(value: string): string {
-  if (/^[A-Za-z0-9_./:@+=,-]+$/.test(value)) return value;
-  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+function traceQueryParams(filters: TraceFilters): URLSearchParams {
+  return new URLSearchParams(
+    Object.entries(traceHandoff(filters).query).map(([key, value]) => [key, String(value)]),
+  );
 }
 
 function traceCliCommand(filters: TraceFilters): string {
-  const args = ["agent-browser", "service", "trace"];
-  if (filters.serviceName.trim()) args.push("--service-name", shellArg(filters.serviceName.trim()));
-  if (filters.agentName.trim()) args.push("--agent-name", shellArg(filters.agentName.trim()));
-  if (filters.taskName.trim()) args.push("--task-name", shellArg(filters.taskName.trim()));
-  if (filters.browserId.trim()) args.push("--browser-id", shellArg(filters.browserId.trim()));
-  if (filters.profileId.trim()) args.push("--profile-id", shellArg(filters.profileId.trim()));
-  if (filters.sessionId.trim()) args.push("--session-id", shellArg(filters.sessionId.trim()));
-  if (filters.since.trim()) args.push("--since", shellArg(filters.since.trim()));
-  args.push("--limit", String(filters.limit));
-  return args.join(" ");
+  return traceHandoff(filters).cliCommand;
 }
 
 function traceHttpPath(filters: TraceFilters): string {
-  return `/api/service/trace?${traceQueryParams(filters).toString()}`;
+  return traceHandoff(filters).httpPath;
+}
+
+function incidentHandoff(filters: TraceFilters, trace: ServiceTraceData | null) {
+  const singleIncidentId = trace?.incidents?.length === 1 ? trace.incidents[0]?.id : null;
+  if (singleIncidentId) {
+    return createServiceIncidentHandoff({
+      incidentId: singleIncidentId,
+      limit: 20,
+    });
+  }
+  return createServiceIncidentHandoff({
+    serviceName: filters.serviceName,
+    agentName: filters.agentName,
+    taskName: filters.taskName,
+    browserId: filters.browserId,
+    profileId: filters.profileId,
+    sessionId: filters.sessionId,
+    since: filters.since,
+    state: "active",
+    handlingState: "unacknowledged",
+    summary: true,
+    limit: 20,
+  });
 }
 
 function browserCapabilityLaunchKey(launch: ServiceTraceBrowserCapabilityLaunch): string {
@@ -1309,12 +1329,17 @@ function TraceExplorer({
     !!filters.profileId.trim() ||
     !!filters.sessionId.trim() ||
     !!filters.since.trim();
-  const cliCommand = traceCliCommand(filters);
-  const httpPath = traceHttpPath(filters);
+  const traceHandoffSummary = useMemo(() => traceHandoff(filters), [filters]);
+  const incidentHandoffSummary = useMemo(() => incidentHandoff(filters, trace), [filters, trace]);
+  const cliCommand = traceHandoffSummary.cliCommand;
+  const httpPath = traceHandoffSummary.httpPath;
+  const incidentCliCommand = incidentHandoffSummary.cliCommand;
+  const incidentHttpPath = incidentHandoffSummary.httpPath;
+  const incidentActivityCommand = incidentHandoffSummary.activityCliCommand;
 
   useEffect(() => {
     setCopyStatus("");
-  }, [cliCommand, httpPath]);
+  }, [cliCommand, httpPath, incidentCliCommand, incidentHttpPath, incidentActivityCommand]);
 
   const copyTraceHandoff = useCallback(async (label: string, value: string) => {
     try {
@@ -1422,7 +1447,7 @@ function TraceExplorer({
       {hasFilters && (
         <div className="service-trace-handoff" aria-label="Trace handoff commands">
           <div>
-            <span>CLI</span>
+            <span>Trace CLI</span>
             <code>{cliCommand}</code>
             <button
               type="button"
@@ -1434,7 +1459,7 @@ function TraceExplorer({
             </button>
           </div>
           <div>
-            <span>HTTP</span>
+            <span>Trace HTTP</span>
             <code>{httpPath}</code>
             <button
               type="button"
@@ -1445,6 +1470,44 @@ function TraceExplorer({
               Copy
             </button>
           </div>
+          <div>
+            <span>Incidents CLI</span>
+            <code>{incidentCliCommand}</code>
+            <button
+              type="button"
+              className="service-trace-copy"
+              onClick={() => void copyTraceHandoff("CLI incident command", incidentCliCommand)}
+            >
+              <Copy className="size-3" />
+              Copy
+            </button>
+          </div>
+          <div>
+            <span>Incidents HTTP</span>
+            <code>{incidentHttpPath}</code>
+            <button
+              type="button"
+              className="service-trace-copy"
+              onClick={() => void copyTraceHandoff("HTTP incident path", incidentHttpPath)}
+            >
+              <Copy className="size-3" />
+              Copy
+            </button>
+          </div>
+          {incidentActivityCommand && (
+            <div>
+              <span>Activity CLI</span>
+              <code>{incidentActivityCommand}</code>
+              <button
+                type="button"
+                className="service-trace-copy"
+                onClick={() => void copyTraceHandoff("CLI incident activity command", incidentActivityCommand)}
+              >
+                <Copy className="size-3" />
+                Copy
+              </button>
+            </div>
+          )}
           {copyStatus && <p>{copyStatus}</p>}
         </div>
       )}

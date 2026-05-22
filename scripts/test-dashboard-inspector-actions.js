@@ -135,20 +135,32 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function traceCliCommand\(filters: TraceFilters\): string \{[\s\S]*"agent-browser", "service", "trace"[\s\S]*"--service-name"[\s\S]*"--limit", String\(filters\.limit\)/,
-  'Trace explorer must build a copyable CLI command from active filters',
+  /function traceCliCommand\(filters: TraceFilters\): string \{[\s\S]*return traceHandoff\(filters\)\.cliCommand/,
+  'Trace explorer must build its copyable CLI command from the shared trace handoff helper',
 );
 
 assert.match(
   servicePanel,
-  /function traceHttpPath\(filters: TraceFilters\): string \{[\s\S]*`\/api\/service\/trace\?\$\{traceQueryParams\(filters\)\.toString\(\)\}`/,
-  'Trace explorer must build a copyable HTTP trace path from active filters',
+  /function traceHttpPath\(filters: TraceFilters\): string \{[\s\S]*return traceHandoff\(filters\)\.httpPath/,
+  'Trace explorer must build its copyable HTTP trace path from the shared trace handoff helper',
 );
 
 assert.match(
   servicePanel,
-  /className="service-trace-handoff"[\s\S]*aria-label="Trace handoff commands"[\s\S]*\{cliCommand\}[\s\S]*copyTraceHandoff\("CLI trace command", cliCommand\)[\s\S]*\{httpPath\}[\s\S]*copyTraceHandoff\("HTTP trace path", httpPath\)/,
-  'Trace explorer must render CLI and HTTP handoff copy affordances',
+  /function incidentHandoff\(filters: TraceFilters, trace: ServiceTraceData \| null\)[\s\S]*createServiceIncidentHandoff\(\{[\s\S]*incidentId: singleIncidentId[\s\S]*createServiceIncidentHandoff\(\{[\s\S]*state: "active"[\s\S]*handlingState: "unacknowledged"[\s\S]*summary: true/,
+  'Trace explorer must build incident handoff references from the shared incident handoff helper',
+);
+
+assert.match(
+  servicePanel,
+  /className="service-trace-handoff"[\s\S]*aria-label="Trace handoff commands"[\s\S]*Trace CLI[\s\S]*copyTraceHandoff\("CLI trace command", cliCommand\)[\s\S]*Trace HTTP[\s\S]*copyTraceHandoff\("HTTP trace path", httpPath\)[\s\S]*Incidents CLI[\s\S]*copyTraceHandoff\("CLI incident command", incidentCliCommand\)[\s\S]*Incidents HTTP[\s\S]*copyTraceHandoff\("HTTP incident path", incidentHttpPath\)/,
+  'Trace explorer must render trace and incident handoff copy affordances',
+);
+
+assert.match(
+  servicePanel,
+  /incidentActivityCommand && \([\s\S]*Activity CLI[\s\S]*copyTraceHandoff\("CLI incident activity command", incidentActivityCommand\)/,
+  'Trace explorer must render incident activity handoff copy affordance when an incident id is known',
 );
 
 assert.match(
