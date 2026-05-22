@@ -93,20 +93,27 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /onShowProfileLeaseWaitJob: \(jobId: string\) => void;/,
-  'Trace explorer must expose a typed action for jumping from profile lease waits to Jobs',
+  /onShowTraceJob: \(jobId: string\) => void;/,
+  'Trace explorer must expose a typed action for jumping trace job references to Jobs',
 );
 
 assert.match(
   servicePanel,
-  /onClick=\{\(\) => onShowProfileLeaseWaitJob\(wait\.jobId\)\}[\s\S]*Show job in Jobs/,
+  /onClick=\{\(\) => onShowTraceJob\(wait\.jobId\)\}[\s\S]*Show job in Jobs/,
   'Trace profile lease wait cards must jump to the retained job in the Jobs workspace',
 );
 
 assert.match(
   servicePanel,
-  /const showProfileLeaseWaitJob = useCallback\(\(jobId: string\) => \{[\s\S]*setWorkspaceTab\("jobs"\)[\s\S]*setJobQuery\(jobId\)[\s\S]*setJobDisplayFilter\("all"\)[\s\S]*setJobLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
-  'Service dashboard must switch to Jobs and filter by job id from profile lease wait cards',
+  /const showTraceJob = useCallback\(\(jobId: string\) => \{[\s\S]*setWorkspaceTab\("jobs"\)[\s\S]*setJobQuery\(jobId\)[\s\S]*setJobDisplayFilter\("all"\)[\s\S]*setJobLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
+  'Service dashboard must switch to Jobs and filter by job id from trace cards',
+);
+
+
+assert.match(
+  servicePanel,
+  /className="service-trace-timeline-job-link"[\s\S]*onClick=\{\(\) => onShowTraceJob\(jobId\)\}[\s\S]*Show job \{jobId\} in Jobs/,
+  'Trace timeline job rows must jump to the retained job in the Jobs workspace',
 );
 
 assert.match(

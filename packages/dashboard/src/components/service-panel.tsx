@@ -1221,7 +1221,7 @@ function TraceExplorer({
   timeline,
   onFiltersChange,
   onShowJobsForDisplayAllocation,
-  onShowProfileLeaseWaitJob,
+  onShowTraceJob,
   onLoad,
   onClear,
 }: {
@@ -1232,7 +1232,7 @@ function TraceExplorer({
   timeline: ServiceTraceTimelineItem[];
   onFiltersChange: (filters: TraceFilters) => void;
   onShowJobsForDisplayAllocation: (displayIsolation: string | null, jobIds?: string[]) => void;
-  onShowProfileLeaseWaitJob: (jobId: string) => void;
+  onShowTraceJob: (jobId: string) => void;
   onLoad: () => void;
   onClear: () => void;
 }) {
@@ -1548,7 +1548,7 @@ function TraceExplorer({
                     type="button"
                     key={`${wait.jobId}:${wait.startedAt ?? ""}:${wait.endedAt ?? ""}`}
                     className={cn("service-trace-wait-card", active && "service-trace-wait-card-active")}
-                    onClick={() => onShowProfileLeaseWaitJob(wait.jobId)}
+                    onClick={() => onShowTraceJob(wait.jobId)}
                     title={`Show retained job ${wait.jobId} in Jobs`}
                   >
                     <div className="flex min-w-0 items-center gap-2">
@@ -1597,34 +1597,46 @@ function TraceExplorer({
               No trace records matched these filters.
             </p>
           ) : (
-            timeline.map((item) => (
-              <div key={item.id} className="service-incident-history-item">
-                <EventDot kind={item.kind} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-xs font-bold text-foreground">
-                      {item.title || formatEventKind(item.kind)}
-                    </span>
-                    {item.source && (
-                      <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px] uppercase">
-                        {item.source}
-                      </Badge>
-                    )}
-                    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                      {formatAbsoluteTime(item.timestamp)}
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate text-[10px] text-muted-foreground">
-                    {traceContextLabel(item)}
-                  </p>
-                  {item.message && (
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      {item.message}
+            timeline.map((item) => {
+              const jobId = typeof item.jobId === "string" && item.jobId.length > 0 ? item.jobId : null;
+              return (
+                <div key={item.id} className="service-incident-history-item">
+                  <EventDot kind={item.kind} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-xs font-bold text-foreground">
+                        {item.title || formatEventKind(item.kind)}
+                      </span>
+                      {item.source && (
+                        <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px] uppercase">
+                          {item.source}
+                        </Badge>
+                      )}
+                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                        {formatAbsoluteTime(item.timestamp)}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                      {traceContextLabel(item)}
                     </p>
-                  )}
+                    {item.message && (
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {item.message}
+                      </p>
+                    )}
+                    {jobId && (
+                      <button
+                        type="button"
+                        className="service-trace-timeline-job-link"
+                        onClick={() => onShowTraceJob(jobId)}
+                      >
+                        Show job {jobId} in Jobs
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
@@ -4962,7 +4974,7 @@ export function ServicePanel({
 
     setJobFilterNotice(`Showing ${label} jobs from the trace display allocation summary.`);
   }, [recentJobs]);
-  const showProfileLeaseWaitJob = useCallback((jobId: string) => {
+  const showTraceJob = useCallback((jobId: string) => {
     setWorkspaceTab("jobs");
     setJobQuery(jobId);
     setJobStateFilter("all");
@@ -4974,8 +4986,8 @@ export function ServicePanel({
     const retainedJob = recentJobs.find((job) => job.id === jobId);
     setJobFilterNotice(
       retainedJob
-        ? `Showing profile lease wait job ${jobId} from the trace summary.`
-        : `Profile lease wait job ${jobId} is outside the retained Jobs window; it may appear after the 100-row refresh completes.`,
+        ? `Showing trace job ${jobId} from the retained Jobs window.`
+        : `Trace job ${jobId} is outside the retained Jobs window; it may appear after the 100-row refresh completes.`,
     );
   }, [recentJobs]);
   const filteredJobs = useMemo(() => {
@@ -6337,7 +6349,7 @@ export function ServicePanel({
                   timeline={traceTimeline}
                   onFiltersChange={setTraceFilters}
                   onShowJobsForDisplayAllocation={showJobsForDisplayAllocation}
-                  onShowProfileLeaseWaitJob={showProfileLeaseWaitJob}
+                  onShowTraceJob={showTraceJob}
                   onLoad={loadTrace}
                   onClear={clearTrace}
                 />

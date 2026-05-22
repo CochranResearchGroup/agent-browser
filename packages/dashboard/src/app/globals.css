@@ -1390,6 +1390,31 @@ body {
   text-transform: uppercase;
 }
 
+.service-trace-timeline-job-link {
+  margin-top: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  padding: 0.24rem 0.55rem;
+  color: color-mix(in srgb, var(--foreground) 78%, var(--primary));
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.service-trace-timeline-job-link:hover,
+.service-trace-timeline-job-link:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 46%, var(--border));
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
 .service-trace-wait-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
