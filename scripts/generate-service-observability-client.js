@@ -1098,6 +1098,35 @@ export interface ServiceTraceAttentionSummary {
   [key: string]: unknown;
 }
 
+export interface ServiceTraceDisplayAllocationContextClientSummary {
+  serviceName: string | null;
+  agentName: string | null;
+  taskName: string | null;
+  browserId: string | null;
+  profileId: string | null;
+  sessionId: string | null;
+  displayAllocations: Array<'private_virtual_display' | 'shared_display' | 'ambient_display' | string>;
+  unrecordedDisplayAllocationJobCount: number;
+  jobCount: number;
+  [key: string]: unknown;
+}
+
+export interface ServiceTraceDisplayAllocationClientSummary {
+  total: number;
+  recorded: number;
+  unrecorded: number;
+  privateVirtualDisplay: number;
+  sharedDisplay: number;
+  ambientDisplay: number;
+  hasRecordedAllocations: boolean;
+  hasUnrecordedAllocations: boolean;
+  compactLabels: string[];
+  allocations: ServiceTraceDisplayAllocation[];
+  unrecordedJobIds: string[];
+  contexts: ServiceTraceDisplayAllocationContextClientSummary[];
+  [key: string]: unknown;
+}
+
 export interface ServiceObservabilityHttpOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
@@ -2103,6 +2132,8 @@ export declare function summarizeServiceAccessPlanMonitorRunDue(options: {
 }): ServiceAccessPlanMonitorRunDueSummary;
 /** Summarize UI-neutral trace-context attention rows for software clients. */
 export declare function summarizeServiceTraceAttention(trace?: ServiceTraceResponse | null): ServiceTraceAttentionSummary;
+/** Summarize retained trace display-allocation intent for software clients. */
+export declare function summarizeServiceTraceDisplayAllocations(trace?: ServiceTraceResponse | null): ServiceTraceDisplayAllocationClientSummary;
 export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;

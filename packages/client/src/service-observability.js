@@ -52,6 +52,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceTabsResponse} ServiceTabsResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceResponse} ServiceTraceResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceAttentionSummary} ServiceTraceAttentionSummary
+ * @typedef {import('./service-observability.generated.js').ServiceTraceDisplayAllocationClientSummary} ServiceTraceDisplayAllocationClientSummary
  * @typedef {import('./service-observability.generated.js').ServiceLoginProfileRegistrationOptions} ServiceLoginProfileRegistrationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
@@ -893,6 +894,78 @@ export function summarizeServiceTraceAttention(trace) {
     ),
     messages: uniqueStrings(attentionContexts.map((context) => context.attention.message)),
     contexts: attentionContexts,
+  };
+}
+
+/**
+ * Summarize retained trace display-allocation intent for software clients.
+ *
+ * @param {ServiceTraceResponse | null | undefined} trace
+ * @returns {ServiceTraceDisplayAllocationClientSummary}
+ */
+export function summarizeServiceTraceDisplayAllocations(trace) {
+  const summary = trace?.summary?.displayAllocations;
+  const allocations = Array.isArray(summary?.allocations)
+    ? summary.allocations
+        .map((allocation) => ({
+          displayIsolation:
+            typeof allocation?.displayIsolation === 'string' && allocation.displayIsolation.length > 0
+              ? allocation.displayIsolation
+              : 'unknown',
+          label:
+            typeof allocation?.label === 'string' && allocation.label.length > 0
+              ? allocation.label
+              : displayAllocationLabel(allocation?.displayIsolation),
+          count: Number.isFinite(allocation?.count) ? Number(allocation.count) : 0,
+          jobIds: Array.isArray(allocation?.jobIds) ? uniqueStrings(allocation.jobIds) : [],
+        }))
+        .sort((left, right) => {
+          const countOrder = right.count - left.count;
+          if (countOrder !== 0) return countOrder;
+          return left.displayIsolation.localeCompare(right.displayIsolation);
+        })
+    : [];
+  const unrecordedJobIds = Array.isArray(summary?.unrecordedJobIds)
+    ? uniqueStrings(summary.unrecordedJobIds)
+    : [];
+  const contextRows = Array.isArray(trace?.summary?.contexts)
+    ? trace.summary.contexts
+        .map((context) => ({
+          serviceName: context.serviceName ?? null,
+          agentName: context.agentName ?? null,
+          taskName: context.taskName ?? null,
+          browserId: context.browserId ?? null,
+          profileId: context.profileId ?? null,
+          sessionId: context.sessionId ?? null,
+          displayAllocations: Array.isArray(context.displayAllocations)
+            ? uniqueStrings(context.displayAllocations)
+            : [],
+          unrecordedDisplayAllocationJobCount: Number.isFinite(context.unrecordedDisplayAllocationJobCount)
+            ? Number(context.unrecordedDisplayAllocationJobCount)
+            : 0,
+          jobCount: Number.isFinite(context.jobCount) ? Number(context.jobCount) : 0,
+        }))
+        .filter(
+          (context) =>
+            context.displayAllocations.length > 0 || context.unrecordedDisplayAllocationJobCount > 0,
+        )
+    : [];
+
+  return {
+    total: Number.isFinite(summary?.count) ? Number(summary.count) : 0,
+    recorded: Number.isFinite(summary?.recordedCount) ? Number(summary.recordedCount) : 0,
+    unrecorded: Number.isFinite(summary?.unrecordedCount) ? Number(summary.unrecordedCount) : 0,
+    privateVirtualDisplay: Number.isFinite(summary?.privateVirtualDisplayCount)
+      ? Number(summary.privateVirtualDisplayCount)
+      : 0,
+    sharedDisplay: Number.isFinite(summary?.sharedDisplayCount) ? Number(summary.sharedDisplayCount) : 0,
+    ambientDisplay: Number.isFinite(summary?.ambientDisplayCount) ? Number(summary.ambientDisplayCount) : 0,
+    hasRecordedAllocations: allocations.length > 0,
+    hasUnrecordedAllocations: unrecordedJobIds.length > 0 || (summary?.unrecordedCount ?? 0) > 0,
+    compactLabels: allocations.map((allocation) => `${allocation.label}: ${allocation.count}`),
+    allocations,
+    unrecordedJobIds,
+    contexts: contextRows,
   };
 }
 
@@ -2180,6 +2253,16 @@ function firstMatchingProfileValue(profile, identities, field) {
  */
 function uniqueStrings(values) {
   return [...new Set(values.flatMap((value) => (typeof value === 'string' && value.length > 0 ? [value] : [])))];
+}
+
+/**
+ * @param {unknown} displayIsolation
+ */
+function displayAllocationLabel(displayIsolation) {
+  if (displayIsolation === 'private_virtual_display') return 'private display';
+  if (displayIsolation === 'shared_display') return 'shared display';
+  if (displayIsolation === 'ambient_display') return 'ambient display';
+  return 'unknown display';
 }
 
 function browserPreferenceBindingId(browserBuild, preferredExecutableId, targets, accounts, services, tasks) {

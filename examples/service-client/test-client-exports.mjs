@@ -29,6 +29,7 @@ import {
   summarizeServiceProfileAllocationBrowserHealth,
   summarizeServiceProfileReadiness,
   summarizeServiceTraceAttention,
+  summarizeServiceTraceDisplayAllocations,
   updateServiceProfileFreshness,
   upsertServiceProfileReadinessMonitor,
 } from '@agent-browser/client/service-observability';
@@ -57,6 +58,7 @@ assert.equal(typeof runServiceAccessPlanPostSeedingProbe, 'function');
 assert.equal(typeof summarizeServiceProfileAllocationBrowserHealth, 'function');
 assert.equal(typeof summarizeServiceProfileReadiness, 'function');
 assert.equal(typeof summarizeServiceTraceAttention, 'function');
+assert.equal(typeof summarizeServiceTraceDisplayAllocations, 'function');
 assert.equal(typeof updateServiceProfileFreshness, 'function');
 assert.equal(typeof upsertServiceProfileReadinessMonitor, 'function');
 

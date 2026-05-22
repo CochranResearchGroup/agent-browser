@@ -34,6 +34,7 @@ import {
   summarizeServiceProfileAcquisition,
   summarizeServiceProfileReadiness,
   summarizeServiceTraceAttention,
+  summarizeServiceTraceDisplayAllocations,
   triageServiceMonitor,
   updateServiceProfileFreshness,
   updateServiceProfileSeedingHandoff,
@@ -2049,6 +2050,23 @@ async function main() {
             },
           ],
         },
+        displayAllocations: {
+          count: 2,
+          recordedCount: 1,
+          unrecordedCount: 1,
+          privateVirtualDisplayCount: 1,
+          sharedDisplayCount: 0,
+          ambientDisplayCount: 0,
+          allocations: [
+            {
+              displayIsolation: 'private_virtual_display',
+              label: 'private virtual display',
+              count: 1,
+              jobIds: ['job-display-private'],
+            },
+          ],
+          unrecordedJobIds: ['job-display-unrecorded'],
+        },
         contexts: [
           {
             serviceName: 'JournalDownloader',
@@ -2064,6 +2082,8 @@ async function main() {
             targetIdentityCount: 1,
             targetServiceIds: ['acs'],
             controlPlaneModes: ['cdp'],
+            displayAllocations: ['private_virtual_display'],
+            unrecordedDisplayAllocationJobCount: 0,
             lifecycleOnlyJobCount: 0,
             attention: {
               required: true,
@@ -2090,6 +2110,8 @@ async function main() {
             targetIdentityCount: 0,
             targetServiceIds: [],
             controlPlaneModes: ['service'],
+            displayAllocations: [],
+            unrecordedDisplayAllocationJobCount: 1,
             lifecycleOnlyJobCount: 1,
             attention: {
               required: true,
@@ -2158,6 +2180,19 @@ async function main() {
     'include_task_name',
   ]);
   assert.equal(traceAttention.contexts[0].serviceName, 'JournalDownloader');
+  const traceDisplayAllocations = summarizeServiceTraceDisplayAllocations(traceResult);
+  assert.equal(traceDisplayAllocations.total, 2);
+  assert.equal(traceDisplayAllocations.recorded, 1);
+  assert.equal(traceDisplayAllocations.unrecorded, 1);
+  assert.equal(traceDisplayAllocations.privateVirtualDisplay, 1);
+  assert.equal(traceDisplayAllocations.sharedDisplay, 0);
+  assert.equal(traceDisplayAllocations.ambientDisplay, 0);
+  assert.equal(traceDisplayAllocations.hasRecordedAllocations, true);
+  assert.equal(traceDisplayAllocations.hasUnrecordedAllocations, true);
+  assert.deepEqual(traceDisplayAllocations.compactLabels, ['private virtual display: 1']);
+  assert.deepEqual(traceDisplayAllocations.unrecordedJobIds, ['job-display-unrecorded']);
+  assert.equal(traceDisplayAllocations.contexts[0].displayAllocations[0], 'private_virtual_display');
+  assert.equal(traceDisplayAllocations.contexts[1].unrecordedDisplayAllocationJobCount, 1);
   assert.deepEqual(summarizeServiceTraceAttention(null), {
     required: false,
     requiredCount: 0,
@@ -2169,6 +2204,20 @@ async function main() {
     reasons: [],
     suggestedActions: [],
     messages: [],
+    contexts: [],
+  });
+  assert.deepEqual(summarizeServiceTraceDisplayAllocations(null), {
+    total: 0,
+    recorded: 0,
+    unrecorded: 0,
+    privateVirtualDisplay: 0,
+    sharedDisplay: 0,
+    ambientDisplay: 0,
+    hasRecordedAllocations: false,
+    hasUnrecordedAllocations: false,
+    compactLabels: [],
+    allocations: [],
+    unrecordedJobIds: [],
     contexts: [],
   });
 

@@ -9,6 +9,7 @@ import {
   summarizeServiceAccessPlanBrowserBuildSelection,
   summarizeServiceProfileAcquisition,
   summarizeServiceTraceAttention,
+  summarizeServiceTraceDisplayAllocations,
 } from '@agent-browser/client/service-observability';
 
 const DEFAULT_URL = 'https://example.com';
@@ -261,6 +262,7 @@ export async function runServiceWorkflow({
       incidents: trace.counts.incidents,
       activity: trace.counts.activity,
       attention: summarizeServiceTraceAttention(trace),
+      displayAllocations: summarizeServiceTraceDisplayAllocations(trace),
     },
     latestJobs: trace.jobs.slice(-5).map((/** @type {import('@agent-browser/client/service-observability').ServiceJobRecord} */ job) => ({
       id: job.id,
