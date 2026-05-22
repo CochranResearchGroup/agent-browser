@@ -1220,6 +1220,7 @@ function TraceExplorer({
   error,
   timeline,
   onFiltersChange,
+  onShowJobsForDisplayAllocation,
   onLoad,
   onClear,
 }: {
@@ -1229,6 +1230,7 @@ function TraceExplorer({
   error: string;
   timeline: ServiceTraceTimelineItem[];
   onFiltersChange: (filters: TraceFilters) => void;
+  onShowJobsForDisplayAllocation: (displayIsolation: string | null, jobIds?: string[]) => void;
   onLoad: () => void;
   onClear: () => void;
 }) {
@@ -1400,16 +1402,32 @@ function TraceExplorer({
           ) : (
             <div className="service-trace-display-grid">
               {displayAllocationSummary.allocations.map((allocation) => (
-                <div
+                <button
+                  type="button"
                   key={allocation.displayIsolation ?? "unknown"}
                   className="service-trace-display-card"
                   title={displayIsolationValueTitle(allocation.displayIsolation)}
+                  onClick={() =>
+                    onShowJobsForDisplayAllocation(allocation.displayIsolation ?? null, allocation.jobIds)
+                  }
                 >
                   <span>{allocation.label ?? displayIsolationLabel(allocation.displayIsolation)}</span>
                   <strong>{allocation.count ?? 0}</strong>
-                  <small>{allocation.jobIds?.length ?? 0} jobs</small>
-                </div>
+                  <small>{allocation.jobIds?.length ?? 0} jobs · show in Jobs</small>
+                </button>
               ))}
+              {displayAllocationSummary.unrecorded > 0 && (
+                <button
+                  type="button"
+                  className="service-trace-display-card service-trace-display-card-muted"
+                  title="Show jobs whose retained records do not include display allocation metadata"
+                  onClick={() => onShowJobsForDisplayAllocation(null)}
+                >
+                  <span>Unrecorded</span>
+                  <strong>{displayAllocationSummary.unrecorded}</strong>
+                  <small>jobs · show in Jobs</small>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -2172,6 +2190,18 @@ function serviceJobDisplayMatchesFilter(job: ServiceJob, filter: ServiceJobDispl
   if (filter === "all") return true;
   if (filter === "unrecorded") return !job.displayIsolation;
   return job.displayIsolation === filter;
+}
+
+function serviceJobDisplayFilterForTraceAllocation(displayIsolation: string | null): ServiceJobDisplayFilter {
+  if (
+    displayIsolation === "private_virtual_display" ||
+    displayIsolation === "shared_display" ||
+    displayIsolation === "ambient_display"
+  ) {
+    return displayIsolation;
+  }
+  if (!displayIsolation) return "unrecorded";
+  return "all";
 }
 
 function serviceJobSortValue(job: ServiceJob, sortKey: ServiceJobSortKey): string | number {
@@ -4477,6 +4507,7 @@ export function ServicePanel({
   const [jobSortKey, setJobSortKey] = useState<ServiceJobSortKey>("submittedAt");
   const [jobSortDirection, setJobSortDirection] = useState<SortDirection>("desc");
   const [jobLimit, setJobLimit] = useState<ServiceRecordLimit>(24);
+  const [jobFilterNotice, setJobFilterNotice] = useState("");
   const [actingIncidentId, setActingIncidentId] = useState<string | null>(null);
   const [operatorIdentity, setOperatorIdentity] = useState(initialOperatorIdentity);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
@@ -4901,6 +4932,30 @@ export function ServicePanel({
     [serviceState?.jobs],
   );
   const recentJobs = jobs?.jobs ?? retainedServiceJobs.slice(-8);
+  const showJobsForDisplayAllocation = useCallback((displayIsolation: string | null, jobIds: string[] = []) => {
+    const displayFilter = serviceJobDisplayFilterForTraceAllocation(displayIsolation);
+    const label = displayIsolationLabel(displayIsolation);
+    setWorkspaceTab("jobs");
+    setJobDisplayFilter(displayFilter);
+    setJobStateFilter("all");
+    setJobSortKey("displayIsolation");
+    setJobSortDirection("asc");
+    setJobLimit((current) => (current < 100 ? 100 : current));
+    setJobQuery(displayFilter === "all" && displayIsolation ? displayIsolation : "");
+
+    if (jobIds.length > 0) {
+      const retainedJobIds = new Set(recentJobs.map((job) => job.id));
+      const missingJobCount = jobIds.filter((jobId) => !retainedJobIds.has(jobId)).length;
+      if (missingJobCount > 0) {
+        setJobFilterNotice(
+          `Showing ${label} jobs from the retained Jobs window. ${missingJobCount} trace job${missingJobCount === 1 ? "" : "s"} may appear after the 100-row refresh completes.`,
+        );
+        return;
+      }
+    }
+
+    setJobFilterNotice(`Showing ${label} jobs from the trace display allocation summary.`);
+  }, [recentJobs]);
   const filteredJobs = useMemo(() => {
     const query = jobQuery.trim().toLowerCase();
     const rows = recentJobs.filter((job) => {
@@ -6169,13 +6224,22 @@ export function ServicePanel({
                   <span className="sr-only">Filter service jobs</span>
                   <input
                     value={jobQuery}
-                    onChange={(event) => setJobQuery(event.target.value)}
+                    onChange={(event) => {
+                      setJobQuery(event.target.value);
+                      setJobFilterNotice("");
+                    }}
                     placeholder="filter jobs, services, agents, tasks"
                   />
                 </label>
                 <label className="service-record-select">
                   <span>State</span>
-                  <select value={jobStateFilter} onChange={(event) => setJobStateFilter(event.target.value)}>
+                  <select
+                    value={jobStateFilter}
+                    onChange={(event) => {
+                      setJobStateFilter(event.target.value);
+                      setJobFilterNotice("");
+                    }}
+                  >
                     {SERVICE_JOB_STATE_FILTER_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
@@ -6185,7 +6249,10 @@ export function ServicePanel({
                   <span>Display</span>
                   <select
                     value={jobDisplayFilter}
-                    onChange={(event) => setJobDisplayFilter(event.target.value as ServiceJobDisplayFilter)}
+                    onChange={(event) => {
+                      setJobDisplayFilter(event.target.value as ServiceJobDisplayFilter);
+                      setJobFilterNotice("");
+                    }}
                   >
                     {SERVICE_JOB_DISPLAY_FILTER_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -6220,6 +6287,9 @@ export function ServicePanel({
                   ))}
                 </div>
               </div>
+              {jobFilterNotice && (
+                <p className="service-workspace-inline-note">{jobFilterNotice}</p>
+              )}
               <div className="service-section-list">
                 {filteredJobs.length === 0 ? (
                   <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
@@ -6244,6 +6314,7 @@ export function ServicePanel({
                   error={traceError}
                   timeline={traceTimeline}
                   onFiltersChange={setTraceFilters}
+                  onShowJobsForDisplayAllocation={showJobsForDisplayAllocation}
                   onLoad={loadTrace}
                   onClear={clearTrace}
                 />

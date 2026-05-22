@@ -75,6 +75,24 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /onShowJobsForDisplayAllocation: \(displayIsolation: string \| null, jobIds\?: string\[\]\) => void;/,
+  'Trace explorer must expose a typed action for jumping from display allocation summaries to Jobs',
+);
+
+assert.match(
+  servicePanel,
+  /onClick=\{\(\) =>[\s\S]*onShowJobsForDisplayAllocation\(allocation\.displayIsolation \?\? null, allocation\.jobIds\)[\s\S]*show in Jobs/,
+  'Trace display allocation cards must jump to the filtered Jobs workspace',
+);
+
+assert.match(
+  servicePanel,
+  /const showJobsForDisplayAllocation = useCallback\(\(displayIsolation: string \| null, jobIds: string\[\] = \[\]\) => \{[\s\S]*setWorkspaceTab\("jobs"\)[\s\S]*setJobDisplayFilter\(displayFilter\)[\s\S]*setJobSortKey\("displayIsolation"\)[\s\S]*setJobLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
+  'Service dashboard must switch to Jobs and apply display-allocation filters from trace summary cards',
+);
+
+assert.match(
+  servicePanel,
   /<JobSortButton[\s\S]*sortKey=\{sortKey\}[\s\S]*activeSortKey=\{jobSortKey\}[\s\S]*onSort=\{toggleJobSort\}/,
   'Service dashboard Jobs workspace must render job sort controls',
 );
