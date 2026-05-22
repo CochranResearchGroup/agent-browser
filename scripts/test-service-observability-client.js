@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   acquireServiceLoginProfile,
   applyServiceRemedies,
+  createServiceTraceHandoff,
   findServiceProfileForIdentity,
   deleteServiceMonitor,
   getServiceAccessPlan,
@@ -2193,6 +2194,39 @@ async function main() {
   assert.deepEqual(traceDisplayAllocations.unrecordedJobIds, ['job-display-unrecorded']);
   assert.equal(traceDisplayAllocations.contexts[0].displayAllocations[0], 'private_virtual_display');
   assert.equal(traceDisplayAllocations.contexts[1].unrecordedDisplayAllocationJobCount, 1);
+  const traceHandoff = createServiceTraceHandoff({
+    baseUrl: 'http://127.0.0.1:4849',
+    serviceName: 'JournalDownloader',
+    agentName: 'agent a',
+    taskName: 'probeACSwebsite',
+    browserId: 'browser-1',
+    profileId: 'profile-1',
+    since: '2026-04-25T12:00:00Z',
+    limit: 20,
+  });
+  assert.equal(
+    traceHandoff.cliCommand,
+    "agent-browser service trace --service-name JournalDownloader --agent-name 'agent a' --task-name probeACSwebsite --browser-id browser-1 --profile-id profile-1 --since 2026-04-25T12:00:00Z --limit 20",
+  );
+  assert.equal(
+    traceHandoff.httpPath,
+    '/api/service/trace?service-name=JournalDownloader&agent-name=agent+a&task-name=probeACSwebsite&browser-id=browser-1&profile-id=profile-1&since=2026-04-25T12%3A00%3A00Z&limit=20',
+  );
+  assert.equal(
+    traceHandoff.httpUrl,
+    'http://127.0.0.1:4849/api/service/trace?service-name=JournalDownloader&agent-name=agent+a&task-name=probeACSwebsite&browser-id=browser-1&profile-id=profile-1&since=2026-04-25T12%3A00%3A00Z&limit=20',
+  );
+  assert.equal(traceHandoff.mcpToolName, 'service_trace');
+  assert.deepEqual(traceHandoff.mcpToolArguments, {
+    serviceName: 'JournalDownloader',
+    agentName: 'agent a',
+    taskName: 'probeACSwebsite',
+    browserId: 'browser-1',
+    profileId: 'profile-1',
+    since: '2026-04-25T12:00:00Z',
+    limit: 20,
+  });
+  assert.deepEqual(createServiceTraceHandoff({ limit: 0 }).query, { limit: 20 });
   assert.deepEqual(summarizeServiceTraceAttention(null), {
     required: false,
     requiredCount: 0,

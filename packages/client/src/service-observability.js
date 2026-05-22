@@ -53,6 +53,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceTraceResponse} ServiceTraceResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceAttentionSummary} ServiceTraceAttentionSummary
  * @typedef {import('./service-observability.generated.js').ServiceTraceDisplayAllocationClientSummary} ServiceTraceDisplayAllocationClientSummary
+ * @typedef {import('./service-observability.generated.js').ServiceTraceHandoffOptions} ServiceTraceHandoffOptions
+ * @typedef {import('./service-observability.generated.js').ServiceTraceHandoffSummary} ServiceTraceHandoffSummary
  * @typedef {import('./service-observability.generated.js').ServiceLoginProfileRegistrationOptions} ServiceLoginProfileRegistrationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
@@ -966,6 +968,53 @@ export function summarizeServiceTraceDisplayAllocations(trace) {
     allocations,
     unrecordedJobIds,
     contexts: contextRows,
+  };
+}
+
+/**
+ * Build copyable trace references for operators, agents, and software clients.
+ *
+ * @param {ServiceTraceHandoffOptions} options
+ * @returns {ServiceTraceHandoffSummary}
+ */
+export function createServiceTraceHandoff(options = {}) {
+  const filters = {
+    serviceName: stringOrNull(options.serviceName),
+    agentName: stringOrNull(options.agentName),
+    taskName: stringOrNull(options.taskName),
+    browserId: stringOrNull(options.browserId),
+    profileId: stringOrNull(options.profileId),
+    sessionId: stringOrNull(options.sessionId),
+    since: stringOrNull(options.since),
+    limit: positiveInteger(options.limit) ?? 20,
+  };
+  const query = traceQuery(filters);
+  const queryString = new URLSearchParams(
+    Object.entries(query).map(([key, value]) => [key, String(value)]),
+  ).toString();
+  const httpPath = `/api/service/trace?${queryString}`;
+  const baseUrl = stringOrNull(options.baseUrl);
+  const httpUrl = baseUrl ? new URL(httpPath, baseUrl).toString() : null;
+  const mcpToolArguments = {
+    ...(filters.serviceName ? { serviceName: filters.serviceName } : {}),
+    ...(filters.agentName ? { agentName: filters.agentName } : {}),
+    ...(filters.taskName ? { taskName: filters.taskName } : {}),
+    ...(filters.browserId ? { browserId: filters.browserId } : {}),
+    ...(filters.profileId ? { profileId: filters.profileId } : {}),
+    ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+    ...(filters.since ? { since: filters.since } : {}),
+    limit: filters.limit,
+  };
+
+  return {
+    filters,
+    query,
+    cliCommand: traceCliCommand(filters),
+    httpPath,
+    httpUrl,
+    mcpToolName: 'service_trace',
+    mcpToolArguments,
+    recommendedNextStep: 'Paste the CLI command, HTTP path, or MCP tool arguments into the agent or software client that needs the same trace context.',
   };
 }
 
@@ -2253,6 +2302,57 @@ function firstMatchingProfileValue(profile, identities, field) {
  */
 function uniqueStrings(values) {
   return [...new Set(values.flatMap((value) => (typeof value === 'string' && value.length > 0 ? [value] : [])))];
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function stringOrNull(value) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+/**
+ * @param {{ serviceName: string | null, agentName: string | null, taskName: string | null, browserId: string | null, profileId: string | null, sessionId: string | null, since: string | null, limit: number }} filters
+ * @returns {Record<string, string | number>}
+ */
+function traceQuery(filters) {
+  return {
+    ...(filters.serviceName ? { 'service-name': filters.serviceName } : {}),
+    ...(filters.agentName ? { 'agent-name': filters.agentName } : {}),
+    ...(filters.taskName ? { 'task-name': filters.taskName } : {}),
+    ...(filters.browserId ? { 'browser-id': filters.browserId } : {}),
+    ...(filters.profileId ? { 'profile-id': filters.profileId } : {}),
+    ...(filters.sessionId ? { 'session-id': filters.sessionId } : {}),
+    ...(filters.since ? { since: filters.since } : {}),
+    limit: filters.limit,
+  };
+}
+
+/**
+ * @param {{ serviceName: string | null, agentName: string | null, taskName: string | null, browserId: string | null, profileId: string | null, sessionId: string | null, since: string | null, limit: number }} filters
+ * @returns {string}
+ */
+function traceCliCommand(filters) {
+  const args = ['agent-browser', 'service', 'trace'];
+  if (filters.serviceName) args.push('--service-name', filters.serviceName);
+  if (filters.agentName) args.push('--agent-name', filters.agentName);
+  if (filters.taskName) args.push('--task-name', filters.taskName);
+  if (filters.browserId) args.push('--browser-id', filters.browserId);
+  if (filters.profileId) args.push('--profile-id', filters.profileId);
+  if (filters.sessionId) args.push('--session-id', filters.sessionId);
+  if (filters.since) args.push('--since', filters.since);
+  args.push('--limit', String(filters.limit));
+  return args.map(shellQuoteArg).join(' ');
 }
 
 /**

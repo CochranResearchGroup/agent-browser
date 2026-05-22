@@ -1068,6 +1068,48 @@ export interface ServiceTraceDisplayAllocationClientSummary {
   [key: string]: unknown;
 }
 
+export interface ServiceTraceHandoffOptions {
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+  since?: string | null;
+  limit?: number | null;
+  /** Optional base URL used to produce an absolute HTTP trace URL. */
+  baseUrl?: string | null;
+}
+
+export interface ServiceTraceHandoffSummary {
+  filters: {
+    serviceName: string | null;
+    agentName: string | null;
+    taskName: string | null;
+    browserId: string | null;
+    profileId: string | null;
+    sessionId: string | null;
+    since: string | null;
+    limit: number;
+  };
+  query: Record<string, string | number>;
+  cliCommand: string;
+  httpPath: string;
+  httpUrl: string | null;
+  mcpToolName: 'service_trace';
+  mcpToolArguments: {
+    serviceName?: string;
+    agentName?: string;
+    taskName?: string;
+    browserId?: string;
+    profileId?: string;
+    sessionId?: string;
+    since?: string;
+    limit: number;
+  };
+  recommendedNextStep: string;
+}
+
 export interface ServiceObservabilityHttpOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
@@ -2082,6 +2124,8 @@ export declare function summarizeServiceAccessPlanMonitorRunDue(options: {
 export declare function summarizeServiceTraceAttention(trace?: ServiceTraceResponse | null): ServiceTraceAttentionSummary;
 /** Summarize retained trace display-allocation intent for software clients. */
 export declare function summarizeServiceTraceDisplayAllocations(trace?: ServiceTraceResponse | null): ServiceTraceDisplayAllocationClientSummary;
+/** Build copyable CLI, HTTP, and MCP trace references for one filter set. */
+export declare function createServiceTraceHandoff(options?: ServiceTraceHandoffOptions): ServiceTraceHandoffSummary;
 export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;

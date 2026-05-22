@@ -1984,6 +1984,7 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 `summarizeServiceAccessPlanBrowserBuildSelection`,
 `summarizeServiceAccessPlanMonitorRunDue`, `summarizeServiceBrowserPreferenceCommands`,
 `summarizeServiceTraceAttention`, `summarizeServiceTraceDisplayAllocations`,
+`createServiceTraceHandoff`,
 `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`,
 `runServiceAccessPlanBrowserCapabilityPreflight`, `postServiceReconcile`,
 upsert and delete helpers for profiles, sessions, site policies, providers,
@@ -2005,6 +2006,9 @@ Use `summarizeServiceTraceDisplayAllocations()` on the same trace response to
 roll up private, shared, and ambient remote-headed display allocation counts,
 compact labels, unrecorded job ids, and affected contexts without reimplementing
 dashboard trace grouping.
+Use `createServiceTraceHandoff()` when a software client needs the same
+copyable CLI command, HTTP path or URL, and MCP `service_trace` arguments that
+the dashboard shows for one trace filter set.
 Declarations are generated from the matching service contract schemas.
 
 Software clients should treat agent-browser as the profile broker. A client
