@@ -57,6 +57,30 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /type ServiceJobDisplayFilter = "all" \| "private_virtual_display" \| "shared_display" \| "ambient_display" \| "unrecorded";/,
+  'Service dashboard must expose a typed job display allocation filter',
+);
+
+assert.match(
+  servicePanel,
+  /const filteredJobs = useMemo\(\(\) => \{[\s\S]*serviceJobDisplayMatchesFilter\(job, jobDisplayFilter\)[\s\S]*serviceJobSortValue\(left, jobSortKey\)[\s\S]*jobSortDirection === "asc"/,
+  'Service dashboard Jobs workspace must filter and sort jobs by recorded display allocation intent',
+);
+
+assert.match(
+  servicePanel,
+  /<select[\s\S]*value=\{jobDisplayFilter\}[\s\S]*setJobDisplayFilter\(event\.target\.value as ServiceJobDisplayFilter\)[\s\S]*SERVICE_JOB_DISPLAY_FILTER_OPTIONS\.map/,
+  'Service dashboard Jobs workspace must render a display allocation filter control',
+);
+
+assert.match(
+  servicePanel,
+  /<JobSortButton[\s\S]*sortKey=\{sortKey\}[\s\S]*activeSortKey=\{jobSortKey\}[\s\S]*onSort=\{toggleJobSort\}/,
+  'Service dashboard Jobs workspace must render job sort controls',
+);
+
+assert.match(
+  servicePanel,
   /<EventDetailItem label="Display allocation" value=\{job\.displayIsolation \? displayIsolationLabel\(job\.displayIsolation\) : null\} \/>/,
   'Job inspector must show requested display allocation policy',
 );

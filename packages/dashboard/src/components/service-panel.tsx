@@ -437,6 +437,8 @@ type EventLimit = 8 | 20 | 50;
 type ServiceRecordLimit = 12 | 24 | 50 | 100;
 type ProfileReadinessFilter = "all" | "needs_attention" | "normal";
 type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
+type ServiceJobDisplayFilter = "all" | "private_virtual_display" | "shared_display" | "ambient_display" | "unrecorded";
+type ServiceJobSortKey = "submittedAt" | "state" | "action" | "displayIsolation" | "serviceName" | "taskName";
 type ServiceWorkspaceTab = "profiles" | "incidents" | "sessions" | "jobs" | "events";
 type TraceFilters = {
   serviceName: string;
@@ -468,6 +470,34 @@ const EVENT_WINDOW_OPTIONS: Array<{ value: EventWindowFilter; label: string; mil
 
 const EVENT_LIMIT_OPTIONS: EventLimit[] = [8, 20, 50];
 const SERVICE_RECORD_LIMIT_OPTIONS: ServiceRecordLimit[] = [12, 24, 50, 100];
+
+const SERVICE_JOB_DISPLAY_FILTER_OPTIONS: Array<{ value: ServiceJobDisplayFilter; label: string }> = [
+  { value: "all", label: "Any display" },
+  { value: "private_virtual_display", label: "Private display" },
+  { value: "shared_display", label: "Shared display" },
+  { value: "ambient_display", label: "Ambient display" },
+  { value: "unrecorded", label: "Unrecorded" },
+];
+
+const SERVICE_JOB_STATE_FILTER_OPTIONS = [
+  { value: "all", label: "All states" },
+  { value: "queued", label: "Queued" },
+  { value: "waiting_profile_lease", label: "Waiting lease" },
+  { value: "running", label: "Running" },
+  { value: "succeeded", label: "Succeeded" },
+  { value: "failed", label: "Failed" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "timed_out", label: "Timed out" },
+];
+
+const SERVICE_JOB_SORT_LABELS: Record<ServiceJobSortKey, string> = {
+  submittedAt: "Time",
+  state: "State",
+  action: "Action",
+  displayIsolation: "Display",
+  serviceName: "Service",
+  taskName: "Task",
+};
 
 const INCIDENT_HANDLING_OPTIONS: Array<{ value: IncidentHandlingFilter; label: string }> = [
   { value: "all", label: "All" },
@@ -548,6 +578,24 @@ function tabSearchText(tab: ServiceTab): string {
     tab.title,
     tab.url,
     tab.challengeId,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function serviceJobSearchText(job: ServiceJob): string {
+  return [
+    job.id,
+    job.action,
+    job.state,
+    job.priority,
+    job.serviceName,
+    job.agentName,
+    job.taskName,
+    job.displayIsolation,
+    job.error,
+    job.submittedAt,
+    job.startedAt,
+    job.completedAt,
+    ...(job.namingWarnings ?? []),
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
@@ -1696,6 +1744,31 @@ function JobRow({ job, onSelect }: { job: ServiceJob; onSelect: (job: ServiceJob
   );
 }
 
+function JobSortButton({
+  sortKey,
+  activeSortKey,
+  direction,
+  onSort,
+}: {
+  sortKey: ServiceJobSortKey;
+  activeSortKey: ServiceJobSortKey;
+  direction: SortDirection;
+  onSort: (sortKey: ServiceJobSortKey) => void;
+}) {
+  const active = sortKey === activeSortKey;
+  return (
+    <button
+      type="button"
+      className={cn("service-filter-chip", active && "service-filter-chip-active")}
+      onClick={() => onSort(sortKey)}
+      aria-label={`Sort jobs by ${SERVICE_JOB_SORT_LABELS[sortKey]}`}
+    >
+      {SERVICE_JOB_SORT_LABELS[sortKey]}
+      <span aria-hidden="true">{active ? (direction === "asc" ? "↑" : "↓") : "↕"}</span>
+    </button>
+  );
+}
+
 function serviceJobNamingWarningLabel(warnings?: string[]): string | null {
   if (!warnings || warnings.length === 0) return null;
   const labels = warnings.map((warning) => {
@@ -2057,6 +2130,24 @@ function browserSortValue(browser: ServiceBrowser, sortKey: BrowserSortKey): str
 function compareBrowserValues(left: string | number, right: string | number): number {
   if (typeof left === "number" && typeof right === "number") return left - right;
   return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function serviceJobDisplayMatchesFilter(job: ServiceJob, filter: ServiceJobDisplayFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "unrecorded") return !job.displayIsolation;
+  return job.displayIsolation === filter;
+}
+
+function serviceJobSortValue(job: ServiceJob, sortKey: ServiceJobSortKey): string | number {
+  if (sortKey === "submittedAt") {
+    const timestamp = job.submittedAt ? new Date(job.submittedAt).getTime() : 0;
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+  if (sortKey === "state") return job.state ?? "";
+  if (sortKey === "action") return job.action ?? "";
+  if (sortKey === "displayIsolation") return displayIsolationLabel(job.displayIsolation);
+  if (sortKey === "serviceName") return job.serviceName ?? "";
+  return job.taskName ?? "";
 }
 
 function isLiveBrowserRecord(browser: ServiceBrowser): boolean {
@@ -4344,6 +4435,12 @@ export function ServicePanel({
   const [cleanupError, setCleanupError] = useState("");
   const [incidentOnly, setIncidentOnly] = useState(false);
   const [incidentHandlingFilter, setIncidentHandlingFilter] = useState<IncidentHandlingFilter>("all");
+  const [jobQuery, setJobQuery] = useState("");
+  const [jobDisplayFilter, setJobDisplayFilter] = useState<ServiceJobDisplayFilter>("all");
+  const [jobStateFilter, setJobStateFilter] = useState("all");
+  const [jobSortKey, setJobSortKey] = useState<ServiceJobSortKey>("submittedAt");
+  const [jobSortDirection, setJobSortDirection] = useState<SortDirection>("desc");
+  const [jobLimit, setJobLimit] = useState<ServiceRecordLimit>(24);
   const [actingIncidentId, setActingIncidentId] = useState<string | null>(null);
   const [operatorIdentity, setOperatorIdentity] = useState(initialOperatorIdentity);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
@@ -4389,7 +4486,7 @@ export function ServicePanel({
       const contractsPromise = fetch(`${serviceBase(activePort)}/contracts`).catch(() => null);
       const [statusResp, jobsResp, eventsResp, incidentsResp, contractsResp] = await Promise.all([
         fetch(`${serviceBase(activePort)}/status`),
-        fetch(`${serviceBase(activePort)}/jobs?limit=8`),
+        fetch(`${serviceBase(activePort)}/jobs?limit=${jobLimit}`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
         fetch(`${serviceBase(activePort)}/incidents?summary=true&limit=50`),
         contractsPromise,
@@ -4414,7 +4511,7 @@ export function ServicePanel({
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, [activePort, canFetch, eventBrowserId, eventKind, eventLimit, eventWindow]);
+  }, [activePort, canFetch, eventBrowserId, eventKind, eventLimit, eventWindow, jobLimit]);
 
   useEffect(() => {
     setStatus(null);
@@ -4768,6 +4865,22 @@ export function ServicePanel({
     [serviceState?.jobs],
   );
   const recentJobs = jobs?.jobs ?? retainedServiceJobs.slice(-8);
+  const filteredJobs = useMemo(() => {
+    const query = jobQuery.trim().toLowerCase();
+    const rows = recentJobs.filter((job) => {
+      if (jobStateFilter !== "all" && job.state !== jobStateFilter) return false;
+      if (!serviceJobDisplayMatchesFilter(job, jobDisplayFilter)) return false;
+      return query ? serviceJobSearchText(job).includes(query) : true;
+    });
+    rows.sort((left, right) => {
+      const order = compareBrowserValues(
+        serviceJobSortValue(left, jobSortKey),
+        serviceJobSortValue(right, jobSortKey),
+      );
+      return jobSortDirection === "asc" ? order : -order;
+    });
+    return rows;
+  }, [jobDisplayFilter, jobQuery, jobSortDirection, jobSortKey, jobStateFilter, recentJobs]);
   const recentEvents = events?.events ?? serviceState?.events?.slice(-8) ?? [];
   const jobIncidentEvents = useMemo(() => deriveJobIncidentEvents(recentJobs), [recentJobs]);
   const visibleEvents = useMemo(() => {
@@ -4794,6 +4907,24 @@ export function ServicePanel({
     const retained = Math.max(0, retainedServiceJobs.length - active);
     return { active, terminal, retained };
   }, [retainedServiceJobs]);
+  const jobDisplaySummary = useMemo(() => {
+    const counts = recentJobs.reduce(
+      (summary, job) => {
+        const key = job.displayIsolation ?? "unrecorded";
+        summary[key] = (summary[key] ?? 0) + 1;
+        return summary;
+      },
+      {} as Record<string, number>,
+    );
+    const parts = SERVICE_JOB_DISPLAY_FILTER_OPTIONS
+      .filter((option) => option.value !== "all")
+      .map((option) => {
+        const count = counts[option.value] ?? 0;
+        return count > 0 ? `${option.label}: ${count}` : null;
+      })
+      .filter((value): value is string => Boolean(value));
+    return parts.length > 0 ? parts.join(" / ") : "No display allocation requests in this window";
+  }, [recentJobs]);
   const eventSummary =
     incidentOnly
       ? `${visibleEvents.length} incident events shown`
@@ -5225,6 +5356,14 @@ export function ServicePanel({
 
     openViewStream(stream, browser, tab, focusMessage);
   }, [activePort, activeSession, browserById, canFetch, openViewStream, operatorIdentity, tabIndexById]);
+  const toggleJobSort = useCallback((nextSortKey: ServiceJobSortKey) => {
+    if (nextSortKey === jobSortKey) {
+      setJobSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setJobSortKey(nextSortKey);
+    setJobSortDirection(nextSortKey === "submittedAt" ? "desc" : "asc");
+  }, [jobSortKey]);
   const entityCounts = useMemo(() => ({
     browsers: countEntries(serviceState?.browsers),
     profiles: countEntries(serviceState?.profiles),
@@ -5980,21 +6119,78 @@ export function ServicePanel({
             <TabsContent value="jobs" className="service-workspace-content">
               <div className="service-workspace-pane-heading">
                 <ServerCog className="size-3.5 text-muted-foreground" />
-                <span>{jobActivitySummary.active} active / {jobActivitySummary.retained} retained; {jobSummary}</span>
+                <span>{jobActivitySummary.active} active / {jobActivitySummary.retained} retained; {filteredJobs.length} shown; {jobSummary}</span>
                 {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
               </div>
               <div className="service-workspace-summary-chips" aria-label="Service job activity summary">
                 <span>{jobActivitySummary.active} queued or running</span>
                 <span>{jobActivitySummary.terminal} terminal</span>
-                <span>{recentJobs.length} recent shown</span>
+                <span>{jobDisplaySummary}</span>
+              </div>
+              <div className="service-filter-bar" aria-label="Service job filters">
+                <label className="service-browser-filter service-record-filter">
+                  <Filter className="size-3.5" />
+                  <span className="sr-only">Filter service jobs</span>
+                  <input
+                    value={jobQuery}
+                    onChange={(event) => setJobQuery(event.target.value)}
+                    placeholder="filter jobs, services, agents, tasks"
+                  />
+                </label>
+                <label className="service-record-select">
+                  <span>State</span>
+                  <select value={jobStateFilter} onChange={(event) => setJobStateFilter(event.target.value)}>
+                    {SERVICE_JOB_STATE_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="service-record-select">
+                  <span>Display</span>
+                  <select
+                    value={jobDisplayFilter}
+                    onChange={(event) => setJobDisplayFilter(event.target.value as ServiceJobDisplayFilter)}
+                  >
+                    {SERVICE_JOB_DISPLAY_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="service-filter-bar" aria-label="Service job sort and limit">
+                <div className="service-filter-group">
+                  <span>Sort</span>
+                  {(["submittedAt", "state", "action", "displayIsolation", "serviceName", "taskName"] as ServiceJobSortKey[]).map((sortKey) => (
+                    <JobSortButton
+                      key={sortKey}
+                      sortKey={sortKey}
+                      activeSortKey={jobSortKey}
+                      direction={jobSortDirection}
+                      onSort={toggleJobSort}
+                    />
+                  ))}
+                </div>
+                <div className="service-filter-group" aria-label="Service job display limit">
+                  <span>Rows</span>
+                  {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
+                    <button
+                      key={limit}
+                      type="button"
+                      className={cn("service-filter-chip", jobLimit === limit && "service-filter-chip-active")}
+                      onClick={() => setJobLimit(limit)}
+                    >
+                      {limit}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="service-section-list">
-                {recentJobs.length === 0 ? (
+                {filteredJobs.length === 0 ? (
                   <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
-                    No service jobs yet.
+                    {recentJobs.length === 0 ? "No service jobs yet." : "No service jobs match the current filters."}
                   </p>
                 ) : (
-                  recentJobs.map((job) => <JobRow key={job.id} job={job} onSelect={inspectJob} />)
+                  filteredJobs.map((job) => <JobRow key={job.id} job={job} onSelect={inspectJob} />)
                 )}
               </div>
             </TabsContent>
