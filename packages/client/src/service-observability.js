@@ -55,6 +55,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceTraceDisplayAllocationClientSummary} ServiceTraceDisplayAllocationClientSummary
  * @typedef {import('./service-observability.generated.js').ServiceTraceHandoffOptions} ServiceTraceHandoffOptions
  * @typedef {import('./service-observability.generated.js').ServiceTraceHandoffSummary} ServiceTraceHandoffSummary
+ * @typedef {import('./service-observability.generated.js').ServiceIncidentHandoffOptions} ServiceIncidentHandoffOptions
+ * @typedef {import('./service-observability.generated.js').ServiceIncidentHandoffSummary} ServiceIncidentHandoffSummary
  * @typedef {import('./service-observability.generated.js').ServiceLoginProfileRegistrationOptions} ServiceLoginProfileRegistrationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
@@ -1015,6 +1017,87 @@ export function createServiceTraceHandoff(options = {}) {
     mcpToolName: 'service_trace',
     mcpToolArguments,
     recommendedNextStep: 'Paste the CLI command, HTTP path, or MCP tool arguments into the agent or software client that needs the same trace context.',
+  };
+}
+
+/**
+ * Build copyable incident references for operators, agents, and software clients.
+ *
+ * @param {ServiceIncidentHandoffOptions} options
+ * @returns {ServiceIncidentHandoffSummary}
+ */
+export function createServiceIncidentHandoff(options = {}) {
+  const filters = {
+    incidentId: stringOrNull(options.incidentId),
+    state: stringOrNull(options.state),
+    severity: stringOrNull(options.severity),
+    escalation: stringOrNull(options.escalation),
+    handlingState: stringOrNull(options.handlingState),
+    kind: stringOrNull(options.kind),
+    browserId: stringOrNull(options.browserId),
+    profileId: stringOrNull(options.profileId),
+    sessionId: stringOrNull(options.sessionId),
+    serviceName: stringOrNull(options.serviceName),
+    agentName: stringOrNull(options.agentName),
+    taskName: stringOrNull(options.taskName),
+    since: stringOrNull(options.since),
+    summary: options.summary === true,
+    remediesOnly: options.remediesOnly === true,
+    limit: positiveInteger(options.limit) ?? 20,
+  };
+  const query = incidentQuery(filters);
+  const queryString = new URLSearchParams(
+    Object.entries(query).map(([key, value]) => [key, String(value)]),
+  ).toString();
+  const encodedIncidentId = filters.incidentId ? encodeURIComponent(filters.incidentId) : null;
+  const httpPath = encodedIncidentId
+    ? `/api/service/incidents/${encodedIncidentId}${queryString ? `?${queryString}` : ''}`
+    : `/api/service/incidents?${queryString}`;
+  const activityHttpPath = encodedIncidentId
+    ? `/api/service/incidents/${encodedIncidentId}/activity`
+    : null;
+  const baseUrl = stringOrNull(options.baseUrl);
+  const httpUrl = baseUrl ? new URL(httpPath, baseUrl).toString() : null;
+  const activityHttpUrl = baseUrl && activityHttpPath ? new URL(activityHttpPath, baseUrl).toString() : null;
+  const mcpToolArguments = {
+    ...(filters.incidentId ? { incidentId: filters.incidentId } : {}),
+    ...(filters.state ? { state: filters.state } : {}),
+    ...(filters.severity ? { severity: filters.severity } : {}),
+    ...(filters.escalation ? { escalation: filters.escalation } : {}),
+    ...(filters.handlingState ? { handlingState: filters.handlingState } : {}),
+    ...(filters.kind ? { kind: filters.kind } : {}),
+    ...(filters.browserId ? { browserId: filters.browserId } : {}),
+    ...(filters.profileId ? { profileId: filters.profileId } : {}),
+    ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+    ...(filters.serviceName ? { serviceName: filters.serviceName } : {}),
+    ...(filters.agentName ? { agentName: filters.agentName } : {}),
+    ...(filters.taskName ? { taskName: filters.taskName } : {}),
+    ...(filters.since ? { since: filters.since } : {}),
+    ...(filters.summary ? { summary: true } : {}),
+    ...(filters.remediesOnly ? { remediesOnly: true } : {}),
+    limit: filters.limit,
+  };
+  const mcpActivityResource = filters.incidentId
+    ? `agent-browser://incidents/${filters.incidentId}/activity`
+    : null;
+
+  return {
+    filters,
+    query,
+    cliCommand: incidentCliCommand(filters),
+    activityCliCommand: filters.incidentId
+      ? ['agent-browser', 'service', 'activity', filters.incidentId].map(shellQuoteArg).join(' ')
+      : null,
+    httpPath,
+    httpUrl,
+    activityHttpPath,
+    activityHttpUrl,
+    mcpToolName: 'service_incidents',
+    mcpToolArguments,
+    mcpActivityResource,
+    recommendedNextStep: filters.incidentId
+      ? 'Use the incident command for grouped context, then use the activity command, HTTP path, or MCP resource for the normalized incident timeline.'
+      : 'Paste the CLI command, HTTP path, or MCP tool arguments into the agent or software client that needs the same incident context.',
   };
 }
 
@@ -2350,6 +2433,55 @@ function traceCliCommand(filters) {
   if (filters.browserId) args.push('--browser-id', filters.browserId);
   if (filters.profileId) args.push('--profile-id', filters.profileId);
   if (filters.sessionId) args.push('--session-id', filters.sessionId);
+  if (filters.since) args.push('--since', filters.since);
+  args.push('--limit', String(filters.limit));
+  return args.map(shellQuoteArg).join(' ');
+}
+
+/**
+ * @param {{ incidentId: string | null, state: string | null, severity: string | null, escalation: string | null, handlingState: string | null, kind: string | null, browserId: string | null, profileId: string | null, sessionId: string | null, serviceName: string | null, agentName: string | null, taskName: string | null, since: string | null, summary: boolean, remediesOnly: boolean, limit: number }} filters
+ * @returns {Record<string, string | number | boolean>}
+ */
+function incidentQuery(filters) {
+  return {
+    ...(filters.state ? { state: filters.state } : {}),
+    ...(filters.severity ? { severity: filters.severity } : {}),
+    ...(filters.escalation ? { escalation: filters.escalation } : {}),
+    ...(filters.handlingState ? { 'handling-state': filters.handlingState } : {}),
+    ...(filters.kind ? { kind: filters.kind } : {}),
+    ...(filters.browserId ? { 'browser-id': filters.browserId } : {}),
+    ...(filters.profileId ? { 'profile-id': filters.profileId } : {}),
+    ...(filters.sessionId ? { 'session-id': filters.sessionId } : {}),
+    ...(filters.serviceName ? { 'service-name': filters.serviceName } : {}),
+    ...(filters.agentName ? { 'agent-name': filters.agentName } : {}),
+    ...(filters.taskName ? { 'task-name': filters.taskName } : {}),
+    ...(filters.since ? { since: filters.since } : {}),
+    ...(filters.summary ? { summary: true } : {}),
+    ...(filters.remediesOnly ? { remedies: true } : {}),
+    limit: filters.limit,
+  };
+}
+
+/**
+ * @param {{ incidentId: string | null, state: string | null, severity: string | null, escalation: string | null, handlingState: string | null, kind: string | null, browserId: string | null, profileId: string | null, sessionId: string | null, serviceName: string | null, agentName: string | null, taskName: string | null, since: string | null, summary: boolean, remediesOnly: boolean, limit: number }} filters
+ * @returns {string}
+ */
+function incidentCliCommand(filters) {
+  const args = ['agent-browser', 'service', 'incidents'];
+  if (filters.incidentId) args.push('--id', filters.incidentId);
+  if (filters.summary) args.push('--summary');
+  if (filters.remediesOnly) args.push('--remedies');
+  if (filters.state) args.push('--state', filters.state);
+  if (filters.severity) args.push('--severity', filters.severity);
+  if (filters.escalation) args.push('--escalation', filters.escalation);
+  if (filters.handlingState) args.push('--handling-state', filters.handlingState);
+  if (filters.kind) args.push('--kind', filters.kind);
+  if (filters.browserId) args.push('--browser-id', filters.browserId);
+  if (filters.profileId) args.push('--profile-id', filters.profileId);
+  if (filters.sessionId) args.push('--session-id', filters.sessionId);
+  if (filters.serviceName) args.push('--service-name', filters.serviceName);
+  if (filters.agentName) args.push('--agent-name', filters.agentName);
+  if (filters.taskName) args.push('--task-name', filters.taskName);
   if (filters.since) args.push('--since', filters.since);
   args.push('--limit', String(filters.limit));
   return args.map(shellQuoteArg).join(' ');

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   acquireServiceLoginProfile,
   applyServiceRemedies,
+  createServiceIncidentHandoff,
   createServiceTraceHandoff,
   findServiceProfileForIdentity,
   deleteServiceMonitor,
@@ -2227,6 +2228,73 @@ async function main() {
     limit: 20,
   });
   assert.deepEqual(createServiceTraceHandoff({ limit: 0 }).query, { limit: 20 });
+  const incidentHandoff = createServiceIncidentHandoff({
+    baseUrl: 'http://127.0.0.1:4849',
+    incidentId: 'monitor:google-login-freshness',
+    summary: true,
+    remediesOnly: true,
+    state: 'active',
+    severity: 'warning',
+    escalation: 'monitor_attention',
+    handlingState: 'unacknowledged',
+    kind: 'service_job_timeout',
+    browserId: 'browser-1',
+    profileId: 'profile-1',
+    sessionId: 'session-1',
+    serviceName: 'JournalDownloader',
+    agentName: 'agent a',
+    taskName: 'probeACSwebsite',
+    since: '2026-04-25T12:00:00Z',
+    limit: 10,
+  });
+  assert.equal(
+    incidentHandoff.cliCommand,
+    "agent-browser service incidents --id monitor:google-login-freshness --summary --remedies --state active --severity warning --escalation monitor_attention --handling-state unacknowledged --kind service_job_timeout --browser-id browser-1 --profile-id profile-1 --session-id session-1 --service-name JournalDownloader --agent-name 'agent a' --task-name probeACSwebsite --since 2026-04-25T12:00:00Z --limit 10",
+  );
+  assert.equal(
+    incidentHandoff.activityCliCommand,
+    'agent-browser service activity monitor:google-login-freshness',
+  );
+  assert.equal(
+    incidentHandoff.httpPath,
+    '/api/service/incidents/monitor%3Agoogle-login-freshness?state=active&severity=warning&escalation=monitor_attention&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&profile-id=profile-1&session-id=session-1&service-name=JournalDownloader&agent-name=agent+a&task-name=probeACSwebsite&since=2026-04-25T12%3A00%3A00Z&summary=true&remedies=true&limit=10',
+  );
+  assert.equal(
+    incidentHandoff.httpUrl,
+    'http://127.0.0.1:4849/api/service/incidents/monitor%3Agoogle-login-freshness?state=active&severity=warning&escalation=monitor_attention&handling-state=unacknowledged&kind=service_job_timeout&browser-id=browser-1&profile-id=profile-1&session-id=session-1&service-name=JournalDownloader&agent-name=agent+a&task-name=probeACSwebsite&since=2026-04-25T12%3A00%3A00Z&summary=true&remedies=true&limit=10',
+  );
+  assert.equal(
+    incidentHandoff.activityHttpPath,
+    '/api/service/incidents/monitor%3Agoogle-login-freshness/activity',
+  );
+  assert.equal(
+    incidentHandoff.activityHttpUrl,
+    'http://127.0.0.1:4849/api/service/incidents/monitor%3Agoogle-login-freshness/activity',
+  );
+  assert.equal(incidentHandoff.mcpToolName, 'service_incidents');
+  assert.deepEqual(incidentHandoff.mcpToolArguments, {
+    incidentId: 'monitor:google-login-freshness',
+    state: 'active',
+    severity: 'warning',
+    escalation: 'monitor_attention',
+    handlingState: 'unacknowledged',
+    kind: 'service_job_timeout',
+    browserId: 'browser-1',
+    profileId: 'profile-1',
+    sessionId: 'session-1',
+    serviceName: 'JournalDownloader',
+    agentName: 'agent a',
+    taskName: 'probeACSwebsite',
+    since: '2026-04-25T12:00:00Z',
+    summary: true,
+    remediesOnly: true,
+    limit: 10,
+  });
+  assert.equal(
+    incidentHandoff.mcpActivityResource,
+    'agent-browser://incidents/monitor:google-login-freshness/activity',
+  );
+  assert.deepEqual(createServiceIncidentHandoff({ limit: -1 }).query, { limit: 20 });
   assert.deepEqual(summarizeServiceTraceAttention(null), {
     required: false,
     requiredCount: 0,

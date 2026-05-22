@@ -1169,6 +1169,76 @@ export interface ServiceTraceHandoffSummary {
   recommendedNextStep: string;
 }
 
+export interface ServiceIncidentHandoffOptions {
+  incidentId?: string | null;
+  state?: ServiceIncidentState | string | null;
+  severity?: ServiceIncidentSeverity | string | null;
+  escalation?: ServiceIncidentEscalation | string | null;
+  handlingState?: ServiceIncidentHandlingState | string | null;
+  kind?: 'browser_health_changed' | 'reconciliation_error' | 'service_job_timeout' | 'service_job_cancelled' | string | null;
+  browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  since?: string | null;
+  summary?: boolean | null;
+  remediesOnly?: boolean | null;
+  limit?: number | null;
+  /** Optional base URL used to produce absolute HTTP incident URLs. */
+  baseUrl?: string | null;
+}
+
+export interface ServiceIncidentHandoffSummary {
+  filters: {
+    incidentId: string | null;
+    state: string | null;
+    severity: string | null;
+    escalation: string | null;
+    handlingState: string | null;
+    kind: string | null;
+    browserId: string | null;
+    profileId: string | null;
+    sessionId: string | null;
+    serviceName: string | null;
+    agentName: string | null;
+    taskName: string | null;
+    since: string | null;
+    summary: boolean;
+    remediesOnly: boolean;
+    limit: number;
+  };
+  query: Record<string, string | number | boolean>;
+  cliCommand: string;
+  activityCliCommand: string | null;
+  httpPath: string;
+  httpUrl: string | null;
+  activityHttpPath: string | null;
+  activityHttpUrl: string | null;
+  mcpToolName: 'service_incidents';
+  mcpToolArguments: {
+    incidentId?: string;
+    state?: string;
+    severity?: string;
+    escalation?: string;
+    handlingState?: string;
+    kind?: string;
+    browserId?: string;
+    profileId?: string;
+    sessionId?: string;
+    serviceName?: string;
+    agentName?: string;
+    taskName?: string;
+    since?: string;
+    summary?: boolean;
+    remediesOnly?: boolean;
+    limit: number;
+  };
+  mcpActivityResource: string | null;
+  recommendedNextStep: string;
+}
+
 export interface ServiceObservabilityHttpOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
@@ -2178,6 +2248,8 @@ export declare function summarizeServiceTraceAttention(trace?: ServiceTraceRespo
 export declare function summarizeServiceTraceDisplayAllocations(trace?: ServiceTraceResponse | null): ServiceTraceDisplayAllocationClientSummary;
 /** Build copyable CLI, HTTP, and MCP trace references for one filter set. */
 export declare function createServiceTraceHandoff(options?: ServiceTraceHandoffOptions): ServiceTraceHandoffSummary;
+/** Build copyable CLI, HTTP, and MCP incident references for one filter set. */
+export declare function createServiceIncidentHandoff(options?: ServiceIncidentHandoffOptions): ServiceIncidentHandoffSummary;
 export declare function getServiceSitePolicies(options: ServiceQueryOptions): Promise<ServiceSitePoliciesResponse>;
 export declare function getServiceProviders(options: ServiceQueryOptions): Promise<ServiceProvidersResponse>;
 export declare function getServiceChallenges(options: ServiceQueryOptions): Promise<ServiceChallengesResponse>;

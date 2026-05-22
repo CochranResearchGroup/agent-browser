@@ -1984,7 +1984,7 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 `summarizeServiceAccessPlanBrowserBuildSelection`,
 `summarizeServiceAccessPlanMonitorRunDue`, `summarizeServiceBrowserPreferenceCommands`,
 `summarizeServiceTraceAttention`, `summarizeServiceTraceDisplayAllocations`,
-`createServiceTraceHandoff`,
+`createServiceTraceHandoff`, `createServiceIncidentHandoff`,
 `acquireServiceLoginProfile`, `runServiceAccessPlanMonitorRunDue`,
 `runServiceAccessPlanBrowserCapabilityPreflight`, `postServiceReconcile`,
 upsert and delete helpers for profiles, sessions, site policies, providers,
@@ -2009,6 +2009,8 @@ dashboard trace grouping.
 Use `createServiceTraceHandoff()` when a software client needs the same
 copyable CLI command, HTTP path or URL, and MCP `service_trace` arguments that
 the dashboard shows for one trace filter set.
+Use `createServiceIncidentHandoff()` for the matching service incidents helper,
+including incident detail and activity references when an incident id is known.
 Declarations are generated from the matching service contract schemas.
 
 Software clients should treat agent-browser as the profile broker. A client
