@@ -2276,7 +2276,9 @@ choice, profile lease waiting, browser reuse, and queued control requests.
 
 See `examples/service-client/` for a copyable workflow that asks for an access
 plan, requests a service tab with `requestServiceTab`, reads the matching trace,
-and can demonstrate known queued-job cancellation with `cancelServiceJob`. Run
+prints copyable trace and incident handoffs with `createServiceTraceHandoff()`
+and `createServiceIncidentHandoff()`, and can demonstrate known queued-job
+cancellation with `cancelServiceJob`. Run
 `pnpm test:service-client-example` to validate the no-launch broker-first
 example contract plus the example dry-run modes.
 The main `service-request-trace.mjs` example is the generic integration path
@@ -2294,7 +2296,9 @@ request. Its output includes `profileAcquisitionSummary.monitorRunDueRan`,
 browser-capability preflight outcome fields, and latest trace job
 `controlPlaneMode` plus `lifecycleOnly` values so callers can see whether
 access-plan freshness work changed the recommendation before browser control
-begins and whether the retained job was CDP-backed or lifecycle-only.
+begins and whether the retained job was CDP-backed or lifecycle-only. It also
+prints a `handoff` object with CLI, HTTP, and MCP references for the matching
+trace and incident context.
 That dry run also covers `managed-profile-flow.mjs`, a CanvaCLI-style
 profile-broker recipe that uses the no-launch profile planning surfaces to
 ask agent-browser for an access plan, inspect readiness and the service-owned

@@ -8,6 +8,8 @@ This example shows the software-client workflow for agent-browser service mode:
 - ask agent-browser for an access plan with `getServiceAccessPlan`
 - request one intent-based service tab with `requestServiceTab`
 - read the matching service trace with `getServiceTrace`
+- produce copyable trace and incident handoffs with `createServiceTraceHandoff`
+  and `createServiceIncidentHandoff`
 - optionally cancel a queued job with `cancelServiceJob`
 - keep `serviceName`, `agentName`, and `taskName` attached to both calls
 
@@ -17,8 +19,9 @@ This example shows the software-client workflow for agent-browser service mode:
 pnpm --filter agent-browser-service-client-example dry-run
 ```
 
-The dry run validates imports and prints the request, access-plan query, and
-trace query without contacting a running agent-browser service.
+The dry run validates imports and prints the request, access-plan query, trace
+query, and copyable trace plus incident handoff references without contacting a
+running agent-browser service.
 
 The repo-level live smoke validates the same example against an isolated
 daemon and browser session:
@@ -48,9 +51,10 @@ You can also set `AGENT_BROWSER_SERVICE_BASE_URL` instead of passing
 `--base-url`.
 
 The script prints the access plan, command result, typed tab, title, wait,
-viewport, and console result fields, trace counts, and the latest retained jobs
-so software projects can confirm that the planning, request, and trace metadata
-are connected.
+viewport, and console result fields, trace counts, copyable trace and incident
+handoffs, and the latest retained jobs so software projects can confirm that
+the planning, request, trace metadata, and operator handoff references are
+connected.
 
 For a recurring service-owned profile, pass `--register-profile-id` with
 `--register-readiness-monitor`. The script first asks for the no-launch access

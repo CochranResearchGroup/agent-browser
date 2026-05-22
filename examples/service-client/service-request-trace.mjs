@@ -5,6 +5,8 @@ import { createServiceRequest, postServiceRequest, requestServiceTab } from '@ag
 import {
   acquireServiceLoginProfile,
   cancelServiceJob,
+  createServiceIncidentHandoff,
+  createServiceTraceHandoff,
   getServiceTrace,
   summarizeServiceAccessPlanBrowserBuildSelection,
   summarizeServiceProfileAcquisition,
@@ -87,11 +89,26 @@ export async function runServiceWorkflow({
   const request = buildServiceTabRequest({ url, serviceName, agentName, taskName, siteId, loginId });
 
   if (dryRun) {
+    const traceHandoff = createServiceTraceHandoff({ serviceName, agentName, taskName, limit: 50 });
+    const incidentHandoff = createServiceIncidentHandoff({
+      serviceName,
+      agentName,
+      taskName,
+      state: 'active',
+      handlingState: 'unacknowledged',
+      summary: true,
+      limit: 20,
+    });
+
     return {
       dryRun: true,
       request,
       traceQuery: { serviceName, agentName, taskName, limit: 50 },
       accessPlanQuery: { serviceName, agentName, taskName, siteId, loginId },
+      handoff: {
+        trace: traceHandoff,
+        incidents: incidentHandoff,
+      },
       profileSelection: {
         requestedIdentity: loginId || siteId,
         preferredProfileFields: [
@@ -228,6 +245,30 @@ export async function runServiceWorkflow({
     fetch,
     query: { serviceName, agentName, taskName, limit: 50 },
   });
+  const primaryIncident = Array.isArray(trace.incidents) ? trace.incidents[0] : null;
+  const traceHandoff = createServiceTraceHandoff({
+    baseUrl,
+    serviceName,
+    agentName,
+    taskName,
+    limit: 50,
+  });
+  const incidentHandoff = primaryIncident?.id
+    ? createServiceIncidentHandoff({
+        baseUrl,
+        incidentId: primaryIncident.id,
+        limit: 20,
+      })
+    : createServiceIncidentHandoff({
+        baseUrl,
+        serviceName,
+        agentName,
+        taskName,
+        state: 'active',
+        handlingState: 'unacknowledged',
+        summary: true,
+        limit: 20,
+      });
   const consoleMessageCount = countConsoleMessages(consoleResult.data);
 
   return {
@@ -263,6 +304,10 @@ export async function runServiceWorkflow({
       activity: trace.counts.activity,
       attention: summarizeServiceTraceAttention(trace),
       displayAllocations: summarizeServiceTraceDisplayAllocations(trace),
+    },
+    handoff: {
+      trace: traceHandoff,
+      incidents: incidentHandoff,
     },
     latestJobs: trace.jobs.slice(-5).map((/** @type {import('@agent-browser/client/service-observability').ServiceJobRecord} */ job) => ({
       id: job.id,

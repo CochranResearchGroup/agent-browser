@@ -11,6 +11,7 @@ const loginId = 'example';
 const profileId = 'journal-example';
 
 await testSkipsRegistrationWhenBrokerSelectsProfile();
+await testDryRunIncludesCopyableHandoffs();
 await testRegistersFallbackOnlyAfterAccessPlanMiss();
 await testRunsDueMonitorAndShowsRefreshedRecommendation();
 await testRunsBrowserCapabilityPreflightBeforeBrowserWork();
@@ -65,6 +66,31 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
   });
   assert.deepEqual(result.browserBuildSelectionSummary, expectedBrowserBuildSelectionSummary());
   assert.equal(result.commandResult?.success, true);
+  assert.equal(
+    result.handoff.trace.cliCommand,
+    'agent-browser service trace --service-name JournalDownloader --agent-name article-probe-agent --task-name probeACSwebsite --limit 50',
+  );
+  assert.equal(
+    result.handoff.trace.httpUrl,
+    'http://127.0.0.1:4849/api/service/trace?service-name=JournalDownloader&agent-name=article-probe-agent&task-name=probeACSwebsite&limit=50',
+  );
+  assert.equal(
+    result.handoff.incidents.cliCommand,
+    'agent-browser service incidents --id browser-1 --limit 20',
+  );
+  assert.equal(result.handoff.incidents.activityCliCommand, 'agent-browser service activity browser-1');
+  assert.equal(
+    result.handoff.incidents.httpUrl,
+    'http://127.0.0.1:4849/api/service/incidents/browser-1?limit=20',
+  );
+  assert.equal(
+    result.handoff.incidents.activityHttpUrl,
+    'http://127.0.0.1:4849/api/service/incidents/browser-1/activity',
+  );
+  assert.deepEqual(result.handoff.incidents.mcpToolArguments, {
+    incidentId: 'browser-1',
+    limit: 20,
+  });
   assert.equal(result.traceSummary.attention.required, true);
   assert.equal(result.traceSummary.attention.operatorRequiredCount, 1);
   assert.deepEqual(result.traceSummary.attention.reasons, ['incidents_present']);
@@ -77,6 +103,39 @@ async function testSkipsRegistrationWhenBrokerSelectsProfile() {
     'POST /api/service/request',
     'GET /api/service/trace',
   ]);
+}
+
+async function testDryRunIncludesCopyableHandoffs() {
+  const result = await runServiceWorkflow({
+    dryRun: true,
+    serviceName,
+    agentName,
+    taskName,
+    siteId: loginId,
+    loginId,
+  });
+
+  assert.equal(result.handoff.trace.cliCommand, 'agent-browser service trace --service-name JournalDownloader --agent-name article-probe-agent --task-name probeACSwebsite --limit 50');
+  assert.equal(result.handoff.trace.httpPath, '/api/service/trace?service-name=JournalDownloader&agent-name=article-probe-agent&task-name=probeACSwebsite&limit=50');
+  assert.equal(result.handoff.trace.mcpToolName, 'service_trace');
+  assert.deepEqual(result.handoff.trace.mcpToolArguments, {
+    serviceName,
+    agentName,
+    taskName,
+    limit: 50,
+  });
+  assert.equal(result.handoff.incidents.cliCommand, 'agent-browser service incidents --summary --state active --handling-state unacknowledged --service-name JournalDownloader --agent-name article-probe-agent --task-name probeACSwebsite --limit 20');
+  assert.equal(result.handoff.incidents.httpPath, '/api/service/incidents?state=active&handling-state=unacknowledged&service-name=JournalDownloader&agent-name=article-probe-agent&task-name=probeACSwebsite&summary=true&limit=20');
+  assert.equal(result.handoff.incidents.mcpToolName, 'service_incidents');
+  assert.deepEqual(result.handoff.incidents.mcpToolArguments, {
+    state: 'active',
+    handlingState: 'unacknowledged',
+    serviceName,
+    agentName,
+    taskName,
+    summary: true,
+    limit: 20,
+  });
 }
 
 async function testRegistersFallbackOnlyAfterAccessPlanMiss() {
@@ -462,7 +521,7 @@ function createBrokerFirstFetch({
         counts: {
           events: 1,
         jobs: 1,
-        incidents: 0,
+        incidents: 1,
         activity: 0,
         },
         summary: {
@@ -500,6 +559,18 @@ function createBrokerFirstFetch({
             taskName,
             controlPlaneMode: 'cdp',
             lifecycleOnly: false,
+          },
+        ],
+        incidents: [
+          {
+            id: 'browser-1',
+            kind: 'browser_health_changed',
+            state: 'active',
+            severity: 'warning',
+            escalation: 'browser_recovery',
+            title: 'Browser needs recovery',
+            message: 'Browser health changed.',
+            latestTimestamp: '2026-05-10T00:00:00Z',
           },
         ],
       });
