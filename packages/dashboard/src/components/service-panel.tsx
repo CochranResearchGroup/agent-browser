@@ -286,6 +286,7 @@ export type ServiceInspectorActions = {
   onControlBrowser?: (browser: ServiceBrowser) => void;
   onAcknowledgeIncident?: (incident: IncidentRecord, note: string) => void;
   onResolveIncident?: (incident: IncidentRecord, note: string) => void;
+  onShowIncidentTrace?: (incident: IncidentRecord) => void;
   onCancelJob?: (job: ServiceJob) => void;
 };
 
@@ -903,6 +904,24 @@ function deriveIncidentTimeline(incident: IncidentRecord): ServiceTraceTimelineI
   return [...eventItems, ...jobItems, ...operatorItems].sort(
     (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
   );
+}
+
+function incidentTraceFilters(incident: IncidentRecord): TraceFilters {
+  const records = [...incident.serviceEvents, ...incident.jobEvents]
+    .sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime());
+  const contextRecord = records.find((record) =>
+    record.serviceName || record.agentName || record.taskName || record.profileId || record.sessionId
+  );
+  return {
+    serviceName: contextRecord?.serviceName ?? "",
+    agentName: contextRecord?.agentName ?? "",
+    taskName: contextRecord?.taskName ?? "",
+    browserId: incident.browserId ?? contextRecord?.browserId ?? "",
+    profileId: contextRecord?.profileId ?? "",
+    sessionId: contextRecord?.sessionId ?? "",
+    since: records[0]?.timestamp ?? incident.latestTimestamp,
+    limit: 50,
+  };
 }
 
 function browserCapabilityLaunchKey(launch: ServiceTraceBrowserCapabilityLaunch): string {
@@ -3290,6 +3309,7 @@ export function ServiceDetailInspector({
             acting={actions.actingIncidentId === selection.incident.id}
             onAcknowledge={actions.onAcknowledgeIncident}
             onResolve={actions.onResolveIncident}
+            onShowTrace={actions.onShowIncidentTrace}
           />
         )}
         {selection.kind === "session" && <SessionDetailContent session={selection.session} />}
@@ -3999,6 +4019,7 @@ function IncidentDetailDialog({
   onOpenChange,
   onAcknowledge,
   onResolve,
+  onShowTrace,
   acting,
 }: {
   incident: IncidentRecord | null;
@@ -4008,6 +4029,7 @@ function IncidentDetailDialog({
   onOpenChange: (open: boolean) => void;
   onAcknowledge: (incident: IncidentRecord, note: string) => void;
   onResolve: (incident: IncidentRecord, note: string) => void;
+  onShowTrace: (incident: IncidentRecord) => void;
   acting: boolean;
 }) {
   const [actionNote, setActionNote] = useState("");
@@ -4111,6 +4133,15 @@ function IncidentDetailDialog({
                 </div>
               )}
               <div className="service-incident-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => onShowTrace(incident)}
+                >
+                  <History className="size-3.5" />
+                  Show related trace
+                </Button>
                 {handlingState === "unacknowledged" && (
                   <Button
                     type="button"
@@ -4264,11 +4295,13 @@ function IncidentDetailContent({
   acting = false,
   onAcknowledge,
   onResolve,
+  onShowTrace,
 }: {
   incident: IncidentRecord;
   acting?: boolean;
   onAcknowledge?: (incident: IncidentRecord, note: string) => void;
   onResolve?: (incident: IncidentRecord, note: string) => void;
+  onShowTrace?: (incident: IncidentRecord) => void;
 }) {
   const [actionNote, setActionNote] = useState("");
   const timeline = deriveIncidentTimeline(incident);
@@ -4347,8 +4380,19 @@ function IncidentDetailContent({
           />
         </div>
       )}
-      {actionsAvailable && (
+      {(actionsAvailable || onShowTrace) && (
         <div className="service-incident-actions">
+          {onShowTrace && (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => onShowTrace(incident)}
+            >
+              <History className="size-3.5" />
+              Show related trace
+            </Button>
+          )}
           {handlingState === "unacknowledged" && onAcknowledge && (
             <Button
               type="button"
@@ -4637,19 +4681,19 @@ export function ServicePanel({
     }
   }, [operatorIdentity]);
 
-  const loadTrace = useCallback(async () => {
+  const loadTraceForFilters = useCallback(async (filters: TraceFilters) => {
     if (!canFetch || traceLoading) return;
     setTraceLoading(true);
     setTraceError("");
     try {
-      const params = new URLSearchParams({ limit: String(traceFilters.limit) });
-      if (traceFilters.serviceName.trim()) params.set("service-name", traceFilters.serviceName.trim());
-      if (traceFilters.agentName.trim()) params.set("agent-name", traceFilters.agentName.trim());
-      if (traceFilters.taskName.trim()) params.set("task-name", traceFilters.taskName.trim());
-      if (traceFilters.browserId.trim()) params.set("browser-id", traceFilters.browserId.trim());
-      if (traceFilters.profileId.trim()) params.set("profile-id", traceFilters.profileId.trim());
-      if (traceFilters.sessionId.trim()) params.set("session-id", traceFilters.sessionId.trim());
-      if (traceFilters.since.trim()) params.set("since", traceFilters.since.trim());
+      const params = new URLSearchParams({ limit: String(filters.limit) });
+      if (filters.serviceName.trim()) params.set("service-name", filters.serviceName.trim());
+      if (filters.agentName.trim()) params.set("agent-name", filters.agentName.trim());
+      if (filters.taskName.trim()) params.set("task-name", filters.taskName.trim());
+      if (filters.browserId.trim()) params.set("browser-id", filters.browserId.trim());
+      if (filters.profileId.trim()) params.set("profile-id", filters.profileId.trim());
+      if (filters.sessionId.trim()) params.set("session-id", filters.sessionId.trim());
+      if (filters.since.trim()) params.set("since", filters.since.trim());
       const resp = await fetch(`${serviceBase(activePort)}/trace?${params.toString()}`);
       const json = (await resp.json()) as ApiResponse<ServiceTraceData | ServiceTraceToolPayload>;
       if (!json.success) throw new Error(json.error || "Service trace failed");
@@ -4659,7 +4703,11 @@ export function ServicePanel({
     } finally {
       setTraceLoading(false);
     }
-  }, [activePort, canFetch, traceFilters, traceLoading]);
+  }, [activePort, canFetch, traceLoading]);
+
+  const loadTrace = useCallback(async () => {
+    await loadTraceForFilters(traceFilters);
+  }, [loadTraceForFilters, traceFilters]);
 
   const clearTrace = useCallback(() => {
     setTrace(null);
@@ -5100,6 +5148,12 @@ export function ServicePanel({
         : `Trace incident ${incidentId} is outside the retained Incidents window; it may appear after the 100-row refresh completes.`,
     );
   }, [incidentRecords, inspectIncident]);
+  const showIncidentTrace = useCallback((incident: IncidentRecord) => {
+    const filters = incidentTraceFilters(incident);
+    setWorkspaceTab("events");
+    setTraceFilters(filters);
+    void loadTraceForFilters(filters);
+  }, [loadTraceForFilters]);
   const incidentQueryText = incidentQuery.trim().toLowerCase();
   const filteredIncidentRecords = useMemo(() => {
     const handlingFiltered = incidentHandlingFilter === "all"
@@ -5401,6 +5455,7 @@ export function ServicePanel({
       onControlBrowser: focusBrowserViewStream,
       onAcknowledgeIncident: acknowledgeInspectorIncident,
       onResolveIncident: resolveInspectorIncident,
+      onShowIncidentTrace: showIncidentTrace,
       onCancelJob: cancelInspectorJob,
     });
   }, [
@@ -5410,6 +5465,7 @@ export function ServicePanel({
     focusBrowserViewStream,
     onInspectorActionsChange,
     resolveInspectorIncident,
+    showIncidentTrace,
   ]);
 
   const closeServiceBrowser = useCallback(async (browser: ServiceBrowser) => {
@@ -5635,6 +5691,10 @@ export function ServicePanel({
         }}
         onAcknowledge={(incident, note) => handleIncident(incident, "acknowledge", note)}
         onResolve={(incident, note) => handleIncident(incident, "resolve", note)}
+        onShowTrace={(incident) => {
+          showIncidentTrace(incident);
+          setSelectedIncident(null);
+        }}
         acting={!!selectedIncident && actingIncidentId === selectedIncident.id}
       />
       <BrowserDetailDialog

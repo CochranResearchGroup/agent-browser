@@ -15,8 +15,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /export type ServiceInspectorActions = \{[\s\S]*onControlBrowser\?:[\s\S]*onAcknowledgeIncident\?:[\s\S]*onResolveIncident\?:[\s\S]*onCancelJob\?:/,
-  'ServiceInspectorActions must expose browser control, incident acknowledge, incident resolve, and job cancel callbacks separately',
+  /export type ServiceInspectorActions = \{[\s\S]*onControlBrowser\?:[\s\S]*onAcknowledgeIncident\?:[\s\S]*onResolveIncident\?:[\s\S]*onShowIncidentTrace\?:[\s\S]*onCancelJob\?:/,
+  'ServiceInspectorActions must expose browser control, incident acknowledge, incident resolve, incident trace, and job cancel callbacks separately',
 );
 
 assert.match(
@@ -33,8 +33,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /selection\.kind === "incident"[\s\S]*<IncidentDetailContent[\s\S]*onAcknowledge=\{actions\.onAcknowledgeIncident\}[\s\S]*onResolve=\{actions\.onResolveIncident\}/,
-  'Incident inspector must receive acknowledge and resolve callbacks from inspector actions',
+  /selection\.kind === "incident"[\s\S]*<IncidentDetailContent[\s\S]*onAcknowledge=\{actions\.onAcknowledgeIncident\}[\s\S]*onResolve=\{actions\.onResolveIncident\}[\s\S]*onShowTrace=\{actions\.onShowIncidentTrace\}/,
+  'Incident inspector must receive acknowledge, resolve, and trace callbacks from inspector actions',
 );
 
 assert.match(
@@ -123,6 +123,18 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /function incidentTraceFilters\(incident: IncidentRecord\): TraceFilters \{[\s\S]*serviceName: contextRecord\?\.serviceName \?\? ""[\s\S]*browserId: incident\.browserId \?\? contextRecord\?\.browserId \?\? ""[\s\S]*limit: 50/,
+  'Service dashboard must derive trace filters from retained incident context',
+);
+
+assert.match(
+  servicePanel,
+  /const showIncidentTrace = useCallback\(\(incident: IncidentRecord\) => \{[\s\S]*const filters = incidentTraceFilters\(incident\)[\s\S]*setWorkspaceTab\("events"\)[\s\S]*setTraceFilters\(filters\)[\s\S]*loadTraceForFilters\(filters\)/,
+  'Incident detail actions must switch to Events and load the related trace immediately',
+);
+
+assert.match(
+  servicePanel,
   /className="service-trace-timeline-job-link"[\s\S]*onClick=\{\(\) => onShowTraceJob\(jobId\)\}[\s\S]*Show job \{jobId\} in Jobs/,
   'Trace timeline job rows must jump to the retained job in the Jobs workspace',
 );
@@ -147,7 +159,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /onInspectorActionsChange\(\{[\s\S]*actingIncidentId,[\s\S]*onControlBrowser: focusBrowserViewStream,[\s\S]*onAcknowledgeIncident: acknowledgeInspectorIncident,[\s\S]*onResolveIncident: resolveInspectorIncident,[\s\S]*onCancelJob: cancelInspectorJob,[\s\S]*\}\);/,
+  /onInspectorActionsChange\(\{[\s\S]*actingIncidentId,[\s\S]*onControlBrowser: focusBrowserViewStream,[\s\S]*onAcknowledgeIncident: acknowledgeInspectorIncident,[\s\S]*onResolveIncident: resolveInspectorIncident,[\s\S]*onShowIncidentTrace: showIncidentTrace,[\s\S]*onCancelJob: cancelInspectorJob,[\s\S]*\}\);/,
   'ServicePanel must publish right-pane action handlers through onInspectorActionsChange',
 );
 
