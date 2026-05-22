@@ -1185,6 +1185,75 @@ body {
   letter-spacing: 0.14em;
 }
 
+.service-trace-handoff {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  padding: 0.55rem;
+}
+
+.service-trace-handoff div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.service-trace-handoff span {
+  color: var(--muted-foreground);
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.service-trace-handoff code {
+  overflow: hidden;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--background) 68%, transparent);
+  padding: 0.32rem 0.45rem;
+  color: color-mix(in srgb, var(--foreground) 86%, var(--primary));
+  font-size: 0.68rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-trace-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 60%, transparent);
+  padding: 0.28rem 0.5rem;
+  color: var(--foreground);
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.service-trace-copy:hover,
+.service-trace-copy:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 46%, var(--border));
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.service-trace-handoff p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
 .service-trace-contexts {
   display: grid;
   gap: 0.5rem;

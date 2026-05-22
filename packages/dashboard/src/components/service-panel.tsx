@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  Copy,
   Eye,
   ExternalLink,
   Filter,
@@ -924,6 +925,40 @@ function incidentTraceFilters(incident: IncidentRecord): TraceFilters {
   };
 }
 
+function traceQueryParams(filters: TraceFilters): URLSearchParams {
+  const params = new URLSearchParams({ limit: String(filters.limit) });
+  if (filters.serviceName.trim()) params.set("service-name", filters.serviceName.trim());
+  if (filters.agentName.trim()) params.set("agent-name", filters.agentName.trim());
+  if (filters.taskName.trim()) params.set("task-name", filters.taskName.trim());
+  if (filters.browserId.trim()) params.set("browser-id", filters.browserId.trim());
+  if (filters.profileId.trim()) params.set("profile-id", filters.profileId.trim());
+  if (filters.sessionId.trim()) params.set("session-id", filters.sessionId.trim());
+  if (filters.since.trim()) params.set("since", filters.since.trim());
+  return params;
+}
+
+function shellArg(value: string): string {
+  if (/^[A-Za-z0-9_./:@+=,-]+$/.test(value)) return value;
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
+function traceCliCommand(filters: TraceFilters): string {
+  const args = ["agent-browser", "service", "trace"];
+  if (filters.serviceName.trim()) args.push("--service-name", shellArg(filters.serviceName.trim()));
+  if (filters.agentName.trim()) args.push("--agent-name", shellArg(filters.agentName.trim()));
+  if (filters.taskName.trim()) args.push("--task-name", shellArg(filters.taskName.trim()));
+  if (filters.browserId.trim()) args.push("--browser-id", shellArg(filters.browserId.trim()));
+  if (filters.profileId.trim()) args.push("--profile-id", shellArg(filters.profileId.trim()));
+  if (filters.sessionId.trim()) args.push("--session-id", shellArg(filters.sessionId.trim()));
+  if (filters.since.trim()) args.push("--since", shellArg(filters.since.trim()));
+  args.push("--limit", String(filters.limit));
+  return args.join(" ");
+}
+
+function traceHttpPath(filters: TraceFilters): string {
+  return `/api/service/trace?${traceQueryParams(filters).toString()}`;
+}
+
 function browserCapabilityLaunchKey(launch: ServiceTraceBrowserCapabilityLaunch): string {
   return [
     launch.sessionId ?? "",
@@ -1257,6 +1292,7 @@ function TraceExplorer({
   onLoad: () => void;
   onClear: () => void;
 }) {
+  const [copyStatus, setCopyStatus] = useState("");
   const counts = trace?.counts;
   const matched = trace?.matched;
   const summaryCards = traceSummaryCards(trace);
@@ -1273,6 +1309,21 @@ function TraceExplorer({
     !!filters.profileId.trim() ||
     !!filters.sessionId.trim() ||
     !!filters.since.trim();
+  const cliCommand = traceCliCommand(filters);
+  const httpPath = traceHttpPath(filters);
+
+  useEffect(() => {
+    setCopyStatus("");
+  }, [cliCommand, httpPath]);
+
+  const copyTraceHandoff = useCallback(async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyStatus(`Copied ${label}.`);
+    } catch {
+      setCopyStatus(`Clipboard unavailable. Select the ${label} text and copy it manually.`);
+    }
+  }, []);
 
   return (
     <div className="service-trace-card">
@@ -1368,6 +1419,35 @@ function TraceExplorer({
           </button>
         )}
       </div>
+      {hasFilters && (
+        <div className="service-trace-handoff" aria-label="Trace handoff commands">
+          <div>
+            <span>CLI</span>
+            <code>{cliCommand}</code>
+            <button
+              type="button"
+              className="service-trace-copy"
+              onClick={() => void copyTraceHandoff("CLI trace command", cliCommand)}
+            >
+              <Copy className="size-3" />
+              Copy
+            </button>
+          </div>
+          <div>
+            <span>HTTP</span>
+            <code>{httpPath}</code>
+            <button
+              type="button"
+              className="service-trace-copy"
+              onClick={() => void copyTraceHandoff("HTTP trace path", httpPath)}
+            >
+              <Copy className="size-3" />
+              Copy
+            </button>
+          </div>
+          {copyStatus && <p>{copyStatus}</p>}
+        </div>
+      )}
       {error && (
         <div className="service-browser-error">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -4686,14 +4766,7 @@ export function ServicePanel({
     setTraceLoading(true);
     setTraceError("");
     try {
-      const params = new URLSearchParams({ limit: String(filters.limit) });
-      if (filters.serviceName.trim()) params.set("service-name", filters.serviceName.trim());
-      if (filters.agentName.trim()) params.set("agent-name", filters.agentName.trim());
-      if (filters.taskName.trim()) params.set("task-name", filters.taskName.trim());
-      if (filters.browserId.trim()) params.set("browser-id", filters.browserId.trim());
-      if (filters.profileId.trim()) params.set("profile-id", filters.profileId.trim());
-      if (filters.sessionId.trim()) params.set("session-id", filters.sessionId.trim());
-      if (filters.since.trim()) params.set("since", filters.since.trim());
+      const params = traceQueryParams(filters);
       const resp = await fetch(`${serviceBase(activePort)}/trace?${params.toString()}`);
       const json = (await resp.json()) as ApiResponse<ServiceTraceData | ServiceTraceToolPayload>;
       if (!json.success) throw new Error(json.error || "Service trace failed");

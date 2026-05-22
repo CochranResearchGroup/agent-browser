@@ -135,6 +135,24 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /function traceCliCommand\(filters: TraceFilters\): string \{[\s\S]*"agent-browser", "service", "trace"[\s\S]*"--service-name"[\s\S]*"--limit", String\(filters\.limit\)/,
+  'Trace explorer must build a copyable CLI command from active filters',
+);
+
+assert.match(
+  servicePanel,
+  /function traceHttpPath\(filters: TraceFilters\): string \{[\s\S]*`\/api\/service\/trace\?\$\{traceQueryParams\(filters\)\.toString\(\)\}`/,
+  'Trace explorer must build a copyable HTTP trace path from active filters',
+);
+
+assert.match(
+  servicePanel,
+  /className="service-trace-handoff"[\s\S]*aria-label="Trace handoff commands"[\s\S]*\{cliCommand\}[\s\S]*copyTraceHandoff\("CLI trace command", cliCommand\)[\s\S]*\{httpPath\}[\s\S]*copyTraceHandoff\("HTTP trace path", httpPath\)/,
+  'Trace explorer must render CLI and HTTP handoff copy affordances',
+);
+
+assert.match(
+  servicePanel,
   /className="service-trace-timeline-job-link"[\s\S]*onClick=\{\(\) => onShowTraceJob\(jobId\)\}[\s\S]*Show job \{jobId\} in Jobs/,
   'Trace timeline job rows must jump to the retained job in the Jobs workspace',
 );
