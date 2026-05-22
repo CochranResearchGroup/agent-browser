@@ -1390,8 +1390,10 @@ body {
   text-transform: uppercase;
 }
 
-.service-trace-timeline-job-link {
+.service-trace-timeline-job-link,
+.service-trace-timeline-incident-link {
   margin-top: 0.45rem;
+  margin-right: 0.35rem;
   border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
   border-radius: 999px;
   background: color-mix(in srgb, var(--primary) 7%, transparent);
@@ -1408,7 +1410,9 @@ body {
 }
 
 .service-trace-timeline-job-link:hover,
-.service-trace-timeline-job-link:focus-visible {
+.service-trace-timeline-job-link:focus-visible,
+.service-trace-timeline-incident-link:hover,
+.service-trace-timeline-incident-link:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 46%, var(--border));
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   outline: none;

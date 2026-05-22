@@ -57,6 +57,23 @@ export type ServiceTraceTimelineItem = {
   taskName?: string | null;
   eventId?: string | null;
   jobId?: string | null;
+  incidentId?: string | null;
+};
+
+export type ServiceTraceIncident = {
+  id: string;
+  label?: string | null;
+  latestTimestamp?: string | null;
+  latestKind?: string | null;
+  latestMessage?: string | null;
+  browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  eventIds?: string[];
+  jobIds?: string[];
 };
 
 export type ServiceTraceProfileLeaseWait = {
@@ -106,7 +123,7 @@ export type ServiceTraceData = {
   filters?: ServiceTraceFiltersData;
   events?: ServiceTraceEvent[];
   jobs?: ServiceTraceJob[];
-  incidents?: unknown[];
+  incidents?: ServiceTraceIncident[];
   activity?: ServiceTraceTimelineItem[];
   summary?: {
     contextCount?: number;
@@ -408,6 +425,11 @@ export function traceTimelineItems(trace: ServiceTraceData | null): ServiceTrace
       .map((item) => item.jobId)
       .filter((id): id is string => typeof id === "string" && id.length > 0),
   );
+  const seenIncidentIds = new Set(
+    (trace.activity ?? [])
+      .map((item) => item.incidentId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
   const activityItems = (trace.activity ?? []).map((item) => ({
     ...item,
     source: item.source ?? "activity",
@@ -444,8 +466,25 @@ export function traceTimelineItems(trace: ServiceTraceData | null): ServiceTrace
       agentName: job.agentName,
       taskName: job.taskName,
     }));
+  const incidentItems = (trace.incidents ?? [])
+    .filter((incident) => !seenIncidentIds.has(incident.id))
+    .map((incident) => ({
+      id: `trace-incident-${incident.id}`,
+      incidentId: incident.id,
+      source: "incident",
+      timestamp: incident.latestTimestamp ?? "",
+      kind: incident.latestKind ?? "service_incident",
+      title: incident.label ?? "Service incident",
+      message: incident.latestMessage ?? incident.id,
+      browserId: incident.browserId,
+      profileId: incident.profileId,
+      sessionId: incident.sessionId,
+      serviceName: incident.serviceName,
+      agentName: incident.agentName,
+      taskName: incident.taskName,
+    }));
 
-  return [...activityItems, ...eventItems, ...jobItems].sort(
+  return [...activityItems, ...eventItems, ...jobItems, ...incidentItems].sort(
     (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
   );
 }

@@ -99,6 +99,12 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /onShowTraceIncident: \(incidentId: string\) => void;/,
+  'Trace explorer must expose a typed action for jumping trace incident references to Incidents',
+);
+
+assert.match(
+  servicePanel,
   /onClick=\{\(\) => onShowTraceJob\(wait\.jobId\)\}[\s\S]*Show job in Jobs/,
   'Trace profile lease wait cards must jump to the retained job in the Jobs workspace',
 );
@@ -109,11 +115,22 @@ assert.match(
   'Service dashboard must switch to Jobs and filter by job id from trace cards',
 );
 
+assert.match(
+  servicePanel,
+  /const showTraceIncident = useCallback\(\(incidentId: string\) => \{[\s\S]*setWorkspaceTab\("incidents"\)[\s\S]*setIncidentQuery\(incidentId\)[\s\S]*setIncidentHandlingFilter\("all"\)[\s\S]*setIncidentLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
+  'Service dashboard must switch to Incidents and filter by incident id from trace rows',
+);
 
 assert.match(
   servicePanel,
   /className="service-trace-timeline-job-link"[\s\S]*onClick=\{\(\) => onShowTraceJob\(jobId\)\}[\s\S]*Show job \{jobId\} in Jobs/,
   'Trace timeline job rows must jump to the retained job in the Jobs workspace',
+);
+
+assert.match(
+  servicePanel,
+  /className="service-trace-timeline-incident-link"[\s\S]*onClick=\{\(\) => onShowTraceIncident\(incidentId\)\}[\s\S]*Show incident \{incidentId\} in Incidents/,
+  'Trace timeline incident rows must jump to the retained incident in the Incidents workspace',
 );
 
 assert.match(

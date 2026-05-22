@@ -73,7 +73,36 @@ const traceData = {
       displayIsolation: 'shared_display',
     },
   ],
-  incidents: [],
+  incidents: [
+    {
+      id: 'incident-seen',
+      browserId: 'browser-1',
+      label: 'Browser recovered',
+      severity: 'warning',
+      escalation: 'browser_recovery',
+      recommendedAction: 'Review recovered browser before reuse.',
+      latestTimestamp: '2026-04-25T12:05:00Z',
+      latestKind: 'browser_health_changed',
+      latestMessage: 'Browser recovered after watchdog probe',
+      currentHealth: 'ready',
+      eventIds: ['event-seen'],
+      jobIds: [],
+    },
+    {
+      id: 'incident-standalone',
+      browserId: 'browser-1',
+      label: 'Browser degraded',
+      severity: 'error',
+      escalation: 'browser_degraded',
+      recommendedAction: 'Inspect browser health.',
+      latestTimestamp: '2026-04-25T12:06:00Z',
+      latestKind: 'browser_health_changed',
+      latestMessage: 'Browser degraded after failed probe',
+      currentHealth: 'degraded',
+      eventIds: ['event-standalone'],
+      jobIds: ['job-standalone'],
+    },
+  ],
   activity: [
     {
       id: 'activity-event-seen',
@@ -97,6 +126,18 @@ const traceData = {
       message: 'job-seen',
       serviceName: 'JournalDownloader',
       agentName: 'agent-a',
+      taskName: 'probeACSwebsite',
+    },
+    {
+      id: 'activity-incident-seen',
+      source: 'incident',
+      incidentId: 'incident-seen',
+      timestamp: '2026-04-25T12:05:00Z',
+      kind: 'browser_health_changed',
+      title: 'Browser recovered',
+      message: 'Browser recovered after watchdog probe',
+      browserId: 'browser-1',
+      serviceName: 'JournalDownloader',
       taskName: 'probeACSwebsite',
     },
   ],
@@ -241,8 +282,8 @@ const traceData = {
         namingWarnings: [],
         eventCount: 2,
         jobCount: 2,
-        incidentCount: 0,
-        activityCount: 2,
+        incidentCount: 2,
+        activityCount: 3,
         attention: {
           required: false,
           owner: 'none',
@@ -291,7 +332,7 @@ assert.equal(summaryContexts[1].serviceName, 'SmallService');
 const summaryCards = traceSummaryCards(traceData);
 assert.equal(summaryCards[0].title, 'JournalDownloader');
 assert.equal(summaryCards[0].subtitle, 'probeACSwebsite');
-assert.equal(summaryCards[0].total, 6);
+assert.equal(summaryCards[0].total, 9);
 assert.equal(summaryCards[0].warning, null);
 assert.equal(summaryCards[0].attention, null);
 assert.deepEqual(summaryCards[0].meta, [
@@ -301,7 +342,7 @@ assert.deepEqual(summaryCards[0].meta, [
   'session session-1',
 ]);
 assert.deepEqual(summaryCards[0].targetServiceIds, ['acs', 'google']);
-assert.deepEqual(summaryCards[0].counts, ['2 ev', '2 jobs', '0 inc', '2 act']);
+assert.deepEqual(summaryCards[0].counts, ['2 ev', '2 jobs', '2 inc', '3 act']);
 assert.equal(summaryCards[1].warning, 'Missing agent name');
 assert.equal(summaryCards[1].attention?.reason, 'missing_caller_label');
 assert.deepEqual(summaryCards[1].targetServiceIds, []);
@@ -355,7 +396,14 @@ assert.equal(traceProfileLeaseWaits(null).length, 0);
 const timeline = traceTimelineItems(traceData);
 assert.deepEqual(
   timeline.map((item) => item.id),
-  ['trace-event-event-standalone', 'trace-job-job-standalone', 'activity-job-seen', 'activity-event-seen'],
+  [
+    'trace-incident-incident-standalone',
+    'activity-incident-seen',
+    'trace-event-event-standalone',
+    'trace-job-job-standalone',
+    'activity-job-seen',
+    'activity-event-seen',
+  ],
 );
 assert.equal(
   timeline.some((item) => item.id === 'trace-event-event-seen'),
@@ -367,9 +415,17 @@ assert.equal(
   false,
   'Activity-backed jobs should not be duplicated',
 );
-assert.equal(timeline[0].source, 'event');
-assert.equal(timeline[1].source, 'job');
-assert.equal(timeline[1].message, 'Wait timed out');
+assert.equal(
+  timeline.some((item) => item.id === 'trace-incident-incident-seen'),
+  false,
+  'Activity-backed incidents should not be duplicated',
+);
+assert.equal(timeline[0].source, 'incident');
+assert.equal(timeline[0].incidentId, 'incident-standalone');
+assert.equal(timeline[1].source, 'incident');
+assert.equal(timeline[1].incidentId, 'incident-seen');
+assert.equal(timeline[3].source, 'job');
+assert.equal(timeline[3].message, 'Wait timed out');
 
 const criticalIncidentPriority = incidentPriorityView({
   label: 'browser-1',

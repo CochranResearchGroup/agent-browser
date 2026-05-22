@@ -1222,6 +1222,7 @@ function TraceExplorer({
   onFiltersChange,
   onShowJobsForDisplayAllocation,
   onShowTraceJob,
+  onShowTraceIncident,
   onLoad,
   onClear,
 }: {
@@ -1233,6 +1234,7 @@ function TraceExplorer({
   onFiltersChange: (filters: TraceFilters) => void;
   onShowJobsForDisplayAllocation: (displayIsolation: string | null, jobIds?: string[]) => void;
   onShowTraceJob: (jobId: string) => void;
+  onShowTraceIncident: (incidentId: string) => void;
   onLoad: () => void;
   onClear: () => void;
 }) {
@@ -1599,6 +1601,8 @@ function TraceExplorer({
           ) : (
             timeline.map((item) => {
               const jobId = typeof item.jobId === "string" && item.jobId.length > 0 ? item.jobId : null;
+              const incidentId =
+                typeof item.incidentId === "string" && item.incidentId.length > 0 ? item.incidentId : null;
               return (
                 <div key={item.id} className="service-incident-history-item">
                   <EventDot kind={item.kind} />
@@ -1631,6 +1635,15 @@ function TraceExplorer({
                         onClick={() => onShowTraceJob(jobId)}
                       >
                         Show job {jobId} in Jobs
+                      </button>
+                    )}
+                    {incidentId && (
+                      <button
+                        type="button"
+                        className="service-trace-timeline-incident-link"
+                        onClick={() => onShowTraceIncident(incidentId)}
+                      >
+                        Show incident {incidentId} in Incidents
                       </button>
                     )}
                   </div>
@@ -4526,6 +4539,7 @@ export function ServicePanel({
   const [jobSortDirection, setJobSortDirection] = useState<SortDirection>("desc");
   const [jobLimit, setJobLimit] = useState<ServiceRecordLimit>(24);
   const [jobFilterNotice, setJobFilterNotice] = useState("");
+  const [incidentFilterNotice, setIncidentFilterNotice] = useState("");
   const [actingIncidentId, setActingIncidentId] = useState<string | null>(null);
   const [operatorIdentity, setOperatorIdentity] = useState(initialOperatorIdentity);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
@@ -5070,6 +5084,22 @@ export function ServicePanel({
       ),
     [retainedServiceJobs, serviceState?.events, serviceState?.incidents],
   );
+  const showTraceIncident = useCallback((incidentId: string) => {
+    setWorkspaceTab("incidents");
+    setIncidentQuery(incidentId);
+    setIncidentHandlingFilter("all");
+    setIncidentLimit((current) => (current < 100 ? 100 : current));
+
+    const retainedIncident = incidentRecords.find((incident) => incident.id === incidentId);
+    if (retainedIncident) {
+      inspectIncident(retainedIncident);
+    }
+    setIncidentFilterNotice(
+      retainedIncident
+        ? `Showing trace incident ${incidentId} from the retained Incidents window.`
+        : `Trace incident ${incidentId} is outside the retained Incidents window; it may appear after the 100-row refresh completes.`,
+    );
+  }, [incidentRecords, inspectIncident]);
   const incidentQueryText = incidentQuery.trim().toLowerCase();
   const filteredIncidentRecords = useMemo(() => {
     const handlingFiltered = incidentHandlingFilter === "all"
@@ -6098,7 +6128,10 @@ export function ServicePanel({
                         incidentHandlingFilter === option.value && "service-filter-chip-active",
                         option.value === "unacknowledged" && incidentHandlingFilter === option.value && "service-filter-chip-incident",
                       )}
-                      onClick={() => setIncidentHandlingFilter(option.value)}
+                      onClick={() => {
+                        setIncidentHandlingFilter(option.value);
+                        setIncidentFilterNotice("");
+                      }}
                     >
                       {option.label}
                     </button>
@@ -6108,7 +6141,10 @@ export function ServicePanel({
                   <span className="sr-only">Filter incidents</span>
                   <input
                     value={incidentQuery}
-                    onChange={(event) => setIncidentQuery(event.target.value)}
+                    onChange={(event) => {
+                      setIncidentQuery(event.target.value);
+                      setIncidentFilterNotice("");
+                    }}
                     placeholder="filter incidents, browsers, remedies"
                   />
                 </label>
@@ -6119,13 +6155,19 @@ export function ServicePanel({
                       key={`incident-limit-${limit}`}
                       type="button"
                       className={cn("service-filter-chip", incidentLimit === limit && "service-filter-chip-active")}
-                      onClick={() => setIncidentLimit(limit)}
+                      onClick={() => {
+                        setIncidentLimit(limit);
+                        setIncidentFilterNotice("");
+                      }}
                     >
                       {limit}
                     </button>
                   ))}
                 </div>
               </div>
+              {incidentFilterNotice && (
+                <p className="service-workspace-inline-note">{incidentFilterNotice}</p>
+              )}
               <div className="service-section-list">
                 <p className="service-record-list-heading">
                   Incidents: {visibleIncidentRecords.length} shown
@@ -6350,6 +6392,7 @@ export function ServicePanel({
                   onFiltersChange={setTraceFilters}
                   onShowJobsForDisplayAllocation={showJobsForDisplayAllocation}
                   onShowTraceJob={showTraceJob}
+                  onShowTraceIncident={showTraceIncident}
                   onLoad={loadTrace}
                   onClear={clearTrace}
                 />
