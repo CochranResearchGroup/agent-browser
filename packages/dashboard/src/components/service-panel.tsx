@@ -1221,6 +1221,7 @@ function TraceExplorer({
   timeline,
   onFiltersChange,
   onShowJobsForDisplayAllocation,
+  onShowProfileLeaseWaitJob,
   onLoad,
   onClear,
 }: {
@@ -1231,6 +1232,7 @@ function TraceExplorer({
   timeline: ServiceTraceTimelineItem[];
   onFiltersChange: (filters: TraceFilters) => void;
   onShowJobsForDisplayAllocation: (displayIsolation: string | null, jobIds?: string[]) => void;
+  onShowProfileLeaseWaitJob: (jobId: string) => void;
   onLoad: () => void;
   onClear: () => void;
 }) {
@@ -1542,9 +1544,12 @@ function TraceExplorer({
                 const active = !wait.endedAt;
                 const conflictCount = wait.conflictSessionIds?.length ?? 0;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={`${wait.jobId}:${wait.startedAt ?? ""}:${wait.endedAt ?? ""}`}
                     className={cn("service-trace-wait-card", active && "service-trace-wait-card-active")}
+                    onClick={() => onShowProfileLeaseWaitJob(wait.jobId)}
+                    title={`Show retained job ${wait.jobId} in Jobs`}
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate text-xs font-black text-foreground">
@@ -1577,7 +1582,8 @@ function TraceExplorer({
                         Conflicts: {wait.conflictSessionIds?.join(", ")}
                       </p>
                     )}
-                  </div>
+                    <small className="service-trace-card-action">Show job in Jobs</small>
+                  </button>
                 );
               })}
             </div>
@@ -4956,6 +4962,22 @@ export function ServicePanel({
 
     setJobFilterNotice(`Showing ${label} jobs from the trace display allocation summary.`);
   }, [recentJobs]);
+  const showProfileLeaseWaitJob = useCallback((jobId: string) => {
+    setWorkspaceTab("jobs");
+    setJobQuery(jobId);
+    setJobStateFilter("all");
+    setJobDisplayFilter("all");
+    setJobSortKey("submittedAt");
+    setJobSortDirection("desc");
+    setJobLimit((current) => (current < 100 ? 100 : current));
+
+    const retainedJob = recentJobs.find((job) => job.id === jobId);
+    setJobFilterNotice(
+      retainedJob
+        ? `Showing profile lease wait job ${jobId} from the trace summary.`
+        : `Profile lease wait job ${jobId} is outside the retained Jobs window; it may appear after the 100-row refresh completes.`,
+    );
+  }, [recentJobs]);
   const filteredJobs = useMemo(() => {
     const query = jobQuery.trim().toLowerCase();
     const rows = recentJobs.filter((job) => {
@@ -6315,6 +6337,7 @@ export function ServicePanel({
                   timeline={traceTimeline}
                   onFiltersChange={setTraceFilters}
                   onShowJobsForDisplayAllocation={showJobsForDisplayAllocation}
+                  onShowProfileLeaseWaitJob={showProfileLeaseWaitJob}
                   onLoad={loadTrace}
                   onClear={clearTrace}
                 />

@@ -93,6 +93,24 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /onShowProfileLeaseWaitJob: \(jobId: string\) => void;/,
+  'Trace explorer must expose a typed action for jumping from profile lease waits to Jobs',
+);
+
+assert.match(
+  servicePanel,
+  /onClick=\{\(\) => onShowProfileLeaseWaitJob\(wait\.jobId\)\}[\s\S]*Show job in Jobs/,
+  'Trace profile lease wait cards must jump to the retained job in the Jobs workspace',
+);
+
+assert.match(
+  servicePanel,
+  /const showProfileLeaseWaitJob = useCallback\(\(jobId: string\) => \{[\s\S]*setWorkspaceTab\("jobs"\)[\s\S]*setJobQuery\(jobId\)[\s\S]*setJobDisplayFilter\("all"\)[\s\S]*setJobLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
+  'Service dashboard must switch to Jobs and filter by job id from profile lease wait cards',
+);
+
+assert.match(
+  servicePanel,
   /<JobSortButton[\s\S]*sortKey=\{sortKey\}[\s\S]*activeSortKey=\{jobSortKey\}[\s\S]*onSort=\{toggleJobSort\}/,
   'Service dashboard Jobs workspace must render job sort controls',
 );
