@@ -2978,6 +2978,31 @@ function BrowserTable({
           </tbody>
         </table>
       </div>
+      <div className="service-browser-card-list" aria-label="Managed browser cards">
+        {filteredBrowsers.length === 0 ? (
+          <p className="service-browser-card-empty">
+            No browser records match the current filter.
+          </p>
+        ) : (
+          visibleBrowsers.map((browser, index) => (
+            <BrowserTableCard
+              key={browser.id || browser.cdpEndpoint || `browser-card-${index}`}
+              browser={browser}
+              ownership={browserOwnershipById.get(browser.id) ?? EMPTY_BROWSER_OWNERSHIP}
+              selected={Boolean(browser.id && browser.id === selectedBrowserId)}
+              onSelect={onSelect}
+              onViewStream={onViewStream}
+              onFocusViewStream={onFocusViewStream}
+              onCloseBrowser={onCloseBrowser}
+              onRepairBrowser={onRepairBrowser}
+              closeSupported={closeSupported}
+              repairSupported={repairSupported}
+              activeSessionName={activeSessionName}
+              acting={Boolean(actingBrowserActionId && browser.id === actingBrowserActionId)}
+            />
+          ))
+        )}
+      </div>
       {hiddenBrowserCount > 0 && (
         <div className="service-browser-table-window" aria-live="polite">
           <span>{hiddenBrowserCount} more browser records match this view.</span>
@@ -2996,6 +3021,170 @@ function BrowserTable({
             Show all
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+function BrowserRowActions({
+  browser,
+  onSelect,
+  onViewStream,
+  onFocusViewStream,
+  onCloseBrowser,
+  onRepairBrowser,
+  closeSupported,
+  repairSupported,
+  activeSessionName,
+  acting,
+  density,
+}: {
+  browser: ServiceBrowser;
+  onSelect: (browser: ServiceBrowser) => void;
+  onViewStream?: (browser: ServiceBrowser) => void;
+  onFocusViewStream?: (browser: ServiceBrowser) => void;
+  onCloseBrowser?: (browser: ServiceBrowser) => void;
+  onRepairBrowser?: (browser: ServiceBrowser) => void;
+  closeSupported?: boolean;
+  repairSupported?: boolean;
+  activeSessionName?: string | null;
+  acting?: boolean;
+  density: BrowserTableDensity;
+}) {
+  const primaryViewStream = browserPrimaryViewStream(browser);
+  const viewStreamAvailable = canOpenViewStream(primaryViewStream);
+  const controlAvailable = canOpenControlViewStream(primaryViewStream);
+  const closeAvailable = Boolean(closeSupported && onCloseBrowser && activeSessionName && browser.id === `session:${activeSessionName}`);
+  const repairAvailable = Boolean(repairSupported && onRepairBrowser && ["degraded", "faulted"].includes((browser.health ?? "").toLowerCase()));
+  const closeTitle = browserRowCloseTitle({
+    available: closeAvailable,
+    supported: Boolean(closeSupported),
+  });
+  const repairTitle = browserRowRepairTitle({
+    available: repairAvailable,
+    supported: Boolean(repairSupported),
+  });
+  const unavailableActionCount = [
+    !viewStreamAvailable || !onViewStream,
+    !controlAvailable || !onFocusViewStream,
+    !closeAvailable,
+    !repairAvailable,
+  ].filter(Boolean).length;
+
+  return (
+    <div className="service-browser-row-actions" aria-label={`Browser actions for ${browser.id || "unnamed browser"}`}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+        onClick={() => onSelect(browser)}
+      >
+        Inspect
+      </Button>
+      {viewStreamAvailable && onViewStream && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+          title={viewStreamOpenTitle(primaryViewStream)}
+          onClick={() => onViewStream(browser)}
+        >
+          View
+        </Button>
+      )}
+      {controlAvailable && onFocusViewStream && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+          title={viewStreamControlTitle(primaryViewStream)}
+          onClick={() => onFocusViewStream(browser)}
+        >
+          Control
+        </Button>
+      )}
+      {closeAvailable && (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+              disabled={acting}
+              title={closeTitle}
+            >
+              Close
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Close service browser?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This queues a polite close for {browser.id || "the selected browser"}. If polite close fails, agent-browser records degraded shutdown health.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => onCloseBrowser?.(browser)}>Close browser</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+      {repairAvailable && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+          disabled={acting}
+          title={repairTitle}
+          onClick={() => onRepairBrowser?.(browser)}
+        >
+          Repair
+        </Button>
+      )}
+      {unavailableActionCount > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+              aria-label={`Show unavailable actions for ${browser.id || "unnamed browser"}`}
+              title={`${unavailableActionCount} unavailable row actions`}
+            >
+              <MoreHorizontal className="size-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>Unavailable actions</DropdownMenuLabel>
+            {(!viewStreamAvailable || !onViewStream) && (
+              <DropdownMenuItem disabled title={viewStreamOpenTitle(primaryViewStream)}>
+                View: {viewStreamOpenTitle(primaryViewStream)}
+              </DropdownMenuItem>
+            )}
+            {(!controlAvailable || !onFocusViewStream) && (
+              <DropdownMenuItem disabled title={viewStreamControlTitle(primaryViewStream)}>
+                Control: {viewStreamControlTitle(primaryViewStream)}
+              </DropdownMenuItem>
+            )}
+            {!closeAvailable && (
+              <DropdownMenuItem disabled title={closeTitle}>
+                Close: {closeTitle}
+              </DropdownMenuItem>
+            )}
+            {!repairAvailable && (
+              <DropdownMenuItem disabled title={repairTitle}>
+                Repair: {repairTitle}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );
@@ -3039,26 +3228,7 @@ function BrowserTableRow({
   const tone = healthTone(browser.health);
   const sessionCount = browser.activeSessionIds?.length ?? 0;
   const viewStreamCount = browser.viewStreams?.length ?? 0;
-  const primaryViewStream = browserPrimaryViewStream(browser);
-  const viewStreamAvailable = canOpenViewStream(primaryViewStream);
-  const controlAvailable = canOpenControlViewStream(primaryViewStream);
   const viewStreamCapability = browserViewStreamCapability(browser);
-  const closeAvailable = Boolean(closeSupported && onCloseBrowser && activeSessionName && browser.id === `session:${activeSessionName}`);
-  const repairAvailable = Boolean(repairSupported && onRepairBrowser && ["degraded", "faulted"].includes((browser.health ?? "").toLowerCase()));
-  const closeTitle = browserRowCloseTitle({
-    available: closeAvailable,
-    supported: Boolean(closeSupported),
-  });
-  const repairTitle = browserRowRepairTitle({
-    available: repairAvailable,
-    supported: Boolean(repairSupported),
-  });
-  const unavailableActionCount = [
-    !viewStreamAvailable || !onViewStream,
-    !controlAvailable || !onFocusViewStream,
-    !closeAvailable,
-    !repairAvailable,
-  ].filter(Boolean).length;
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
     <tr className={cn("service-browser-table-row", selected && "service-browser-table-row-selected")} aria-selected={selected}>
@@ -3119,123 +3289,107 @@ function BrowserTableRow({
         </td>
       )}
       <td>
-        <div className="service-browser-row-actions" aria-label={`Browser actions for ${browser.id || "unnamed browser"}`}>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-            onClick={() => onSelect(browser)}
-          >
-            Inspect
-          </Button>
-          {viewStreamAvailable && onViewStream && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-              title={viewStreamOpenTitle(primaryViewStream)}
-              onClick={() => onViewStream(browser)}
-            >
-              View
-            </Button>
-          )}
-          {controlAvailable && onFocusViewStream && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-              title={viewStreamControlTitle(primaryViewStream)}
-              onClick={() => onFocusViewStream(browser)}
-            >
-              Control
-            </Button>
-          )}
-          {closeAvailable && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-                  disabled={acting}
-                  title={closeTitle}
-                >
-                  Close
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Close service browser?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This queues a polite close for {browser.id || "the selected browser"}. If polite close fails, agent-browser records degraded shutdown health.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => onCloseBrowser?.(browser)}>Close browser</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-          {repairAvailable && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-              disabled={acting}
-              title={repairTitle}
-              onClick={() => onRepairBrowser?.(browser)}
-            >
-              Repair
-            </Button>
-          )}
-          {unavailableActionCount > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-                  aria-label={`Show unavailable actions for ${browser.id || "unnamed browser"}`}
-                  title={`${unavailableActionCount} unavailable row actions`}
-                >
-                  <MoreHorizontal className="size-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel>Unavailable actions</DropdownMenuLabel>
-                {(!viewStreamAvailable || !onViewStream) && (
-                  <DropdownMenuItem disabled title={viewStreamOpenTitle(primaryViewStream)}>
-                    View: {viewStreamOpenTitle(primaryViewStream)}
-                  </DropdownMenuItem>
-                )}
-                {(!controlAvailable || !onFocusViewStream) && (
-                  <DropdownMenuItem disabled title={viewStreamControlTitle(primaryViewStream)}>
-                    Control: {viewStreamControlTitle(primaryViewStream)}
-                  </DropdownMenuItem>
-                )}
-                {!closeAvailable && (
-                  <DropdownMenuItem disabled title={closeTitle}>
-                    Close: {closeTitle}
-                  </DropdownMenuItem>
-                )}
-                {!repairAvailable && (
-                  <DropdownMenuItem disabled title={repairTitle}>
-                    Repair: {repairTitle}
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+        <BrowserRowActions
+          browser={browser}
+          onSelect={onSelect}
+          onViewStream={onViewStream}
+          onFocusViewStream={onFocusViewStream}
+          onCloseBrowser={onCloseBrowser}
+          onRepairBrowser={onRepairBrowser}
+          closeSupported={closeSupported}
+          repairSupported={repairSupported}
+          activeSessionName={activeSessionName}
+          acting={acting}
+          density={density}
+        />
       </td>
     </tr>
+  );
+}
+
+function BrowserTableCard({
+  browser,
+  ownership,
+  selected,
+  onSelect,
+  onViewStream,
+  onFocusViewStream,
+  onCloseBrowser,
+  onRepairBrowser,
+  closeSupported,
+  repairSupported,
+  activeSessionName,
+  acting,
+}: {
+  browser: ServiceBrowser;
+  ownership: BrowserOwnershipSummary;
+  selected: boolean;
+  onSelect: (browser: ServiceBrowser) => void;
+  onViewStream?: (browser: ServiceBrowser) => void;
+  onFocusViewStream?: (browser: ServiceBrowser) => void;
+  onCloseBrowser?: (browser: ServiceBrowser) => void;
+  onRepairBrowser?: (browser: ServiceBrowser) => void;
+  closeSupported?: boolean;
+  repairSupported?: boolean;
+  activeSessionName?: string | null;
+  acting?: boolean;
+}) {
+  const tone = healthTone(browser.health);
+  const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
+  const viewStreamCapability = browserViewStreamCapability(browser);
+  return (
+    <article className={cn("service-browser-card", selected && "service-browser-card-selected")}>
+      <button
+        type="button"
+        className="service-browser-card-primary"
+        onClick={() => onSelect(browser)}
+        aria-label={`Inspect browser ${browser.id || "unnamed browser"}`}
+        aria-current={selected ? "true" : undefined}
+      >
+        <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
+        <span className="min-w-0 flex-1">
+          <span className="service-browser-card-title">{browser.id || "unnamed browser"}</span>
+          <span className="service-browser-card-subtitle">
+            {browser.host ?? "unknown host"} / {processLabel}
+          </span>
+        </span>
+        <Badge variant="outline" className="h-5 max-w-28 truncate px-1.5 text-[9px]">
+          {browser.health ?? "unknown"}
+        </Badge>
+      </button>
+      <div className="service-browser-card-grid">
+        <span>
+          <strong>Profile</strong>
+          {browser.profileId || "unassigned"}
+        </span>
+        <span>
+          <strong>Sessions</strong>
+          {browser.activeSessionIds?.length ?? 0}
+        </span>
+        <span>
+          <strong>Streams</strong>
+          {(browser.viewStreams?.length ?? 0)} / {viewStreamCapability}
+        </span>
+        <span>
+          <strong>Error</strong>
+          {browser.lastError || "none"}
+        </span>
+      </div>
+      <BrowserOwnershipCell ownership={ownership} />
+      <BrowserRowActions
+        browser={browser}
+        onSelect={onSelect}
+        onViewStream={onViewStream}
+        onFocusViewStream={onFocusViewStream}
+        onCloseBrowser={onCloseBrowser}
+        onRepairBrowser={onRepairBrowser}
+        closeSupported={closeSupported}
+        repairSupported={repairSupported}
+        activeSessionName={activeSessionName}
+        acting={acting}
+        density="standard"
+      />
+    </article>
   );
 }
 

@@ -381,8 +381,20 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const viewStreamAvailable = canOpenViewStream\(primaryViewStream\);[\s\S]*const controlAvailable = canOpenControlViewStream\(primaryViewStream\);[\s\S]*const unavailableActionCount = \[[\s\S]*!viewStreamAvailable \|\| !onViewStream[\s\S]*!controlAvailable \|\| !onFocusViewStream[\s\S]*!closeAvailable[\s\S]*!repairAvailable[\s\S]*service-browser-table-streams[\s\S]*viewStreamCapability[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*\{viewStreamAvailable && onViewStream && \([\s\S]*View[\s\S]*\{controlAvailable && onFocusViewStream && \([\s\S]*Control[\s\S]*\{closeAvailable && \([\s\S]*AlertDialog[\s\S]*Close[\s\S]*\{repairAvailable && \([\s\S]*Repair[\s\S]*\{unavailableActionCount > 0 && \([\s\S]*Unavailable actions/,
-  'Browser row actions must keep enabled actions inline and move unavailable action reasons into a row menu',
+  /function BrowserRowActions\(\{[\s\S]*const viewStreamAvailable = canOpenViewStream\(primaryViewStream\);[\s\S]*const controlAvailable = canOpenControlViewStream\(primaryViewStream\);[\s\S]*const unavailableActionCount = \[[\s\S]*!viewStreamAvailable \|\| !onViewStream[\s\S]*!controlAvailable \|\| !onFocusViewStream[\s\S]*!closeAvailable[\s\S]*!repairAvailable[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*\{viewStreamAvailable && onViewStream && \([\s\S]*View[\s\S]*\{controlAvailable && onFocusViewStream && \([\s\S]*Control[\s\S]*\{closeAvailable && \([\s\S]*AlertDialog[\s\S]*Close[\s\S]*\{repairAvailable && \([\s\S]*Repair[\s\S]*\{unavailableActionCount > 0 && \([\s\S]*Unavailable actions/,
+  'Browser row actions must use a shared action component with enabled actions inline and unavailable reasons in a row menu',
+);
+
+assert.match(
+  servicePanel,
+  /className="service-browser-card-list" aria-label="Managed browser cards"[\s\S]*visibleBrowsers\.map\(\(browser, index\) => \([\s\S]*<BrowserTableCard[\s\S]*onViewStream=\{onViewStream\}[\s\S]*onFocusViewStream=\{onFocusViewStream\}[\s\S]*onCloseBrowser=\{onCloseBrowser\}[\s\S]*onRepairBrowser=\{onRepairBrowser\}/,
+  'Browser table must render mobile managed-browser cards from the same visible browser window and action callbacks',
+);
+
+assert.match(
+  servicePanel,
+  /function BrowserTableCard\([\s\S]*service-browser-card-primary[\s\S]*service-browser-card-grid[\s\S]*<BrowserOwnershipCell ownership=\{ownership\} \/>[\s\S]*<BrowserRowActions/,
+  'Mobile browser cards must expose primary browser details, ownership evidence, and shared row actions',
 );
 
 assert.match(
@@ -417,7 +429,7 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-browser-table-streams[\s\S]*grid[\s\S]*\.service-browser-row-actions[\s\S]*min-width: 12rem[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end[\s\S]*\.service-browser-row-actions button:disabled/,
+  /\.service-browser-table-streams[\s\S]*grid[\s\S]*\.service-browser-row-actions[\s\S]*min-width: 12rem[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end[\s\S]*\.service-browser-card[\s\S]*\.service-browser-card-grid[\s\S]*@media \(max-width: 767px\)[\s\S]*\.service-browser-table-scroll[\s\S]*display: none[\s\S]*\.service-browser-card-list[\s\S]*display: grid/,
   'Browser row actions must keep compact wrapping action-group styling and stream posture labels',
 );
 
