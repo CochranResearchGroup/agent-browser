@@ -9,6 +9,7 @@ import {
 import { useAtomValue } from "jotai/react";
 import {
   AlertTriangle,
+  ChevronDown,
   CheckCircle2,
   Clock3,
   Copy,
@@ -4924,6 +4925,7 @@ export function ServicePanel({
   const [cleanupKind, setCleanupKind] = useState<RetainedCleanupKind | null>(null);
   const [cleanupResult, setCleanupResult] = useState<RetainedCleanupResult | null>(null);
   const [cleanupError, setCleanupError] = useState("");
+  const [managedAttentionOpen, setManagedAttentionOpen] = useState(false);
   const [incidentOnly, setIncidentOnly] = useState(false);
   const [incidentHandlingFilter, setIncidentHandlingFilter] = useState<IncidentHandlingFilter>("all");
   const [jobQuery, setJobQuery] = useState("");
@@ -5947,6 +5949,13 @@ export function ServicePanel({
   const cleanupAppliedTotal = cleanupKind === "repair"
     ? cleanupTotal(cleanupResult?.repairedCounts)
     : cleanupTotal(cleanupResult?.removed);
+  const managedAttentionCount = [
+    reconciliation?.lastError,
+    retainedStateCleanupNeeded,
+  ].filter(Boolean).length;
+  const managedAttentionExpanded =
+    managedAttentionOpen ||
+    Boolean(cleanupLoading || cleanupApplying || cleanupError || cleanupResult);
   const cleanupApplyLabel = cleanupKind ? `Apply reviewed ${cleanupKind}` : "Apply reviewed cleanup";
   const cleanupDialogTitle = cleanupKind === "repair"
     ? "Apply retained-state repair?"
@@ -6193,117 +6202,142 @@ export function ServicePanel({
             />
           </div>
 
-          {(reconciliation?.lastError || retainedStateCleanupNeeded) && (
-            <div className="service-state-alerts" aria-label="Managed state attention items">
-              {reconciliation?.lastError && (
-                <div className="service-state-alert service-state-alert-error">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>{reconciliation.lastError}</span>
-                </div>
-              )}
-              {retainedStateCleanupNeeded && (
-                <div className="service-state-alert service-retained-state-hint">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-black text-foreground">Retained state is large.</p>
-                    <p className="mt-1 leading-5">
-                      Review the Records status detail, then run a dry-run prune or repair. Apply is enabled only after a reviewed result.
-                    </p>
-                    <div className="service-retained-state-actions">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 rounded-lg px-2 text-[11px]"
-                        disabled={!!cleanupLoading || !!cleanupApplying}
-                        onClick={() => runRetainedCleanup("prune", false)}
-                      >
-                        {cleanupLoading === "prune" ? <Loader2 className="size-3 animate-spin" /> : null}
-                        Dry-run prune
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 rounded-lg px-2 text-[11px]"
-                        disabled={!!cleanupLoading || !!cleanupApplying}
-                        onClick={() => runRetainedCleanup("repair", false)}
-                      >
-                        {cleanupLoading === "repair" ? <Loader2 className="size-3 animate-spin" /> : null}
-                        Dry-run repair
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+          {managedAttentionCount > 0 && (
+            <div className="service-attention-rail" aria-label="Managed state attention items">
+              <button
+                type="button"
+                className="service-attention-toggle"
+                aria-expanded={managedAttentionExpanded}
+                aria-label={`${managedAttentionCount} managed-state item${managedAttentionCount === 1 ? "" : "s"} need review`}
+                onClick={() => setManagedAttentionOpen((open) => !open)}
+              >
+                <span className="service-attention-icon">
+                  <AlertTriangle className="size-3.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="service-attention-kicker">Attention</span>
+                  <span className="service-attention-summary">
+                    {managedAttentionCount} managed-state item{managedAttentionCount === 1 ? "" : "s"} need review
+                  </span>
+                </span>
+                <ChevronDown
+                  className={cn("size-3.5 shrink-0 transition-transform", managedAttentionExpanded && "rotate-180")}
+                  aria-hidden="true"
+                />
+              </button>
+              {managedAttentionExpanded && (
+                <div className="service-state-alerts">
+                  {reconciliation?.lastError && (
+                    <div className="service-state-alert service-state-alert-error">
+                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                      <span>{reconciliation.lastError}</span>
+                    </div>
+                  )}
+                  {retainedStateCleanupNeeded && (
+                    <div className="service-state-alert service-retained-state-hint">
+                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-black text-foreground">Retained state is large.</p>
+                        <p className="mt-1 leading-5">
+                          Review the Records status detail, then run a dry-run prune or repair. Apply is enabled only after a reviewed result.
+                        </p>
+                        <div className="service-retained-state-actions">
                           <Button
                             size="sm"
+                            variant="outline"
                             className="h-7 rounded-lg px-2 text-[11px]"
-                            disabled={!cleanupApplyEnabled || !!cleanupLoading || !!cleanupApplying || !cleanupKind}
+                            disabled={!!cleanupLoading || !!cleanupApplying}
+                            onClick={() => runRetainedCleanup("prune", false)}
                           >
-                            {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
-                            {cleanupApplyLabel}
+                            {cleanupLoading === "prune" ? <Loader2 className="size-3 animate-spin" /> : null}
+                            Dry-run prune
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>{cleanupDialogTitle}</AlertDialogTitle>
-                            <AlertDialogDescription>{cleanupDialogDescription}</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <div className="service-retained-cleanup-confirm">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 rounded-lg px-2 text-[11px]"
+                            disabled={!!cleanupLoading || !!cleanupApplying}
+                            onClick={() => runRetainedCleanup("repair", false)}
+                          >
+                            {cleanupLoading === "repair" ? <Loader2 className="size-3 animate-spin" /> : null}
+                            Dry-run repair
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                className="h-7 rounded-lg px-2 text-[11px]"
+                                disabled={!cleanupApplyEnabled || !!cleanupLoading || !!cleanupApplying || !cleanupKind}
+                              >
+                                {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
+                                {cleanupApplyLabel}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>{cleanupDialogTitle}</AlertDialogTitle>
+                                <AlertDialogDescription>{cleanupDialogDescription}</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <div className="service-retained-cleanup-confirm">
+                                <p>
+                                  Candidates: {cleanupCountSummary(cleanupResult?.candidateCounts)}
+                                </p>
+                                <p>
+                                  Skipped: {cleanupCountSummary(cleanupResult?.skippedCounts)}
+                                </p>
+                                <p>
+                                  Actor: {operatorIdentity.trim() || activeSession || "operator"}
+                                </p>
+                              </div>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel disabled={!!cleanupApplying}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20"
+                                  disabled={!cleanupKind || !!cleanupApplying}
+                                  onClick={() => cleanupKind && runRetainedCleanup(cleanupKind, true)}
+                                >
+                                  {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
+                                  Apply cleanup
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                        {cleanupError && <p className="service-retained-cleanup-error">{cleanupError}</p>}
+                        {cleanupResult && (
+                          <div className="service-retained-cleanup-result">
+                            <div className="service-retained-cleanup-result-header">
+                              <Badge variant="secondary">{cleanupKind ?? "cleanup"}</Badge>
+                              <span>{cleanupResult.dryRun ? "Dry-run" : "Applied"}</span>
+                              <span>{cleanupCandidateTotal} candidates</span>
+                              {!cleanupResult.dryRun && <span>{cleanupAppliedTotal} changed</span>}
+                            </div>
                             <p>
-                              Candidates: {cleanupCountSummary(cleanupResult?.candidateCounts)}
+                              Candidates: {cleanupCountSummary(cleanupResult.candidateCounts)}
                             </p>
                             <p>
-                              Skipped: {cleanupCountSummary(cleanupResult?.skippedCounts)}
+                              Skipped: {cleanupCountSummary(cleanupResult.skippedCounts)}
                             </p>
-                            <p>
-                              Actor: {operatorIdentity.trim() || activeSession || "operator"}
-                            </p>
+                            {!cleanupResult.dryRun && (
+                              <p>
+                                Changed: {cleanupCountSummary(cleanupKind === "repair"
+                                  ? cleanupResult.repairedCounts
+                                  : cleanupResult.removed)}
+                              </p>
+                            )}
+                            {cleanupResult.recommendedNextStep && (
+                              <p className="service-retained-cleanup-next">
+                                Next: {cleanupResult.recommendedNextStep}
+                              </p>
+                            )}
                           </div>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel disabled={!!cleanupApplying}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20"
-                              disabled={!cleanupKind || !!cleanupApplying}
-                              onClick={() => cleanupKind && runRetainedCleanup(cleanupKind, true)}
-                            >
-                              {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
-                              Apply cleanup
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  {cleanupError && <p className="service-retained-cleanup-error">{cleanupError}</p>}
-                  {cleanupResult && (
-                    <div className="service-retained-cleanup-result">
-                      <div className="service-retained-cleanup-result-header">
-                        <Badge variant="secondary">{cleanupKind ?? "cleanup"}</Badge>
-                        <span>{cleanupResult.dryRun ? "Dry-run" : "Applied"}</span>
-                        <span>{cleanupCandidateTotal} candidates</span>
-                        {!cleanupResult.dryRun && <span>{cleanupAppliedTotal} changed</span>}
+                        )}
                       </div>
-                      <p>
-                        Candidates: {cleanupCountSummary(cleanupResult.candidateCounts)}
-                      </p>
-                      <p>
-                        Skipped: {cleanupCountSummary(cleanupResult.skippedCounts)}
-                      </p>
-                      {!cleanupResult.dryRun && (
-                        <p>
-                          Changed: {cleanupCountSummary(cleanupKind === "repair"
-                            ? cleanupResult.repairedCounts
-                            : cleanupResult.removed)}
-                        </p>
-                      )}
-                      {cleanupResult.recommendedNextStep && (
-                        <p className="service-retained-cleanup-next">
-                          Next: {cleanupResult.recommendedNextStep}
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
           )}
 
           <div className="service-summary-card">

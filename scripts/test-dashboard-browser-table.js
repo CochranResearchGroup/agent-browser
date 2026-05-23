@@ -525,8 +525,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /\{\(reconciliation\?\.lastError \|\| retainedStateCleanupNeeded\) && \([\s\S]*service-state-alerts[\s\S]*service-state-alert-error[\s\S]*service-retained-state-hint/,
-  'Service dashboard must only show managed-state alert rows when reconciliation or retained cleanup needs attention',
+  /const managedAttentionCount = \[[\s\S]*reconciliation\?\.lastError,[\s\S]*retainedStateCleanupNeeded,[\s\S]*\.filter\(Boolean\)\.length;[\s\S]*const managedAttentionExpanded =[\s\S]*managedAttentionOpen[\s\S]*cleanupLoading[\s\S]*cleanupResult/,
+  'Service dashboard must derive a compact managed-state attention summary before rendering alert details',
+);
+
+assert.match(
+  servicePanel,
+  /managedAttentionCount > 0[\s\S]*service-attention-rail[\s\S]*service-attention-toggle[\s\S]*aria-expanded=\{managedAttentionExpanded\}[\s\S]*service-state-alerts[\s\S]*service-state-alert-error[\s\S]*service-retained-state-hint/,
+  'Service dashboard must collapse managed-state alert rows behind a compact attention rail',
 );
 
 assert.doesNotMatch(
@@ -573,14 +579,14 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-status-strip[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(7\.8rem, 1fr\)\)/,
+  /\.service-status-strip[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(6\.6rem, 1fr\)\)/,
   'Service status strip must stay dense enough to include retained record status without another summary row',
 );
 
 assert.match(
   dashboardCss,
-  /\.service-state-alerts[\s\S]*\.service-state-alert[\s\S]*\.service-state-alert-error[\s\S]*\.service-retained-state-hint/,
-  'Service dashboard must style exceptional managed-state alerts separately from the compact status strip',
+  /\.service-attention-rail[\s\S]*\.service-attention-toggle[\s\S]*\.service-attention-summary[\s\S]*\.service-state-alerts[\s\S]*\.service-state-alert[\s\S]*\.service-state-alert-error[\s\S]*\.service-retained-state-hint/,
+  'Service dashboard must style exceptional managed-state alerts as expandable detail under a compact attention rail',
 );
 
 assert.match(
