@@ -223,10 +223,10 @@ assert.match(
   'Right-pane resolve must keep the inspector open while applying the service action',
 );
 
-assert.match(
+assert.doesNotMatch(
   servicePanel,
-  /AlertDialogTrigger asChild[\s\S]*\{cleanupApplyLabel\}[\s\S]*AlertDialogContent[\s\S]*Apply cleanup/,
-  'Retained-state cleanup apply must be guarded by an AlertDialog confirmation',
+  /Dry-run prune|Dry-run repair|Apply cleanup|cleanupApplyLabel/,
+  'Retained-state cleanup controls must stay hidden until the UI can review candidate-level evidence',
 );
 
 assert.match(

@@ -499,60 +499,6 @@ body {
   background: color-mix(in srgb, var(--dashboard-panel-strong) 86%, transparent);
 }
 
-.service-operator-input {
-  min-width: 10rem;
-  flex: 1 1 12rem;
-  min-height: 2.15rem;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--background) 64%, transparent);
-  padding: 0.35rem 0.8rem;
-  color: var(--foreground);
-  font-size: 0.78rem;
-  font-weight: 700;
-  outline: none;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    background-color 160ms ease;
-}
-
-.service-operator-menu {
-  display: grid;
-  gap: 0.35rem;
-  padding: 0.35rem 0.5rem 0.55rem;
-}
-
-.service-operator-menu label {
-  color: var(--muted-foreground);
-  font-size: 0.62rem;
-  font-weight: 950;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.service-operator-menu p {
-  color: var(--muted-foreground);
-  font-size: 0.68rem;
-  line-height: 1.35;
-}
-
-.service-operator-menu .service-operator-input {
-  width: 100%;
-  min-width: 0;
-  flex: none;
-}
-
-.service-operator-input::placeholder {
-  color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
-}
-
-.service-operator-input:focus {
-  border-color: color-mix(in srgb, var(--ring) 58%, var(--border));
-  background: color-mix(in srgb, var(--background) 78%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent);
-}
-
 .service-panel-mark {
   display: grid;
   width: 1.65rem;
@@ -564,27 +510,11 @@ body {
   background: linear-gradient(140deg, var(--primary), color-mix(in srgb, var(--success) 68%, var(--primary)));
 }
 
-.service-panel-action-button {
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--background) 48%, transparent);
-  color: var(--muted-foreground);
-}
-
-.service-panel-action-button:hover,
-.service-panel-action-button:focus-visible {
-  color: var(--foreground);
-  background: color-mix(in srgb, var(--foreground) 6%, transparent);
-}
-
 .service-panel-body {
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 0.92fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 0.5rem;
   overflow: hidden;
   padding: 0.5rem;
@@ -608,7 +538,6 @@ body {
   backdrop-filter: blur(18px);
 }
 
-.service-summary-card,
 .service-health-timeline-card,
 .service-trace-card,
 .service-timeline-card,
@@ -696,16 +625,11 @@ body {
   line-height: 1.15;
 }
 
-.service-summary-card,
 .service-health-timeline-card,
 .service-trace-card,
 .service-timeline-card {
   padding: 0.65rem;
   animation: dashboard-rise 460ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
-}
-
-.service-summary-card {
-  min-height: 0;
 }
 
 .service-section {
@@ -827,6 +751,8 @@ body {
 }
 
 .service-workspace-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
@@ -908,7 +834,6 @@ body {
 .service-workspace-content {
   display: grid;
   min-height: 0;
-  max-height: clamp(14rem, 28vh, 24rem);
   overflow: auto;
   gap: 0.55rem;
   margin: 0;
@@ -1140,63 +1065,11 @@ body {
   color: color-mix(in srgb, var(--warning) 72%, var(--foreground));
 }
 
-.service-retained-state-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.55rem;
-}
-
 .service-retained-state-hint code {
   color: var(--foreground);
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 800;
-}
-
-.service-retained-cleanup-error {
-  margin-top: 0.5rem;
-  color: var(--destructive);
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.service-retained-cleanup-result {
-  display: grid;
-  gap: 0.25rem;
-  margin-top: 0.55rem;
-  border-radius: 0.55rem;
-  background: color-mix(in srgb, var(--background) 50%, transparent);
-  padding: 0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.7rem;
-}
-
-.service-retained-cleanup-result-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--foreground);
-  font-size: 0.7rem;
-  font-weight: 850;
-}
-
-.service-retained-cleanup-next {
-  color: color-mix(in srgb, var(--warning) 74%, var(--foreground));
-  font-weight: 800;
-}
-
-.service-retained-cleanup-confirm {
-  display: grid;
-  gap: 0.25rem;
-  border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--destructive) 7%, transparent);
-  padding: 0.75rem;
-  color: var(--muted-foreground);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  line-height: 1.45;
 }
 
 .service-health-timeline-card {

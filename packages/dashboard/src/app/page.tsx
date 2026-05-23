@@ -140,9 +140,6 @@ export default function DashboardPage() {
         <TabsList variant="line" className="h-7 w-full">
           <TabsTrigger value="chat" className="text-[11px]">Chat</TabsTrigger>
           <TabsTrigger value="activity" className="text-[11px]">Activity</TabsTrigger>
-          {activeSection !== "service" && (
-            <TabsTrigger value="service" className="text-[11px]">Service</TabsTrigger>
-          )}
           <TabsTrigger value="console" className="text-[11px]">
             Console
             {hasConsoleErrors && (
@@ -162,11 +159,6 @@ export default function DashboardPage() {
       <TabsContent value="activity" className="min-h-0 flex-1 overflow-hidden">
         <ActivityFeed />
       </TabsContent>
-      {activeSection !== "service" && (
-        <TabsContent value="service" className="min-h-0 flex-1 overflow-hidden">
-          <ServicePanel />
-        </TabsContent>
-      )}
       <TabsContent value="console" className="min-h-0 flex-1 overflow-hidden">
         <ConsolePanel />
       </TabsContent>

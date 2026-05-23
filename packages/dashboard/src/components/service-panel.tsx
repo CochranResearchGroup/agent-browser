@@ -24,7 +24,6 @@ import {
   Minimize2,
   MoreHorizontal,
   RadioTower,
-  RefreshCw,
   ServerCog,
   ShieldCheck,
   Trash2,
@@ -336,21 +335,6 @@ export type ServiceInspectorActions = {
   onCancelJob?: (job: ServiceJob) => void;
 };
 
-type RetainedCleanupKind = "prune" | "repair";
-
-type RetainedCleanupResult = {
-  pruned?: boolean;
-  repaired?: boolean;
-  dryRun?: boolean;
-  recommendedNextStep?: string;
-  candidateCounts?: Record<string, number>;
-  skippedCounts?: Record<string, number>;
-  removed?: Record<string, number>;
-  repairedCounts?: Record<string, number>;
-  before?: Record<string, number>;
-  after?: Record<string, number>;
-};
-
 type ServiceBrowserCloseData = {
   closed?: boolean;
   browserId?: string;
@@ -487,7 +471,7 @@ type ProfileReadinessFilter = "all" | "needs_attention" | "normal";
 type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
 type ServiceJobDisplayFilter = "all" | "private_virtual_display" | "shared_display" | "ambient_display" | "unrecorded";
 type ServiceJobSortKey = "submittedAt" | "state" | "action" | "displayIsolation" | "serviceName" | "taskName";
-type ServiceWorkspaceTab = "profiles" | "incidents" | "sessions" | "jobs" | "events";
+type ServiceWorkspaceTab = "profiles" | "browsers" | "incidents" | "sessions" | "jobs" | "events";
 type TraceFilters = {
   serviceName: string;
   agentName: string;
@@ -751,23 +735,6 @@ function formatDurationMs(value?: number | null): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.round(seconds % 60);
   return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
-}
-
-function cleanupTotal(value?: Record<string, number>): number {
-  if (!value) return 0;
-  if (typeof value.total === "number" && Number.isFinite(value.total)) return value.total;
-  return Object.entries(value)
-    .filter(([key]) => key !== "total")
-    .reduce((sum, [, count]) => sum + (Number.isFinite(count) ? count : 0), 0);
-}
-
-function cleanupCountSummary(value?: Record<string, number>): string {
-  if (!value) return "none";
-  const entries = Object.entries(value).filter(([key, count]) => key !== "total" && count > 0);
-  if (entries.length === 0) return "none";
-  return entries
-    .map(([key, count]) => `${key.replaceAll(/([A-Z])/g, " $1").toLowerCase()}: ${count}`)
-    .join(" / ");
 }
 
 function formatDetails(value: unknown): string {
@@ -5364,7 +5331,6 @@ export function ServicePanel({
     limit: 20,
   });
   const [loading, setLoading] = useState(false);
-  const [reconciling, setReconciling] = useState(false);
   const [error, setError] = useState("");
   const [eventKind, setEventKind] = useState<EventKindFilter>("all");
   const [eventWindow, setEventWindow] = useState<EventWindowFilter>("all");
@@ -5381,12 +5347,7 @@ export function ServicePanel({
   const [profileReadinessFilter, setProfileReadinessFilter] = useState<ProfileReadinessFilter>("all");
   const [incidentQuery, setIncidentQuery] = useState("");
   const [incidentLimit, setIncidentLimit] = useState<ServiceRecordLimit>(24);
-  const [workspaceTab, setWorkspaceTab] = useState<ServiceWorkspaceTab>("incidents");
-  const [cleanupLoading, setCleanupLoading] = useState<RetainedCleanupKind | null>(null);
-  const [cleanupApplying, setCleanupApplying] = useState<RetainedCleanupKind | null>(null);
-  const [cleanupKind, setCleanupKind] = useState<RetainedCleanupKind | null>(null);
-  const [cleanupResult, setCleanupResult] = useState<RetainedCleanupResult | null>(null);
-  const [cleanupError, setCleanupError] = useState("");
+  const [workspaceTab, setWorkspaceTab] = useState<ServiceWorkspaceTab>("profiles");
   const [managedAttentionOpen, setManagedAttentionOpen] = useState(false);
   const [incidentOnly, setIncidentOnly] = useState(false);
   const [incidentHandlingFilter, setIncidentHandlingFilter] = useState<IncidentHandlingFilter>("all");
@@ -5560,22 +5521,6 @@ export function ServicePanel({
     };
   }, [activePort, canFetch, selectedIncident?.id]);
 
-  const reconcile = useCallback(async () => {
-    if (!canFetch || reconciling) return;
-    setReconciling(true);
-    setError("");
-    try {
-      const resp = await fetch(`${serviceBase(activePort)}/reconcile`, { method: "POST" });
-      const json = (await resp.json()) as ApiResponse<{ service_state?: ServiceState }>;
-      if (!json.success) throw new Error(json.error || "Service reconcile failed");
-      await fetchService(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Service reconcile unavailable");
-    } finally {
-      setReconciling(false);
-    }
-  }, [activePort, canFetch, fetchService, reconciling]);
-
   const inspectJob = useCallback(async (job: ServiceJob) => {
     if (!canFetch || !job.id) {
       if (onInspectSelection) {
@@ -5724,55 +5669,6 @@ export function ServicePanel({
       return null;
     }
   }, [activePort, canFetch, fetchService]);
-
-  const runRetainedCleanup = useCallback(async (kind: RetainedCleanupKind, apply: boolean) => {
-    if (!canFetch) return;
-    setCleanupError("");
-    if (apply) {
-      setCleanupApplying(kind);
-    } else {
-      setCleanupLoading(kind);
-    }
-    try {
-      const params = kind === "prune"
-        ? {
-            apply,
-            closedTabs: true,
-            notStartedBrowsers: true,
-            processExitedBrowsers: false,
-            releasedSessions: false,
-            abandonedSessions: false,
-          }
-        : {
-            apply,
-            missingLeaseObservedAt: true,
-          };
-      const resp = await fetch(`${serviceBase(activePort)}/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: kind === "prune" ? "service_prune_retained" : "service_repair_retained",
-          serviceName: "agent-browser-dashboard",
-          agentName: operatorIdentity.trim() || activeSession || "operator",
-          taskName: apply ? `apply-retained-${kind}` : `dry-run-retained-${kind}`,
-          params,
-          jobTimeoutMs: 10000,
-        }),
-      });
-      const json = (await resp.json()) as ApiResponse<RetainedCleanupResult>;
-      if (!json.success) throw new Error(json.error || `Retained ${kind} request failed`);
-      setCleanupKind(kind);
-      setCleanupResult(json.data ?? null);
-      if (apply) {
-        await fetchService(false);
-      }
-    } catch (err) {
-      setCleanupError(err instanceof Error ? err.message : `Retained ${kind} request failed`);
-    } finally {
-      setCleanupLoading(null);
-      setCleanupApplying(null);
-    }
-  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
 
   const handleIncident = useCallback(async (
     incident: IncidentRecord,
@@ -6519,31 +6415,24 @@ export function ServicePanel({
     `${entityCounts.policies} site policies`,
     `${entityCounts.providers} providers`,
   ].join("; "), [entityCounts, jobs?.count, jobs?.total, recentJobs.length]);
-  const cleanupCandidateTotal = cleanupTotal(cleanupResult?.candidateCounts);
-  const cleanupApplyEnabled = Boolean(cleanupKind && cleanupResult?.dryRun && cleanupCandidateTotal > 0);
-  const cleanupAppliedTotal = cleanupKind === "repair"
-    ? cleanupTotal(cleanupResult?.repairedCounts)
-    : cleanupTotal(cleanupResult?.removed);
   const managedAttentionCount = [
     reconciliation?.lastError,
     retainedStateCleanupNeeded,
   ].filter(Boolean).length;
   const managedAttentionExpanded =
-    managedAttentionOpen ||
-    Boolean(cleanupLoading || cleanupApplying || cleanupError || cleanupResult);
-  const cleanupApplyLabel = cleanupKind ? `Apply reviewed ${cleanupKind}` : "Apply reviewed cleanup";
-  const cleanupDialogTitle = cleanupKind === "repair"
-    ? "Apply retained-state repair?"
-    : "Apply retained-state prune?";
-  const cleanupDialogDescription = cleanupKind === "repair"
-    ? "This will mutate retained session evidence based on the reviewed dry-run result. It does not launch Chrome, but it changes service state."
-    : "This will remove inert retained records based on the reviewed dry-run result. Failure evidence is preserved unless the dry-run selected removable candidates.";
+    managedAttentionOpen;
   const workspaceTabs = useMemo(() => [
     {
       value: "profiles" as const,
       label: "Profiles",
       count: filteredProfileAllocations.length,
       detail: "profile routing rows",
+    },
+    {
+      value: "browsers" as const,
+      label: "Browsers",
+      count: browserRecords.length,
+      detail: `${browserRecords.filter(isLiveBrowserRecord).length} live`,
     },
     {
       value: "incidents" as const,
@@ -6573,6 +6462,7 @@ export function ServicePanel({
       tone: incidentOnly ? "warn" : "neutral",
     },
   ], [
+    browserRecords,
     filteredIncidentRecords.length,
     filteredProfileAllocations.length,
     incidentHandlingSummary.unacknowledged,
@@ -6703,26 +6593,6 @@ export function ServicePanel({
             {activePort > 0 ? `; active browser port ${activePort}` : ""}
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="service-panel-action-button"
-              aria-label="Service actions"
-              title="Service actions"
-            >
-              {reconciling ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Service actions</DropdownMenuLabel>
-            <DropdownMenuItem onClick={reconcile} disabled={reconciling || loading}>
-              <RefreshCw className="size-3.5" />
-              Reconcile retained state
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
       {error && (
@@ -6816,99 +6686,8 @@ export function ServicePanel({
                       <div className="min-w-0 flex-1">
                         <p className="font-black text-foreground">Retained state is large.</p>
                         <p className="mt-1 leading-5">
-                          Review the Records status detail, then run a dry-run prune or repair. Apply is enabled only after a reviewed result.
+                          These are retained service records, not necessarily live browsers or real profile directories. A high count usually means stale retained evidence or profile creation policy drift; cleanup needs candidate-level review before this UI should expose mutating controls.
                         </p>
-                        <div className="service-retained-state-actions">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 rounded-lg px-2 text-[11px]"
-                            disabled={!!cleanupLoading || !!cleanupApplying}
-                            onClick={() => runRetainedCleanup("prune", false)}
-                          >
-                            {cleanupLoading === "prune" ? <Loader2 className="size-3 animate-spin" /> : null}
-                            Dry-run prune
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 rounded-lg px-2 text-[11px]"
-                            disabled={!!cleanupLoading || !!cleanupApplying}
-                            onClick={() => runRetainedCleanup("repair", false)}
-                          >
-                            {cleanupLoading === "repair" ? <Loader2 className="size-3 animate-spin" /> : null}
-                            Dry-run repair
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                className="h-7 rounded-lg px-2 text-[11px]"
-                                disabled={!cleanupApplyEnabled || !!cleanupLoading || !!cleanupApplying || !cleanupKind}
-                              >
-                                {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
-                                {cleanupApplyLabel}
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>{cleanupDialogTitle}</AlertDialogTitle>
-                                <AlertDialogDescription>{cleanupDialogDescription}</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <div className="service-retained-cleanup-confirm">
-                                <p>
-                                  Candidates: {cleanupCountSummary(cleanupResult?.candidateCounts)}
-                                </p>
-                                <p>
-                                  Skipped: {cleanupCountSummary(cleanupResult?.skippedCounts)}
-                                </p>
-                                <p>
-                                  Actor: {operatorIdentity.trim() || activeSession || "operator"}
-                                </p>
-                              </div>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel disabled={!!cleanupApplying}>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  className="bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20"
-                                  disabled={!cleanupKind || !!cleanupApplying}
-                                  onClick={() => cleanupKind && runRetainedCleanup(cleanupKind, true)}
-                                >
-                                  {cleanupApplying ? <Loader2 className="size-3 animate-spin" /> : null}
-                                  Apply cleanup
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                        {cleanupError && <p className="service-retained-cleanup-error">{cleanupError}</p>}
-                        {cleanupResult && (
-                          <div className="service-retained-cleanup-result">
-                            <div className="service-retained-cleanup-result-header">
-                              <Badge variant="secondary">{cleanupKind ?? "cleanup"}</Badge>
-                              <span>{cleanupResult.dryRun ? "Dry-run" : "Applied"}</span>
-                              <span>{cleanupCandidateTotal} candidates</span>
-                              {!cleanupResult.dryRun && <span>{cleanupAppliedTotal} changed</span>}
-                            </div>
-                            <p>
-                              Candidates: {cleanupCountSummary(cleanupResult.candidateCounts)}
-                            </p>
-                            <p>
-                              Skipped: {cleanupCountSummary(cleanupResult.skippedCounts)}
-                            </p>
-                            {!cleanupResult.dryRun && (
-                              <p>
-                                Changed: {cleanupCountSummary(cleanupKind === "repair"
-                                  ? cleanupResult.repairedCounts
-                                  : cleanupResult.removed)}
-                              </p>
-                            )}
-                            {cleanupResult.recommendedNextStep && (
-                              <p className="service-retained-cleanup-next">
-                                Next: {cleanupResult.recommendedNextStep}
-                              </p>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
@@ -6917,42 +6696,6 @@ export function ServicePanel({
             </div>
           )}
 
-          <div className="service-summary-card">
-            <div className="flex items-center gap-2">
-              <RadioTower className="size-4 text-muted-foreground" />
-              <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
-                  Managed browsers
-                </p>
-                <p className="truncate text-[11px] text-muted-foreground">
-                  {browserRecords.length} persisted browser records
-                </p>
-              </div>
-            </div>
-            <div className="service-browser-table-region">
-              {browserRecords.length === 0 ? (
-                <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
-                  No browser records yet.
-                </p>
-              ) : (
-                <BrowserTable
-                  browsers={browserRecords}
-                  sessions={sessionRecords}
-                  onSelect={inspectBrowser}
-                  onViewStream={openBrowserViewStream}
-                  onFocusViewStream={focusBrowserViewStream}
-                  onCloseBrowser={closeServiceBrowser}
-                  onRepairBrowser={repairServiceBrowser}
-                  closeSupported={browserCloseSupported}
-                  repairSupported={browserRepairSupported}
-                  activeSessionName={activeSession}
-                  actingBrowserActionId={actingBrowserActionId}
-                  selectedBrowserId={selectedBrowserId}
-                />
-              )}
-            </div>
-          </div>
-
           <Tabs
             value={workspaceTab}
             onValueChange={(value) => setWorkspaceTab(value as ServiceWorkspaceTab)}
@@ -6960,9 +6703,9 @@ export function ServicePanel({
           >
             <div className="service-workspace-header">
               <div className="min-w-0">
-                <p className="service-workspace-title">Operational records</p>
+                <p className="service-workspace-title">Service records</p>
                 <p className="service-workspace-detail">
-                  Inspect profile routing, incidents, leases, queue history, and trace without leaving the browser table.
+                  Profiles are first because browser routing and identity policy determine which sessions should exist.
                 </p>
               </div>
               <TabsList className="service-workspace-tabs" variant="line">
@@ -6984,11 +6727,48 @@ export function ServicePanel({
               </TabsList>
             </div>
 
+            <TabsContent value="browsers" className="service-workspace-content">
+              <div className="service-workspace-pane-heading">
+                <RadioTower className="size-3.5 text-muted-foreground" />
+                <span>
+                  {browserRecords.filter(isLiveBrowserRecord).length} live / {browserRecords.filter(isInertRetainedBrowserRecord).length} inert retained; {browserRecords.length} browser records
+                </span>
+              </div>
+              <p className="service-workspace-inline-note">
+                Browser rows should identify the browser build, runtime profile, owning service, agent, task, sessions, streams, and available controls. Missing cells mean the service record did not provide that evidence yet.
+              </p>
+              <div className="service-browser-table-region">
+                {browserRecords.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
+                    No browser records yet.
+                  </p>
+                ) : (
+                  <BrowserTable
+                    browsers={browserRecords}
+                    sessions={sessionRecords}
+                    onSelect={inspectBrowser}
+                    onViewStream={openBrowserViewStream}
+                    onFocusViewStream={focusBrowserViewStream}
+                    onCloseBrowser={closeServiceBrowser}
+                    onRepairBrowser={repairServiceBrowser}
+                    closeSupported={browserCloseSupported}
+                    repairSupported={browserRepairSupported}
+                    activeSessionName={activeSession}
+                    actingBrowserActionId={actingBrowserActionId}
+                    selectedBrowserId={selectedBrowserId}
+                  />
+                )}
+              </div>
+            </TabsContent>
+
             <TabsContent value="profiles" className="service-workspace-content">
               <div className="service-workspace-pane-heading">
                 <ShieldCheck className="size-3.5 text-muted-foreground" />
                 <span>{filteredProfileRecords.length} of {profileRecords.length} runtime profile configs; {filteredProfileAllocations.length} allocation rows</span>
               </div>
+              <p className="service-workspace-inline-note">
+                Profile dots show readiness: green means no recorded auth or seeding attention; yellow means at least one target identity needs seeding, verification, or login follow-up. Large profile counts are retained service records and should trigger a profile-creation policy review before pruning.
+              </p>
               <div className="service-profile-routing-strip" aria-label="Profile identity and routing summary">
                 <span>
                   <strong>{profileRoutingSummary.profiles}</strong>

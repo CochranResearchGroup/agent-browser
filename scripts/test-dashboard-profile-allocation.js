@@ -181,7 +181,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /service-profile-routing-strip" aria-label="Profile identity and routing summary"[\s\S]*runtime profiles[\s\S]*target identities[\s\S]*login identities[\s\S]*authenticated targets[\s\S]*profiles with browsers[\s\S]*pinned builds[\s\S]*readiness attention/,
+  /Profile dots show readiness: green means no recorded auth or seeding attention; yellow means at least one target identity needs seeding, verification, or login follow-up[\s\S]*service-profile-routing-strip" aria-label="Profile identity and routing summary"[\s\S]*runtime profiles[\s\S]*target identities[\s\S]*login identities[\s\S]*authenticated targets[\s\S]*profiles with browsers[\s\S]*pinned builds[\s\S]*readiness attention/,
   'Profiles workspace must render the identity and routing summary labels',
 );
 

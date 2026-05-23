@@ -525,8 +525,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const managedAttentionCount = \[[\s\S]*reconciliation\?\.lastError,[\s\S]*retainedStateCleanupNeeded,[\s\S]*\.filter\(Boolean\)\.length;[\s\S]*const managedAttentionExpanded =[\s\S]*managedAttentionOpen[\s\S]*cleanupLoading[\s\S]*cleanupResult/,
+  /const managedAttentionCount = \[[\s\S]*reconciliation\?\.lastError,[\s\S]*retainedStateCleanupNeeded,[\s\S]*\.filter\(Boolean\)\.length;[\s\S]*const managedAttentionExpanded =[\s\S]*managedAttentionOpen;/,
   'Service dashboard must derive a compact managed-state attention summary before rendering alert details',
+);
+
+assert.match(
+  servicePanel,
+  /const \[workspaceTab, setWorkspaceTab\] = useState<ServiceWorkspaceTab>\("profiles"\);[\s\S]*label: "Profiles"[\s\S]*label: "Browsers"[\s\S]*detail: `\$\{browserRecords\.filter\(isLiveBrowserRecord\)\.length\} live`/,
+  'Service workspace must default to Profiles and expose Browsers as a sibling tab instead of a preamble',
 );
 
 assert.match(
@@ -651,8 +657,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /selectedBrowserId[\s\S]*<BrowserTable[\s\S]*browsers=\{browserRecords\}[\s\S]*sessions=\{sessionRecords\}[\s\S]*onSelect=\{inspectBrowser\}[\s\S]*selectedBrowserId=\{selectedBrowserId\}/,
-  'Service browser table must receive service sessions and selected browser state for right-pane list-detail feedback',
+  /TabsContent value="browsers"[\s\S]*Browser rows should identify the browser build, runtime profile, owning service, agent, task, sessions, streams, and available controls[\s\S]*<BrowserTable[\s\S]*browsers=\{browserRecords\}[\s\S]*sessions=\{sessionRecords\}[\s\S]*onSelect=\{inspectBrowser\}[\s\S]*selectedBrowserId=\{selectedBrowserId\}/,
+  'Service browser table must live in the Browsers sub-tab and receive service sessions plus selected browser state',
 );
 
 assert.match(
@@ -675,8 +681,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<p className="service-workspace-title">Operational records<\/p>/,
-  'Service workspace copy must describe operator records instead of generic secondary surfaces',
+  /<p className="service-workspace-title">Service records<\/p>[\s\S]*Profiles are first because browser routing and identity policy determine which sessions should exist/,
+  'Service workspace copy must explain why Profiles lead the service plane',
+);
+
+assert.doesNotMatch(
+  servicePanel + dashboardCss,
+  /Service actions|Reconcile retained state|Dry-run prune|Dry-run repair|Apply reviewed cleanup|service-panel-action-button|service-operator-input/,
+  'Service plane must not expose one-item refresh menus, inert retained-cleanup actions, or ordinary-user operator identity controls',
 );
 
 assert.doesNotMatch(
