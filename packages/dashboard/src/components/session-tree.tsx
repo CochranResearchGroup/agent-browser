@@ -405,6 +405,7 @@ export function SessionTree() {
               type="button"
               onClick={() => setCloseAllOpen(true)}
               className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Close all sessions"
               title="Close all sessions"
             >
               <Trash2 className="size-3" />
@@ -420,6 +421,7 @@ export function SessionTree() {
               setNewSessionOpen(true);
             }}
             className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="New session"
             title="New session"
           >
             <Plus className="size-3.5" />

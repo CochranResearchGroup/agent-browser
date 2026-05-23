@@ -231,6 +231,12 @@ assert.match(
 
 assert.match(
   servicePanel,
+  /const TERMINAL_BROWSER_HEALTH = new Set\(\["closed", "faulted", "not_started", "process_exited"\]\);[\s\S]*function isLiveBrowserRecord\(browser: ServiceBrowser\): boolean \{[\s\S]*TERMINAL_BROWSER_HEALTH\.has\(\(browser\.health \?\? ""\)\.toLowerCase\(\)\)[\s\S]*return false[\s\S]*browser\.pid/,
+  'Browser table must not classify terminal health records as live just because stale PID evidence exists',
+);
+
+assert.match(
+  servicePanel,
   /function isInertRetainedBrowserRecord\(browser: ServiceBrowser\): boolean[\s\S]*browser\.health[\s\S]*"not_started"/,
   'Browser table must classify inert retained not_started browser records explicitly',
 );
@@ -375,8 +381,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const viewStreamAvailable = canOpenViewStream\(primaryViewStream\);[\s\S]*const controlAvailable = canOpenControlViewStream\(primaryViewStream\);[\s\S]*service-browser-table-streams[\s\S]*viewStreamCapability[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*disabled=\{!viewStreamAvailable \|\| !onViewStream\}[\s\S]*title=\{viewStreamOpenTitle\(primaryViewStream\)\}[\s\S]*View[\s\S]*disabled=\{!controlAvailable \|\| !onFocusViewStream\}[\s\S]*title=\{viewStreamControlTitle\(primaryViewStream\)\}[\s\S]*Control[\s\S]*AlertDialog[\s\S]*disabled=\{!closeAvailable \|\| acting\}[\s\S]*Close[\s\S]*disabled=\{!repairAvailable \|\| acting\}[\s\S]*Repair/,
-  'Browser row actions must expose Inspect, View, Control, Close, and Repair with service-owned capability gates',
+  /const viewStreamAvailable = canOpenViewStream\(primaryViewStream\);[\s\S]*const controlAvailable = canOpenControlViewStream\(primaryViewStream\);[\s\S]*const unavailableActionCount = \[[\s\S]*!viewStreamAvailable \|\| !onViewStream[\s\S]*!controlAvailable \|\| !onFocusViewStream[\s\S]*!closeAvailable[\s\S]*!repairAvailable[\s\S]*service-browser-table-streams[\s\S]*viewStreamCapability[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*\{viewStreamAvailable && onViewStream && \([\s\S]*View[\s\S]*\{controlAvailable && onFocusViewStream && \([\s\S]*Control[\s\S]*\{closeAvailable && \([\s\S]*AlertDialog[\s\S]*Close[\s\S]*\{repairAvailable && \([\s\S]*Repair[\s\S]*\{unavailableActionCount > 0 && \([\s\S]*Unavailable actions/,
+  'Browser row actions must keep enabled actions inline and move unavailable action reasons into a row menu',
 );
 
 assert.match(
@@ -411,7 +417,7 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-browser-table-streams[\s\S]*grid[\s\S]*\.service-browser-row-actions[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end[\s\S]*\.service-browser-row-actions button:disabled/,
+  /\.service-browser-table-streams[\s\S]*grid[\s\S]*\.service-browser-row-actions[\s\S]*min-width: 12rem[\s\S]*flex-wrap: wrap[\s\S]*justify-content: flex-end[\s\S]*\.service-browser-row-actions button:disabled/,
   'Browser row actions must keep compact wrapping action-group styling and stream posture labels',
 );
 

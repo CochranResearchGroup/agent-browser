@@ -166,7 +166,11 @@ export function AppShell({
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" className="dashboard-avatar-chip">
+              <button
+                type="button"
+                className="dashboard-avatar-chip"
+                aria-label={`Operator menu for ${activeSessionName}`}
+              >
                 <span className="dashboard-avatar">{sessionInitial || "A"}</span>
                 <span className="hidden min-w-0 text-left md:block">
                   <span className="block max-w-32 truncate text-xs font-bold">

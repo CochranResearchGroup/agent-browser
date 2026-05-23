@@ -2227,6 +2227,7 @@ const BROWSER_TABLE_MIN_COLUMN_WIDTH = 72;
 const BROWSER_TABLE_MAX_COLUMN_WIDTH = 420;
 const BROWSER_TABLE_INITIAL_ROW_LIMIT = 50;
 const BROWSER_TABLE_ROW_LIMIT_STEP = 50;
+const TERMINAL_BROWSER_HEALTH = new Set(["closed", "faulted", "not_started", "process_exited"]);
 const DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number> = {
   health: 132,
   id: 220,
@@ -2410,12 +2411,13 @@ function serviceJobSortValue(job: ServiceJob, sortKey: ServiceJobSortKey): strin
 }
 
 function isLiveBrowserRecord(browser: ServiceBrowser): boolean {
+  if (TERMINAL_BROWSER_HEALTH.has((browser.health ?? "").toLowerCase())) return false;
   return Boolean(
     browser.pid ||
       browser.cdpEndpoint ||
       (browser.activeSessionIds?.length ?? 0) > 0 ||
       (browser.viewStreams?.length ?? 0) > 0 ||
-      ["launching", "ready", "degraded", "cdp_disconnected", "reconnecting", "closing", "faulted"].includes(browser.health ?? ""),
+      ["launching", "ready", "degraded", "cdp_disconnected", "reconnecting", "closing"].includes(browser.health ?? ""),
   );
 }
 
@@ -3051,6 +3053,12 @@ function BrowserTableRow({
     available: repairAvailable,
     supported: Boolean(repairSupported),
   });
+  const unavailableActionCount = [
+    !viewStreamAvailable || !onViewStream,
+    !controlAvailable || !onFocusViewStream,
+    !closeAvailable,
+    !repairAvailable,
+  ].filter(Boolean).length;
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
     <tr className={cn("service-browser-table-row", selected && "service-browser-table-row-selected")} aria-selected={selected}>
@@ -3121,65 +3129,110 @@ function BrowserTableRow({
           >
             Inspect
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-            disabled={!viewStreamAvailable || !onViewStream}
-            title={viewStreamOpenTitle(primaryViewStream)}
-            onClick={() => onViewStream?.(browser)}
-          >
-            View
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-            disabled={!controlAvailable || !onFocusViewStream}
-            title={viewStreamControlTitle(primaryViewStream)}
-            onClick={() => onFocusViewStream?.(browser)}
-          >
-            Control
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-                disabled={!closeAvailable || acting}
-                title={closeTitle}
-              >
-                Close
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Close service browser?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This queues a polite close for {browser.id || "the selected browser"}. If polite close fails, agent-browser records degraded shutdown health.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => onCloseBrowser?.(browser)}>Close browser</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-            disabled={!repairAvailable || acting}
-            title={repairTitle}
-            onClick={() => onRepairBrowser?.(browser)}
-          >
-            Repair
-          </Button>
+          {viewStreamAvailable && onViewStream && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+              title={viewStreamOpenTitle(primaryViewStream)}
+              onClick={() => onViewStream(browser)}
+            >
+              View
+            </Button>
+          )}
+          {controlAvailable && onFocusViewStream && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+              title={viewStreamControlTitle(primaryViewStream)}
+              onClick={() => onFocusViewStream(browser)}
+            >
+              Control
+            </Button>
+          )}
+          {closeAvailable && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+                  disabled={acting}
+                  title={closeTitle}
+                >
+                  Close
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Close service browser?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This queues a polite close for {browser.id || "the selected browser"}. If polite close fails, agent-browser records degraded shutdown health.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => onCloseBrowser?.(browser)}>Close browser</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          {repairAvailable && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+              disabled={acting}
+              title={repairTitle}
+              onClick={() => onRepairBrowser?.(browser)}
+            >
+              Repair
+            </Button>
+          )}
+          {unavailableActionCount > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
+                  aria-label={`Show unavailable actions for ${browser.id || "unnamed browser"}`}
+                  title={`${unavailableActionCount} unavailable row actions`}
+                >
+                  <MoreHorizontal className="size-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Unavailable actions</DropdownMenuLabel>
+                {(!viewStreamAvailable || !onViewStream) && (
+                  <DropdownMenuItem disabled title={viewStreamOpenTitle(primaryViewStream)}>
+                    View: {viewStreamOpenTitle(primaryViewStream)}
+                  </DropdownMenuItem>
+                )}
+                {(!controlAvailable || !onFocusViewStream) && (
+                  <DropdownMenuItem disabled title={viewStreamControlTitle(primaryViewStream)}>
+                    Control: {viewStreamControlTitle(primaryViewStream)}
+                  </DropdownMenuItem>
+                )}
+                {!closeAvailable && (
+                  <DropdownMenuItem disabled title={closeTitle}>
+                    Close: {closeTitle}
+                  </DropdownMenuItem>
+                )}
+                {!repairAvailable && (
+                  <DropdownMenuItem disabled title={repairTitle}>
+                    Repair: {repairTitle}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </td>
     </tr>
