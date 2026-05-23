@@ -6363,16 +6363,19 @@ export function ServicePanel({
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Service actions</DropdownMenuLabel>
             <div className="service-operator-menu" onKeyDown={(event) => event.stopPropagation()}>
-              <label htmlFor="service-audit-actor">Audit actor</label>
+              <label htmlFor="service-audit-actor">Action signer</label>
               <input
                 id="service-audit-actor"
-                aria-label="Audit actor for incident actions"
+                aria-label="Name recorded on dashboard actions"
+                aria-describedby="service-audit-actor-help"
                 className="service-operator-input"
-                placeholder={activeSession || "dashboard"}
+                placeholder={activeSession || "dashboard operator"}
                 value={operatorIdentity}
                 onChange={(event) => setOperatorIdentity(event.target.value)}
               />
-              <p>Incident and cleanup actions are recorded as this actor.</p>
+              <p id="service-audit-actor-help">
+                This signs dashboard actions in the audit trail. It is not the site/login identity used for profile selection.
+              </p>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={reconcile} disabled={reconciling || loading}>

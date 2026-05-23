@@ -686,6 +686,12 @@ assert.doesNotMatch(
 );
 
 assert.match(
+  servicePanel,
+  /<label htmlFor="service-audit-actor">Action signer<\/label>[\s\S]*aria-label="Name recorded on dashboard actions"[\s\S]*aria-describedby="service-audit-actor-help"[\s\S]*This signs dashboard actions in the audit trail\. It is not the site\/login identity used for profile selection\./,
+  'Dashboard action signer copy must distinguish audit identity from site/login profile identity',
+);
+
+assert.match(
   dashboardCss,
   /\.service-browser-table-density-compact[\s\S]*\.service-browser-table-density-expanded/,
   'Browser table density modes must have explicit compact and expanded CSS hooks',
