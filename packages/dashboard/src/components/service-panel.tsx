@@ -9,7 +9,6 @@ import {
 import { useAtomValue } from "jotai/react";
 import {
   AlertTriangle,
-  ChevronDown,
   CheckCircle2,
   Clock3,
   Copy,
@@ -160,6 +159,9 @@ export type ServiceBrowser = {
   host?: string;
   health?: string;
   browserBuild?: string | null;
+  executableId?: string | null;
+  executablePath?: string | null;
+  platform?: string | null;
   displayIsolation?: string | null;
   displayName?: string | null;
   pid?: number | null;
@@ -471,7 +473,7 @@ type ProfileReadinessFilter = "all" | "needs_attention" | "normal";
 type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resolved";
 type ServiceJobDisplayFilter = "all" | "private_virtual_display" | "shared_display" | "ambient_display" | "unrecorded";
 type ServiceJobSortKey = "submittedAt" | "state" | "action" | "displayIsolation" | "serviceName" | "taskName";
-type ServiceWorkspaceTab = "profiles" | "browsers" | "incidents" | "sessions" | "jobs" | "events";
+type ServiceWorkspaceTab = "profiles" | "browsers" | "incidents" | "sessions" | "tabs" | "jobs" | "events";
 type TraceFilters = {
   serviceName: string;
   agentName: string;
@@ -1263,30 +1265,48 @@ function ServiceStatusLight({
   detail,
   icon: Icon,
   tone = "neutral",
+  onClick,
 }: {
   label: string;
   value: string;
   detail: string;
   icon: typeof ServerCog;
   tone?: ServiceStatusTone;
+  onClick?: () => void;
 }) {
+  const content = (
+    <>
+      <span className="service-health-icon">
+        <Icon className="size-3.5" />
+      </span>
+      <span className="min-w-0">
+        <span className="service-status-light-label">{label}</span>
+        <span className="service-status-light-value">{value}</span>
+      </span>
+    </>
+  );
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div
-          className={cn("service-status-light", `service-health-${tone}`)}
-          role="status"
-          tabIndex={0}
-          aria-label={`${label}: ${value}. ${detail}`}
-        >
-          <span className="service-health-icon">
-            <Icon className="size-3.5" />
-          </span>
-          <span className="min-w-0">
-            <span className="service-status-light-label">{label}</span>
-            <span className="service-status-light-value">{value}</span>
-          </span>
-        </div>
+        {onClick ? (
+          <button
+            type="button"
+            className={cn("service-status-light service-status-light-button", `service-health-${tone}`)}
+            aria-label={`${label}: ${value}. ${detail}`}
+            onClick={onClick}
+          >
+            {content}
+          </button>
+        ) : (
+          <div
+            className={cn("service-status-light", `service-health-${tone}`)}
+            role="status"
+            tabIndex={0}
+            aria-label={`${label}: ${value}. ${detail}`}
+          >
+            {content}
+          </div>
+        )}
       </TooltipTrigger>
       <TooltipContent>
         <p>{detail}</p>
@@ -2453,6 +2473,9 @@ function browserSearchText(browser: ServiceBrowser): string {
     browser.host,
     browser.health,
     browser.browserBuild,
+    browser.executableId,
+    browser.executablePath,
+    browser.platform,
     browser.pid ? `pid ${browser.pid}` : "retained",
     browser.cdpEndpoint,
     browser.lastError,
@@ -2482,6 +2505,103 @@ function browserOwnershipSearchText(ownership: BrowserOwnershipSummary): string 
     ...ownership.taskNames,
     ...ownership.sessionIds,
   ].join(" ").toLowerCase();
+}
+
+function browserExecutableSource({
+  browserBuild,
+  executableId,
+  executablePath,
+  host,
+  platform,
+}: {
+  browserBuild?: string | null;
+  executableId?: string | null;
+  executablePath?: string | null;
+  host?: string | null;
+  platform?: string | null;
+}): string {
+  return [
+    executableId,
+    executablePath,
+    browserBuild,
+    platform,
+    host,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function browserExecutableKind(source: string): "stealth" | "chromium" | "chrome" | "browser" {
+  if (source.includes("stealthcdp") || source.includes("stealth-cdp")) return "stealth";
+  if (source.includes("chromium")) return "chromium";
+  if (source.includes("chrome")) return "chrome";
+  return "browser";
+}
+
+function browserExecutablePlatform(source: string): "windows" | "linux" | "host" {
+  if (source.includes("windows") || source.includes("win32") || source.includes("chrome.exe") || source.includes("/mnt/c/")) return "windows";
+  if (source.includes("linux") || source.includes("wsl") || source.startsWith("/") || source.includes("chrome-linux")) return "linux";
+  return "host";
+}
+
+function browserExecutableLabel(kind: ReturnType<typeof browserExecutableKind>): string {
+  if (kind === "stealth") return "Stealth Chromium";
+  if (kind === "chromium") return "Chromium";
+  if (kind === "chrome") return "Chrome";
+  return "Browser";
+}
+
+function browserExecutableBadgeText(kind: ReturnType<typeof browserExecutableKind>): string {
+  if (kind === "stealth") return "St";
+  if (kind === "chromium") return "Cr";
+  if (kind === "chrome") return "Ch";
+  return "Br";
+}
+
+function browserExecutablePlatformLabel(platform: ReturnType<typeof browserExecutablePlatform>): string {
+  if (platform === "windows") return "Win";
+  if (platform === "linux") return "Linux";
+  return "Host";
+}
+
+function browserExecutableDetail(browser: Pick<ServiceBrowser, "browserBuild" | "executableId" | "executablePath" | "host" | "platform">): string {
+  return browser.executablePath ?? browser.executableId ?? browser.browserBuild ?? browser.platform ?? browser.host ?? "executable not recorded";
+}
+
+function BrowserExecutableBadge({
+  browserBuild,
+  executableId,
+  executablePath,
+  host,
+  platform,
+  compact = false,
+}: {
+  browserBuild?: string | null;
+  executableId?: string | null;
+  executablePath?: string | null;
+  host?: string | null;
+  platform?: string | null;
+  compact?: boolean;
+}) {
+  const source = browserExecutableSource({ browserBuild, executableId, executablePath, host, platform });
+  const kind = browserExecutableKind(source);
+  const platformKind = browserExecutablePlatform(source);
+  const label = browserExecutableLabel(kind);
+  const detail = executablePath ?? executableId ?? browserBuild ?? platform ?? host ?? "executable not recorded";
+  return (
+    <span
+      className={cn(
+        "service-executable-badge",
+        `service-executable-badge-${kind}`,
+        compact && "service-executable-badge-compact",
+      )}
+      title={`${label}; ${browserExecutablePlatformLabel(platformKind)}; ${detail}`}
+    >
+      <span className="service-executable-icon" aria-hidden="true">{browserExecutableBadgeText(kind)}</span>
+      <span className="service-executable-label">{label}</span>
+      <span className={cn("service-executable-platform", `service-executable-platform-${platformKind}`)}>
+        {browserExecutablePlatformLabel(platformKind)}
+      </span>
+    </span>
+  );
 }
 
 function browserFilterOptionValues(browsers: ServiceBrowser[], field: "health" | "host" | "browserBuild"): string[] {
@@ -3379,7 +3499,17 @@ function BrowserTableRow({
           aria-current={selected ? "true" : undefined}
           aria-describedby="service-browser-table-keyboard-hint"
         >
-          {browser.id || "unnamed browser"}
+          <span className="service-browser-table-title-row">
+            <BrowserExecutableBadge
+              browserBuild={browser.browserBuild}
+              executableId={browser.executableId}
+              executablePath={browser.executablePath}
+              host={browser.host}
+              platform={browser.platform}
+              compact
+            />
+            <span className="service-browser-table-title-text">{browser.id || "unnamed browser"}</span>
+          </span>
         </button>
       </td>
       {visibleColumns.has("profile") && (
@@ -3474,7 +3604,17 @@ function BrowserTableCard({
       >
         <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
         <span className="min-w-0 flex-1">
-          <span className="service-browser-card-title">{browser.id || "unnamed browser"}</span>
+          <span className="service-browser-card-title">
+            <BrowserExecutableBadge
+              browserBuild={browser.browserBuild}
+              executableId={browser.executableId}
+              executablePath={browser.executablePath}
+              host={browser.host}
+              platform={browser.platform}
+              compact
+            />
+            <span>{browser.id || "unnamed browser"}</span>
+          </span>
           <span className="service-browser-card-subtitle">
             {browser.host ?? "unknown host"} / {processLabel}
           </span>
@@ -3484,6 +3624,10 @@ function BrowserTableCard({
         </Badge>
       </button>
       <div className="service-browser-card-grid">
+        <span>
+          <strong>Executable</strong>
+          {browserExecutableLabel(browserExecutableKind(browserExecutableSource(browser)))}
+        </span>
         <span>
           <strong>Profile</strong>
           {browser.profileId || "unassigned"}
@@ -3672,6 +3816,9 @@ function BrowserDetailContent({
   const viewStreamCount = browser.viewStreams?.length ?? 0;
   const primaryViewStream = browserPrimaryViewStream(browser);
   const controlAvailable = canOpenControlViewStream(primaryViewStream);
+  const executableSource = browserExecutableSource(browser);
+  const executableKind = browserExecutableKind(executableSource);
+  const executablePlatform = browserExecutablePlatform(executableSource);
   return (
     <div className="service-event-dialog-body">
       {browser.lastError && (
@@ -3680,8 +3827,24 @@ function BrowserDetailContent({
           <span>{browser.lastError}</span>
         </div>
       )}
+      <div className="service-browser-detail-summary">
+        <BrowserExecutableBadge
+          browserBuild={browser.browserBuild}
+          executableId={browser.executableId}
+          executablePath={browser.executablePath}
+          host={browser.host}
+          platform={browser.platform}
+        />
+        <div className="min-w-0">
+          <p>{browserExecutableLabel(executableKind)} on {browserExecutablePlatformLabel(executablePlatform)}</p>
+          <span>{browserExecutableDetail(browser)}</span>
+        </div>
+      </div>
       <div className="service-event-detail-grid">
         <EventDetailItem label="Browser ID" value={browser.id} />
+        <EventDetailItem label="Executable" value={browserExecutableDetail(browser)} />
+        <EventDetailItem label="Browser build" value={browser.browserBuild} />
+        <EventDetailItem label="Platform" value={browser.platform ?? browserExecutablePlatformLabel(executablePlatform)} />
         <EventDetailItem label="Profile" value={browser.profileId} />
         <EventDetailItem label="Host" value={browser.host} />
         <EventDetailItem label="Health" value={browser.health} />
@@ -4073,6 +4236,11 @@ function RuntimeProfileConfigCard({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <span className={cn("service-browser-health-dot", readinessAttention ? "service-browser-health-warn" : "service-browser-health-good")} />
+            <BrowserExecutableBadge
+              browserBuild={browserBuild}
+              host={profile.defaultBrowserHost}
+              compact
+            />
             <h4>{profile.name || profileId}</h4>
           </div>
           <p>{profileId}</p>
@@ -5348,7 +5516,6 @@ export function ServicePanel({
   const [incidentQuery, setIncidentQuery] = useState("");
   const [incidentLimit, setIncidentLimit] = useState<ServiceRecordLimit>(24);
   const [workspaceTab, setWorkspaceTab] = useState<ServiceWorkspaceTab>("profiles");
-  const [managedAttentionOpen, setManagedAttentionOpen] = useState(false);
   const [incidentOnly, setIncidentOnly] = useState(false);
   const [incidentHandlingFilter, setIncidentHandlingFilter] = useState<IncidentHandlingFilter>("all");
   const [jobQuery, setJobQuery] = useState("");
@@ -6419,8 +6586,6 @@ export function ServicePanel({
     reconciliation?.lastError,
     retainedStateCleanupNeeded,
   ].filter(Boolean).length;
-  const managedAttentionExpanded =
-    managedAttentionOpen;
   const workspaceTabs = useMemo(() => [
     {
       value: "profiles" as const,
@@ -6444,8 +6609,14 @@ export function ServicePanel({
     {
       value: "sessions" as const,
       label: "Sessions",
-      count: sessionActivitySummary.activeSessions + sessionActivitySummary.activeTabs,
-      detail: `${sessionActivitySummary.retainedSessions + sessionActivitySummary.retainedTabs} retained`,
+      count: sessionActivitySummary.activeSessions,
+      detail: `${sessionActivitySummary.retainedSessions} retained`,
+    },
+    {
+      value: "tabs" as const,
+      label: "Tabs",
+      count: sessionActivitySummary.activeTabs,
+      detail: `${sessionActivitySummary.retainedTabs} retained`,
     },
     {
       value: "jobs" as const,
@@ -6606,18 +6777,19 @@ export function ServicePanel({
         <div className="service-panel-body">
           <div className="service-status-strip">
             <ServiceStatusLight
-              label="Worker"
-              value={control?.worker_state ?? serviceState?.controlPlane?.workerState ?? "unknown"}
-              detail={`Queue ${control?.queue_depth ?? serviceState?.controlPlane?.queueDepth ?? 0} of ${control?.queue_capacity ?? serviceState?.controlPlane?.queueCapacity ?? 0}; job timeout ${serviceJobTimeoutMs ? `${serviceJobTimeoutMs} ms` : "off"}`}
+              label="Queue"
+              value={`${control?.queue_depth ?? serviceState?.controlPlane?.queueDepth ?? 0}/${control?.queue_capacity ?? serviceState?.controlPlane?.queueCapacity ?? 0}`}
+              detail={`Control-plane worker is ${control?.worker_state ?? serviceState?.controlPlane?.workerState ?? "unknown"}; job timeout ${serviceJobTimeoutMs ? `${serviceJobTimeoutMs} ms` : "off"}`}
               icon={ServerCog}
               tone={healthTone(control?.worker_state ?? serviceState?.controlPlane?.workerState)}
             />
             <ServiceStatusLight
-              label="Browser"
+              label="Control health"
               value={control?.browser_health ?? serviceState?.controlPlane?.browserHealth ?? "unknown"}
               detail={`${entityCounts.browsers} tracked browser records`}
               icon={RadioTower}
               tone={healthTone(control?.browser_health ?? serviceState?.controlPlane?.browserHealth)}
+              onClick={() => setWorkspaceTab("browsers")}
             />
             <ServiceStatusLight
               label="Reconciled"
@@ -6632,6 +6804,7 @@ export function ServicePanel({
               detail={`${events?.count ?? recentEvents.length} shown in this view`}
               icon={History}
               tone="neutral"
+              onClick={() => setWorkspaceTab("events")}
             />
             <ServiceStatusLight
               label="Jobs"
@@ -6639,6 +6812,7 @@ export function ServicePanel({
               detail={`${jobs?.count ?? recentJobs.length} recent control jobs`}
               icon={ServerCog}
               tone="neutral"
+              onClick={() => setWorkspaceTab("jobs")}
             />
             <ServiceStatusLight
               label="Records"
@@ -6646,51 +6820,41 @@ export function ServicePanel({
               detail={`Retained service-state counts: ${managedRecordDetail}`}
               icon={GitBranch}
               tone={retainedStateCleanupNeeded ? "warn" : "neutral"}
+              onClick={() => setWorkspaceTab("browsers")}
             />
           </div>
 
           {managedAttentionCount > 0 && (
-            <div className="service-attention-rail" aria-label="Managed state attention items">
-              <button
-                type="button"
-                className="service-attention-toggle"
-                aria-expanded={managedAttentionExpanded}
-                aria-label={`${managedAttentionCount} managed-state item${managedAttentionCount === 1 ? "" : "s"} need review`}
-                onClick={() => setManagedAttentionOpen((open) => !open)}
-              >
-                <span className="service-attention-icon">
-                  <AlertTriangle className="size-3.5" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="service-attention-kicker">Attention</span>
-                  <span className="service-attention-summary">
-                    {managedAttentionCount} managed-state item{managedAttentionCount === 1 ? "" : "s"} need review
-                  </span>
-                </span>
-                <ChevronDown
-                  className={cn("size-3.5 shrink-0 transition-transform", managedAttentionExpanded && "rotate-180")}
-                  aria-hidden="true"
-                />
-              </button>
-              {managedAttentionExpanded && (
-                <div className="service-state-alerts">
-                  {reconciliation?.lastError && (
-                    <div className="service-state-alert service-state-alert-error">
-                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                      <span>{reconciliation.lastError}</span>
-                    </div>
-                  )}
-                  {retainedStateCleanupNeeded && (
-                    <div className="service-state-alert service-retained-state-hint">
-                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-black text-foreground">Retained state is large.</p>
-                        <p className="mt-1 leading-5">
-                          These are retained service records, not necessarily live browsers or real profile directories. A high count usually means stale retained evidence or profile creation policy drift; cleanup needs candidate-level review before this UI should expose mutating controls.
-                        </p>
-                      </div>
-                    </div>
-                  )}
+            <div className="service-state-alerts service-state-alerts-inline" aria-label="Managed state attention items">
+              {reconciliation?.lastError && (
+                <div className="service-state-alert service-state-alert-error">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black">Reconciliation failed</p>
+                    <p className="mt-1 leading-5">{reconciliation.lastError}</p>
+                  </div>
+                  <Button size="sm" variant="outline" className="service-state-alert-action" onClick={() => setWorkspaceTab("events")}>
+                    Review events
+                  </Button>
+                </div>
+              )}
+              {retainedStateCleanupNeeded && (
+                <div className="service-state-alert service-retained-state-hint">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black text-foreground">Retained state is large.</p>
+                    <p className="mt-1 leading-5">
+                      These are retained records, not necessarily live browsers or real profile directories. Review browser records and jobs before pruning or changing profile creation policy.
+                    </p>
+                  </div>
+                  <div className="service-state-alert-actions">
+                    <Button size="sm" variant="outline" onClick={() => setWorkspaceTab("browsers")}>
+                      Review browsers
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setWorkspaceTab("jobs")}>
+                      Review jobs
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -7023,91 +7187,105 @@ export function ServicePanel({
               <div className="service-workspace-pane-heading">
                 <GitBranch className="size-3.5 text-muted-foreground" />
                 <span>
-                  {sessionActivitySummary.activeSessions} active sessions / {sessionActivitySummary.retainedSessions} retained;
-                  {" "}
+                  {sessionActivitySummary.activeSessions} active sessions / {sessionActivitySummary.retainedSessions} retained
+                </span>
+              </div>
+              <div className="service-record-controls">
+                <label className="service-browser-filter service-record-filter">
+                  <Filter className="size-3.5" />
+                  <span className="sr-only">Filter sessions</span>
+                  <input
+                    value={sessionTabQuery}
+                    onChange={(event) => setSessionTabQuery(event.target.value)}
+                    placeholder="Filter sessions, profiles, services"
+                  />
+                </label>
+                <div className="service-filter-group" aria-label="Session display limit">
+                  <span className="service-record-limit-label">Rows</span>
+                  {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
+                    <button
+                      key={`session-limit-${limit}`}
+                      type="button"
+                      className={cn("service-filter-chip", sessionLimit === limit && "service-filter-chip-active")}
+                      onClick={() => setSessionLimit(limit)}
+                    >
+                      {limit}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="service-section-list">
+                <p className="service-record-list-heading">
+                  Sessions: {sessionActivitySummary.activeSessions} active / {sessionActivitySummary.retainedSessions} retained; {visibleSessionRecords.length} shown
+                  {hiddenSessionCount > 0 ? ` / ${hiddenSessionCount} hidden` : ""}
+                </p>
+                {filteredSessionRecords.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                    {sessionRecords.length === 0 ? "No service sessions yet." : "No sessions match the current filter."}
+                  </p>
+                ) : (
+                  visibleSessionRecords.map((session, index) => (
+                    <ServiceSessionRow
+                      key={session.id || `session-${index}`}
+                      session={session}
+                      onSelect={inspectSession}
+                    />
+                  ))
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="tabs" className="service-workspace-content">
+              <div className="service-workspace-pane-heading">
+                <GitBranch className="size-3.5 text-muted-foreground" />
+                <span>
                   {sessionActivitySummary.activeTabs} active tabs / {sessionActivitySummary.retainedTabs} retained
                 </span>
               </div>
               <div className="service-record-controls">
                 <label className="service-browser-filter service-record-filter">
                   <Filter className="size-3.5" />
-                  <span className="sr-only">Filter sessions and tabs</span>
+                  <span className="sr-only">Filter tabs</span>
                   <input
                     value={sessionTabQuery}
                     onChange={(event) => setSessionTabQuery(event.target.value)}
-                    placeholder="Filter sessions, tabs, profiles, URLs"
+                    placeholder="Filter tabs, browsers, URLs"
                   />
                 </label>
-                <div className="service-record-limit-groups">
-                  <div className="service-filter-group" aria-label="Session display limit">
-                    <span className="service-record-limit-label">Sessions</span>
-                    {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
-                      <button
-                        key={`session-limit-${limit}`}
-                        type="button"
-                        className={cn("service-filter-chip", sessionLimit === limit && "service-filter-chip-active")}
-                        onClick={() => setSessionLimit(limit)}
-                      >
-                        {limit}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="service-filter-group" aria-label="Tab display limit">
-                    <span className="service-record-limit-label">Tabs</span>
-                    {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
-                      <button
-                        key={`tab-limit-${limit}`}
-                        type="button"
-                        className={cn("service-filter-chip", tabLimit === limit && "service-filter-chip-active")}
-                        onClick={() => setTabLimit(limit)}
-                      >
-                        {limit}
-                      </button>
-                    ))}
-                  </div>
+                <div className="service-filter-group" aria-label="Tab display limit">
+                  <span className="service-record-limit-label">Rows</span>
+                  {SERVICE_RECORD_LIMIT_OPTIONS.map((limit) => (
+                    <button
+                      key={`tab-limit-${limit}`}
+                      type="button"
+                      className={cn("service-filter-chip", tabLimit === limit && "service-filter-chip-active")}
+                      onClick={() => setTabLimit(limit)}
+                    >
+                      {limit}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="service-split-records">
-                <div className="service-section-list">
-                  <p className="service-record-list-heading">
-                    Sessions: {sessionActivitySummary.activeSessions} active / {sessionActivitySummary.retainedSessions} retained; {visibleSessionRecords.length} shown
-                    {hiddenSessionCount > 0 ? ` / ${hiddenSessionCount} hidden` : ""}
+              <div className="service-section-list">
+                <p className="service-record-list-heading">
+                  Tabs: {sessionActivitySummary.activeTabs} active / {sessionActivitySummary.retainedTabs} retained; {visibleTabRecords.length} shown
+                  {hiddenTabCount > 0 ? ` / ${hiddenTabCount} hidden` : ""}
+                </p>
+                {filteredTabRecords.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                    {tabRecords.length === 0 ? "No service tabs yet." : "No tabs match the current filter."}
                   </p>
-                  {filteredSessionRecords.length === 0 ? (
-                    <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
-                      {sessionRecords.length === 0 ? "No service sessions yet." : "No sessions match the current filter."}
-                    </p>
-                  ) : (
-                    visibleSessionRecords.map((session, index) => (
-                      <ServiceSessionRow
-                        key={session.id || `session-${index}`}
-                        session={session}
-                        onSelect={inspectSession}
-                      />
-                    ))
-                  )}
-                </div>
-                <div className="service-section-list">
-                  <p className="service-record-list-heading">
-                    Tabs: {sessionActivitySummary.activeTabs} active / {sessionActivitySummary.retainedTabs} retained; {visibleTabRecords.length} shown
-                    {hiddenTabCount > 0 ? ` / ${hiddenTabCount} hidden` : ""}
-                  </p>
-                  {filteredTabRecords.length === 0 ? (
-                    <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
-                      {tabRecords.length === 0 ? "No service tabs yet." : "No tabs match the current filter."}
-                    </p>
-                  ) : (
-                    visibleTabRecords.map((tab, index) => (
-                      <ServiceTabRow
-                        key={tab.id || tab.targetId || `tab-${index}`}
-                        tab={tab}
-                        viewStreamAvailable={tab.browserId ? canOpenControlViewStream(browserPrimaryViewStream(browserById.get(tab.browserId))) : false}
-                        onInspect={inspectTabViewStream}
-                        onSelect={inspectTab}
-                      />
-                    ))
-                  )}
-                </div>
+                ) : (
+                  visibleTabRecords.map((tab, index) => (
+                    <ServiceTabRow
+                      key={tab.id || tab.targetId || `tab-${index}`}
+                      tab={tab}
+                      viewStreamAvailable={tab.browserId ? canOpenControlViewStream(browserPrimaryViewStream(browserById.get(tab.browserId))) : false}
+                      onInspect={inspectTabViewStream}
+                      onSelect={inspectTab}
+                    />
+                  ))
+                )}
               </div>
             </TabsContent>
 
@@ -7211,6 +7389,15 @@ export function ServicePanel({
                   events={healthTransitionEvents}
                   onSelect={setSelectedEvent}
                 />
+                <details className="service-advanced-trace">
+                  <summary>
+                    <History className="size-3.5" />
+                    <span>Advanced trace explorer</span>
+                    {traceLoading && <Loader2 className="ml-auto size-3.5 animate-spin" />}
+                  </summary>
+                  <p>
+                    Trace filters are an operator/debugging surface. Most users should start with Records, Jobs, Incidents, or Events before opening this.
+                  </p>
                 <TraceExplorer
                   filters={traceFilters}
                   trace={trace}
@@ -7224,6 +7411,7 @@ export function ServicePanel({
                   onLoad={loadTrace}
                   onClear={clearTrace}
                 />
+                </details>
               </div>
               <div className="service-workspace-pane-heading">
                 <CheckCircle2 className="size-3.5 text-muted-foreground" />

@@ -561,10 +561,16 @@ body {
   border-radius: 999px;
   background: color-mix(in srgb, var(--dashboard-panel) 68%, transparent);
   padding: 0.22rem 0.4rem 0.22rem 0.25rem;
+  color: inherit;
   outline: none;
+  text-align: left;
   transition:
     border-color 160ms ease,
     background-color 160ms ease;
+}
+
+.service-status-light-button {
+  cursor: pointer;
 }
 
 .service-status-light:hover,
@@ -902,6 +908,75 @@ body {
   margin: 0;
 }
 
+.service-executable-badge {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.12rem 0.32rem 0.12rem 0.14rem;
+  color: var(--muted-foreground);
+  font-size: 0.6rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.service-executable-badge-compact {
+  gap: 0.18rem;
+  padding-right: 0.22rem;
+}
+
+.service-executable-icon {
+  display: grid;
+  width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+  font-size: 0.52rem;
+  letter-spacing: -0.04em;
+}
+
+.service-executable-badge-chrome .service-executable-icon {
+  color: color-mix(in srgb, var(--success) 74%, var(--foreground));
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+}
+
+.service-executable-badge-chromium .service-executable-icon,
+.service-executable-badge-stealth .service-executable-icon {
+  color: color-mix(in srgb, var(--primary) 78%, var(--foreground));
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.service-executable-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-executable-badge-compact .service-executable-label {
+  display: none;
+}
+
+.service-executable-platform {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 64%, transparent);
+  padding: 0.1rem 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.52rem;
+}
+
+.service-executable-platform-windows {
+  color: color-mix(in srgb, var(--primary) 76%, var(--foreground));
+}
+
+.service-executable-platform-linux {
+  color: color-mix(in srgb, var(--success) 72%, var(--foreground));
+}
+
 .service-record-select {
   display: grid;
   min-width: 9.5rem;
@@ -1046,8 +1121,16 @@ body {
   animation: dashboard-rise 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+.service-state-alerts-inline {
+  border: 1px solid color-mix(in srgb, var(--warning) 18%, var(--border));
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--dashboard-panel) 82%, transparent);
+  padding: 0.4rem;
+}
+
 .service-state-alert {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 0.5rem;
   border-radius: 0.65rem;
@@ -1070,6 +1153,46 @@ body {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 800;
+}
+
+.service-state-alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.service-state-alert-action {
+  margin-left: auto;
+}
+
+.service-advanced-trace {
+  border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--dashboard-panel) 92%, transparent);
+  padding: 0.45rem;
+}
+
+.service-advanced-trace summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  color: var(--foreground);
+  font-size: 0.74rem;
+  font-weight: 900;
+  list-style: none;
+}
+
+.service-advanced-trace summary::-webkit-details-marker {
+  display: none;
+}
+
+.service-advanced-trace > p {
+  margin: 0.45rem 0;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.5;
 }
 
 .service-health-timeline-card {
@@ -2542,6 +2665,20 @@ body {
   cursor: pointer;
 }
 
+.service-browser-table-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.32rem;
+}
+
+.service-browser-table-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .service-browser-table-id:hover,
 .service-browser-table-id:focus-visible {
   color: var(--primary);
@@ -2663,9 +2800,19 @@ body {
 }
 
 .service-browser-card-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--foreground);
   font-size: 0.82rem;
   font-weight: 900;
+}
+
+.service-browser-card-title > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .service-browser-card-subtitle {
@@ -2840,6 +2987,37 @@ body {
   display: grid;
   gap: 0.55rem;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.service-browser-detail-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 0.95rem;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary) 8%, transparent),
+    color-mix(in srgb, var(--foreground) 3%, transparent)
+  );
+  padding: 0.65rem 0.75rem;
+}
+
+.service-browser-detail-summary p {
+  color: var(--foreground);
+  font-size: 0.82rem;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.service-browser-detail-summary span:not(.service-executable-icon):not(.service-executable-label):not(.service-executable-platform) {
+  display: block;
+  margin-top: 0.12rem;
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
 }
 
 .service-event-detail-item {

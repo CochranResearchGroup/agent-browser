@@ -507,8 +507,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /label: "Sessions"[\s\S]*count: sessionActivitySummary\.activeSessions \+ sessionActivitySummary\.activeTabs[\s\S]*detail: `\$\{sessionActivitySummary\.retainedSessions \+ sessionActivitySummary\.retainedTabs\} retained`/,
-  'Service workspace Sessions tab must badge active work and label retained history separately',
+  /label: "Sessions"[\s\S]*count: sessionActivitySummary\.activeSessions[\s\S]*detail: `\$\{sessionActivitySummary\.retainedSessions\} retained`/,
+  'Service workspace Sessions tab must badge only session work and label retained session history',
+);
+
+assert.match(
+  servicePanel,
+  /label: "Tabs"[\s\S]*count: sessionActivitySummary\.activeTabs[\s\S]*detail: `\$\{sessionActivitySummary\.retainedTabs\} retained`/,
+  'Service workspace Tabs tab must badge tab work separately from sessions',
 );
 
 assert.match(
@@ -519,14 +525,32 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<ServiceStatusLight[\s\S]*label="Records"[\s\S]*value=\{`\$\{entityCounts\.browsers\} browsers`\}[\s\S]*detail=\{`Retained service-state counts: \$\{managedRecordDetail\}`\}[\s\S]*icon=\{GitBranch\}/,
-  'Service dashboard must expose retained record counts as a compact Records status light',
+  /<ServiceStatusLight[\s\S]*label="Queue"[\s\S]*Control-plane worker is/,
+  'Service status strip must explain the worker as the queue indicator instead of a separate unexplained Worker light',
 );
 
 assert.match(
   servicePanel,
-  /const managedAttentionCount = \[[\s\S]*reconciliation\?\.lastError,[\s\S]*retainedStateCleanupNeeded,[\s\S]*\.filter\(Boolean\)\.length;[\s\S]*const managedAttentionExpanded =[\s\S]*managedAttentionOpen;/,
-  'Service dashboard must derive a compact managed-state attention summary before rendering alert details',
+  /<ServiceStatusLight[\s\S]*label="Control health"[\s\S]*onClick=\{\(\) => setWorkspaceTab\("browsers"\)\}/,
+  'Service status strip must avoid a conflicting Browser label and drill control health into browser records',
+);
+
+assert.match(
+  servicePanel,
+  /<ServiceStatusLight[\s\S]*label="Jobs"[\s\S]*onClick=\{\(\) => setWorkspaceTab\("jobs"\)\}/,
+  'Service Jobs status light must drill into the Jobs workspace',
+);
+
+assert.match(
+  servicePanel,
+  /<ServiceStatusLight[\s\S]*label="Records"[\s\S]*value=\{`\$\{entityCounts\.browsers\} browsers`\}[\s\S]*detail=\{`Retained service-state counts: \$\{managedRecordDetail\}`\}[\s\S]*icon=\{GitBranch\}[\s\S]*onClick=\{\(\) => setWorkspaceTab\("browsers"\)\}/,
+  'Service dashboard must expose retained record counts as a compact Records status light that drills into browser records',
+);
+
+assert.match(
+  servicePanel,
+  /const managedAttentionCount = \[[\s\S]*reconciliation\?\.lastError,[\s\S]*retainedStateCleanupNeeded,[\s\S]*\.filter\(Boolean\)\.length;/,
+  'Service dashboard must derive a compact managed-state attention summary before rendering actionable alert details',
 );
 
 assert.match(
@@ -537,8 +561,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /managedAttentionCount > 0[\s\S]*service-attention-rail[\s\S]*service-attention-toggle[\s\S]*aria-expanded=\{managedAttentionExpanded\}[\s\S]*service-state-alerts[\s\S]*service-state-alert-error[\s\S]*service-retained-state-hint/,
-  'Service dashboard must collapse managed-state alert rows behind a compact attention rail',
+  /managedAttentionCount > 0[\s\S]*service-state-alerts service-state-alerts-inline[\s\S]*Review events[\s\S]*Review browsers[\s\S]*Review jobs/,
+  'Service dashboard must render managed-state attention as actionable inline alerts',
 );
 
 assert.doesNotMatch(
@@ -591,8 +615,8 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-attention-rail[\s\S]*\.service-attention-toggle[\s\S]*\.service-attention-summary[\s\S]*\.service-state-alerts[\s\S]*\.service-state-alert[\s\S]*\.service-state-alert-error[\s\S]*\.service-retained-state-hint/,
-  'Service dashboard must style exceptional managed-state alerts as expandable detail under a compact attention rail',
+  /\.service-state-alerts-inline[\s\S]*\.service-state-alert[\s\S]*flex-wrap: wrap[\s\S]*\.service-retained-state-hint[\s\S]*\.service-state-alert-actions/,
+  'Service dashboard must style exceptional managed-state alerts as compact actionable rows',
 );
 
 assert.match(
@@ -662,9 +686,63 @@ assert.match(
 );
 
 assert.match(
+  servicePanel,
+  /function BrowserExecutableBadge[\s\S]*browserExecutableKind[\s\S]*browserExecutablePlatform[\s\S]*service-executable-badge/,
+  'Service browser and profile records must have a reusable executable and platform badge',
+);
+
+assert.match(
+  servicePanel,
+  /<BrowserExecutableBadge[\s\S]*browserBuild=\{browser\.browserBuild\}[\s\S]*executablePath=\{browser\.executablePath\}/,
+  'Managed browser rows and cards must surface executable identity from service browser records',
+);
+
+assert.match(
+  servicePanel,
+  /<BrowserExecutableBadge[\s\S]*browserBuild=\{browserBuild\}[\s\S]*host=\{profile\.defaultBrowserHost\}/,
+  'Runtime profile cards must show the preferred browser executable family and host badge',
+);
+
+assert.match(
+  servicePanel,
+  /<EventDetailItem label="Executable" value=\{browserExecutableDetail\(browser\)\}/,
+  'Browser inspector must show the executable detail rather than only host and health',
+);
+
+assert.match(
+  servicePanel,
+  /TabsContent value="sessions"[\s\S]*Sessions: \{sessionActivitySummary\.activeSessions\} active[\s\S]*TabsContent value="tabs"[\s\S]*Tabs: \{sessionActivitySummary\.activeTabs\} active/,
+  'Sessions and Tabs must be separate workspaces instead of a confusing two-column layout',
+);
+
+assert.doesNotMatch(
+  servicePanel,
+  /service-split-records/,
+  'Service workspace must not render the old two-column Sessions and Tabs layout',
+);
+
+assert.match(
+  servicePanel,
+  /<details className="service-advanced-trace">[\s\S]*Advanced trace explorer[\s\S]*<TraceExplorer/,
+  'Trace Explorer free-form filters must be hidden behind an advanced disclosure by default',
+);
+
+assert.match(
   dashboardCss,
   /\.service-browser-table-scroll[\s\S]*max-height: clamp\(16rem, 42vh, 34rem\)[\s\S]*overflow: auto/,
   'Browser table must be vertically bounded so operational records remain reachable',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-executable-badge[\s\S]*\.service-executable-icon[\s\S]*\.service-executable-platform/,
+  'Executable badges must have compact icon and platform styling',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-advanced-trace[\s\S]*summary[\s\S]*cursor: pointer/,
+  'Advanced trace explorer disclosure must have an explicit interactive affordance',
 );
 
 assert.match(
