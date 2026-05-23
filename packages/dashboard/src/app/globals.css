@@ -2092,6 +2092,109 @@ body {
   gap: 0.4rem;
 }
 
+.service-profile-config-dialog {
+  max-width: min(54rem, calc(100vw - 1.5rem));
+}
+
+.service-profile-config-form {
+  display: grid;
+  max-height: min(72vh, 48rem);
+  gap: 0.7rem;
+  overflow: auto;
+  padding-right: 0.1rem;
+}
+
+.service-profile-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.service-profile-config-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 0.22rem;
+}
+
+.service-profile-config-wide {
+  grid-column: 1 / -1;
+}
+
+.service-profile-config-grid label span,
+.service-profile-config-checks span {
+  color: var(--muted-foreground);
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.service-profile-config-grid input,
+.service-profile-config-grid select {
+  min-height: 2rem;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--background) 48%, transparent);
+  color: var(--foreground);
+  padding: 0.32rem 0.55rem;
+  font-size: 0.76rem;
+  font-weight: 750;
+  outline: none;
+}
+
+.service-profile-config-grid input[readonly] {
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.service-profile-config-grid input:focus,
+.service-profile-config-grid select:focus {
+  border-color: color-mix(in srgb, var(--ring) 58%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent);
+}
+
+.service-profile-config-checks,
+.service-profile-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.service-profile-config-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.service-profile-config-help {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.service-profile-config-actions {
+  justify-content: flex-end;
+}
+
+.service-profile-config-actions > :first-child {
+  margin-right: auto;
+}
+
+.service-profile-config-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--destructive) 25%, transparent);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  color: var(--destructive);
+  padding: 0.5rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
 .service-profile-field-filters {
   display: grid;
   flex: 1 1 100%;
@@ -3281,6 +3384,10 @@ body {
   }
 
   .service-browser-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .service-profile-config-grid {
     grid-template-columns: 1fr;
   }
 

@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Clock3,
   Copy,
+  Edit3,
   Eye,
   ExternalLink,
   Filter,
@@ -26,6 +27,7 @@ import {
   RefreshCw,
   ServerCog,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { activePortAtom, activeSessionNameAtom } from "@/store/sessions";
 import { cn } from "@/lib/utils";
@@ -233,6 +235,24 @@ type ServiceProfileRecord = {
   targetReadiness?: ServiceProfileTargetReadiness[];
   persistent?: boolean;
   tags?: string[];
+};
+
+type RuntimeProfileConfigFormState = {
+  name: string;
+  userDataDir: string;
+  defaultBrowserHost: string;
+  browserBuild: string;
+  allocation: string;
+  keyring: string;
+  targetServiceIds: string;
+  authenticatedServiceIds: string;
+  accountIds: string;
+  sitePolicyIds: string;
+  sharedServiceIds: string;
+  credentialProviderIds: string;
+  tags: string;
+  manualLoginPreferred: boolean;
+  persistent: boolean;
 };
 
 type ServiceProfileAllocationBrowserSummary = {
@@ -912,6 +932,68 @@ function serviceProfileBrowserBuild(profile: ServiceProfileRecord, allocation?: 
 
 function serviceProfileKeyring(profile: ServiceProfileRecord, allocation?: ServiceProfileAllocation): string {
   return profile.keyring ?? allocation?.keyring ?? "default policy";
+}
+
+function commaList(values?: string[]): string {
+  return values?.filter((value) => value.trim().length > 0).join(", ") ?? "";
+}
+
+function parseCommaList(value: string): string[] {
+  return uniqueStringValues(value.split(",").map((item) => item.trim()).filter(Boolean));
+}
+
+function nullableFormValue(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function runtimeProfileConfigFormState(
+  profile: ServiceProfileRecord,
+  allocation?: ServiceProfileAllocation,
+): RuntimeProfileConfigFormState {
+  return {
+    name: profile.name ?? allocation?.profileName ?? serviceProfileId(profile, allocation?.profileId ?? ""),
+    userDataDir: profile.userDataDir ?? "",
+    defaultBrowserHost: profile.defaultBrowserHost ?? "",
+    browserBuild: serviceProfileBrowserBuild(profile, allocation) ?? "",
+    allocation: profile.allocation ?? allocation?.allocation ?? "shared_service",
+    keyring: profile.keyring ?? allocation?.keyring ?? "basic_password_store",
+    targetServiceIds: commaList(serviceProfileTargets(profile, allocation)),
+    authenticatedServiceIds: commaList(profile.authenticatedServiceIds ?? allocation?.authenticatedServiceIds),
+    accountIds: commaList(serviceProfileAccounts(profile, allocation)),
+    sitePolicyIds: commaList(profile.sitePolicyIds),
+    sharedServiceIds: commaList(profile.sharedServiceIds ?? allocation?.sharedServiceIds),
+    credentialProviderIds: commaList(profile.credentialProviderIds),
+    tags: commaList(profile.tags),
+    manualLoginPreferred: profile.manualLoginPreferred ?? false,
+    persistent: profile.persistent ?? true,
+  };
+}
+
+function runtimeProfileConfigPayload(
+  profile: ServiceProfileRecord,
+  form: RuntimeProfileConfigFormState,
+): ServiceProfileRecord {
+  const profileId = serviceProfileId(profile);
+  return {
+    id: profileId,
+    name: form.name.trim() || profileId,
+    userDataDir: nullableFormValue(form.userDataDir),
+    sitePolicyIds: parseCommaList(form.sitePolicyIds),
+    targetServiceIds: parseCommaList(form.targetServiceIds),
+    authenticatedServiceIds: parseCommaList(form.authenticatedServiceIds),
+    accountIds: parseCommaList(form.accountIds),
+    defaultBrowserHost: nullableFormValue(form.defaultBrowserHost),
+    browserBuild: nullableFormValue(form.browserBuild),
+    allocation: form.allocation,
+    keyring: form.keyring,
+    sharedServiceIds: parseCommaList(form.sharedServiceIds),
+    credentialProviderIds: parseCommaList(form.credentialProviderIds),
+    manualLoginPreferred: form.manualLoginPreferred,
+    targetReadiness: profile.targetReadiness ?? [],
+    persistent: form.persistent,
+    tags: parseCommaList(form.tags),
+  };
 }
 
 function formatHealthLabel(value?: string | null): string {
@@ -4002,11 +4084,13 @@ function RuntimeProfileConfigCard({
   profile,
   allocation,
   onSelect,
+  onEdit,
   selected,
 }: {
   profile: ServiceProfileRecord;
   allocation?: ServiceProfileAllocation;
   onSelect: (allocation: ServiceProfileAllocation) => void;
+  onEdit: (profile: ServiceProfileRecord) => void;
   selected: boolean;
 }) {
   const profileId = serviceProfileId(profile, allocation?.profileId ?? "unknown");
@@ -4076,13 +4160,227 @@ function RuntimeProfileConfigCard({
       )}
       {allocation && (
         <div className="service-runtime-profile-actions">
+          <Button size="sm" variant="outline" onClick={() => onEdit(profile)}>
+            <Edit3 className="size-3.5" />
+            Edit config
+          </Button>
           <Button size="sm" variant="outline" onClick={() => onSelect(allocation)}>
             Inspect allocation
           </Button>
           <span>{allocation.leaseState ?? "unknown lease"} / {allocation.recommendedAction ?? "inspect"}</span>
         </div>
       )}
+      {!allocation && (
+        <div className="service-runtime-profile-actions">
+          <Button size="sm" variant="outline" onClick={() => onEdit(profile)}>
+            <Edit3 className="size-3.5" />
+            Edit config
+          </Button>
+          <span>No allocation row is currently retained for this profile.</span>
+        </div>
+      )}
     </article>
+  );
+}
+
+function RuntimeProfileConfigDialog({
+  profile,
+  allocation,
+  saving,
+  deleting,
+  error,
+  onSave,
+  onDelete,
+  onOpenChange,
+}: {
+  profile: ServiceProfileRecord | null;
+  allocation?: ServiceProfileAllocation;
+  saving: boolean;
+  deleting: boolean;
+  error: string;
+  onSave: (profile: ServiceProfileRecord, form: RuntimeProfileConfigFormState) => Promise<void>;
+  onDelete: (profile: ServiceProfileRecord) => Promise<void>;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [form, setForm] = useState<RuntimeProfileConfigFormState | null>(null);
+
+  useEffect(() => {
+    if (!profile) {
+      setForm(null);
+      return;
+    }
+    setForm(runtimeProfileConfigFormState(profile, allocation));
+  }, [allocation, profile]);
+
+  const profileId = profile ? serviceProfileId(profile, allocation?.profileId ?? "") : "";
+  const updateField = <K extends keyof RuntimeProfileConfigFormState>(
+    key: K,
+    value: RuntimeProfileConfigFormState[K],
+  ) => {
+    setForm((current) => current ? { ...current, [key]: value } : current);
+  };
+
+  return (
+    <Dialog open={!!profile} onOpenChange={onOpenChange}>
+      <DialogContent className="service-profile-config-dialog">
+        {profile && form && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-8 text-xl font-black tracking-[-0.04em]">
+                Edit runtime profile config
+              </DialogTitle>
+              <DialogDescription>
+                Persist service-managed profile routing and launch policy for {profileId || "this profile"}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="service-profile-config-form">
+              {error && (
+                <div className="service-profile-config-error">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+              <div className="service-profile-config-grid">
+                <label>
+                  <span>Profile ID</span>
+                  <input value={profileId} readOnly />
+                </label>
+                <label>
+                  <span>Name</span>
+                  <input value={form.name} onChange={(event) => updateField("name", event.target.value)} />
+                </label>
+                <label className="service-profile-config-wide">
+                  <span>User data dir</span>
+                  <input value={form.userDataDir} onChange={(event) => updateField("userDataDir", event.target.value)} />
+                </label>
+                <label>
+                  <span>Browser build</span>
+                  <select value={form.browserBuild} onChange={(event) => updateField("browserBuild", event.target.value)}>
+                    <option value="">Service default</option>
+                    <option value="stock_chrome">stock_chrome</option>
+                    <option value="stealthcdp_chromium">stealthcdp_chromium</option>
+                    <option value="cdp_free_headed">cdp_free_headed</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Default host</span>
+                  <select value={form.defaultBrowserHost} onChange={(event) => updateField("defaultBrowserHost", event.target.value)}>
+                    <option value="">Service default</option>
+                    <option value="local_headless">local_headless</option>
+                    <option value="local_headed">local_headed</option>
+                    <option value="docker_headed">docker_headed</option>
+                    <option value="remote_headed">remote_headed</option>
+                    <option value="cloud_provider">cloud_provider</option>
+                    <option value="attached_existing">attached_existing</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Allocation</span>
+                  <select value={form.allocation} onChange={(event) => updateField("allocation", event.target.value)}>
+                    <option value="shared_service">shared_service</option>
+                    <option value="per_service">per_service</option>
+                    <option value="per_site">per_site</option>
+                    <option value="per_identity">per_identity</option>
+                    <option value="caller_supplied">caller_supplied</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Keyring</span>
+                  <select value={form.keyring} onChange={(event) => updateField("keyring", event.target.value)}>
+                    <option value="basic_password_store">basic_password_store</option>
+                    <option value="real_os_keychain">real_os_keychain</option>
+                    <option value="managed_vault">managed_vault</option>
+                    <option value="manual_login_profile">manual_login_profile</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Target services</span>
+                  <input value={form.targetServiceIds} onChange={(event) => updateField("targetServiceIds", event.target.value)} />
+                </label>
+                <label>
+                  <span>Account IDs</span>
+                  <input value={form.accountIds} onChange={(event) => updateField("accountIds", event.target.value)} />
+                </label>
+                <label>
+                  <span>Authenticated services</span>
+                  <input value={form.authenticatedServiceIds} onChange={(event) => updateField("authenticatedServiceIds", event.target.value)} />
+                </label>
+                <label>
+                  <span>Shared services</span>
+                  <input value={form.sharedServiceIds} onChange={(event) => updateField("sharedServiceIds", event.target.value)} />
+                </label>
+                <label>
+                  <span>Site policies</span>
+                  <input value={form.sitePolicyIds} onChange={(event) => updateField("sitePolicyIds", event.target.value)} />
+                </label>
+                <label>
+                  <span>Credential providers</span>
+                  <input value={form.credentialProviderIds} onChange={(event) => updateField("credentialProviderIds", event.target.value)} />
+                </label>
+                <label className="service-profile-config-wide">
+                  <span>Tags</span>
+                  <input value={form.tags} onChange={(event) => updateField("tags", event.target.value)} />
+                </label>
+              </div>
+              <div className="service-profile-config-checks">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={form.manualLoginPreferred}
+                    onChange={(event) => updateField("manualLoginPreferred", event.target.checked)}
+                  />
+                  <span>Prefer manual login for this profile</span>
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={form.persistent}
+                    onChange={(event) => updateField("persistent", event.target.checked)}
+                  />
+                  <span>Persistent service profile</span>
+                </label>
+              </div>
+              <p className="service-profile-config-help">
+                List fields are comma-separated. Freshness and seeding readiness rows are preserved; use the seeding or freshness actions to change login evidence.
+              </p>
+              <div className="service-profile-config-actions">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" disabled={saving || deleting}>
+                      <Trash2 className="size-3.5" />
+                      Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete runtime profile config?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This removes the persisted service profile record for {profileId}. It does not delete the browser user-data directory.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20"
+                        disabled={deleting}
+                        onClick={() => onDelete(profile)}
+                      >
+                        {deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                        Delete config
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button disabled={saving || deleting} onClick={() => onSave(profile, form)}>
+                  {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  Save config
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -5118,6 +5416,10 @@ export function ServicePanel({
   const [selectedProfileAllocation, setSelectedProfileAllocation] = useState<ServiceProfileAllocation | null>(null);
   const [selectedProfileAllocationLoading, setSelectedProfileAllocationLoading] = useState(false);
   const [selectedProfileAllocationError, setSelectedProfileAllocationError] = useState("");
+  const [selectedProfileConfig, setSelectedProfileConfig] = useState<ServiceProfileRecord | null>(null);
+  const [profileConfigSaving, setProfileConfigSaving] = useState(false);
+  const [profileConfigDeleting, setProfileConfigDeleting] = useState(false);
+  const [profileConfigError, setProfileConfigError] = useState("");
   const [actingBrowserActionId, setActingBrowserActionId] = useState<string | null>(null);
   const profileAllocationLookupId = useRef(0);
   const profileAllocationRowRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -5344,6 +5646,57 @@ export function ServicePanel({
       }
     }
   }, [activePort, canFetch, onInspectSelection]);
+
+  const editRuntimeProfileConfig = useCallback((profile: ServiceProfileRecord) => {
+    setProfileConfigError("");
+    setSelectedProfileConfig(profile);
+  }, []);
+
+  const saveRuntimeProfileConfig = useCallback(async (
+    profile: ServiceProfileRecord,
+    form: RuntimeProfileConfigFormState,
+  ) => {
+    const profileId = serviceProfileId(profile);
+    if (!canFetch || !profileId) return;
+    setProfileConfigSaving(true);
+    setProfileConfigError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/profiles/${encodeURIComponent(profileId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(runtimeProfileConfigPayload(profile, form)),
+      });
+      const json = (await resp.json()) as ApiResponse<{ profile?: ServiceProfileRecord }>;
+      if (!json.success) throw new Error(json.error || "Service profile save failed");
+      setSelectedProfileConfig(null);
+      await fetchService(false);
+    } catch (err) {
+      setProfileConfigError(err instanceof Error ? err.message : "Service profile save unavailable");
+    } finally {
+      setProfileConfigSaving(false);
+    }
+  }, [activePort, canFetch, fetchService]);
+
+  const deleteRuntimeProfileConfig = useCallback(async (profile: ServiceProfileRecord) => {
+    const profileId = serviceProfileId(profile);
+    if (!canFetch || !profileId) return;
+    setProfileConfigDeleting(true);
+    setProfileConfigError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/profiles/${encodeURIComponent(profileId)}`, {
+        method: "DELETE",
+      });
+      const json = (await resp.json()) as ApiResponse<{ deleted?: boolean; profile?: ServiceProfileRecord }>;
+      if (!json.success) throw new Error(json.error || "Service profile delete failed");
+      setSelectedProfileConfig(null);
+      if (selectedProfileAllocationId === profileId) setSelectedProfileAllocationId(null);
+      await fetchService(false);
+    } catch (err) {
+      setProfileConfigError(err instanceof Error ? err.message : "Service profile delete unavailable");
+    } finally {
+      setProfileConfigDeleting(false);
+    }
+  }, [activePort, canFetch, fetchService, selectedProfileAllocationId]);
 
   const inspectIncident = useCallback((incident: IncidentRecord) => {
     if (onInspectSelection) {
@@ -5692,6 +6045,9 @@ export function ServicePanel({
     }
     return byId;
   }, [profileAllocations]);
+  const selectedProfileConfigAllocation = selectedProfileConfig
+    ? profileAllocationById.get(serviceProfileId(selectedProfileConfig))
+    : undefined;
   const profileRecords = useMemo(
     () => Object.entries(serviceState?.profiles ?? {}).map(([id, profile]) => ({ ...profile, id: profile.id ?? id })),
     [serviceState?.profiles],
@@ -6317,6 +6673,21 @@ export function ServicePanel({
           }
         }}
       />
+      <RuntimeProfileConfigDialog
+        profile={selectedProfileConfig}
+        allocation={selectedProfileConfigAllocation}
+        saving={profileConfigSaving}
+        deleting={profileConfigDeleting}
+        error={profileConfigError}
+        onSave={saveRuntimeProfileConfig}
+        onDelete={deleteRuntimeProfileConfig}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedProfileConfig(null);
+            setProfileConfigError("");
+          }
+        }}
+      />
       <div className="service-panel-hero">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -6729,6 +7100,7 @@ export function ServicePanel({
                           profile={profile}
                           allocation={allocation}
                           onSelect={inspectProfileAllocation}
+                          onEdit={editRuntimeProfileConfig}
                           selected={Boolean(profileId && profileId === selectedProfileAllocationId)}
                         />
                       );

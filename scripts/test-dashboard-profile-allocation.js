@@ -85,8 +85,20 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function RuntimeProfileConfigCard\(\{[\s\S]*service-runtime-profile-card[\s\S]*User data[\s\S]*Browser build[\s\S]*Host[\s\S]*Keyring[\s\S]*targets:[\s\S]*accounts:[\s\S]*authenticated:[\s\S]*Inspect allocation/,
-  'Profiles workspace must render runtime profile config cards before allocation detail',
+  /function RuntimeProfileConfigCard\(\{[\s\S]*service-runtime-profile-card[\s\S]*User data[\s\S]*Browser build[\s\S]*Host[\s\S]*Keyring[\s\S]*targets:[\s\S]*accounts:[\s\S]*authenticated:[\s\S]*Edit config[\s\S]*Inspect allocation/,
+  'Profiles workspace must render editable runtime profile config cards before allocation detail',
+);
+
+assert.match(
+  servicePanel,
+  /function RuntimeProfileConfigDialog\(\{[\s\S]*Edit runtime profile config[\s\S]*Profile ID[\s\S]*User data dir[\s\S]*Browser build[\s\S]*Default host[\s\S]*Target services[\s\S]*Delete config[\s\S]*Save config/,
+  'Profiles workspace must expose a runtime profile config edit/delete dialog',
+);
+
+assert.match(
+  servicePanel,
+  /function runtimeProfileConfigPayload\([\s\S]*targetReadiness: profile\.targetReadiness \?\? \[\],[\s\S]*persistent: form\.persistent/,
+  'Profile config saves must preserve readiness rows while editing config fields',
 );
 
 assert.match(
@@ -123,6 +135,24 @@ assert.match(
   servicePanel,
   /const \[selectedProfileAllocationId, setSelectedProfileAllocationId\] = useState<string \| null>\(null\);[\s\S]*const profileAllocationRowRefs = useRef\(new Map<string, HTMLButtonElement>\(\)\);/,
   'Profiles workspace must track selected profile row state and stable row refs',
+);
+
+assert.match(
+  servicePanel,
+  /const \[selectedProfileConfig, setSelectedProfileConfig\] = useState<ServiceProfileRecord \| null>\(null\);[\s\S]*const \[profileConfigSaving, setProfileConfigSaving\] = useState\(false\);[\s\S]*const \[profileConfigDeleting, setProfileConfigDeleting\] = useState\(false\);/,
+  'Profiles workspace must track runtime profile config edit state',
+);
+
+assert.match(
+  servicePanel,
+  /const saveRuntimeProfileConfig = useCallback\(async \([\s\S]*fetch\(`\$\{serviceBase\(activePort\)\}\/profiles\/\$\{encodeURIComponent\(profileId\)\}`,[\s\S]*method: "POST"[\s\S]*runtimeProfileConfigPayload\(profile, form\)[\s\S]*await fetchService\(false\)/,
+  'Profiles workspace must save profile config through POST /api/service/profiles/<id>',
+);
+
+assert.match(
+  servicePanel,
+  /const deleteRuntimeProfileConfig = useCallback\(async \(profile: ServiceProfileRecord\) => \{[\s\S]*fetch\(`\$\{serviceBase\(activePort\)\}\/profiles\/\$\{encodeURIComponent\(profileId\)\}`,[\s\S]*method: "DELETE"[\s\S]*await fetchService\(false\)/,
+  'Profiles workspace must delete profile config through DELETE /api/service/profiles/<id>',
 );
 
 assert.match(
@@ -187,7 +217,7 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-profile-routing-strip[\s\S]*\.service-runtime-profile-grid-list[\s\S]*\.service-runtime-profile-card[\s\S]*\.service-runtime-profile-grid[\s\S]*\.service-runtime-profile-token-row[\s\S]*\.service-profile-field-filters[\s\S]*\.service-profile-allocation-row-selected[\s\S]*\.service-profile-route-grid[\s\S]*\.service-profile-route-cell[\s\S]*\.service-profile-route-detail[\s\S]*\.service-profile-attention-badge/,
+  /\.service-profile-routing-strip[\s\S]*\.service-runtime-profile-grid-list[\s\S]*\.service-runtime-profile-card[\s\S]*\.service-runtime-profile-grid[\s\S]*\.service-runtime-profile-token-row[\s\S]*\.service-profile-config-dialog[\s\S]*\.service-profile-config-grid[\s\S]*\.service-profile-config-actions[\s\S]*\.service-profile-field-filters[\s\S]*\.service-profile-allocation-row-selected[\s\S]*\.service-profile-route-grid[\s\S]*\.service-profile-route-cell[\s\S]*\.service-profile-route-detail[\s\S]*\.service-profile-attention-badge/,
   'Profiles routing UI must keep dedicated runtime config and allocation styling',
 );
 
