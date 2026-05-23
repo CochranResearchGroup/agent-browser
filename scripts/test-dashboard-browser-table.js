@@ -765,8 +765,20 @@ assert.match(
 
 assert.doesNotMatch(
   servicePanel + dashboardCss,
-  /Service actions|Reconcile retained state|Dry-run prune|Dry-run repair|Apply reviewed cleanup|service-panel-action-button|service-operator-input/,
-  'Service plane must not expose one-item refresh menus, inert retained-cleanup actions, or ordinary-user operator identity controls',
+  /Service actions|Reconcile retained state|Dry-run repair|Apply reviewed cleanup|service-panel-action-button|service-operator-input/,
+  'Service plane must not expose one-item refresh menus, unrelated repair cleanup actions, or ordinary-user operator identity controls',
+);
+
+assert.match(
+  servicePanel,
+  /action: "service_prune_retained"[\s\S]*serviceState[\s\S]*Dry-run prune[\s\S]*Apply prune/,
+  'Retained-state warning must expose a real dry-run and guarded apply prune path backed by service_prune_retained',
+);
+
+assert.match(
+  dashboardCss,
+  /\.service-status-strip \{[\s\S]*display: grid[\s\S]*padding-bottom: 0\.1rem[\s\S]*\.service-workspace-card \{[\s\S]*grid-row: 3[\s\S]*\.service-workspace-header \{[\s\S]*padding: 0\.58rem 0\.65rem 0\.55rem/,
+  'Service status indicators and record tabs must have separated grid rows and enough header padding to avoid visual overlap',
 );
 
 assert.doesNotMatch(

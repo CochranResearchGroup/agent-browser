@@ -350,6 +350,29 @@ type ServiceBrowserRepairData = {
   incident?: IncidentRecord | null;
 };
 
+type ServiceRetentionPruneData = {
+  dryRun?: boolean;
+  pruned?: boolean;
+  candidateCounts?: {
+    closedTabs?: number;
+    browsers?: number;
+    sessions?: number;
+    total?: number;
+  };
+  removed?: {
+    closedTabs?: number;
+    browsers?: number;
+    sessions?: number;
+    sessionTabRefs?: number;
+    sessionBrowserRefs?: number;
+  };
+  skippedCounts?: {
+    abandonedSessionsMissingAgeTimestamp?: number;
+    abandonedSessionsTooFresh?: number;
+  };
+  recommendedNextStep?: string;
+};
+
 type ServiceState = {
   controlPlane?: {
     workerState?: string;
@@ -2505,6 +2528,22 @@ function browserOwnershipSearchText(ownership: BrowserOwnershipSummary): string 
     ...ownership.taskNames,
     ...ownership.sessionIds,
   ].join(" ").toLowerCase();
+}
+
+function retainedPruneTotal(result: ServiceRetentionPruneData | null): number {
+  return result?.candidateCounts?.total ?? 0;
+}
+
+function retainedPruneSummary(result: ServiceRetentionPruneData | null): string {
+  if (!result) return "No retained-state prune dry-run has been run in this dashboard session.";
+  const counts = result.candidateCounts;
+  const removed = result.removed;
+  const total = counts?.total ?? 0;
+  const removedTotal = (removed?.closedTabs ?? 0) + (removed?.browsers ?? 0) + (removed?.sessions ?? 0);
+  if (result.pruned) {
+    return `Pruned ${removedTotal} retained records: ${removed?.closedTabs ?? 0} closed tabs, ${removed?.browsers ?? 0} browsers, ${removed?.sessions ?? 0} sessions.`;
+  }
+  return `Dry-run found ${total} prune candidates: ${counts?.closedTabs ?? 0} closed tabs, ${counts?.browsers ?? 0} browsers, ${counts?.sessions ?? 0} sessions.`;
 }
 
 function browserExecutableSource({
@@ -5549,6 +5588,8 @@ export function ServicePanel({
   const [profileConfigDeleting, setProfileConfigDeleting] = useState(false);
   const [profileConfigError, setProfileConfigError] = useState("");
   const [actingBrowserActionId, setActingBrowserActionId] = useState<string | null>(null);
+  const [retainedPruneAction, setRetainedPruneAction] = useState<"dry-run" | "apply" | null>(null);
+  const [retainedPruneResult, setRetainedPruneResult] = useState<ServiceRetentionPruneData | null>(null);
   const profileAllocationLookupId = useRef(0);
   const profileAllocationRowRefs = useRef(new Map<string, HTMLButtonElement>());
 
@@ -6507,6 +6548,47 @@ export function ServicePanel({
       setActingBrowserActionId(null);
     }
   }, [activePort, activeSession, canFetch, fetchService, operatorIdentity]);
+  const runRetainedPrune = useCallback(async (apply: boolean) => {
+    if (!canFetch) return;
+    setRetainedPruneAction(apply ? "apply" : "dry-run");
+    setError("");
+    try {
+      const resp = await fetch(`${serviceBase(activePort)}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "service_prune_retained",
+          serviceName: "agent-browser-dashboard",
+          agentName: operatorIdentity.trim() || activeSession || "operator",
+          taskName: apply ? "apply-retained-state-prune" : "dry-run-retained-state-prune",
+          params: {
+            apply,
+            dryRun: !apply,
+            closedTabs: true,
+            notStartedBrowsers: true,
+            processExitedBrowsers: false,
+            releasedSessions: false,
+            abandonedSessions: false,
+            abandonedSessionMinAgeMinutes: 1440,
+            ...(apply ? {} : { serviceState }),
+          },
+          jobTimeoutMs: 10000,
+        }),
+      });
+      const json = (await resp.json()) as ApiResponse<ServiceRetentionPruneData>;
+      if (json.success === false) throw new Error(json.error || "Retained-state prune request failed");
+      const result = (json.data ?? json) as ServiceRetentionPruneData;
+      setRetainedPruneResult(result);
+      if (apply) {
+        await fetchService(false);
+        setWorkspaceTab("browsers");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Retained-state prune request failed");
+    } finally {
+      setRetainedPruneAction(null);
+    }
+  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity, serviceState]);
   const inspectTabViewStream = useCallback(async (tab: ServiceTab) => {
     const browser = tab.browserId ? browserById.get(tab.browserId) : null;
     const stream = browserPrimaryViewStream(browser);
@@ -6844,8 +6926,12 @@ export function ServicePanel({
                   <div className="min-w-0 flex-1">
                     <p className="font-black text-foreground">Retained state is large.</p>
                     <p className="mt-1 leading-5">
-                      These are retained records, not necessarily live browsers or real profile directories. Review browser records and jobs before pruning or changing profile creation policy.
+                      These are retained records, not necessarily live browsers or real profile directories. Run a dry-run first, review the candidate count, then apply the conservative prune when it looks safe.
                     </p>
+                    <p className="mt-1 leading-5">{retainedPruneSummary(retainedPruneResult)}</p>
+                    {retainedPruneResult?.recommendedNextStep && (
+                      <p className="mt-1 leading-5">{retainedPruneResult.recommendedNextStep}</p>
+                    )}
                   </div>
                   <div className="service-state-alert-actions">
                     <Button size="sm" variant="outline" onClick={() => setWorkspaceTab("browsers")}>
@@ -6854,6 +6940,42 @@ export function ServicePanel({
                     <Button size="sm" variant="outline" onClick={() => setWorkspaceTab("jobs")}>
                       Review jobs
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={retainedPruneAction !== null}
+                      onClick={() => runRetainedPrune(false)}
+                    >
+                      {retainedPruneAction === "dry-run" ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                      Dry-run prune
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={retainedPruneAction !== null || retainedPruneTotal(retainedPruneResult) === 0}
+                          title={retainedPruneTotal(retainedPruneResult) === 0 ? "Run dry-run prune first and review candidates before applying." : "Apply the retained-state prune candidates from the latest dry-run."}
+                        >
+                          {retainedPruneAction === "apply" ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                          Apply prune
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Apply retained-state prune?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This removes conservative retained candidates from service state: closed tabs and inert not-started browsers. It does not prune process-exited browsers or abandoned sessions from this dashboard action.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => runRetainedPrune(true)}>
+                            Apply prune
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               )}

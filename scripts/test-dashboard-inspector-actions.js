@@ -223,10 +223,10 @@ assert.match(
   'Right-pane resolve must keep the inspector open while applying the service action',
 );
 
-assert.doesNotMatch(
+assert.match(
   servicePanel,
-  /Dry-run prune|Dry-run repair|Apply cleanup|cleanupApplyLabel/,
-  'Retained-state cleanup controls must stay hidden until the UI can review candidate-level evidence',
+  /retainedPruneSummary\(retainedPruneResult\)[\s\S]*Dry-run prune[\s\S]*retainedPruneTotal\(retainedPruneResult\) === 0[\s\S]*Apply prune/,
+  'Retained-state cleanup controls must require a dry-run result before the guarded apply action is available',
 );
 
 assert.match(
