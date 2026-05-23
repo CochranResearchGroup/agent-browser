@@ -1945,6 +1945,153 @@ body {
   background: color-mix(in srgb, var(--warning) 10%, transparent) !important;
 }
 
+.service-runtime-profile-grid-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.service-runtime-profile-card {
+  display: grid;
+  gap: 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 42%),
+    color-mix(in srgb, var(--dashboard-panel) 82%, transparent);
+  padding: 0.75rem;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 1.5%),
+    0 1px 2px -1px rgb(0 0 0 / 8%);
+}
+
+.service-runtime-profile-card-selected {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--primary) 13%, transparent), transparent 44%),
+    color-mix(in srgb, var(--primary) 7%, var(--dashboard-panel));
+}
+
+.service-runtime-profile-card-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.service-runtime-profile-card-header h4 {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.86rem;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-runtime-profile-card-header p {
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-runtime-profile-badges {
+  display: flex;
+  max-width: 45%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+.service-runtime-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.35rem;
+}
+
+.service-runtime-profile-grid span {
+  display: grid;
+  min-width: 0;
+  gap: 0.14rem;
+  border-radius: 0.78rem;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.45rem 0.55rem;
+}
+
+.service-runtime-profile-grid strong {
+  color: var(--muted-foreground);
+  font-size: 0.55rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.service-runtime-profile-grid code {
+  overflow: hidden;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-runtime-profile-token-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+}
+
+.service-runtime-profile-token-row span,
+.service-runtime-readiness-list span,
+.service-runtime-profile-actions span {
+  max-width: min(100%, 22rem);
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  color: var(--muted-foreground);
+  padding: 0.16rem 0.46rem;
+  font-size: 0.68rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-runtime-readiness-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+}
+
+.service-runtime-readiness-list strong,
+.service-runtime-readiness-list code,
+.service-runtime-readiness-list em {
+  margin-right: 0.32rem;
+}
+
+.service-runtime-readiness-list code {
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-weight: 850;
+}
+
+.service-runtime-readiness-list em {
+  font-style: normal;
+}
+
+.service-runtime-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .service-profile-field-filters {
   display: grid;
   flex: 1 1 100%;

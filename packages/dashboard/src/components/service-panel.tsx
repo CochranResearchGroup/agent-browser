@@ -215,6 +215,26 @@ export type ServiceProfileAllocation = {
   tabIds?: string[];
 };
 
+type ServiceProfileRecord = {
+  id?: string;
+  name?: string;
+  userDataDir?: string | null;
+  sitePolicyIds?: string[];
+  targetServiceIds?: string[];
+  authenticatedServiceIds?: string[];
+  accountIds?: string[];
+  defaultBrowserHost?: string | null;
+  browserBuild?: string | null;
+  allocation?: string;
+  keyring?: string;
+  sharedServiceIds?: string[];
+  credentialProviderIds?: string[];
+  manualLoginPreferred?: boolean;
+  targetReadiness?: ServiceProfileTargetReadiness[];
+  persistent?: boolean;
+  tags?: string[];
+};
+
 type ServiceProfileAllocationBrowserSummary = {
   browserId?: string;
   host?: string;
@@ -336,7 +356,7 @@ type ServiceState = {
   events?: ServiceEvent[];
   incidents?: ServiceIncident[];
   browsers?: Record<string, ServiceBrowser>;
-  profiles?: Record<string, unknown>;
+  profiles?: Record<string, ServiceProfileRecord>;
   jobs?: Record<string, ServiceJob>;
   sessions?: Record<string, ServiceSession>;
   tabs?: Record<string, ServiceTab>;
@@ -646,6 +666,39 @@ function profileAllocationSearchText(allocation: ServiceProfileAllocation): stri
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
+function serviceProfileId(profile: ServiceProfileRecord, fallback = ""): string {
+  return profile.id?.trim() || fallback;
+}
+
+function serviceProfileSearchText(profile: ServiceProfileRecord, allocation?: ServiceProfileAllocation): string {
+  return [
+    profile.id,
+    profile.name,
+    profile.userDataDir,
+    profile.defaultBrowserHost,
+    profile.browserBuild,
+    profile.allocation,
+    profile.keyring,
+    profile.manualLoginPreferred ? "manual login preferred" : "",
+    profile.persistent ? "persistent" : "",
+    ...(profile.sitePolicyIds ?? []),
+    ...(profile.targetServiceIds ?? []),
+    ...(profile.authenticatedServiceIds ?? []),
+    ...(profile.accountIds ?? []),
+    ...(profile.sharedServiceIds ?? []),
+    ...(profile.credentialProviderIds ?? []),
+    ...(profile.tags ?? []),
+    ...(profile.targetReadiness ?? []).flatMap((readiness) => [
+      readiness.targetServiceId,
+      readiness.loginId,
+      readiness.state,
+      readiness.evidence,
+      readiness.recommendedAction,
+    ]),
+    allocation ? profileAllocationSearchText(allocation) : "",
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
 function incidentSearchText(incident: IncidentRecord): string {
   return [
     incident.id,
@@ -836,6 +889,36 @@ function profileReadinessNeedsAttention(rows?: ServiceProfileTargetReadiness[]):
     row.manualSeedingRequired ||
     ["needs_manual_seeding", "stale", "failed", "unverified", "seeding_closed_unverified"].includes((row.state ?? "").toLowerCase())
   ));
+}
+
+function serviceProfileReadiness(profile: ServiceProfileRecord, allocation?: ServiceProfileAllocation): ServiceProfileTargetReadiness[] {
+  return profile.targetReadiness?.length ? profile.targetReadiness : allocation?.targetReadiness ?? [];
+}
+
+function serviceProfileTargets(profile: ServiceProfileRecord, allocation?: ServiceProfileAllocation): string[] {
+  return uniqueStringValues([
+    ...(profile.targetServiceIds ?? []),
+    ...(profile.authenticatedServiceIds ?? []),
+    ...serviceProfileReadiness(profile, allocation).map((row) => row.targetServiceId),
+    ...(allocation?.targetServiceIds ?? []),
+    ...(allocation?.authenticatedServiceIds ?? []),
+  ]);
+}
+
+function serviceProfileAccounts(profile: ServiceProfileRecord, allocation?: ServiceProfileAllocation): string[] {
+  return uniqueStringValues([
+    ...(profile.accountIds ?? []),
+    ...serviceProfileReadiness(profile, allocation).map((row) => row.loginId),
+    ...(allocation?.accountIds ?? []),
+  ]);
+}
+
+function serviceProfileBrowserBuild(profile: ServiceProfileRecord, allocation?: ServiceProfileAllocation): string | null {
+  return profile.browserBuild ?? allocation?.browserBuild ?? null;
+}
+
+function serviceProfileKeyring(profile: ServiceProfileRecord, allocation?: ServiceProfileAllocation): string {
+  return profile.keyring ?? allocation?.keyring ?? "default policy";
 }
 
 function formatHealthLabel(value?: string | null): string {
@@ -3922,6 +4005,94 @@ function ProfileAllocationRow({
   );
 }
 
+function RuntimeProfileConfigCard({
+  profile,
+  allocation,
+  onSelect,
+  selected,
+}: {
+  profile: ServiceProfileRecord;
+  allocation?: ServiceProfileAllocation;
+  onSelect: (allocation: ServiceProfileAllocation) => void;
+  selected: boolean;
+}) {
+  const profileId = serviceProfileId(profile, allocation?.profileId ?? "unknown");
+  const readinessRows = serviceProfileReadiness(profile, allocation);
+  const readinessAttention = profileReadinessNeedsAttention(readinessRows);
+  const targets = serviceProfileTargets(profile, allocation);
+  const accounts = serviceProfileAccounts(profile, allocation);
+  const browserBuild = serviceProfileBrowserBuild(profile, allocation);
+  const keyring = serviceProfileKeyring(profile, allocation);
+  return (
+    <article className={cn("service-runtime-profile-card", selected && "service-runtime-profile-card-selected")}>
+      <div className="service-runtime-profile-card-header">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={cn("service-browser-health-dot", readinessAttention ? "service-browser-health-warn" : "service-browser-health-good")} />
+            <h4>{profile.name || profileId}</h4>
+          </div>
+          <p>{profileId}</p>
+        </div>
+        <div className="service-runtime-profile-badges">
+          <Badge variant="outline">{profile.allocation ?? allocation?.allocation ?? "managed"}</Badge>
+          <Badge variant="outline">{profile.persistent === false ? "ephemeral" : "persistent"}</Badge>
+          {readinessAttention && <Badge variant="outline" className="service-profile-attention-badge">readiness attention</Badge>}
+        </div>
+      </div>
+      <div className="service-runtime-profile-grid">
+        <span>
+          <strong>User data</strong>
+          <code>{profile.userDataDir ?? "runtime profile path not recorded"}</code>
+        </span>
+        <span>
+          <strong>Browser build</strong>
+          <code>{browserBuild ?? "service default"}</code>
+        </span>
+        <span>
+          <strong>Host</strong>
+          <code>{profile.defaultBrowserHost ?? "service default"}</code>
+        </span>
+        <span>
+          <strong>Keyring</strong>
+          <code>{keyring}</code>
+        </span>
+      </div>
+      <div className="service-runtime-profile-token-row">
+        <span>targets: {formatStringList(targets)}</span>
+        <span>accounts: {formatStringList(accounts)}</span>
+        <span>authenticated: {formatStringList(profile.authenticatedServiceIds ?? allocation?.authenticatedServiceIds)}</span>
+        <span>shared: {formatStringList(profile.sharedServiceIds ?? allocation?.sharedServiceIds)}</span>
+      </div>
+      <div className="service-runtime-profile-token-row">
+        <span>site policies: {formatStringList(profile.sitePolicyIds)}</span>
+        <span>credential providers: {formatStringList(profile.credentialProviderIds)}</span>
+        <span>tags: {formatStringList(profile.tags)}</span>
+        <span>{profile.manualLoginPreferred ? "manual login preferred" : "automated login acceptable when policy allows"}</span>
+      </div>
+      {readinessRows.length > 0 && (
+        <div className="service-runtime-readiness-list" aria-label={`Readiness for runtime profile ${profileId}`}>
+          {readinessRows.slice(0, 3).map((row, index) => (
+            <span key={`${profileId}-${row.targetServiceId ?? "target"}-${row.loginId ?? "login"}-${index}`}>
+              <strong>{row.targetServiceId ?? "target"}</strong>
+              <code>{row.state ?? "unknown"}</code>
+              {row.loginId && <em>{row.loginId}</em>}
+            </span>
+          ))}
+          {readinessRows.length > 3 && <span>{readinessRows.length - 3} more readiness rows</span>}
+        </div>
+      )}
+      {allocation && (
+        <div className="service-runtime-profile-actions">
+          <Button size="sm" variant="outline" onClick={() => onSelect(allocation)}>
+            Inspect allocation
+          </Button>
+          <span>{allocation.leaseState ?? "unknown lease"} / {allocation.recommendedAction ?? "inspect"}</span>
+        </div>
+      )}
+    </article>
+  );
+}
+
 function ProfileAllocationDetailDialog({
   allocation,
   loading,
@@ -5530,19 +5701,65 @@ export function ServicePanel({
     () => status?.profileAllocations ?? [],
     [status?.profileAllocations],
   );
+  const profileAllocationById = useMemo(() => {
+    const byId = new Map<string, ServiceProfileAllocation>();
+    for (const allocation of profileAllocations) {
+      if (allocation.profileId) byId.set(allocation.profileId, allocation);
+    }
+    return byId;
+  }, [profileAllocations]);
+  const profileRecords = useMemo(
+    () => Object.entries(serviceState?.profiles ?? {}).map(([id, profile]) => ({ ...profile, id: profile.id ?? id })),
+    [serviceState?.profiles],
+  );
   const profileTargetOptions = useMemo(
-    () => uniqueStringValues(profileAllocations.flatMap(profileAllocationTargetValues)),
-    [profileAllocations],
+    () => uniqueStringValues([
+      ...profileAllocations.flatMap(profileAllocationTargetValues),
+      ...profileRecords.flatMap((profile) => serviceProfileTargets(profile, profileAllocationById.get(serviceProfileId(profile)))),
+    ]),
+    [profileAllocationById, profileAllocations, profileRecords],
   );
   const profileLoginOptions = useMemo(
-    () => uniqueStringValues(profileAllocations.flatMap(profileAllocationLoginValues)),
-    [profileAllocations],
+    () => uniqueStringValues([
+      ...profileAllocations.flatMap(profileAllocationLoginValues),
+      ...profileRecords.flatMap((profile) => serviceProfileAccounts(profile, profileAllocationById.get(serviceProfileId(profile)))),
+    ]),
+    [profileAllocationById, profileAllocations, profileRecords],
   );
   const profileBrowserBuildOptions = useMemo(
-    () => uniqueStringValues(profileAllocations.map((allocation) => allocation.browserBuild)),
-    [profileAllocations],
+    () => uniqueStringValues([
+      ...profileAllocations.map((allocation) => allocation.browserBuild),
+      ...profileRecords.map((profile) => profile.browserBuild),
+    ]),
+    [profileAllocations, profileRecords],
   );
   const profileAllocationQueryText = profileAllocationQuery.trim().toLowerCase();
+  const filteredProfileRecords = useMemo(() => {
+    const fieldFiltered = profileRecords.filter((profile) => {
+      const allocation = profileAllocationById.get(serviceProfileId(profile));
+      if (profileTargetFilter !== "all" && !serviceProfileTargets(profile, allocation).includes(profileTargetFilter)) return false;
+      if (profileLoginFilter !== "all" && !serviceProfileAccounts(profile, allocation).includes(profileLoginFilter)) return false;
+      if (profileBrowserBuildFilter !== "all" && serviceProfileBrowserBuild(profile, allocation) !== profileBrowserBuildFilter) return false;
+      const needsAttention = profileReadinessNeedsAttention(serviceProfileReadiness(profile, allocation));
+      if (profileReadinessFilter === "needs_attention" && !needsAttention) return false;
+      if (profileReadinessFilter === "normal" && needsAttention) return false;
+      return true;
+    });
+    return profileAllocationQueryText
+      ? fieldFiltered.filter((profile) => {
+        const allocation = profileAllocationById.get(serviceProfileId(profile));
+        return includesQuery(serviceProfileSearchText(profile, allocation), profileAllocationQueryText);
+      })
+      : fieldFiltered;
+  }, [
+    profileAllocationById,
+    profileAllocationQueryText,
+    profileBrowserBuildFilter,
+    profileLoginFilter,
+    profileReadinessFilter,
+    profileRecords,
+    profileTargetFilter,
+  ]);
   const filteredProfileAllocations = useMemo(() => {
     const fieldFiltered = profileAllocations.filter((allocation) => {
       if (profileTargetFilter !== "all" && !profileAllocationTargetValues(allocation).includes(profileTargetFilter)) return false;
@@ -5568,6 +5785,11 @@ export function ServicePanel({
     () => filteredProfileAllocations.slice(0, profileAllocationLimit),
     [filteredProfileAllocations, profileAllocationLimit],
   );
+  const visibleProfileRecords = useMemo(
+    () => filteredProfileRecords.slice(0, profileAllocationLimit),
+    [filteredProfileRecords, profileAllocationLimit],
+  );
+  const hiddenProfileRecordCount = Math.max(0, filteredProfileRecords.length - visibleProfileRecords.length);
   const hiddenProfileAllocationCount = Math.max(0, filteredProfileAllocations.length - visibleProfileAllocations.length);
   const setProfileAllocationRowRef = (profileId: string, node: HTMLButtonElement | null) => {
     if (node) {
@@ -5614,6 +5836,18 @@ export function ServicePanel({
     let readinessAttention = 0;
     let explicitBrowserBuilds = 0;
     let profilesWithBrowsers = 0;
+    for (const profile of profileRecords) {
+      const allocation = profileAllocationById.get(serviceProfileId(profile));
+      for (const target of serviceProfileTargets(profile, allocation)) {
+        if (target.trim()) targets.add(target);
+      }
+      for (const account of serviceProfileAccounts(profile, allocation)) {
+        if (account.trim()) accounts.add(account);
+      }
+      authenticatedTargets += profile.authenticatedServiceIds?.length ?? allocation?.authenticatedServiceIds?.length ?? 0;
+      if (profileReadinessNeedsAttention(serviceProfileReadiness(profile, allocation))) readinessAttention += 1;
+      if (serviceProfileBrowserBuild(profile, allocation)?.trim()) explicitBrowserBuilds += 1;
+    }
     for (const allocation of profileAllocations) {
       for (const target of allocation.targetServiceIds ?? []) {
         if (target.trim()) targets.add(target);
@@ -5631,6 +5865,7 @@ export function ServicePanel({
       if ((allocation.browserSummaries?.length ?? allocation.browserIds?.length ?? 0) > 0) profilesWithBrowsers += 1;
     }
     return {
+      profiles: profileRecords.length,
       targets: targets.size,
       accounts: accounts.size,
       authenticatedTargets,
@@ -5638,7 +5873,7 @@ export function ServicePanel({
       explicitBrowserBuilds,
       profilesWithBrowsers,
     };
-  }, [profileAllocations]);
+  }, [profileAllocationById, profileAllocations, profileRecords]);
   const tabRecords = useMemo(
     () => Object.values(serviceState?.tabs ?? {}),
     [serviceState?.tabs],
@@ -6410,9 +6645,13 @@ export function ServicePanel({
             <TabsContent value="profiles" className="service-workspace-content">
               <div className="service-workspace-pane-heading">
                 <ShieldCheck className="size-3.5 text-muted-foreground" />
-                <span>{filteredProfileAllocations.length} of {profileAllocations.length} identity and routing rows</span>
+                <span>{filteredProfileRecords.length} of {profileRecords.length} runtime profile configs; {filteredProfileAllocations.length} allocation rows</span>
               </div>
               <div className="service-profile-routing-strip" aria-label="Profile identity and routing summary">
+                <span>
+                  <strong>{profileRoutingSummary.profiles}</strong>
+                  runtime profiles
+                </span>
                 <span>
                   <strong>{profileRoutingSummary.targets}</strong>
                   target identities
@@ -6445,7 +6684,7 @@ export function ServicePanel({
                   <input
                     value={profileAllocationQuery}
                     onChange={(event) => setProfileAllocationQuery(event.target.value)}
-                    placeholder="Filter profiles, target identities, login identities, browsers, tasks"
+                    placeholder="Filter runtime profiles, target identities, login identities, browsers, tasks"
                   />
                 </label>
                 <div className="service-profile-field-filters" aria-label="Profile routing field filters">
@@ -6498,11 +6737,40 @@ export function ServicePanel({
                 </div>
               </div>
               <div className="service-section-list">
+                <p className="service-record-list-heading">
+                  Runtime profile config: {visibleProfileRecords.length} shown
+                  {hiddenProfileRecordCount > 0 ? ` / ${hiddenProfileRecordCount} hidden` : ""}
+                </p>
+                {filteredProfileRecords.length === 0 ? (
+                  <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
+                    {profileRecords.length === 0
+                      ? "No runtime profile config records yet. Register a managed profile or launch a runtime profile to make configuration visible here."
+                      : "No runtime profile config records match the current filter."}
+                  </p>
+                ) : (
+                  <div className="service-runtime-profile-grid-list">
+                    {visibleProfileRecords.map((profile, index) => {
+                      const profileId = serviceProfileId(profile, `runtime-profile-${index}`);
+                      const allocation = profileAllocationById.get(profileId);
+                      return (
+                        <RuntimeProfileConfigCard
+                          key={profileId}
+                          profile={profile}
+                          allocation={allocation}
+                          onSelect={inspectProfileAllocation}
+                          selected={Boolean(profileId && profileId === selectedProfileAllocationId)}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="service-section-list">
                 <p id="service-profile-allocation-keyboard-hint" className="sr-only">
                   Profile routing rows support Arrow Up, Arrow Down, Home, and End within the visible row window.
                 </p>
                 <p className="service-record-list-heading">
-                  Identity routes: {visibleProfileAllocations.length} shown
+                  Allocation and lease state: {visibleProfileAllocations.length} shown
                   {hiddenProfileAllocationCount > 0 ? ` / ${hiddenProfileAllocationCount} hidden` : ""}
                 </p>
                 {filteredProfileAllocations.length === 0 ? (
