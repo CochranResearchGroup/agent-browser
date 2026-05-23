@@ -534,8 +534,6 @@ const INCIDENT_HANDLING_OPTIONS: Array<{ value: IncidentHandlingFilter; label: s
   { value: "resolved", label: "Resolved" },
 ];
 
-const OPERATOR_STORAGE_KEY = "agent-browser-dashboard-operator";
-
 function serviceBase(port: number): string {
   if (typeof window === "undefined") return "/api/service";
   const { hostname, port: locationPort } = window.location;
@@ -548,11 +546,6 @@ function serviceBase(port: number): string {
   }
 
   return "/api/service";
-}
-
-function initialOperatorIdentity(): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(OPERATOR_STORAGE_KEY) ?? "";
 }
 
 function formatRelativeTime(value?: string | null): string {
@@ -5108,7 +5101,7 @@ export function ServicePanel({
   const [jobFilterNotice, setJobFilterNotice] = useState("");
   const [incidentFilterNotice, setIncidentFilterNotice] = useState("");
   const [actingIncidentId, setActingIncidentId] = useState<string | null>(null);
-  const [operatorIdentity, setOperatorIdentity] = useState(initialOperatorIdentity);
+  const operatorIdentity = "default";
   const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
   const [selectedIncidentActivity, setSelectedIncidentActivity] = useState<ServiceTraceTimelineItem[] | null>(null);
   const [selectedIncidentActivityLoading, setSelectedIncidentActivityLoading] = useState(false);
@@ -5194,15 +5187,6 @@ export function ServicePanel({
     }, 7000);
     return () => clearInterval(timer);
   }, [canFetch, fetchService]);
-
-  useEffect(() => {
-    const trimmed = operatorIdentity.trim();
-    if (trimmed) {
-      window.localStorage.setItem(OPERATOR_STORAGE_KEY, trimmed);
-    } else {
-      window.localStorage.removeItem(OPERATOR_STORAGE_KEY);
-    }
-  }, [operatorIdentity]);
 
   const loadTraceForFilters = useCallback(async (filters: TraceFilters) => {
     if (!canFetch || traceLoading) return;
@@ -6362,22 +6346,6 @@ export function ServicePanel({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Service actions</DropdownMenuLabel>
-            <div className="service-operator-menu" onKeyDown={(event) => event.stopPropagation()}>
-              <label htmlFor="service-audit-actor">Action signer</label>
-              <input
-                id="service-audit-actor"
-                aria-label="Name recorded on dashboard actions"
-                aria-describedby="service-audit-actor-help"
-                className="service-operator-input"
-                placeholder={activeSession || "dashboard operator"}
-                value={operatorIdentity}
-                onChange={(event) => setOperatorIdentity(event.target.value)}
-              />
-              <p id="service-audit-actor-help">
-                This signs dashboard actions in the audit trail. It is not the site/login identity used for profile selection.
-              </p>
-            </div>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={reconcile} disabled={reconciling || loading}>
               <RefreshCw className="size-3.5" />
               Reconcile retained state

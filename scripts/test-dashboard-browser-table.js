@@ -681,14 +681,14 @@ assert.match(
 
 assert.doesNotMatch(
   servicePanel + dashboardCss,
-  /service-operator-card|Operator identity/,
-  'Audit actor controls must not reintroduce a full-width operator identity row',
+  /service-operator-card|Operator identity|service-audit-actor|Action signer|Name recorded on dashboard actions/,
+  'Audit signer controls must stay hidden from ordinary dashboard users',
 );
 
 assert.match(
   servicePanel,
-  /<label htmlFor="service-audit-actor">Action signer<\/label>[\s\S]*aria-label="Name recorded on dashboard actions"[\s\S]*aria-describedby="service-audit-actor-help"[\s\S]*This signs dashboard actions in the audit trail\. It is not the site\/login identity used for profile selection\./,
-  'Dashboard action signer copy must distinguish audit identity from site/login profile identity',
+  /const operatorIdentity = "default";/,
+  'Dashboard actions must use the hidden default signer until multi-user identity exists',
 );
 
 assert.match(
