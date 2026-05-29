@@ -110,12 +110,12 @@ Final validation:
 - `node --check scripts/smoke-utils.js`
 - `pnpm --dir docs build`
 
-Residual P06 scope:
+First-slice residual, later resolved below:
 
 - This slice proves the current already-provisioned machine does not require
   interactive sudo for install doctor, remote-view doctor, or the live gate.
-  It does not freshly prove the first-install "sudo exactly once" path on a
-  clean host.
+  At this point in the sequence it had not yet proven the first-install
+  "sudo exactly once" path on a clean host.
 - `agent-browser install doctor --json` now reports binary drift, browser-build
   readiness, helper, sudoers, group, privilege readiness, service readiness,
   and version state.
