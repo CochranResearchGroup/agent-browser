@@ -335,3 +335,33 @@ Result:
   `cb9f81a245464c516d313aee875fa076049cdc5559e9342250c9680463faa9e4`.
 - P07 remains open for release PR merge, release workflow dry run, real
   release workflow run, and GitHub release asset verification.
+
+## 2026-05-29 Turn 9 | P07 Release Dry Run Cross-Target Fix
+
+Scope: respond to the first manual `Release` workflow dry-run failure.
+
+Actions:
+
+- Ran the `Release` workflow with `dry_run=true` on `main`.
+- Confirmed release-state precheck passed.
+- Diagnosed the platform build failures as a Rust cfg leak in
+  `cli/src/native/cdp/chrome.rs`.
+- Kept the private remote-headed virtual-display fallback inside the Linux cfg
+  block so non-Linux targets do not reference Linux-only helpers.
+- Added
+  `docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml private_remote_display -- --test-threads=1`
+- `cargo check --manifest-path cli/Cargo.toml --target x86_64-pc-windows-gnu`
+
+Result:
+
+- Format, clippy, and the focused private remote-display unit test passed.
+- The local Windows cross-target check advanced past the previous missing
+  symbols, then stopped because this workstation lacks
+  `x86_64-w64-mingw32-gcc` for the `ring` build script.
+- The release workflow dry run must be retried after this fix lands on `main`.

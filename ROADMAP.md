@@ -377,9 +377,9 @@ release lane when the maintainer wants to prepare and publish a release.
 ## P07 | v0.27.0 Formal Release
 
 State: OPEN
-Current state: P07 release metadata and local validation are complete. The
-release pull request, release workflow dry run, real release workflow run, and
-GitHub release asset verification remain.
+Current state: P07 release metadata is on `main`. The first release workflow
+dry run found a cross-target Rust cfg leak in the private remote-headed
+display fallback; the fix is in progress before retrying the dry run.
 
 ### Current State
 
@@ -392,6 +392,9 @@ GitHub release asset verification remain.
   validation, PR merge, and GitHub release publication.
 - Release-preparation validation passed and is recorded in
   `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`.
+- The first release workflow dry run failed on cross-target Rust compile
+  errors; the fix note is
+  `docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`.
 
 ### Evidence
 
@@ -399,8 +402,10 @@ GitHub release asset verification remain.
 - `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
 - `docs/dev/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md`
 - `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`
+- `docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`
 
 ### Next Recommendation
 
-Complete P07 by validating the release metadata, merging the release PR, and
-running the manual GitHub release workflow after a successful dry run.
+Complete P07 by landing the cross-target fix, retrying the release workflow
+dry run, running the real release workflow, and verifying GitHub release
+assets.

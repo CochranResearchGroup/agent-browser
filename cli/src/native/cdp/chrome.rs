@@ -1025,18 +1025,20 @@ fn try_launch_chrome(
 
     let mut aux_processes = Vec::new();
     #[cfg(target_os = "linux")]
-    let private_remote_display_allowed = private_remote_display_allowed(options);
-    let remote_headed_display = if options.remote_headed
-        && !options.headless
-        && options.display.is_none()
-        && private_remote_display_allowed
-        && !is_wsl_mounted_windows_executable(chrome_path)
-    {
-        let (display, child) = start_remote_headed_virtual_display(options.viewport_size)?;
-        aux_processes.push(child);
-        Some(display)
-    } else {
-        None
+    let remote_headed_display = {
+        let private_remote_display_allowed = private_remote_display_allowed(options);
+        if options.remote_headed
+            && !options.headless
+            && options.display.is_none()
+            && private_remote_display_allowed
+            && !is_wsl_mounted_windows_executable(chrome_path)
+        {
+            let (display, child) = start_remote_headed_virtual_display(options.viewport_size)?;
+            aux_processes.push(child);
+            Some(display)
+        } else {
+            None
+        }
     };
     #[cfg(not(target_os = "linux"))]
     let remote_headed_display: Option<String> = None;

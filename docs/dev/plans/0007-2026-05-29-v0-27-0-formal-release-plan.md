@@ -5,9 +5,11 @@ State: OPEN
 Lane: P07
 Outcome: IN PROGRESS
 
-Current state: release metadata and local validation are complete. P07 still
-needs the release pull request, release workflow dry run, real release workflow
-run, and GitHub release asset verification.
+Current state: release metadata and local validation are complete, and the
+release pull request has merged. The first release workflow dry run exposed a
+cross-target Linux cfg leak in the private remote-headed display fallback. The
+source fix is in progress, and P07 still needs a successful release workflow
+dry run, real release workflow run, and GitHub release asset verification.
 
 P05 kept `0.27.0` as an installed-runtime checkpoint because
 the Guacamole/RDP many-to-many operation milestone still needed
@@ -93,7 +95,7 @@ Result: complete. See
 
 ### Slice C | Release Pull Request
 
-Status: IN PROGRESS.
+Status: COMPLETE.
 
 Tasks:
 
@@ -105,9 +107,12 @@ Exit criteria:
 
 - `main` contains the release metadata and remains synchronized with origin.
 
+Result: complete. PR #5 merged into `main` as
+`d13cddc0851395aa2e87fccc2902ad38c9978ae6`.
+
 ### Slice D | GitHub Release
 
-Status: PENDING.
+Status: IN PROGRESS.
 
 Tasks:
 
@@ -119,3 +124,7 @@ Exit criteria:
 
 - `v0.27.0` exists as the public GitHub release.
 - Release assets match the workflow's expected platform matrix.
+
+Result: in progress. The first dry run failed with a cross-target Rust compile
+error in `cli/src/native/cdp/chrome.rs`; see
+`docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`.
