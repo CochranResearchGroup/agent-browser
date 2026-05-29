@@ -83,6 +83,63 @@ function commandExists(command) {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
+function firstExistingCommand(commands) {
+  for (const command of commands) {
+    const path = commandExists(command);
+    if (path && existsSync(path)) return path;
+  }
+  return null;
+}
+
+function installedAgentBrowserCommand() {
+  if (envValue('AGENT_BROWSER_RDP_TEST_USE_INSTALLED') === '0') return null;
+  return envValue('AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD') || commandExists('agent-browser');
+}
+
+function runRemoteViewDoctor(command) {
+  if (!command) return null;
+  const result = spawnSync(command, ['doctor', 'remote-view', '--json'], {
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      error: `remote_view_doctor_failed: ${result.stdout}${result.stderr}`.trim(),
+      report: null,
+    };
+  }
+  try {
+    return {
+      ok: true,
+      error: null,
+      report: JSON.parse(result.stdout),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: `remote_view_doctor_json_parse_failed: ${error.message}`,
+      report: null,
+    };
+  }
+}
+
+function hydrateRouteEnvironmentFromDoctor(command) {
+  if (envValue('AGENT_BROWSER_RDP_ROUTE_POOL_JSON')) return { usedDoctor: false, doctor: null };
+  const doctor = runRemoteViewDoctor(command);
+  if (!doctor?.ok) {
+    return { usedDoctor: false, doctor };
+  }
+  const routePoolEnv = doctor.report?.data?.guacamole?.routePool?.data?.env || {};
+  const routeDisplayEnv = doctor.report?.data?.guacamole?.routeDisplays?.data?.env || {};
+  for (const [key, value] of Object.entries({ ...routePoolEnv, ...routeDisplayEnv })) {
+    if (typeof value === 'string' && value && !process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+  return { usedDoctor: true, doctor };
+}
+
 function runChecked(command, args, label) {
   const result = spawnSync(command, args, {
     encoding: 'utf8',
@@ -209,6 +266,28 @@ function guacamoleBaseUrl(route) {
   url.search = '';
   url.hash = '';
   return url.toString();
+}
+
+function assertLocalEmbeddableGuacamoleUrls(routes) {
+  if (envValue('AGENT_BROWSER_RDP_TEST_ALLOW_PUBLIC_GUAC_URL') === '1') return;
+  const publicUrls = [];
+  for (const route of routes) {
+    const rawUrl = route.frameUrl || route.externalUrl;
+    if (!rawUrl) continue;
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    const local = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    if (!local) publicUrls.push(rawUrl);
+  }
+  assert(
+    publicUrls.length === 0,
+    [
+      'non_embeddable_guacamole_url: many-to-many live smoke requires local embeddable Guacamole frame URLs.',
+      'Set AGENT_BROWSER_REMOTE_VIEW_URL=http://127.0.0.1:8092/guacamole/ before running the gate,',
+      'or set AGENT_BROWSER_RDP_TEST_ALLOW_PUBLIC_GUAC_URL=1 only for a reviewed public-ingress diagnostic.',
+      `Observed URLs: ${publicUrls.join(', ')}`,
+    ].join(' '),
+  );
 }
 
 async function waitForDashboardCredentials(context, timeoutMs = 60000) {
@@ -721,6 +800,10 @@ const context = createSmokeContext({
   prefix: 'ab-rdp-guac-many-to-many-',
   sessionPrefix: 'rdp-guac-many-a',
 });
+const installedCommand = installedAgentBrowserCommand();
+if (installedCommand) {
+  context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD = installedCommand;
+}
 context.env.AGENT_BROWSER_DASHBOARD_AUTH_FILE = join(context.agentHome, 'dashboard-auth.json');
 context.env.AGENT_BROWSER_ENGINE = 'chrome';
 context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
@@ -753,11 +836,22 @@ try {
   assert(commandExists('identify'), 'ImageMagick identify is required for target-binding screenshot proof');
   assert(commandExists('convert'), 'ImageMagick convert is required for target-binding screenshot proof');
   assert(commandExists('tesseract'), 'tesseract is required for target-binding OCR proof');
+  const doctorHydration = hydrateRouteEnvironmentFromDoctor(installedCommand);
   const routes = requireDistinctRoutePool();
-  const clientAExecutable = envValue('AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE');
-  const clientBExecutable = envValue('AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE') || clientAExecutable;
-  assert(clientAExecutable && existsSync(clientAExecutable), 'AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE must point to a browser executable');
-  assert(clientBExecutable && existsSync(clientBExecutable), 'AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE must point to a browser executable');
+  assertLocalEmbeddableGuacamoleUrls(routes);
+  const clientAExecutable = envValue('AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE') ||
+    firstExistingCommand(['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']);
+  const clientBExecutable = envValue('AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE') ||
+    firstExistingCommand(['brave-browser', 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) ||
+    clientAExecutable;
+  assert(
+    clientAExecutable && existsSync(clientAExecutable),
+    'viewer_executable_missing: AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE must point to a browser executable, or google-chrome/chromium must be on PATH',
+  );
+  assert(
+    clientBExecutable && existsSync(clientBExecutable),
+    'viewer_executable_missing: AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE must point to a browser executable, or brave-browser/google-chrome/chromium must be on PATH',
+  );
   const profileA = envValue('AGENT_BROWSER_RDP_TEST_PROFILE_A') || join(context.tempHome, 'viewer-a-profile');
   const profileB = envValue('AGENT_BROWSER_RDP_TEST_PROFILE_B') || join(context.tempHome, 'viewer-b-profile');
   const remoteConfig = configureRemoteHeadedContext(context);
@@ -809,6 +903,8 @@ try {
     browserA,
     browserB,
     dashboardTileUrl,
+    routePoolHydratedFromDoctor: doctorHydration.usedDoctor,
+    agentBrowserCommand: context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD || 'cargo run --manifest-path cli/Cargo.toml',
     routePool: routes,
     viewerLeaseCount: Object.keys(afterLeases.data?.service_state?.viewerLeases || {}).length,
   });
@@ -939,10 +1035,12 @@ try {
 } catch (err) {
   writeArtifact('failure.json', {
     error: err.stack || err.message,
+    agentBrowserCommand: context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD || 'cargo run --manifest-path cli/Cargo.toml',
     routePoolConfigHint: {
       json: 'AGENT_BROWSER_RDP_ROUTE_POOL_JSON',
       routeA: 'AGENT_BROWSER_RDP_ROUTE_A_ID, AGENT_BROWSER_RDP_ROUTE_A_FRAME_URL, AGENT_BROWSER_RDP_ROUTE_A_CONNECTION_ID',
       routeB: 'AGENT_BROWSER_RDP_ROUTE_B_ID, AGENT_BROWSER_RDP_ROUTE_B_FRAME_URL, AGENT_BROWSER_RDP_ROUTE_B_CONNECTION_ID',
+      doctor: 'agent-browser doctor remote-view --json can supply AGENT_BROWSER_RDP_ROUTE_POOL_JSON and display-name variables when the route pool is ready',
     },
   });
   console.error(err.stack || err.message);

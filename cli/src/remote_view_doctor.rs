@@ -66,16 +66,34 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
     let privileges = inspect_privileges();
     let config = inspect_remote_view_config();
     let display_access = inspect_route_display_access(&route_displays);
-    let many_to_many = many_to_many_status(&route_pool, &route_displays, &display_access);
-    let next_action = recommend_next_action(
+    let viewer_prerequisites = inspect_viewer_prerequisites();
+    let many_to_many = many_to_many_status(
         &route_pool,
         &route_displays,
         &display_access,
+        &viewer_prerequisites,
+    );
+    let next_action = recommend_next_action(
+        &install,
+        &route_pool,
+        &route_displays,
+        &display_access,
+        &viewer_prerequisites,
         &users,
         &privileges,
     );
     let next_command = recommend_next_command(&next_action);
     let drift = drift_findings(&users, &config);
+    let issues = remote_view_issues(RemoteViewIssueContext {
+        install: &install,
+        route_pool: &route_pool,
+        route_displays: &route_displays,
+        display_access: &display_access,
+        viewer_prerequisites: &viewer_prerequisites,
+        users: &users,
+        privileges: &privileges,
+        next_action: &next_action,
+    });
 
     json!({
         "success": true,
@@ -95,8 +113,10 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
                 "routeDisplays": route_displays,
             },
             "manyToMany": many_to_many,
+            "viewerPrerequisites": viewer_prerequisites,
             "config": config,
             "drift": drift,
+            "issues": issues,
             "stateSources": state_sources(),
             "nextAction": next_action,
             "nextCommand": next_command,
@@ -274,6 +294,8 @@ fn inspect_privileges() -> Value {
     let helper_path = env::var("AGENT_BROWSER_PRIVILEGED_HELPER").unwrap_or_else(|_| {
         "/usr/local/libexec/agent-browser/agent-browser-privileged-helper".to_string()
     });
+    let sudoers_path = env::var("AGENT_BROWSER_PRIVILEGED_SUDOERS")
+        .unwrap_or_else(|_| "/etc/sudoers.d/agent-browser".to_string());
     let current_user = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
     let group_exists = Command::new("getent")
         .args(["group", &group_name])
@@ -291,6 +313,7 @@ fn inspect_privileges() -> Value {
         .map(|groups| groups.iter().any(|group| group == &group_name))
         .unwrap_or(false);
     let helper_exists = Path::new(&helper_path).exists();
+    let sudoers_exists = Path::new(&sudoers_path).exists();
     let helper_check = run_text_command("sudo", &["-n", &helper_path, "check"]);
 
     json!({
@@ -300,8 +323,10 @@ fn inspect_privileges() -> Value {
         "userInGroup": user_in_group,
         "helperPath": helper_path,
         "helperExists": helper_exists,
+        "sudoersPath": sudoers_path,
+        "sudoersExists": sudoers_exists,
         "helperCheck": helper_check,
-        "ready": group_exists && user_in_group && helper_exists && helper_check["success"].as_bool() == Some(true),
+        "ready": group_exists && user_in_group && helper_exists && sudoers_exists && helper_check["success"].as_bool() == Some(true),
     })
 }
 
@@ -352,6 +377,90 @@ fn inspect_route_display_access(route_displays: &Value) -> Value {
         "entries": entries,
     })
 }
+
+fn inspect_viewer_prerequisites() -> Value {
+    let client_a_env = env::var("AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE").ok();
+    let client_b_env = env::var("AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE").ok();
+    let client_a = executable_candidate(
+        client_a_env.as_deref(),
+        &[
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+        ],
+    );
+    let client_b = executable_candidate(
+        client_b_env.as_deref(),
+        &[
+            "brave-browser",
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+        ],
+    )
+    .or_else(|| client_a.clone());
+    let identify = command_path("identify");
+    let convert = command_path("convert");
+    let tesseract = command_path("tesseract");
+    let ready = client_a.is_some()
+        && client_b.is_some()
+        && identify.is_some()
+        && convert.is_some()
+        && tesseract.is_some();
+
+    json!({
+        "ready": ready,
+        "clients": {
+            "A": {
+                "env": client_a_env,
+                "path": client_a,
+            },
+            "B": {
+                "env": client_b_env,
+                "path": client_b,
+            },
+        },
+        "tools": {
+            "identify": identify,
+            "convert": convert,
+            "tesseract": tesseract,
+        },
+    })
+}
+
+fn executable_candidate(explicit: Option<&str>, candidates: &[&str]) -> Option<String> {
+    if let Some(path) = explicit {
+        if Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+    candidates
+        .iter()
+        .find_map(|candidate| command_path(candidate))
+}
+
+fn command_path(command: &str) -> Option<String> {
+    let output = Command::new("sh")
+        .args(["-lc", &format!("command -v {}", shell_quote(command))])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path)
+    }
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
 fn inspect_remote_view_config() -> Value {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from(""));
     let agent_home = env::var("AGENT_BROWSER_HOME")
@@ -426,6 +535,7 @@ fn many_to_many_status(
     route_pool: &Value,
     route_displays: &Value,
     display_access: &Value,
+    viewer_prerequisites: &Value,
 ) -> Value {
     let route_pool_ready = nested_bool(route_pool, &["data", "success"]);
     let display_ready = nested_bool(route_displays, &["data", "success"]);
@@ -433,8 +543,16 @@ fn many_to_many_status(
         .get("ready")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let viewer_prerequisites_ready = viewer_prerequisites
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let status = if route_pool_ready && display_ready && display_access_ready {
-        "ready"
+        if viewer_prerequisites_ready {
+            "ready"
+        } else {
+            "needs_viewer_prerequisites"
+        }
     } else if route_pool_ready && display_ready {
         "needs_display_access"
     } else if route_pool_ready {
@@ -447,7 +565,8 @@ fn many_to_many_status(
         "routePoolReady": route_pool_ready,
         "routeDisplaysReady": display_ready,
         "routeDisplayAccessReady": display_access_ready,
-        "simultaneousViewingReady": route_pool_ready && display_ready && display_access_ready,
+        "viewerPrerequisitesReady": viewer_prerequisites_ready,
+        "simultaneousViewingReady": route_pool_ready && display_ready && display_access_ready && viewer_prerequisites_ready,
     })
 }
 
@@ -460,12 +579,17 @@ fn nested_bool(value: &Value, path: &[&str]) -> bool {
 }
 
 fn recommend_next_action(
+    install: &Value,
     route_pool: &Value,
     route_displays: &Value,
     display_access: &Value,
+    viewer_prerequisites: &Value,
     users: &Value,
     privileges: &Value,
 ) -> String {
+    if !nested_bool(install, &["success"]) {
+        return "repair_install_drift".to_string();
+    }
     if !nested_bool(route_pool, &["data", "success"]) {
         return "repair_or_sync_guacamole_route_pool_before_creating_more_users".to_string();
     }
@@ -533,6 +657,13 @@ fn recommend_next_action(
     {
         return "install_privileged_helper_for_recurring_desktop_setup".to_string();
     }
+    if !viewer_prerequisites
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return "install_viewer_prerequisites_for_many_to_many_gate".to_string();
+    }
     "run_many_to_many_live_gate".to_string()
 }
 
@@ -578,10 +709,20 @@ fn recommend_next_command(next_action: &str) -> Value {
             "requiresInteractiveSudo": false,
             "why": "The reusable agent-browser-rdp user is missing; inspect setup state before creating route-specific users."
         }),
+        "repair_install_drift" => json!({
+            "command": "agent-browser install doctor --json",
+            "requiresInteractiveSudo": false,
+            "why": "The installed command, current executable, package binary, workspace binary, or launch configuration is out of sync."
+        }),
         "run_many_to_many_live_gate" => json!({
             "command": "pnpm test:rdp-guac-many-to-many-live",
             "requiresInteractiveSudo": false,
             "why": "Route pool and route displays are ready; run the OCR-backed many-to-many gate."
+        }),
+        "install_viewer_prerequisites_for_many_to_many_gate" => json!({
+            "command": "agent-browser doctor remote-view --json",
+            "requiresInteractiveSudo": false,
+            "why": "Route pool and route displays are ready, but the OCR/browser viewer prerequisites for the many-to-many gate are missing."
         }),
         _ => json!({
             "command": "agent-browser doctor remote-view",
@@ -589,6 +730,296 @@ fn recommend_next_command(next_action: &str) -> Value {
             "why": "Re-run the doctor after resolving the reported state."
         }),
     }
+}
+
+struct RemoteViewIssueContext<'a> {
+    install: &'a Value,
+    route_pool: &'a Value,
+    route_displays: &'a Value,
+    display_access: &'a Value,
+    viewer_prerequisites: &'a Value,
+    users: &'a Value,
+    privileges: &'a Value,
+    next_action: &'a str,
+}
+
+fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
+    let mut issues = Vec::new();
+    let RemoteViewIssueContext {
+        install,
+        route_pool,
+        route_displays,
+        display_access,
+        viewer_prerequisites,
+        users,
+        privileges,
+        next_action,
+    } = context;
+
+    if !nested_bool(install, &["success"]) {
+        let install_issues = install
+            .pointer("/data/data/issues")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for issue in install_issues {
+            let code = issue
+                .get("code")
+                .and_then(Value::as_str)
+                .unwrap_or("install_doctor_not_ready");
+            let message = issue
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("agent-browser install doctor reported an issue");
+            issues.push(remote_view_issue(
+                &format!("install_{code}"),
+                message,
+                "run agent-browser install doctor --json and resolve the reported install drift before relying on remote-view setup",
+                false,
+                "repair_install_drift",
+            ));
+        }
+        if issues.is_empty() {
+            issues.push(remote_view_issue(
+                "install_doctor_not_ready",
+                "agent-browser install doctor did not report success",
+                "run agent-browser install doctor --json and resolve the reported install drift",
+                false,
+                "repair_install_drift",
+            ));
+        }
+    }
+
+    if !nested_bool(route_pool, &["available"]) {
+        issues.push(remote_view_issue(
+            "route_pool_readiness_unavailable",
+            "the Guacamole route-pool readiness helper could not be run",
+            "run pnpm test:rdp-guac-route-pool-readiness -- --report-only from the repo root",
+            false,
+            "route_pool",
+        ));
+    } else if !nested_bool(route_pool, &["data", "success"]) {
+        let components = route_pool
+            .pointer("/data/readiness/components")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for component in components {
+            let status = component
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            if status == "ready" {
+                continue;
+            }
+            let name = component
+                .get("component")
+                .and_then(Value::as_str)
+                .unwrap_or("route_pool");
+            let next_action = component
+                .get("nextAction")
+                .and_then(Value::as_str)
+                .unwrap_or("repair_route_pool");
+            let recovery = component
+                .get("recovery")
+                .and_then(Value::as_str)
+                .unwrap_or("repair the Guacamole route-pool prerequisite, then rerun doctor");
+            issues.push(remote_view_issue(
+                &format!("route_pool_{name}_{status}").replace(':', "_"),
+                component
+                    .get("evidence")
+                    .and_then(Value::as_str)
+                    .unwrap_or("route-pool readiness is not ready"),
+                recovery,
+                false,
+                next_action,
+            ));
+        }
+        if issues.is_empty() {
+            issues.push(remote_view_issue(
+                "route_pool_not_ready",
+                "the Guacamole route pool is not ready",
+                "run pnpm test:rdp-guac-route-pool-readiness -- --report-only and repair the first blocked component",
+                false,
+                "route_pool",
+            ));
+        }
+    }
+
+    if nested_bool(route_pool, &["data", "success"])
+        && !nested_bool(route_displays, &["data", "success"])
+    {
+        let route_specific_users_ready = users
+            .get("entries")
+            .and_then(Value::as_array)
+            .map(|entries| {
+                ["agent-browser-rdp-a", "agent-browser-rdp-b"]
+                    .iter()
+                    .all(|name| {
+                        entries.iter().any(|entry| {
+                            entry.get("user").and_then(Value::as_str) == Some(*name)
+                                && entry.get("exists").and_then(Value::as_bool) == Some(true)
+                        })
+                    })
+            })
+            .unwrap_or(false);
+        let remediation = if route_specific_users_ready {
+            "open both route-specific Guacamole/RDP sessions, then rerun agent-browser doctor remote-view"
+        } else {
+            "run pnpm setup:rdp-guac-route-pool after the display gate proves the existing-user routes collapse to one display"
+        };
+        issues.push(remote_view_issue(
+            "route_displays_missing_or_collapsed",
+            "two distinct route displays are not currently visible",
+            remediation,
+            !route_specific_users_ready,
+            next_action,
+        ));
+    }
+
+    if nested_bool(route_displays, &["data", "success"])
+        && !display_access
+            .get("ready")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    {
+        issues.push(remote_view_issue(
+            "route_display_access_missing",
+            "the current user cannot open windows on every active route display",
+            "run pnpm grant:rdp-route-display-access -- --apply after the one-time privileged helper is installed",
+            false,
+            "grant_route_display_access",
+        ));
+    }
+
+    if !viewer_prerequisites
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let mut missing = Vec::new();
+        if viewer_prerequisites
+            .pointer("/clients/A/path")
+            .and_then(Value::as_str)
+            .is_none()
+        {
+            missing.push("client A browser executable");
+        }
+        if viewer_prerequisites
+            .pointer("/clients/B/path")
+            .and_then(Value::as_str)
+            .is_none()
+        {
+            missing.push("client B browser executable");
+        }
+        for tool in ["identify", "convert", "tesseract"] {
+            if viewer_prerequisites
+                .pointer(&format!("/tools/{tool}"))
+                .and_then(Value::as_str)
+                .is_none()
+            {
+                missing.push(tool);
+            }
+        }
+        issues.push(remote_view_issue(
+            "viewer_prerequisites_missing",
+            &format!(
+                "many-to-many viewer prerequisites are missing: {}",
+                missing.join(", ")
+            ),
+            "install ImageMagick and tesseract, and set AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE or put Chrome/Chromium on PATH",
+            false,
+            "install_viewer_prerequisites_for_many_to_many_gate",
+        ));
+    }
+
+    if !privileges
+        .get("groupExists")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        issues.push(remote_view_issue(
+            "remote_view_privileged_group_missing",
+            "the agent-browser privileged group is missing",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+            "install_privileged_helper",
+        ));
+    }
+    if !privileges
+        .get("userInGroup")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        issues.push(remote_view_issue(
+            "remote_view_privileged_group_membership_missing",
+            "the current user is not in the agent-browser privileged group",
+            "run agent-browser install --with-remote-view-privileges, then open a new shell or run newgrp agent-browser",
+            true,
+            "install_privileged_helper",
+        ));
+    }
+    if !privileges
+        .get("helperExists")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        issues.push(remote_view_issue(
+            "remote_view_privileged_helper_missing",
+            "the root-owned remote-view privileged helper is missing",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+            "install_privileged_helper",
+        ));
+    }
+    if !privileges
+        .get("sudoersExists")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        issues.push(remote_view_issue(
+            "remote_view_privileged_sudoers_missing",
+            "the remote-view sudoers policy is missing",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+            "install_privileged_helper",
+        ));
+    }
+    if privileges
+        .get("helperExists")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        && privileges
+            .pointer("/helperCheck/success")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        issues.push(remote_view_issue(
+            "remote_view_privileged_helper_not_usable",
+            "the remote-view privileged helper cannot be run with sudo -n",
+            "confirm the sudoers file and group membership are active in this shell, then rerun doctor",
+            false,
+            "install_privileged_helper",
+        ));
+    }
+
+    issues
+}
+
+fn remote_view_issue(
+    code: &str,
+    message: &str,
+    remediation: &str,
+    requires_interactive_sudo: bool,
+    next_action: &str,
+) -> Value {
+    json!({
+        "code": code,
+        "message": message,
+        "remediation": remediation,
+        "requiresInteractiveSudo": requires_interactive_sudo,
+        "nextAction": next_action,
+    })
 }
 
 fn drift_findings(users: &Value, config: &Value) -> Vec<Value> {
@@ -879,8 +1310,10 @@ MaxSessions=50
     #[test]
     fn recommend_next_action_reuses_existing_rdp_user_before_route_users() {
         let route_pool = json!({"data": {"success": true}});
+        let install = json!({"success": true});
         let route_displays = json!({"data": {"success": false}});
         let display_access = json!({"ready": false});
+        let viewer_prerequisites = json!({"ready": true});
         let privileges = json!({"ready": false});
         let users = json!({
             "entries": [
@@ -891,9 +1324,11 @@ MaxSessions=50
         });
         assert_eq!(
             recommend_next_action(
+                &install,
                 &route_pool,
                 &route_displays,
                 &display_access,
+                &viewer_prerequisites,
                 &users,
                 &privileges
             ),
@@ -913,8 +1348,10 @@ MaxSessions=50
     #[test]
     fn recommend_next_action_opens_route_specific_sessions_after_users_exist() {
         let route_pool = json!({"data": {"success": true}});
+        let install = json!({"success": true});
         let route_displays = json!({"data": {"success": false}});
         let display_access = json!({"ready": false});
+        let viewer_prerequisites = json!({"ready": true});
         let privileges = json!({"ready": false});
         let users = json!({
             "entries": [
@@ -925,9 +1362,11 @@ MaxSessions=50
         });
         assert_eq!(
             recommend_next_action(
+                &install,
                 &route_pool,
                 &route_displays,
                 &display_access,
+                &viewer_prerequisites,
                 &users,
                 &privileges
             ),
@@ -938,15 +1377,19 @@ MaxSessions=50
     #[test]
     fn recommend_next_action_installs_helper_before_display_access_grant() {
         let route_pool = json!({"data": {"success": true}});
+        let install = json!({"success": true});
         let route_displays = json!({"data": {"success": true}});
         let display_access = json!({"ready": false});
+        let viewer_prerequisites = json!({"ready": true});
         let privileges = json!({"ready": false});
         let users = json!({"entries": []});
         assert_eq!(
             recommend_next_action(
+                &install,
                 &route_pool,
                 &route_displays,
                 &display_access,
+                &viewer_prerequisites,
                 &users,
                 &privileges
             ),
@@ -957,15 +1400,19 @@ MaxSessions=50
     #[test]
     fn recommend_next_action_grants_display_access_after_helper_ready() {
         let route_pool = json!({"data": {"success": true}});
+        let install = json!({"success": true});
         let route_displays = json!({"data": {"success": true}});
         let display_access = json!({"ready": false});
+        let viewer_prerequisites = json!({"ready": true});
         let privileges = json!({"ready": true});
         let users = json!({"entries": []});
         assert_eq!(
             recommend_next_action(
+                &install,
                 &route_pool,
                 &route_displays,
                 &display_access,
+                &viewer_prerequisites,
                 &users,
                 &privileges
             ),
@@ -976,15 +1423,19 @@ MaxSessions=50
     #[test]
     fn recommend_next_action_installs_helper_after_viewing_is_ready() {
         let route_pool = json!({"data": {"success": true}});
+        let install = json!({"success": true});
         let route_displays = json!({"data": {"success": true}});
         let display_access = json!({"ready": true});
+        let viewer_prerequisites = json!({"ready": true});
         let privileges = json!({"ready": false});
         let users = json!({"entries": []});
         assert_eq!(
             recommend_next_action(
+                &install,
                 &route_pool,
                 &route_displays,
                 &display_access,
+                &viewer_prerequisites,
                 &users,
                 &privileges
             ),
@@ -997,7 +1448,13 @@ MaxSessions=50
         let route_pool = json!({"data": {"success": true}});
         let route_displays = json!({"data": {"success": true}});
         let display_access = json!({"ready": false});
-        let status = many_to_many_status(&route_pool, &route_displays, &display_access);
+        let viewer_prerequisites = json!({"ready": true});
+        let status = many_to_many_status(
+            &route_pool,
+            &route_displays,
+            &display_access,
+            &viewer_prerequisites,
+        );
         assert_eq!(status["status"], "needs_display_access");
         assert_eq!(status["simultaneousViewingReady"], false);
     }

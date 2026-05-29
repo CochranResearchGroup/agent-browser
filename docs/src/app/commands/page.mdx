@@ -32,7 +32,7 @@ agent-browser eval <js>               # Run JavaScript
 agent-browser connect <port|url>      # Connect to browser via CDP
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall # Scan bounded ports and query firewall state
-agent-browser doctor remote-view # Diagnose Guacamole, XRDP, RDP users, and route-display state
+agent-browser doctor remote-view # Diagnose Guacamole, XRDP, RDP users, privileges, displays, and issue codes
 agent-browser setup windows-browser --print-powershell # Print reviewed Windows routing setup script
 agent-browser setup windows-browser --print-powershell --doctor # Embed current route diagnostics in the script
 pnpm test:wsl-windows-chromium-profile-live # Validate WSL Windows Chromium profile writes when doctor says available

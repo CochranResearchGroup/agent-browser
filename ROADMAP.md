@@ -326,25 +326,43 @@ formal release milestone.
 ## P06 | Guacamole RDP Productization Hardening
 
 State: OPEN
-Current state: P06 is the active next lane after the P05 installed-runtime
-checkpoint. It keeps the project in roadmap-campaign mode and targets the
-remaining installer and diagnostic work required before any formal release.
+Current state: P06 has completed its first productization slice for the
+already-provisioned checkpoint, but remains open for clean-install sudo proof
+and one remaining install-doctor ownership decision.
 
 ### Current State
 
 - Plan
   `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
   is open.
-- The installed checkpoint runtime already passes the many-to-many live gate
-  with local Guacamole URL and explicit viewer executable preconditions.
+- The rebuilt installed checkpoint runtime passes install doctor, remote-view
+  doctor, and the many-to-many live gate from the installed command.
+- `agent-browser install doctor --json` now reports remote-view privilege
+  readiness with helper, sudoers, group, membership, helper check, nested issue
+  fields, and `requiresInteractiveSudo=false` on the provisioned machine.
+- `agent-browser doctor remote-view --json` now reports stable top-level issue
+  codes, viewer browser and OCR prerequisites, privilege readiness, route-pool
+  readiness, route displays, display access, and many-to-many readiness.
+- The many-to-many harness now hydrates route-pool and route-display
+  environment from doctor output, auto-discovers common viewer browsers,
+  prefers installed `agent-browser`, and classifies public Guacamole route URLs
+  with `non_embeddable_guacamole_url`.
+- The current installed 0.27.0 checkpoint checksum is
+  `1b67077ccdb5e80d8667d3bcc8327e9c2a1a8521417c25280f71d059bc3b1694`.
 - The next release milestone is not a version number. It is the operational
   state where many-to-many Guacamole/RDP remote browser control is hardened,
   the installer needs sudo exactly once on first install, and doctor output is
   complete enough to diagnose every supported runtime prerequisite.
 
+### Evidence
+
+- `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
+- `docs/dev/notes/2026-05-29-p06-installer-doctor-productization.md`
+
 ### Next Recommendation
 
-Start with P06 Slice A: audit the current install and doctor contract against
-the one-time-sudo requirement, then turn any manual precondition that appeared
-in P05 validation into either an installer-owned setup step or a doctor-owned
-diagnostic with a concrete remediation.
+Continue P06 with the clean-machine install path: prove
+`agent-browser install --with-deps --with-remote-view-privileges` has one clear
+sudo boundary, prove repeated setup stays non-interactive, and decide whether
+service readiness belongs directly in install doctor or remains composed by
+remote-view doctor.

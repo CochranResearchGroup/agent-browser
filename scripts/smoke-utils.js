@@ -48,14 +48,19 @@ export function cargoArgs(args) {
 
 export function runCli(context, args, timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('cargo', cargoArgs(args), {
+    const installedCommand = context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD ||
+      process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD;
+    const command = installedCommand || 'cargo';
+    const commandArgs = installedCommand ? args : cargoArgs(args);
+    const label = installedCommand ? command : `agent-browser ${args.join(' ')}`;
+    const proc = spawn(command, commandArgs, {
       cwd: rootDir,
       env: context.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const procTimeout = setTimeout(() => {
       proc.kill('SIGTERM');
-      reject(new Error(`agent-browser ${args.join(' ')} timed out`));
+      reject(new Error(`${label} timed out`));
     }, timeoutMs);
     let out = '';
     let err = '';
@@ -78,7 +83,7 @@ export function runCli(context, args, timeoutMs = 60000) {
       } else {
         reject(
           new Error(
-            `agent-browser ${args.join(' ')} failed: code=${code} signal=${signal}\n${out}${err}`,
+            `${label} failed: code=${code} signal=${signal}\n${out}${err}`,
           ),
         );
       }

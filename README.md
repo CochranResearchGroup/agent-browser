@@ -441,7 +441,7 @@ agent-browser reload                  # Reload page
 ```bash
 agent-browser install                 # Download Chrome from Chrome for Testing (Google's official automation channel)
 agent-browser install stealthcdp-chromium  # Download the preferred patched Chromium release when available
-agent-browser install doctor          # Check user-scoped binary drift and launch readiness
+agent-browser install doctor          # Check binary drift, launch readiness, and remote-view privilege state
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall  # Scan bounded ports and query Windows firewall state
 agent-browser doctor remote-view      # Diagnose Guacamole, XRDP, RDP users, privileges, displays, and display access
@@ -1439,9 +1439,12 @@ It is read-only and reports install state, Guacamole route-pool readiness, XRDP
 policy, existing `agent-browser-rdp` and route-specific user inventory,
 one-time privileged helper readiness, remote-view config file presence with
 keys only, route-display state, agent display access to those XRDP displays,
-drift findings, and the next setup action. The doctor prefers reusing the existing
-`agent-browser-rdp` user and only points toward route-specific users when the
-current state shows they are actually needed.
+stable issue codes with remediation text, drift findings, and the next setup
+action. `agent-browser install doctor --json` also reports
+`remoteViewPrivileges` with helper, sudoers, group, membership, and
+`requiresInteractiveSudo` fields. The remote-view doctor prefers reusing the
+existing `agent-browser-rdp` user and only points toward route-specific users
+when the current state shows they are actually needed.
 Run
 `agent-browser setup windows-browser --print-powershell` to print a reviewed
 Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall
@@ -1854,11 +1857,18 @@ from the user-scoped secret file, and creates route A/B records with distinct
 RDP color depths so the current XRDP `Policy=Default` can allocate distinct
 sessions for the same user.
 Use `pnpm test:rdp-guac-many-to-many-live` for the Slice H many-to-many gate.
-It requires two distinct route-pool entries through
-`AGENT_BROWSER_RDP_ROUTE_POOL_JSON` or paired
-`AGENT_BROWSER_RDP_ROUTE_A_*` and `AGENT_BROWSER_RDP_ROUTE_B_*` variables,
-plus `AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE` and optionally
-`AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE` for the two dashboard viewers.
+It prefers the installed `agent-browser` command and, when route variables are
+not already set, hydrates `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` and route-display
+variables from `agent-browser doctor remote-view --json`. The gate still
+accepts two distinct route-pool entries through `AGENT_BROWSER_RDP_ROUTE_POOL_JSON`
+or paired `AGENT_BROWSER_RDP_ROUTE_A_*` and `AGENT_BROWSER_RDP_ROUTE_B_*`
+variables. It auto-discovers common local viewer browsers when
+`AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE` and
+`AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE` are unset. The harness requires
+local embeddable Guacamole frame URLs by default; set
+`AGENT_BROWSER_REMOTE_VIEW_URL=http://127.0.0.1:8092/guacamole/` or use
+`AGENT_BROWSER_RDP_TEST_ALLOW_PUBLIC_GUAC_URL=1` only for a reviewed public
+ingress diagnostic.
 Route entries may include `target.displayName` in
 `AGENT_BROWSER_RDP_ROUTE_POOL_JSON`, or
 `AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME` and

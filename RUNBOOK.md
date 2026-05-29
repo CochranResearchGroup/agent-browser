@@ -153,3 +153,51 @@ Result:
   remote-view doctor reports route pool, route displays, display access,
   privileged helper, and simultaneous viewing readiness with
   `requiresInteractiveSudo=false`.
+
+## 2026-05-29 Turn 5 | P06 Doctor And Live-Gate Productization
+
+Scope: execute and refactor the first P06 slice after auditing the installed
+checkpoint against the productization issues from P05.
+
+Actions:
+
+- Added install-doctor remote-view privilege readiness fields for helper,
+  sudoers, group, membership, helper check, nested issues, and
+  `requiresInteractiveSudo`.
+- Added remote-view doctor top-level issue codes, remediations, viewer browser
+  and OCR prerequisites, install drift propagation, sudoers readiness, and
+  many-to-many prerequisite status.
+- Changed the many-to-many live harness to prefer installed `agent-browser`,
+  hydrate route-pool and route-display environment from remote-view doctor
+  output, auto-discover common viewer browsers, and fail public Guacamole route
+  URLs with `non_embeddable_guacamole_url`.
+- Updated README, CLI help, docs site pages, the repo skill guidance, the P06
+  plan, the roadmap, and the P06 validation note.
+- Rebuilt and installed the checkpoint binary to the local command, workspace
+  binary, and pnpm package binary.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml install_doctor -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml remote_view_doctor -- --test-threads=1`
+- `node --check scripts/test-rdp-guac-many-to-many-live.js`
+- `node --check scripts/smoke-utils.js`
+- `pnpm --dir docs build`
+- `agent-browser install doctor --json`
+- `agent-browser doctor remote-view --json`
+- `AGENT_BROWSER_RDP_TEST_USE_INSTALLED=1 node scripts/test-rdp-guac-many-to-many-live.js`
+- `AGENT_BROWSER_REMOTE_VIEW_URL=http://127.0.0.1:8092/guacamole/ AGENT_BROWSER_RDP_TEST_USE_INSTALLED=1 node scripts/test-rdp-guac-many-to-many-live.js`
+
+Result:
+
+- Installed doctor and remote-view doctor passed with no issues. The installed
+  runtime checksum is
+  `1b67077ccdb5e80d8667d3bcc8327e9c2a1a8521417c25280f71d059bc3b1694`.
+- The public Guacamole URL invocation failed fast with the intended
+  `non_embeddable_guacamole_url` precondition diagnostic.
+- The local embeddable Guacamole many-to-many gate passed from the installed
+  command with artifacts at
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-06-07-291Z`.
+- P06 remains open for clean-machine first-install sudo proof and the
+  install-doctor service-readiness ownership decision.

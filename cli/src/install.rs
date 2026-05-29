@@ -937,6 +937,18 @@ pub fn run_install_doctor(flags: &Flags) {
         "launch executable",
         report.pointer("/data/launchConfig/executablePath"),
     );
+    print_doctor_field(
+        "remote-view privileges ready",
+        report.pointer("/data/remoteViewPrivileges/ready"),
+    );
+    print_doctor_field(
+        "remote-view helper",
+        report.pointer("/data/remoteViewPrivileges/helperPath"),
+    );
+    print_doctor_field(
+        "remote-view sudoers",
+        report.pointer("/data/remoteViewPrivileges/sudoersPath"),
+    );
 
     let issues = report
         .pointer("/data/issues")
@@ -978,6 +990,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let pnpm_package_binary = binary_fingerprint(find_pnpm_package_binary());
     let workspace_binary = binary_fingerprint(find_workspace_binary());
     let launch_config = launch_config_status(flags);
+    let remote_view_privileges = remote_view_privilege_status();
     let issues = install_doctor_issues(
         &current_executable,
         &path_command,
@@ -995,6 +1008,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "pnpmPackageBinary": pnpm_package_binary,
             "workspaceBinary": workspace_binary,
             "launchConfig": launch_config,
+            "remoteViewPrivileges": remote_view_privileges,
             "issues": issues,
         }
     })
@@ -1078,6 +1092,164 @@ fn install_doctor_issues(
     }
 
     issues
+}
+
+fn remote_view_privilege_status() -> serde_json::Value {
+    let group_name = std::env::var("AGENT_BROWSER_PRIVILEGED_GROUP")
+        .unwrap_or_else(|_| "agent-browser".to_string());
+    let helper_path = std::env::var("AGENT_BROWSER_PRIVILEGED_HELPER").unwrap_or_else(|_| {
+        "/usr/local/libexec/agent-browser/agent-browser-privileged-helper".to_string()
+    });
+    let sudoers_path = std::env::var("AGENT_BROWSER_PRIVILEGED_SUDOERS")
+        .unwrap_or_else(|_| "/etc/sudoers.d/agent-browser".to_string());
+    let current_user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
+    let group_exists = command_success("getent", &["group", &group_name]);
+    let user_groups = Command::new("id").arg("-nG").output().ok().map(|output| {
+        String::from_utf8_lossy(&output.stdout)
+            .split_whitespace()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+    });
+    let user_in_group = user_groups
+        .as_ref()
+        .map(|groups| groups.iter().any(|group| group == &group_name))
+        .unwrap_or(false);
+    let helper_exists = Path::new(&helper_path).exists();
+    let sudoers_exists = Path::new(&sudoers_path).exists();
+    let helper_check = command_output_summary("sudo", &["-n", &helper_path, "check"]);
+
+    let mut issues = Vec::new();
+    if !group_exists {
+        issues.push(remote_view_privilege_issue(
+            "remote_view_privileged_group_missing",
+            "the agent-browser privileged group is missing",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+        ));
+    }
+    if group_exists && !user_in_group {
+        issues.push(remote_view_privilege_issue(
+            "remote_view_privileged_group_membership_missing",
+            "the current user is not in the agent-browser privileged group",
+            "run agent-browser install --with-remote-view-privileges, then open a new shell or run newgrp agent-browser",
+            true,
+        ));
+    }
+    if !helper_exists {
+        issues.push(remote_view_privilege_issue(
+            "remote_view_privileged_helper_missing",
+            "the root-owned remote-view privileged helper is missing",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+        ));
+    }
+    if !sudoers_exists {
+        issues.push(remote_view_privilege_issue(
+            "remote_view_privileged_sudoers_missing",
+            "the remote-view sudoers policy is missing",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+        ));
+    }
+    if helper_exists
+        && helper_check
+            .get("success")
+            .and_then(|value| value.as_bool())
+            != Some(true)
+    {
+        issues.push(remote_view_privilege_issue(
+            "remote_view_privileged_helper_not_usable",
+            "the remote-view privileged helper cannot be run with sudo -n",
+            "install the helper, confirm group membership in a new shell, and rerun agent-browser install doctor",
+            false,
+        ));
+    }
+
+    let ready = group_exists
+        && user_in_group
+        && helper_exists
+        && sudoers_exists
+        && helper_check
+            .get("success")
+            .and_then(|value| value.as_bool())
+            == Some(true);
+
+    json!({
+        "ready": ready,
+        "requiresInteractiveSudo": !ready,
+        "currentUser": current_user,
+        "groupName": group_name,
+        "groupExists": group_exists,
+        "userInGroup": user_in_group,
+        "helperPath": helper_path,
+        "helperExists": helper_exists,
+        "sudoersPath": sudoers_path,
+        "sudoersExists": sudoers_exists,
+        "helperCheck": helper_check,
+        "issues": issues,
+    })
+}
+
+fn remote_view_privilege_issue(
+    code: &str,
+    message: &str,
+    remediation: &str,
+    first_install_sudo: bool,
+) -> serde_json::Value {
+    json!({
+        "code": code,
+        "message": message,
+        "remediation": remediation,
+        "requiresInteractiveSudo": first_install_sudo,
+    })
+}
+
+fn command_success(command: &str, args: &[&str]) -> bool {
+    Command::new(command)
+        .args(args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn command_output_summary(command: &str, args: &[&str]) -> serde_json::Value {
+    match Command::new(command).args(args).output() {
+        Ok(output) => json!({
+            "available": true,
+            "success": output.status.success(),
+            "exitCode": output.status.code(),
+            "stdout": redact_doctor_text(String::from_utf8_lossy(&output.stdout).trim()),
+            "stderr": redact_doctor_text(String::from_utf8_lossy(&output.stderr).trim()),
+        }),
+        Err(error) => json!({
+            "available": false,
+            "success": false,
+            "exitCode": null,
+            "stdout": "",
+            "stderr": redact_doctor_text(error.to_string()),
+        }),
+    }
+}
+
+fn redact_doctor_text(text: impl AsRef<str>) -> String {
+    text.as_ref()
+        .lines()
+        .map(|line| {
+            let lower = line.to_ascii_lowercase();
+            if lower.contains("password") || lower.contains("secret") || lower.contains("token") {
+                if let Some((key, _)) = line.split_once('=') {
+                    format!("{}=<redacted>", key.trim())
+                } else {
+                    "<redacted>".to_string()
+                }
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn binary_fingerprint(path: Option<PathBuf>) -> serde_json::Value {

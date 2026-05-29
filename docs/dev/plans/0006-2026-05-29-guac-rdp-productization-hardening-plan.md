@@ -3,13 +3,27 @@
 Date: 2026-05-29
 State: OPEN
 Lane: P06
-Outcome: PENDING
+Outcome: PARTIAL
 
 Current state: P05 proved that the installed `0.27.0` checkpoint runtime can
 operate two simultaneous Guacamole/RDP browser routes when local route-pool,
 display, access, viewer, and Guacamole URL preconditions are already satisfied.
 P06 turns that checkpoint into productization work. It does not prepare or
 publish a formal release.
+
+2026-05-29 update: the first P06 implementation slice addressed the known
+P05 operator issues around undocumented live-gate inputs and incomplete doctor
+diagnostics. The rebuilt installed checkpoint now reports remote-view privilege
+readiness from install doctor, reports top-level remote-view issue codes plus
+viewer prerequisites, hydrates the many-to-many live harness from doctor output,
+auto-discovers common viewer browsers, and fails non-local Guacamole route URLs
+with the explicit `non_embeddable_guacamole_url` diagnostic. The installed
+local many-to-many gate passed from the installed command.
+
+P06 remains open because this turn did not freshly prove the clean-machine
+first-install path asks for sudo exactly once, and because the product
+invariant that names service readiness inside install doctor still needs an
+explicit ownership decision.
 
 ## Purpose
 
@@ -60,6 +74,8 @@ P06 is not complete until these invariants are true:
 
 ### Slice A | Installer And Doctor Contract Audit
 
+Status: COMPLETE for the already-provisioned checkpoint.
+
 Goal: compare the current installed checkpoint against the one-time-sudo and
 fully diagnostic release bar.
 
@@ -79,7 +95,18 @@ Exit criteria:
 - Any required first-install sudo action is named and scoped.
 - Re-run behavior is documented for already-installed machines.
 
+Result:
+
+- Manual P05 preconditions are now assigned to installer, doctor, or live-test
+  ownership in
+  `docs/dev/notes/2026-05-29-p06-installer-doctor-productization.md`.
+- Current installed doctors prove `requiresInteractiveSudo=false` on the
+  already-provisioned machine.
+- The clean-machine first-install proof is still deferred to Slice B.
+
 ### Slice B | One-Time Sudo Install Path
+
+Status: OPEN.
 
 Goal: make the first install perform all required privileged setup behind one
 interactive sudo boundary.
@@ -99,7 +126,15 @@ Exit criteria:
 - Subsequent setup and doctor runs report `requiresInteractiveSudo=false` when
   the machine is already provisioned.
 
+Remaining issue:
+
+- Re-run readiness is proven on the current machine, but the first-install
+  "exactly once" behavior has not been validated on a clean host or equivalent
+  reset fixture.
+
 ### Slice C | Fully Diagnostic Doctor Surface
+
+Status: MOSTLY COMPLETE for blockers observed in P03 through P05.
 
 Goal: make doctors good enough to replace ad hoc operator spelunking.
 
@@ -119,6 +154,20 @@ Exit criteria:
 - Doctors identify every blocker that appeared during P03 through P05.
 - A failed many-to-many gate points back to a doctor issue instead of requiring
   manual log archaeology.
+
+Result:
+
+- `agent-browser install doctor --json` now reports remote-view privilege
+  readiness, helper, sudoers, group, membership, helper check, nested issues,
+  installed binary, workspace binary, pnpm package binary, browser-build state,
+  and version state.
+- `agent-browser doctor remote-view --json` now reports stable top-level
+  issues, remediations, viewer prerequisites, privilege readiness, route-pool
+  readiness, route-display readiness, display access, and many-to-many
+  readiness.
+- The remaining diagnostic decision is whether install doctor should directly
+  report service readiness, or whether service readiness remains composed in
+  remote-view doctor.
 
 ### Slice D | Route-Pool And Display Maintenance
 
@@ -142,6 +191,8 @@ Exit criteria:
 
 ### Slice E | Live Gate Productization
 
+Status: COMPLETE for the current Guacamole/RDP gate.
+
 Goal: turn the many-to-many live harness into a reliable release gate.
 
 Tasks:
@@ -158,7 +209,19 @@ Exit criteria:
 - Harness failures are classified as precondition failure, product regression,
   or external service failure.
 
+Result:
+
+- The harness now prefers installed `agent-browser`, hydrates route-pool and
+  route-display environment from `agent-browser doctor remote-view --json`,
+  auto-discovers common viewer browsers, checks OCR tooling, and fails public
+  Guacamole route URLs with `non_embeddable_guacamole_url`.
+- The local embeddable Guacamole gate passed from the installed command with
+  artifacts at
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-06-07-291Z`.
+
 ### Slice F | Release-Readiness Handoff
+
+Status: OPEN.
 
 Goal: decide whether the hardened operational milestone is ready for a future
 formal release lane.
@@ -176,3 +239,9 @@ Exit criteria:
 - Either P06 closes with release-readiness evidence, or it leaves a bounded
   next plan for remaining operational blockers.
 - Formal release work remains a separate explicit lane.
+
+Current handoff:
+
+- P06 does not close in this slice.
+- The next bounded work is Slice B clean-install sudo proof plus the Slice C
+  install-doctor service-readiness ownership decision.

@@ -4711,7 +4711,8 @@ Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install stealthcdp-chromium [--force]
        agent-browser install doctor [--json]
 
-Downloads and installs browser binaries required for automation.
+Downloads and installs browser binaries required for automation. The doctor is
+no-launch and also reports remote-view privilege helper readiness on Linux.
 
 Options:
   -d, --with-deps      Also install system dependencies (Linux only)
