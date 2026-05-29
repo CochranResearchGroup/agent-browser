@@ -2,7 +2,7 @@
 
 Date: 2026-05-29
 Plan: `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
-Status: Validated slice handoff
+Status: Validated P06 handoff
 
 ## Slice A Audit
 
@@ -156,7 +156,56 @@ Validation added for this follow-up:
 - `node scripts/dev/select-validation.js --base HEAD --json` passed and wrote
   `/tmp/agent-browser-p06-validation-select-turn6.json`.
 
-Remaining P06 scope:
+Clean-fixture validation:
 
-- A clean-host or equivalent reset-fixture validation is still needed before
-  claiming the first-install path asks for sudo exactly once.
+- `pnpm test:install-privileges-clean-fixture` passed. The smoke runs
+  `scripts/install-agent-browser-privileges.sh --apply` with fake `sudo`,
+  `getent`, `id`, `groupadd`, `usermod`, and `visudo` against a temp install
+  root. First apply records exactly one `sudo -v`, no `sudo -n`, three
+  privileged install operations, one group creation, and one membership update.
+  Second apply records no additional `sudo -v` and no additional privileged
+  install operations.
+- `cargo test --manifest-path cli/Cargo.toml install_orders_remote_view_privileges_before_linux_deps -- --test-threads=1`
+  passed, proving the full `agent-browser install --with-deps
+  --with-remote-view-privileges` source path runs the privilege installer
+  before Linux dependency installation.
+- The rebuilt installed command, workspace binary, and pnpm package binary
+  were synchronized at checksum
+  `cb9f81a245464c516d313aee875fa076049cdc5559e9342250c9680463faa9e4`.
+
+Final P06 validation:
+
+- `agent-browser install doctor --json` passed with no issues and reported
+  matching installed, workspace, and pnpm package binary checksums,
+  `remoteViewPrivileges.ready=true`, `requiresInteractiveSudo=false`, and
+  `service.ready=true`.
+- `agent-browser doctor remote-view --json` passed with no issues and reported
+  route-pool, route-display, display-access, viewer-prerequisite, and
+  many-to-many readiness.
+- `docker restart agent-browser-guacamole agent-browser-guacd && node scripts/smoke-rdp-guac-route-pool-readiness.js --report-only`
+  passed, proving route-pool readiness survives Guacamole web and guacd
+  restarts.
+- `pnpm sync:rdp-guac-existing-user-route-pool` passed without interactive
+  sudo.
+- `pnpm grant:rdp-route-display-access -- --apply` passed through the
+  installed privileged helper without interactive sudo.
+- `agent-browser --json get title` passed, proving default command attach still
+  works from the installed runtime.
+- `AGENT_BROWSER_REMOTE_VIEW_URL=http://127.0.0.1:8092/guacamole/ AGENT_BROWSER_RDP_TEST_USE_INSTALLED=1 node scripts/test-rdp-guac-many-to-many-live.js`
+  passed from the installed command with artifacts at
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-39-55-085Z`.
+- `AGENT_BROWSER_RDP_TEST_USE_INSTALLED=1 node scripts/test-rdp-guac-many-to-many-live.js`
+  failed fast with the intended `non_embeddable_guacamole_url` diagnostic and
+  artifacts at
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-40-34-292Z`.
+- `git diff --check` passed after closeout doc updates.
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+  passed after syncing the installed skill.
+- `node scripts/dev/select-validation.js --base HEAD --json` passed and wrote
+  `/tmp/agent-browser-p06-validation-select-closeout.json`.
+
+P06 closeout:
+
+- P06 is complete as an operational hardening lane.
+- Formal release preparation remains a separate lane. P06 did not publish a
+  release, move release markers, or add a public `0.27.0` changelog entry.

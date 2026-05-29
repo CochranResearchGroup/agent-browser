@@ -244,3 +244,61 @@ Result:
   doctor reports `data.service.ready=true` plus `data.service.noLaunch=true`.
 - P06 remains open for clean-host or equivalent reset-fixture proof that first
   install uses one clear sudo authorization boundary.
+
+## 2026-05-29 Turn 7 | P06 Closeout
+
+Scope: finish P06 by proving the first-install sudo boundary with an equivalent
+clean reset fixture, validating route-pool restart durability, and running the
+final installed gates.
+
+Actions:
+
+- Added `pnpm test:install-privileges-clean-fixture`, which runs the privilege
+  installer against fake `sudo`, `getent`, `id`, `groupadd`, `usermod`, and
+  `visudo` under a temp install root.
+- Reordered the Linux install path so
+  `agent-browser install --with-deps --with-remote-view-privileges` runs
+  remote-view privilege setup before dependency installation.
+- Added a Rust guard that keeps remote-view privilege setup before Linux
+  dependency installation.
+- Updated README, docs site installation guidance, skill guidance, P06 plan,
+  roadmap, and P06 validation note.
+- Rebuilt and installed the checkpoint binary to the local command, workspace
+  binary, and pnpm package binary.
+
+Validation run:
+
+- `pnpm test:install-privileges-clean-fixture`
+- `cargo test --manifest-path cli/Cargo.toml install_orders_remote_view_privileges_before_linux_deps -- --test-threads=1`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `pnpm --dir docs build`
+- `pnpm build:native`
+- `agent-browser install doctor --json`
+- `agent-browser doctor remote-view --json`
+- `node scripts/smoke-rdp-guac-route-pool-readiness.js --report-only`
+- `docker restart agent-browser-guacamole agent-browser-guacd && node scripts/smoke-rdp-guac-route-pool-readiness.js --report-only`
+- `pnpm sync:rdp-guac-existing-user-route-pool`
+- `pnpm grant:rdp-route-display-access -- --apply`
+- `agent-browser --json get title`
+- `AGENT_BROWSER_REMOTE_VIEW_URL=http://127.0.0.1:8092/guacamole/ AGENT_BROWSER_RDP_TEST_USE_INSTALLED=1 node scripts/test-rdp-guac-many-to-many-live.js`
+- `AGENT_BROWSER_RDP_TEST_USE_INSTALLED=1 node scripts/test-rdp-guac-many-to-many-live.js`
+
+Result:
+
+- The clean-fixture smoke proved first apply uses exactly one explicit
+  `sudo -v` boundary and second apply does not add another prompt boundary or
+  repeat privileged install commands.
+- Installed doctor and remote-view doctor passed with no issues. The final
+  P06 installed runtime checksum is
+  `cb9f81a245464c516d313aee875fa076049cdc5559e9342250c9680463faa9e4`.
+- Route-pool readiness survived Guacamole web and guacd restarts.
+- Route sync and route-display access grant reruns passed without interactive
+  sudo.
+- Default command attach passed.
+- The local embeddable Guacamole many-to-many gate passed with artifacts at
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-39-55-085Z`.
+- The public Guacamole URL invocation failed fast with the intended
+  `non_embeddable_guacamole_url` diagnostic and artifacts at
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-40-34-292Z`.
+- P06 is closed. Formal release work remains a separate lane.

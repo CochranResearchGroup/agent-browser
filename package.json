@@ -86,6 +86,7 @@
     "test:service-health-live": "node scripts/smoke-service-health.js",
     "setup:rdp-guac-route-pool": "bash scripts/setup-rdp-guac-route-pool.sh",
     "install:privileges": "bash scripts/install-agent-browser-privileges.sh",
+    "test:install-privileges-clean-fixture": "bash scripts/smoke-install-privileges-clean-fixture.sh",
     "sync:rdp-guac-existing-user-route-pool": "bash scripts/sync-rdp-guac-existing-user-route-pool.sh",
     "inspect:rdp-route-displays": "node scripts/inspect-rdp-route-displays.js",
     "grant:rdp-route-display-access": "bash scripts/grant-rdp-route-display-access.sh",

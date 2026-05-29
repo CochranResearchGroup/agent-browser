@@ -57,6 +57,9 @@ sudoers rule that lets members of that group configure RDP route users,
 restart XRDP, and grant route-display access without repeated sudo prompts.
 After applying, open a new shell or run `newgrp agent-browser`, then verify
 with `agent-browser doctor remote-view`.
+When `--with-deps` is combined with `--with-remote-view-privileges`, the
+remote-view privilege installer runs first so its explicit `sudo -v` boundary
+authorizes the later dependency installation.
 Re-running the command on an already-provisioned machine exits before any
 privileged changes when the helper, sudoers policy, group, and membership are
 already ready.

@@ -1,9 +1,9 @@
 # Guacamole RDP Productization Hardening Plan
 
 Date: 2026-05-29
-State: OPEN
+State: CLOSED
 Lane: P06
-Outcome: PARTIAL
+Outcome: VALIDATED
 
 Current state: P05 proved that the installed `0.27.0` checkpoint runtime can
 operate two simultaneous Guacamole/RDP browser routes when local route-pool,
@@ -20,8 +20,13 @@ auto-discovers common viewer browsers, and fails non-local Guacamole route URLs
 with the explicit `non_embeddable_guacamole_url` diagnostic. The installed
 local many-to-many gate passed from the installed command.
 
-P06 remains open because this work has not freshly proved the clean-machine
-first-install path asks for sudo exactly once.
+2026-05-29 closeout: P06 is validated. A reset-fixture smoke now proves the
+one-time privilege installer uses exactly one explicit `sudo -v` boundary on a
+clean simulated host and uses only a non-interactive helper readiness check on
+the second apply. The full install path now runs remote-view privilege setup
+before dependency installation when `--with-deps` and
+`--with-remote-view-privileges` are combined, so the explicit helper
+authorization boundary comes first.
 
 ## Purpose
 
@@ -104,7 +109,7 @@ Result:
 
 ### Slice B | One-Time Sudo Install Path
 
-Status: PARTIAL.
+Status: COMPLETE.
 
 Goal: make the first install perform all required privileged setup behind one
 interactive sudo boundary.
@@ -124,13 +129,18 @@ Exit criteria:
 - Subsequent setup and doctor runs report `requiresInteractiveSudo=false` when
   the machine is already provisioned.
 
-Remaining issue:
+Result:
 
 - Re-run readiness is proven on the current machine. The privilege installer
   now exits before privileged changes when the helper, sudoers file, group,
   membership, and non-interactive helper check are already ready.
-- The first-install "exactly once" behavior has not been validated on a clean
-  host or equivalent reset fixture.
+- `pnpm test:install-privileges-clean-fixture` validates an equivalent clean
+  reset fixture: first apply records exactly one `sudo -v`, installs helper,
+  sudoers, group, and membership through the fake privileged boundary, and
+  second apply records no additional `sudo -v` or privileged install commands.
+- `agent-browser install --with-deps --with-remote-view-privileges` now runs
+  remote-view privilege setup before Linux dependency installation so the
+  explicit helper authorization boundary is first.
 
 ### Slice C | Fully Diagnostic Doctor Surface
 
@@ -171,6 +181,8 @@ Result:
 
 ### Slice D | Route-Pool And Display Maintenance
 
+Status: COMPLETE.
+
 Goal: make route-pool state durable and repairable.
 
 Tasks:
@@ -188,6 +200,19 @@ Exit criteria:
 
 - Route-pool readiness is reproducible after service restarts.
 - Duplicate or missing display assignments produce deterministic diagnostics.
+
+Result:
+
+- Route-pool readiness passed before and after restarting
+  `agent-browser-guacamole` and `agent-browser-guacd`.
+- `pnpm sync:rdp-guac-existing-user-route-pool` reran successfully without
+  interactive sudo for the reusable `agent-browser-rdp` route shape.
+- `pnpm grant:rdp-route-display-access -- --apply` used the installed
+  privileged helper and completed without interactive sudo for the active
+  route displays.
+- Remote-view doctor reports route displays, display access, and deterministic
+  top-level issue codes for missing route pool, display, access, and
+  privilege-helper blockers.
 
 ### Slice E | Live Gate Productization
 
@@ -221,7 +246,7 @@ Result:
 
 ### Slice F | Release-Readiness Handoff
 
-Status: OPEN.
+Status: COMPLETE.
 
 Goal: decide whether the hardened operational milestone is ready for a future
 formal release lane.
@@ -240,7 +265,10 @@ Exit criteria:
   next plan for remaining operational blockers.
 - Formal release work remains a separate explicit lane.
 
-Current handoff:
+Result:
 
-- P06 does not close in this slice.
-- The next bounded work is Slice B clean-install sudo proof.
+- Installed `agent-browser install doctor --json`, `agent-browser doctor
+  remote-view --json`, default command attach, route-pool restart readiness,
+  public URL classifier, and the local OCR-backed many-to-many live gate all
+  passed or failed with the intended diagnostic.
+- Formal release work remains separate from P06.

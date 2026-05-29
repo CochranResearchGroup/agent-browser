@@ -786,6 +786,10 @@ pub fn run_install(with_deps: bool, with_remote_view_privileges: bool) {
     let is_linux = cfg!(target_os = "linux");
 
     if is_linux {
+        if with_remote_view_privileges {
+            install_remote_view_privileges();
+        }
+
         if with_deps {
             install_linux_deps();
         } else {
@@ -795,10 +799,6 @@ pub fn run_install(with_deps: bool, with_remote_view_privileges: bool) {
             );
             println!("  agent-browser install --with-deps");
             println!();
-        }
-
-        if with_remote_view_privileges {
-            install_remote_view_privileges();
         }
     } else if with_remote_view_privileges {
         eprintln!(
@@ -1958,6 +1958,26 @@ mod tests {
         );
 
         assert_eq!(issue_codes(issues), vec!["service_status_not_ready"]);
+    }
+
+    #[test]
+    fn install_orders_remote_view_privileges_before_linux_deps() {
+        let source = include_str!("install.rs");
+        let run_install_start = source
+            .find("pub fn run_install")
+            .expect("run_install should exist");
+        let run_install_source = &source[run_install_start..];
+        let privileges_pos = run_install_source
+            .find("install_remote_view_privileges();")
+            .expect("run_install should call install_remote_view_privileges");
+        let deps_pos = run_install_source
+            .find("install_linux_deps();")
+            .expect("run_install should call install_linux_deps");
+
+        assert!(
+            privileges_pos < deps_pos,
+            "remote-view privileges must establish the sudo boundary before dependency installation"
+        );
     }
 
     #[test]

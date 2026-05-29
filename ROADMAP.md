@@ -325,15 +325,15 @@ formal release milestone.
 
 ## P06 | Guacamole RDP Productization Hardening
 
-State: OPEN
-Current state: P06 has completed the doctor, live-gate, and already-provisioned
-idempotence slices, but remains open for clean-install sudo proof.
+State: CLOSED
+Current state: P06 validated the Guacamole/RDP productization hardening
+milestone without publishing a formal release.
 
 ### Current State
 
 - Plan
   `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
-  is open.
+  is closed.
 - The rebuilt installed checkpoint runtime passes install doctor, remote-view
   doctor, and the many-to-many live gate from the installed command.
 - `agent-browser install doctor --json` now reports remote-view privilege
@@ -350,12 +350,18 @@ idempotence slices, but remains open for clean-install sudo proof.
   environment from doctor output, auto-discovers common viewer browsers,
   prefers installed `agent-browser`, and classifies public Guacamole route URLs
   with `non_embeddable_guacamole_url`.
-- The current installed 0.27.0 checkpoint checksum is
-  `1ec7a0528944fad76fc4b3c2539b57b15944a503126038e47fb9d8727bdfa53a`.
-- The next release milestone is not a version number. It is the operational
-  state where many-to-many Guacamole/RDP remote browser control is hardened,
-  the installer needs sudo exactly once on first install, and doctor output is
-  complete enough to diagnose every supported runtime prerequisite.
+- `pnpm test:install-privileges-clean-fixture` proves the clean reset-fixture
+  first-apply privilege installer path uses exactly one `sudo -v` boundary and
+  the second apply performs only a non-interactive helper readiness check.
+- `agent-browser install --with-deps --with-remote-view-privileges` now runs
+  remote-view privilege setup before Linux dependency installation, so the
+  explicit helper authorization boundary comes first.
+- Route-pool readiness passed after restarting `agent-browser-guacamole` and
+  `agent-browser-guacd`.
+- The final installed 0.27.0 checkpoint checksum for P06 is
+  `cb9f81a245464c516d313aee875fa076049cdc5559e9342250c9680463faa9e4`.
+- P06 did not publish a formal release, move release markers, or add a public
+  `0.27.0` docs changelog entry.
 
 ### Evidence
 
@@ -364,7 +370,6 @@ idempotence slices, but remains open for clean-install sudo proof.
 
 ### Next Recommendation
 
-Continue P06 with the clean-machine install path: prove
-`agent-browser install --with-deps --with-remote-view-privileges` has one clear
-sudo boundary on a clean host or equivalent reset fixture. Repeated setup is
-now proven non-interactive on the current already-provisioned machine.
+Keep P06 closed unless install doctor, remote-view doctor, route-pool
+readiness, or the many-to-many live gate regresses. Open a separate formal
+release lane when the maintainer wants to prepare and publish a release.
