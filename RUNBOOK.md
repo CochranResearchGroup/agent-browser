@@ -302,3 +302,36 @@ Result:
   `non_embeddable_guacamole_url` diagnostic and artifacts at
   `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-40-34-292Z`.
 - P06 is closed. Formal release work remains a separate lane.
+
+## 2026-05-29 Turn 8 | P07 v0.27.0 Formal Release Prep
+
+Scope: open the formal release lane now that P06 closed the Guacamole/RDP
+productization blocker.
+
+Actions:
+
+- Created
+  `docs/dev/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md`.
+- Moved `CHANGELOG.md` release extraction markers from `0.26.1` to `0.27.0`.
+- Added the public docs changelog entry for `v0.27.0` dated May 29, 2026.
+- Added P07 to `ROADMAP.md`.
+- Added release-preparation validation note
+  `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`.
+
+Validation run:
+
+- `git log v0.26.1..HEAD --format='%an <%ae>' | sort -u`
+- `pnpm version:sync`
+- `git diff --check`
+- `pnpm validation:select -- --base HEAD`
+- `pnpm --dir docs build`
+- `agent-browser install doctor --json`
+- `agent-browser doctor remote-view --json`
+
+Result:
+
+- Local release-preparation validation passed. The installed runtime checksum
+  remains
+  `cb9f81a245464c516d313aee875fa076049cdc5559e9342250c9680463faa9e4`.
+- P07 remains open for release PR merge, release workflow dry run, real
+  release workflow run, and GitHub release asset verification.
