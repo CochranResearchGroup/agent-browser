@@ -201,3 +201,46 @@ Result:
   `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-06-07-291Z`.
 - P06 remains open for clean-machine first-install sudo proof and the
   install-doctor service-readiness ownership decision.
+
+## 2026-05-29 Turn 6 | P06 Install Doctor Service Probe And Idempotence
+
+Scope: continue P06 by resolving the remaining install-doctor service
+ownership decision and strengthening the already-provisioned privilege
+installer re-run contract.
+
+Actions:
+
+- Added `data.service` to `agent-browser install doctor --json` using an
+  isolated no-launch service-status probe.
+- Made install doctor fail with `service_status_not_ready` when the no-launch
+  service probe does not report ready.
+- Changed `scripts/install-agent-browser-privileges.sh --apply` to exit before
+  privileged changes when the helper source matches the installed helper, the
+  sudoers file exists, the operator is in the `agent-browser` group, and
+  `sudo -n <helper> check` succeeds.
+- Updated CLI help, README, docs site installation/service-mode pages, skill
+  guidance, the P06 plan, roadmap, and validation note.
+
+Validation run:
+
+- `cargo run --quiet --manifest-path cli/Cargo.toml -- install doctor --json`
+- `cargo test --manifest-path cli/Cargo.toml install_doctor -- --test-threads=1`
+- `bash -n scripts/install-agent-browser-privileges.sh`
+- `AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE=scripts/libexec/agent-browser-privileged-helper bash scripts/install-agent-browser-privileges.sh --dry-run`
+- `AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE=scripts/libexec/agent-browser-privileged-helper bash scripts/install-agent-browser-privileges.sh --apply`
+- `pnpm build:native`
+- `agent-browser install doctor --json`
+- `agent-browser doctor remote-view --json`
+
+Result:
+
+- The source-build install doctor showed the new service probe as ready and
+  no-launch, while still correctly reporting source/install binary drift.
+- The already-provisioned helper installer re-run exited with "already ready"
+  and made no privileged changes.
+- The rebuilt installed runtime checksum is
+  `1ec7a0528944fad76fc4b3c2539b57b15944a503126038e47fb9d8727bdfa53a`.
+- Installed doctor and remote-view doctor passed with no issues, and install
+  doctor reports `data.service.ready=true` plus `data.service.noLaunch=true`.
+- P06 remains open for clean-host or equivalent reset-fixture proof that first
+  install uses one clear sudo authorization boundary.

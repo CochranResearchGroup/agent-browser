@@ -937,6 +937,11 @@ pub fn run_install_doctor(flags: &Flags) {
         "launch executable",
         report.pointer("/data/launchConfig/executablePath"),
     );
+    print_doctor_field("service ready", report.pointer("/data/service/ready"));
+    print_doctor_field(
+        "service no-launch",
+        report.pointer("/data/service/noLaunch"),
+    );
     print_doctor_field(
         "remote-view privileges ready",
         report.pointer("/data/remoteViewPrivileges/ready"),
@@ -991,12 +996,14 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let workspace_binary = binary_fingerprint(find_workspace_binary());
     let launch_config = launch_config_status(flags);
     let remote_view_privileges = remote_view_privilege_status();
+    let service = service_status_probe();
     let issues = install_doctor_issues(
         &current_executable,
         &path_command,
         &pnpm_package_binary,
         &workspace_binary,
         &launch_config,
+        &service,
     );
 
     json!({
@@ -1008,6 +1015,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "pnpmPackageBinary": pnpm_package_binary,
             "workspaceBinary": workspace_binary,
             "launchConfig": launch_config,
+            "service": service,
             "remoteViewPrivileges": remote_view_privileges,
             "issues": issues,
         }
@@ -1020,6 +1028,7 @@ fn install_doctor_issues(
     pnpm_package_binary: &serde_json::Value,
     workspace_binary: &serde_json::Value,
     launch_config: &serde_json::Value,
+    service: &serde_json::Value,
 ) -> Vec<serde_json::Value> {
     let mut issues = Vec::new();
 
@@ -1091,7 +1100,107 @@ fn install_doctor_issues(
         }));
     }
 
+    if !service
+        .get("ready")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        issues.push(json!({
+            "code": "service_status_not_ready",
+            "message": "agent-browser service status no-launch probe did not report ready"
+        }));
+    }
+
     issues
+}
+
+fn service_status_probe() -> serde_json::Value {
+    let temp_home = std::env::temp_dir().join(format!(
+        "agent-browser-install-doctor-service-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_micros())
+            .unwrap_or(0)
+    ));
+    let current_exe = std::env::current_exe().ok();
+    let Some(current_exe) = current_exe else {
+        return json!({
+            "available": false,
+            "ready": false,
+            "success": false,
+            "exitCode": null,
+            "command": "agent-browser --json service status",
+            "noLaunch": true,
+            "browserHealth": null,
+            "statePathExists": false,
+            "stderr": "current executable path is unavailable",
+        });
+    };
+
+    let output = Command::new(&current_exe)
+        .args([
+            "--json",
+            "--session",
+            "install-doctor-service-probe",
+            "service",
+            "status",
+        ])
+        .env("AGENT_BROWSER_HOME", &temp_home)
+        .env("AGENT_BROWSER_ARGS", "--no-sandbox")
+        .output();
+    let state_path = temp_home.join("service").join("state.json");
+
+    let result = match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let data = serde_json::from_str::<serde_json::Value>(stdout.trim()).ok();
+            let command_success = output.status.success();
+            let response_success = data
+                .as_ref()
+                .and_then(|value| value.get("success"))
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false);
+            let browser_health = data
+                .as_ref()
+                .and_then(|value| value.pointer("/data/control_plane/browser_health"))
+                .and_then(|value| value.as_str())
+                .map(ToString::to_string);
+            let no_launch = browser_health.as_deref() == Some("NotStarted");
+            json!({
+                "available": true,
+                "ready": command_success && response_success && no_launch,
+                "success": command_success,
+                "exitCode": output.status.code(),
+                "command": format!(
+                    "{} --json --session install-doctor-service-probe service status",
+                    current_exe.display()
+                ),
+                "noLaunch": no_launch,
+                "browserHealth": browser_health,
+                "statePathExists": state_path.exists(),
+                "stderr": redact_doctor_text(stderr.trim()),
+            })
+        }
+        Err(error) => json!({
+            "available": false,
+            "ready": false,
+            "success": false,
+            "exitCode": null,
+            "command": format!(
+                "{} --json --session install-doctor-service-probe service status",
+                current_exe.display()
+            ),
+            "noLaunch": true,
+            "browserHealth": null,
+            "statePathExists": state_path.exists(),
+            "stderr": redact_doctor_text(error.to_string()),
+        }),
+    };
+
+    let _ = fs::remove_dir_all(&temp_home);
+    result
 }
 
 fn remote_view_privilege_status() -> serde_json::Value {
@@ -1801,6 +1910,7 @@ mod tests {
             &fingerprint(Some("/pnpm/agent-browser"), Some("ccc")),
             &fingerprint(None, None),
             &launch_config,
+            &json!({"ready": true}),
         );
 
         assert_eq!(
@@ -1825,9 +1935,29 @@ mod tests {
             &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
             &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
             &launch_config,
+            &json!({"ready": true}),
         );
 
         assert_eq!(issue_codes(issues), vec!["launch_config_not_ready"]);
+    }
+
+    #[test]
+    fn install_doctor_flags_service_status_not_ready() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let issues = install_doctor_issues(
+            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
+            &launch_config,
+            &json!({"ready": false}),
+        );
+
+        assert_eq!(issue_codes(issues), vec!["service_status_not_ready"]);
     }
 
     #[test]

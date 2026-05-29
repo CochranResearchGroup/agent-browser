@@ -71,6 +71,25 @@ if [[ ! -f "$HELPER_SOURCE" ]]; then
   exit 1
 fi
 
+expected_sudoers_content() {
+  cat <<EOF
+# agent-browser narrow privileged helper
+%$GROUP_NAME ALL=(root) NOPASSWD: $HELPER_PATH
+EOF
+}
+
+current_install_ready() {
+  getent group "$GROUP_NAME" >/dev/null 2>&1 || return 1
+  id -nG "$OPERATOR_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx "$GROUP_NAME" >/dev/null || return 1
+  [[ -x "$HELPER_PATH" ]] || return 1
+  cmp -s "$HELPER_SOURCE" "$HELPER_PATH" || return 1
+  [[ -f "$SUDOERS_PATH" ]] || return 1
+  if [[ -r "$SUDOERS_PATH" ]]; then
+    expected_sudoers_content | diff -q - "$SUDOERS_PATH" >/dev/null 2>&1 || return 1
+  fi
+  sudo -n "$HELPER_PATH" check >/dev/null 2>&1 || return 1
+}
+
 if [[ "$APPLY" != "1" ]]; then
   cat <<EOF
 agent-browser privileged helper install dry run
@@ -93,6 +112,12 @@ EOF
   exit 0
 fi
 
+if current_install_ready; then
+  echo "agent-browser privileged helper is already ready."
+  echo "No privileged changes were needed."
+  exit 0
+fi
+
 if ! command -v visudo >/dev/null 2>&1; then
   echo "visudo is required to validate the sudoers policy." >&2
   exit 1
@@ -102,10 +127,7 @@ sudo -v
 
 SUDOERS_TMP="$(mktemp)"
 trap 'rm -f "$SUDOERS_TMP"' EXIT
-cat >"$SUDOERS_TMP" <<EOF
-# agent-browser narrow privileged helper
-%$GROUP_NAME ALL=(root) NOPASSWD: $HELPER_PATH
-EOF
+expected_sudoers_content >"$SUDOERS_TMP"
 
 sudo visudo -cf "$SUDOERS_TMP" >/dev/null
 sudo install -d -o root -g root -m 0755 "$HELPER_DIR"

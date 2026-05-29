@@ -326,9 +326,8 @@ formal release milestone.
 ## P06 | Guacamole RDP Productization Hardening
 
 State: OPEN
-Current state: P06 has completed its first productization slice for the
-already-provisioned checkpoint, but remains open for clean-install sudo proof
-and one remaining install-doctor ownership decision.
+Current state: P06 has completed the doctor, live-gate, and already-provisioned
+idempotence slices, but remains open for clean-install sudo proof.
 
 ### Current State
 
@@ -339,7 +338,11 @@ and one remaining install-doctor ownership decision.
   doctor, and the many-to-many live gate from the installed command.
 - `agent-browser install doctor --json` now reports remote-view privilege
   readiness with helper, sudoers, group, membership, helper check, nested issue
-  fields, and `requiresInteractiveSudo=false` on the provisioned machine.
+  fields, service readiness from a no-launch service-status probe, and
+  `requiresInteractiveSudo=false` on the provisioned machine.
+- The privilege installer now exits before privileged changes on an
+  already-provisioned machine when the helper, sudoers file, group, membership,
+  and non-interactive helper check are ready.
 - `agent-browser doctor remote-view --json` now reports stable top-level issue
   codes, viewer browser and OCR prerequisites, privilege readiness, route-pool
   readiness, route displays, display access, and many-to-many readiness.
@@ -348,7 +351,7 @@ and one remaining install-doctor ownership decision.
   prefers installed `agent-browser`, and classifies public Guacamole route URLs
   with `non_embeddable_guacamole_url`.
 - The current installed 0.27.0 checkpoint checksum is
-  `1b67077ccdb5e80d8667d3bcc8327e9c2a1a8521417c25280f71d059bc3b1694`.
+  `1ec7a0528944fad76fc4b3c2539b57b15944a503126038e47fb9d8727bdfa53a`.
 - The next release milestone is not a version number. It is the operational
   state where many-to-many Guacamole/RDP remote browser control is hardened,
   the installer needs sudo exactly once on first install, and doctor output is
@@ -363,6 +366,5 @@ and one remaining install-doctor ownership decision.
 
 Continue P06 with the clean-machine install path: prove
 `agent-browser install --with-deps --with-remote-view-privileges` has one clear
-sudo boundary, prove repeated setup stays non-interactive, and decide whether
-service readiness belongs directly in install doctor or remains composed by
-remote-view doctor.
+sudo boundary on a clean host or equivalent reset fixture. Repeated setup is
+now proven non-interactive on the current already-provisioned machine.

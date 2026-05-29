@@ -20,10 +20,8 @@ auto-discovers common viewer browsers, and fails non-local Guacamole route URLs
 with the explicit `non_embeddable_guacamole_url` diagnostic. The installed
 local many-to-many gate passed from the installed command.
 
-P06 remains open because this turn did not freshly prove the clean-machine
-first-install path asks for sudo exactly once, and because the product
-invariant that names service readiness inside install doctor still needs an
-explicit ownership decision.
+P06 remains open because this work has not freshly proved the clean-machine
+first-install path asks for sudo exactly once.
 
 ## Purpose
 
@@ -106,7 +104,7 @@ Result:
 
 ### Slice B | One-Time Sudo Install Path
 
-Status: OPEN.
+Status: PARTIAL.
 
 Goal: make the first install perform all required privileged setup behind one
 interactive sudo boundary.
@@ -128,13 +126,15 @@ Exit criteria:
 
 Remaining issue:
 
-- Re-run readiness is proven on the current machine, but the first-install
-  "exactly once" behavior has not been validated on a clean host or equivalent
-  reset fixture.
+- Re-run readiness is proven on the current machine. The privilege installer
+  now exits before privileged changes when the helper, sudoers file, group,
+  membership, and non-interactive helper check are already ready.
+- The first-install "exactly once" behavior has not been validated on a clean
+  host or equivalent reset fixture.
 
 ### Slice C | Fully Diagnostic Doctor Surface
 
-Status: MOSTLY COMPLETE for blockers observed in P03 through P05.
+Status: COMPLETE for blockers observed in P03 through P05.
 
 Goal: make doctors good enough to replace ad hoc operator spelunking.
 
@@ -160,14 +160,14 @@ Result:
 - `agent-browser install doctor --json` now reports remote-view privilege
   readiness, helper, sudoers, group, membership, helper check, nested issues,
   installed binary, workspace binary, pnpm package binary, browser-build state,
-  and version state.
+  service readiness from a no-launch service-status probe, and version state.
 - `agent-browser doctor remote-view --json` now reports stable top-level
   issues, remediations, viewer prerequisites, privilege readiness, route-pool
   readiness, route-display readiness, display access, and many-to-many
   readiness.
-- The remaining diagnostic decision is whether install doctor should directly
-  report service readiness, or whether service readiness remains composed in
-  remote-view doctor.
+- Install doctor directly owns the service-readiness field required by the P06
+  invariant. Remote-view doctor still composes runtime process visibility for
+  the Guacamole/RDP operator path.
 
 ### Slice D | Route-Pool And Display Maintenance
 
@@ -243,5 +243,4 @@ Exit criteria:
 Current handoff:
 
 - P06 does not close in this slice.
-- The next bounded work is Slice B clean-install sudo proof plus the Slice C
-  install-doctor service-readiness ownership decision.
+- The next bounded work is Slice B clean-install sudo proof.

@@ -57,6 +57,9 @@ sudoers rule that lets members of that group configure RDP route users,
 restart XRDP, and grant route-display access without repeated sudo prompts.
 After applying, open a new shell or run `newgrp agent-browser`, then verify
 with `agent-browser doctor remote-view`.
+Re-running the command on an already-provisioned machine exits before any
+privileged changes when the helper, sudoers policy, group, and membership are
+already ready.
 
 ### Install Doctor
 
@@ -65,6 +68,8 @@ changing custom browser manifests. It does not launch Chrome. It checks the
 `agent-browser` command on `PATH`, the running executable, the pnpm global
 package binary when pnpm is available, the current workspace binary when run
 from a checkout, and the no-launch `launchConfig` readiness view.
+It also runs a no-launch service-status probe and, on Linux, reports
+remote-view privilege helper readiness.
 
 ```bash
 agent-browser install doctor
@@ -1442,9 +1447,10 @@ keys only, route-display state, agent display access to those XRDP displays,
 stable issue codes with remediation text, drift findings, and the next setup
 action. `agent-browser install doctor --json` also reports
 `remoteViewPrivileges` with helper, sudoers, group, membership, and
-`requiresInteractiveSudo` fields. The remote-view doctor prefers reusing the
-existing `agent-browser-rdp` user and only points toward route-specific users
-when the current state shows they are actually needed.
+`requiresInteractiveSudo` fields plus `service` readiness from a no-launch
+service-status probe. The remote-view doctor prefers reusing the existing
+`agent-browser-rdp` user and only points toward route-specific users when the
+current state shows they are actually needed.
 Run
 `agent-browser setup windows-browser --print-powershell` to print a reviewed
 Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall

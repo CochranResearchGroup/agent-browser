@@ -4712,7 +4712,7 @@ Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install doctor [--json]
 
 Downloads and installs browser binaries required for automation. The doctor is
-no-launch and also reports remote-view privilege helper readiness on Linux.
+no-launch and also reports service-status and remote-view privilege readiness.
 
 Options:
   -d, --with-deps      Also install system dependencies (Linux only)
