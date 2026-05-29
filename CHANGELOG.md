@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.27.0
+
+<!-- release:start -->
 ### New Features
 
 - **Remote view route pools** - Added hardened Guacamole/RDP route-pool setup, route display inspection, viewer transfer, browser-switch, private-display, cleanup, and many-to-many validation flows for simultaneous remote browser viewing.
@@ -23,9 +26,14 @@
 
 - **Operator checkpoint guidance** - Updated README, CLI help, docs pages, skill guidance, roadmap, runbook, plans, and validation notes for the new service, dashboard, install, and remote-view checkpoint surfaces.
 
+### Contributors
+
+- @ecochran76
+
+<!-- release:end -->
+
 ## 0.26.1
 
-<!-- release:start -->
 ### Release
 
 - **GitHub release artifact** - Published a patch release after discovering that the npm package was not an authoritative artifact for this fork. The GitHub `v0.26.1` release contains the supported service-mode binaries.
@@ -33,8 +41,6 @@
 ### Contributors
 
 - @ecochran76
-
-<!-- release:end -->
 
 ## 0.26.0
 

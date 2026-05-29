@@ -373,3 +373,34 @@ milestone without publishing a formal release.
 Keep P06 closed unless install doctor, remote-view doctor, route-pool
 readiness, or the many-to-many live gate regresses. Open a separate formal
 release lane when the maintainer wants to prepare and publish a release.
+
+## P07 | v0.27.0 Formal Release
+
+State: OPEN
+Current state: P07 release metadata and local validation are complete. The
+release pull request, release workflow dry run, real release workflow run, and
+GitHub release asset verification remain.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md`
+  is open.
+- P06 closed the operational milestone that kept P05 from publishing a public
+  release.
+- This lane moves the validated `0.27.0` checkpoint into release metadata,
+  validation, PR merge, and GitHub release publication.
+- Release-preparation validation passed and is recorded in
+  `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`.
+
+### Evidence
+
+- `docs/dev/plans/0005-2026-05-29-runtime-checkpoint-and-no-release-handoff-plan.md`
+- `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
+- `docs/dev/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md`
+- `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`
+
+### Next Recommendation
+
+Complete P07 by validating the release metadata, merging the release PR, and
+running the manual GitHub release workflow after a successful dry run.
