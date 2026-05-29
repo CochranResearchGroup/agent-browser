@@ -38,6 +38,13 @@
         "tab_lifecycle_changed",
         "profile_lease_wait_started",
         "profile_lease_wait_ended",
+        "viewer_takeover_requested",
+        "viewer_connected",
+        "viewer_disconnected",
+        "controller_requested",
+        "controller_granted",
+        "controller_denied",
+        "route_released",
         "reconciliation_error",
         "incident_acknowledged",
         "incident_resolved"

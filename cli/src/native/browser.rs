@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -114,6 +115,10 @@ fn update_page_target_info_in_pages(pages: &mut [PageInfo], target: &TargetInfo)
         return true;
     }
     false
+}
+
+fn page_index_for_target_id(pages: &[PageInfo], target_id: &str) -> Option<usize> {
+    pages.iter().position(|p| p.target_id == target_id)
 }
 
 /// Converts common error messages into AI-friendly, actionable descriptions.
@@ -288,6 +293,13 @@ impl BrowserProcess {
     pub fn stderr_log_path(&self) -> Option<&Path> {
         match self {
             BrowserProcess::Chrome(p) => p.stderr_log_path(),
+            BrowserProcess::Lightpanda(_) => None,
+        }
+    }
+
+    pub fn display_name(&self) -> Option<&str> {
+        match self {
+            BrowserProcess::Chrome(p) => p.display_name(),
             BrowserProcess::Lightpanda(_) => None,
         }
     }
@@ -1152,6 +1164,15 @@ impl BrowserManager {
         Ok(json!({ "index": index, "url": url, "title": title }))
     }
 
+    pub async fn tab_switch_target_id(&mut self, target_id: &str) -> Result<Value, String> {
+        let index = page_index_for_target_id(&self.pages, target_id).ok_or_else(|| {
+            format!("Target ID {target_id} was not found in the attached tab list")
+        })?;
+        let mut result = self.tab_switch(index).await?;
+        result["targetId"] = json!(target_id);
+        Ok(result)
+    }
+
     pub async fn tab_close(&mut self, index: Option<usize>) -> Result<Value, String> {
         let target_index = index.unwrap_or(self.active_page_index);
 
@@ -1292,13 +1313,18 @@ impl BrowserManager {
     /// native window for operator remote-view inspection.
     pub async fn focus_for_view(&self, maximize: bool) -> Result<Value, String> {
         self.bring_to_front().await?;
+        let native_window_focus = self.focus_native_window_for_view();
 
         if !maximize {
-            return Ok(json!({
+            let mut result = json!({
                 "broughtToFront": true,
                 "maximizeRequested": false,
                 "maximized": false,
-            }));
+            });
+            if let Some(native_window_focus) = native_window_focus {
+                result["nativeWindowFocus"] = native_window_focus;
+            }
+            return Ok(result);
         }
 
         let target_id = self.active_target_id()?;
@@ -1327,19 +1353,68 @@ impl BrowserManager {
             )
             .await
         {
-            Ok(_) => Ok(json!({
+            Ok(_) => {
+                let mut result = json!({
                 "broughtToFront": true,
                 "maximizeRequested": true,
                 "maximized": true,
                 "windowId": window_id,
-            })),
-            Err(err) => Ok(json!({
+                });
+                if let Some(native_window_focus) = native_window_focus {
+                    result["nativeWindowFocus"] = native_window_focus;
+                }
+                Ok(result)
+            }
+            Err(err) => {
+                let mut result = json!({
                 "broughtToFront": true,
                 "maximizeRequested": true,
                 "maximized": false,
                 "windowId": window_id,
                 "maximizeError": err,
-            })),
+                });
+                if let Some(native_window_focus) = native_window_focus {
+                    result["nativeWindowFocus"] = native_window_focus;
+                }
+                Ok(result)
+            }
+        }
+    }
+
+    fn focus_native_window_for_view(&self) -> Option<Value> {
+        let pid = self.browser_pid()?;
+        let display = env::var("DISPLAY")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+            })?;
+
+        #[cfg(target_os = "linux")]
+        {
+            Some(match focus_x11_browser_window(pid, &display) {
+                Ok(value) => value,
+                Err(error) => json!({
+                    "attempted": true,
+                    "focused": false,
+                    "display": display,
+                    "pid": pid,
+                    "error": error,
+                }),
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Some(json!({
+                "attempted": false,
+                "focused": false,
+                "display": display,
+                "pid": pid,
+                "reason": "native_window_focus_unsupported",
+            }))
         }
     }
 
@@ -1551,6 +1626,10 @@ impl BrowserManager {
         self.browser_process
             .as_ref()
             .and_then(|p| p.stderr_log_path())
+    }
+
+    pub fn browser_display_name(&self) -> Option<&str> {
+        self.browser_process.as_ref().and_then(|p| p.display_name())
     }
 
     pub fn visited_origins(&self) -> &HashSet<String> {
@@ -1804,6 +1883,291 @@ async fn resolve_cdp_url(input: &str) -> Result<String, String> {
     ))
 }
 
+#[cfg(target_os = "linux")]
+fn focus_x11_browser_window(pid: u32, display_name: &str) -> Result<Value, String> {
+    x11_focus::focus_window_for_pid(pid, display_name)
+}
+
+#[cfg(target_os = "linux")]
+mod x11_focus {
+    use libc::{c_char, c_int, c_long, c_uchar, c_uint, c_ulong, c_void};
+    use serde_json::{json, Value};
+    use std::ffi::CString;
+    use std::ptr;
+
+    type Display = c_void;
+    type Window = c_ulong;
+    type Atom = c_ulong;
+
+    const FALSE: c_int = 0;
+    const ANY_PROPERTY_TYPE: Atom = 0;
+    const XA_WINDOW: Atom = 33;
+    const PROP_MODE_REPLACE: c_int = 0;
+    const REVERT_TO_PARENT: c_int = 2;
+    const CURRENT_TIME: c_ulong = 0;
+
+    #[link(name = "X11")]
+    extern "C" {
+        fn XOpenDisplay(display_name: *const c_char) -> *mut Display;
+        fn XCloseDisplay(display: *mut Display) -> c_int;
+        fn XDefaultRootWindow(display: *mut Display) -> Window;
+        fn XInternAtom(
+            display: *mut Display,
+            atom_name: *const c_char,
+            only_if_exists: c_int,
+        ) -> Atom;
+        fn XGetWindowProperty(
+            display: *mut Display,
+            w: Window,
+            property: Atom,
+            long_offset: c_long,
+            long_length: c_long,
+            delete: c_int,
+            req_type: Atom,
+            actual_type_return: *mut Atom,
+            actual_format_return: *mut c_int,
+            nitems_return: *mut c_ulong,
+            bytes_after_return: *mut c_ulong,
+            prop_return: *mut *mut c_uchar,
+        ) -> c_int;
+        fn XQueryTree(
+            display: *mut Display,
+            w: Window,
+            root_return: *mut Window,
+            parent_return: *mut Window,
+            children_return: *mut *mut Window,
+            nchildren_return: *mut c_uint,
+        ) -> c_int;
+        fn XFree(data: *mut c_void) -> c_int;
+        fn XMapRaised(display: *mut Display, w: Window) -> c_int;
+        fn XRaiseWindow(display: *mut Display, w: Window) -> c_int;
+        fn XSetInputFocus(
+            display: *mut Display,
+            focus: Window,
+            revert_to: c_int,
+            time: c_ulong,
+        ) -> c_int;
+        fn XChangeProperty(
+            display: *mut Display,
+            w: Window,
+            property: Atom,
+            type_: Atom,
+            format: c_int,
+            mode: c_int,
+            data: *const c_uchar,
+            nelements: c_int,
+        ) -> c_int;
+        fn XFlush(display: *mut Display) -> c_int;
+    }
+
+    pub(super) fn focus_window_for_pid(pid: u32, display_name: &str) -> Result<Value, String> {
+        let display_c = CString::new(display_name)
+            .map_err(|_| "X11 display contains an interior NUL byte".to_string())?;
+
+        unsafe {
+            let display = XOpenDisplay(display_c.as_ptr());
+            if display.is_null() {
+                return Err(format!("Failed to open X11 display {}", display_name));
+            }
+
+            let outcome = focus_window_for_pid_on_display(display, pid, display_name);
+            XCloseDisplay(display);
+            outcome
+        }
+    }
+
+    unsafe fn focus_window_for_pid_on_display(
+        display: *mut Display,
+        pid: u32,
+        display_name: &str,
+    ) -> Result<Value, String> {
+        let root = XDefaultRootWindow(display);
+        let pid_atom = intern_atom(display, "_NET_WM_PID")?;
+        let stacking_atom = intern_atom(display, "_NET_CLIENT_LIST_STACKING")?;
+        let client_list_atom = intern_atom(display, "_NET_CLIENT_LIST")?;
+        let active_atom = intern_atom(display, "_NET_ACTIVE_WINDOW")?;
+
+        let mut candidates = window_list_property(display, root, stacking_atom)
+            .or_else(|| window_list_property(display, root, client_list_atom))
+            .unwrap_or_default();
+        if candidates.is_empty() {
+            candidates = collect_window_tree(display, root);
+        }
+
+        let Some(target_window) = candidates
+            .iter()
+            .rev()
+            .copied()
+            .find(|window| window_pid(display, *window, pid_atom) == Some(pid))
+        else {
+            return Err(format!("No X11 window found for browser PID {}", pid));
+        };
+
+        let parent_window = direct_parent_window(display, target_window)
+            .filter(|window| *window != 0 && *window != root)
+            .unwrap_or(target_window);
+
+        XMapRaised(display, parent_window);
+        XRaiseWindow(display, parent_window);
+        XMapRaised(display, target_window);
+        XRaiseWindow(display, target_window);
+        XSetInputFocus(display, target_window, REVERT_TO_PARENT, CURRENT_TIME);
+        XChangeProperty(
+            display,
+            root,
+            active_atom,
+            XA_WINDOW,
+            32,
+            PROP_MODE_REPLACE,
+            &target_window as *const Window as *const c_uchar,
+            1,
+        );
+        XFlush(display);
+
+        Ok(json!({
+            "attempted": true,
+            "focused": true,
+            "display": display_name,
+            "pid": pid,
+            "window": format!("0x{:x}", target_window),
+            "parentWindow": format!("0x{:x}", parent_window),
+        }))
+    }
+
+    unsafe fn intern_atom(display: *mut Display, name: &str) -> Result<Atom, String> {
+        let c_name = CString::new(name).map_err(|_| format!("Invalid X11 atom name {}", name))?;
+        let atom = XInternAtom(display, c_name.as_ptr(), FALSE);
+        if atom == 0 {
+            Err(format!("X11 atom {} is unavailable", name))
+        } else {
+            Ok(atom)
+        }
+    }
+
+    unsafe fn window_list_property(
+        display: *mut Display,
+        window: Window,
+        property: Atom,
+    ) -> Option<Vec<Window>> {
+        let mut actual_type: Atom = 0;
+        let mut actual_format: c_int = 0;
+        let mut nitems: c_ulong = 0;
+        let mut bytes_after: c_ulong = 0;
+        let mut prop: *mut c_uchar = ptr::null_mut();
+        let status = XGetWindowProperty(
+            display,
+            window,
+            property,
+            0,
+            4096,
+            FALSE,
+            ANY_PROPERTY_TYPE,
+            &mut actual_type,
+            &mut actual_format,
+            &mut nitems,
+            &mut bytes_after,
+            &mut prop,
+        );
+        if status != 0 || prop.is_null() || actual_format != 32 || nitems == 0 {
+            if !prop.is_null() {
+                XFree(prop as *mut c_void);
+            }
+            return None;
+        }
+
+        let values = std::slice::from_raw_parts(prop as *const c_ulong, nitems as usize);
+        let windows = values.to_vec();
+        XFree(prop as *mut c_void);
+        Some(windows)
+    }
+
+    unsafe fn window_pid(display: *mut Display, window: Window, pid_atom: Atom) -> Option<u32> {
+        let mut actual_type: Atom = 0;
+        let mut actual_format: c_int = 0;
+        let mut nitems: c_ulong = 0;
+        let mut bytes_after: c_ulong = 0;
+        let mut prop: *mut c_uchar = ptr::null_mut();
+        let status = XGetWindowProperty(
+            display,
+            window,
+            pid_atom,
+            0,
+            1,
+            FALSE,
+            ANY_PROPERTY_TYPE,
+            &mut actual_type,
+            &mut actual_format,
+            &mut nitems,
+            &mut bytes_after,
+            &mut prop,
+        );
+        if status != 0 || prop.is_null() || actual_format != 32 || nitems == 0 {
+            if !prop.is_null() {
+                XFree(prop as *mut c_void);
+            }
+            return None;
+        }
+
+        let value = *(prop as *const c_ulong) as u32;
+        XFree(prop as *mut c_void);
+        Some(value)
+    }
+
+    unsafe fn direct_parent_window(display: *mut Display, window: Window) -> Option<Window> {
+        let mut root: Window = 0;
+        let mut parent: Window = 0;
+        let mut children: *mut Window = ptr::null_mut();
+        let mut nchildren: c_uint = 0;
+        let ok = XQueryTree(
+            display,
+            window,
+            &mut root,
+            &mut parent,
+            &mut children,
+            &mut nchildren,
+        );
+        if !children.is_null() {
+            XFree(children as *mut c_void);
+        }
+        (ok != 0).then_some(parent)
+    }
+
+    unsafe fn collect_window_tree(display: *mut Display, root: Window) -> Vec<Window> {
+        let mut windows = Vec::new();
+        collect_window_tree_into(display, root, &mut windows);
+        windows
+    }
+
+    unsafe fn collect_window_tree_into(
+        display: *mut Display,
+        window: Window,
+        windows: &mut Vec<Window>,
+    ) {
+        let mut root_return: Window = 0;
+        let mut parent_return: Window = 0;
+        let mut children: *mut Window = ptr::null_mut();
+        let mut nchildren: c_uint = 0;
+        let ok = XQueryTree(
+            display,
+            window,
+            &mut root_return,
+            &mut parent_return,
+            &mut children,
+            &mut nchildren,
+        );
+        if ok == 0 || children.is_null() {
+            return;
+        }
+
+        let child_slice = std::slice::from_raw_parts(children, nchildren as usize);
+        for child in child_slice {
+            windows.push(*child);
+            collect_window_tree_into(display, *child, windows);
+        }
+        XFree(children as *mut c_void);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1858,6 +2222,29 @@ mod tests {
         assert!(update_page_target_info_in_pages(&mut pages, &target));
         assert_eq!(pages[0].url, "https://example.com/popup");
         assert_eq!(pages[0].title, "Popup");
+    }
+
+    #[test]
+    fn test_page_index_for_target_id_finds_attached_page() {
+        let pages = vec![
+            PageInfo {
+                target_id: "blank-target".to_string(),
+                session_id: "session-1".to_string(),
+                url: "about:blank".to_string(),
+                title: "about:blank".to_string(),
+                target_type: "page".to_string(),
+            },
+            PageInfo {
+                target_id: "visible-target".to_string(),
+                session_id: "session-2".to_string(),
+                url: "https://example.com/".to_string(),
+                title: "Example Domain".to_string(),
+                target_type: "page".to_string(),
+            },
+        ];
+
+        assert_eq!(page_index_for_target_id(&pages, "visible-target"), Some(1));
+        assert_eq!(page_index_for_target_id(&pages, "missing-target"), None);
     }
 
     #[test]

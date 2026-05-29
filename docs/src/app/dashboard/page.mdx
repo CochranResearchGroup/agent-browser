@@ -15,6 +15,18 @@ Then open `http://localhost:4848` in your browser to see the live dashboard.
 
 All sessions automatically stream to the dashboard. No extra flags are needed.
 
+## Dashboard login
+
+The dashboard protects its operator APIs with an app-owned login screen. On
+first start it creates `~/.agent-browser/dashboard-auth.json` with hashed
+superuser credentials and writes bootstrap credentials to the mode-0600 file
+`~/.agent-browser/dashboard-auth.env`.
+
+The default `admin` account is a superuser. A `codex` superuser is also created
+for agent observation through trusted ingress. The dashboard records
+`AGENT_BROWSER_DASHBOARD_AUTH_FILE` in `~/.agent-browser/.env` so foreground
+runs and the user-scoped service use the same auth store.
+
 ### Custom stream port
 
 By default each session binds its WebSocket stream server to an OS-assigned port. To use a specific port, set the `AGENT_BROWSER_STREAM_PORT` environment variable:
@@ -33,7 +45,18 @@ agent-browser stream disable
 
 ## Dashboard features
 
-The dashboard is a single-page web app with three areas:
+The dashboard is an operations console with routeable operator areas:
+
+Dashboard sections are URL-addressable. Use <code>/service</code> for the
+Service view, <code>/browsers</code> for Browser sessions, and
+<code>/activity</code> for the activity stream. The Service view preserves its
+active record workspace in <code>?view=service:&lt;name&gt;</code> with values
+such as <code>service:browsers</code>, <code>service:profiles</code>,
+<code>service:incidents</code>, <code>service:sessions</code>,
+<code>service:tabs</code>, <code>service:jobs</code>, and
+<code>service:events</code>. The left workspace navigator separately persists
+the selected workspace, browser, session, tab, profile, and job query
+parameters so refreshes and handoff links reopen the same operational view.
 
 <table>
   <thead>
@@ -45,11 +68,15 @@ The dashboard is a single-page web app with three areas:
   <tbody>
     <tr>
       <td><strong>Live viewport</strong></td>
-      <td>Real-time JPEG frames from the browser, rendered to a canvas element</td>
+      <td>Real-time JPEG frames from the browser, rendered to a canvas element; embedded Guacamole workspace viewports include a compact interaction-settings control that opens the keyboard/input-method and mouse-mode panel without relying on the mobile edge gesture or Ctrl+Alt+Shift shortcut, classify browser health, dashboard auth, provider or ingress, iframe embedding, viewer ownership, and retained focus or takeover job readiness, and detect single-active-viewer disconnects with a Take over action that queues <code>view_takeover</code> before the iframe or popout reconnects. The guarded Slice D check is <code>pnpm test:rdp-guac-readiness-failures-live</code>, which captures a live healthy RDP/Guacamole viewport and rendered failure-state screenshots without stopping shared provider services.</td>
+    </tr>
+    <tr>
+      <td><strong>Workspace navigator</strong></td>
+      <td>Compact left-pane workspace rows derived from service-owned browser, session, tab, profile allocation, job, incident, and view-stream state. Rows are grouped as Active, Attention, and Retained; raw IDs are secondary to service, agent, task, profile, tab, and URL labels; disabled actions keep service-sourced reasons visible; guided browser/profile launches start the selected combo as its own daemon session; launcher defaults use the shared remote desktop display, RDP gateway view stream, and manual desktop input; selecting RDP gateway starts a <code>remote_headed</code> session so configured Guac or RDP gateway metadata can open directly in the embedded workspace viewport; remote-headed launches carry current Guac environment hints into an already-running daemon and maximize the browser window for viewport resizing; launched browser identity and retained stream metadata open that viewport when available, with Service Jobs as the fallback; launcher eligibility can surface compact remote-view readiness failures before a broken route opens; and blocked or human-takeover rows stay in Attention while Control or View remains primary whenever the related browser still exposes a controllable stream. Take over and external open both use the service-owned <code>view_takeover</code> request path. Disabled Resume remains visible until the backend exposes a service-owned release action.</td>
     </tr>
     <tr>
       <td><strong>Service view</strong></td>
-      <td>Worker health, browser health, compact retained-record status with hover details and cleanup alerts only when retained state needs attention, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent service-sourced incident severity, escalation, recommended action displays, and remedy summary groups, a service-owned incident history timeline with local fallback, a trace explorer backed by <code>/api/service/trace</code> for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards, target identity chips from <code>summary.contexts[].targetServiceIds</code>, naming warnings, and profile lease wait cards from the shared trace payload, a browser-health transition timeline for crash/recovery visibility, a backend-owned profile allocation view from <code>profileAllocations</code> with detail inspection refreshed from <code>GET /api/service/profiles/&lt;id&gt;/allocation</code>, target readiness rows including <code>needs_manual_seeding</code> for Google first-login profiles, and guarded by <code>pnpm test:dashboard-profile-allocation</code>, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, active-versus-retained summaries for sessions, tabs, and jobs, recent service jobs with naming warnings, detail inspection, and queued/running job cancellation, a managed browser table that defaults to actionable live or degraded records while keeping inert retained placeholders behind retained/all filters, grouped and locally remembered browser table lifecycle, density, column visibility, and column width controls with a full table-view reset, browser/session/tab detail inspection, filterable service events including tab lifecycle changes, and a reconcile action backed by the service HTTP API</td>
+      <td>Worker health, browser health, compact retained-record status with hover details and cleanup alerts only when retained state needs attention, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent service-sourced incident severity, escalation, recommended action displays, and remedy summary groups, a service-owned incident history timeline with local fallback, a trace explorer backed by <code>/api/service/trace</code> for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards, target identity chips from <code>summary.contexts[].targetServiceIds</code>, naming warnings, and profile lease wait cards from the shared trace payload, a browser-health transition timeline for crash/recovery visibility, a backend-owned profile allocation view from <code>profileAllocations</code> with detail inspection refreshed from <code>GET /api/service/profiles/&lt;id&gt;/allocation</code>, target readiness rows including <code>needs_manual_seeding</code> for Google first-login profiles, and guarded by <code>pnpm test:dashboard-profile-allocation</code>, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, active-versus-retained summaries for sessions, tabs, and jobs, recent service jobs with naming warnings, detail inspection, and queued/running job cancellation, a managed browser table that defaults to actionable live or degraded records while keeping inert retained placeholders behind retained/all filters, grouped and locally remembered browser table lifecycle, density, column visibility, and column width controls with a full table-view reset, selected-record inspection for browsers, profiles, incidents, sessions, tabs, and jobs with a hero summary, primary action row, semantic runtime/control/ownership/activity sections, related-record jumps, and an Evidence disclosure for raw JSON, long IDs, and endpoints, embedded remote-view inspection for browser view streams and service tabs through dashboard-owned chrome with fullscreen and Guacamole interaction settings controls, filterable service events including tab lifecycle changes, and a reconcile action backed by the service HTTP API</td>
     </tr>
     <tr>
       <td><strong>Activity feed</strong></td>

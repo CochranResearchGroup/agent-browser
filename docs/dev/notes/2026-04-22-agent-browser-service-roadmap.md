@@ -440,6 +440,85 @@ the service should make the requested browser/tab the foreground/maximized
 target inside the remote desktop viewport so the operator sees the intended
 state, not whichever window happened to have focus.
 
+## Dashboard Workspace Navigator Campaign
+
+The left pane should become a workspace navigator for human operators, not a
+raw implementation tree of daemon sessions. This campaign comes after the
+Service workbench and selected-record inspector are stable enough to expose the
+service-owned browser, profile, tab, job, and view-stream state in one coherent
+navigation model.
+
+The campaign objective is that a human can open the dashboard, pick the browser
+and profile posture they intend to use, launch or focus the matching
+service-owned browser, and then interact with it through the dashboard-owned
+remote viewport when a controllable view stream is available.
+
+End-of-campaign deliverables:
+
+- replace the current session tree with a workspace navigator that groups live,
+  attention-needed, and retained browser workspaces
+- derive navigator rows from service-owned browser, session, tab, profile,
+  allocation, readiness, and view-stream state instead of frontend-only
+  session labels
+- expose a guided launch affordance for supported browser and profile
+  combinations, using access-plan, profile readiness, browser capability, and
+  service-request contracts as the authority
+- keep incompatible browser/profile combinations visible but disabled with
+  service-sourced reasons and recommended actions, such as manual seeding,
+  profile lease wait, or browser capability validation
+- persist navigator selection in the URL so refresh and direct links return to
+  the same workspace, browser, profile, or tab context
+- make controllable remote headed browsers open in the embedded dashboard
+  viewport, including `rdp_gateway` or Guacamole-backed streams, after a queued
+  `view_focus` request has focused the selected browser or tab
+- provide a fullscreen and external-open fallback for the viewport without
+  making Guacamole or any stream provider the root dashboard experience
+- model human control as an operator takeover path with clear queue, lease, and
+  resume semantics rather than an untracked manual side channel
+- visually inspect UI-affecting slices with `agent-browser` throughout the
+  campaign, checking route persistence, row density, aesthetics, and viewport
+  ergonomics before calling each UX slice complete
+- validate the campaign with no-launch contract tests, dashboard source tests,
+  rendered `agent-browser` route smokes, and at least one live remote-view
+  control smoke before calling it complete
+
+The detailed planning checkpoint for this campaign is
+`docs/dev/notes/2026-05-23-left-pane-workspace-navigator-campaign.md`.
+
+## Remote View Backend Productization Campaign
+
+Remote viewing should become a backend-agnostic product capability rather than
+a single Guacamole integration.
+
+The current supported choices should be:
+
+- `rdp_gateway` through RDP and Guacamole for full-desktop remote control
+- `cdp_screencast` for CDP-backed tab review streams on browsers that are not
+  remote desktop workspaces
+- `novnc` with `vnc_input` for future multi-client remote desktop workspaces
+
+The sequence should favor reliability over switching providers too early:
+
+1. Harden RDP and Guacamole first. Make one-human multi-device transfer,
+   iframe and popout behavior, stale-tab recovery, duplicate-session repair,
+   readiness diagnostics, and many RDP-capable workspace tracking reliable.
+2. Add CDP read-only streaming and make it the default review path for non RDP
+   browser rows when CDP is enabled and site policy allows it.
+3. Add CDP read-write mode behind an explicit dashboard enable action,
+   service-owned policy gate, and audit trail.
+4. Add VNC/noVNC as a switchable multi-client desktop backend after the RDP
+   path is reliable and the noVNC spike proves its operational value.
+
+This keeps RDP as the first production full-control path, adds useful remote
+review for ordinary CDP-enabled browsers, and preserves the option to move
+full-desktop control to VNC/noVNC later without another dashboard refactor.
+
+The detailed planning checkpoint for this campaign is
+`docs/dev/notes/2026-05-26-remote-view-backends-campaign.md`.
+
+The detailed RDP and Guacamole hardening and testing plan is
+`docs/dev/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md`.
+
 ## MCP Surface
 
 MCP should expose agent-native primitives and resources.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import { activePortAtom, sessionsAtom, newSessionDialogAtom } from "@/store/sessions";
 import { useSessionsSync } from "@/store/sessions";
@@ -10,14 +10,20 @@ import { activeExtensionsAtom } from "@/store/sessions";
 import { useChatStatusSync } from "@/store/chat";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Viewport } from "@/components/viewport";
+import { WorkspaceRemoteViewport } from "@/components/workspace-remote-viewport";
 import { ActivityFeed } from "@/components/activity-feed";
 import { ChatPanel } from "@/components/chat-panel";
 import { ConsolePanel } from "@/components/console-panel";
 import { StoragePanel } from "@/components/storage-panel";
 import { ExtensionsPanel } from "@/components/extensions-panel";
 import { NetworkPanel } from "@/components/network-panel";
-import { SessionTree } from "@/components/session-tree";
+import { WorkspaceNavigator } from "@/components/workspace-navigator";
 import { AppShell, type DashboardSection } from "@/components/app-shell";
+import {
+  DASHBOARD_WORKSPACE_SELECTION_EVENT,
+  dashboardWorkspaceSelectionHasValue,
+  readDashboardWorkspaceUrlSelection,
+} from "@/lib/workspace-url-selection";
 import {
   ServiceDetailInspector,
   ServicePanel,
@@ -37,10 +43,51 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Plus,
+  ShieldCheck,
 } from "lucide-react";
 
 const LEFT_PANE_COLLAPSED_KEY = "agent-browser-dashboard-left-pane-collapsed";
 const RIGHT_PANE_COLLAPSED_KEY = "agent-browser-dashboard-right-pane-collapsed";
+const SECTION_PATHS: Record<DashboardSection, string> = {
+  overview: "/",
+  browsers: "/browsers",
+  service: "/service",
+  activity: "/activity",
+};
+type MobileDashboardPanel = "workspaces" | "viewport" | "activity" | "service";
+type DashboardAuthUser = {
+  username: string;
+  displayName?: string;
+  role?: string;
+};
+
+type DashboardAuthStatus = {
+  authenticated: boolean;
+  user?: DashboardAuthUser | null;
+};
+
+function dashboardSectionFromPath(pathname: string): DashboardSection {
+  const segments = pathname.split("/").filter(Boolean);
+  const segment = segments[segments.length - 1];
+  if (segment === "browsers" || segment === "service" || segment === "activity") return segment;
+  return "overview";
+}
+
+function dashboardSectionUrl(section: DashboardSection): string {
+  if (typeof window === "undefined") return SECTION_PATHS[section];
+  const params = new URLSearchParams(window.location.search);
+  const search = params.toString();
+  return `${SECTION_PATHS[section]}${search ? `?${search}` : ""}${window.location.hash}`;
+}
+
+function readWorkspaceViewportRoute(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get("view");
+  if (view === "workspace:tile") return true;
+  if (view !== "workspace:control" && view !== "workspace:view") return false;
+  return dashboardWorkspaceSelectionHasValue(readDashboardWorkspaceUrlSelection());
+}
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {
   if (typeof window === "undefined") return fallback;
@@ -54,16 +101,191 @@ function writeStoredBoolean(key: string, value: boolean): void {
   window.localStorage.setItem(key, String(value));
 }
 
-export default function DashboardPage() {
-  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
+export default function DashboardPage({
+  initialSection = "overview",
+}: {
+  initialSection?: DashboardSection;
+} = {}) {
+  return <DashboardAuthGate initialSection={initialSection} />;
+}
+
+function DashboardAuthGate({ initialSection }: { initialSection: DashboardSection }) {
+  const [checking, setChecking] = useState(true);
+  const [user, setUser] = useState<DashboardAuthUser | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkAuth() {
+      try {
+        const response = await fetch("/api/dashboard-auth/status", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        const payload = (await response.json()) as DashboardAuthStatus;
+        if (cancelled) return;
+        setUser(payload.authenticated ? payload.user ?? null : null);
+      } catch {
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
+    }
+    void checkAuth();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleLogin = useCallback((nextUser: DashboardAuthUser) => {
+    setUser(nextUser);
+    if (typeof window === "undefined") return;
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      window.history.replaceState({ dashboardAuth: true }, "", next);
+    } else if (window.location.pathname === "/login") {
+      window.history.replaceState({ dashboardAuth: true }, "", "/");
+    }
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    await fetch("/api/dashboard-auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    }).catch(() => undefined);
+    setUser(null);
+    if (typeof window !== "undefined") {
+      window.history.replaceState({ dashboardAuth: false }, "", "/login");
+    }
+  }, []);
+
+  if (checking) {
+    return <DashboardLoginScreen busy />;
+  }
+
+  if (!user) {
+    return <DashboardLoginScreen onAuthenticated={handleLogin} />;
+  }
+
+  return (
+    <DashboardExperience
+      initialSection={initialSection}
+      user={user}
+      onLogout={handleLogout}
+    />
+  );
+}
+
+function DashboardLoginScreen({
+  busy = false,
+  onAuthenticated,
+}: {
+  busy?: boolean;
+  onAuthenticated?: (user: DashboardAuthUser) => void;
+}) {
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy || submitting || !onAuthenticated) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/dashboard-auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ username, password }),
+      });
+      const payload = await response.json() as DashboardAuthStatus & { error?: string };
+      if (!response.ok || !payload.authenticated || !payload.user) {
+        setError(payload.error || "Invalid username or password.");
+        return;
+      }
+      onAuthenticated(payload.user);
+    } catch {
+      setError("Dashboard auth is not reachable.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="dashboard-root dashboard-login-root">
+      <div className="dashboard-aurora dashboard-aurora-one" />
+      <div className="dashboard-aurora dashboard-aurora-two" />
+      <main className="dashboard-login-main">
+        <form className="dashboard-login-panel" onSubmit={submit}>
+          <div className="dashboard-login-mark">
+            <ShieldCheck className="size-5" />
+          </div>
+          <div className="dashboard-login-heading">
+            <p className="dashboard-login-title">Agent Browser</p>
+            <p className="dashboard-login-subtitle">Superuser access required</p>
+          </div>
+          <label className="dashboard-login-field">
+            <span>Username</span>
+            <input
+              autoComplete="username"
+              disabled={busy || submitting}
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+            />
+          </label>
+          <label className="dashboard-login-field">
+            <span>Password</span>
+            <input
+              autoComplete="current-password"
+              disabled={busy || submitting}
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          {error && <p className="dashboard-login-error">{error}</p>}
+          <Button
+            type="submit"
+            className="dashboard-primary-action dashboard-login-submit"
+            disabled={busy || submitting || !username || !password}
+          >
+            <ShieldCheck className="size-4" />
+            {busy ? "Checking" : submitting ? "Signing in" : "Sign in"}
+          </Button>
+        </form>
+      </main>
+    </div>
+  );
+}
+
+function DashboardExperience({
+  initialSection = "overview",
+  user,
+  onLogout,
+}: {
+  initialSection?: DashboardSection;
+  user: DashboardAuthUser;
+  onLogout: () => void;
+}) {
+  const [activeSection, setActiveSection] = useState<DashboardSection>(() => {
+    if (typeof window === "undefined") return initialSection;
+    return dashboardSectionFromPath(window.location.pathname);
+  });
   const [leftPaneCollapsed, setLeftPaneCollapsed] = useState(() =>
     readStoredBoolean(LEFT_PANE_COLLAPSED_KEY, false),
   );
   const [rightPaneCollapsed, setRightPaneCollapsed] = useState(() =>
     readStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, true),
   );
+  const [mobilePanel, setMobilePanel] = useState<MobileDashboardPanel>(() => {
+    if (initialSection === "service") return "service";
+    if (initialSection === "activity") return "activity";
+    return "viewport";
+  });
   const [serviceInspectorSelection, setServiceInspectorSelection] = useState<ServiceInspectorSelection | null>(null);
   const [serviceInspectorActions, setServiceInspectorActions] = useState<ServiceInspectorActions>({});
+  const [hasWorkspaceViewportRoute, setHasWorkspaceViewportRoute] = useState(() => readWorkspaceViewportRoute());
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -76,6 +298,39 @@ export default function DashboardPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const hasConsoleErrors = useAtomValue(hasConsoleErrorsAtom);
   const activeExtensions = useAtomValue(activeExtensionsAtom);
+  const changeDashboardSection = useCallback((section: DashboardSection) => {
+    setActiveSection(section);
+    if (typeof window === "undefined") return;
+    const nextUrl = dashboardSectionUrl(section);
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.pushState({ dashboardSection: section }, "", nextUrl);
+    }
+  }, []);
+  const openNewSession = useCallback(() => {
+    if (!isDesktop) setMobilePanel("workspaces");
+    setNewSessionDialog(true);
+  }, [isDesktop, setNewSessionDialog]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setActiveSection(dashboardSectionFromPath(window.location.pathname));
+      setHasWorkspaceViewportRoute(readWorkspaceViewportRoute());
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    const onWorkspaceSelection = () => setHasWorkspaceViewportRoute(readWorkspaceViewportRoute());
+    window.addEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
+    return () => window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
+  }, []);
+  useEffect(() => {
+    if (activeSection === "service" || activeSection === "activity") {
+      setMobilePanel(activeSection);
+    }
+  }, [activeSection]);
+
   const openRightPane = useCallback(() => {
     setRightPaneCollapsed(false);
     writeStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, false);
@@ -100,8 +355,8 @@ export default function DashboardPage() {
       variant="ghost"
       size="icon"
       className="dashboard-pane-toggle dashboard-pane-toggle-left"
-      aria-label={leftPaneCollapsed ? "Show session pane" : "Collapse session pane"}
-      title={leftPaneCollapsed ? "Show session pane" : "Collapse session pane"}
+      aria-label={leftPaneCollapsed ? "Show workspace pane" : "Collapse workspace pane"}
+      title={leftPaneCollapsed ? "Show workspace pane" : "Collapse workspace pane"}
       onClick={toggleLeftPane}
     >
       {leftPaneCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
@@ -129,7 +384,7 @@ export default function DashboardPage() {
     )
     : activeSection === "activity"
       ? <ActivityFeed />
-      : <Viewport />;
+      : <WorkspaceRemoteViewport fallback={<Viewport />} />;
   const serviceInspectorPanel = (
     <ServiceDetailInspector selection={serviceInspectorSelection} actions={serviceInspectorActions} />
   );
@@ -178,19 +433,19 @@ export default function DashboardPage() {
   );
 
   if (isDesktop) {
-    if (!hasSessions && activeSection !== "service") {
+    if (!hasSessions && activeSection !== "service" && !hasWorkspaceViewportRoute) {
       return (
-        <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
+        <AppShell activeSection={activeSection} onSectionChange={changeDashboardSection} onNewSessionRequest={openNewSession} authenticatedUser={user.displayName || user.username} onLogout={onLogout}>
           <ResizablePanelGroup
             orientation="horizontal"
             className="dashboard-panel-grid"
           >
             {!leftPaneCollapsed && (
               <>
-                <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
+                <ResizablePanel id="sessions" defaultSize="20%" minSize="14%" maxSize="34%">
                   <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
                     {leftPaneToggle}
-                    <SessionTree />
+                    <WorkspaceNavigator />
                   </div>
                 </ResizablePanel>
                 <ResizableHandle />
@@ -214,7 +469,7 @@ export default function DashboardPage() {
                   <Button
                     size="lg"
                     className="dashboard-primary-action"
-                    onClick={() => setNewSessionDialog(true)}
+                    onClick={openNewSession}
                   >
                     <Plus className="size-4" />
                     New session
@@ -229,17 +484,17 @@ export default function DashboardPage() {
 
     if (!hasSessions && activeSection === "service") {
       return (
-        <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
+        <AppShell activeSection={activeSection} onSectionChange={changeDashboardSection} onNewSessionRequest={openNewSession} authenticatedUser={user.displayName || user.username} onLogout={onLogout}>
           <ResizablePanelGroup
             orientation="horizontal"
             className="dashboard-panel-grid"
           >
             {!leftPaneCollapsed && (
               <>
-                <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
+                <ResizablePanel id="sessions" defaultSize="20%" minSize="14%" maxSize="34%">
                   <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
                     {leftPaneToggle}
-                    <SessionTree />
+                    <WorkspaceNavigator />
                   </div>
                 </ResizablePanel>
                 <ResizableHandle />
@@ -272,17 +527,17 @@ export default function DashboardPage() {
     }
 
     return (
-      <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
+      <AppShell activeSection={activeSection} onSectionChange={changeDashboardSection} onNewSessionRequest={openNewSession} authenticatedUser={user.displayName || user.username} onLogout={onLogout}>
         <ResizablePanelGroup
           orientation="horizontal"
           className="dashboard-panel-grid"
         >
           {!leftPaneCollapsed && (
             <>
-              <ResizablePanel id="sessions" defaultSize="15%" minSize="10%" maxSize="30%">
+              <ResizablePanel id="sessions" defaultSize="20%" minSize="14%" maxSize="34%">
                 <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
                   {leftPaneToggle}
-                  <SessionTree />
+                  <WorkspaceNavigator />
                 </div>
               </ResizablePanel>
               <ResizableHandle />
@@ -312,36 +567,38 @@ export default function DashboardPage() {
   }
 
   return (
-    <AppShell activeSection={activeSection} onSectionChange={setActiveSection}>
+    <AppShell activeSection={activeSection} onSectionChange={changeDashboardSection} onNewSessionRequest={openNewSession} authenticatedUser={user.displayName || user.username} onLogout={onLogout}>
       <Tabs
-        value={activeSection === "service" ? "service" : activeSection === "activity" ? "activity" : "viewport"}
+        value={mobilePanel}
         onValueChange={(value) => {
-          if (value === "service" || value === "activity") {
-            setActiveSection(value);
-          } else {
-            setActiveSection("overview");
+          if (value === "workspaces" || value === "viewport") {
+            setMobilePanel(value);
+            changeDashboardSection("overview");
+          } else if (value === "service" || value === "activity") {
+            setMobilePanel(value);
+            changeDashboardSection(value);
           }
         }}
-        className="min-h-0 flex-1"
+        className="dashboard-mobile-tabs min-h-0 flex-1"
       >
-        <div className="shrink-0 px-3 pt-3">
+        <div className="dashboard-mobile-tabs-list shrink-0 px-3 pt-3">
           <TabsList className="w-full rounded-2xl bg-white/60 p-1 shadow-sm ring-1 ring-foreground/10 backdrop-blur-xl dark:bg-white/5">
-            <TabsTrigger value="sessions">Sessions</TabsTrigger>
+            <TabsTrigger value="workspaces">Workspaces</TabsTrigger>
             <TabsTrigger value="viewport">Viewport</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="service">Service</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="sessions" className="min-h-0 overflow-hidden p-3">
-          <SessionTree />
+        <TabsContent value="workspaces" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
+          <WorkspaceNavigator />
         </TabsContent>
-        <TabsContent value="viewport" className="min-h-0 overflow-hidden p-3">
-          <Viewport />
+        <TabsContent value="viewport" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
+          <WorkspaceRemoteViewport fallback={<Viewport />} />
         </TabsContent>
-        <TabsContent value="activity" className="min-h-0 overflow-hidden p-3">
+        <TabsContent value="activity" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
           {sidePanel}
         </TabsContent>
-        <TabsContent value="service" className="min-h-0 overflow-hidden p-3">
+        <TabsContent value="service" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
           <div className="dashboard-pane">
             <ServicePanel />
           </div>

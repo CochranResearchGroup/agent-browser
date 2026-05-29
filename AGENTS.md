@@ -38,6 +38,13 @@ Releases are manual, single-PR affairs. There is no changesets automation. The m
 
 Normal project work lands in this project's `origin` repository. Do not open release or feature PRs against the original upstream repository unless a maintainer explicitly asks for an upstream contribution.
 
+Normal roadmap checkpoint work may update the local installed runtime and may
+advance workspace version metadata for validation, but it is not a formal
+release. Formal releases are reserved for explicit maintainer direction after a
+fully hardened and operational many-to-many Guacamole/RDP remote operation
+milestone is met. That milestone must include a robust installer that requires
+sudo exactly once on first install and a fully diagnostic doctor surface.
+
 To prepare a release:
 
 1. Create a branch (e.g. `prepare-v0.24.0`)
@@ -48,7 +55,12 @@ To prepare a release:
 6. Validate the user-scoped install/update surface with `agent-browser install doctor` after installing or replacing the release candidate binary
 7. Open a PR and merge to `main`
 
-When the PR merges, CI checks whether the matching GitHub release tag already exists. If the tag is missing, it builds all 7 platform binaries and creates the GitHub release automatically. The GitHub release body is extracted from the content between the `<!-- release:start -->` and `<!-- release:end -->` markers in `CHANGELOG.md`. npm is not an authoritative release target for this fork.
+The `Release` workflow is manually dispatched. With `dry_run=true`, it builds
+and verifies all 7 platform binaries without creating a GitHub release. With
+`dry_run=false`, it creates or updates the GitHub release for the current
+`package.json` version using the content between the `<!-- release:start -->`
+and `<!-- release:end -->` markers in `CHANGELOG.md`. npm is not an
+authoritative release target for this fork.
 
 To validate the release workflow without creating a release, run the `Release` workflow manually from GitHub Actions with `dry_run` set to `true`. This builds the release binaries, verifies all expected artifacts, and skips GitHub release creation.
 
@@ -270,14 +282,17 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 - re-read planning-related policy before opening, revising, or closing a substantive plan
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete
+- re-read graph-backed memory policy before Graphiti discovery, writes, cleanup, or memory-derived handoff claims
+- re-read CodeGraph policy before non-trivial source exploration, architecture tracing, refactor planning, or source edits
 
 ## Policy Entry
 
 This repo keeps its durable repo-local policy under `docs/dev/policies/`.
 
 Installed policy bundle:
-- `repo-policy-selector` `v0.1.8`
+- `repo-policy-selector` `v0.1.13`
 - selected profile: `standalone-library`
+- local policy overrides: `graph-backed-memory-usage`, `codegraph-usage`
 
 Treat the files present in that directory as the source of truth for the
 currently adopted repo-local policy. Do not rely on the bullet list below
@@ -294,6 +309,8 @@ Read and follow:
 - `docs/dev/policies/0008-versioning-and-release.md`
 - `docs/dev/policies/0009-turn-closeout.md`
 - `docs/dev/policies/0010-validation-and-handoff.md`
+- `docs/dev/policies/0011-graph-backed-memory-usage.md`
+- `docs/dev/policies/0012-codegraph-usage.md`
 
 ## Scope
 

@@ -10,6 +10,7 @@ import {
   Compass,
   GalleryVerticalEnd,
   LayoutDashboard,
+  LogOut,
   MonitorDot,
   Plus,
   Radio,
@@ -44,6 +45,13 @@ const NAV_ITEMS: { id: DashboardSection; label: string; icon: typeof LayoutDashb
   { id: "service", label: "Service", icon: ShieldCheck },
   { id: "activity", label: "Activity", icon: Activity },
 ];
+
+const NAV_PATHS: Record<DashboardSection, string> = {
+  overview: "/",
+  browsers: "/browsers",
+  service: "/service",
+  activity: "/activity",
+};
 
 function StatusChip({
   label,
@@ -80,10 +88,16 @@ function currentHost(url: string): string {
 export function AppShell({
   activeSection = "overview",
   onSectionChange,
+  onNewSessionRequest,
+  authenticatedUser,
+  onLogout,
   children,
 }: {
   activeSection?: DashboardSection;
   onSectionChange?: (section: DashboardSection) => void;
+  onNewSessionRequest?: () => void;
+  authenticatedUser?: string;
+  onLogout?: () => void;
   children: ReactNode;
 }) {
   const sessions = useAtomValue(sessionsAtom);
@@ -95,7 +109,8 @@ export function AppShell({
   const activeUrl = useAtomValue(activeUrlAtom);
   const setNewSessionDialog = useSetAtom(newSessionDialogAtom);
   const activeSessionName = activeSession?.session ?? "No session";
-  const sessionInitial = activeSessionName.slice(0, 1).toUpperCase();
+  const operatorName = authenticatedUser || activeSessionName;
+  const sessionInitial = operatorName.slice(0, 1).toUpperCase();
 
   return (
     <div className="dashboard-root">
@@ -123,10 +138,15 @@ export function AppShell({
 
         <nav className="dashboard-nav" aria-label="Dashboard navigation">
           {NAV_ITEMS.map((item) => (
-            <button
+            <a
               key={item.label}
-              type="button"
-              onClick={() => onSectionChange?.(item.id)}
+              href={NAV_PATHS[item.id]}
+              aria-current={activeSection === item.id ? "page" : undefined}
+              onClick={(event) => {
+                if (!onSectionChange) return;
+                event.preventDefault();
+                onSectionChange(item.id);
+              }}
               className={cn(
                 "dashboard-nav-item",
                 activeSection === item.id && "dashboard-nav-item-active",
@@ -134,7 +154,7 @@ export function AppShell({
             >
               <item.icon className="size-3.5" />
               <span>{item.label}</span>
-            </button>
+            </a>
           ))}
         </nav>
 
@@ -159,7 +179,7 @@ export function AppShell({
           <Button
             size="sm"
             className="dashboard-primary-action"
-            onClick={() => setNewSessionDialog(true)}
+            onClick={() => onNewSessionRequest ? onNewSessionRequest() : setNewSessionDialog(true)}
           >
             <Plus className="size-3.5" />
             <span className="hidden sm:inline">New session</span>
@@ -174,7 +194,7 @@ export function AppShell({
                 <span className="dashboard-avatar">{sessionInitial || "A"}</span>
                 <span className="hidden min-w-0 text-left md:block">
                   <span className="block max-w-32 truncate text-xs font-bold">
-                    {activeSessionName}
+                    {operatorName}
                   </span>
                   <span className="block max-w-32 truncate text-[10px] text-muted-foreground">
                     {currentHost(activeUrl)}
@@ -186,9 +206,15 @@ export function AppShell({
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel>
                 <span className="block text-xs text-muted-foreground">Operator</span>
-                <span className="block truncate text-sm text-foreground">{activeSessionName}</span>
+                <span className="block truncate text-sm text-foreground">{operatorName}</span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {authenticatedUser && (
+                <DropdownMenuItem disabled>
+                  <ShieldCheck className="size-4" />
+                  Superuser session
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem>
                 <GalleryVerticalEnd className="size-4" />
                 {sessions.length} tracked {sessions.length === 1 ? "session" : "sessions"}
@@ -209,6 +235,21 @@ export function AppShell({
                 <Sparkles className="size-4" />
                 Appearance follows the dashboard shell
               </DropdownMenuItem>
+              {onLogout && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      void onLogout();
+                    }}
+                  >
+                    <LogOut className="size-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

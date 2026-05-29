@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-display-allocations-response.v1.schema.json",
+  "title": "agent-browser service display allocations response",
+  "description": "Stable API shape for compact service display allocation collection responses.",
+  "type": "object",
+  "required": [
+    "displayAllocations",
+    "count"
+  ],
+  "properties": {
+    "displayAllocations": {
+      "type": "array",
+      "items": {
+        "$ref": "service-display-allocation-record.v1.schema.json"
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

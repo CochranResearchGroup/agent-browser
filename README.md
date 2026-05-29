@@ -17,6 +17,7 @@ chmod +x ~/.local/bin/agent-browser
 agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
 agent-browser install doctor  # Check user-scoped binary drift and launch readiness
+agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Guacamole desktop setup
 pnpm test:wsl-windows-chromium-profile-live  # Validate WSL Windows profile writes when doctor says available
 ```
 
@@ -42,6 +43,20 @@ On Linux, install system dependencies:
 ```bash
 agent-browser install --with-deps
 ```
+
+For Guacamole and RDP remote viewing on Linux, include the one-time privileged
+setup in the installer:
+
+```bash
+agent-browser install --with-deps --with-remote-view-privileges
+```
+
+This installs the `agent-browser` group, the root-owned narrow helper at
+`/usr/local/libexec/agent-browser/agent-browser-privileged-helper`, and the
+sudoers rule that lets members of that group configure RDP route users,
+restart XRDP, and grant route-display access without repeated sudo prompts.
+After applying, open a new shell or run `newgrp agent-browser`, then verify
+with `agent-browser doctor remote-view`.
 
 ### Install Doctor
 
@@ -429,9 +444,11 @@ agent-browser install stealthcdp-chromium  # Download the preferred patched Chro
 agent-browser install doctor          # Check user-scoped binary drift and launch readiness
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall  # Scan bounded ports and query Windows firewall state
+agent-browser doctor remote-view      # Diagnose Guacamole, XRDP, RDP users, privileges, displays, and display access
 agent-browser setup windows-browser --print-powershell  # Print reviewed Windows routing setup script
 agent-browser setup windows-browser --print-powershell --doctor  # Embed current route diagnostics in the script
 agent-browser install --with-deps     # Also install system deps (Linux)
+agent-browser install --with-deps --with-remote-view-privileges  # Install Linux RDP/Guacamole privilege helper
 agent-browser upgrade                 # Upgrade agent-browser to the latest version
 ```
 
@@ -613,7 +630,10 @@ Run `pnpm test:service-profile-target-mcp-live` to validate the live typed MCP
 target-hint profile selection path.
 Run `pnpm test:service-request-live` to validate that HTTP
 `/api/service/request` and MCP `service_request` queue intent-based browser
-actions with profile hints and retained job metadata.
+actions with profile hints and retained job metadata. Copied access-plan
+requests include the planner-selected `runtimeProfile`, profile path when one
+is configured, and `browserBuild`, so a dashboard launch uses the intended
+browser/profile lane instead of falling back to the default runtime profile.
 Run `pnpm test:service-profile-lease-wait-live` during manual full-CI or
 release-gating checks that touch profile selection, profile lease waiting,
 service request, trace summary, dashboard trace, or service observability
@@ -948,6 +968,15 @@ On macOS, `AGENT_BROWSER_KEYCHAIN_PASSWORD` unlocks the login keychain before Ch
 | `AGENT_BROWSER_ENV_FILE`            | Optional dotenv file for agent-browser secrets |
 | `AGENT_BROWSER_USE_REAL_KEYCHAIN`   | Use the real OS keychain for Chrome profile launches |
 | `AGENT_BROWSER_KEYCHAIN_PASSWORD`   | Password used to unlock the macOS login keychain or Linux GNOME Keyring |
+| `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` | Shared display for `remote_headed` launches |
+| `AGENT_BROWSER_REMOTE_VIEW_URL`     | Embedded or external remote-view URL for `remote_headed` records |
+| `AGENT_BROWSER_REMOTE_VIEW_FRAME_URL` | Service-owned embeddable route URL for `remote_headed` records |
+| `AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL` | Service-owned external route URL for `remote_headed` records |
+| `AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID` | Service-owned remote-view route identifier |
+| `AGENT_BROWSER_GUACAMOLE_CONNECTION_ID` | Guacamole connection id or route token for RDP gateway streams |
+| `AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME` | Human-readable Guacamole connection name for RDP gateway streams |
+| `AGENT_BROWSER_REMOTE_VIEW_PROVIDER` | Remote-view provider label for `remote_headed` records |
+| `AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER` | Remote control-input provider label for `remote_headed` records |
 
 See [Security documentation](https://agent-browser.dev/security) for details.
 
@@ -1022,6 +1051,10 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--screenshot-quality <n>` | JPEG quality 0-100 (or `AGENT_BROWSER_SCREENSHOT_QUALITY` env) |
 | `--screenshot-format <fmt>` | Screenshot format: `png`, `jpeg` (or `AGENT_BROWSER_SCREENSHOT_FORMAT` env) |
 | `--headed` | Show browser window (not headless). On Unix, agent-browser defaults `DISPLAY` to `:0.0` if `DISPLAY` is unset (or `AGENT_BROWSER_HEADED` env) |
+| `--browser-host <host>` | Launch host hint for a fresh daemon: `local_headless`, `local_headed`, `docker_headed`, `remote_headed`, `cloud_provider`, or `attached_existing` |
+| `--view-stream-provider <provider>` | Remote view metadata: `cdp_screencast`, `chrome_tab_webrtc`, `virtual_display_webrtc`, `novnc`, `rdp_gateway`, or `external_url` |
+| `--control-input-provider <provider>` | Remote control-input metadata: `cdp_input`, `webrtc_input`, `vnc_input`, or `manual_attached_desktop` |
+| `--display-isolation <policy>` | Remote display allocation policy: `private_virtual_display`, `shared_display`, or `ambient_display` |
 | `--cdp <port\|url>` | Connect via Chrome DevTools Protocol (port or WebSocket URL) |
 | `--auto-connect` | Auto-discover and connect to running Chrome (or `AGENT_BROWSER_AUTO_CONNECT` env) |
 
@@ -1068,6 +1101,30 @@ agent-browser dashboard stop
 
 The dashboard runs as a standalone background process on port 4848, independent of browser sessions. It stays available even when no sessions are running. All sessions automatically stream to the dashboard.
 The standalone dashboard also exposes `/api/service/*` on the same origin by proxying to the active session service API when available and falling back to CLI-backed read-only service views where possible. This keeps the Service view usable through stable local or authenticated ingress routes instead of requiring the operator's browser to reach per-session localhost ports.
+When a long-lived `dashboard-service-backend` session is present, the standalone
+dashboard prefers it for proxied service API requests before falling back to
+`default` or the first discovered session. This lets operators keep public
+dashboard ingress on a current backend without disturbing an existing default
+browser.
+
+The dashboard includes an app-owned login screen. On first start it creates
+`~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a
+mode-0600 bootstrap credential file at
+`~/.agent-browser/dashboard-auth.env`. The default `admin` account and the
+`codex` observer account are superusers. `~/.agent-browser/.env` records
+`AGENT_BROWSER_DASHBOARD_AUTH_FILE` so the user-scoped service and foreground
+runs use the same credential store.
+
+Dashboard sections have stable paths, so refreshes and shared links keep the
+selected area instead of returning to the home view. Use `/service` for the
+Service view, `/browsers` for Browser sessions, and `/activity` for the
+activity stream. The Service view preserves its active record workspace in
+`?view=service:<name>` with values such as `service:browsers`,
+`service:profiles`, `service:incidents`, `service:sessions`, `service:tabs`,
+`service:jobs`, and `service:events`. The left workspace navigator separately
+persists selected workspace identity in `workspace`, `browser`, `session`,
+`tab`, `profile`, and `job` query parameters so row selection, inspector
+context, and the embedded viewport survive refreshes and handoff links.
 
 On Linux workstations that should expose the dashboard through a stable local
 or external ingress route, install the user-scoped systemd service:
@@ -1082,8 +1139,13 @@ restart-on-failure behavior, and starts at user login. Set
 port.
 
 The dashboard displays:
-- **Live viewport** — real-time JPEG frames from the browser
-- **Service view** — worker and browser health cards, compact retained-record status with hover details and cleanup alerts only when retained state needs attention, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent incident severity, escalation, recommended action displays, and remedy summary groups sourced from the service incident contract, a service-owned incident history timeline with local fallback, a trace explorer backed by `/api/service/trace` for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards, naming warnings, copyable CLI and HTTP trace handoff strings, profile lease wait cards and timeline job rows that jump to their retained Jobs row, incident-backed timeline rows that jump to their retained Incidents row, incident detail actions that jump back to the related trace, display-allocation summary cards that jump to filtered Jobs rows, a browser-health transition timeline for crash/recovery visibility, a backend-owned profile allocation view from `profileAllocations` with detail inspection refreshed from `GET /api/service/profiles/<id>/allocation` and guarded by `pnpm test:dashboard-profile-allocation`, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, active-versus-retained summaries for sessions, tabs, and jobs, filterable and sortable service jobs with naming warnings, requested display allocation, and queued/running job cancellation, a managed browser table that defaults to actionable live or degraded records while keeping inert retained placeholders behind retained/all filters, grouped and locally remembered lifecycle, density, column visibility, and column width controls for browser table fields with a full table-view reset, list-detail inspection that opens browser, profile, incident, session, tab, and job rows in the right pane on desktop while preserving dialog inspection in embedded and mobile views, right-pane acknowledge/resolve actions for selected incidents, right-pane cancel for selected queued or running jobs, embedded remote-view inspection for browser view streams and service tabs with a fullscreen toggle, a queued `view_focus` request that brings the selected tab forward and asks Chrome to maximize the containing window before inspection, filterable service events including tab lifecycle changes, and a reconcile action
+- **Workspace navigator** — a compact left pane derived from service-owned browser, session, tab, profile allocation, job, incident, and view-stream state. It groups Active, Attention, and Retained workspaces; keeps raw IDs secondary to service, agent, task, profile, tab, and URL labels; shows disabled Launch, Seed, View, Control, Resume, Repair, and Close actions with service-sourced reasons; and includes a guided browser/profile launcher that starts the selected combo as its own daemon session. Blocked or human-takeover rows stay in Attention, but a controllable service-owned stream still makes Control or View the primary operator action while disabled Resume records the missing backend release action. The launcher defaults to the shared remote desktop display, RDP gateway view stream, and manual desktop input; selecting RDP gateway starts a `remote_headed` session so the resulting browser has a Guac-ready embedded viewport when `AGENT_BROWSER_REMOTE_VIEW_URL` and `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` are configured. When retained stream metadata is embeddable, the dashboard closes the launcher, queues `view_focus` with the selected live target ID and a stable tab-index fallback when both are known, and opens the workspace viewport; otherwise it falls back to the Service Jobs view.
+  Guided launches preserve the access-plan selected `runtimeProfile`, configured
+  profile path, `browserBuild`, and executable evidence in the spawned session,
+  and non-blocking freshness warnings do not disable Launch when the launchable
+  request itself is available.
+- **Live viewport** — real-time JPEG frames from the browser; embedded Guacamole workspace viewports include a compact interaction-settings control that opens Guacamole's keyboard/input-method and mouse-mode panel without relying on the mobile edge gesture or Ctrl+Alt+Shift shortcut, and they detect single-active-viewer disconnects with a Take over action so another dashboard or popout can be served deliberately
+- **Service view** — worker and browser health cards, compact retained-record status with hover details and cleanup alerts only when retained state needs attention, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent incident severity, escalation, recommended action displays, and remedy summary groups sourced from the service incident contract, a service-owned incident history timeline with local fallback, a trace explorer backed by `/api/service/trace` for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards, naming warnings, copyable CLI and HTTP trace handoff strings, profile lease wait cards and timeline job rows that jump to their retained Jobs row, incident-backed timeline rows that jump to their retained Incidents row, incident detail actions that jump back to the related trace, display-allocation summary cards that jump to filtered Jobs rows, a browser-health transition timeline for crash/recovery visibility, a backend-owned profile allocation view from `profileAllocations` with detail inspection refreshed from `GET /api/service/profiles/<id>/allocation` and guarded by `pnpm test:dashboard-profile-allocation`, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, active-versus-retained summaries for sessions, tabs, and jobs, filterable and sortable service jobs with naming warnings, requested display allocation, and queued/running job cancellation, a managed browser table that defaults to actionable live or degraded records while keeping inert retained placeholders behind retained/all filters, grouped and locally remembered lifecycle, density, column visibility, and column width controls for browser table fields with a full table-view reset, selected-record inspection that opens browser, profile, incident, session, tab, and job rows in a desktop right pane or mobile dialog with a hero summary, primary actions, semantic fact sections, related-record jumps, and an Evidence disclosure for raw JSON, IDs, and endpoints, right-pane acknowledge/resolve actions for selected incidents, right-pane cancel for selected queued or running jobs, embedded remote-view inspection for browser view streams and service tabs with fullscreen and Guacamole interaction settings controls, a queued `view_focus` request that prefers the selected live target ID, falls back to the tab index when retained target state is stale, brings that tab forward, and asks Chrome to maximize the containing window before inspection, human-takeover sessions with visible owner, queue impact, lease/conflict details, disabled Resume until a service-owned release action exists, and preserved Control or View actions on related browsers that still expose controllable streams, filterable service events including tab lifecycle changes, and a reconcile action
 - **Activity feed** — chronological command/result stream with timing and expandable details
 - **Console output** — browser console messages (log, warn, error)
 - **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
@@ -1371,6 +1433,15 @@ Windows firewall and Hyper-V firewall query through PowerShell when available.
 The doctor also reports `profileSmoke.available`, `profileSmoke.command`, and
 `profileSmoke.reason` so operators can see whether the Windows
 `chromium-stealthcdp` profile-write smoke is ready to run.
+
+Run `agent-browser doctor remote-view` before changing Guacamole or RDP setup.
+It is read-only and reports install state, Guacamole route-pool readiness, XRDP
+policy, existing `agent-browser-rdp` and route-specific user inventory,
+one-time privileged helper readiness, remote-view config file presence with
+keys only, route-display state, agent display access to those XRDP displays,
+drift findings, and the next setup action. The doctor prefers reusing the existing
+`agent-browser-rdp` user and only points toward route-specific users when the
+current state shows they are actually needed.
 Run
 `agent-browser setup windows-browser --print-powershell` to print a reviewed
 Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall
@@ -1591,10 +1662,12 @@ Access-plan `decision.launchPosture` now reports the service-selected
 carry those hints in `params` so dashboards and software clients do not infer
 remote-view posture locally. Remote-headed access plans also include
 `params.displayIsolation=private_virtual_display` by default. Raw HTTP, MCP,
-and client requests can set `displayIsolation` or `params.displayIsolation` to
-`private_virtual_display`, `shared_display`, or `ambient_display` when a
-caller needs to force an isolated virtual display, reuse a configured shared
-display, or deliberately use the daemon's inherited `DISPLAY`. The shipped UPS policy selects
+and client access-plan requests can set `browserHost`, `viewStreamProvider`,
+`controlInputProvider`, and `displayIsolation`; raw service requests can set
+`displayIsolation` or `params.displayIsolation` to `private_virtual_display`,
+`shared_display`, or `ambient_display` when a caller needs to force an isolated
+virtual display, reuse a configured shared display, or deliberately use the
+daemon's inherited `DISPLAY`. The shipped UPS policy selects
 `stealthcdp_chromium`, `remote_headed`, `rdp_gateway`, and
 `manual_attached_desktop` because headed stealth Chromium loaded UPS tracking
 where true headless did not. Remote-headed browser records persist the selected
@@ -1606,34 +1679,205 @@ stream is merely viewable or operator controllable and whether display state is
 isolated before opening it. Dashboard browser rows enable **View** only for
 embeddable streams and **Control** only when the service also reports an input
 provider, with disabled-state explanations sourced from the stream metadata.
+Launcher and workspace viewport readiness copy distinguish browser health,
+dashboard auth, provider or ingress failure, iframe embedding limits, viewer
+ownership, and stale focus or takeover job evidence before showing a blank
+stream.
+P03 many-to-many remote viewing adds no-launch contract schemas for display
+allocations, remote view routes, route pool entries, and viewer leases under
+`docs/dev/contracts/`. Browser records and `viewStreams` can carry
+`displayAllocationId`, `routeId`, provider concurrency mode, viewer lease ids,
+and controller lease ids so clients can distinguish two private browser routes
+from one shared Guacamole route without parsing raw URLs. The read surface is
+available through HTTP `GET /api/service/display-allocations`,
+`GET /api/service/remote-view-routes`, `GET /api/service/route-pool`,
+`GET /api/service/viewer-leases`, and the matching MCP resources
+`agent-browser://display-allocations`, `agent-browser://remote-view-routes`,
+`agent-browser://route-pool`, and `agent-browser://viewer-leases`. Until a
+route pool is configured, the existing shared Guacamole route remains an
+explicit fallback and should be treated as focus switching rather than
+simultaneous multi-browser viewing.
 Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` to reuse an existing virtual display,
 and set `AGENT_BROWSER_REMOTE_VIEW_URL` when an external noVNC, RDP gateway,
 WebRTC, or dashboard view URL should be recorded on the service browser record.
+For Guacamole and RDP gateway routing, prefer service-owned route fields:
+`AGENT_BROWSER_REMOTE_VIEW_FRAME_URL` for the embeddable iframe URL,
+`AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL` for popout or external windows,
+`AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID` for the service route identity, and
+`AGENT_BROWSER_GUACAMOLE_CONNECTION_ID` plus
+`AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME` when the provider exposes a concrete
+Guacamole connection. A bare Guacamole root URL is preserved as a root URL; the
+dashboard does not synthesize a client route from a built-in connection hash.
 Use the shared display override only for trusted low-contention workloads,
 because focus and native-window state become shared mutable resources.
 Set `AGENT_BROWSER_REMOTE_VIEW_PROVIDER=rdp_gateway` when the URL points to an
 HTML5 RDP gateway that should be embedded in the dashboard browser details.
+On Linux, `remote_headed` headed launches disable Chromium's Vulkan/ANGLE path
+and force desktop GL so XRDP and Xvfb view streams paint the browser window
+instead of a blank white surface. Remote-headed launches also start maximized
+by default and run the same native-window maximize step used by `view_focus`, so
+window managers can resize the browser with the Guacamole or XRDP viewport.
+When a caller sends remote-headed flags through an already-running daemon,
+agent-browser carries `AGENT_BROWSER_REMOTE_HEADED_DISPLAY`,
+`AGENT_BROWSER_REMOTE_VIEW_URL`, `AGENT_BROWSER_REMOTE_VIEW_FRAME_URL`,
+`AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL`, `AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID`,
+`AGENT_BROWSER_GUACAMOLE_CONNECTION_ID`,
+`AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME`,
+`AGENT_BROWSER_REMOTE_VIEW_PROVIDER`, and
+`AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER` into the launch command instead
+of relying on stale daemon environment.
+The dashboard guided launcher defaults to this RDP gateway posture; selecting
+RDP gateway in the launcher starts the selected browser/profile combo as a
+fresh `remote_headed` daemon session with `shared_display` and
+`manual_attached_desktop` so the operator lands in the same remote desktop that
+Guacamole embeds instead of an invisible headless tab when the backend has
+`AGENT_BROWSER_REMOTE_VIEW_URL` and
+`AGENT_BROWSER_REMOTE_HEADED_DISPLAY`.
 Use `pnpm test:rdp-gateway-readiness-live` on operator workstations to check
 the local RDP backend. It verifies `guacd`, `xrdp`, `xfreerdp`, and their TCP
-ports. Add `--require-html5-client` when `AGENT_BROWSER_REMOTE_VIEW_URL` should
-also be reachable before the setup is considered ready.
+ports, and prints a compact readiness payload with component, status, evidence,
+next-action, and recovery fields for the local RDP services, Guacamole web
+route, dashboard-auth follow-up, iframe embedding follow-up, and ingress
+follow-up. Add `--require-html5-client` when
+`AGENT_BROWSER_REMOTE_VIEW_URL` should also be reachable before the setup is
+considered ready.
 Use `pnpm test:service-remote-view-control-live` when changing the
 remote-headed launch, retained browser record, or dashboard stream gating
 contract. It starts an isolated remote-headed browser, verifies the retained
 `rdp_gateway` stream includes a control input provider, checks that the
 dashboard helpers would enable both View and Control, runs queued `view_focus`,
-and closes the browser through the service-owned control path.
-The Service inspector also shows a compact readiness strip for the selected
-browser with remote view readiness, control readiness, provider, input, and
-gateway URL so operators can diagnose missing stream metadata before opening a
-remote desktop. The selected-browser inspector exposes the same **Open remote
-control** path as browser rows, so it queues `view_focus` before opening the
-embedded stream when the service reports a controllable input provider.
+with target ID plus tab-index fallback, and closes the browser through the
+service-owned control path.
+The Service inspector uses a selected-record layout for browsers, profiles,
+sessions, tabs, jobs, and incidents. Each detail view starts with a human
+summary, keeps primary actions near the top, groups runtime, control,
+ownership, activity, and related-record facts into compact sections, and moves
+raw JSON, long IDs, and endpoints into an Evidence disclosure. The selected
+browser inspector also shows a compact readiness strip with remote view
+readiness, control readiness, provider, input, and gateway URL so operators can
+diagnose missing stream metadata before opening a remote desktop. Its **Open
+remote control** action uses the same path as browser rows, so it queues
+`view_focus` with target ID plus tab-index fallback before opening the embedded
+stream when the service reports a controllable input provider.
 Use `pnpm test:service-dashboard-remote-control-ui-live` when changing the
 selected-browser inspector or embedded remote-control dialog; it drives the
 real dashboard UI with `agent-browser`, selects the remote-headed browser row,
 clicks the right-pane **Open remote control** action, verifies the iframe URL,
 and confirms a dashboard-owned `view_focus` job was queued.
+Use `pnpm test:rdp-guac-viewer-transfer-live` for the Slice B two-client RDP
+and Guacamole gate. It refuses to run unless `AGENT_BROWSER_REMOTE_VIEW_URL`,
+`AGENT_BROWSER_REMOTE_HEADED_DISPLAY`,
+`AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE`, and
+`AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE` are set, and the two client
+executables must be different. Optional overrides include
+`AGENT_BROWSER_RDP_TEST_BROWSER_A`, `AGENT_BROWSER_RDP_TEST_PROFILE_A`,
+`AGENT_BROWSER_RDP_TEST_PROFILE_B`, `AGENT_BROWSER_RDP_TEST_PUBLIC_URL`, and
+`AGENT_BROWSER_RDP_TEST_DISPLAY_ISOLATION`. The smoke launches one
+service-owned `remote_headed` browser on the RDP gateway posture, opens the
+same workspace in both clients, captures desktop and mobile-size screenshots
+plus service-state samples under
+`/tmp/agent-browser-rdp-guac-hardening-<timestamp>/`, checks either
+simultaneous viewing or deterministic takeover behavior, exercises the
+dashboard external-open `view_takeover` path, refreshes both clients, and
+leaves the slice unvalidated if any required evidence is missing.
+Use `pnpm test:rdp-guac-browser-switch-live` for the Slice C managed-browser
+switching gate. It launches two `remote_headed` daemon sessions with distinct
+runtime profiles in the same isolated service home, opens browser A in client
+1, switches that client to browser B through the workspace route, refreshes B,
+opens browser A in client 2 while client 1 remains routed to B, alternates A
+to B to A to B three times, exercises external-open `view_takeover`, and
+captures A/B/refresh/return screenshots plus service-state artifacts under
+`/tmp/agent-browser-rdp-guac-browser-switch-<timestamp>/`. It uses the same
+required inputs as the viewer-transfer smoke and also accepts
+`AGENT_BROWSER_RDP_TEST_BROWSER_B` to pin browser B's daemon session.
+Use `pnpm test:rdp-guac-readiness-failures-live` for the Slice D readiness
+failure gate. It first runs the live RDP gateway readiness smoke with
+`--require-html5-client`, opens one real RDP-backed workspace for a healthy
+viewport screenshot, then uses isolated service-state fixtures to render auth,
+Guacamole connection, provider or ingress, viewer ownership, browser
+unavailable, missing stream, and stale retained-job recovery states. The
+harness labels every assertion as `live`, `isolated-live`, or
+`fixture-backed`, captures screenshots and service-state samples under
+`/tmp/agent-browser-rdp-guac-readiness-<timestamp>/`, and does not stop or
+reconfigure shared RDP, Guacamole, auth, or ingress services to create
+failures.
+Use `pnpm test:rdp-guac-route-cleanup-live` for the Slice G route-cleanup
+gate. It launches an isolated `remote_headed` browser, seeds and checks out a
+service-owned route-pool entry, restarts the stream daemon, verifies a healthy
+route is not repairable, kills the browser process, runs `service reconcile`,
+then dry-runs and applies `service_route_pool_repair`. It captures service
+status, reconcile, repair, and cleanup proof under
+`/tmp/agent-browser-rdp-guac-route-cleanup-<timestamp>/`.
+Use `pnpm test:rdp-guac-route-pool-readiness` before the Slice H many-to-many
+gate to inspect the local Guacamole database without printing passwords. It
+checks the Guacamole Compose containers, lists redacted RDP connection metadata,
+probes the Guacamole web route, checks guacd-to-RDP TCP reachability for the
+selected route candidates, requires at least two distinct route candidates by
+default, and emits a copyable `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` value when
+the provider has enough ready routes. Emitted route-pool entries include
+redacted target identity and readiness metadata, not passwords. Pass
+`--report-only` to collect the JSON readiness report without failing the
+command on a one-route workstation.
+Run `pnpm setup:rdp-guac-route-pool -- --dry-run` to review the first static
+host-XRDP route-pool bootstrap without changing the host. Run `pnpm
+install:privileges -- --dry-run` to review the one-time privileged helper
+install, then `pnpm install:privileges -- --apply` from an interactive
+terminal to create the `agent-browser` group, install the root-owned helper
+under `/usr/local/libexec/agent-browser`, add the operator user to the group,
+and install the narrow sudoers rule. Open a new shell or run
+`newgrp agent-browser` after applying it. Then run
+`pnpm setup:rdp-guac-route-pool` only after the doctor or display inspector
+proves the existing route topology collapsed to one display, or when a
+reviewed operator override passes `--force`. It creates or updates two local
+XRDP users, creates or updates two Guacamole RDP connections, grants Guacamole
+read permission, stores generated XRDP passwords under the user-scoped
+Guacamole secret file, restarts XRDP, and then tells you to rerun the
+route-pool readiness smoke. The setup command uses the installed privileged
+helper when available, falls back to interactive sudo otherwise, and does not
+print the generated passwords. This bootstrap only creates distinct RDP
+sessions; P03 is complete only after the many-to-many live gate proves Browser
+A and Browser B are actually visible through those routes at the same time.
+After opening both route sessions, run
+`pnpm inspect:rdp-route-displays` to map the route users to active XRDP display
+names and print `AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME` and
+`AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME` for the live gate. Pass `--shell` to
+the display inspector or route-pool readiness smoke when you want copyable
+`export ...` lines instead of JSON. If the agent user cannot launch onto those
+XRDP-owned displays, run `pnpm grant:rdp-route-display-access -- --dry-run` to
+review the narrow local X grants, then run
+`pnpm grant:rdp-route-display-access -- --apply`. It uses the installed helper
+when available and falls back to interactive sudo otherwise.
+If the reusable `agent-browser-rdp` user already exists, use
+`pnpm sync:rdp-guac-existing-user-route-pool` instead of the sudo setup. It
+updates only Guacamole connection records, reads the existing XRDP credentials
+from the user-scoped secret file, and creates route A/B records with distinct
+RDP color depths so the current XRDP `Policy=Default` can allocate distinct
+sessions for the same user.
+Use `pnpm test:rdp-guac-many-to-many-live` for the Slice H many-to-many gate.
+It requires two distinct route-pool entries through
+`AGENT_BROWSER_RDP_ROUTE_POOL_JSON` or paired
+`AGENT_BROWSER_RDP_ROUTE_A_*` and `AGENT_BROWSER_RDP_ROUTE_B_*` variables,
+plus `AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE` and optionally
+`AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE` for the two dashboard viewers.
+Route entries may include `target.displayName` in
+`AGENT_BROWSER_RDP_ROUTE_POOL_JSON`, or
+`AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME` and
+`AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME` for paired environment variables.
+When display targets are present, the smoke launches each browser directly on
+that route's XRDP display with `displayIsolation="shared_display"` and requires
+the two display names to be distinct. When display targets are absent, it uses
+the service private-display allocator.
+The smoke launches two `remote_headed` browsers, checks out distinct
+routes, creates two observer leases per route, assigns Viewer 1 as controller
+for Browser A and Viewer 2 as controller for Browser B, opens the tiled
+workspace view in both dashboard clients, refreshes Browser A's tile, closes
+Browser A, and proves Browser B remains ready. It crops each dashboard iframe
+from the tile screenshots and runs OCR against the remote-view pixels so the
+gate proves route A shows Browser A and route B shows Browser B, not only that
+two iframe URLs loaded. It saves service state, viewer/controller lease proof,
+tile screenshots, target-binding crops and OCR text, provider route evidence,
+and close/release artifacts under
+`/tmp/agent-browser-rdp-guac-many-to-many-<timestamp>/`.
 
 You can also manage streaming at runtime with `stream enable`, `stream disable`, and `stream status`:
 
@@ -1857,19 +2101,22 @@ curl "http://127.0.0.1:<stream-port>/api/service/monitors?summary=true&failed=tr
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/monitors/google-login-freshness" -H "content-type: application/json" -d '{"name":"Google login freshness","target":{"site_policy":"google"},"intervalMs":60000,"state":"paused"}'
 curl -X DELETE "http://127.0.0.1:<stream-port>/api/service/monitors/google-login-freshness"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/request" -H "content-type: application/json" -d '{"serviceName":"JournalDownloader","agentName":"article-probe-agent","taskName":"probeACSwebsite","siteId":"acs","action":"navigate","params":{"url":"https://example.com","waitUntil":"load"}}'
+curl -X POST "http://127.0.0.1:<stream-port>/api/service/request" -H "content-type: application/json" -d '{"serviceName":"agent-browser-dashboard","agentName":"operator","taskName":"workspace-viewport-takeover","action":"view_takeover","params":{"browserId":"session:rdp-hardening-a","sessionName":"rdp-hardening-a","streamId":"remote-headed-view","provider":"rdp_gateway","openMode":"iframe"}}'
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/remedies/apply?escalation=monitor_attention&by=operator&note=reviewed"
 curl -X POST "http://127.0.0.1:<stream-port>/api/service/reconcile"
 ```
 
-The HTTP API loads the same persisted and configured service state as the CLI before relaying state-changing requests to the daemon. Named browser endpoints are thin wrappers over the same daemon command queue as `/api/command` and MCP tools. POST bodies accept the same command fields as the underlying action, including `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs` for traceable software clients. `GET /api/service/contracts` and MCP `agent-browser://contracts` return compatibility metadata for service request schema IDs, contract versions, routes, MCP tool names, and supported actions. `GET /api/service/contracts` also advertises `serviceBrowserCapabilityRegistryResponse`, `serviceBrowserCapabilityRegistryUpsertResponse`, `serviceBrowserCapabilityPreflightResponse`, `serviceProfileAllocationResponse`, `serviceProfileReadinessResponse`, `serviceProfileSeedingHandoffResponse`, `serviceProfileLookupResponse`, and `serviceAccessPlanResponse`; the metadata names the `@agent-browser/client/service-observability` helpers and the lookup selection order software clients should expect. `GET /api/service/browser-capability-registry` and MCP `agent-browser://browser-capability-registry` follow `docs/dev/contracts/service-browser-capability-registry.v1.schema.json` and return the advisory no-launch browser host, executable, capability, profile compatibility, preference binding, and validation evidence registry. `POST /api/service/browser-capability-registry/<collection>/<id>`, MCP `service_browser_capability_registry_upsert`, `upsertServiceBrowserCapabilityRegistryRecord()`, and `upsertServiceBrowserPreferenceBinding()` follow `docs/dev/contracts/service-browser-capability-registry-upsert-response.v1.schema.json` and add or replace one advisory registry record through the same service worker queue. `GET /api/service/browser-capability/preflight`, MCP `service_browser_capability_preflight`, and `getServiceBrowserCapabilityPreflight()` follow `docs/dev/contracts/service-browser-capability-preflight-response.v1.schema.json` and run the same browser capability launch gates without starting Chrome against effective configured and persisted service state. Manifest-resolved default executables do not block this preflight as explicit overrides; caller-supplied executable paths still do. `POST /api/service/request` accepts one intent object with `serviceName`, `agentName`, `taskName`, `siteId`, `loginId`, `accountId`, `url`, target-service hints, explicit `profile` or `runtimeProfile` hints, `action`, `params`, and `jobTimeoutMs`, then queues that browser action through the same service-owned control path. Its request object follows `docs/dev/contracts/service-request.v1.schema.json`; the MCP `tools/call` wrapper follows `docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json`. `GET /api/service/jobs` and `GET /api/service/jobs/<id>` return service job records matching the repo schema at `docs/dev/contracts/service-job-record.v1.schema.json`; retained jobs include requested `displayIsolation` when a remote-headed request or copied access plan selected `private_virtual_display`, `shared_display`, or `ambient_display`. Their response envelopes follow `docs/dev/contracts/service-jobs-response.v1.schema.json`. `GET /api/service/incidents` and `GET /api/service/incidents/<id>` return service incident records matching the repo schema at `docs/dev/contracts/service-incident-record.v1.schema.json`; their response envelopes follow `docs/dev/contracts/service-incidents-response.v1.schema.json`. `GET /api/service/events` returns service event records matching the repo schema at `docs/dev/contracts/service-event-record.v1.schema.json`; its response envelope follows `docs/dev/contracts/service-events-response.v1.schema.json`. HTTP and MCP profile, browser, session, tab, monitor, site policy, provider, and challenge records follow the matching repo schemas under `docs/dev/contracts/service-*-record.v1.schema.json`; profile records include derived `targetReadiness` rows. Service status and compact collection response envelopes follow the matching status and collection response schemas under `docs/dev/contracts/`. `GET /api/service/profiles/<id>/allocation` follows `docs/dev/contracts/service-profile-allocation-response.v1.schema.json` and returns one derived profile allocation row, including the same `targetReadiness` rows. `GET /api/service/profiles/<id>/readiness` and MCP `agent-browser://profiles/{profile_id}/readiness` follow `docs/dev/contracts/service-profile-readiness-response.v1.schema.json` and return one profile's no-launch readiness rows without allocation details. `GET /api/service/profiles/<id>/seeding-handoff` and MCP `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}` follow `docs/dev/contracts/service-profile-seeding-handoff-response.v1.schema.json` and return the exact detached `runtime login` command, setup URL, operator steps, warnings, and persisted lifecycle record derived from `targetReadiness`; `POST /api/service/profiles/<id>/seeding-handoff` and MCP `service_profile_seeding_handoff_update` update that lifecycle through the serialized service-state mutator; pass `targetServiceId`, `siteId`, or `loginId` when a profile has multiple target identities. `GET /api/service/profiles/lookup` follows `docs/dev/contracts/service-profile-lookup-response.v1.schema.json` and applies the authoritative service profile selector for `serviceName` plus target, site, login, account, or URL identity. `GET /api/service/access-plan` follows `docs/dev/contracts/service-access-plan-response.v1.schema.json` and returns the service-owned no-launch recommendation that combines the selected profile, readiness, readiness summary, site policy, enabled providers, retained challenges, and decision fields before a caller requests browser control. `GET /api/service/monitors` follows `docs/dev/contracts/service-monitors-response.v1.schema.json` and returns retained monitor records for heartbeat and freshness probes; `state`, `failed`, and `summary` query parameters filter and summarize repeated monitor failures for operator triage. Active monitors are checked by the daemon scheduler when due. `service_trace` responses follow `docs/dev/contracts/service-trace-response.v1.schema.json`, with summary and activity records covered by the matching trace schemas. Incident activity responses follow `docs/dev/contracts/service-incident-activity-response.v1.schema.json`. `POST /api/service/profiles/<id>`, `POST /api/service/profiles/<id>/freshness`, `POST /api/service/profiles/<id>/seeding-handoff`, `POST /api/service/sessions/<id>`, `POST /api/service/site-policies/<id>`, `POST /api/service/monitors/<id>`, `POST /api/service/providers/<id>`, and `POST /api/service/browser-capability-registry/<collection>/<id>` persist service config records through the service worker queue, and `DELETE` on the same entity paths removes persisted records through the same queue where supported. Profile, session, site-policy, monitor, and provider mutation responses follow `docs/dev/contracts/service-*-upsert-response.v1.schema.json` and `docs/dev/contracts/service-*-delete-response.v1.schema.json`. Browser capability registry upserts follow the dedicated upsert response schema. Job cancel, browser retry, incident acknowledgement or resolution, and remedy apply responses follow the matching operator remedy response schemas under `docs/dev/contracts/`, including `service-remedies-apply-response.v1.schema.json` for `POST /api/service/remedies/apply`. Service reconcile responses follow `docs/dev/contracts/service-reconcile-response.v1.schema.json`. The path ID is authoritative; requests with a conflicting nested `id` field are rejected. Profile mutations reject `caller_supplied` profiles without `userDataDir` and `per_service` profiles with more than one `sharedServiceIds` entry. Session mutations infer `owner` from `agentName`, then `serviceName`, when `owner` is omitted; `profileId` must reference a persisted profile, and profile `sharedServiceIds` allow-lists are enforced. `service_profile_freshness_update` and `POST /api/service/profiles/<id>/freshness` merge bounded-probe profile freshness evidence without requiring clients to replace the whole profile. The collection endpoints return the same compact arrays as the MCP resources: `profiles`, `sessions`, `browsers`, `tabs`, `monitors`, `sitePolicies`, `providers`, `challenges`, and `browserCapabilityRegistry`. Site-policy collections also include `sitePolicySources` so operators and clients can see whether each effective policy came from config, persisted state, or built-in defaults. Run `pnpm test:service-config-live` to validate HTTP and MCP mutation parity for profiles, sessions, site policies, monitors, providers, and browser capability registry upserts.
+The HTTP API loads the same persisted and configured service state as the CLI before relaying state-changing requests to the daemon. Named browser endpoints are thin wrappers over the same daemon command queue as `/api/command` and MCP tools. POST bodies accept the same command fields as the underlying action, including `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs` for traceable software clients. `GET /api/service/contracts` and MCP `agent-browser://contracts` return compatibility metadata for service request schema IDs, contract versions, routes, MCP tool names, and supported actions. `GET /api/service/contracts` also advertises `serviceBrowserCapabilityRegistryResponse`, `serviceBrowserCapabilityRegistryUpsertResponse`, `serviceBrowserCapabilityPreflightResponse`, `serviceProfileAllocationResponse`, `serviceProfileReadinessResponse`, `serviceProfileSeedingHandoffResponse`, `serviceProfileLookupResponse`, `serviceAccessPlanResponse`, `serviceDisplayAllocationsResponse`, `serviceRemoteViewRoutesResponse`, `serviceRoutePoolResponse`, and `serviceViewerLeasesResponse`; the metadata names the `@agent-browser/client/service-observability` helpers and the lookup selection order software clients should expect. `GET /api/service/browser-capability-registry` and MCP `agent-browser://browser-capability-registry` follow `docs/dev/contracts/service-browser-capability-registry.v1.schema.json` and return the advisory no-launch browser host, executable, capability, profile compatibility, preference binding, and validation evidence registry. `POST /api/service/browser-capability-registry/<collection>/<id>`, MCP `service_browser_capability_registry_upsert`, `upsertServiceBrowserCapabilityRegistryRecord()`, and `upsertServiceBrowserPreferenceBinding()` follow `docs/dev/contracts/service-browser-capability-registry-upsert-response.v1.schema.json` and add or replace one advisory registry record through the same service worker queue. `GET /api/service/browser-capability/preflight`, MCP `service_browser_capability_preflight`, and `getServiceBrowserCapabilityPreflight()` follow `docs/dev/contracts/service-browser-capability-preflight-response.v1.schema.json` and run the same browser capability launch gates without starting Chrome against effective configured and persisted service state. Manifest-resolved default executables do not block this preflight as explicit overrides; caller-supplied executable paths still do. `POST /api/service/request` accepts one intent object with `serviceName`, `agentName`, `taskName`, `siteId`, `loginId`, `accountId`, `url`, target-service hints, explicit `profile` or `runtimeProfile` hints, `action`, `params`, and `jobTimeoutMs`, then queues that browser action through the same service-owned control path. Its request object follows `docs/dev/contracts/service-request.v1.schema.json`; the MCP `tools/call` wrapper follows `docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json`. `GET /api/service/jobs` and `GET /api/service/jobs/<id>` return service job records matching the repo schema at `docs/dev/contracts/service-job-record.v1.schema.json`; retained jobs include requested `displayIsolation`, requested and resolved `displayAllocationId`, requested and resolved `remoteViewRouteId`, `routePoolEntryId`, `viewerLeaseId`, and `controllerLeaseId` for remote-headed route audit. Their response envelopes follow `docs/dev/contracts/service-jobs-response.v1.schema.json`. `GET /api/service/incidents` and `GET /api/service/incidents/<id>` return service incident records matching the repo schema at `docs/dev/contracts/service-incident-record.v1.schema.json`; their response envelopes follow `docs/dev/contracts/service-incidents-response.v1.schema.json`. `GET /api/service/events` returns service event records matching the repo schema at `docs/dev/contracts/service-event-record.v1.schema.json`; its response envelope follows `docs/dev/contracts/service-events-response.v1.schema.json`. HTTP and MCP profile, browser, session, tab, monitor, site policy, provider, challenge, display allocation, remote-view route, route pool, and viewer lease records follow the matching repo schemas under `docs/dev/contracts/service-*-record.v1.schema.json`; profile records include derived `targetReadiness` rows. Service status and compact collection response envelopes follow the matching status and collection response schemas under `docs/dev/contracts/`. `GET /api/service/display-allocations`, `GET /api/service/remote-view-routes`, `GET /api/service/route-pool`, and `GET /api/service/viewer-leases` return no-launch remote-view route state. Software clients can use `getServiceDisplayAllocations()`, `getServiceRemoteViewRoutes()`, `getServiceRoutePool()`, `getServiceViewerLeases()`, `findServiceDisplayAllocation()`, `findServiceRemoteViewRoute()`, and `findServiceViewerLease()` instead of parsing Guacamole URLs. `GET /api/service/profiles/<id>/allocation` follows `docs/dev/contracts/service-profile-allocation-response.v1.schema.json` and returns one derived profile allocation row, including the same `targetReadiness` rows. `GET /api/service/profiles/<id>/readiness` and MCP `agent-browser://profiles/{profile_id}/readiness` follow `docs/dev/contracts/service-profile-readiness-response.v1.schema.json` and return one profile's no-launch readiness rows without allocation details. `GET /api/service/profiles/<id>/seeding-handoff` and MCP `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}` follow `docs/dev/contracts/service-profile-seeding-handoff-response.v1.schema.json` and return the exact detached `runtime login` command, setup URL, operator steps, warnings, and persisted lifecycle record derived from `targetReadiness`; `POST /api/service/profiles/<id>/seeding-handoff` and MCP `service_profile_seeding_handoff_update` update that lifecycle through the serialized service-state mutator; pass `targetServiceId`, `siteId`, or `loginId` when a profile has multiple target identities. `GET /api/service/profiles/lookup` follows `docs/dev/contracts/service-profile-lookup-response.v1.schema.json` and applies the authoritative service profile selector for `serviceName` plus target, site, login, account, or URL identity. `GET /api/service/access-plan` follows `docs/dev/contracts/service-access-plan-response.v1.schema.json` and returns the service-owned no-launch recommendation that combines the selected profile, readiness, readiness summary, site policy, enabled providers, retained challenges, and decision fields before a caller requests browser control. `GET /api/service/monitors` follows `docs/dev/contracts/service-monitors-response.v1.schema.json` and returns retained monitor records for heartbeat and freshness probes; `state`, `failed`, and `summary` query parameters filter and summarize repeated monitor failures for operator triage. Active monitors are checked by the daemon scheduler when due. `service_trace` responses follow `docs/dev/contracts/service-trace-response.v1.schema.json`, with summary and activity records covered by the matching trace schemas. Incident activity responses follow `docs/dev/contracts/service-incident-activity-response.v1.schema.json`. `POST /api/service/profiles/<id>`, `POST /api/service/profiles/<id>/freshness`, `POST /api/service/profiles/<id>/seeding-handoff`, `POST /api/service/sessions/<id>`, `POST /api/service/site-policies/<id>`, `POST /api/service/monitors/<id>`, `POST /api/service/providers/<id>`, and `POST /api/service/browser-capability-registry/<collection>/<id>` persist service config records through the service worker queue, and `DELETE` on the same entity paths removes persisted records through the same queue where supported. Profile, session, site-policy, monitor, and provider mutation responses follow `docs/dev/contracts/service-*-upsert-response.v1.schema.json` and `docs/dev/contracts/service-*-delete-response.v1.schema.json`. Browser capability registry upserts follow the dedicated upsert response schema. Job cancel, browser retry, incident acknowledgement or resolution, and remedy apply responses follow the matching operator remedy response schemas under `docs/dev/contracts/`, including `service-remedies-apply-response.v1.schema.json` for `POST /api/service/remedies/apply`. Service reconcile responses follow `docs/dev/contracts/service-reconcile-response.v1.schema.json`. The path ID is authoritative; requests with a conflicting nested `id` field are rejected. Profile mutations reject `caller_supplied` profiles without `userDataDir` and `per_service` profiles with more than one `sharedServiceIds` entry. Session mutations infer `owner` from `agentName`, then `serviceName`, when `owner` is omitted; `profileId` must reference a persisted profile, and profile `sharedServiceIds` allow-lists are enforced. `service_profile_freshness_update` and `POST /api/service/profiles/<id>/freshness` merge bounded-probe profile freshness evidence without requiring clients to replace the whole profile. The collection endpoints return the same compact arrays as the MCP resources: `profiles`, `sessions`, `browsers`, `tabs`, `monitors`, `sitePolicies`, `providers`, `challenges`, `displayAllocations`, `remoteViewRoutes`, `routePool`, `viewerLeases`, and `browserCapabilityRegistry`. Site-policy collections also include `sitePolicySources` so operators and clients can see whether each effective policy came from config, persisted state, or built-in defaults. Run `pnpm test:service-config-live` to validate HTTP and MCP mutation parity for profiles, sessions, site policies, monitors, providers, and browser capability registry upserts.
+
+Use `action: "view_takeover"` with `params.browserId`, `params.sessionName`, `params.streamId`, `params.provider`, and `params.openMode` when an RDP or Guacamole viewer should take over or reconnect without closing or relaunching the browser. Successful requests return `status`, `providerMode`, `viewerLeaseId`, `lastViewerEvent`, and `serviceEventId`, and they retain a `viewer_takeover_requested` service event for later dashboard, HTTP, MCP, and service trace inspection. For retained routes, use `service_viewer_lease_request`, `service_viewer_lease_heartbeat`, `service_viewer_lease_release`, and `service_controller_lease_takeover` to track observers, keep viewer leases fresh, release viewers, and make controller ownership auditable. Routes with `providerMode: "single_viewer"` reject additional active viewers; controller requests reject an existing controller unless the caller uses the explicit takeover action.
 
 The guarded service read surface has MCP parity: contracts, access-plan, profile lookup, per-profile readiness, allocation, seeding handoff, service collections, incidents, events, jobs, and incident activity all have matching HTTP and MCP read paths. Agents should usually start with MCP `service_access_plan` or `agent-browser://access-plan{?...}` because it returns the service-owned profile decision, readiness, policy, providers, retained challenges, monitor findings, and copyable queued request before browser control is requested. Use narrower resources such as profile lookup, readiness, allocation, or seeding handoff only when the caller already knows it does not need the full recommendation.
 
 MCP `agent-browser://profiles/{profile_id}/allocation` mirrors `GET /api/service/profiles/<id>/allocation` for agents that need one profile's lease, holder, conflict, recommended-action, and readiness state without fetching the full profile collection.
 
-MCP `agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}` mirrors `GET /api/service/profiles/lookup` for agents that need the narrower no-launch profile selector response instead of the richer access-plan recommendation. The lookup and access-plan selectors accept `accountId`, `accountIds`, `url`, and `browserBuild`; URL hints derive the matching site policy identity when the origin is known.
+MCP `agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}` mirrors `GET /api/service/profiles/lookup` for agents that need the narrower no-launch profile selector response instead of the richer access-plan recommendation. The lookup and access-plan selectors accept `accountId`, `accountIds`, `url`, and `browserBuild`; access-plan selectors also accept `browserHost`, `viewStreamProvider`, `controlInputProvider`, and `displayIsolation` when the caller needs to preserve a remote viewport posture. URL hints derive the matching site policy identity when the origin is known.
 
-MCP `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}` mirrors `GET /api/service/access-plan` with the same account, URL, and browser-build hints for software clients and agents that need the full no-launch recommendation.
+MCP `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}` mirrors `GET /api/service/access-plan` with the same account, URL, browser-build, browser-host, view-stream, control-input, and display-isolation hints for software clients and agents that need the full no-launch recommendation.
 
 MCP `service_profile_freshness_update` mirrors `POST /api/service/profiles/<id>/freshness` for serialized profile freshness updates. MCP `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}` mirrors `GET /api/service/profiles/<id>/seeding-handoff` for handoff reads. MCP `service_profile_seeding_handoff_update` mirrors `POST /api/service/profiles/<id>/seeding-handoff` for detached seeding lifecycle changes such as launched, waiting for close, closed unverified, verification pending, fresh, failed, or abandoned. HTTP `POST /api/service/monitors/<id>`, HTTP `DELETE /api/service/monitors/<id>`, MCP `service_monitor_upsert`, MCP `service_monitor_delete`, `upsertServiceMonitor()`, and `deleteServiceMonitor()` persist monitor definitions. Active monitors are checked by the daemon scheduler when due; use HTTP `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, `runDueServiceMonitors()`, or `agent-browser service monitors run-due` to run due active monitors immediately. Use HTTP `POST /api/service/monitors/<id>/pause`, HTTP `POST /api/service/monitors/<id>/resume`, MCP `service_monitor_pause`, MCP `service_monitor_resume`, `pauseServiceMonitor()`, `resumeServiceMonitor()`, or the matching CLI commands to quiet or restore a monitor without clearing health history. Use HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, `triageServiceMonitor()`, or `agent-browser service monitors triage <id>` to acknowledge the related monitor incident and reset reviewed failures together. Use HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, `resetServiceMonitorFailures()`, or `agent-browser service monitors reset <id>` after a reviewed failure has been triaged and the retained failure evidence should remain available. Use HTTP `POST /api/service/remedies/apply?escalation=monitor_attention`, MCP `service_remedies_apply`, `applyServiceRemedies()`, or `agent-browser service remedies apply --escalation monitor_attention` to apply all active monitor remedies in one serialized operation. Use `escalation=browser_degraded` after operator review to batch retry enablement for active degraded-browser incidents. Use `escalation=os_degraded_possible` only after host inspection to batch the existing faulted-browser retry remedy for active OS-degraded-possible incidents.
 
@@ -1924,7 +2171,14 @@ command envelope with `success`, optional `data`, optional `error`, optional
 `docs/dev/contracts/service-request.v1.schema.json` gets a typed `data` shape
 through
 `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new`
-data. `requestServiceTab`, `createServiceTabRequest`, and
+data. Remote-view route and lease actions return typed route checkout, route
+release, viewer lease, and controller lease metadata. Use
+`requestServiceRemoteViewRouteCheckout()`,
+`requestServiceRemoteViewRouteRelease()`, `requestServiceViewerLease()`,
+`releaseServiceViewerLease()`, and `takeoverServiceControllerLease()` when a
+software client needs to allocate a retained Guacamole or RDP route, attach an
+observer, take over control, or release the route without hand-building the
+underlying service request. `requestServiceTab`, `createServiceTabRequest`, and
 `createServiceTabRequestFromAccessPlan` accept an access-plan response so
 software clients can queue the planned tab request without manually unpacking
 `decision.serviceRequest.request`. Explicit call fields such as `url`,
@@ -2355,7 +2609,7 @@ handoff; it verifies an access-plan response can be passed into
 `pnpm test:service-client-example-live` to validate the main trace
 example against a real isolated daemon and browser session.
 
-For MCP clients, use `mcp serve` to run a stdio server that exposes service resources without launching a browser. The server supports `initialize`, `ping`, `resources/list`, `resources/templates/list`, `resources/read`, `tools/list`, and `tools/call`. MCP tools include `service_request`, which queues one intent-based browser action with caller context and site/login hints, `service_job_cancel`, which cancels queued service jobs or requests cancellation for running jobs, `service_browser_retry`, which enables a new recovery attempt for a faulted browser, `service_incidents`, which reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP, `service_trace`, which reads related events, jobs, incidents, and activity from persisted service state, `service_profile_upsert`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, `service_provider_delete`, and `service_browser_capability_registry_upsert`, which mutate persisted service config through the service worker queue with the same ID checks as HTTP, `browser_navigate`, which queues typed navigation for the active browser session, `browser_requests`, which enables and filters request inspection, `browser_request_detail`, which reads one tracked request by ID, `browser_headers`, which sets extra HTTP headers for the active browser session, `browser_offline`, which toggles network offline emulation, `browser_cookies_get`, which reads cookies, `browser_cookies_set`, which sets cookies, `browser_cookies_clear`, which clears cookies, `browser_storage_get`, which reads localStorage or sessionStorage, `browser_storage_set`, which sets localStorage or sessionStorage, `browser_storage_clear`, which clears localStorage or sessionStorage, `browser_user_agent`, which sets the user agent, `browser_viewport`, which sets the viewport, `browser_geolocation`, which sets geolocation emulation, `browser_permissions`, which grants browser permissions, `browser_timezone`, which sets timezone emulation, `browser_locale`, which sets locale emulation, `browser_media`, which sets media emulation, `browser_dialog`, which handles dialog status or response, `browser_upload`, which uploads files, `browser_download`, which clicks and saves downloads, `browser_wait_for_download`, which waits for downloads, `browser_har_start` and `browser_har_stop`, which capture HAR files, `browser_route`, which routes matching requests, `browser_unroute`, which removes routes, `browser_console`, which reads or clears console messages, `browser_errors`, which reads page errors, `browser_pdf`, which saves PDFs, `browser_response_body`, which reads matching response bodies, `browser_clipboard`, which controls clipboard operations, `browser_command`, which queues any supported browser-control action for HTTP parity, `browser_snapshot`, which queues the existing snapshot command for the active browser session, `browser_get_url`, which reads the active browser URL, `browser_get_title`, which reads the active browser title, `browser_tabs`, which lists open tabs, `browser_screenshot`, which saves a screenshot for visual inspection, `browser_click`, which clicks a selector or cached ref through the queued control plane, `browser_fill`, which fills a field through the queued control plane, `browser_wait`, which waits for selector, text, URL, function, load-state, or fixed-duration conditions through the queued control plane, `browser_type`, which types text through the queued control plane, `browser_press`, which presses keys and key chords through the queued control plane, `browser_hover`, which hovers elements through the queued control plane, `browser_select`, which selects dropdown values through the queued control plane, `browser_get_text`, which reads element text through the queued control plane, `browser_get_value`, which reads field values through the queued control plane, `browser_get_attribute`, which reads element attributes through the queued control plane, `browser_get_html`, which reads element inner HTML through the queued control plane, `browser_get_styles`, which reads computed styles through the queued control plane, `browser_count`, which counts matching elements through the queued control plane, `browser_get_box`, which reads element geometry through the queued control plane, `browser_is_visible`, which reads element visibility through the queued control plane, `browser_is_enabled`, which reads element enabled state through the queued control plane, `browser_check`, which checks checkbox or radio controls through the queued control plane, `browser_is_checked`, which reads checkbox, radio, or ARIA checked state through the queued control plane, `browser_uncheck`, which unchecks checkbox controls through the queued control plane, `browser_scroll`, which scrolls pages or containers through the queued control plane, `browser_scroll_into_view`, which scrolls a target element into view through the queued control plane, `browser_focus`, which focuses a target element through the queued control plane, and `browser_clear`, which clears a target field through the queued control plane. MCP tool callers should include `serviceName`, `agentName`, and `taskName` when available so multi-service and multi-agent behavior remains traceable. Service jobs persist these caller context fields when commands provide them and persist advisory `namingWarnings` when any caller label is missing. Access-plan responses echo the same caller labels and report the same naming warnings in `query` and `decision`. Current warning values are `missing_service_name`, `missing_agent_name`, and `missing_task_name`; `hasNamingWarning` is `true` when `namingWarnings` is non-empty. The `agent-browser://contracts` resource mirrors HTTP `GET /api/service/contracts` with service request schema IDs, contract versions, route names, MCP tool names, and supported actions. The `agent-browser://browser-capability-registry` resource mirrors HTTP `GET /api/service/browser-capability-registry` and returns the advisory no-launch browser registry. `POST /api/service/browser-capability-registry/<collection>/<id>`, MCP `service_browser_capability_registry_upsert`, and `upsertServiceBrowserCapabilityRegistryRecord()` add or replace one advisory registry record and return the updated registry counts. The `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}` template mirrors HTTP `GET /api/service/access-plan` and returns the no-launch service-owned profile, policy, provider, challenge, readiness, and recommendation payload. The `agent-browser://jobs` resource returns the same service job record schema as HTTP: `docs/dev/contracts/service-job-record.v1.schema.json`; CLI and HTTP `service_jobs` response envelopes follow `docs/dev/contracts/service-jobs-response.v1.schema.json`. The `agent-browser://incidents` resource and `service_incidents` tool return the same service incident record schema as HTTP: `docs/dev/contracts/service-incident-record.v1.schema.json`; `service_incidents` response envelopes follow `docs/dev/contracts/service-incidents-response.v1.schema.json`. Run `pnpm test:mcp-live` to validate the live daemon, browser, MCP tool call, and retained job metadata path. Run `pnpm test:service-reconcile-live` to validate that `service reconcile` and MCP browser/tab resources agree on live service-owned state. Run `pnpm test:service-profile-live` to validate that runtime-profile launches populate MCP profile and session resources with caller metadata. Run `pnpm test:service-profile-http-live` to validate the same profile and session metadata through the HTTP service API. Run `pnpm test:service-request-live` to validate HTTP `/api/service/request` and MCP `service_request` over one isolated live browser session. Run `pnpm test:service-recovery-http-live` to validate the HTTP trace contract for crash detection, recovery start, and ready-after-relaunch events. Run `pnpm test:service-recovery-mcp-live` to validate the same recovery trace contract through MCP `service_trace`. Run `pnpm test:service-api-mcp-parity` to statically check that named browser-control HTTP endpoints, typed MCP tools, README, skill, and docs site stay aligned. For shell inspection, use `mcp resources` to list service resource contracts and `mcp read <uri>` to read one resource from persisted service state. Implemented resources are `agent-browser://contracts`, `agent-browser://browser-capability-registry`, `agent-browser://access-plan`, `agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}`, `agent-browser://profiles/{profile_id}/readiness`, `agent-browser://profiles/{profile_id}/allocation`, `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}`, `agent-browser://incidents`, `agent-browser://profiles`, `agent-browser://sessions`, `agent-browser://browsers`, `agent-browser://tabs`, `agent-browser://site-policies`, `agent-browser://providers`, `agent-browser://challenges`, `agent-browser://jobs`, `agent-browser://events`, `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}`, and `agent-browser://incidents/{incident_id}/activity`.
+For MCP clients, use `mcp serve` to run a stdio server that exposes service resources without launching a browser. The server supports `initialize`, `ping`, `resources/list`, `resources/templates/list`, `resources/read`, `tools/list`, and `tools/call`. MCP tools include `service_request`, which queues one intent-based browser action with caller context and site/login hints, `service_job_cancel`, which cancels queued service jobs or requests cancellation for running jobs, `service_browser_retry`, which enables a new recovery attempt for a faulted browser, `service_incidents`, which reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP, `service_trace`, which reads related events, jobs, incidents, and activity from persisted service state, `service_profile_upsert`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, `service_provider_delete`, and `service_browser_capability_registry_upsert`, which mutate persisted service config through the service worker queue with the same ID checks as HTTP, `browser_navigate`, which queues typed navigation for the active browser session, `browser_requests`, which enables and filters request inspection, `browser_request_detail`, which reads one tracked request by ID, `browser_headers`, which sets extra HTTP headers for the active browser session, `browser_offline`, which toggles network offline emulation, `browser_cookies_get`, which reads cookies, `browser_cookies_set`, which sets cookies, `browser_cookies_clear`, which clears cookies, `browser_storage_get`, which reads localStorage or sessionStorage, `browser_storage_set`, which sets localStorage or sessionStorage, `browser_storage_clear`, which clears localStorage or sessionStorage, `browser_user_agent`, which sets the user agent, `browser_viewport`, which sets the viewport, `browser_geolocation`, which sets geolocation emulation, `browser_permissions`, which grants browser permissions, `browser_timezone`, which sets timezone emulation, `browser_locale`, which sets locale emulation, `browser_media`, which sets media emulation, `browser_dialog`, which handles dialog status or response, `browser_upload`, which uploads files, `browser_download`, which clicks and saves downloads, `browser_wait_for_download`, which waits for downloads, `browser_har_start` and `browser_har_stop`, which capture HAR files, `browser_route`, which routes matching requests, `browser_unroute`, which removes routes, `browser_console`, which reads or clears console messages, `browser_errors`, which reads page errors, `browser_pdf`, which saves PDFs, `browser_response_body`, which reads matching response bodies, `browser_clipboard`, which controls clipboard operations, `browser_command`, which queues any supported browser-control action for HTTP parity, `browser_snapshot`, which queues the existing snapshot command for the active browser session, `browser_get_url`, which reads the active browser URL, `browser_get_title`, which reads the active browser title, `browser_tabs`, which lists open tabs, `browser_screenshot`, which saves a screenshot for visual inspection, `browser_click`, which clicks a selector or cached ref through the queued control plane, `browser_fill`, which fills a field through the queued control plane, `browser_wait`, which waits for selector, text, URL, function, load-state, or fixed-duration conditions through the queued control plane, `browser_type`, which types text through the queued control plane, `browser_press`, which presses keys and key chords through the queued control plane, `browser_hover`, which hovers elements through the queued control plane, `browser_select`, which selects dropdown values through the queued control plane, `browser_get_text`, which reads element text through the queued control plane, `browser_get_value`, which reads field values through the queued control plane, `browser_get_attribute`, which reads element attributes through the queued control plane, `browser_get_html`, which reads element inner HTML through the queued control plane, `browser_get_styles`, which reads computed styles through the queued control plane, `browser_count`, which counts matching elements through the queued control plane, `browser_get_box`, which reads element geometry through the queued control plane, `browser_is_visible`, which reads element visibility through the queued control plane, `browser_is_enabled`, which reads element enabled state through the queued control plane, `browser_check`, which checks checkbox or radio controls through the queued control plane, `browser_is_checked`, which reads checkbox, radio, or ARIA checked state through the queued control plane, `browser_uncheck`, which unchecks checkbox controls through the queued control plane, `browser_scroll`, which scrolls pages or containers through the queued control plane, `browser_scroll_into_view`, which scrolls a target element into view through the queued control plane, `browser_focus`, which focuses a target element through the queued control plane, and `browser_clear`, which clears a target field through the queued control plane. MCP tool callers should include `serviceName`, `agentName`, and `taskName` when available so multi-service and multi-agent behavior remains traceable. Service jobs persist these caller context fields when commands provide them and persist advisory `namingWarnings` when any caller label is missing. Access-plan responses echo the same caller labels and report the same naming warnings in `query` and `decision`. Current warning values are `missing_service_name`, `missing_agent_name`, and `missing_task_name`; `hasNamingWarning` is `true` when `namingWarnings` is non-empty. The `agent-browser://contracts` resource mirrors HTTP `GET /api/service/contracts` with service request schema IDs, contract versions, route names, MCP tool names, and supported actions. The `agent-browser://browser-capability-registry` resource mirrors HTTP `GET /api/service/browser-capability-registry` and returns the advisory no-launch browser registry. `POST /api/service/browser-capability-registry/<collection>/<id>`, MCP `service_browser_capability_registry_upsert`, and `upsertServiceBrowserCapabilityRegistryRecord()` add or replace one advisory registry record and return the updated registry counts. The `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}` template mirrors HTTP `GET /api/service/access-plan` and returns the no-launch service-owned profile, policy, provider, challenge, readiness, and recommendation payload. The `agent-browser://jobs` resource returns the same service job record schema as HTTP: `docs/dev/contracts/service-job-record.v1.schema.json`; CLI and HTTP `service_jobs` response envelopes follow `docs/dev/contracts/service-jobs-response.v1.schema.json`. The `agent-browser://incidents` resource and `service_incidents` tool return the same service incident record schema as HTTP: `docs/dev/contracts/service-incident-record.v1.schema.json`; `service_incidents` response envelopes follow `docs/dev/contracts/service-incidents-response.v1.schema.json`. Run `pnpm test:mcp-live` to validate the live daemon, browser, MCP tool call, and retained job metadata path. Run `pnpm test:service-reconcile-live` to validate that `service reconcile` and MCP browser/tab resources agree on live service-owned state. Run `pnpm test:service-profile-live` to validate that runtime-profile launches populate MCP profile and session resources with caller metadata. Run `pnpm test:service-profile-http-live` to validate the same profile and session metadata through the HTTP service API. Run `pnpm test:service-request-live` to validate HTTP `/api/service/request` and MCP `service_request` over one isolated live browser session. Run `pnpm test:service-recovery-http-live` to validate the HTTP trace contract for crash detection, recovery start, and ready-after-relaunch events. Run `pnpm test:service-recovery-mcp-live` to validate the same recovery trace contract through MCP `service_trace`. Run `pnpm test:service-api-mcp-parity` to statically check that named browser-control HTTP endpoints, typed MCP tools, README, skill, and docs site stay aligned. For shell inspection, use `mcp resources` to list service resource contracts and `mcp read <uri>` to read one resource from persisted service state. Implemented resources are `agent-browser://contracts`, `agent-browser://browser-capability-registry`, `agent-browser://access-plan`, `agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}`, `agent-browser://profiles/{profile_id}/readiness`, `agent-browser://profiles/{profile_id}/allocation`, `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}`, `agent-browser://incidents`, `agent-browser://profiles`, `agent-browser://sessions`, `agent-browser://browsers`, `agent-browser://tabs`, `agent-browser://site-policies`, `agent-browser://providers`, `agent-browser://challenges`, `agent-browser://jobs`, `agent-browser://events`, `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}`, and `agent-browser://incidents/{incident_id}/activity`.
 
 The equivalent MCP `tools/call` payload uses the same intent fields:
 

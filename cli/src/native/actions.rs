@@ -71,10 +71,11 @@ use super::service_lifecycle::{
 use super::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, BrowserSession, ControlInputProvider,
+    BrowserHost as ServiceBrowserHost, BrowserSession, ControlInputProvider, DisplayAllocation,
     JobState as ServiceJobState, LeaseState, MonitorState, ProfileKeyringPolicy,
-    ProfileLeaseDisposition, ProfileSelectionReason, ServiceEvent, ServiceEventKind, ServiceState,
-    SessionCleanupPolicy, TabLifecycle, ViewStream, ViewStreamProvider,
+    ProfileLeaseDisposition, ProfileSelectionReason, RemoteViewRoute, RoutePoolEntry, ServiceEvent,
+    ServiceEventKind, ServiceState, SessionCleanupPolicy, TabLifecycle, ViewStream,
+    ViewStreamProvider, ViewerLease,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -214,6 +215,14 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "stream_enable"
             | "stream_disable"
             | "stream_status"
+            | "view_takeover"
+            | "service_remote_view_route_checkout"
+            | "service_remote_view_route_release"
+            | "service_route_pool_repair"
+            | "service_viewer_lease_request"
+            | "service_viewer_lease_heartbeat"
+            | "service_viewer_lease_release"
+            | "service_controller_lease_takeover"
             | "service_status"
             | "service_reconcile"
             | "service_browser_close"
@@ -1140,11 +1149,14 @@ impl ServiceLaunchMetadata {
                 .map(remote_headed_view_streams_from_command)
                 .unwrap_or_default(),
             display_isolation: remote_headed_display_isolation(options),
-            display_name: options.display.clone().or_else(|| {
-                (options.remote_headed && !options.headless)
-                    .then(|| env::var("DISPLAY").ok())
-                    .flatten()
-            }),
+            display_name: match remote_headed_display_isolation(options).as_deref() {
+                Some("private_virtual_display") => None,
+                _ => options.display.clone().or_else(|| {
+                    (options.remote_headed && !options.headless)
+                        .then(|| env::var("DISPLAY").ok())
+                        .flatten()
+                }),
+            },
         }
     }
 }
@@ -1195,6 +1207,104 @@ fn parse_service_browser_host(value: &str) -> Option<ServiceBrowserHost> {
     }
 }
 
+#[derive(Debug, Clone)]
+struct RetainedRemoteHeadedLaunchHint {
+    view_streams: Vec<ViewStream>,
+    display_isolation: Option<String>,
+    display_name: Option<String>,
+}
+
+fn command_has_explicit_launch_surface(command: &Value) -> bool {
+    browser_host_from_command(command).is_some()
+        || command.get("provider").is_some()
+        || command.get("cdpUrl").is_some()
+        || command.get("cdpPort").is_some()
+        || command
+            .get("autoConnect")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+        || command
+            .get("headlessExplicit")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+        || command
+            .get("params")
+            .and_then(|params| params.get("headlessExplicit"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+}
+
+fn retained_remote_headed_launch_hint(
+    session_id: &str,
+    command: &Value,
+) -> Option<RetainedRemoteHeadedLaunchHint> {
+    if command_has_explicit_launch_surface(command) {
+        return None;
+    }
+    let repository = LockedServiceStateRepository::default_json().ok()?;
+    let service_state = repository.load_snapshot().ok()?;
+    let browser = service_state
+        .browsers
+        .get(&format!("session:{}", session_id))?;
+    if browser.host != ServiceBrowserHost::RemoteHeaded || browser.view_streams.is_empty() {
+        return None;
+    }
+    Some(RetainedRemoteHeadedLaunchHint {
+        view_streams: browser.view_streams.clone(),
+        display_isolation: browser.display_isolation.clone(),
+        display_name: browser.display_name.clone(),
+    })
+}
+
+fn apply_retained_remote_headed_launch_hints(
+    options: &mut LaunchOptions,
+    retained: Option<&RetainedRemoteHeadedLaunchHint>,
+) {
+    let Some(retained) = retained else {
+        return;
+    };
+    options.headless = false;
+    options.remote_headed = true;
+    if options.remote_headed_display_isolation.is_none() {
+        options.remote_headed_display_isolation = retained
+            .display_isolation
+            .as_deref()
+            .and_then(normalize_remote_headed_display_isolation)
+            .or_else(|| {
+                retained
+                    .display_name
+                    .as_ref()
+                    .map(|_| "shared_display".to_string())
+            });
+    }
+    if options.display.is_none()
+        && !matches!(
+            options.remote_headed_display_isolation.as_deref(),
+            Some("private_virtual_display" | "ambient_display")
+        )
+    {
+        options.display = retained.display_name.clone();
+    }
+}
+
+fn apply_retained_remote_headed_metadata(
+    metadata: &mut ServiceLaunchMetadata,
+    retained: Option<&RetainedRemoteHeadedLaunchHint>,
+) {
+    let Some(retained) = retained else {
+        return;
+    };
+    if metadata.view_streams.is_empty() {
+        metadata.view_streams = retained.view_streams.clone();
+    }
+    if metadata.display_isolation.is_none() {
+        metadata.display_isolation = retained.display_isolation.clone();
+    }
+    if metadata.display_name.is_none() {
+        metadata.display_name = retained.display_name.clone();
+    }
+}
+
 fn apply_launch_host_hints(options: &mut LaunchOptions, command: &Value) -> ServiceBrowserHost {
     let host = browser_host_from_command(command).unwrap_or_else(|| {
         if command.get("provider").is_some() {
@@ -1207,6 +1317,8 @@ fn apply_launch_host_hints(options: &mut LaunchOptions, command: &Value) -> Serv
                 .unwrap_or(false)
         {
             ServiceBrowserHost::AttachedExisting
+        } else if options.remote_headed {
+            ServiceBrowserHost::RemoteHeaded
         } else if options.headless {
             ServiceBrowserHost::LocalHeadless
         } else {
@@ -1227,11 +1339,19 @@ fn apply_launch_host_hints(options: &mut LaunchOptions, command: &Value) -> Serv
     }
     if host == ServiceBrowserHost::RemoteHeaded {
         options.remote_headed = true;
-        options.remote_headed_display_isolation =
-            remote_headed_display_isolation_from_command(command);
+        let explicit_remote_display = remote_headed_display_from_command_only(command);
+        if let Some(display_isolation) = remote_headed_display_isolation_from_command(command) {
+            options.remote_headed_display_isolation = Some(display_isolation);
+        } else if options.remote_headed_display_isolation.is_none()
+            && explicit_remote_display.is_some()
+        {
+            options.remote_headed_display_isolation = Some("shared_display".to_string());
+        } else if options.remote_headed_display_isolation.is_none() {
+            options.remote_headed_display_isolation = Some("private_virtual_display".to_string());
+        }
         options.display = match options.remote_headed_display_isolation.as_deref() {
             Some("private_virtual_display") | Some("ambient_display") => None,
-            _ => remote_headed_display_from_command(command),
+            _ => remote_headed_display_from_command(command).or_else(|| options.display.clone()),
         };
     }
     host
@@ -1261,14 +1381,18 @@ fn normalize_remote_headed_display_isolation(value: &str) -> Option<String> {
 }
 
 fn remote_headed_display_from_command(command: &Value) -> Option<String> {
+    remote_headed_display_from_command_only(command)
+        .or_else(|| env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY").ok())
+}
+
+fn remote_headed_display_from_command_only(command: &Value) -> Option<String> {
     optional_command_string(command, "remoteHeadedDisplay")
         .or_else(|| optional_command_string(command, "display"))
         .or_else(|| {
             command
                 .get("params")
-                .and_then(remote_headed_display_from_command)
+                .and_then(remote_headed_display_from_command_only)
         })
-        .or_else(|| env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY").ok())
 }
 
 fn remote_headed_view_streams_from_command(command: &Value) -> Vec<ViewStream> {
@@ -1286,15 +1410,67 @@ fn remote_headed_view_streams_from_command(command: &Value) -> Vec<ViewStream> {
         .or_else(|| env::var("AGENT_BROWSER_REMOTE_VIEW_PROVIDER").ok())
         .and_then(|provider| parse_view_stream_provider(&provider))
         .unwrap_or(ViewStreamProvider::CdpScreencast);
-    let url = optional_command_string(command, "remoteViewUrl")
-        .or_else(|| optional_command_string(command, "viewStreamUrl"))
-        .or_else(|| {
-            command.get("params").and_then(|params| {
-                optional_command_string(params, "remoteViewUrl")
-                    .or_else(|| optional_command_string(params, "viewStreamUrl"))
-            })
-        })
-        .or_else(|| env::var("AGENT_BROWSER_REMOTE_VIEW_URL").ok());
+    let url = view_stream_command_string(
+        command,
+        &["remoteViewUrl", "viewStreamUrl"],
+        "AGENT_BROWSER_REMOTE_VIEW_URL",
+    );
+    let frame_url = view_stream_command_string(
+        command,
+        &["frameUrl", "viewStreamFrameUrl", "remoteViewFrameUrl"],
+        "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
+    )
+    .or_else(|| guacamole_client_url(url.as_deref()));
+    let external_url = view_stream_command_string(
+        command,
+        &[
+            "externalUrl",
+            "viewStreamExternalUrl",
+            "remoteViewExternalUrl",
+        ],
+        "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
+    )
+    .or_else(|| guacamole_client_url(url.as_deref()))
+    .or_else(|| frame_url.clone());
+    let explicit_route_id = view_stream_command_string(
+        command,
+        &["routeId", "viewStreamRouteId", "guacamoleRouteId"],
+        "AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID",
+    );
+    let connection_id = view_stream_command_string(
+        command,
+        &["connectionId", "guacamoleConnectionId"],
+        "AGENT_BROWSER_GUACAMOLE_CONNECTION_ID",
+    )
+    .or_else(|| {
+        frame_url
+            .as_deref()
+            .or(external_url.as_deref())
+            .or(url.as_deref())
+            .and_then(guacamole_connection_id_from_url)
+    });
+    let route_id = explicit_route_id.or_else(|| {
+        connection_id
+            .as_ref()
+            .map(|value| format!("guacamole:{}", value))
+    });
+    let connection_name = view_stream_command_string(
+        command,
+        &["connectionName", "guacamoleConnectionName"],
+        "AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME",
+    );
+    let route_source = if route_id.is_some()
+        || connection_id.is_some()
+        || frame_url.is_some()
+        || external_url.is_some()
+    {
+        Some("service_request".to_string())
+    } else {
+        None
+    };
+    let url = url
+        .or_else(|| frame_url.clone())
+        .or_else(|| external_url.clone());
     let control_input = optional_command_string(command, "controlInput")
         .or_else(|| optional_command_string(command, "controlInputProvider"))
         .or_else(|| {
@@ -1311,8 +1487,83 @@ fn remote_headed_view_streams_from_command(command: &Value) -> Vec<ViewStream> {
         provider,
         control_input,
         url,
+        frame_url,
+        external_url,
+        route_id,
+        display_allocation_id: None,
+        connection_id,
+        connection_name,
+        route_source,
+        provider_mode: None,
+        viewer_lease_ids: Vec::new(),
+        controller_lease_id: None,
         read_only: false,
+        readiness: None,
+        remote_readiness: None,
     }]
+}
+
+fn view_stream_command_string(command: &Value, keys: &[&str], env_key: &str) -> Option<String> {
+    for key in keys {
+        if let Some(value) = optional_command_string(command, key) {
+            return Some(value);
+        }
+    }
+    if let Some(params) = command.get("params") {
+        for key in keys {
+            if let Some(value) = optional_command_string(params, key) {
+                return Some(value);
+            }
+        }
+    }
+    env::var(env_key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn guacamole_client_url(root_url: Option<&str>) -> Option<String> {
+    if let Ok(configured_url) = env::var("AGENT_BROWSER_REMOTE_VIEW_URL") {
+        let configured_url = configured_url.trim();
+        if !configured_url.is_empty() && configured_url.contains("#/client/") {
+            return Some(configured_url.to_string());
+        }
+    }
+    let root_url = root_url.map(str::trim).filter(|url| !url.is_empty())?;
+    if root_url.contains("#/client/") {
+        return Some(root_url.to_string());
+    }
+    None
+}
+
+fn guacamole_connection_id_from_url(url: &str) -> Option<String> {
+    let (_, route) = url.split_once("#/client/")?;
+    let connection_id = route
+        .split(['?', '&', '#', '/'])
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    Some(connection_id.to_string())
+}
+
+fn refresh_remote_view_stream_urls(service_state: &mut ServiceState) {
+    for browser in service_state.browsers.values_mut() {
+        if browser.host != ServiceBrowserHost::RemoteHeaded {
+            continue;
+        }
+        for stream in browser.view_streams.iter_mut() {
+            if stream.provider != ViewStreamProvider::RdpGateway {
+                continue;
+            }
+            let client_url = guacamole_client_url(stream.url.as_deref());
+            if stream.frame_url.is_none() {
+                stream.frame_url = client_url.clone();
+            }
+            if stream.external_url.is_none() {
+                stream.external_url = client_url;
+            }
+        }
+    }
 }
 
 fn parse_view_stream_provider(value: &str) -> Option<ViewStreamProvider> {
@@ -1421,6 +1672,12 @@ fn persist_current_browser_health(
         .unwrap_or((None, None, None));
     let metadata = metadata.map(|mut metadata| {
         metadata.browser_stderr_log_path = browser_stderr_log_path;
+        if metadata.display_name.is_none() {
+            metadata.display_name = state
+                .browser
+                .as_ref()
+                .and_then(|mgr| mgr.browser_display_name().map(str::to_string));
+        }
         metadata
     });
     persist_service_browser_record(
@@ -1533,6 +1790,35 @@ fn service_profile_lease_metadata_for_command(command: &Value) -> Option<Service
         selection_reason,
     );
     (metadata.service_name.is_some() && metadata.profile_id.is_some()).then_some(metadata)
+}
+
+fn apply_explicit_launch_identity_from_command(options: &mut LaunchOptions, command: &Value) {
+    if let Some(profile) = optional_command_string(command, "profile") {
+        options.profile = Some(profile);
+    }
+    if let Some(runtime_profile) = optional_command_string(command, "runtimeProfile") {
+        options.runtime_profile = Some(runtime_profile);
+    }
+    if let Some(browser_family) = optional_command_string(command, "runtimeProfileBrowserFamily") {
+        options.expected_browser_family = Some(browser_family);
+    }
+}
+
+fn apply_auto_launch_command_hints(
+    options: &mut LaunchOptions,
+    command: &Value,
+    retained_remote_headed: Option<&RetainedRemoteHeadedLaunchHint>,
+) -> (
+    ServiceBrowserHost,
+    Option<ProfileSelectionReason>,
+    BrowserCapabilityLaunchResolution,
+) {
+    apply_explicit_launch_identity_from_command(options, command);
+    apply_retained_remote_headed_launch_hints(options, retained_remote_headed);
+    let service_host = apply_launch_host_hints(options, command);
+    let selection_reason = apply_service_profile_selection(options, command);
+    let browser_capability_launch = apply_service_browser_capability_selection(options, command);
+    (service_host, selection_reason, browser_capability_launch)
 }
 
 fn service_profile_lease_conflict_session_ids(
@@ -2812,6 +3098,10 @@ fn managed_runtime_attach_target(
     })
 }
 
+fn can_attach_managed_runtime_for_launch(options: &LaunchOptions) -> bool {
+    options.headless && !options.remote_headed
+}
+
 async fn attach_managed_runtime_browser(
     state: &mut DaemonState,
     target: &ManagedRuntimeAttachTarget,
@@ -3231,6 +3521,20 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "tab_switch" => handle_tab_switch(cmd, state).await,
         "tab_close" => handle_tab_close(cmd, state).await,
         "view_focus" => handle_view_focus(cmd, state).await,
+        "view_takeover" => handle_view_takeover(cmd, state).await,
+        "service_remote_view_route_checkout" => {
+            handle_service_remote_view_route_checkout(cmd, state).await
+        }
+        "service_remote_view_route_release" => {
+            handle_service_remote_view_route_release(cmd, state).await
+        }
+        "service_route_pool_repair" => handle_service_route_pool_repair(cmd).await,
+        "service_viewer_lease_request" => handle_service_viewer_lease_request(cmd, state).await,
+        "service_viewer_lease_heartbeat" => handle_service_viewer_lease_heartbeat(cmd, state).await,
+        "service_viewer_lease_release" => handle_service_viewer_lease_release(cmd, state).await,
+        "service_controller_lease_takeover" => {
+            handle_service_controller_lease_takeover(cmd, state).await
+        }
         "viewport" => handle_viewport(cmd, state).await,
         "useragent" | "user_agent" => handle_user_agent(cmd, state).await,
         "set_media" => handle_set_media(cmd, state).await,
@@ -3469,6 +3773,33 @@ async fn connect_auto_with_fresh_tab() -> Result<BrowserManager, String> {
     Ok(mgr)
 }
 
+async fn focus_remote_headed_launch_for_view(
+    mgr: &BrowserManager,
+    options: &LaunchOptions,
+) -> Option<Value> {
+    if !options.remote_headed || options.headless {
+        return None;
+    }
+
+    let mut last_error = None;
+    for attempt in 0..3 {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        }
+        match mgr.focus_for_view(true).await {
+            Ok(result) => return Some(result),
+            Err(err) => last_error = Some(err),
+        }
+    }
+
+    Some(json!({
+        "broughtToFront": false,
+        "maximizeRequested": true,
+        "maximized": false,
+        "maximizeError": last_error.unwrap_or_else(|| "Remote-headed view focus failed".to_string()),
+    }))
+}
+
 async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), String> {
     let mut options = launch_options_from_env();
     let leave_open = env::var("AGENT_BROWSER_LEAVE_OPEN")
@@ -3482,10 +3813,13 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
         options.viewport_size = Some(server.viewport().await);
     }
     let engine = env::var("AGENT_BROWSER_ENGINE").ok();
-    let service_host = apply_launch_host_hints(&mut options, command);
-    let selection_reason = apply_service_profile_selection(&mut options, command);
-    let metadata =
+    let retained_remote_headed = retained_remote_headed_launch_hint(&state.session_id, command);
+    let (service_host, selection_reason, browser_capability_launch) =
+        apply_auto_launch_command_hints(&mut options, command, retained_remote_headed.as_ref());
+    let mut metadata =
         ServiceLaunchMetadata::from_launch_options(&options, Some(command), selection_reason);
+    apply_retained_remote_headed_metadata(&mut metadata, retained_remote_headed.as_ref());
+    metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
     ensure_service_profile_lease_available(&metadata, &state.session_id, command).await?;
 
     // Store proxy credentials for Fetch.authRequired handling
@@ -3605,14 +3939,18 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
     }
 
     let hash = launch_hash(&options);
-    if engine.as_deref().unwrap_or("chrome") == "chrome" {
+    if engine.as_deref().unwrap_or("chrome") == "chrome"
+        && can_attach_managed_runtime_for_launch(&options)
+    {
         if let Some(target) = managed_runtime_attach_target(options.runtime_profile.as_deref()) {
             attach_managed_runtime_browser(state, &target, leave_open, metadata).await?;
             state.launch_hash = Some(hash);
             return Ok(());
         }
     }
+    let remote_focus_options = options.clone();
     let mgr = BrowserManager::launch(options, engine.as_deref()).await?;
+    let _ = focus_remote_headed_launch_for_view(&mgr, &remote_focus_options).await;
     state.reset_input_state();
     state.attached_runtime_profile = None;
     state.attached_browser_pid = None;
@@ -3829,12 +4167,15 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         remote_headed: false,
         remote_headed_display_isolation: None,
     };
+    let retained_remote_headed = retained_remote_headed_launch_hint(&state.session_id, cmd);
+    apply_retained_remote_headed_launch_hints(&mut launch_options, retained_remote_headed.as_ref());
     let service_host = apply_launch_host_hints(&mut launch_options, cmd);
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
     let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, cmd);
     let mut metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
+    apply_retained_remote_headed_metadata(&mut metadata, retained_remote_headed.as_ref());
     metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
     ensure_service_profile_lease_available(&metadata, &state.session_id, cmd).await?;
 
@@ -4064,7 +4405,9 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     state.engine = engine.as_deref().unwrap_or("chrome").to_string();
     write_engine_file(&state.session_id, &state.engine);
     write_extensions_file(&state.session_id);
-    if engine.as_deref().unwrap_or("chrome") == "chrome" {
+    if engine.as_deref().unwrap_or("chrome") == "chrome"
+        && can_attach_managed_runtime_for_launch(&launch_options)
+    {
         if let Some(target) =
             managed_runtime_attach_target(launch_options.runtime_profile.as_deref())
         {
@@ -4073,16 +4416,20 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
             return Ok(json!({
                 "launched": true,
                 "attachedToExistingBrowser": true,
-                "runtimeProfile": target.runtime_profile,
+                    "runtimeProfile": target.runtime_profile,
                 "browserPid": target.browser_pid,
                 "cdpPort": target.cdp_port,
             }));
         }
     }
+    let remote_focus_options = launch_options.clone();
     state.reset_input_state();
     state.attached_runtime_profile = None;
     state.attached_browser_pid = None;
-    state.browser = Some(BrowserManager::launch(launch_options, engine.as_deref()).await?);
+    let launched_browser = BrowserManager::launch(launch_options, engine.as_deref()).await?;
+    let remote_view_focus =
+        focus_remote_headed_launch_for_view(&launched_browser, &remote_focus_options).await;
+    state.browser = Some(launched_browser);
     state.close_behavior = close_behavior_for_launched_browser(
         state
             .browser
@@ -4135,7 +4482,11 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         }
     }
 
-    Ok(json!({ "launched": true }))
+    let mut response = json!({ "launched": true });
+    if let Some(remote_view_focus) = remote_view_focus {
+        response["viewFocus"] = remote_view_focus;
+    }
+    Ok(response)
 }
 
 async fn handle_cdp_free_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
@@ -6377,7 +6728,19 @@ async fn handle_tab_new(cmd: &Value, state: &mut DaemonState) -> Result<Value, S
     state.ref_map.clear();
     state.iframe_sessions.clear();
     state.active_frame_id = None;
-    mgr.tab_new(url).await
+    let mut result = mgr.tab_new(url).await?;
+    if let Some(object) = result.as_object_mut() {
+        object.insert(
+            "browserId".to_string(),
+            json!(service_browser_id(&state.session_id)),
+        );
+        object.insert("sessionId".to_string(), json!(state.session_id.clone()));
+        if let Some(runtime_profile) = mgr.runtime_profile_name() {
+            object.insert("runtimeProfile".to_string(), json!(runtime_profile));
+            object.insert("profileId".to_string(), json!(runtime_profile));
+        }
+    }
+    Ok(result)
 }
 
 async fn handle_tab_switch(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
@@ -6431,11 +6794,32 @@ async fn handle_view_focus(cmd: &Value, state: &mut DaemonState) -> Result<Value
     state.active_frame_id = None;
 
     let mut tab_switched = None;
-    if let Some(index) = cmd
+    let fallback_index = cmd
         .get("index")
         .and_then(|v| v.as_u64())
-        .map(|i| i as usize)
+        .map(|i| i as usize);
+    if let Some(target_id) = cmd
+        .get("targetId")
+        .or_else(|| cmd.get("target_id"))
+        .and_then(|v| v.as_str())
+        .filter(|value| !value.trim().is_empty())
     {
+        // Prefer an exact CDP target when dashboard retained state contains
+        // closed or stale tab records that cannot provide a stable index.
+        match mgr.tab_switch_target_id(target_id.trim()).await {
+            Ok(value) => tab_switched = Some(value),
+            Err(target_err) => {
+                if let Some(index) = fallback_index {
+                    let mut fallback = mgr.tab_switch(index).await?;
+                    fallback["fallbackFromTargetId"] = json!(target_id.trim());
+                    fallback["fallbackReason"] = json!(target_err);
+                    tab_switched = Some(fallback);
+                } else {
+                    return Err(target_err);
+                }
+            }
+        }
+    } else if let Some(index) = fallback_index {
         tab_switched = Some(mgr.tab_switch(index).await?);
     }
 
@@ -6448,6 +6832,1036 @@ async fn handle_view_focus(cmd: &Value, state: &mut DaemonState) -> Result<Value
         result["tabSwitch"] = tab_switched;
     }
     Ok(result)
+}
+
+async fn handle_view_takeover(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
+    let browser_id = optional_command_string(cmd, "browserId")
+        .unwrap_or_else(|| service_browser_id(&state.session_id));
+    let session_name =
+        optional_command_string(cmd, "sessionName").unwrap_or_else(|| state.session_id.clone());
+    let stream_id = optional_command_string(cmd, "streamId");
+    let provider = optional_command_string(cmd, "provider");
+    let open_mode =
+        optional_command_string(cmd, "openMode").unwrap_or_else(|| "iframe".to_string());
+    let reason =
+        optional_command_string(cmd, "reason").unwrap_or_else(|| "operator_request".to_string());
+    let target_id = optional_command_string(cmd, "targetId");
+    let tab_index = cmd.get("index").and_then(Value::as_u64);
+    let provider_mode = match provider.as_deref() {
+        Some("rdp_gateway" | "rdp-gateway") => "provider_single_view",
+        Some(_) => "provider_multi_view",
+        None => "provider_unknown",
+    };
+    let requested_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let viewer_lease_id = format!(
+        "viewer:{}:{}:{}",
+        browser_id,
+        stream_id.as_deref().unwrap_or("default"),
+        requested_at
+    );
+    let service_event_id = persist_view_takeover_requested_event(
+        &browser_id,
+        &session_name,
+        stream_id.as_deref(),
+        provider.as_deref(),
+        &open_mode,
+        &reason,
+        target_id.as_deref(),
+        tab_index,
+        &viewer_lease_id,
+        &requested_at,
+        cmd,
+    )?;
+
+    Ok(json!({
+        "status": "accepted",
+        "takeoverStatus": "accepted",
+        "takeoverRequested": true,
+        "reconnectRequested": true,
+        "browserId": browser_id,
+        "sessionName": session_name,
+        "streamId": stream_id,
+        "provider": provider,
+        "openMode": open_mode,
+        "reason": reason,
+        "targetId": target_id,
+        "index": tab_index,
+        "providerMode": provider_mode,
+        "viewerLeaseId": viewer_lease_id,
+        "lastViewerEvent": "takeover_requested",
+        "serviceEventId": service_event_id,
+        "browserProcessPreserved": true,
+        "requestedAt": requested_at,
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn persist_view_takeover_requested_event(
+    browser_id: &str,
+    session_name: &str,
+    stream_id: Option<&str>,
+    provider: Option<&str>,
+    open_mode: &str,
+    reason: &str,
+    target_id: Option<&str>,
+    tab_index: Option<u64>,
+    viewer_lease_id: &str,
+    requested_at: &str,
+    cmd: &Value,
+) -> Result<String, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let event_id = format!("viewer-takeover-{}-{}", browser_id, requested_at);
+    let service_name = optional_command_string(cmd, "serviceName");
+    let agent_name = optional_command_string(cmd, "agentName");
+    let task_name = optional_command_string(cmd, "taskName");
+    repository.mutate(|state| {
+        let profile_id = state
+            .browsers
+            .get(browser_id)
+            .and_then(|browser| browser.profile_id.clone());
+        let event = ServiceEvent {
+            id: event_id.clone(),
+            timestamp: requested_at.to_string(),
+            kind: ServiceEventKind::ViewerTakeoverRequested,
+            message: format!(
+                "Viewer takeover requested for {} via {}.",
+                browser_id,
+                provider.unwrap_or("unknown_provider")
+            ),
+            browser_id: Some(browser_id.to_string()),
+            profile_id,
+            session_id: Some(session_name.to_string()),
+            service_name,
+            agent_name,
+            task_name,
+            details: Some(json!({
+                "streamId": stream_id,
+                "provider": provider,
+                "openMode": open_mode,
+                "reason": reason,
+                "targetId": target_id,
+                "index": tab_index,
+                "viewerLeaseId": viewer_lease_id,
+                "lastViewerEvent": "takeover_requested",
+                "takeoverStatus": "accepted",
+            })),
+            ..ServiceEvent::default()
+        };
+        state.events.push(event);
+        if state.events.len() > 100 {
+            let excess = state.events.len() - 100;
+            state.events.drain(0..excess);
+        }
+        Ok(())
+    })?;
+    Ok(event_id)
+}
+
+fn route_pool_target_string(entry: &RoutePoolEntry, key: &str) -> Option<String> {
+    entry
+        .target
+        .get(key)
+        .and_then(Value::as_str)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+}
+
+fn route_pool_entry_matches_display(
+    entry: &RoutePoolEntry,
+    display_allocation_id: &str,
+    allocation: Option<&DisplayAllocation>,
+) -> bool {
+    if let Some(target_allocation_id) = route_pool_target_string(entry, "displayAllocationId") {
+        return target_allocation_id == display_allocation_id;
+    }
+    if let Some(target_browser_id) = route_pool_target_string(entry, "browserId") {
+        return allocation.and_then(|allocation| allocation.owner_browser_id.as_deref())
+            == Some(target_browser_id.as_str());
+    }
+    if let Some(target_session_id) = route_pool_target_string(entry, "sessionId") {
+        return allocation.and_then(|allocation| allocation.owner_session_id.as_deref())
+            == Some(target_session_id.as_str());
+    }
+    if let Some(target_display_name) = route_pool_target_string(entry, "displayName") {
+        return allocation.and_then(|allocation| allocation.display_name.as_deref())
+            == Some(target_display_name.as_str());
+    }
+    true
+}
+
+fn ensure_route_pool_entry_matches_display(
+    entry: &RoutePoolEntry,
+    display_allocation_id: &str,
+    allocation: Option<&DisplayAllocation>,
+) -> Result<(), String> {
+    if route_pool_entry_matches_display(entry, display_allocation_id, allocation) {
+        return Ok(());
+    }
+    Err(format!(
+        "route_pool_target_mismatch: route pool entry '{}' does not target display allocation '{}'",
+        entry.id, display_allocation_id
+    ))
+}
+
+fn route_pool_readiness_state(readiness: &Value) -> Option<String> {
+    match readiness {
+        Value::String(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Value::Array(items) => items
+            .iter()
+            .filter_map(route_pool_readiness_state)
+            .find(|state| state != "ready"),
+        Value::Object(record) => {
+            for key in ["state", "status", "readiness", "lastProviderEvent"] {
+                if let Some(value) = record.get(key).and_then(Value::as_str) {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        return Some(trimmed.to_string());
+                    }
+                }
+            }
+            for key in ["components", "checks", "results"] {
+                if let Some(Value::Array(items)) = record.get(key) {
+                    if let Some(state) = items
+                        .iter()
+                        .filter_map(route_pool_readiness_state)
+                        .find(|state| state != "ready")
+                    {
+                        return Some(state);
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn ensure_route_pool_entry_ready_for_checkout(entry: &RoutePoolEntry) -> Result<(), String> {
+    let Some(readiness) = entry.readiness.as_ref() else {
+        return Ok(());
+    };
+    let Some(state) = route_pool_readiness_state(readiness) else {
+        return Ok(());
+    };
+    if state == "ready" {
+        return Ok(());
+    }
+    Err(format!(
+        "route_pool_not_ready: route pool entry '{}' readiness is '{}'",
+        entry.id, state
+    ))
+}
+
+fn resolve_route_pool_entry_id(
+    state: &ServiceState,
+    requested_pool_entry_id: Option<&str>,
+    requested_route_id: Option<&str>,
+    display_allocation_id: &str,
+    allocation: Option<&DisplayAllocation>,
+    provider: ViewStreamProvider,
+) -> Result<Option<String>, String> {
+    if let Some(id) = requested_pool_entry_id {
+        return Ok(Some(id.to_string()));
+    }
+    if state.route_pool.is_empty() {
+        return Ok(None);
+    }
+
+    let matching_entries = state
+        .route_pool
+        .values()
+        .filter(|entry| entry.provider == provider)
+        .filter(|entry| {
+            requested_route_id
+                .map(|route_id| entry.route_id == route_id)
+                .unwrap_or(true)
+        })
+        .filter(|entry| route_pool_entry_matches_display(entry, display_allocation_id, allocation))
+        .collect::<Vec<_>>();
+
+    if let Some(entry) = matching_entries
+        .iter()
+        .find(|entry| entry.state == "available")
+    {
+        return Ok(Some(entry.id.clone()));
+    }
+
+    if requested_route_id.is_some()
+        || allocation
+            .is_some_and(|allocation| allocation.display_isolation == "private_virtual_display")
+    {
+        return Err(format!(
+            "route_pool_unavailable: no available route pool entry for display allocation '{}'",
+            display_allocation_id
+        ));
+    }
+    Ok(None)
+}
+
+fn ensure_remote_view_route_available_for_display(
+    state: &ServiceState,
+    route_id: &str,
+    display_allocation_id: &str,
+    allocation: Option<&DisplayAllocation>,
+) -> Result<(), String> {
+    let Some(route) = state.remote_view_routes.get(route_id) else {
+        return Ok(());
+    };
+    if route.state == "released"
+        || route.display_allocation_id.as_deref() == Some(display_allocation_id)
+    {
+        return Ok(());
+    }
+
+    let current_allocation_is_private = route
+        .display_allocation_id
+        .as_ref()
+        .and_then(|id| state.display_allocations.get(id))
+        .is_some_and(|allocation| allocation.display_isolation == "private_virtual_display");
+    let requested_allocation_is_private = allocation
+        .is_some_and(|allocation| allocation.display_isolation == "private_virtual_display");
+    if current_allocation_is_private || requested_allocation_is_private {
+        return Err(format!(
+            "route_pool_contention: remote view route '{}' is already checked out to another private display allocation",
+            route_id
+        ));
+    }
+    Ok(())
+}
+
+fn remote_view_lease_is_active(lease: &ViewerLease) -> bool {
+    !matches!(
+        lease.state.as_str(),
+        "disconnected" | "expired" | "failed" | "released"
+    )
+}
+
+fn push_remote_view_service_event(
+    state: &mut ServiceState,
+    kind: ServiceEventKind,
+    timestamp: &str,
+    browser_id: Option<String>,
+    session_id: Option<String>,
+    message: String,
+    details: Value,
+) -> String {
+    let event_id = format!(
+        "remote-view-event:{}:{}",
+        service_event_kind_name(kind),
+        timestamp.replace([':', '.'], "-")
+    );
+    state.events.push(ServiceEvent {
+        id: event_id.clone(),
+        timestamp: timestamp.to_string(),
+        kind,
+        message,
+        browser_id,
+        session_id,
+        details: Some(details),
+        ..ServiceEvent::default()
+    });
+    if state.events.len() > 100 {
+        let excess = state.events.len() - 100;
+        state.events.drain(0..excess);
+    }
+    event_id
+}
+
+async fn handle_service_remote_view_route_checkout(
+    cmd: &Value,
+    daemon_state: &DaemonState,
+) -> Result<Value, String> {
+    let browser_id = optional_command_string(cmd, "browserId")
+        .unwrap_or_else(|| service_browser_id(&daemon_state.session_id));
+    let session_id = optional_command_string(cmd, "sessionName")
+        .unwrap_or_else(|| daemon_state.session_id.clone());
+    let display_allocation_id = optional_command_string(cmd, "displayAllocationId")
+        .or_else(|| optional_command_string(cmd, "requestedDisplayAllocationId"));
+    let route_pool_entry_id = optional_command_string(cmd, "routePoolEntryId")
+        .or_else(|| optional_command_string(cmd, "poolEntryId"));
+    let requested_route_id = optional_command_string(cmd, "remoteViewRouteId")
+        .or_else(|| optional_command_string(cmd, "routeId"))
+        .or_else(|| optional_command_string(cmd, "viewStreamRouteId"));
+    let now = service_remote_view_timestamp();
+    let repository = LockedServiceStateRepository::default_json()?;
+
+    repository.mutate(|state| {
+        let display_allocation_id = display_allocation_id
+            .clone()
+            .or_else(|| {
+                state
+                    .browsers
+                    .get(&browser_id)
+                    .and_then(|browser| browser.display_allocation_id.clone())
+            })
+            .ok_or_else(|| {
+                "service_remote_view_route_checkout requires displayAllocationId or a browser with displayAllocationId".to_string()
+            })?;
+
+        let existing_display_allocation = state
+            .display_allocations
+            .get(&display_allocation_id)
+            .cloned();
+        let provider = optional_command_string(cmd, "provider")
+            .and_then(|value| parse_view_stream_provider(&value))
+            .unwrap_or(ViewStreamProvider::RdpGateway);
+        let selected_route_pool_entry_id = resolve_route_pool_entry_id(
+            state,
+            route_pool_entry_id.as_deref(),
+            requested_route_id.as_deref(),
+            &display_allocation_id,
+            existing_display_allocation.as_ref(),
+            provider,
+        )?;
+        let pool_entry = selected_route_pool_entry_id
+            .as_ref()
+            .map(|id| {
+                state
+                    .route_pool
+                    .get(id)
+                    .cloned()
+                    .ok_or_else(|| format!("route pool entry '{}' not found", id))
+            })
+            .transpose()?;
+        if let Some(ref entry) = pool_entry {
+            ensure_route_pool_entry_matches_display(
+                entry,
+                &display_allocation_id,
+                existing_display_allocation.as_ref(),
+            )?;
+            ensure_route_pool_entry_ready_for_checkout(entry)?;
+            if entry.state != "available"
+                && entry.current_route_allocation_id.as_deref() != requested_route_id.as_deref()
+            {
+                return Err(format!(
+                    "route pool entry '{}' is not available for checkout",
+                    entry.id
+                ));
+            }
+        }
+
+        let provider = pool_entry
+            .as_ref()
+            .map(|entry| entry.provider)
+            .unwrap_or(provider);
+        let control_input = optional_command_string(cmd, "controlInput")
+            .or_else(|| optional_command_string(cmd, "controlInputProvider"))
+            .and_then(|value| parse_control_input_provider(&value))
+            .or_else(|| default_control_input_provider(provider));
+        let route_id = requested_route_id
+            .clone()
+            .or_else(|| pool_entry.as_ref().map(|entry| entry.route_id.clone()))
+            .unwrap_or_else(|| format!("remote-view-route:{}", display_allocation_id));
+        ensure_remote_view_route_available_for_display(
+            state,
+            &route_id,
+            &display_allocation_id,
+            existing_display_allocation.as_ref(),
+        )?;
+        let connection_id = optional_command_string(cmd, "connectionId")
+            .or_else(|| optional_command_string(cmd, "guacamoleConnectionId"))
+            .or_else(|| pool_entry.as_ref().and_then(|entry| entry.connection_id.clone()));
+        let connection_name = optional_command_string(cmd, "connectionName")
+            .or_else(|| optional_command_string(cmd, "guacamoleConnectionName"))
+            .or_else(|| pool_entry.as_ref().and_then(|entry| entry.connection_name.clone()));
+        let frame_url = optional_command_string(cmd, "frameUrl")
+            .or_else(|| optional_command_string(cmd, "remoteViewFrameUrl"))
+            .or_else(|| pool_entry.as_ref().and_then(|entry| entry.frame_url.clone()));
+        let external_url = optional_command_string(cmd, "externalUrl")
+            .or_else(|| optional_command_string(cmd, "remoteViewExternalUrl"))
+            .or_else(|| pool_entry.as_ref().and_then(|entry| entry.external_url.clone()))
+            .or_else(|| frame_url.clone());
+        let provider_mode = optional_command_string(cmd, "providerMode")
+            .or_else(|| pool_entry.as_ref().map(|entry| entry.provider_mode.clone()))
+            .unwrap_or_else(|| "unknown".to_string());
+        let route_source = if pool_entry.is_some() {
+            "pool"
+        } else {
+            "retained_state"
+        };
+        let readiness = cmd.get("readiness").cloned().or_else(|| {
+            pool_entry
+                .as_ref()
+                .and_then(|entry| entry.readiness.clone())
+        });
+
+        let display_allocation = state
+            .display_allocations
+            .entry(display_allocation_id.clone())
+            .or_insert_with(|| DisplayAllocation {
+                id: display_allocation_id.clone(),
+                owner_browser_id: Some(browser_id.clone()),
+                owner_session_id: Some(session_id.clone()),
+                state: "ready".to_string(),
+                created_at: Some(now.clone()),
+                updated_at: Some(now.clone()),
+                ..DisplayAllocation::default()
+            });
+        display_allocation.owner_browser_id = Some(browser_id.clone());
+        display_allocation.owner_session_id = Some(session_id.clone());
+        display_allocation.state = "ready".to_string();
+        display_allocation.updated_at = Some(now.clone());
+        if !display_allocation.route_ids.contains(&route_id) {
+            display_allocation.route_ids.push(route_id.clone());
+        }
+
+        let route = RemoteViewRoute {
+            id: route_id.clone(),
+            provider,
+            display_allocation_id: Some(display_allocation_id.clone()),
+            browser_id: Some(browser_id.clone()),
+            session_id: Some(session_id.clone()),
+            route_source: route_source.to_string(),
+            connection_id: connection_id.clone(),
+            connection_name: connection_name.clone(),
+            route_template: optional_command_string(cmd, "routeTemplate"),
+            frame_url: frame_url.clone(),
+            external_url: external_url.clone(),
+            read_only: cmd.get("readOnly").and_then(Value::as_bool).unwrap_or(false),
+            control_input,
+            provider_mode: provider_mode.clone(),
+            state: "ready".to_string(),
+            last_provider_event: Some("route_checked_out".to_string()),
+            readiness: readiness.clone(),
+            ..state.remote_view_routes.get(&route_id).cloned().unwrap_or_default()
+        };
+        state.remote_view_routes.insert(route_id.clone(), route.clone());
+        if let Some(route_pool_entry_id) = selected_route_pool_entry_id.as_ref() {
+            if let Some(entry) = state.route_pool.get_mut(route_pool_entry_id) {
+                entry.state = "checked_out".to_string();
+                entry.current_route_allocation_id = Some(route_id.clone());
+            }
+        }
+        if let Some(browser) = state.browsers.get_mut(&browser_id) {
+            browser.display_allocation_id = Some(display_allocation_id.clone());
+            browser.active_session_ids.push(session_id.clone());
+            browser.active_session_ids.sort();
+            browser.active_session_ids.dedup();
+            upsert_remote_view_stream_for_route(
+                browser,
+                cmd,
+                &route,
+                &display_allocation_id,
+                &frame_url,
+                &external_url,
+            );
+        }
+
+        let route_pool_entry = route_pool_entry_id
+            .as_ref()
+            .and_then(|id| state.route_pool.get(id).cloned());
+        let route_pool_entry = selected_route_pool_entry_id
+            .as_ref()
+            .and_then(|id| state.route_pool.get(id).cloned())
+            .or(route_pool_entry);
+        Ok(json!({
+            "status": "checked_out",
+            "routeId": route_id,
+            "remoteViewRouteId": route.id,
+            "displayAllocationId": display_allocation_id,
+            "routePoolEntryId": selected_route_pool_entry_id,
+            "browserId": browser_id,
+            "sessionName": session_id,
+            "frameUrl": route.frame_url,
+            "externalUrl": route.external_url,
+            "providerMode": route.provider_mode,
+            "remoteViewRoute": route,
+            "routePoolEntry": route_pool_entry,
+            "updatedAt": now,
+        }))
+    })
+}
+
+async fn handle_service_remote_view_route_release(
+    cmd: &Value,
+    _daemon_state: &DaemonState,
+) -> Result<Value, String> {
+    let route_id = required_remote_view_route_id(cmd)?;
+    let now = service_remote_view_timestamp();
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|state| {
+        let route = state
+            .remote_view_routes
+            .get_mut(&route_id)
+            .ok_or_else(|| format!("remote view route '{}' not found", route_id))?;
+        route.state = "released".to_string();
+        route.last_provider_event = Some("route_released".to_string());
+        let display_allocation_id = route.display_allocation_id.clone();
+        let browser_id = route.browser_id.clone();
+        let session_id = route.session_id.clone();
+        let viewer_lease_ids = route.viewer_lease_ids.clone();
+        route.controller_lease_id = None;
+        for lease_id in &viewer_lease_ids {
+            if let Some(lease) = state.viewer_leases.get_mut(lease_id) {
+                lease.state = "disconnected".to_string();
+                lease.last_viewer_event = Some("disconnected".to_string());
+                lease.updated_at = Some(now.clone());
+                lease.last_heartbeat_at = Some(now.clone());
+            }
+        }
+        for entry in state.route_pool.values_mut() {
+            if entry.current_route_allocation_id.as_deref() == Some(route_id.as_str()) {
+                entry.state = "available".to_string();
+                entry.current_route_allocation_id = None;
+            }
+        }
+        if let Some(display_allocation_id) = display_allocation_id.as_ref() {
+            if let Some(allocation) = state.display_allocations.get_mut(display_allocation_id) {
+                allocation.route_ids.retain(|id| id != &route_id);
+                allocation.updated_at = Some(now.clone());
+            }
+        }
+        if let Some(browser_id) = browser_id.as_ref() {
+            if let Some(browser) = state.browsers.get_mut(browser_id) {
+                for stream in &mut browser.view_streams {
+                    if stream.route_id.as_deref() == Some(route_id.as_str()) {
+                        stream.viewer_lease_ids.clear();
+                        stream.controller_lease_id = None;
+                        stream.remote_readiness = Some(json!({
+                            "state": "released",
+                            "updatedAt": now,
+                        }));
+                    }
+                }
+            }
+        }
+        push_remote_view_service_event(
+            state,
+            ServiceEventKind::RouteReleased,
+            &now,
+            browser_id.clone(),
+            session_id,
+            format!("Remote view route '{}' released", route_id),
+            json!({
+                "routeId": route_id,
+                "displayAllocationId": display_allocation_id,
+                "releasedViewerLeaseIds": viewer_lease_ids,
+            }),
+        );
+        Ok(json!({
+            "status": "released",
+            "routeId": route_id,
+            "remoteViewRoute": state.remote_view_routes.get(&route_id),
+            "releasedViewerLeaseIds": viewer_lease_ids,
+            "updatedAt": now,
+        }))
+    })
+}
+
+async fn handle_service_viewer_lease_request(
+    cmd: &Value,
+    daemon_state: &DaemonState,
+) -> Result<Value, String> {
+    mutate_service_viewer_lease(cmd, daemon_state, false)
+}
+
+async fn handle_service_controller_lease_takeover(
+    cmd: &Value,
+    daemon_state: &DaemonState,
+) -> Result<Value, String> {
+    mutate_service_viewer_lease(cmd, daemon_state, true)
+}
+
+fn mutate_service_viewer_lease(
+    cmd: &Value,
+    daemon_state: &DaemonState,
+    controller_takeover: bool,
+) -> Result<Value, String> {
+    let route_id = required_remote_view_route_id(cmd)?;
+    let now = service_remote_view_timestamp();
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|state| {
+        let route_snapshot = state
+            .remote_view_routes
+            .get(&route_id)
+            .cloned()
+            .ok_or_else(|| format!("remote view route '{}' not found", route_id))?;
+        if route_snapshot.state == "released" {
+            return Err(format!("remote view route '{}' is released", route_id));
+        }
+        let browser_id = optional_command_string(cmd, "browserId")
+            .or_else(|| route_snapshot.browser_id.clone())
+            .unwrap_or_else(|| service_browser_id(&daemon_state.session_id));
+        let viewer_id =
+            optional_command_string(cmd, "viewerId").unwrap_or_else(|| "operator".to_string());
+        let viewer_lease_id = optional_command_string(cmd, "viewerLeaseId").unwrap_or_else(|| {
+            format!(
+                "viewer:{}:{}:{}",
+                route_id,
+                viewer_id,
+                now.replace([':', '.'], "-")
+            )
+        });
+        let active_viewer_count = route_snapshot
+            .viewer_lease_ids
+            .iter()
+            .filter(|lease_id| lease_id.as_str() != viewer_lease_id.as_str())
+            .filter_map(|lease_id| state.viewer_leases.get(lease_id))
+            .filter(|lease| remote_view_lease_is_active(lease))
+            .count();
+        let previous_controller_lease_id = route_snapshot.controller_lease_id.clone();
+        let previous_controller_is_other = previous_controller_lease_id
+            .as_deref()
+            .is_some_and(|id| id != viewer_lease_id.as_str());
+        let provider_mode = route_snapshot.provider_mode.as_str();
+        let requested_role =
+            optional_command_string(cmd, "viewerRole").unwrap_or_else(|| "observer".to_string());
+        let viewer_role = if controller_takeover {
+            "controller".to_string()
+        } else {
+            requested_role
+        };
+        let wants_controller = viewer_role == "controller";
+        if provider_mode == "single_viewer" && active_viewer_count > 0 {
+            let event_id = push_remote_view_service_event(
+                state,
+                ServiceEventKind::ControllerDenied,
+                &now,
+                route_snapshot.browser_id.clone(),
+                route_snapshot.session_id.clone(),
+                format!(
+                    "Remote view route '{}' rejected additional viewer",
+                    route_id
+                ),
+                json!({
+                    "routeId": route_id,
+                    "viewerLeaseId": viewer_lease_id,
+                    "viewerId": viewer_id,
+                    "providerMode": route_snapshot.provider_mode,
+                    "reason": "single_viewer_active",
+                }),
+            );
+            return Ok(json!({
+                "status": "viewer_denied",
+                "reason": "single_viewer_active",
+                "routeId": route_id,
+                "remoteViewRouteId": route_id,
+                "viewerLeaseId": viewer_lease_id,
+                "serviceEventId": event_id,
+                "updatedAt": now,
+            }));
+        }
+        if wants_controller && previous_controller_is_other && !controller_takeover {
+            let event_id = push_remote_view_service_event(
+                state,
+                ServiceEventKind::ControllerDenied,
+                &now,
+                route_snapshot.browser_id.clone(),
+                route_snapshot.session_id.clone(),
+                format!(
+                    "Remote view route '{}' rejected controller request",
+                    route_id
+                ),
+                json!({
+                    "routeId": route_id,
+                    "viewerLeaseId": viewer_lease_id,
+                    "viewerId": viewer_id,
+                    "providerMode": route_snapshot.provider_mode,
+                    "previousControllerLeaseId": previous_controller_lease_id,
+                    "reason": "controller_active",
+                }),
+            );
+            return Ok(json!({
+                "status": "controller_denied",
+                "reason": "controller_active",
+                "routeId": route_id,
+                "remoteViewRouteId": route_id,
+                "viewerLeaseId": viewer_lease_id,
+                "controllerLeaseId": previous_controller_lease_id,
+                "serviceEventId": event_id,
+                "updatedAt": now,
+            }));
+        }
+        if wants_controller {
+            push_remote_view_service_event(
+                state,
+                ServiceEventKind::ControllerRequested,
+                &now,
+                route_snapshot.browser_id.clone(),
+                route_snapshot.session_id.clone(),
+                format!("Remote view route '{}' controller requested", route_id),
+                json!({
+                    "routeId": route_id,
+                    "viewerLeaseId": viewer_lease_id,
+                    "viewerId": viewer_id,
+                    "providerMode": route_snapshot.provider_mode,
+                    "takeover": controller_takeover,
+                    "previousControllerLeaseId": previous_controller_lease_id,
+                }),
+            );
+        }
+        let route = state
+            .remote_view_routes
+            .get_mut(&route_id)
+            .ok_or_else(|| format!("remote view route '{}' not found", route_id))?;
+        if route.state == "released" {
+            return Err(format!("remote view route '{}' is released", route_id));
+        }
+        let viewer_name = optional_command_string(cmd, "viewerName")
+            .or_else(|| optional_command_string(cmd, "agentName"))
+            .or_else(|| Some(viewer_id.clone()));
+        let open_mode =
+            optional_command_string(cmd, "openMode").unwrap_or_else(|| "embedded".to_string());
+        let state_value = if viewer_role == "controller" {
+            "controlling"
+        } else {
+            "observing"
+        };
+        let last_viewer_event = if controller_takeover {
+            "taken_over"
+        } else {
+            "connected"
+        };
+        let lease = ViewerLease {
+            id: viewer_lease_id.clone(),
+            route_id: Some(route_id.clone()),
+            browser_id: Some(browser_id.clone()),
+            viewer_id: Some(viewer_id),
+            viewer_name,
+            viewer_role: viewer_role.clone(),
+            open_mode,
+            state: state_value.to_string(),
+            last_viewer_event: Some(last_viewer_event.to_string()),
+            created_at: state
+                .viewer_leases
+                .get(&viewer_lease_id)
+                .and_then(|lease| lease.created_at.clone())
+                .or_else(|| Some(now.clone())),
+            updated_at: Some(now.clone()),
+            last_heartbeat_at: Some(now.clone()),
+            expires_at: optional_command_string(cmd, "expiresAt"),
+            service_event_id: optional_command_string(cmd, "serviceEventId"),
+        };
+        state
+            .viewer_leases
+            .insert(viewer_lease_id.clone(), lease.clone());
+        if !route.viewer_lease_ids.contains(&viewer_lease_id) {
+            route.viewer_lease_ids.push(viewer_lease_id.clone());
+        }
+        if viewer_role == "controller" {
+            route.controller_lease_id = Some(viewer_lease_id.clone());
+        }
+        route.last_provider_event = Some(last_viewer_event.to_string());
+        let controller_lease_id = route.controller_lease_id.clone();
+        let remote_view_route = route.clone();
+        if let Some(browser) = state.browsers.get_mut(&browser_id) {
+            for stream in &mut browser.view_streams {
+                if stream.route_id.as_deref() == Some(route_id.as_str()) {
+                    if !stream.viewer_lease_ids.contains(&viewer_lease_id) {
+                        stream.viewer_lease_ids.push(viewer_lease_id.clone());
+                    }
+                    if viewer_role == "controller" {
+                        stream.controller_lease_id = Some(viewer_lease_id.clone());
+                    }
+                }
+            }
+        }
+        let event_kind = if viewer_role == "controller" {
+            ServiceEventKind::ControllerGranted
+        } else {
+            ServiceEventKind::ViewerConnected
+        };
+        let service_event_id = push_remote_view_service_event(
+            state,
+            event_kind,
+            &now,
+            remote_view_route.browser_id.clone(),
+            remote_view_route.session_id.clone(),
+            format!(
+                "Remote view route '{}' {}",
+                route_id,
+                if viewer_role == "controller" {
+                    "controller granted"
+                } else {
+                    "viewer connected"
+                }
+            ),
+            json!({
+                "routeId": route_id,
+                "viewerLeaseId": viewer_lease_id,
+                "viewerRole": viewer_role,
+                "providerMode": remote_view_route.provider_mode,
+                "previousControllerLeaseId": previous_controller_lease_id,
+                "controllerLeaseId": controller_lease_id,
+            }),
+        );
+        Ok(json!({
+            "status": if controller_takeover { "controller_taken" } else { "viewer_connected" },
+            "routeId": route_id,
+            "remoteViewRouteId": route_id,
+            "viewerLeaseId": viewer_lease_id,
+            "controllerLeaseId": controller_lease_id,
+            "previousControllerLeaseId": previous_controller_lease_id,
+            "serviceEventId": service_event_id,
+            "viewerLease": lease,
+            "remoteViewRoute": remote_view_route,
+            "updatedAt": now,
+        }))
+    })
+}
+
+async fn handle_service_viewer_lease_heartbeat(
+    cmd: &Value,
+    _daemon_state: &DaemonState,
+) -> Result<Value, String> {
+    let viewer_lease_id = optional_command_string(cmd, "viewerLeaseId")
+        .ok_or_else(|| "service_viewer_lease_heartbeat requires viewerLeaseId".to_string())?;
+    let now = service_remote_view_timestamp();
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|state| {
+        let lease = state
+            .viewer_leases
+            .get_mut(&viewer_lease_id)
+            .ok_or_else(|| format!("viewer lease '{}' not found", viewer_lease_id))?;
+        if matches!(lease.state.as_str(), "disconnected" | "expired" | "failed") {
+            return Err(format!(
+                "viewer_lease_inactive: viewer lease '{}' is {}",
+                viewer_lease_id, lease.state
+            ));
+        }
+        lease.last_viewer_event = Some("heartbeat".to_string());
+        lease.updated_at = Some(now.clone());
+        lease.last_heartbeat_at = Some(now.clone());
+        if let Some(expires_at) = optional_command_string(cmd, "expiresAt") {
+            lease.expires_at = Some(expires_at);
+        }
+        let route_id = lease.route_id.clone();
+        Ok(json!({
+            "status": "viewer_heartbeat",
+            "viewerLeaseId": viewer_lease_id,
+            "routeId": route_id,
+            "viewerLease": state.viewer_leases.get(&viewer_lease_id),
+            "updatedAt": now,
+        }))
+    })
+}
+
+async fn handle_service_viewer_lease_release(
+    cmd: &Value,
+    _daemon_state: &DaemonState,
+) -> Result<Value, String> {
+    let viewer_lease_id = optional_command_string(cmd, "viewerLeaseId")
+        .ok_or_else(|| "service_viewer_lease_release requires viewerLeaseId".to_string())?;
+    let now = service_remote_view_timestamp();
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|state| {
+        let lease = state
+            .viewer_leases
+            .get_mut(&viewer_lease_id)
+            .ok_or_else(|| format!("viewer lease '{}' not found", viewer_lease_id))?;
+        lease.state = "disconnected".to_string();
+        lease.last_viewer_event = Some("disconnected".to_string());
+        lease.updated_at = Some(now.clone());
+        lease.last_heartbeat_at = Some(now.clone());
+        let route_id = lease.route_id.clone();
+        let browser_id = lease.browser_id.clone();
+        if let Some(route_id) = route_id.as_ref() {
+            if let Some(route) = state.remote_view_routes.get_mut(route_id) {
+                route.viewer_lease_ids.retain(|id| id != &viewer_lease_id);
+                if route.controller_lease_id.as_deref() == Some(viewer_lease_id.as_str()) {
+                    route.controller_lease_id = None;
+                }
+                route.last_provider_event = Some("viewer_released".to_string());
+            }
+        }
+        for browser in state.browsers.values_mut() {
+            for stream in &mut browser.view_streams {
+                stream.viewer_lease_ids.retain(|id| id != &viewer_lease_id);
+                if stream.controller_lease_id.as_deref() == Some(viewer_lease_id.as_str()) {
+                    stream.controller_lease_id = None;
+                }
+            }
+        }
+        push_remote_view_service_event(
+            state,
+            ServiceEventKind::ViewerDisconnected,
+            &now,
+            browser_id,
+            None,
+            format!("Remote view viewer lease '{}' released", viewer_lease_id),
+            json!({
+                "routeId": route_id,
+                "viewerLeaseId": viewer_lease_id,
+            }),
+        );
+        Ok(json!({
+            "status": "released",
+            "viewerLeaseId": viewer_lease_id,
+            "routeId": route_id,
+            "viewerLease": state.viewer_leases.get(&viewer_lease_id),
+            "updatedAt": now,
+        }))
+    })
+}
+
+fn required_remote_view_route_id(cmd: &Value) -> Result<String, String> {
+    optional_command_string(cmd, "remoteViewRouteId")
+        .or_else(|| optional_command_string(cmd, "routeId"))
+        .or_else(|| optional_command_string(cmd, "viewStreamRouteId"))
+        .ok_or_else(|| "remote-view route action requires routeId or remoteViewRouteId".to_string())
+}
+
+fn service_remote_view_timestamp() -> String {
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+fn upsert_remote_view_stream_for_route(
+    browser: &mut super::service_model::BrowserProcess,
+    cmd: &Value,
+    route: &RemoteViewRoute,
+    display_allocation_id: &str,
+    frame_url: &Option<String>,
+    external_url: &Option<String>,
+) {
+    let stream_id = optional_command_string(cmd, "streamId")
+        .unwrap_or_else(|| "remote-headed-view".to_string());
+    let url = optional_command_string(cmd, "remoteViewUrl")
+        .or_else(|| frame_url.clone())
+        .or_else(|| external_url.clone());
+    let stream = browser.view_streams.iter_mut().find(|stream| {
+        stream.id == stream_id || stream.route_id.as_deref() == Some(route.id.as_str())
+    });
+    let update_stream = |stream: &mut ViewStream| {
+        stream.id = stream_id.clone();
+        stream.provider = route.provider;
+        stream.control_input = route.control_input;
+        stream.url = url.clone();
+        stream.frame_url = frame_url.clone();
+        stream.external_url = external_url.clone();
+        stream.route_id = Some(route.id.clone());
+        stream.display_allocation_id = Some(display_allocation_id.to_string());
+        stream.connection_id = route.connection_id.clone();
+        stream.connection_name = route.connection_name.clone();
+        stream.route_source = Some(route.route_source.clone());
+        stream.provider_mode = Some(route.provider_mode.clone());
+        stream.viewer_lease_ids = route.viewer_lease_ids.clone();
+        stream.controller_lease_id = route.controller_lease_id.clone();
+        stream.read_only = route.read_only;
+        stream.readiness = route.readiness.clone();
+        stream.remote_readiness = Some(json!({
+            "state": route.state,
+            "lastProviderEvent": route.last_provider_event,
+        }));
+    };
+    if let Some(stream) = stream {
+        update_stream(stream);
+    } else {
+        let mut stream = ViewStream::default();
+        update_stream(&mut stream);
+        browser.view_streams.push(stream);
+    }
 }
 
 async fn handle_viewport(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
@@ -7750,6 +9164,7 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
             ..super::service_model::ControlPlaneSnapshot::default()
         });
     }
+    refresh_remote_view_stream_urls(&mut service_state);
     service_state.refresh_profile_readiness();
 
     let profile_allocations = service_profile_allocations(&service_state);
@@ -7788,6 +9203,26 @@ async fn handle_service_access_plan(cmd: &Value) -> Result<Value, String> {
         readiness_profile_id: optional_command_string(cmd, "readinessProfileId"),
         browser_build: browser_build_from_command(cmd),
         browser_build_explicit: cmd.get("browserBuild").and_then(Value::as_str).is_some(),
+        browser_host: browser_host_from_command(cmd),
+        view_stream_provider: optional_command_string(cmd, "viewStreamProvider")
+            .or_else(|| optional_command_string(cmd, "viewStream"))
+            .or_else(|| {
+                cmd.get("params").and_then(|params| {
+                    optional_command_string(params, "viewStreamProvider")
+                        .or_else(|| optional_command_string(params, "viewStream"))
+                })
+            })
+            .and_then(|value| parse_view_stream_provider(&value)),
+        control_input_provider: optional_command_string(cmd, "controlInputProvider")
+            .or_else(|| optional_command_string(cmd, "controlInput"))
+            .or_else(|| {
+                cmd.get("params").and_then(|params| {
+                    optional_command_string(params, "controlInputProvider")
+                        .or_else(|| optional_command_string(params, "controlInput"))
+                })
+            })
+            .and_then(|value| parse_control_input_provider(&value)),
+        display_isolation: remote_headed_display_isolation_from_command(cmd),
     };
 
     let mut plan = service_access_plan_for_state(&service_state, request);
@@ -8685,6 +10120,188 @@ fn repair_retained_service_state(
             "Review candidates, then rerun with --apply to stamp current observation time onto safe legacy placeholders."
         },
     })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ServiceRoutePoolRepairOptions {
+    apply: bool,
+    stale_checkouts: bool,
+}
+
+impl ServiceRoutePoolRepairOptions {
+    fn from_command(cmd: &Value) -> Self {
+        Self {
+            apply: cmd.get("apply").and_then(Value::as_bool).unwrap_or(false),
+            stale_checkouts: cmd
+                .get("staleCheckouts")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        }
+    }
+}
+
+async fn handle_service_route_pool_repair(cmd: &Value) -> Result<Value, String> {
+    let options = ServiceRoutePoolRepairOptions::from_command(cmd);
+    let observed_at = chrono::Utc::now().to_rfc3339();
+    if options.apply {
+        let repository = LockedServiceStateRepository::default_json()?;
+        repository.mutate(|state| {
+            Ok(repair_route_pool_service_state(
+                state,
+                options,
+                observed_at.as_str(),
+            ))
+        })
+    } else {
+        let mut service_state = if let Some(service_state) = cmd.get("serviceState") {
+            serde_json::from_value::<ServiceState>(service_state.clone())
+                .map_err(|err| format!("Invalid serviceState: {}", err))?
+        } else {
+            LockedServiceStateRepository::default_json()?.load_snapshot()?
+        };
+        Ok(repair_route_pool_service_state(
+            &mut service_state,
+            options,
+            observed_at.as_str(),
+        ))
+    }
+}
+
+fn repair_route_pool_service_state(
+    state: &mut ServiceState,
+    options: ServiceRoutePoolRepairOptions,
+    observed_at: &str,
+) -> Value {
+    let before_route_pool_count = state.route_pool.len();
+    let mut stale_checkouts = Vec::new();
+    let mut stale_checkout_reasons = serde_json::Map::new();
+    let mut skipped_active_checkouts = Vec::new();
+
+    if options.stale_checkouts {
+        for entry in state.route_pool.values() {
+            if entry.state != "checked_out" {
+                continue;
+            }
+            let Some(route_id) = entry.current_route_allocation_id.as_deref() else {
+                stale_checkouts.push(entry.id.clone());
+                stale_checkout_reasons.insert(
+                    entry.id.clone(),
+                    json!({
+                        "reason": "missing_current_route_allocation_id",
+                    }),
+                );
+                continue;
+            };
+            match route_pool_checkout_stale_reason(state, route_id) {
+                Some(reason) => {
+                    stale_checkouts.push(entry.id.clone());
+                    stale_checkout_reasons.insert(
+                        entry.id.clone(),
+                        json!({
+                            "reason": reason,
+                            "routeId": route_id,
+                        }),
+                    );
+                }
+                None => skipped_active_checkouts.push(entry.id.clone()),
+            }
+        }
+    }
+
+    stale_checkouts.sort();
+    skipped_active_checkouts.sort();
+    let repaired_count = stale_checkouts.len();
+
+    if options.apply {
+        for entry_id in &stale_checkouts {
+            if let Some(entry) = state.route_pool.get_mut(entry_id) {
+                let previous_route_allocation_id = entry.current_route_allocation_id.clone();
+                let reason = stale_checkout_reasons
+                    .get(entry_id)
+                    .and_then(|value| value.get("reason"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("stale_route_pool_checkout");
+                entry.state = "available".to_string();
+                entry.current_route_allocation_id = None;
+                entry.readiness = Some(json!({
+                    "state": "ready",
+                    "reason": "stale_route_pool_checkout_repaired",
+                    "staleReason": reason,
+                    "previousRouteAllocationId": previous_route_allocation_id,
+                    "updatedAt": observed_at,
+                }));
+            }
+        }
+    }
+
+    json!({
+        "repaired": options.apply,
+        "dryRun": !options.apply,
+        "observedAt": observed_at,
+        "policy": {
+            "staleCheckouts": options.stale_checkouts,
+            "repairsCheckedOutEntriesOnly": true,
+            "preservesActiveReadyRoutes": true,
+        },
+        "before": {
+            "routePoolEntryCount": before_route_pool_count,
+        },
+        "candidates": {
+            "staleCheckouts": stale_checkouts,
+        },
+        "candidateReasons": {
+            "staleCheckouts": stale_checkout_reasons,
+        },
+        "candidateCounts": {
+            "staleCheckouts": repaired_count,
+            "total": repaired_count,
+        },
+        "skipped": {
+            "activeCheckouts": skipped_active_checkouts,
+        },
+        "skippedCounts": {
+            "activeCheckouts": skipped_active_checkouts.len(),
+        },
+        "repairedCounts": {
+            "staleCheckouts": if options.apply { repaired_count } else { 0 },
+            "total": if options.apply { repaired_count } else { 0 },
+        },
+        "after": {
+            "routePoolEntryCount": state.route_pool.len(),
+        },
+        "recommendedNextStep": if options.apply {
+            "Run service_remote_view_route_checkout for the intended display allocations, then run service_reconcile to refresh derived remote-view incidents."
+        } else {
+            "Review stale checkout candidates, then rerun with apply=true to return those route-pool entries to available state."
+        },
+    })
+}
+
+fn route_pool_checkout_stale_reason(state: &ServiceState, route_id: &str) -> Option<&'static str> {
+    let Some(route) = state.remote_view_routes.get(route_id) else {
+        return Some("route_missing");
+    };
+    if matches!(
+        route.state.as_str(),
+        "released" | "orphaned" | "failed" | "unavailable"
+    ) {
+        return Some("route_not_active");
+    }
+    if let Some(display_allocation_id) = route.display_allocation_id.as_deref() {
+        match state.display_allocations.get(display_allocation_id) {
+            Some(allocation) if matches!(allocation.state.as_str(), "ready" | "allocating") => {}
+            Some(_) => return Some("display_allocation_not_active"),
+            None => return Some("display_allocation_missing"),
+        }
+    }
+    if let Some(browser_id) = route.browser_id.as_deref() {
+        match state.browsers.get(browser_id) {
+            Some(browser) if browser.health == ServiceBrowserHealth::Ready => {}
+            Some(_) => return Some("browser_not_ready"),
+            None => return Some("browser_missing"),
+        }
+    }
+    None
 }
 
 fn prune_retained_service_state(
@@ -9639,6 +11256,13 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ProfileLeaseWaitStarted => "profile_lease_wait_started",
         ServiceEventKind::ProfileLeaseWaitEnded => "profile_lease_wait_ended",
+        ServiceEventKind::ViewerTakeoverRequested => "viewer_takeover_requested",
+        ServiceEventKind::ViewerConnected => "viewer_connected",
+        ServiceEventKind::ViewerDisconnected => "viewer_disconnected",
+        ServiceEventKind::ControllerRequested => "controller_requested",
+        ServiceEventKind::ControllerGranted => "controller_granted",
+        ServiceEventKind::ControllerDenied => "controller_denied",
+        ServiceEventKind::RouteReleased => "route_released",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
         ServiceEventKind::IncidentResolved => "incident_resolved",
@@ -12696,7 +14320,7 @@ mod tests {
         assert_service_status_response_contract, assert_service_trace_activity_record_contract,
         assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
         service_job_naming_warning_values, BrowserCapabilityRegistry, BrowserProcess,
-        BrowserProfile, BrowserSession, BrowserTab, ProfileSeedingHandoffState,
+        BrowserProfile, BrowserSession, BrowserTab, ProfileSeedingHandoffState, RoutePoolEntry,
     };
     use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -12733,7 +14357,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_launch_host_hints_makes_remote_headed_hidden_headed() {
+    fn apply_launch_host_hints_defaults_remote_headed_to_private_display() {
         let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_HEADED_DISPLAY"]);
         guard.set("AGENT_BROWSER_REMOTE_HEADED_DISPLAY", ":93");
         let command = json!({
@@ -12749,7 +14373,38 @@ mod tests {
         assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
         assert!(!options.headless);
         assert!(options.remote_headed);
-        assert_eq!(options.display.as_deref(), Some(":93"));
+        assert_eq!(
+            options.remote_headed_display_isolation.as_deref(),
+            Some("private_virtual_display")
+        );
+        assert_eq!(options.display, None);
+    }
+
+    #[test]
+    fn apply_launch_host_hints_preserves_explicit_private_over_configured_remote_display() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_HEADED_DISPLAY"]);
+        guard.set("AGENT_BROWSER_REMOTE_HEADED_DISPLAY", ":93");
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed"
+            }
+        });
+        let mut options = LaunchOptions {
+            remote_headed_display_isolation: Some("private_virtual_display".to_string()),
+            ..LaunchOptions::default()
+        };
+
+        let host = apply_launch_host_hints(&mut options, &command);
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert!(!options.headless);
+        assert!(options.remote_headed);
+        assert_eq!(
+            options.remote_headed_display_isolation.as_deref(),
+            Some("private_virtual_display")
+        );
+        assert_eq!(options.display, None);
     }
 
     #[test]
@@ -12869,6 +14524,89 @@ mod tests {
             streams[0].url.as_deref(),
             Some("http://127.0.0.1:8080/rdp/session")
         );
+    }
+
+    #[test]
+    fn remote_headed_view_stream_accepts_service_owned_route_metadata() {
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed",
+                "viewStreamProvider": "rdp_gateway",
+                "controlInputProvider": "manual_attached_desktop",
+                "viewStreamUrl": "https://agent-browser.example/guacamole/",
+                "frameUrl": "https://agent-browser.example/guacamole/#/client/browser-a",
+                "externalUrl": "https://agent-browser.example/guacamole/#/client/browser-a",
+                "routeId": "route-browser-a",
+                "guacamoleConnectionId": "browser-a",
+                "guacamoleConnectionName": "Browser A"
+            }
+        });
+
+        let streams = remote_headed_view_streams_from_command(&command);
+
+        assert_eq!(streams.len(), 1);
+        assert_eq!(streams[0].provider, ViewStreamProvider::RdpGateway);
+        assert_eq!(
+            streams[0].url.as_deref(),
+            Some("https://agent-browser.example/guacamole/")
+        );
+        assert_eq!(
+            streams[0].frame_url.as_deref(),
+            Some("https://agent-browser.example/guacamole/#/client/browser-a")
+        );
+        assert_eq!(
+            streams[0].external_url.as_deref(),
+            Some("https://agent-browser.example/guacamole/#/client/browser-a")
+        );
+        assert_eq!(streams[0].route_id.as_deref(), Some("route-browser-a"));
+        assert_eq!(streams[0].connection_id.as_deref(), Some("browser-a"));
+        assert_eq!(streams[0].connection_name.as_deref(), Some("Browser A"));
+        assert_eq!(streams[0].route_source.as_deref(), Some("service_request"));
+    }
+
+    #[test]
+    fn remote_headed_view_stream_does_not_invent_guacamole_route_from_root_url() {
+        let _guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_URL"]);
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed",
+                "viewStreamProvider": "rdp_gateway",
+                "viewStreamUrl": "https://agent-browser.example/guacamole/"
+            }
+        });
+
+        let streams = remote_headed_view_streams_from_command(&command);
+
+        assert_eq!(streams.len(), 1);
+        assert_eq!(
+            streams[0].url.as_deref(),
+            Some("https://agent-browser.example/guacamole/")
+        );
+        assert!(streams[0].frame_url.is_none());
+        assert!(streams[0].external_url.is_none());
+        assert!(streams[0].connection_id.is_none());
+    }
+
+    #[test]
+    fn remote_headed_view_stream_derives_route_identity_from_guacamole_client_url() {
+        let _guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_URL"]);
+        let command = json!({
+            "action": "tab_new",
+            "params": {
+                "browserHost": "remote_headed",
+                "viewStreamProvider": "rdp_gateway",
+                "viewStreamUrl": "https://agent-browser.example/guacamole/#/client/browser-a"
+            }
+        });
+
+        let streams = remote_headed_view_streams_from_command(&command);
+
+        assert_eq!(streams.len(), 1);
+        assert_eq!(streams[0].connection_id.as_deref(), Some("browser-a"));
+        assert_eq!(streams[0].route_id.as_deref(), Some("guacamole:browser-a"));
+        assert_eq!(streams[0].route_source.as_deref(), Some("service_request"));
     }
 
     #[test]
@@ -12993,6 +14731,208 @@ mod tests {
         assert!(selected.is_none());
         assert_eq!(options.profile.as_deref(), Some("/tmp/explicit-profile"));
         assert!(options.runtime_profile.is_none());
+    }
+
+    #[test]
+    fn test_apply_auto_launch_command_hints_honors_planned_identity_and_capability() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);
+        let home = unique_socket_dir("auto-launch-command-hints");
+        fs::create_dir_all(&home).expect("test home should be created");
+        let executable = home.join("chrome");
+        let user_data_dir = home.join("stealth-profile");
+        fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
+        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+
+        let command = json!({
+            "action": "tab_new",
+            "serviceName": "CanaryRunner",
+            "targetServiceId": "canary-site",
+            "browserBuild": "stealthcdp_chromium",
+            "runtimeProfile": "stealth-profile",
+            "profile": user_data_dir.display().to_string(),
+            "params": {
+                "browserHost": "remote_headed",
+                "displayIsolation": "private_virtual_display",
+                "viewStreamProvider": "rdp_gateway",
+                "controlInputProvider": "manual_attached_desktop",
+                "viewStreamUrl": "http://agent-browser.localhost/guacamole/"
+            },
+            "serviceState": {
+                "browserCapabilityRegistry": {
+                    "browserHosts": [{
+                        "id": "linux-local",
+                        "hostKind": "local",
+                        "reachable": true,
+                        "lifecycleOwner": "agent_browser"
+                    }],
+                    "browserExecutables": [{
+                        "id": "stealth-current",
+                        "hostId": "linux-local",
+                        "buildLabel": "stealthcdp_chromium",
+                        "executablePath": executable.display().to_string()
+                    }],
+                    "browserCapabilities": [{
+                        "id": "stealth-capability",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "cdpSupported": true,
+                        "headedSupported": true,
+                        "headlessSupported": true
+                    }],
+                    "profileCompatibility": [{
+                        "id": "stealth-profile-compatible",
+                        "profileId": "stealth-profile",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "compatible": true,
+                        "requiresOperatorOverride": false
+                    }],
+                    "browserPreferenceBindings": [{
+                        "id": "canary-stealth-default",
+                        "scope": "site",
+                        "targetServiceIds": ["canary-site"],
+                        "preferredHostId": "linux-local",
+                        "preferredExecutableId": "stealth-current",
+                        "preferredCapabilityId": "stealth-capability",
+                        "browserBuild": "stealthcdp_chromium",
+                        "priority": 50
+                    }],
+                    "validationEvidence": [{
+                        "id": "stealth-launch-smoke",
+                        "hostId": "linux-local",
+                        "executableId": "stealth-current",
+                        "capabilityId": "stealth-capability",
+                        "kind": "launch",
+                        "state": "passed"
+                    }]
+                }
+            }
+        });
+        let mut options = LaunchOptions::default();
+
+        let (host, selection_reason, browser_capability_launch) =
+            apply_auto_launch_command_hints(&mut options, &command, None);
+        let metadata =
+            ServiceLaunchMetadata::from_launch_options(&options, Some(&command), selection_reason);
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert!(!options.headless);
+        assert!(options.remote_headed);
+        assert_eq!(options.runtime_profile.as_deref(), Some("stealth-profile"));
+        assert_eq!(
+            options.profile.as_deref(),
+            Some(user_data_dir.to_str().expect("path should be utf-8"))
+        );
+        assert_eq!(
+            options.executable_path.as_deref(),
+            Some(executable.to_str().expect("path should be utf-8"))
+        );
+        assert!(browser_capability_launch.applied);
+        assert_eq!(
+            browser_capability_launch.to_value()["bindingId"],
+            "canary-stealth-default"
+        );
+        assert_eq!(metadata.profile_id.as_deref(), Some("stealth-profile"));
+        assert_eq!(metadata.view_streams.len(), 1);
+        assert_eq!(
+            metadata.view_streams[0].provider,
+            ViewStreamProvider::RdpGateway
+        );
+        assert_eq!(
+            metadata.view_streams[0].control_input,
+            Some(ControlInputProvider::ManualAttachedDesktop)
+        );
+        assert_eq!(
+            metadata.view_streams[0].url.as_deref(),
+            Some("http://agent-browser.localhost/guacamole/")
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_apply_auto_launch_command_hints_preserves_retained_remote_headed_surface() {
+        let retained = RetainedRemoteHeadedLaunchHint {
+            view_streams: vec![ViewStream {
+                id: "remote-headed-view".to_string(),
+                provider: ViewStreamProvider::RdpGateway,
+                control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
+                frame_url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
+                external_url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
+                route_id: None,
+                display_allocation_id: None,
+                connection_id: Some("MQBjAHBvc3RncmVzcWw=".to_string()),
+                connection_name: None,
+                route_source: Some("test_fixture".to_string()),
+                provider_mode: None,
+                viewer_lease_ids: Vec::new(),
+                controller_lease_id: None,
+                read_only: false,
+                readiness: None,
+                remote_readiness: None,
+            }],
+            display_isolation: Some("shared_display".to_string()),
+            display_name: Some(":10".to_string()),
+        };
+        let command = json!({
+            "action": "launch",
+            "headless": true,
+            "runtimeProfile": "stealthcdp-default"
+        });
+        let mut options = LaunchOptions::default();
+
+        assert!(!command_has_explicit_launch_surface(&command));
+        assert!(command_has_explicit_launch_surface(&json!({
+            "action": "launch",
+            "headless": true,
+            "headlessExplicit": true
+        })));
+
+        let (host, selection_reason, _) =
+            apply_auto_launch_command_hints(&mut options, &command, Some(&retained));
+        let mut metadata =
+            ServiceLaunchMetadata::from_launch_options(&options, Some(&command), selection_reason);
+        apply_retained_remote_headed_metadata(&mut metadata, Some(&retained));
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert!(!options.headless);
+        assert!(options.remote_headed);
+        assert_eq!(
+            options.remote_headed_display_isolation.as_deref(),
+            Some("shared_display")
+        );
+        assert_eq!(options.display.as_deref(), Some(":10"));
+        assert_eq!(metadata.view_streams, retained.view_streams);
+        assert_eq!(
+            metadata.display_isolation.as_deref(),
+            Some("shared_display")
+        );
+        assert_eq!(metadata.display_name.as_deref(), Some(":10"));
+    }
+
+    #[test]
+    fn test_private_remote_headed_metadata_waits_for_launched_display_name() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.set("DISPLAY", ":0");
+        let command = json!({
+            "action": "navigate",
+            "browserHost": "remote_headed",
+            "displayIsolation": "private_virtual_display",
+            "headless": false
+        });
+        let mut options = LaunchOptions::default();
+
+        let (host, selection_reason, _) =
+            apply_auto_launch_command_hints(&mut options, &command, None);
+        let metadata =
+            ServiceLaunchMetadata::from_launch_options(&options, Some(&command), selection_reason);
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert_eq!(
+            metadata.display_isolation.as_deref(),
+            Some("private_virtual_display")
+        );
+        assert_eq!(metadata.display_name, None);
     }
 
     #[test]
@@ -13316,13 +15256,28 @@ mod tests {
             "agentName": "codex",
             "taskName": "openCanvaWorkspace",
             "loginId": "canary-site",
-            "browserBuild": "stealthcdp_chromium"
+            "browserBuild": "stealthcdp_chromium",
+            "browserHost": "remote_headed",
+            "viewStreamProvider": "rdp_gateway",
+            "controlInputProvider": "manual_attached_desktop",
+            "displayIsolation": "private_virtual_display"
         }))
         .await
         .expect("access plan should evaluate");
 
         assert_eq!(response["query"]["serviceName"], "CanvaCLI");
+        assert_eq!(response["query"]["browserHost"], "remote_headed");
+        assert_eq!(response["query"]["viewStreamProvider"], "rdp_gateway");
+        assert_eq!(
+            response["query"]["controlInputProvider"],
+            "manual_attached_desktop"
+        );
+        assert_eq!(
+            response["query"]["displayIsolation"],
+            "private_virtual_display"
+        );
         assert!(response["decision"].is_object());
+        assert_eq!(response["decision"]["launchPosture"]["source"], "request");
         assert_eq!(
             response["browserBuildSelectionSummary"]["browserBuild"],
             "stealthcdp_chromium"
@@ -13934,6 +15889,26 @@ mod tests {
         assert_eq!(target.runtime_profile, runtime_profile);
         assert_eq!(target.browser_pid, std::process::id());
         assert_eq!(target.cdp_port, 9444);
+    }
+
+    #[test]
+    fn test_managed_runtime_attach_is_only_for_compatible_headless_launches() {
+        let headless = LaunchOptions::default();
+        assert!(can_attach_managed_runtime_for_launch(&headless));
+
+        let headed = LaunchOptions {
+            headless: false,
+            ..LaunchOptions::default()
+        };
+        assert!(!can_attach_managed_runtime_for_launch(&headed));
+
+        let remote_headed = LaunchOptions {
+            headless: false,
+            remote_headed: true,
+            remote_headed_display_isolation: Some("shared_display".to_string()),
+            ..LaunchOptions::default()
+        };
+        assert!(!can_attach_managed_runtime_for_launch(&remote_headed));
     }
 
     #[tokio::test]
@@ -14792,6 +16767,102 @@ mod tests {
         assert_eq!(
             result["data"]["profileAllocations"][0]["recommendedAction"],
             "release_holder_or_redirect_waiting_jobs"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_status_repairs_stale_guacamole_view_url() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_URL"]);
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_URL",
+            "/guacamole/#/client/MQBjAHBvc3RncmVzcWw=",
+        );
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_status",
+            "id": "svc-view-url",
+            "serviceState": {
+                "browsers": {
+                    "session:odollo-carrier-ups": {
+                        "id": "session:odollo-carrier-ups",
+                        "host": "remote_headed",
+                        "health": "ready",
+                        "viewStreams": [{
+                            "id": "remote-headed-view",
+                            "provider": "rdp_gateway",
+                            "controlInput": "manual_attached_desktop",
+                            "url": "https://agent-browser.example/guacamole/",
+                            "readOnly": false
+                        }]
+                    },
+                    "browser-cdp": {
+                        "id": "browser-cdp",
+                        "host": "remote_headed",
+                        "health": "ready",
+                        "viewStreams": [{
+                            "id": "cdp",
+                            "provider": "cdp_screencast",
+                            "url": "https://agent-browser.example/guacamole/",
+                            "readOnly": false
+                        }]
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(
+            result["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
+                ["viewStreams"][0]["frameUrl"],
+            "/guacamole/#/client/MQBjAHBvc3RncmVzcWw="
+        );
+        assert_eq!(
+            result["data"]["service_state"]["browsers"]["browser-cdp"]["viewStreams"][0]["url"],
+            "https://agent-browser.example/guacamole/"
+        );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_status_leaves_guacamole_root_without_route() {
+        let _guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_URL"]);
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_status",
+            "id": "svc-view-url-fallback",
+            "serviceState": {
+                "browsers": {
+                    "session:odollo-carrier-ups": {
+                        "id": "session:odollo-carrier-ups",
+                        "host": "remote_headed",
+                        "health": "ready",
+                        "viewStreams": [{
+                            "id": "remote-headed-view",
+                            "provider": "rdp_gateway",
+                            "controlInput": "manual_attached_desktop",
+                            "url": "https://agent-browser.example/guacamole/",
+                            "readOnly": false
+                        }]
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(
+            result["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
+                ["viewStreams"][0]["url"],
+            "https://agent-browser.example/guacamole/"
+        );
+        assert!(
+            result["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
+                ["viewStreams"][0]["frameUrl"]
+                .is_null()
         );
         assert!(state.browser.is_none());
     }
@@ -16004,6 +18075,919 @@ mod tests {
             .unwrap_or_default()
             .contains("Invalid --since timestamp"));
         assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_view_takeover_records_service_event() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("view-takeover-event-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let mut state = DaemonState::new();
+        state.session_id = "rdp-hardening-a".to_string();
+        let cmd = json!({
+            "action": "view_takeover",
+            "serviceName": "agent-browser-dashboard",
+            "agentName": "operator",
+            "taskName": "workspace-viewport-takeover",
+            "browserId": "session:rdp-hardening-a",
+            "sessionName": "rdp-hardening-a",
+            "streamId": "remote-headed-view",
+            "provider": "rdp_gateway",
+            "openMode": "external",
+            "reason": "operator_request",
+            "targetId": "target-1",
+            "index": 1
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        let service_event_id = result["data"]["serviceEventId"].as_str().unwrap();
+        let viewer_lease_id = result["data"]["viewerLeaseId"].as_str().unwrap();
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        let persisted = repository.load_snapshot().unwrap();
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| event.id == service_event_id)
+            .expect("view takeover event should be persisted");
+        assert_eq!(result["data"]["status"], "accepted");
+        assert_eq!(result["data"]["providerMode"], "provider_single_view");
+        assert_eq!(event.kind, ServiceEventKind::ViewerTakeoverRequested);
+        assert_eq!(event.browser_id.as_deref(), Some("session:rdp-hardening-a"));
+        assert_eq!(event.session_id.as_deref(), Some("rdp-hardening-a"));
+        assert_eq!(
+            event.service_name.as_deref(),
+            Some("agent-browser-dashboard")
+        );
+        assert_eq!(
+            event.details.as_ref().unwrap()["viewerLeaseId"],
+            viewer_lease_id
+        );
+        assert_eq!(
+            event.details.as_ref().unwrap()["lastViewerEvent"],
+            "takeover_requested"
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-route-lease-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                display_allocations: BTreeMap::from([(
+                    "display-a".to_string(),
+                    DisplayAllocation {
+                        id: "display-a".to_string(),
+                        display_name: Some(":21".to_string()),
+                        state: "ready".to_string(),
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                route_pool: BTreeMap::from([(
+                    "pool-a".to_string(),
+                    RoutePoolEntry {
+                        id: "pool-a".to_string(),
+                        route_id: "route-a".to_string(),
+                        frame_url: Some("https://guac.example/#/client/route-a".to_string()),
+                        external_url: Some("https://guac.example/#/client/route-a".to_string()),
+                        provider_mode: "single_controller".to_string(),
+                        state: "available".to_string(),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                browsers: BTreeMap::from([(
+                    "session:rdp-a".to_string(),
+                    BrowserProcess {
+                        id: "session:rdp-a".to_string(),
+                        host: ServiceBrowserHost::RemoteHeaded,
+                        health: ServiceBrowserHealth::Ready,
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = "rdp-a".to_string();
+
+        let checkout = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "displayAllocationId": "display-a",
+                "routePoolEntryId": "pool-a",
+                "browserId": "session:rdp-a",
+                "sessionName": "rdp-a",
+                "streamId": "remote-headed-view"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(checkout["success"], true);
+        assert_eq!(checkout["data"]["routeId"], "route-a");
+        assert_eq!(checkout["data"]["displayAllocationId"], "display-a");
+
+        let viewer = execute_command(
+            &json!({
+                "action": "service_viewer_lease_request",
+                "routeId": "route-a",
+                "viewerId": "viewer-a",
+                "viewerName": "Operator A",
+                "openMode": "tile"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(viewer["success"], true);
+        let viewer_lease_id = viewer["data"]["viewerLeaseId"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let heartbeat = execute_command(
+            &json!({
+                "action": "service_viewer_lease_heartbeat",
+                "viewerLeaseId": viewer_lease_id,
+                "expiresAt": "2026-05-28T04:00:00Z"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(heartbeat["success"], true);
+        assert_eq!(heartbeat["data"]["status"], "viewer_heartbeat");
+
+        let controller = execute_command(
+            &json!({
+                "action": "service_controller_lease_takeover",
+                "routeId": "route-a",
+                "viewerLeaseId": viewer_lease_id,
+                "viewerId": "viewer-a"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(controller["success"], true);
+        assert_eq!(controller["data"]["controllerLeaseId"], viewer_lease_id);
+
+        let release_viewer = execute_command(
+            &json!({
+                "action": "service_viewer_lease_release",
+                "viewerLeaseId": viewer_lease_id
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(release_viewer["success"], true);
+
+        let release_route = execute_command(
+            &json!({
+                "action": "service_remote_view_route_release",
+                "routeId": "route-a"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(release_route["success"], true);
+
+        let persisted = store.load().unwrap();
+        let route = persisted.remote_view_routes.get("route-a").unwrap();
+        assert_eq!(route.state, "released");
+        assert_eq!(route.controller_lease_id, None);
+        assert_eq!(
+            persisted.route_pool["pool-a"].current_route_allocation_id,
+            None
+        );
+        assert_eq!(persisted.route_pool["pool-a"].state, "available");
+        assert_eq!(
+            persisted.viewer_leases[&viewer_lease_id].state,
+            "disconnected"
+        );
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::ViewerConnected
+                && event.details.as_ref().unwrap()["viewerLeaseId"] == viewer_lease_id
+        }));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::ControllerRequested));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::ControllerGranted));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::ViewerDisconnected));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::RouteReleased));
+        assert_eq!(
+            persisted.browsers["session:rdp-a"].view_streams[0]
+                .route_id
+                .as_deref(),
+            Some("route-a")
+        );
+        assert!(state.browser.is_none());
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_service_route_pool_repair_dry_run_reports_stale_checkouts() {
+        let mut state = DaemonState::new();
+        let cmd = json!({
+            "action": "service_route_pool_repair",
+            "serviceState": {
+                "displayAllocations": {
+                    "display-active": {
+                        "id": "display-active",
+                        "state": "ready"
+                    }
+                },
+                "browsers": {
+                    "session:active": {
+                        "id": "session:active",
+                        "health": "ready"
+                    }
+                },
+                "remoteViewRoutes": {
+                    "route-active": {
+                        "id": "route-active",
+                        "state": "ready",
+                        "displayAllocationId": "display-active",
+                        "browserId": "session:active"
+                    },
+                    "route-orphaned": {
+                        "id": "route-orphaned",
+                        "state": "orphaned",
+                        "displayAllocationId": "display-missing",
+                        "browserId": "session:missing"
+                    }
+                },
+                "routePool": {
+                    "pool-active": {
+                        "id": "pool-active",
+                        "routeId": "route-active",
+                        "state": "checked_out",
+                        "currentRouteAllocationId": "route-active"
+                    },
+                    "pool-missing": {
+                        "id": "pool-missing",
+                        "routeId": "route-missing",
+                        "state": "checked_out",
+                        "currentRouteAllocationId": "route-missing"
+                    },
+                    "pool-orphaned": {
+                        "id": "pool-orphaned",
+                        "routeId": "route-orphaned",
+                        "state": "checked_out",
+                        "currentRouteAllocationId": "route-orphaned"
+                    },
+                    "pool-available": {
+                        "id": "pool-available",
+                        "routeId": "route-available",
+                        "state": "available"
+                    }
+                }
+            }
+        });
+
+        let result = execute_command(&cmd, &mut state).await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["dryRun"], true);
+        assert_eq!(result["data"]["candidateCounts"]["staleCheckouts"], 2);
+        assert_eq!(
+            result["data"]["candidates"]["staleCheckouts"],
+            json!(["pool-missing", "pool-orphaned"])
+        );
+        assert_eq!(
+            result["data"]["candidateReasons"]["staleCheckouts"]["pool-missing"]["reason"],
+            "route_missing"
+        );
+        assert_eq!(
+            result["data"]["candidateReasons"]["staleCheckouts"]["pool-orphaned"]["reason"],
+            "route_not_active"
+        );
+        assert_eq!(
+            result["data"]["skipped"]["activeCheckouts"],
+            json!(["pool-active"])
+        );
+        assert_eq!(result["data"]["repairedCounts"]["staleCheckouts"], 0);
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_route_pool_repair_dry_run_reads_persisted_state() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("route-pool-repair-dry-run-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                route_pool: BTreeMap::from([(
+                    "pool-missing".to_string(),
+                    RoutePoolEntry {
+                        id: "pool-missing".to_string(),
+                        route_id: "route-missing".to_string(),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some("route-missing".to_string()),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+        let result = execute_command(
+            &json!({
+                "action": "service_route_pool_repair",
+                "apply": false
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["dryRun"], true);
+        assert_eq!(result["data"]["candidateCounts"]["staleCheckouts"], 1);
+        assert_eq!(
+            result["data"]["candidates"]["staleCheckouts"],
+            json!(["pool-missing"])
+        );
+        assert_eq!(
+            store.load().unwrap().route_pool["pool-missing"].state,
+            "checked_out"
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_repair_route_pool_service_state_apply_resets_stale_checkout_only() {
+        let mut service_state = ServiceState {
+            display_allocations: BTreeMap::from([(
+                "display-active".to_string(),
+                DisplayAllocation {
+                    id: "display-active".to_string(),
+                    state: "ready".to_string(),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "session:active".to_string(),
+                BrowserProcess {
+                    id: "session:active".to_string(),
+                    health: ServiceBrowserHealth::Ready,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route-active".to_string(),
+                RemoteViewRoute {
+                    id: "route-active".to_string(),
+                    state: "ready".to_string(),
+                    display_allocation_id: Some("display-active".to_string()),
+                    browser_id: Some("session:active".to_string()),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([
+                (
+                    "pool-active".to_string(),
+                    RoutePoolEntry {
+                        id: "pool-active".to_string(),
+                        route_id: "route-active".to_string(),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some("route-active".to_string()),
+                        ..RoutePoolEntry::default()
+                    },
+                ),
+                (
+                    "pool-missing".to_string(),
+                    RoutePoolEntry {
+                        id: "pool-missing".to_string(),
+                        route_id: "route-missing".to_string(),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some("route-missing".to_string()),
+                        ..RoutePoolEntry::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let result = repair_route_pool_service_state(
+            &mut service_state,
+            ServiceRoutePoolRepairOptions {
+                apply: true,
+                stale_checkouts: true,
+            },
+            "2026-05-28T12:00:00Z",
+        );
+
+        assert_eq!(result["repaired"], true);
+        assert_eq!(result["repairedCounts"]["staleCheckouts"], 1);
+        assert_eq!(service_state.route_pool["pool-missing"].state, "available");
+        assert_eq!(
+            service_state.route_pool["pool-missing"].current_route_allocation_id,
+            None
+        );
+        assert_eq!(
+            service_state.route_pool["pool-missing"]
+                .readiness
+                .as_ref()
+                .unwrap()["reason"],
+            "stale_route_pool_checkout_repaired"
+        );
+        assert_eq!(service_state.route_pool["pool-active"].state, "checked_out");
+        assert_eq!(
+            service_state.route_pool["pool-active"]
+                .current_route_allocation_id
+                .as_deref(),
+            Some("route-active")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_route_checkout_selects_distinct_matching_pool_entries() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-route-pool-distinct-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                display_allocations: BTreeMap::from([
+                    (
+                        "display-a".to_string(),
+                        DisplayAllocation {
+                            id: "display-a".to_string(),
+                            display_name: Some(":91".to_string()),
+                            display_isolation: "private_virtual_display".to_string(),
+                            owner_browser_id: Some("session:rdp-a".to_string()),
+                            owner_session_id: Some("rdp-a".to_string()),
+                            state: "ready".to_string(),
+                            ..DisplayAllocation::default()
+                        },
+                    ),
+                    (
+                        "display-b".to_string(),
+                        DisplayAllocation {
+                            id: "display-b".to_string(),
+                            display_name: Some(":92".to_string()),
+                            display_isolation: "private_virtual_display".to_string(),
+                            owner_browser_id: Some("session:rdp-b".to_string()),
+                            owner_session_id: Some("rdp-b".to_string()),
+                            state: "ready".to_string(),
+                            ..DisplayAllocation::default()
+                        },
+                    ),
+                ]),
+                route_pool: BTreeMap::from([
+                    (
+                        "pool-a".to_string(),
+                        RoutePoolEntry {
+                            id: "pool-a".to_string(),
+                            route_id: "route-a".to_string(),
+                            connection_id: Some("conn-a".to_string()),
+                            frame_url: Some("https://guac.example/#/client/conn-a".to_string()),
+                            target: json!({ "displayName": ":91" }),
+                            provider_mode: "single_controller".to_string(),
+                            state: "available".to_string(),
+                            ..RoutePoolEntry::default()
+                        },
+                    ),
+                    (
+                        "pool-b".to_string(),
+                        RoutePoolEntry {
+                            id: "pool-b".to_string(),
+                            route_id: "route-b".to_string(),
+                            connection_id: Some("conn-b".to_string()),
+                            frame_url: Some("https://guac.example/#/client/conn-b".to_string()),
+                            target: json!({ "displayName": ":92" }),
+                            provider_mode: "single_controller".to_string(),
+                            state: "available".to_string(),
+                            ..RoutePoolEntry::default()
+                        },
+                    ),
+                ]),
+                browsers: BTreeMap::from([
+                    (
+                        "session:rdp-a".to_string(),
+                        BrowserProcess {
+                            id: "session:rdp-a".to_string(),
+                            host: ServiceBrowserHost::RemoteHeaded,
+                            health: ServiceBrowserHealth::Ready,
+                            display_allocation_id: Some("display-a".to_string()),
+                            ..BrowserProcess::default()
+                        },
+                    ),
+                    (
+                        "session:rdp-b".to_string(),
+                        BrowserProcess {
+                            id: "session:rdp-b".to_string(),
+                            host: ServiceBrowserHost::RemoteHeaded,
+                            health: ServiceBrowserHealth::Ready,
+                            display_allocation_id: Some("display-b".to_string()),
+                            ..BrowserProcess::default()
+                        },
+                    ),
+                ]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let checkout_a = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "browserId": "session:rdp-a",
+                "sessionName": "rdp-a"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(checkout_a["success"], true);
+        assert_eq!(checkout_a["data"]["routeId"], "route-a");
+        assert_eq!(checkout_a["data"]["routePoolEntryId"], "pool-a");
+
+        let checkout_b = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "browserId": "session:rdp-b",
+                "sessionName": "rdp-b"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(checkout_b["success"], true);
+        assert_eq!(checkout_b["data"]["routeId"], "route-b");
+        assert_eq!(checkout_b["data"]["routePoolEntryId"], "pool-b");
+
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.route_pool["pool-a"]
+                .current_route_allocation_id
+                .as_deref(),
+            Some("route-a")
+        );
+        assert_eq!(
+            persisted.route_pool["pool-b"]
+                .current_route_allocation_id
+                .as_deref(),
+            Some("route-b")
+        );
+        assert_ne!(
+            persisted.browsers["session:rdp-a"].view_streams[0]
+                .route_id
+                .as_deref(),
+            persisted.browsers["session:rdp-b"].view_streams[0]
+                .route_id
+                .as_deref()
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_viewer_lease_policy_rejects_single_viewer_and_controller_conflicts() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-viewer-lease-policy-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                remote_view_routes: BTreeMap::from([(
+                    "route-single".to_string(),
+                    RemoteViewRoute {
+                        id: "route-single".to_string(),
+                        provider_mode: "single_viewer".to_string(),
+                        state: "ready".to_string(),
+                        browser_id: Some("session:rdp-a".to_string()),
+                        session_id: Some("rdp-a".to_string()),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let first = execute_command(
+            &json!({
+                "action": "service_viewer_lease_request",
+                "routeId": "route-single",
+                "viewerLeaseId": "lease-a",
+                "viewerId": "viewer-a"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(first["success"], true);
+
+        let second = execute_command(
+            &json!({
+                "action": "service_viewer_lease_request",
+                "routeId": "route-single",
+                "viewerLeaseId": "lease-b",
+                "viewerId": "viewer-b"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(second["success"], true);
+        assert_eq!(second["data"]["status"], "viewer_denied");
+        assert_eq!(second["data"]["reason"], "single_viewer_active");
+
+        store
+            .save(&ServiceState {
+                remote_view_routes: BTreeMap::from([(
+                    "route-controller".to_string(),
+                    RemoteViewRoute {
+                        id: "route-controller".to_string(),
+                        provider_mode: "single_controller".to_string(),
+                        state: "ready".to_string(),
+                        browser_id: Some("session:rdp-b".to_string()),
+                        session_id: Some("rdp-b".to_string()),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        let first_controller = execute_command(
+            &json!({
+                "action": "service_viewer_lease_request",
+                "routeId": "route-controller",
+                "viewerLeaseId": "lease-controller-a",
+                "viewerId": "viewer-a",
+                "viewerRole": "controller"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(first_controller["success"], true);
+
+        let denied_controller = execute_command(
+            &json!({
+                "action": "service_viewer_lease_request",
+                "routeId": "route-controller",
+                "viewerLeaseId": "lease-controller-b",
+                "viewerId": "viewer-b",
+                "viewerRole": "controller"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(denied_controller["success"], true);
+        assert_eq!(denied_controller["data"]["status"], "controller_denied");
+        assert_eq!(denied_controller["data"]["reason"], "controller_active");
+
+        let takeover = execute_command(
+            &json!({
+                "action": "service_controller_lease_takeover",
+                "routeId": "route-controller",
+                "viewerLeaseId": "lease-controller-b",
+                "viewerId": "viewer-b"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(takeover["success"], true);
+        assert_eq!(takeover["data"]["controllerLeaseId"], "lease-controller-b");
+
+        let persisted = store.load().unwrap();
+        assert_eq!(
+            persisted.remote_view_routes["route-controller"]
+                .controller_lease_id
+                .as_deref(),
+            Some("lease-controller-b")
+        );
+        assert!(persisted.viewer_leases.contains_key("lease-controller-a"));
+        assert!(persisted
+            .events
+            .iter()
+            .any(|event| event.kind == ServiceEventKind::ControllerDenied));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_route_checkout_rejects_pool_target_mismatch_and_contention() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-route-pool-reject-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                display_allocations: BTreeMap::from([
+                    (
+                        "display-a".to_string(),
+                        DisplayAllocation {
+                            id: "display-a".to_string(),
+                            display_name: Some(":91".to_string()),
+                            display_isolation: "private_virtual_display".to_string(),
+                            state: "ready".to_string(),
+                            ..DisplayAllocation::default()
+                        },
+                    ),
+                    (
+                        "display-b".to_string(),
+                        DisplayAllocation {
+                            id: "display-b".to_string(),
+                            display_name: Some(":92".to_string()),
+                            display_isolation: "private_virtual_display".to_string(),
+                            state: "ready".to_string(),
+                            ..DisplayAllocation::default()
+                        },
+                    ),
+                ]),
+                route_pool: BTreeMap::from([
+                    (
+                        "pool-a".to_string(),
+                        RoutePoolEntry {
+                            id: "pool-a".to_string(),
+                            route_id: "route-a".to_string(),
+                            target: json!({ "displayName": ":91" }),
+                            state: "available".to_string(),
+                            ..RoutePoolEntry::default()
+                        },
+                    ),
+                    (
+                        "pool-busy".to_string(),
+                        RoutePoolEntry {
+                            id: "pool-busy".to_string(),
+                            route_id: "route-busy".to_string(),
+                            target: json!({ "displayName": ":92" }),
+                            state: "available".to_string(),
+                            ..RoutePoolEntry::default()
+                        },
+                    ),
+                    (
+                        "pool-failed".to_string(),
+                        RoutePoolEntry {
+                            id: "pool-failed".to_string(),
+                            route_id: "route-failed".to_string(),
+                            target: json!({ "displayName": ":92" }),
+                            state: "available".to_string(),
+                            readiness: Some(json!({
+                                "components": [
+                                    {
+                                        "component": "rdp_backend",
+                                        "status": "failed",
+                                        "evidence": "target display did not answer"
+                                    }
+                                ]
+                            })),
+                            ..RoutePoolEntry::default()
+                        },
+                    ),
+                ]),
+                remote_view_routes: BTreeMap::from([(
+                    "route-busy".to_string(),
+                    RemoteViewRoute {
+                        id: "route-busy".to_string(),
+                        display_allocation_id: Some("display-a".to_string()),
+                        state: "ready".to_string(),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                browsers: BTreeMap::from([(
+                    "session:rdp-b".to_string(),
+                    BrowserProcess {
+                        id: "session:rdp-b".to_string(),
+                        host: ServiceBrowserHost::RemoteHeaded,
+                        health: ServiceBrowserHealth::Ready,
+                        display_allocation_id: Some("display-b".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let mismatch = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "displayAllocationId": "display-b",
+                "routePoolEntryId": "pool-a",
+                "browserId": "session:rdp-b",
+                "sessionName": "rdp-b"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(mismatch["success"], false);
+        assert!(mismatch["error"]
+            .as_str()
+            .unwrap()
+            .contains("route_pool_target_mismatch"));
+
+        let contention = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "displayAllocationId": "display-b",
+                "routeId": "route-busy",
+                "browserId": "session:rdp-b",
+                "sessionName": "rdp-b"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(contention["success"], false);
+        assert!(contention["error"]
+            .as_str()
+            .unwrap()
+            .contains("route_pool_contention"));
+
+        let not_ready = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "displayAllocationId": "display-b",
+                "routePoolEntryId": "pool-failed",
+                "browserId": "session:rdp-b",
+                "sessionName": "rdp-b"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(not_ready["success"], false);
+        assert!(not_ready["error"]
+            .as_str()
+            .unwrap()
+            .contains("route_pool_not_ready"));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_route_checkout_reports_route_pool_unavailable() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-route-pool-unavailable-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                display_allocations: BTreeMap::from([(
+                    "display-a".to_string(),
+                    DisplayAllocation {
+                        id: "display-a".to_string(),
+                        display_name: Some(":91".to_string()),
+                        display_isolation: "private_virtual_display".to_string(),
+                        state: "ready".to_string(),
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                route_pool: BTreeMap::from([(
+                    "pool-a".to_string(),
+                    RoutePoolEntry {
+                        id: "pool-a".to_string(),
+                        route_id: "route-a".to_string(),
+                        target: json!({ "displayName": ":91" }),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some("route-a".to_string()),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                browsers: BTreeMap::from([(
+                    "session:rdp-a".to_string(),
+                    BrowserProcess {
+                        id: "session:rdp-a".to_string(),
+                        host: ServiceBrowserHost::RemoteHeaded,
+                        health: ServiceBrowserHealth::Ready,
+                        display_allocation_id: Some("display-a".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let result = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "browserId": "session:rdp-a",
+                "sessionName": "rdp-a"
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], false);
+        assert!(result["error"]
+            .as_str()
+            .unwrap()
+            .contains("route_pool_unavailable"));
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[tokio::test]
@@ -18047,6 +21031,80 @@ mod tests {
             session.browser_capability_launch.as_ref().unwrap()["bindingId"],
             "test-binding"
         );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_persist_service_browser_record_clears_stale_view_streams_when_metadata_is_empty() {
+        let home = unique_socket_dir("service-browser-record-clears-streams");
+        fs::create_dir_all(&home).unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let view_stream = ViewStream {
+            id: "remote-headed-view".to_string(),
+            provider: ViewStreamProvider::RdpGateway,
+            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+            url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
+            frame_url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
+            external_url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
+            route_id: None,
+            display_allocation_id: None,
+            connection_id: Some("MQBjAHBvc3RncmVzcWw=".to_string()),
+            connection_name: None,
+            route_source: Some("test_fixture".to_string()),
+            provider_mode: None,
+            viewer_lease_ids: Vec::new(),
+            controller_lease_id: None,
+            read_only: false,
+            readiness: None,
+            remote_readiness: None,
+        };
+
+        persist_service_browser_record_in_repository(
+            &repository,
+            "persist-session",
+            ServiceBrowserHost::RemoteHeaded,
+            ServiceBrowserHealth::Ready,
+            Some(1234),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                profile_id: Some("work".to_string()),
+                view_streams: vec![view_stream],
+                display_isolation: Some("shared_display".to_string()),
+                display_name: Some(":10".to_string()),
+                ..ServiceLaunchMetadata::default()
+            }),
+        )
+        .unwrap();
+
+        persist_service_browser_record_in_repository(
+            &repository,
+            "persist-session",
+            ServiceBrowserHost::LocalHeadless,
+            ServiceBrowserHealth::Ready,
+            Some(5678),
+            Some("http://127.0.0.1:9333".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                profile_id: Some("work".to_string()),
+                view_streams: Vec::new(),
+                display_isolation: None,
+                display_name: None,
+                ..ServiceLaunchMetadata::default()
+            }),
+        )
+        .unwrap();
+
+        let state = store.load().unwrap();
+        let browser = &state.browsers["session:persist-session"];
+
+        assert_eq!(browser.host, ServiceBrowserHost::LocalHeadless);
+        assert_eq!(browser.pid, Some(5678));
+        assert!(browser.view_streams.is_empty());
+        assert!(browser.display_isolation.is_none());
+        assert!(browser.display_name.is_none());
 
         let _ = fs::remove_dir_all(&home);
     }

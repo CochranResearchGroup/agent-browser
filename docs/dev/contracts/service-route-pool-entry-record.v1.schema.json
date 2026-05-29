@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-route-pool-entry-record.v1.schema.json",
+  "title": "agent-browser service route pool entry record",
+  "description": "Stable API shape for configured remote-view route pool entries.",
+  "type": "object",
+  "required": [
+    "id",
+    "provider",
+    "routeId",
+    "connectionId",
+    "connectionName",
+    "frameUrl",
+    "externalUrl",
+    "target",
+    "providerMode",
+    "state",
+    "readiness"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "cdp_screencast",
+        "chrome_tab_webrtc",
+        "virtual_display_webrtc",
+        "novnc",
+        "rdp_gateway",
+        "external_url"
+      ]
+    },
+    "routeId": {
+      "type": "string"
+    },
+    "connectionId": {
+      "type": ["string", "null"]
+    },
+    "connectionName": {
+      "type": ["string", "null"]
+    },
+    "frameUrl": {
+      "type": ["string", "null"]
+    },
+    "externalUrl": {
+      "type": ["string", "null"]
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": ["string", "null"]
+        },
+        "port": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "displayName": {
+          "type": ["string", "null"]
+        },
+        "targetUser": {
+          "type": ["string", "null"]
+        },
+        "targetId": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "providerMode": {
+      "type": "string",
+      "enum": [
+        "simultaneous_view",
+        "single_viewer",
+        "single_controller",
+        "unknown",
+        "unavailable"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "available",
+        "checked_out",
+        "degraded",
+        "disabled",
+        "unknown"
+      ]
+    },
+    "currentRouteAllocationId": {
+      "type": ["string", "null"]
+    },
+    "readiness": {
+      "type": ["object", "array", "null"]
+    }
+  },
+  "additionalProperties": true
+}

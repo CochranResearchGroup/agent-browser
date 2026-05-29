@@ -63,6 +63,7 @@ pub struct ChromeProcess {
     temp_user_data_dir: Option<PathBuf>,
     user_data_dir: PathBuf,
     runtime_profile: Option<String>,
+    display_name: Option<String>,
     stderr_log_path: Option<PathBuf>,
     stderr_drainer: Option<std::thread::JoinHandle<()>>,
     /// On Unix, the process group ID used to kill the entire Chrome process tree.
@@ -217,6 +218,10 @@ impl ChromeProcess {
 
     pub fn runtime_profile(&self) -> Option<&str> {
         self.runtime_profile.as_deref()
+    }
+
+    pub fn display_name(&self) -> Option<&str> {
+        self.display_name.as_deref()
     }
 
     pub fn stderr_log_path(&self) -> Option<&Path> {
@@ -558,6 +563,88 @@ struct ChromeArgs {
     runtime_profile: Option<String>,
 }
 
+fn has_launch_arg(args: &[String], key: &str) -> bool {
+    args.iter().any(|arg| {
+        arg == key
+            || arg
+                .strip_prefix(key)
+                .is_some_and(|rest| rest.starts_with('='))
+    })
+}
+
+fn push_launch_arg_if_absent(args: &mut Vec<String>, user_args: &[String], key: &str, value: &str) {
+    if !has_launch_arg(args, key) && !has_launch_arg(user_args, key) {
+        args.push(value.to_string());
+    }
+}
+
+fn ensure_disable_features(args: &mut Vec<String>, user_args: &[String], features: &[&str]) {
+    if has_launch_arg(user_args, "--disable-features") {
+        return;
+    }
+
+    if let Some(arg) = args
+        .iter_mut()
+        .find(|arg| arg.starts_with("--disable-features="))
+    {
+        let mut existing: Vec<String> = arg
+            .trim_start_matches("--disable-features=")
+            .split(',')
+            .filter(|feature| !feature.trim().is_empty())
+            .map(|feature| feature.trim().to_string())
+            .collect();
+        for feature in features {
+            if !existing.iter().any(|value| value == feature) {
+                existing.push((*feature).to_string());
+            }
+        }
+        *arg = format!("--disable-features={}", existing.join(","));
+    } else {
+        args.push(format!("--disable-features={}", features.join(",")));
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn apply_linux_remote_headed_rendering_flags(args: &mut Vec<String>, options: &LaunchOptions) {
+    if !options.remote_headed || options.headless || options.manual_login {
+        return;
+    }
+
+    // XRDP/Xvfb headed sessions can otherwise select Chromium's ANGLE Vulkan
+    // path, leaving the X11 window white even though CDP can inspect the page.
+    ensure_disable_features(
+        args,
+        &options.args,
+        &["Vulkan", "DefaultANGLEVulkan", "VulkanFromANGLE"],
+    );
+    push_launch_arg_if_absent(args, &options.args, "--disable-vulkan", "--disable-vulkan");
+    push_launch_arg_if_absent(args, &options.args, "--disable-gpu", "--disable-gpu");
+    push_launch_arg_if_absent(
+        args,
+        &options.args,
+        "--disable-gpu-compositing",
+        "--disable-gpu-compositing",
+    );
+    push_launch_arg_if_absent(args, &options.args, "--use-gl", "--use-gl=desktop");
+    push_launch_arg_if_absent(args, &options.args, "--use-angle", "--use-angle=gl");
+}
+
+fn apply_remote_headed_window_flags(args: &mut Vec<String>, options: &LaunchOptions) {
+    if !options.remote_headed || options.headless || options.manual_login {
+        return;
+    }
+
+    // Remote desktop operators expect the browser window to track the desktop
+    // size. Leave explicit geometry alone, but otherwise start maximized so a
+    // window manager can resize Chrome with the Guacamole/XRDP viewport.
+    if !has_launch_arg(args, "--start-maximized")
+        && !has_launch_arg(&options.args, "--start-maximized")
+        && !has_launch_arg(&options.args, "--window-size")
+    {
+        args.push("--start-maximized".to_string());
+    }
+}
+
 fn build_chrome_args(
     options: &LaunchOptions,
     remote_debugging: bool,
@@ -667,6 +754,11 @@ fn build_chrome_args(
         let (w, h) = options.viewport_size.unwrap_or((1280, 720));
         args.push(format!("--window-size={},{}", w, h));
     }
+
+    apply_remote_headed_window_flags(&mut args, options);
+
+    #[cfg(target_os = "linux")]
+    apply_linux_remote_headed_rendering_flags(&mut args, options);
 
     args.extend(options.args.iter().cloned());
 
@@ -961,10 +1053,11 @@ fn try_launch_chrome(
     // In headed mode on Unix, default DISPLAY to :0.0 when it is unset so WSL
     // and similar environments can attach to the user's primary X server
     // without requiring explicit DISPLAY configuration.
+    let launched_display =
+        headed_display_value_with_override(options, remote_headed_display.as_deref());
+
     #[cfg(unix)]
-    if let Some(display) =
-        headed_display_value_with_override(options, remote_headed_display.as_deref())
-    {
+    if let Some(display) = launched_display.as_deref() {
         cmd.env("DISPLAY", display);
     }
 
@@ -1074,6 +1167,10 @@ fn try_launch_chrome(
         temp_user_data_dir,
         user_data_dir,
         runtime_profile,
+        display_name: options
+            .remote_headed
+            .then(|| launched_display.clone())
+            .flatten(),
         stderr_log_path,
         stderr_drainer: Some(stderr_drainer),
         aux_processes,
@@ -2364,6 +2461,78 @@ mod tests {
         assert!(default_dir.exists());
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_build_args_remote_headed_includes_xrdp_safe_rendering_flags() {
+        let opts = LaunchOptions {
+            headless: false,
+            remote_headed: true,
+            remote_headed_display_isolation: Some("shared_display".to_string()),
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts, true).unwrap();
+        let disable_features = result
+            .args
+            .iter()
+            .find(|arg| arg.starts_with("--disable-features="))
+            .expect("disable-features should be present");
+
+        assert!(result.args.iter().any(|arg| arg == "--disable-vulkan"));
+        assert!(result.args.iter().any(|arg| arg == "--disable-gpu"));
+        assert!(result
+            .args
+            .iter()
+            .any(|arg| arg == "--disable-gpu-compositing"));
+        assert!(result.args.iter().any(|arg| arg == "--start-maximized"));
+        assert!(result.args.iter().any(|arg| arg == "--use-gl=desktop"));
+        assert!(result.args.iter().any(|arg| arg == "--use-angle=gl"));
+        assert!(disable_features.contains("Vulkan"));
+        assert!(disable_features.contains("DefaultANGLEVulkan"));
+        assert!(disable_features.contains("VulkanFromANGLE"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_build_args_remote_headed_respects_explicit_rendering_flags() {
+        let opts = LaunchOptions {
+            headless: false,
+            remote_headed: true,
+            args: vec![
+                "--use-gl=egl".to_string(),
+                "--use-angle=swiftshader-webgl".to_string(),
+                "--disable-vulkan".to_string(),
+                "--disable-features=Translate".to_string(),
+            ],
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts, true).unwrap();
+
+        assert!(!result.args.iter().any(|arg| arg == "--use-gl=desktop"));
+        assert!(!result.args.iter().any(|arg| arg == "--use-angle=gl"));
+        assert_eq!(
+            result
+                .args
+                .iter()
+                .filter(|arg| *arg == "--disable-vulkan")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_build_args_remote_headed_respects_explicit_window_size() {
+        let opts = LaunchOptions {
+            headless: false,
+            remote_headed: true,
+            args: vec!["--window-size=960,720".to_string()],
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts, true).unwrap();
+
+        assert!(!result.args.iter().any(|arg| arg == "--start-maximized"));
+        assert!(result.args.iter().any(|arg| arg == "--window-size=960,720"));
+    }
+
     #[test]
     fn test_build_args_default_profile_dir_created() {
         let opts = LaunchOptions::default();
@@ -2638,6 +2807,28 @@ mod tests {
         let _ = child.wait();
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_remote_headed_virtual_displays_use_distinct_live_display_names() {
+        if find_path_executable("Xvfb").is_none() {
+            return;
+        }
+
+        let (display_a, mut child_a) =
+            start_remote_headed_virtual_display(Some((640, 480))).unwrap();
+        let (display_b, mut child_b) =
+            start_remote_headed_virtual_display(Some((640, 480))).unwrap();
+
+        assert_ne!(display_a, display_b);
+        assert!(child_a.try_wait().unwrap().is_none());
+        assert!(child_b.try_wait().unwrap().is_none());
+
+        let _ = child_a.kill();
+        let _ = child_a.wait();
+        let _ = child_b.kill();
+        let _ = child_b.wait();
+    }
+
     #[test]
     fn test_build_args_custom_window_size_not_overridden() {
         let opts = LaunchOptions {
@@ -2777,6 +2968,7 @@ mod tests {
                 temp_user_data_dir: Some(dir.clone()),
                 user_data_dir: dir.clone(),
                 runtime_profile: None,
+                display_name: None,
                 stderr_log_path: None,
                 stderr_drainer: None,
                 #[cfg(unix)]

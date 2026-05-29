@@ -331,7 +331,7 @@ Extensions from user-level and project-level configs are **concatenated**, not r
 
 The `AGENT_BROWSER_EXTENSIONS` environment variable and CLI `--extension` flags follow the standard priority rules (env replaces config, CLI appends).
 
-For local secret bootstrapping, agent-browser can also load `AGENT_BROWSER_ENV_FILE`, or `~/.agent-browser/.env` when that file exists. Environment variables from the real shell still win over the dotenv file.
+For local secret bootstrapping, agent-browser can also load `AGENT_BROWSER_ENV_FILE`, or `~/.agent-browser/.env` when that file exists. Environment variables from the real shell still win over the dotenv file. The dotenv loader accepts dashboard auth, keychain, and remote-headed view variables so a user-scoped dashboard service and foreground CLI launches share the same Guacamole display and stream metadata.
 
 ## Environment Variables
 
@@ -360,7 +360,13 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_STREAM_PORT</code></td><td>Override the WebSocket streaming port. By default, an OS-assigned port is used. Set this to bind to a specific port (e.g., <code>9223</code>).</td><td>OS-assigned</td></tr>
     <tr><td><code>AGENT_BROWSER_REMOTE_HEADED_DISPLAY</code></td><td>Display used by <code>remote_headed</code> service launches. When unset on Linux and <code>DISPLAY</code> is also unset, agent-browser starts a private Xvfb display for the browser process. Leave this unset for the default per-browser isolation. Set it only when an operator intentionally wants a shared display pool and accepts shared focus and window-state coordination.</td><td>Private Xvfb on Linux when needed</td></tr>
     <tr><td><code>AGENT_BROWSER_REMOTE_VIEW_URL</code></td><td>External noVNC, WebRTC, dashboard, or operator-view URL recorded on <code>remote_headed</code> browser records.</td><td>(none)</td></tr>
+    <tr><td><code>AGENT_BROWSER_REMOTE_VIEW_FRAME_URL</code></td><td>Service-owned embeddable route URL recorded on <code>remote_headed</code> browser records.</td><td>(none)</td></tr>
+    <tr><td><code>AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL</code></td><td>Service-owned external or popout route URL recorded on <code>remote_headed</code> browser records.</td><td>(none)</td></tr>
+    <tr><td><code>AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID</code></td><td>Service-owned remote-view route identifier for providers that multiplex viewers.</td><td>(none)</td></tr>
+    <tr><td><code>AGENT_BROWSER_GUACAMOLE_CONNECTION_ID</code></td><td>Guacamole connection id or route token for <code>rdp_gateway</code> streams.</td><td>(none)</td></tr>
+    <tr><td><code>AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME</code></td><td>Human-readable Guacamole connection name for <code>rdp_gateway</code> streams.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_REMOTE_VIEW_PROVIDER</code></td><td>View stream provider label for <code>remote_headed</code> browser records, such as <code>cdp_screencast</code>, <code>novnc</code>, <code>rdp_gateway</code>, or <code>external_url</code>.</td><td><code>cdp_screencast</code></td></tr>
+    <tr><td><code>AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER</code></td><td>Control-input provider label for <code>remote_headed</code> browser records, such as <code>manual_attached_desktop</code> when an embedded RDP gateway supplies operator input.</td><td>Provider default</td></tr>
     <tr><td><code>AGENT_BROWSER_IDLE_TIMEOUT_MS</code></td><td>Auto-shutdown the daemon after N ms of inactivity (no commands received). Useful for ephemeral environments.</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS</code></td><td>Override the persisted service browser-health reconciliation interval in milliseconds. Set <code>0</code> to disable the daemon background loop.</td><td><code>60000</code></td></tr>
     <tr><td><code>AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET</code></td><td>Browser recovery attempts before faulting. Recovery traces report the active source in <code>details.policySource.retryBudget</code>.</td><td><code>3</code></td></tr>

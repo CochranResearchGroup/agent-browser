@@ -79,7 +79,7 @@ const SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE: &str = "service browser-capability
 
 const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
 
-const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
+const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 
 fn parse_service_access_plan(
     id: String,
@@ -216,6 +216,88 @@ fn parse_service_access_plan(
                     None => {
                         return Err(ParseError::InvalidValue {
                             message: format!("Invalid --browser-build value: {}", value),
+                            usage: SERVICE_ACCESS_PLAN_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--browser-host" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --browser-host".to_string(),
+                        usage: SERVICE_ACCESS_PLAN_USAGE,
+                    });
+                };
+                match *value {
+                    "local_headless" | "local_headed" | "docker_headed" | "remote_headed"
+                    | "cloud_provider" | "attached_existing" => cmd["browserHost"] = json!(value),
+                    _ => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --browser-host value: {}", value),
+                            usage: SERVICE_ACCESS_PLAN_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--view-stream-provider" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --view-stream-provider".to_string(),
+                        usage: SERVICE_ACCESS_PLAN_USAGE,
+                    });
+                };
+                match *value {
+                    "cdp_screencast"
+                    | "chrome_tab_webrtc"
+                    | "virtual_display_webrtc"
+                    | "novnc"
+                    | "rdp_gateway"
+                    | "external_url" => cmd["viewStreamProvider"] = json!(value),
+                    _ => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --view-stream-provider value: {}", value),
+                            usage: SERVICE_ACCESS_PLAN_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--control-input-provider" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --control-input-provider".to_string(),
+                        usage: SERVICE_ACCESS_PLAN_USAGE,
+                    });
+                };
+                match *value {
+                    "cdp_input" | "webrtc_input" | "vnc_input" | "manual_attached_desktop" => {
+                        cmd["controlInputProvider"] = json!(value)
+                    }
+                    _ => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --control-input-provider value: {}", value),
+                            usage: SERVICE_ACCESS_PLAN_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--display-isolation" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --display-isolation".to_string(),
+                        usage: SERVICE_ACCESS_PLAN_USAGE,
+                    });
+                };
+                match *value {
+                    "private_virtual_display" | "shared_display" | "ambient_display" => {
+                        cmd["displayIsolation"] = json!(value)
+                    }
+                    _ => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --display-isolation value: {}", value),
                             usage: SERVICE_ACCESS_PLAN_USAGE,
                         });
                     }
@@ -2924,6 +3006,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 | "tab_lifecycle_changed"
                                 | "profile_lease_wait_started"
                                 | "profile_lease_wait_ended"
+                                | "viewer_takeover_requested"
                                 | "reconciliation_error"
                                 | "incident_acknowledged"
                                 | "incident_resolved" => {
@@ -4616,6 +4699,10 @@ mod tests {
             cli_headed: false,
             cli_leave_open: false,
             cli_runtime_profile: false,
+            cli_browser_host: false,
+            cli_view_stream_provider: false,
+            cli_control_input_provider: false,
+            cli_display_isolation: false,
             annotate: false,
             color_scheme: None,
             download_path: None,
@@ -4626,6 +4713,10 @@ mod tests {
             confirm_actions: None,
             confirm_interactive: false,
             engine: None,
+            browser_host: None,
+            view_stream_provider: None,
+            control_input_provider: None,
+            display_isolation: None,
             screenshot_dir: None,
             screenshot_quality: None,
             screenshot_format: None,
@@ -6539,7 +6630,7 @@ mod tests {
     #[test]
     fn test_service_access_plan_accepts_identity_and_browser_build() {
         let cmd = parse_command(
-            &args("service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva --account-id user@example.test --browser-build stealthcdp_chromium"),
+            &args("service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva --account-id user@example.test --browser-build stealthcdp_chromium --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display"),
             &default_flags(),
         )
         .unwrap();
@@ -6551,6 +6642,10 @@ mod tests {
         assert_eq!(cmd["loginId"], "canva");
         assert_eq!(cmd["accountId"], "user@example.test");
         assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserHost"], "remote_headed");
+        assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
+        assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
+        assert_eq!(cmd["displayIsolation"], "private_virtual_display");
         assert!(cmd["serviceState"].is_object());
     }
 
@@ -7042,6 +7137,17 @@ mod tests {
 
         assert_eq!(started["kind"], "profile_lease_wait_started");
         assert_eq!(ended["kind"], "profile_lease_wait_ended");
+    }
+
+    #[test]
+    fn test_service_events_accepts_viewer_takeover_kind() {
+        let cmd = parse_command(
+            &args("service events --kind viewer_takeover_requested"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["kind"], "viewer_takeover_requested");
     }
 
     #[test]

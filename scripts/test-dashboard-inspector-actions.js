@@ -5,6 +5,10 @@ import { readFileSync } from 'node:fs';
 
 const servicePanel = readFileSync('packages/dashboard/src/components/service-panel.tsx', 'utf8');
 const dashboardPage = readFileSync('packages/dashboard/src/app/page.tsx', 'utf8');
+const appShell = readFileSync('packages/dashboard/src/components/app-shell.tsx', 'utf8');
+const serviceRoutePage = readFileSync('packages/dashboard/src/app/service/page.tsx', 'utf8');
+const activityRoutePage = readFileSync('packages/dashboard/src/app/activity/page.tsx', 'utf8');
+const browsersRoutePage = readFileSync('packages/dashboard/src/app/browsers/page.tsx', 'utf8');
 const validationSelector = readFileSync('scripts/dev/select-validation.js', 'utf8');
 
 assert.match(
@@ -15,8 +19,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /export type ServiceInspectorActions = \{[\s\S]*onControlBrowser\?:[\s\S]*onAcknowledgeIncident\?:[\s\S]*onResolveIncident\?:[\s\S]*onShowIncidentTrace\?:[\s\S]*onCancelJob\?:/,
-  'ServiceInspectorActions must expose browser control, incident acknowledge, incident resolve, incident trace, and job cancel callbacks separately',
+  /export type ServiceInspectorActions = \{[\s\S]*onControlBrowser\?:[\s\S]*onControlTab\?:[\s\S]*onSelectBrowserId\?:[\s\S]*onSelectProfileId\?:[\s\S]*onSelectSessionId\?:[\s\S]*onSelectTabId\?:[\s\S]*onSelectJobId\?:[\s\S]*onAcknowledgeIncident\?:[\s\S]*onResolveIncident\?:[\s\S]*onShowIncidentTrace\?:[\s\S]*onCancelJob\?:/,
+  'ServiceInspectorActions must expose control, related-record navigation, incident, and job callbacks separately',
 );
 
 assert.match(
@@ -27,8 +31,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /selection\.kind === "browser"[\s\S]*<BrowserDetailContent browser=\{selection\.browser\} onControlBrowser=\{actions\.onControlBrowser\} \/>/,
-  'Browser inspector must receive the remote-control callback from inspector actions',
+  /selection\.kind === "browser"[\s\S]*<BrowserDetailContent[\s\S]*browser=\{selection\.browser\}[\s\S]*onControlBrowser=\{actions\.onControlBrowser\}[\s\S]*onSelectProfileId=\{actions\.onSelectProfileId\}[\s\S]*onSelectSessionId=\{actions\.onSelectSessionId\}/,
+  'Browser inspector must receive remote-control and related-record callbacks from inspector actions',
 );
 
 assert.match(
@@ -39,8 +43,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /selection\.kind === "job" && <JobDetailContent job=\{selection\.job\} onCancel=\{actions\.onCancelJob\} \/>/,
-  'Job inspector must receive the cancel callback from inspector actions',
+  /selection\.kind === "job" && \([\s\S]*<JobDetailContent[\s\S]*job=\{selection\.job\}[\s\S]*onCancel=\{actions\.onCancelJob\}[\s\S]*onSelectBrowserId=\{actions\.onSelectBrowserId\}[\s\S]*onSelectProfileId=\{actions\.onSelectProfileId\}[\s\S]*onSelectSessionId=\{actions\.onSelectSessionId\}[\s\S]*onSelectTabId=\{actions\.onSelectTabId\}/,
+  'Job inspector must receive cancel and related target callbacks from inspector actions',
 );
 
 assert.match(
@@ -87,8 +91,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const showJobsForDisplayAllocation = useCallback\(\(displayIsolation: string \| null, jobIds: string\[\] = \[\]\) => \{[\s\S]*setWorkspaceTab\("jobs"\)[\s\S]*setJobDisplayFilter\(displayFilter\)[\s\S]*setJobSortKey\("displayIsolation"\)[\s\S]*setJobLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
-  'Service dashboard must switch to Jobs and apply display-allocation filters from trace summary cards',
+  /const showJobsForDisplayAllocation = useCallback\(\(displayIsolation: string \| null, jobIds: string\[\] = \[\]\) => \{[\s\S]*selectWorkspaceTab\("jobs"\)[\s\S]*setJobDisplayFilter\(displayFilter\)[\s\S]*setJobSortKey\("displayIsolation"\)[\s\S]*setJobLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
+  'Service dashboard must switch to Jobs, update the route, and apply display-allocation filters from trace summary cards',
 );
 
 assert.match(
@@ -111,14 +115,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const showTraceJob = useCallback\(\(jobId: string\) => \{[\s\S]*setWorkspaceTab\("jobs"\)[\s\S]*setJobQuery\(jobId\)[\s\S]*setJobDisplayFilter\("all"\)[\s\S]*setJobLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
-  'Service dashboard must switch to Jobs and filter by job id from trace cards',
+  /const showTraceJob = useCallback\(\(jobId: string\) => \{[\s\S]*selectWorkspaceTab\("jobs"\)[\s\S]*setJobQuery\(jobId\)[\s\S]*setJobDisplayFilter\("all"\)[\s\S]*setJobLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
+  'Service dashboard must switch to Jobs, update the route, and filter by job id from trace cards',
 );
 
 assert.match(
   servicePanel,
-  /const showTraceIncident = useCallback\(\(incidentId: string\) => \{[\s\S]*setWorkspaceTab\("incidents"\)[\s\S]*setIncidentQuery\(incidentId\)[\s\S]*setIncidentHandlingFilter\("all"\)[\s\S]*setIncidentLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
-  'Service dashboard must switch to Incidents and filter by incident id from trace rows',
+  /const showTraceIncident = useCallback\(\(incidentId: string\) => \{[\s\S]*selectWorkspaceTab\("incidents"\)[\s\S]*setIncidentQuery\(incidentId\)[\s\S]*setIncidentHandlingFilter\("all"\)[\s\S]*setIncidentLimit\(\(current\) => \(current < 100 \? 100 : current\)\)/,
+  'Service dashboard must switch to Incidents, update the route, and filter by incident id from trace rows',
 );
 
 assert.match(
@@ -129,8 +133,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const showIncidentTrace = useCallback\(\(incident: IncidentRecord\) => \{[\s\S]*const filters = incidentTraceFilters\(incident\)[\s\S]*setWorkspaceTab\("events"\)[\s\S]*setTraceFilters\(filters\)[\s\S]*loadTraceForFilters\(filters\)/,
-  'Incident detail actions must switch to Events and load the related trace immediately',
+  /const showIncidentTrace = useCallback\(\(incident: IncidentRecord\) => \{[\s\S]*const filters = incidentTraceFilters\(incident\)[\s\S]*selectWorkspaceTab\("events"\)[\s\S]*setTraceFilters\(filters\)[\s\S]*loadTraceForFilters\(filters\)/,
+  'Incident detail actions must switch to Events, update the route, and load the related trace immediately',
 );
 
 assert.match(
@@ -183,15 +187,30 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<EventDetailItem label="Display allocation" value=\{job\.displayIsolation \? displayIsolationLabel\(job\.displayIsolation\) : null\} \/>/,
+  /\{ label: "Display allocation", value: job\.displayIsolation \? displayIsolationLabel\(job\.displayIsolation\) : null \}/,
   'Job inspector must show requested display allocation policy',
 );
 
 assert.match(
   servicePanel,
-  /onInspectorActionsChange\(\{[\s\S]*actingIncidentId,[\s\S]*onControlBrowser: focusBrowserViewStream,[\s\S]*onAcknowledgeIncident: acknowledgeInspectorIncident,[\s\S]*onResolveIncident: resolveInspectorIncident,[\s\S]*onShowIncidentTrace: showIncidentTrace,[\s\S]*onCancelJob: cancelInspectorJob,[\s\S]*\}\);/,
-  'ServicePanel must publish right-pane action handlers through onInspectorActionsChange',
+  /onInspectorActionsChange\(\{[\s\S]*actingIncidentId,[\s\S]*onControlBrowser: focusBrowserViewStream,[\s\S]*onControlTab: inspectTabViewStream,[\s\S]*onSelectBrowserId: selectBrowserById,[\s\S]*onSelectProfileId: selectProfileById,[\s\S]*onSelectSessionId: selectSessionById,[\s\S]*onSelectTabId: selectTabById,[\s\S]*onSelectJobId: selectJobById,[\s\S]*onAcknowledgeIncident: acknowledgeInspectorIncident,[\s\S]*onResolveIncident: resolveInspectorIncident,[\s\S]*onShowIncidentTrace: showIncidentTrace,[\s\S]*onCancelJob: cancelInspectorJob,[\s\S]*\}\);/,
+  'ServicePanel must publish right-pane control, navigation, incident, and job handlers through onInspectorActionsChange',
 );
+
+assert.match(
+  servicePanel,
+  /function InspectorHero\([\s\S]*function InspectorActionBar\([\s\S]*function InspectorSection\([\s\S]*function InspectorFactRows\([\s\S]*function InspectorEvidenceDisclosure\(/,
+  'Service inspector must define shared hero, action, section, fact-row, and evidence primitives',
+);
+
+assert.match(
+  servicePanel,
+  /<InspectorEvidenceDisclosure[\s\S]*Raw browser record/,
+  'Selected-record inspectors must move raw record payloads into evidence disclosures',
+);
+for (const label of ['Raw allocation', 'Raw session record', 'Raw tab record', 'Raw job record', 'Raw incident record']) {
+  assert.match(servicePanel, new RegExp(label), `Inspector evidence must include ${label}`);
+}
 
 assert.match(
   servicePanel,
@@ -207,8 +226,32 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const inspectTabViewStream = useCallback\(async \(tab: ServiceTab\) => \{[\s\S]*const browser = tab\.browserId \? browserById\.get\(tab\.browserId\) : null;[\s\S]*const stream = browserPrimaryViewStream\(browser\);[\s\S]*if \(!canOpenControlViewStream\(stream\)\)[\s\S]*const tabIndex = tabIndexById\.get\(tab\.id\);[\s\S]*action: "view_focus"[\s\S]*taskName: "inspect-hidden-rdp-tab"[\s\S]*params: \{ index: tabIndex, maximize: true \}[\s\S]*openViewStream\(stream, browser, tab, focusMessage\);/,
-  'Service tab remote-control action must queue tab-specific view_focus before opening the stream',
+  /export type ServiceSession = \{[\s\S]*cleanup\?: string \| null;[\s\S]*profileLeaseDisposition\?: string \| null;[\s\S]*profileLeaseConflictSessionIds\?: string\[\];[\s\S]*lastLeaseObservedAt\?: string \| null;/,
+  'Service sessions must expose human takeover lease, cleanup, conflict, and observation fields to the dashboard',
+);
+
+assert.match(
+  servicePanel,
+  /function isHumanTakeoverSession\(session: ServiceSession\): boolean \{[\s\S]*return \(session\.lease \?\? ""\)\.toLowerCase\(\) === "human_takeover";/,
+  'Service dashboard must recognize the service-owned human takeover lease state',
+);
+
+assert.match(
+  servicePanel,
+  /function sessionStateLabel\(session: ServiceSession\): string \{[\s\S]*if \(isHumanTakeoverSession\(session\)\) return "human takeover";/,
+  'Service session rows and inspectors must surface human takeover as the session state',
+);
+
+assert.match(
+  servicePanel,
+  /<InspectorSection title="Operator Takeover">[\s\S]*label: "Owner"[\s\S]*label: "Queue impact"[\s\S]*label: "Resume", value: "No service-owned resume action is exposed yet\."[\s\S]*label: "Selected browser"[\s\S]*label: "Selected tab"/,
+  'Service session inspector must show operator takeover owner, queue impact, disabled resume reason, and selected target',
+);
+
+assert.match(
+  servicePanel,
+  /const inspectTabViewStream = useCallback\(async \(tab: ServiceTab\) => \{[\s\S]*const browser = tab\.browserId \? browserById\.get\(tab\.browserId\) : null;[\s\S]*const stream = browserPrimaryViewStream\(browser\);[\s\S]*if \(!canOpenControlViewStream\(stream\)\)[\s\S]*const tabIndex = tabIndexById\.get\(tab\.id\);[\s\S]*const targetId = tab\.targetId\?\.trim\(\);[\s\S]*const sessionName = daemonSessionNameForBrowser\(browser\);[\s\S]*action: "view_focus"[\s\S]*taskName: "inspect-hidden-rdp-tab"[\s\S]*params: targetId[\s\S]*sessionName[\s\S]*openViewStream\(stream, browser, tab, focusMessage\);/,
+  'Service tab remote-control action must queue target-specific view_focus on the selected browser daemon before opening the stream',
 );
 
 assert.match(
@@ -227,6 +270,54 @@ assert.match(
   servicePanel,
   /retainedPruneSummary\(retainedPruneResult\)[\s\S]*Dry-run prune[\s\S]*retainedPruneTotal\(retainedPruneResult\) === 0[\s\S]*Apply prune/,
   'Retained-state cleanup controls must require a dry-run result before the guarded apply action is available',
+);
+
+assert.match(
+  dashboardPage,
+  /const SECTION_PATHS: Record<DashboardSection, string> = \{[\s\S]*service: "\/service"[\s\S]*activity: "\/activity"[\s\S]*\};/,
+  'Dashboard page must define direct route paths for top-level sections',
+);
+
+assert.match(
+  dashboardPage,
+  /dashboardSectionFromPath\(window\.location\.pathname\)[\s\S]*window\.history\.pushState\(\{ dashboardSection: section \}, "", nextUrl\)[\s\S]*window\.addEventListener\("popstate", onPopState\)/,
+  'Dashboard page must initialize, push, and restore active section state from browser history',
+);
+
+assert.match(
+  appShell,
+  /const NAV_PATHS: Record<DashboardSection, string> = \{[\s\S]*service: "\/service"[\s\S]*activity: "\/activity"[\s\S]*\};[\s\S]*<a[\s\S]*href=\{NAV_PATHS\[item\.id\]\}[\s\S]*aria-current=\{activeSection === item\.id \? "page" : undefined\}/,
+  'Dashboard nav must expose real hrefs for URL-addressable sections',
+);
+
+assert.match(
+  serviceRoutePage,
+  /<DashboardPage initialSection="service" \/>/,
+  'Service route page must deep-link directly to the Service dashboard section',
+);
+
+assert.match(
+  activityRoutePage,
+  /<DashboardPage initialSection="activity" \/>/,
+  'Activity route page must deep-link directly to the Activity dashboard section',
+);
+
+assert.match(
+  browsersRoutePage,
+  /<DashboardPage initialSection="browsers" \/>/,
+  'Browsers route page must deep-link directly to the Browsers dashboard section',
+);
+
+assert.match(
+  servicePanel,
+  /const \[workspaceTab, setWorkspaceTab\] = useState<ServiceWorkspaceTab>\(\(\) => \{[\s\S]*serviceWorkspaceFromSearch\(window\.location\.search\)[\s\S]*const selectWorkspaceTab = useCallback\(\(tab: ServiceWorkspaceTab\) => \{[\s\S]*pushServiceWorkspaceUrl\(tab\)/,
+  'Service panel must persist the selected workspace tab in the URL query string',
+);
+
+assert.match(
+  servicePanel,
+  /serviceWorkspaceFromSearch\(search: string\): ServiceWorkspaceTab[\s\S]*params\.get\("view"\)[\s\S]*view\?\.startsWith\("service:"\)[\s\S]*legacyWorkspace = params\.get\("workspace"\)[\s\S]*: "browsers"/,
+  'Service panel must default to the browser records workspace while treating workspace as a legacy service-tab key only',
 );
 
 assert.match(

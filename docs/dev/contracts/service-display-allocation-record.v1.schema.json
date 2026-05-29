@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-display-allocation-record.v1.schema.json",
+  "title": "agent-browser service display allocation record",
+  "description": "Stable API shape for remote display allocations owned by the service control plane.",
+  "type": "object",
+  "required": [
+    "id",
+    "displayName",
+    "displayIsolation",
+    "ownerBrowserId",
+    "ownerSessionId",
+    "profileId",
+    "browserBuild",
+    "host",
+    "state",
+    "createdAt",
+    "updatedAt",
+    "lastHealthCheckAt",
+    "readiness"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "displayName": {
+      "type": ["string", "null"]
+    },
+    "displayIsolation": {
+      "type": "string",
+      "enum": [
+        "private_virtual_display",
+        "shared_display",
+        "ambient_display"
+      ]
+    },
+    "ownerBrowserId": {
+      "type": ["string", "null"]
+    },
+    "ownerSessionId": {
+      "type": ["string", "null"]
+    },
+    "profileId": {
+      "type": ["string", "null"]
+    },
+    "browserBuild": {
+      "type": ["string", "null"]
+    },
+    "host": {
+      "type": ["string", "null"],
+      "enum": [
+        "remote_headed",
+        "local_headed",
+        "local_headless",
+        "docker_headed",
+        "cloud_provider",
+        "attached_existing",
+        null
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "allocating",
+        "ready",
+        "degraded",
+        "released",
+        "orphaned",
+        "failed"
+      ]
+    },
+    "pidHints": {
+      "type": ["object", "null"],
+      "additionalProperties": {
+        "type": ["integer", "string", "null"]
+      }
+    },
+    "routeIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "createdAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "lastHealthCheckAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "readiness": {
+      "description": "Component readiness for the display host, X server, window manager, RDP target, and browser paint state.",
+      "type": ["object", "array", "null"]
+    }
+  },
+  "additionalProperties": true
+}

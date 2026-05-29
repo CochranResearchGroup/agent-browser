@@ -497,6 +497,9 @@ fn persist_process_exited_browser_health_in_repository(
             display_name: previous
                 .as_ref()
                 .and_then(|browser| browser.display_name.clone()),
+            display_allocation_id: previous
+                .as_ref()
+                .and_then(|browser| browser.display_allocation_id.clone()),
             pid,
             cdp_endpoint,
             view_streams: previous
@@ -510,6 +513,21 @@ fn persist_process_exited_browser_health_in_repository(
         let observation_details = browser_health_observation_details(&browser, None);
         apply_browser_health_observation(&mut browser, Some(&observation_details));
         record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
+        if let Some(display_allocation_id) = browser.display_allocation_id.as_ref() {
+            if let Some(allocation) = service_state
+                .display_allocations
+                .get_mut(display_allocation_id)
+            {
+                allocation.state = "orphaned".to_string();
+                allocation.owner_browser_id = Some(id.clone());
+                allocation.owner_session_id = Some(state.session_id.clone());
+                allocation.updated_at = Some(current_timestamp());
+                allocation.readiness = Some(json!({
+                    "state": "orphaned",
+                    "reason": "browser_process_exited"
+                }));
+            }
+        }
         service_state.browsers.insert(id, browser);
         Ok(())
     })
@@ -531,6 +549,7 @@ fn persist_service_job(job: ServiceJob) {
 }
 
 fn persist_service_job_queued(request: &ControlRequest) {
+    let allocation_refs = service_job_allocation_refs(request, None);
     persist_service_job(ServiceJob {
         id: service_job_id(request),
         action: request.action.clone(),
@@ -546,6 +565,13 @@ fn persist_service_job_queued(request: &ControlRequest) {
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
         display_isolation: service_job_display_isolation(request),
+        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
+        display_allocation_id: allocation_refs.display_allocation_id,
+        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
+        remote_view_route_id: allocation_refs.remote_view_route_id,
+        route_pool_entry_id: allocation_refs.route_pool_entry_id,
+        viewer_lease_id: allocation_refs.viewer_lease_id,
+        controller_lease_id: allocation_refs.controller_lease_id,
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Queued,
@@ -562,6 +588,7 @@ fn persist_service_job_waiting_profile_lease(
     profile_id: &str,
     conflict_session_ids: &[String],
 ) {
+    let allocation_refs = service_job_allocation_refs(request, None);
     persist_service_job(ServiceJob {
         id: service_job_id(request),
         action: request.action.clone(),
@@ -577,6 +604,13 @@ fn persist_service_job_waiting_profile_lease(
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
         display_isolation: service_job_display_isolation(request),
+        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
+        display_allocation_id: allocation_refs.display_allocation_id,
+        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
+        remote_view_route_id: allocation_refs.remote_view_route_id,
+        route_pool_entry_id: allocation_refs.route_pool_entry_id,
+        viewer_lease_id: allocation_refs.viewer_lease_id,
+        controller_lease_id: allocation_refs.controller_lease_id,
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::WaitingProfileLease,
@@ -701,6 +735,7 @@ fn profile_lease_wait_event_message(
 }
 
 fn persist_service_job_running(request: &ControlRequest) {
+    let allocation_refs = service_job_allocation_refs(request, None);
     persist_service_job(ServiceJob {
         id: service_job_id(request),
         action: request.action.clone(),
@@ -716,6 +751,13 @@ fn persist_service_job_running(request: &ControlRequest) {
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
         display_isolation: service_job_display_isolation(request),
+        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
+        display_allocation_id: allocation_refs.display_allocation_id,
+        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
+        remote_view_route_id: allocation_refs.remote_view_route_id,
+        route_pool_entry_id: allocation_refs.route_pool_entry_id,
+        viewer_lease_id: allocation_refs.viewer_lease_id,
+        controller_lease_id: allocation_refs.controller_lease_id,
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Running,
@@ -740,6 +782,7 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         .get("error")
         .and_then(|value| value.as_str())
         .map(str::to_string);
+    let allocation_refs = service_job_allocation_refs(request, Some(response));
 
     persist_service_job(ServiceJob {
         id: job_id,
@@ -756,6 +799,13 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
         display_isolation: service_job_display_isolation(request),
+        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
+        display_allocation_id: allocation_refs.display_allocation_id,
+        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
+        remote_view_route_id: allocation_refs.remote_view_route_id,
+        route_pool_entry_id: allocation_refs.route_pool_entry_id,
+        viewer_lease_id: allocation_refs.viewer_lease_id,
+        controller_lease_id: allocation_refs.controller_lease_id,
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: if success {
@@ -779,6 +829,7 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         .and_then(|job| job.started_at)
         .unwrap_or_else(current_timestamp);
     let timeout_ms = request.timeout_ms.unwrap_or_default();
+    let allocation_refs = service_job_allocation_refs(request, None);
     persist_service_job(ServiceJob {
         id: job_id,
         action: request.action.clone(),
@@ -794,6 +845,13 @@ fn persist_service_job_timed_out(request: &ControlRequest) {
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
         display_isolation: service_job_display_isolation(request),
+        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
+        display_allocation_id: allocation_refs.display_allocation_id,
+        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
+        remote_view_route_id: allocation_refs.remote_view_route_id,
+        route_pool_entry_id: allocation_refs.route_pool_entry_id,
+        viewer_lease_id: allocation_refs.viewer_lease_id,
+        controller_lease_id: allocation_refs.controller_lease_id,
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::TimedOut,
@@ -812,6 +870,7 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
     let started_at = load_service_job(&job_id)
         .and_then(|job| job.started_at)
         .unwrap_or_else(current_timestamp);
+    let allocation_refs = service_job_allocation_refs(request, None);
     persist_service_job(ServiceJob {
         id: job_id,
         action: request.action.clone(),
@@ -827,6 +886,13 @@ fn persist_service_job_cancelled(request: &ControlRequest, reason: &str) {
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
         display_isolation: service_job_display_isolation(request),
+        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
+        display_allocation_id: allocation_refs.display_allocation_id,
+        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
+        remote_view_route_id: allocation_refs.remote_view_route_id,
+        route_pool_entry_id: allocation_refs.route_pool_entry_id,
+        viewer_lease_id: allocation_refs.viewer_lease_id,
+        controller_lease_id: allocation_refs.controller_lease_id,
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Cancelled,
@@ -845,6 +911,7 @@ fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) 
     let submitted_at = load_service_job(&job_id)
         .and_then(|job| job.submitted_at)
         .unwrap_or_else(current_timestamp);
+    let allocation_refs = service_job_allocation_refs(request, None);
     persist_service_job(ServiceJob {
         id: job_id,
         action: request.action.clone(),
@@ -860,6 +927,13 @@ fn persist_service_job_failed_to_enqueue(request: &ControlRequest, error: &str) 
         control_plane_mode: service_job_control_plane_mode(request),
         lifecycle_only: service_job_lifecycle_only(request),
         display_isolation: service_job_display_isolation(request),
+        requested_display_allocation_id: allocation_refs.requested_display_allocation_id,
+        display_allocation_id: allocation_refs.display_allocation_id,
+        requested_remote_view_route_id: allocation_refs.requested_remote_view_route_id,
+        remote_view_route_id: allocation_refs.remote_view_route_id,
+        route_pool_entry_id: allocation_refs.route_pool_entry_id,
+        viewer_lease_id: allocation_refs.viewer_lease_id,
+        controller_lease_id: allocation_refs.controller_lease_id,
         target: JobTarget::Service,
         owner: ServiceActor::System,
         state: JobState::Failed,
@@ -955,6 +1029,7 @@ fn service_job_control_plane_mode(request: &ControlRequest) -> JobControlPlaneMo
     {
         JobControlPlaneMode::CdpFree
     } else if request.priority == ControlPriority::Lifecycle
+        || request.action == "view_takeover"
         || request.action.starts_with("service_")
     {
         JobControlPlaneMode::Service
@@ -995,6 +1070,96 @@ fn normalize_service_job_display_isolation(value: &str) -> Option<String> {
         "ambient_display" | "ambient-display" | "ambient" => Some("ambient_display".to_string()),
         _ => None,
     }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ServiceJobAllocationRefs {
+    requested_display_allocation_id: Option<String>,
+    display_allocation_id: Option<String>,
+    requested_remote_view_route_id: Option<String>,
+    remote_view_route_id: Option<String>,
+    route_pool_entry_id: Option<String>,
+    viewer_lease_id: Option<String>,
+    controller_lease_id: Option<String>,
+}
+
+fn service_job_allocation_refs(
+    request: &ControlRequest,
+    response: Option<&Value>,
+) -> ServiceJobAllocationRefs {
+    let requested_display_allocation_id = service_job_command_string_any(
+        &request.command,
+        &[
+            "requestedDisplayAllocationId",
+            "displayAllocationId",
+            "displayAllocation",
+        ],
+    );
+    let requested_remote_view_route_id = service_job_command_string_any(
+        &request.command,
+        &[
+            "requestedRemoteViewRouteId",
+            "remoteViewRouteId",
+            "routeId",
+            "viewStreamRouteId",
+        ],
+    );
+    let requested_viewer_lease_id = service_job_command_string_any(
+        &request.command,
+        &["viewerLeaseId", "requestedViewerLeaseId"],
+    );
+    let requested_controller_lease_id = service_job_command_string_any(
+        &request.command,
+        &["controllerLeaseId", "requestedControllerLeaseId"],
+    );
+    ServiceJobAllocationRefs {
+        display_allocation_id: service_job_response_string_any(
+            response,
+            &["displayAllocationId", "resolvedDisplayAllocationId"],
+        )
+        .or_else(|| requested_display_allocation_id.clone()),
+        remote_view_route_id: service_job_response_string_any(
+            response,
+            &["remoteViewRouteId", "routeId", "resolvedRemoteViewRouteId"],
+        )
+        .or_else(|| requested_remote_view_route_id.clone()),
+        route_pool_entry_id: service_job_response_string_any(response, &["routePoolEntryId"])
+            .or_else(|| service_job_command_string_any(&request.command, &["routePoolEntryId"])),
+        viewer_lease_id: service_job_response_string_any(response, &["viewerLeaseId"])
+            .or_else(|| requested_viewer_lease_id.clone()),
+        controller_lease_id: service_job_response_string_any(response, &["controllerLeaseId"])
+            .or(requested_controller_lease_id),
+        requested_display_allocation_id,
+        requested_remote_view_route_id,
+    }
+}
+
+fn service_job_command_string_any(command: &Value, keys: &[&str]) -> Option<String> {
+    for key in keys {
+        if let Some(value) = optional_command_string(command, key) {
+            return Some(value);
+        }
+    }
+    if let Some(params) = command.get("params") {
+        for key in keys {
+            if let Some(value) = optional_command_string(params, key) {
+                return Some(value);
+            }
+        }
+    }
+    None
+}
+
+fn service_job_response_string_any(response: Option<&Value>, keys: &[&str]) -> Option<String> {
+    let response = response?;
+    for container in [response.get("data"), Some(response)].into_iter().flatten() {
+        for key in keys {
+            if let Some(value) = optional_command_string(container, key) {
+                return Some(value);
+            }
+        }
+    }
+    None
 }
 
 fn service_job_optional_command_string(request: &ControlRequest, name: &str) -> Option<String> {
@@ -1460,7 +1625,8 @@ mod tests {
         cancel_service_job_in_repository, mutate_service_jobs_in_repository, MAX_SERVICE_JOBS,
     };
     use super::super::service_model::{
-        BrowserSession, LeaseState, MonitorState, MonitorTarget, SiteMonitor, SitePolicy,
+        BrowserSession, DisplayAllocation, LeaseState, MonitorState, MonitorTarget, SiteMonitor,
+        SitePolicy,
     };
     use super::super::service_store::{JsonServiceStateStore, ServiceStateStore};
     use super::*;
@@ -1577,6 +1743,15 @@ mod tests {
         );
         assert!(service_job_lifecycle_only(&service));
 
+        let view_takeover = control_request_for_mode_test(json!({
+            "action": "view_takeover"
+        }));
+        assert_eq!(
+            service_job_control_plane_mode(&view_takeover),
+            JobControlPlaneMode::Service
+        );
+        assert!(service_job_lifecycle_only(&view_takeover));
+
         let cdp = control_request_for_mode_test(json!({
             "action": "navigate"
         }));
@@ -1585,6 +1760,85 @@ mod tests {
             JobControlPlaneMode::Cdp
         );
         assert!(!service_job_lifecycle_only(&cdp));
+    }
+
+    #[test]
+    fn service_job_allocation_refs_preserve_requested_and_resolved_route_state() {
+        let request = control_request_for_mode_test(json!({
+            "action": "view_takeover",
+            "params": {
+                "displayAllocationId": "display-requested",
+                "routeId": "route-requested",
+                "viewerLeaseId": "viewer-requested",
+                "controllerLeaseId": "controller-requested"
+            }
+        }));
+        let queued_refs = service_job_allocation_refs(&request, None);
+
+        assert_eq!(
+            queued_refs.requested_display_allocation_id.as_deref(),
+            Some("display-requested")
+        );
+        assert_eq!(
+            queued_refs.display_allocation_id.as_deref(),
+            Some("display-requested")
+        );
+        assert_eq!(
+            queued_refs.requested_remote_view_route_id.as_deref(),
+            Some("route-requested")
+        );
+        assert_eq!(
+            queued_refs.remote_view_route_id.as_deref(),
+            Some("route-requested")
+        );
+        assert_eq!(
+            queued_refs.viewer_lease_id.as_deref(),
+            Some("viewer-requested")
+        );
+        assert_eq!(
+            queued_refs.controller_lease_id.as_deref(),
+            Some("controller-requested")
+        );
+
+        let finished_refs = service_job_allocation_refs(
+            &request,
+            Some(&json!({
+                "success": true,
+                "data": {
+                    "displayAllocationId": "display-resolved",
+                    "remoteViewRouteId": "route-resolved",
+                    "routePoolEntryId": "pool-1",
+                    "viewerLeaseId": "viewer-resolved",
+                    "controllerLeaseId": "controller-resolved"
+                }
+            })),
+        );
+
+        assert_eq!(
+            finished_refs.requested_display_allocation_id.as_deref(),
+            Some("display-requested")
+        );
+        assert_eq!(
+            finished_refs.display_allocation_id.as_deref(),
+            Some("display-resolved")
+        );
+        assert_eq!(
+            finished_refs.requested_remote_view_route_id.as_deref(),
+            Some("route-requested")
+        );
+        assert_eq!(
+            finished_refs.remote_view_route_id.as_deref(),
+            Some("route-resolved")
+        );
+        assert_eq!(finished_refs.route_pool_entry_id.as_deref(), Some("pool-1"));
+        assert_eq!(
+            finished_refs.viewer_lease_id.as_deref(),
+            Some("viewer-resolved")
+        );
+        assert_eq!(
+            finished_refs.controller_lease_id.as_deref(),
+            Some("controller-resolved")
+        );
     }
 
     fn control_request_for_mode_test(command: Value) -> ControlRequest {
@@ -2098,6 +2352,65 @@ mod tests {
             .events
             .iter()
             .any(|event| event.browser_id.as_deref() == Some(browser_id.as_str())));
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn process_exited_browser_health_marks_display_allocation_orphaned() {
+        let home = temp_home("control-plane-process-exited-display");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let browser_id = service_browser_id("session-1");
+        let allocation_id = "display:private_virtual_display:session-session-1".to_string();
+        store
+            .save(&ServiceState {
+                browsers: std::collections::BTreeMap::from([(
+                    browser_id.clone(),
+                    BrowserProcess {
+                        id: browser_id.clone(),
+                        profile_id: Some("work".to_string()),
+                        host: ServiceBrowserHost::RemoteHeaded,
+                        health: ServiceBrowserHealth::Ready,
+                        display_isolation: Some("private_virtual_display".to_string()),
+                        display_name: Some(":91".to_string()),
+                        display_allocation_id: Some(allocation_id.clone()),
+                        active_session_ids: vec!["session-1".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                display_allocations: std::collections::BTreeMap::from([(
+                    allocation_id.clone(),
+                    DisplayAllocation {
+                        id: allocation_id.clone(),
+                        display_name: Some(":91".to_string()),
+                        display_isolation: "private_virtual_display".to_string(),
+                        owner_browser_id: Some(browser_id.clone()),
+                        owner_session_id: Some("session-1".to_string()),
+                        state: "ready".to_string(),
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = "session-1".to_string();
+
+        persist_process_exited_browser_health_in_repository(&repository, &state).unwrap();
+
+        let persisted = store.load().unwrap();
+        let browser = &persisted.browsers[&browser_id];
+        assert_eq!(browser.health, ServiceBrowserHealth::ProcessExited);
+        assert_eq!(
+            browser.display_allocation_id.as_deref(),
+            Some(allocation_id.as_str())
+        );
+        let allocation = &persisted.display_allocations[&allocation_id];
+        assert_eq!(allocation.state, "orphaned");
+        assert_eq!(
+            allocation.readiness.as_ref().unwrap()["reason"],
+            "browser_process_exited"
+        );
         let _ = std::fs::remove_dir_all(&home);
     }
 

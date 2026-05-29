@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-remote-view-route-record.v1.schema.json",
+  "title": "agent-browser service remote view route record",
+  "description": "Stable API shape for service-owned remote-view provider routes such as Guacamole RDP routes.",
+  "type": "object",
+  "required": [
+    "id",
+    "provider",
+    "displayAllocationId",
+    "browserId",
+    "sessionId",
+    "routeSource",
+    "connectionId",
+    "connectionName",
+    "frameUrl",
+    "externalUrl",
+    "readOnly",
+    "controlInput",
+    "providerMode",
+    "state",
+    "lastProviderEvent",
+    "readiness"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "cdp_screencast",
+        "chrome_tab_webrtc",
+        "virtual_display_webrtc",
+        "novnc",
+        "rdp_gateway",
+        "external_url"
+      ]
+    },
+    "displayAllocationId": {
+      "type": ["string", "null"]
+    },
+    "browserId": {
+      "type": ["string", "null"]
+    },
+    "sessionId": {
+      "type": ["string", "null"]
+    },
+    "routeSource": {
+      "type": "string",
+      "enum": [
+        "config",
+        "pool",
+        "discovered",
+        "generated",
+        "retained_state",
+        "fixture",
+        "unknown"
+      ]
+    },
+    "connectionId": {
+      "type": ["string", "null"]
+    },
+    "connectionName": {
+      "type": ["string", "null"]
+    },
+    "routeTemplate": {
+      "type": ["string", "null"]
+    },
+    "frameUrl": {
+      "type": ["string", "null"]
+    },
+    "externalUrl": {
+      "type": ["string", "null"]
+    },
+    "readOnly": {
+      "type": "boolean"
+    },
+    "controlInput": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "cdp_input",
+            "webrtc_input",
+            "vnc_input",
+            "manual_attached_desktop"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "providerMode": {
+      "type": "string",
+      "enum": [
+        "simultaneous_view",
+        "single_viewer",
+        "single_controller",
+        "unknown",
+        "unavailable"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "allocating",
+        "ready",
+        "reconnecting",
+        "degraded",
+        "released",
+        "orphaned",
+        "failed"
+      ]
+    },
+    "viewerLeaseIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "controllerLeaseId": {
+      "type": ["string", "null"]
+    },
+    "lastProviderEvent": {
+      "type": ["string", "null"]
+    },
+    "readiness": {
+      "description": "Provider readiness for Guacamole web, guacd, RDP backend, auth, iframe, ingress, and viewer ownership.",
+      "type": ["object", "array", "null"]
+    }
+  },
+  "additionalProperties": true
+}

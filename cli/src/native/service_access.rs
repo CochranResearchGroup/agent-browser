@@ -36,6 +36,10 @@ pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) readiness_profile_id: Option<String>,
     pub(crate) browser_build: Option<BrowserBuild>,
     pub(crate) browser_build_explicit: bool,
+    pub(crate) browser_host: Option<BrowserHost>,
+    pub(crate) view_stream_provider: Option<ViewStreamProvider>,
+    pub(crate) control_input_provider: Option<ControlInputProvider>,
+    pub(crate) display_isolation: Option<String>,
 }
 
 impl ServiceAccessPlanRequest {
@@ -94,6 +98,28 @@ pub(crate) fn parse_service_access_plan_query(
             "browserBuild" | "browser_build" | "browser-build" => {
                 request.browser_build = parse_browser_build(&value)?;
                 request.browser_build_explicit = request.browser_build.is_some();
+            }
+            "browserHost" | "browser_host" | "browser-host" => {
+                request.browser_host = parse_browser_host(&value)?;
+            }
+            "viewStreamProvider"
+            | "view_stream_provider"
+            | "view-stream-provider"
+            | "viewStream"
+            | "view_stream"
+            | "view-stream" => {
+                request.view_stream_provider = parse_view_stream_provider(&value)?;
+            }
+            "controlInputProvider"
+            | "control_input_provider"
+            | "control-input-provider"
+            | "controlInput"
+            | "control_input"
+            | "control-input" => {
+                request.control_input_provider = parse_control_input_provider(&value)?;
+            }
+            "displayIsolation" | "display_isolation" | "display-isolation" => {
+                request.display_isolation = parse_display_isolation(&value)?;
             }
             "" => {}
             _ => {
@@ -213,6 +239,10 @@ pub(crate) fn service_access_plan_for_state(
             "challengeId": request.challenge_id,
             "readinessProfileId": request.readiness_profile_id,
             "browserBuild": request.browser_build,
+            "browserHost": request.browser_host,
+            "viewStreamProvider": request.view_stream_provider,
+            "controlInputProvider": request.control_input_provider,
+            "displayIsolation": request.display_isolation,
             "namingWarnings": naming_warnings,
             "hasNamingWarning": has_naming_warning,
         },
@@ -1434,6 +1464,20 @@ fn service_request_decision(
     if let Some(browser_build) = launch_posture.get("browserBuild") {
         service_request.insert("browserBuild".to_string(), browser_build.clone());
     }
+    if let Some(selected_profile) = selected_profile {
+        service_request.insert(
+            "runtimeProfile".to_string(),
+            json!(selected_profile.id.clone()),
+        );
+        if let Some(user_data_dir) = selected_profile
+            .user_data_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            service_request.insert("profile".to_string(), json!(user_data_dir));
+        }
+    }
     if manual_action_required {
         service_request.insert("blockedByManualAction".to_string(), json!(true));
     }
@@ -1510,6 +1554,8 @@ fn service_request_decision(
             "targetServiceIds",
             "accountIds",
             "browserBuild",
+            "runtimeProfile",
+            "profile",
             "displayIsolation",
             "profileLeasePolicy",
             "requiresCdpFree",
@@ -1617,26 +1663,38 @@ fn launch_posture_decision(
     manual_seeding_required: bool,
     browser_capability_evidence: &Value,
 ) -> LaunchPostureDecision {
-    let (browser_host, source) =
-        if let Some(browser_host) = site_policy.and_then(|policy| policy.browser_host) {
-            (browser_host, "site_policy")
-        } else if let Some(browser_host) =
-            selected_profile.and_then(|profile| profile.default_browser_host)
-        {
-            (browser_host, "profile_default")
-        } else {
-            (BrowserHost::LocalHeaded, "service_default")
-        };
+    let (browser_host, source) = if let Some(browser_host) = request.browser_host {
+        (browser_host, "request")
+    } else if let Some(browser_host) = site_policy.and_then(|policy| policy.browser_host) {
+        (browser_host, "site_policy")
+    } else if let Some(browser_host) =
+        selected_profile.and_then(|profile| profile.default_browser_host)
+    {
+        (browser_host, "profile_default")
+    } else {
+        (BrowserHost::LocalHeaded, "service_default")
+    };
     let headed = !matches!(browser_host, BrowserHost::LocalHeadless);
     let remote_view_recommended = matches!(
         browser_host,
         BrowserHost::DockerHeaded | BrowserHost::RemoteHeaded | BrowserHost::CloudProvider
     );
     let (view_stream_provider, view_stream_provider_source) =
-        launch_view_stream_provider_decision(browser_host, site_policy);
+        if let Some(provider) = request.view_stream_provider {
+            (provider, "request")
+        } else {
+            launch_view_stream_provider_decision(browser_host, site_policy)
+        };
     let (control_input_provider, control_input_provider_source) =
-        launch_control_input_provider_decision(view_stream_provider, site_policy);
-    let display_isolation = launch_display_isolation_decision(browser_host);
+        if let Some(provider) = request.control_input_provider {
+            (provider, "request")
+        } else {
+            launch_control_input_provider_decision(view_stream_provider, site_policy)
+        };
+    let display_isolation = request
+        .display_isolation
+        .as_deref()
+        .or_else(|| launch_display_isolation_decision(browser_host));
     let requires_cdp_free = site_policy
         .map(|policy| policy.requires_cdp_free)
         .unwrap_or(false);
@@ -1665,12 +1723,17 @@ fn launch_posture_decision(
         rationale.push("remote_headed_private_display_default");
     }
     match view_stream_provider_source {
+        "request" => rationale.push("view_stream_from_request"),
         "site_policy" => rationale.push("view_stream_from_site_policy"),
         _ => rationale.push("view_stream_from_service_default"),
     }
     match control_input_provider_source {
+        "request" => rationale.push("control_input_from_request"),
         "site_policy" => rationale.push("control_input_from_site_policy"),
         _ => rationale.push("control_input_from_view_stream"),
+    }
+    if request.display_isolation.is_some() {
+        rationale.push("display_isolation_from_request");
     }
     if manual_seeding_required {
         rationale.push("detached_first_login_required");
@@ -1703,6 +1766,7 @@ fn launch_posture_decision(
         rationale.push("browser_build_from_service_default");
     }
     match source {
+        "request" => rationale.push("browser_host_from_request"),
         "site_policy" => rationale.push("browser_host_from_site_policy"),
         "profile_default" => rationale.push("browser_host_from_profile_default"),
         _ => rationale.push("browser_host_from_service_default"),
@@ -2264,6 +2328,77 @@ fn parse_browser_build(value: &str) -> Result<Option<BrowserBuild>, String> {
         .ok_or_else(|| format!("Unknown browserBuild value: {}", value))
 }
 
+pub(crate) fn parse_browser_host(value: &str) -> Result<Option<BrowserHost>, String> {
+    let Some(value) = non_empty(value.to_string()) else {
+        return Ok(None);
+    };
+    let host = match value.as_str() {
+        "local_headless" | "local-headless" => BrowserHost::LocalHeadless,
+        "local_headed" | "local-headed" => BrowserHost::LocalHeaded,
+        "docker_headed" | "docker-headed" => BrowserHost::DockerHeaded,
+        "remote_headed" | "remote-headed" => BrowserHost::RemoteHeaded,
+        "cloud_provider" | "cloud-provider" => BrowserHost::CloudProvider,
+        "attached_existing" | "attached-existing" => BrowserHost::AttachedExisting,
+        _ => return Err(format!("Unknown browserHost value: {}", value)),
+    };
+    Ok(Some(host))
+}
+
+pub(crate) fn parse_view_stream_provider(
+    value: &str,
+) -> Result<Option<ViewStreamProvider>, String> {
+    let Some(value) = non_empty(value.to_string()) else {
+        return Ok(None);
+    };
+    let provider = match value.as_str() {
+        "cdp_screencast" | "cdp-screencast" => ViewStreamProvider::CdpScreencast,
+        "chrome_tab_webrtc" | "chrome-tab-webrtc" => ViewStreamProvider::ChromeTabWebrtc,
+        "virtual_display_webrtc" | "virtual-display-webrtc" => {
+            ViewStreamProvider::VirtualDisplayWebrtc
+        }
+        "novnc" => ViewStreamProvider::Novnc,
+        "rdp_gateway" | "rdp-gateway" | "rdp" => ViewStreamProvider::RdpGateway,
+        "external_url" | "external-url" => ViewStreamProvider::ExternalUrl,
+        _ => return Err(format!("Unknown viewStreamProvider value: {}", value)),
+    };
+    Ok(Some(provider))
+}
+
+pub(crate) fn parse_control_input_provider(
+    value: &str,
+) -> Result<Option<ControlInputProvider>, String> {
+    let Some(value) = non_empty(value.to_string()) else {
+        return Ok(None);
+    };
+    let provider = match value.as_str() {
+        "cdp_input" | "cdp-input" | "cdp" => ControlInputProvider::CdpInput,
+        "webrtc_input" | "webrtc-input" | "webrtc" => ControlInputProvider::WebrtcInput,
+        "vnc_input" | "vnc-input" | "vnc" => ControlInputProvider::VncInput,
+        "manual_attached_desktop"
+        | "manual-attached-desktop"
+        | "manual_desktop"
+        | "manual-desktop"
+        | "manual" => ControlInputProvider::ManualAttachedDesktop,
+        _ => return Err(format!("Unknown controlInputProvider value: {}", value)),
+    };
+    Ok(Some(provider))
+}
+
+pub(crate) fn parse_display_isolation(value: &str) -> Result<Option<String>, String> {
+    let Some(value) = non_empty(value.to_string()) else {
+        return Ok(None);
+    };
+    let display = match value.as_str() {
+        "private_virtual_display" | "private-virtual-display" | "private" => {
+            "private_virtual_display"
+        }
+        "shared_display" | "shared-display" | "shared" => "shared_display",
+        "ambient_display" | "ambient-display" | "ambient" => "ambient_display",
+        _ => return Err(format!("Unknown displayIsolation value: {}", value)),
+    };
+    Ok(Some(display.to_string()))
+}
+
 fn browser_build_for_access_request(
     service_state: &ServiceState,
     request: &ServiceAccessPlanRequest,
@@ -2570,6 +2705,7 @@ mod tests {
                 BrowserProfile {
                     id: "google-work".to_string(),
                     name: "Google work".to_string(),
+                    user_data_dir: Some("/tmp/google-work-profile".to_string()),
                     site_policy_ids: vec!["google".to_string()],
                     target_service_ids: vec!["google".to_string()],
                     credential_provider_ids: vec!["manual".to_string()],
@@ -2803,6 +2939,14 @@ mod tests {
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["profileLeasePolicy"],
             "wait"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["runtimeProfile"],
+            "google-work"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["profile"],
+            "/tmp/google-work-profile"
         );
         assert_eq!(
             plan["decision"]["serviceRequest"]["request"]["blockedByManualAction"],
@@ -3094,6 +3238,37 @@ mod tests {
         assert_eq!(
             request.target_url.as_deref(),
             Some("https://www.canva.com/designs")
+        );
+    }
+
+    #[test]
+    fn parse_service_access_plan_query_accepts_remote_view_hints() {
+        let request = parse_service_access_plan_query(vec![
+            ("browserHost".to_string(), "remote_headed".to_string()),
+            ("viewStreamProvider".to_string(), "rdp_gateway".to_string()),
+            (
+                "controlInputProvider".to_string(),
+                "manual_attached_desktop".to_string(),
+            ),
+            (
+                "displayIsolation".to_string(),
+                "private_virtual_display".to_string(),
+            ),
+        ])
+        .unwrap();
+
+        assert_eq!(request.browser_host, Some(BrowserHost::RemoteHeaded));
+        assert_eq!(
+            request.view_stream_provider,
+            Some(ViewStreamProvider::RdpGateway)
+        );
+        assert_eq!(
+            request.control_input_provider,
+            Some(ControlInputProvider::ManualAttachedDesktop)
+        );
+        assert_eq!(
+            request.display_isolation.as_deref(),
+            Some("private_virtual_display")
         );
     }
 
@@ -3884,6 +4059,78 @@ mod tests {
         assert_eq!(
             plan["decision"]["launchPosture"]["detachedFirstLoginRequired"],
             false
+        );
+    }
+
+    #[test]
+    fn service_access_plan_uses_requested_remote_view_posture() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "default".to_string(),
+                BrowserProfile {
+                    id: "default".to_string(),
+                    name: "Default profile".to_string(),
+                    target_service_ids: vec!["example".to_string()],
+                    authenticated_service_ids: vec!["example".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["example".to_string()],
+                browser_host: Some(BrowserHost::RemoteHeaded),
+                view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                control_input_provider: Some(ControlInputProvider::ManualAttachedDesktop),
+                display_isolation: Some("private_virtual_display".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["decision"]["browserHost"], "remote_headed");
+        assert_eq!(plan["decision"]["launchPosture"]["source"], "request");
+        assert_eq!(
+            plan["decision"]["launchPosture"]["viewStreamProvider"],
+            "rdp_gateway"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["viewStreamProviderSource"],
+            "request"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["controlInputProvider"],
+            "manual_attached_desktop"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["controlInputProviderSource"],
+            "request"
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["displayIsolation"],
+            "private_virtual_display"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["headless"],
+            false
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["browserHost"],
+            "remote_headed"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["viewStreamProvider"],
+            "rdp_gateway"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["controlInputProvider"],
+            "manual_attached_desktop"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["params"]["displayIsolation"],
+            "private_virtual_display"
         );
     }
 

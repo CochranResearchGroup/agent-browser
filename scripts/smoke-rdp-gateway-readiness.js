@@ -12,7 +12,7 @@ loadAgentBrowserEnv();
 const viewUrl = process.env.AGENT_BROWSER_REMOTE_VIEW_URL || '';
 
 function commandExists(command) {
-  const result = spawnSync('sh', ['-lc', `command -v ${command}`], {
+  const result = spawnSync('sh', ['-lc', `command -v ${command} || { for candidate in /usr/sbin/${command} /usr/local/sbin/${command}; do [ -x "$candidate" ] && printf '%s\\n' "$candidate" && exit 0; done; exit 1; }`], {
     encoding: 'utf8',
     stdio: 'pipe',
   });
@@ -90,18 +90,85 @@ function httpCheck(url, timeoutMs = 3000) {
 const commands = {
   guacd: commandExists('guacd'),
   xrdp: commandExists('xrdp'),
+  xrdpSesman: commandExists('xrdp-sesman'),
   xfreerdp: commandExists('xfreerdp'),
 };
 const guacdTcp = await tcpCheck('127.0.0.1', 4822);
 const xrdpTcp = await tcpCheck('127.0.0.1', 3389);
 const html5Client = viewUrl ? await httpCheck(viewUrl) : { ok: false, url: null, error: 'AGENT_BROWSER_REMOTE_VIEW_URL is unset' };
-const backendReady = Boolean(commands.guacd && commands.xrdp && commands.xfreerdp && guacdTcp.ok && xrdpTcp.ok);
+const backendReady = Boolean(commands.guacd && commands.xrdp && commands.xrdpSesman && commands.xfreerdp && guacdTcp.ok && xrdpTcp.ok);
 const ready = backendReady && (!requireHtml5Client || html5Client.ok);
+const readinessComponents = [
+  {
+    component: 'guacd',
+    status: commands.guacd && guacdTcp.ok ? 'ready' : 'failed',
+    evidence: commands.guacd ? `guacd command at ${commands.guacd}; tcp 127.0.0.1:4822 ${guacdTcp.ok ? 'reachable' : guacdTcp.error}` : 'guacd command not found',
+    nextAction: commands.guacd && guacdTcp.ok ? 'none' : 'start_or_install_guacd',
+    recovery: commands.guacd && guacdTcp.ok ? 'guacd is reachable.' : 'Install or start guacd, then rerun the RDP gateway readiness smoke.',
+  },
+  {
+    component: 'xrdp',
+    status: commands.xrdp && xrdpTcp.ok ? 'ready' : 'failed',
+    evidence: commands.xrdp ? `xrdp command at ${commands.xrdp}; tcp 127.0.0.1:3389 ${xrdpTcp.ok ? 'reachable' : xrdpTcp.error}` : 'xrdp command not found',
+    nextAction: commands.xrdp && xrdpTcp.ok ? 'none' : 'start_or_install_xrdp',
+    recovery: commands.xrdp && xrdpTcp.ok ? 'xrdp is reachable.' : 'Install or start xrdp, then rerun the RDP gateway readiness smoke.',
+  },
+  {
+    component: 'xrdp_sesman',
+    status: commands.xrdpSesman ? 'ready' : 'failed',
+    evidence: commands.xrdpSesman ? `xrdp-sesman command at ${commands.xrdpSesman}` : 'xrdp-sesman command not found',
+    nextAction: commands.xrdpSesman ? 'none' : 'start_or_install_xrdp_sesman',
+    recovery: commands.xrdpSesman ? 'xrdp-sesman is installed.' : 'Install or start xrdp-sesman before validating Guacamole sessions.',
+  },
+  {
+    component: 'backend_tcp',
+    status: guacdTcp.ok && xrdpTcp.ok ? 'ready' : 'failed',
+    evidence: `guacd tcp=${guacdTcp.ok ? 'ok' : guacdTcp.error}; xrdp tcp=${xrdpTcp.ok ? 'ok' : xrdpTcp.error}`,
+    nextAction: guacdTcp.ok && xrdpTcp.ok ? 'none' : 'inspect_backend_tcp',
+    recovery: guacdTcp.ok && xrdpTcp.ok ? 'Backend TCP listeners are reachable.' : 'Inspect local firewall, service status, and listener bindings for guacd and xrdp.',
+  },
+  {
+    component: 'guacamole_web_app',
+    status: html5Client.ok ? 'ready' : (viewUrl ? 'failed' : 'missing'),
+    evidence: viewUrl ? `html5 client ${html5Client.statusCode ?? html5Client.error}` : 'AGENT_BROWSER_REMOTE_VIEW_URL is unset',
+    nextAction: html5Client.ok ? 'none' : 'configure_remote_view_url',
+    recovery: html5Client.ok ? 'The configured HTML5 RDP gateway route responded.' : 'Install or start the HTML5 RDP gateway frontend, then set AGENT_BROWSER_REMOTE_VIEW_URL.',
+  },
+  {
+    component: 'dashboard_auth',
+    status: 'unknown',
+    evidence: 'dashboard auth is validated by the browser live harness after isolated AGENT_BROWSER_HOME initialization',
+    nextAction: 'run_dashboard_auth_harness',
+    recovery: 'Initialize dashboard auth in the same isolated AGENT_BROWSER_HOME used by the live RDP and Guacamole harness.',
+  },
+  {
+    component: 'iframe_embedding',
+    status: html5Client.ok ? 'unknown' : 'blocked',
+    evidence: html5Client.ok ? 'route responded; browser iframe policy is checked in the dashboard harness' : 'route did not respond successfully',
+    nextAction: html5Client.ok ? 'run_dashboard_iframe_harness' : 'configure_remote_view_url',
+    recovery: html5Client.ok ? 'Use the dashboard harness to prove iframe embedding and interaction.' : 'Fix the HTML5 gateway route before testing iframe embedding.',
+  },
+  {
+    component: 'public_ingress',
+    status: viewUrl && /^https?:\/\//i.test(viewUrl) ? (html5Client.ok ? 'ready' : 'failed') : 'unknown',
+    evidence: viewUrl || 'no public or local URL configured',
+    nextAction: html5Client.ok ? 'none' : 'inspect_public_ingress',
+    recovery: html5Client.ok ? 'Configured ingress responded.' : 'Inspect DNS, tunnel, proxy, and dashboard route configuration for the public Guacamole path.',
+  },
+];
+const readiness = {
+  status: ready ? 'ready' : 'blocked',
+  components: readinessComponents,
+  nextAction: ready
+    ? 'none'
+    : readinessComponents.find((component) => component.status === 'failed' || component.status === 'blocked' || component.status === 'missing')?.nextAction ?? 'inspect_readiness',
+};
 
 const result = {
   success: ready,
   backendReady,
   html5ClientReady: html5Client.ok,
+  readiness,
   commands,
   tcp: {
     guacd: guacdTcp,

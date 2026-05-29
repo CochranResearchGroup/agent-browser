@@ -4,17 +4,30 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
+  createServiceControllerLeaseTakeoverRequest,
   createServiceCdpFreeLaunchRequest,
+  createServiceRemoteViewRouteCheckoutRequest,
+  createServiceRemoteViewRouteReleaseRequest,
+  createServiceRoutePoolRepairRequest,
   createServiceRequest,
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
   createServiceTabRequestFromAccessPlan,
+  createServiceViewerLeaseHeartbeatRequest,
+  createServiceViewerLeaseReleaseRequest,
+  createServiceViewerLeaseRequest,
+  heartbeatServiceViewerLease,
   isServiceCdpFreeActionAvailable,
   postServiceRequest,
+  releaseServiceViewerLease,
   requestServiceCdpFreeLaunch,
+  requestServiceRemoteViewRouteCheckout,
+  requestServiceRoutePoolRepair,
   requestServiceTab,
+  requestServiceViewerLease,
   SERVICE_REQUEST_ACTIONS,
   summarizeServiceCdpFreeLaunchAvailability,
+  takeoverServiceControllerLease,
 } from '../packages/client/src/service-request.js';
 import { getServiceAccessPlan } from '../packages/client/src/service-observability.js';
 
@@ -925,6 +938,233 @@ async function main() {
     },
     jobTimeoutMs: 120_000,
   });
+
+  const takeoverRequest = createServiceRequest({
+    serviceName: 'agent-browser-dashboard',
+    agentName: 'operator',
+    taskName: 'workspace-viewport-takeover',
+    action: 'view_takeover',
+    params: {
+      browserId: 'session:rdp-hardening-a',
+      sessionName: 'rdp-hardening-a',
+      streamId: 'remote-headed-view',
+      provider: 'rdp_gateway',
+      openMode: 'iframe',
+    },
+    jobTimeoutMs: 5000,
+  });
+  assert.equal(takeoverRequest.action, 'view_takeover');
+  assert.equal(takeoverRequest.params.browserId, 'session:rdp-hardening-a');
+  assert.deepEqual(createServiceRequestMcpToolCall(takeoverRequest), {
+    name: 'service_request',
+    arguments: takeoverRequest,
+  });
+
+  const routeCheckoutRequest = createServiceRemoteViewRouteCheckoutRequest({
+    serviceName: 'agent-browser-dashboard',
+    agentName: 'operator',
+    taskName: 'route-checkout',
+    displayAllocationId: 'display-a',
+    routePoolEntryId: 'pool-a',
+    routeId: 'route-a',
+    browserId: 'session:rdp-a',
+    sessionName: 'rdp-a',
+    streamId: 'remote-headed-view',
+    provider: 'rdp_gateway',
+    frameUrl: 'https://guac.example/#/client/route-a',
+  });
+  assert.equal(routeCheckoutRequest.action, 'service_remote_view_route_checkout');
+  assert.equal(routeCheckoutRequest.serviceName, 'agent-browser-dashboard');
+  assert.deepEqual(routeCheckoutRequest.params, {
+    displayAllocationId: 'display-a',
+    routeId: 'route-a',
+    routePoolEntryId: 'pool-a',
+    browserId: 'session:rdp-a',
+    sessionName: 'rdp-a',
+    streamId: 'remote-headed-view',
+    provider: 'rdp_gateway',
+    frameUrl: 'https://guac.example/#/client/route-a',
+  });
+
+  const routeReleaseRequest = createServiceRemoteViewRouteReleaseRequest({
+    serviceName: 'agent-browser-dashboard',
+    routeId: 'route-a',
+  });
+  assert.equal(routeReleaseRequest.action, 'service_remote_view_route_release');
+  assert.deepEqual(routeReleaseRequest.params, { routeId: 'route-a' });
+
+  const routePoolRepairRequest = createServiceRoutePoolRepairRequest({
+    serviceName: 'agent-browser-dashboard',
+    apply: false,
+    staleCheckouts: true,
+    serviceState: {
+      routePool: {},
+    },
+  });
+  assert.equal(routePoolRepairRequest.action, 'service_route_pool_repair');
+  assert.deepEqual(routePoolRepairRequest.params, {
+    apply: false,
+    staleCheckouts: true,
+    serviceState: {
+      routePool: {},
+    },
+  });
+
+  const viewerLeaseRequest = createServiceViewerLeaseRequest({
+    serviceName: 'agent-browser-dashboard',
+    routeId: 'route-a',
+    viewerId: 'viewer-a',
+    viewerName: 'Operator A',
+    openMode: 'tile',
+  });
+  assert.equal(viewerLeaseRequest.action, 'service_viewer_lease_request');
+  assert.deepEqual(viewerLeaseRequest.params, {
+    routeId: 'route-a',
+    viewerId: 'viewer-a',
+    viewerName: 'Operator A',
+    openMode: 'tile',
+  });
+
+  const controllerTakeoverRequest = createServiceControllerLeaseTakeoverRequest({
+    serviceName: 'agent-browser-dashboard',
+    routeId: 'route-a',
+    viewerLeaseId: 'viewer-a',
+    viewerId: 'operator-a',
+  });
+  assert.equal(controllerTakeoverRequest.action, 'service_controller_lease_takeover');
+  assert.deepEqual(controllerTakeoverRequest.params, {
+    routeId: 'route-a',
+    viewerLeaseId: 'viewer-a',
+    viewerId: 'operator-a',
+  });
+
+  const viewerLeaseHeartbeatRequest = createServiceViewerLeaseHeartbeatRequest({
+    serviceName: 'agent-browser-dashboard',
+    viewerLeaseId: 'viewer-a',
+    expiresAt: '2026-05-28T04:00:00Z',
+  });
+  assert.equal(viewerLeaseHeartbeatRequest.action, 'service_viewer_lease_heartbeat');
+  assert.deepEqual(viewerLeaseHeartbeatRequest.params, {
+    viewerLeaseId: 'viewer-a',
+    expiresAt: '2026-05-28T04:00:00Z',
+  });
+
+  const viewerLeaseReleaseRequest = createServiceViewerLeaseReleaseRequest({
+    serviceName: 'agent-browser-dashboard',
+    viewerLeaseId: 'viewer-a',
+  });
+  assert.equal(viewerLeaseReleaseRequest.action, 'service_viewer_lease_release');
+  assert.deepEqual(viewerLeaseReleaseRequest.params, { viewerLeaseId: 'viewer-a' });
+
+  const remoteViewWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'checked_out',
+      routeId: 'route-a',
+      displayAllocationId: 'display-a',
+    },
+  });
+  await requestServiceRemoteViewRouteCheckout({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: remoteViewWorkflow.fetch,
+    displayAllocationId: 'display-a',
+    routeId: 'route-a',
+  });
+  assert.equal(remoteViewWorkflow.calls[0].body.action, 'service_remote_view_route_checkout');
+  assert.deepEqual(remoteViewWorkflow.calls[0].body.params, {
+    displayAllocationId: 'display-a',
+    routeId: 'route-a',
+  });
+
+  const routePoolRepairWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      repaired: false,
+      dryRun: true,
+      candidateCounts: {
+        staleCheckouts: 1,
+        total: 1,
+      },
+      repairedCounts: {
+        staleCheckouts: 0,
+        total: 0,
+      },
+    },
+  });
+  await requestServiceRoutePoolRepair({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: routePoolRepairWorkflow.fetch,
+    apply: false,
+    staleCheckouts: true,
+  });
+  assert.equal(routePoolRepairWorkflow.calls[0].body.action, 'service_route_pool_repair');
+  assert.deepEqual(routePoolRepairWorkflow.calls[0].body.params, {
+    apply: false,
+    staleCheckouts: true,
+  });
+
+  const viewerWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'viewer_connected',
+      routeId: 'route-a',
+      viewerLeaseId: 'viewer-a',
+    },
+  });
+  await requestServiceViewerLease({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: viewerWorkflow.fetch,
+    routeId: 'route-a',
+    viewerId: 'viewer-a',
+  });
+  assert.equal(viewerWorkflow.calls[0].body.action, 'service_viewer_lease_request');
+
+  const heartbeatWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'viewer_heartbeat',
+      viewerLeaseId: 'viewer-a',
+    },
+  });
+  await heartbeatServiceViewerLease({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: heartbeatWorkflow.fetch,
+    viewerLeaseId: 'viewer-a',
+  });
+  assert.equal(heartbeatWorkflow.calls[0].body.action, 'service_viewer_lease_heartbeat');
+
+  const takeoverWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'controller_taken',
+      routeId: 'route-a',
+      viewerLeaseId: 'viewer-a',
+    },
+  });
+  await takeoverServiceControllerLease({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: takeoverWorkflow.fetch,
+    routeId: 'route-a',
+    viewerLeaseId: 'viewer-a',
+  });
+  assert.equal(
+    takeoverWorkflow.calls[0].body.action,
+    'service_controller_lease_takeover',
+  );
+
+  const releaseWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'released',
+      viewerLeaseId: 'viewer-a',
+    },
+  });
+  await releaseServiceViewerLease({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: releaseWorkflow.fetch,
+    viewerLeaseId: 'viewer-a',
+  });
+  assert.equal(releaseWorkflow.calls[0].body.action, 'service_viewer_lease_release');
 
   console.log('Service request client helper tests passed');
 }

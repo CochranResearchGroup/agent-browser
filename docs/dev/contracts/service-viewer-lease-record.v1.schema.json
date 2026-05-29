@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-viewer-lease-record.v1.schema.json",
+  "title": "agent-browser service viewer lease record",
+  "description": "Stable API shape for remote-view observer and controller leases.",
+  "type": "object",
+  "required": [
+    "id",
+    "routeId",
+    "browserId",
+    "viewerId",
+    "viewerName",
+    "viewerRole",
+    "openMode",
+    "state",
+    "lastViewerEvent",
+    "expiresAt",
+    "createdAt",
+    "updatedAt",
+    "lastHeartbeatAt",
+    "serviceEventId"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "routeId": {
+      "type": ["string", "null"]
+    },
+    "browserId": {
+      "type": ["string", "null"]
+    },
+    "viewerId": {
+      "type": ["string", "null"]
+    },
+    "viewerName": {
+      "type": ["string", "null"]
+    },
+    "viewerRole": {
+      "type": "string",
+      "enum": [
+        "observer",
+        "controller",
+        "pending_controller",
+        "none"
+      ]
+    },
+    "openMode": {
+      "type": "string",
+      "enum": [
+        "embedded",
+        "external",
+        "fullscreen",
+        "tile"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "requested",
+        "connected",
+        "observing",
+        "controlling",
+        "takeover_requested",
+        "reconnecting",
+        "disconnected",
+        "expired",
+        "failed"
+      ]
+    },
+    "lastViewerEvent": {
+      "type": ["string", "null"],
+      "enum": [
+        "connected",
+        "disconnected",
+        "takeover_requested",
+        "taken_over",
+        "reconnected",
+        "failed",
+        "expired",
+        null
+      ]
+    },
+    "expiresAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "createdAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "lastHeartbeatAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "serviceEventId": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

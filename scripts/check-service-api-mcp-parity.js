@@ -376,7 +376,7 @@ const serviceResourceSurface = [
     route: '/api/service/access-plan',
     docsNeedles: [
       '/api/service/access-plan',
-      'agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}',
+      'agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}',
     ],
     httpNeedles: [
       'path == "/api/service/access-plan"',

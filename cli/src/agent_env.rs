@@ -5,7 +5,17 @@ use std::path::PathBuf;
 
 const DEFAULT_ENV_FILE: &str = ".agent-browser/.env";
 const KNOWN_VARS: &[&str] = &[
+    "AGENT_BROWSER_DASHBOARD_AUTH_FILE",
     "AGENT_BROWSER_KEYCHAIN_PASSWORD",
+    "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
+    "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
+    "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
+    "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
+    "AGENT_BROWSER_REMOTE_VIEW_PROVIDER",
+    "AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID",
+    "AGENT_BROWSER_REMOTE_VIEW_URL",
+    "AGENT_BROWSER_GUACAMOLE_CONNECTION_ID",
+    "AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME",
     "AGENT_BROWSER_USE_REAL_KEYCHAIN",
 ];
 
@@ -150,6 +160,7 @@ mod tests {
         let content = r#"
 export AGENT_BROWSER_KEYCHAIN_PASSWORD="line1\nline2"
 AGENT_BROWSER_USE_REAL_KEYCHAIN=1 # force real keychain
+AGENT_BROWSER_REMOTE_HEADED_DISPLAY=:10
 # AGENT_BROWSER_KEYCHAIN_PASSWORD=ignored
 AGENT_BROWSER_KEYCHAIN_PASSWORD='quoted'
 AGENT_BROWSER_UNKNOWN=ignored
@@ -163,6 +174,10 @@ AGENT_BROWSER_UNKNOWN=ignored
         assert_eq!(
             parsed.get("AGENT_BROWSER_USE_REAL_KEYCHAIN"),
             Some(&"1".to_string())
+        );
+        assert_eq!(
+            parsed.get("AGENT_BROWSER_REMOTE_HEADED_DISPLAY"),
+            Some(&":10".to_string())
         );
         assert!(!parsed.contains_key("AGENT_BROWSER_UNKNOWN"));
     }

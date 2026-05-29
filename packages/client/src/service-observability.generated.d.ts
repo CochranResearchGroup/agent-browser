@@ -59,6 +59,13 @@ export type ServiceEventKind =
   | "tab_lifecycle_changed"
   | "profile_lease_wait_started"
   | "profile_lease_wait_ended"
+  | "viewer_takeover_requested"
+  | "viewer_connected"
+  | "viewer_disconnected"
+  | "controller_requested"
+  | "controller_granted"
+  | "controller_denied"
+  | "route_released"
   | "reconciliation_error"
   | "incident_acknowledged"
   | "incident_resolved";
@@ -91,6 +98,13 @@ export interface ServiceJobRecord {
   controlPlaneMode: ServiceJobControlPlaneMode;
   lifecycleOnly: boolean;
   displayIsolation?: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
+  requestedDisplayAllocationId?: string | null;
+  displayAllocationId?: string | null;
+  requestedRemoteViewRouteId?: string | null;
+  remoteViewRouteId?: string | null;
+  routePoolEntryId?: string | null;
+  viewerLeaseId?: string | null;
+  controllerLeaseId?: string | null;
   target: unknown;
   owner: unknown;
   state: ServiceJobState;
@@ -260,6 +274,80 @@ export interface ServiceBrowserRecord {
   health: ServiceBrowserHealthState;
   displayIsolation?: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
   displayName?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceDisplayAllocationRecord {
+  id: string;
+  displayName: string;
+  displayIsolation: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string;
+  ownerBrowserId: string | null;
+  ownerSessionId: string | null;
+  profileId: string | null;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  host: 'local_headless' | 'local_headed' | 'docker_headed' | 'remote_headed' | 'cloud_provider' | 'attached_existing' | string;
+  state: 'allocating' | 'ready' | 'degraded' | 'released' | 'orphaned' | 'failed' | string;
+  routeIds?: string[];
+  readiness: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastHealthCheckAt: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceRemoteViewRouteRecord {
+  id: string;
+  provider: string;
+  displayAllocationId: string | null;
+  browserId: string | null;
+  sessionId: string | null;
+  routeSource: 'config' | 'pool' | 'discovered' | 'generated' | 'retained_state' | 'fixture' | 'unknown' | string;
+  connectionId: string | null;
+  connectionName: string | null;
+  frameUrl: string | null;
+  externalUrl: string | null;
+  readOnly: boolean;
+  controlInput: 'manual_attached_desktop' | 'cdp' | 'none' | string;
+  providerMode: 'simultaneous_view' | 'single_viewer' | 'single_controller' | 'unknown' | 'unavailable' | string;
+  state: 'allocating' | 'ready' | 'reconnecting' | 'degraded' | 'released' | 'orphaned' | 'failed' | string;
+  viewerLeaseIds?: string[];
+  controllerLeaseId?: string | null;
+  readiness: Record<string, unknown>;
+  lastProviderEvent: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceRoutePoolEntryRecord {
+  id: string;
+  provider: string;
+  routeId: string | null;
+  connectionId: string | null;
+  connectionName: string | null;
+  frameUrl: string | null;
+  externalUrl: string | null;
+  target: Record<string, unknown>;
+  providerMode: 'simultaneous_view' | 'single_viewer' | 'single_controller' | 'unknown' | 'unavailable' | string;
+  state: 'available' | 'allocated' | 'degraded' | 'disabled' | 'unknown' | string;
+  readiness: Record<string, unknown>;
+  currentRouteAllocationId?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceViewerLeaseRecord {
+  id: string;
+  routeId: string | null;
+  browserId: string | null;
+  viewerId: string | null;
+  viewerName: string | null;
+  viewerRole: 'observer' | 'controller' | 'pending_controller' | 'none' | string;
+  openMode: 'embedded' | 'external' | 'fullscreen' | 'tile' | string;
+  state: 'requested' | 'connected' | 'observing' | 'controlling' | 'takeover_requested' | 'reconnecting' | 'disconnected' | 'expired' | 'failed' | string;
+  lastViewerEvent: string | null;
+  expiresAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastHeartbeatAt: string | null;
+  serviceEventId: string | null;
   [key: string]: unknown;
 }
 
@@ -626,6 +714,22 @@ export interface ServiceProfileSeedingHandoffUpdateResponse {
 
 export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {
   browsers: ServiceBrowserRecord[];
+}
+
+export interface ServiceDisplayAllocationsResponse extends ServiceListResponse<ServiceDisplayAllocationRecord> {
+  displayAllocations: ServiceDisplayAllocationRecord[];
+}
+
+export interface ServiceRemoteViewRoutesResponse extends ServiceListResponse<ServiceRemoteViewRouteRecord> {
+  remoteViewRoutes: ServiceRemoteViewRouteRecord[];
+}
+
+export interface ServiceRoutePoolResponse extends ServiceListResponse<ServiceRoutePoolEntryRecord> {
+  routePool: ServiceRoutePoolEntryRecord[];
+}
+
+export interface ServiceViewerLeasesResponse extends ServiceListResponse<ServiceViewerLeaseRecord> {
+  viewerLeases: ServiceViewerLeaseRecord[];
 }
 
 export interface ServiceSessionsResponse extends ServiceListResponse<ServiceSessionRecord> {
@@ -1591,7 +1695,7 @@ export interface ServiceAccessPlanLaunchPosture {
     | 'requires_cdp_free'
     | 'service_default'
     | string;
-  source: 'site_policy' | 'profile_default' | 'service_default' | string;
+  source: 'request' | 'site_policy' | 'profile_default' | 'service_default' | string;
   viewStreamProvider:
     | 'cdp_screencast'
     | 'chrome_tab_webrtc'
@@ -1600,14 +1704,14 @@ export interface ServiceAccessPlanLaunchPosture {
     | 'rdp_gateway'
     | 'external_url'
     | string;
-  viewStreamProviderSource: 'site_policy' | 'service_default' | string;
+  viewStreamProviderSource: 'request' | 'site_policy' | 'service_default' | string;
   controlInputProvider:
     | 'cdp_input'
     | 'webrtc_input'
     | 'vnc_input'
     | 'manual_attached_desktop'
     | string;
-  controlInputProviderSource: 'site_policy' | 'view_stream' | string;
+  controlInputProviderSource: 'request' | 'site_policy' | 'view_stream' | string;
   displayIsolation: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
   headed: boolean;
   remoteViewRecommended: boolean;
@@ -1727,6 +1831,14 @@ export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOp
   agentName?: string;
   /** Caller task name for queue and trace debugging. */
   taskName?: string;
+  /** Optional browser-host posture hint for the planned service request. */
+  browserHost?: 'local_headless' | 'local_headed' | 'docker_headed' | 'remote_headed' | 'cloud_provider' | 'attached_existing' | string;
+  /** Optional view stream provider hint for the planned service request. */
+  viewStreamProvider?: 'cdp_screencast' | 'chrome_tab_webrtc' | 'virtual_display_webrtc' | 'novnc' | 'rdp_gateway' | 'external_url' | string;
+  /** Optional control input provider hint for the planned service request. */
+  controlInputProvider?: 'cdp_input' | 'webrtc_input' | 'vnc_input' | 'manual_attached_desktop' | string;
+  /** Optional display allocation hint for remote-headed planned requests. */
+  displayIsolation?: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string;
   /** Optional site-policy ID when the caller wants a specific policy recommendation. */
   sitePolicyId?: string;
   /** Optional challenge ID when planning around one retained challenge. */
@@ -1852,6 +1964,18 @@ export interface ServiceAccessPlanQuery extends ServiceProfileLookupQuery {
   taskName: string | null;
   sitePolicyId: string | null;
   challengeId: string | null;
+  browserHost: 'local_headless' | 'local_headed' | 'docker_headed' | 'remote_headed' | 'cloud_provider' | 'attached_existing' | string | null;
+  viewStreamProvider:
+    | 'cdp_screencast'
+    | 'chrome_tab_webrtc'
+    | 'virtual_display_webrtc'
+    | 'novnc'
+    | 'rdp_gateway'
+    | 'external_url'
+    | string
+    | null;
+  controlInputProvider: 'cdp_input' | 'webrtc_input' | 'vnc_input' | 'manual_attached_desktop' | string | null;
+  displayIsolation: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
 }
@@ -2180,6 +2304,13 @@ export declare function acquireServiceLoginProfile(options: ServiceProfileAcquis
 /** Build a compact broker-first profile acquisition summary for logs, traces, and operator-facing example output. */
 export declare function summarizeServiceProfileAcquisition(profileAcquisition: ServiceProfileAcquisitionResult): ServiceProfileAcquisitionSummary;
 export declare function getServiceBrowsers(options: ServiceQueryOptions): Promise<ServiceBrowsersResponse>;
+export declare function getServiceDisplayAllocations(options: ServiceQueryOptions): Promise<ServiceDisplayAllocationsResponse>;
+export declare function getServiceRemoteViewRoutes(options: ServiceQueryOptions): Promise<ServiceRemoteViewRoutesResponse>;
+export declare function getServiceRoutePool(options: ServiceQueryOptions): Promise<ServiceRoutePoolResponse>;
+export declare function getServiceViewerLeases(options: ServiceQueryOptions): Promise<ServiceViewerLeasesResponse>;
+export declare function findServiceDisplayAllocation(records: ServiceDisplayAllocationRecord[] | ServiceDisplayAllocationsResponse | null | undefined, id: string): ServiceDisplayAllocationRecord | null;
+export declare function findServiceRemoteViewRoute(records: ServiceRemoteViewRouteRecord[] | ServiceRemoteViewRoutesResponse | null | undefined, id: string): ServiceRemoteViewRouteRecord | null;
+export declare function findServiceViewerLease(records: ServiceViewerLeaseRecord[] | ServiceViewerLeasesResponse | null | undefined, id: string): ServiceViewerLeaseRecord | null;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;
 export declare function getServiceMonitors(options: ServiceMonitorQueryOptions): Promise<ServiceMonitorsResponse>;

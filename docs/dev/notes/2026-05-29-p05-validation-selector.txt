@@ -1,0 +1,348 @@
+
+> agent-browser@0.27.0 validation:select /home/ecochran76/workspace.local/agent-browser
+> node scripts/dev/select-validation.js -- --base v0.26.1
+
+Validation base: v0.26.1
+Changed files: 288
+  .github/workflows/ci.yml
+  .github/workflows/release.yml
+  AGENTS.md
+  CHANGELOG.md
+  README.md
+  ROADMAP.md
+  RUNBOOK.md
+  cli/Cargo.lock
+  cli/Cargo.toml
+  cli/src/agent_env.rs
+  cli/src/commands.rs
+  cli/src/connection.rs
+  cli/src/flags.rs
+  cli/src/install.rs
+  cli/src/main.rs
+  cli/src/mcp.rs
+  cli/src/native/actions.rs
+  cli/src/native/auth.rs
+  cli/src/native/browser.rs
+  cli/src/native/cdp/chrome.rs
+  cli/src/native/control_plane.rs
+  cli/src/native/daemon.rs
+  cli/src/native/e2e_tests.rs
+  cli/src/native/mod.rs
+  cli/src/native/parity_tests.rs
+  cli/src/native/service_access.rs
+  cli/src/native/service_activity.rs
+  cli/src/native/service_config.rs
+  cli/src/native/service_contracts.rs
+  cli/src/native/service_health.rs
+  cli/src/native/service_incidents.rs
+  cli/src/native/service_jobs.rs
+  cli/src/native/service_lifecycle.rs
+  cli/src/native/service_model.rs
+  cli/src/native/service_monitors.rs
+  cli/src/native/service_store.rs
+  cli/src/native/service_trace.rs
+  cli/src/native/stream/dashboard.rs
+  cli/src/native/stream/dashboard_auth.rs
+  cli/src/native/stream/http.rs
+  cli/src/native/stream/mod.rs
+  cli/src/output.rs
+  cli/src/remote_view_doctor.rs
+  cli/src/runtime_profile.rs
+  cli/src/windows_browser_doctor.rs
+  cli/src/windows_browser_setup.rs
+  docs/dev/contracts/README.md
+  docs/dev/contracts/examples/browser-capability-registry.sample.json
+  docs/dev/contracts/service-access-plan-response.v1.schema.json
+  docs/dev/contracts/service-browser-capability-preflight-response.v1.schema.json
+  docs/dev/contracts/service-browser-capability-registry-upsert-response.v1.schema.json
+  docs/dev/contracts/service-browser-capability-registry.v1.schema.json
+  docs/dev/contracts/service-browser-record.v1.schema.json
+  docs/dev/contracts/service-display-allocation-record.v1.schema.json
+  docs/dev/contracts/service-display-allocations-response.v1.schema.json
+  docs/dev/contracts/service-event-record.v1.schema.json
+  docs/dev/contracts/service-incident-record.v1.schema.json
+  docs/dev/contracts/service-incidents-response.v1.schema.json
+  docs/dev/contracts/service-job-record.v1.schema.json
+  docs/dev/contracts/service-monitor-delete-response.v1.schema.json
+  docs/dev/contracts/service-monitor-record.v1.schema.json
+  docs/dev/contracts/service-monitor-run-due-response.v1.schema.json
+  docs/dev/contracts/service-monitor-state-response.v1.schema.json
+  docs/dev/contracts/service-monitor-triage-response.v1.schema.json
+  docs/dev/contracts/service-monitor-upsert-response.v1.schema.json
+  docs/dev/contracts/service-monitors-response.v1.schema.json
+  docs/dev/contracts/service-profile-allocation-response.v1.schema.json
+  docs/dev/contracts/service-profile-delete-response.v1.schema.json
+  docs/dev/contracts/service-profile-lookup-response.v1.schema.json
+  docs/dev/contracts/service-profile-readiness-response.v1.schema.json
+  docs/dev/contracts/service-profile-record.v1.schema.json
+  docs/dev/contracts/service-profile-seeding-handoff-response.v1.schema.json
+  docs/dev/contracts/service-profile-upsert-response.v1.schema.json
+  docs/dev/contracts/service-profiles-response.v1.schema.json
+  docs/dev/contracts/service-remedies-apply-response.v1.schema.json
+  docs/dev/contracts/service-remote-view-route-record.v1.schema.json
+  docs/dev/contracts/service-remote-view-routes-response.v1.schema.json
+  docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json
+  docs/dev/contracts/service-request.v1.schema.json
+  docs/dev/contracts/service-route-pool-entry-record.v1.schema.json
+  docs/dev/contracts/service-route-pool-response.v1.schema.json
+  docs/dev/contracts/service-session-delete-response.v1.schema.json
+  docs/dev/contracts/service-session-record.v1.schema.json
+  docs/dev/contracts/service-session-upsert-response.v1.schema.json
+  docs/dev/contracts/service-site-policies-response.v1.schema.json
+  docs/dev/contracts/service-site-policy-record.v1.schema.json
+  docs/dev/contracts/service-status-response.v1.schema.json
+  docs/dev/contracts/service-trace-activity-record.v1.schema.json
+  docs/dev/contracts/service-trace-summary-record.v1.schema.json
+  docs/dev/contracts/service-viewer-lease-record.v1.schema.json
+  docs/dev/contracts/service-viewer-leases-response.v1.schema.json
+  docs/dev/notes/2026-04-22-agent-browser-service-roadmap.md
+  docs/dev/notes/2026-04-24-mcp-service-context-and-profile-strategy.md
+  docs/dev/notes/2026-04-30-service-model-pre-merge-checklist.md
+  docs/dev/notes/2026-05-01-ci-evaluation-boundary.md
+  docs/dev/notes/2026-05-01-shutdown-remedy-operator-triage.md
+  docs/dev/notes/2026-05-03-profile-allocation-api-checkpoint.md
+  docs/dev/notes/2026-05-03-profile-lease-observability-checkpoint.md
+  docs/dev/notes/2026-05-05-ci-failure-pattern-analysis.md
+  docs/dev/notes/2026-05-05-service-roadmap-alignment-checkpoint.md
+  docs/dev/notes/2026-05-06-fast-ci-rust-root-cause.md
+  docs/dev/notes/2026-05-07-ci-rust-contract-root-cause.md
+  docs/dev/notes/2026-05-09-access-plan-service-request-handoff.md
+  docs/dev/notes/2026-05-09-generic-service-profile-registration-contract.md
+  docs/dev/notes/2026-05-10-access-plan-monitor-run-due-recipe.md
+  docs/dev/notes/2026-05-10-access-plan-readiness-probe-due.md
+  docs/dev/notes/2026-05-10-acquire-profile-run-due-monitor.md
+  docs/dev/notes/2026-05-10-managed-profile-flow-acquisition-summary.md
+  docs/dev/notes/2026-05-10-managed-profile-flow-live-smoke.md
+  docs/dev/notes/2026-05-10-service-client-example-monitor-summary.md
+  docs/dev/notes/2026-05-11-cdp-free-access-plan-posture.md
+  docs/dev/notes/2026-05-11-chromium-stealthcdp-handoff.md
+  docs/dev/notes/2026-05-12-browser-build-policy-boundary.md
+  docs/dev/notes/2026-05-13-install-doctor-user-scoped-upgrade.md
+  docs/dev/notes/2026-05-14-chromium-stealthcdp-release-handoff.md
+  docs/dev/notes/2026-05-14-stealthcdp-installer-live-validation.md
+  docs/dev/notes/2026-05-14-wsl-windows-browser-networking-plan.md
+  docs/dev/notes/2026-05-15-stealthcdp-first-roadmap-checkpoint.md
+  docs/dev/notes/2026-05-16-ci-rust-pid-fixture-rca.md
+  docs/dev/notes/2026-05-17-ups-headless-stealthcdp-smoke-handoff.md
+  docs/dev/notes/2026-05-18-service-view-redesign-plan.md
+  docs/dev/notes/2026-05-19-service-dashboard-ux-audit-design-plan.md
+  docs/dev/notes/2026-05-20-browser-row-remedy-roadmap-checkpoint.md
+  docs/dev/notes/2026-05-20-remote-view-control-posture-checkpoint.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-campaign.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-slice-1.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-slice-2.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-slice-3.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-slice-4.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-slice-5.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-slice-6.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-slice-7.md
+  docs/dev/notes/2026-05-23-left-pane-workspace-navigator-slice-8.md
+  docs/dev/notes/2026-05-23-service-inspector-pane-plan.md
+  docs/dev/notes/2026-05-26-graphiti-codegraph-policy-adoption.md
+  docs/dev/notes/2026-05-26-rdp-guac-slice-a-ownership-audit.md
+  docs/dev/notes/2026-05-26-rdp-guac-slice-b-live-validation.md
+  docs/dev/notes/2026-05-26-rdp-guac-slice-b-source-checkpoint.md
+  docs/dev/notes/2026-05-26-rdp-guac-slice-c-browser-switch-harness.md
+  docs/dev/notes/2026-05-26-rdp-guac-slice-c-live-validation.md
+  docs/dev/notes/2026-05-26-rdp-guac-slice-d-live-validation.md
+  docs/dev/notes/2026-05-26-rdp-guac-slice-d-readiness-source-checkpoint.md
+  docs/dev/notes/2026-05-26-rdp-guac-slice-e-reliability-gate.md
+  docs/dev/notes/2026-05-26-rdp-guac-viewer-transfer-live-harness.md
+  docs/dev/notes/2026-05-26-remote-view-backends-campaign.md
+  docs/dev/notes/2026-05-27-guac-route-authority-audit.md
+  docs/dev/notes/2026-05-27-guac-route-hardening-validation.md
+  docs/dev/notes/2026-05-28-guac-rdp-p03-provider-topology-audit.md
+  docs/dev/notes/2026-05-28-p03-doctor-first-refactor.md
+  docs/dev/notes/2026-05-29-p04-release-candidate-install-validation.md
+  docs/dev/notes/2026-05-29-p05-release-preparation-validation.md
+  docs/dev/notes/2026-05-29-p05-validation-selector.txt
+  docs/dev/notes/google-runtime-profile-login.md
+  docs/dev/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md
+  docs/dev/plans/0002-2026-05-27-guac-remote-view-routing-hardening-plan.md
+  docs/dev/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md
+  docs/dev/plans/0004-2026-05-29-release-candidate-install-validation-plan.md
+  docs/dev/plans/0005-2026-05-29-release-preparation-and-publication-plan.md
+  docs/dev/policies/0011-graph-backed-memory-usage.md
+  docs/dev/policies/0012-codegraph-usage.md
+  docs/src/app/changelog/page.mdx
+  docs/src/app/commands/page.mdx
+  docs/src/app/configuration/page.mdx
+  docs/src/app/dashboard/page.mdx
+  docs/src/app/installation/page.mdx
+  docs/src/app/page.mdx
+  docs/src/app/service-mode/page.mdx
+  docs/src/app/sessions/page.mdx
+  docs/src/app/streaming/page.mdx
+  examples/service-client/README.md
+  examples/service-client/managed-profile-flow.mjs
+  examples/service-client/package.json
+  examples/service-client/post-seeding-probe.mjs
+  examples/service-client/service-request-trace.mjs
+  examples/service-client/test-client-exports.mjs
+  package.json
+  packages/client/package.json
+  packages/client/src/service-observability.generated.d.ts
+  packages/client/src/service-observability.generated.js
+  packages/client/src/service-observability.js
+  packages/client/src/service-request.generated.d.ts
+  packages/client/src/service-request.generated.js
+  packages/client/src/service-request.js
+  packages/dashboard/next-env.d.ts
+  packages/dashboard/package.json
+  packages/dashboard/src/app/activity/page.tsx
+  packages/dashboard/src/app/browsers/page.tsx
+  packages/dashboard/src/app/globals.css
+  packages/dashboard/src/app/page.tsx
+  packages/dashboard/src/app/service/page.tsx
+  packages/dashboard/src/components/app-shell.tsx
+  packages/dashboard/src/components/service-panel.tsx
+  packages/dashboard/src/components/session-tree.tsx
+  packages/dashboard/src/components/theme-toggle.tsx
+  packages/dashboard/src/components/ui/alert-dialog.tsx
+  packages/dashboard/src/components/workspace-navigator.tsx
+  packages/dashboard/src/components/workspace-remote-viewport.tsx
+  packages/dashboard/src/lib/dashboard-api.ts
+  packages/dashboard/src/lib/launcher-eligibility.ts
+  packages/dashboard/src/lib/service-browser-row-actions.ts
+  packages/dashboard/src/lib/service-incident-summary.ts
+  packages/dashboard/src/lib/service-profile-allocation.ts
+  packages/dashboard/src/lib/service-trace.ts
+  packages/dashboard/src/lib/service-view-streams.ts
+  packages/dashboard/src/lib/service-workspaces.ts
+  packages/dashboard/src/lib/workspace-url-selection.ts
+  packages/dashboard/src/lib/workspace-viewport-state.ts
+  packages/dashboard/src/store/chat.ts
+  packages/dashboard/src/store/sessions.ts
+  packages/dashboard/tsconfig.json
+  pnpm-lock.yaml
+  pnpm-workspace.yaml
+  scripts/check-service-api-mcp-parity.js
+  scripts/ci/rust-tests.sh
+  scripts/dev/select-validation.js
+  scripts/generate-service-observability-client.js
+  scripts/generate-service-request-client.js
+  scripts/grant-rdp-route-display-access.sh
+  scripts/inspect-rdp-route-displays.js
+  scripts/install-agent-browser-privileges.sh
+  scripts/install-dashboard-user-service.sh
+  scripts/libexec/agent-browser-privileged-helper
+  scripts/setup-rdp-autologin-user.sh
+  scripts/setup-rdp-guac-route-pool.sh
+  scripts/smoke-browser-capability-registry-draft.js
+  scripts/smoke-mcp-read-no-launch.js
+  scripts/smoke-mcp-stdio.js
+  scripts/smoke-rdp-gateway-readiness.js
+  scripts/smoke-rdp-guac-route-pool-readiness.js
+  scripts/smoke-remote-headed-utils.js
+  scripts/smoke-schema-utils.js
+  scripts/smoke-service-access-plan.js
+  scripts/smoke-service-browser-row-close-live.js
+  scripts/smoke-service-browser-row-remedies-no-launch.js
+  scripts/smoke-service-client-example.js
+  scripts/smoke-service-client-managed-profile-flow.js
+  scripts/smoke-service-client-post-seeding-probe.js
+  scripts/smoke-service-collections.js
+  scripts/smoke-service-config.js
+  scripts/smoke-service-contracts-no-launch.js
+  scripts/smoke-service-dashboard-remote-control-ui-live.js
+  scripts/smoke-service-health.js
+  scripts/smoke-service-incident-parity.js
+  scripts/smoke-service-incident-summary-http.js
+  scripts/smoke-service-incident-summary-mcp.js
+  scripts/smoke-service-job-naming.js
+  scripts/smoke-service-profile-http.js
+  scripts/smoke-service-profile-lease-wait.js
+  scripts/smoke-service-profile-lookup.js
+  scripts/smoke-service-profile-sources.js
+  scripts/smoke-service-profile-target-mcp.js
+  scripts/smoke-service-recovery-override-http.js
+  scripts/smoke-service-remedies-apply-json-no-launch.js
+  scripts/smoke-service-remedies-cli-no-launch.js
+  scripts/smoke-service-remedies-json-no-launch.js
+  scripts/smoke-service-remote-view-control-live.js
+  scripts/smoke-service-request-cdp-free-no-launch.js
+  scripts/smoke-service-request-lease-reject.js
+  scripts/smoke-service-request.js
+  scripts/smoke-service-shutdown-faulted.js
+  scripts/smoke-service-site-policy-sources.js
+  scripts/smoke-service-status-no-launch.js
+  scripts/smoke-utils.js
+  scripts/smoke-windows-browser-setup-powershell.sh
+  scripts/smoke-wsl-windows-chromium-profile.sh
+  scripts/sync-rdp-guac-existing-user-route-pool.sh
+  scripts/test-dashboard-browser-row-actions-render.js
+  scripts/test-dashboard-browser-table.js
+  scripts/test-dashboard-incident-summary.js
+  scripts/test-dashboard-inspector-actions.js
+  scripts/test-dashboard-launcher-eligibility.js
+  scripts/test-dashboard-profile-allocation.js
+  scripts/test-dashboard-service-trace.js
+  scripts/test-dashboard-view-streams.js
+  scripts/test-dashboard-workspace-navigator.js
+  scripts/test-dashboard-workspace-nodes.js
+  scripts/test-rdp-guac-browser-switch-live.js
+  scripts/test-rdp-guac-many-to-many-live.js
+  scripts/test-rdp-guac-private-display-live.js
+  scripts/test-rdp-guac-readiness-failures-live.js
+  scripts/test-rdp-guac-route-cleanup-live.js
+  scripts/test-rdp-guac-viewer-transfer-live.js
+  scripts/test-service-client-example.js
+  scripts/test-service-client-managed-profile-flow.js
+  scripts/test-service-client-post-seeding-probe.js
+  scripts/test-service-observability-client.js
+  scripts/test-service-request-client.js
+  skills/agent-browser/SKILL.md
+
+Recommended checks:
+  git diff --check
+    reason: patch whitespace and conflict-marker hygiene
+  pnpm version:sync
+    reason: version metadata changed
+  cargo fmt --manifest-path cli/Cargo.toml -- --check
+    reason: Rust source or manifest changed
+  cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+    reason: Rust Quality CI gate
+  cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1
+    reason: service model wire-shape and contract fixtures changed
+  cargo test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1
+    reason: access-plan decision model changed
+  cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1
+    reason: browser health, recovery, or launch event model changed
+  cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1
+    reason: service contract metadata changed
+  cargo test --manifest-path cli/Cargo.toml service_config -- --test-threads=1
+    reason: service config mutation model changed
+  cargo test --manifest-path cli/Cargo.toml service_monitors -- --test-threads=1
+    reason: service monitor state or run-due logic changed
+  pnpm test:service-api-mcp-parity
+    reason: service API/MCP or service-request action surface changed
+  pnpm test:service-client-contract
+    reason: generated service client contracts may drift
+  pnpm test:service-client-types
+    reason: service client type coverage may drift
+  pnpm test:browser-capability-registry-draft
+    reason: browser capability registry draft schema, sample, or validator changed
+  pnpm test:service-client
+    reason: service client package, examples, or generated helpers changed
+  pnpm --dir docs build
+    reason: docs site changed
+  pnpm test:dashboard-view-streams
+    reason: dashboard view stream provider handling changed
+  pnpm test:dashboard-browser-row-actions-render
+    reason: dashboard browser row action rendered titles changed
+  pnpm test:dashboard-browser-table
+    reason: dashboard browser table filtering or visibility changed
+  pnpm test:dashboard-workspace-nodes
+    reason: dashboard workspace navigator model changed
+  pnpm test:dashboard-launcher-eligibility
+    reason: dashboard launcher eligibility preview changed
+  pnpm test:dashboard-workspace-navigator
+    reason: dashboard workspace navigator UI changed
+  pnpm test:dashboard-inspector-actions
+    reason: dashboard service inspector action wiring changed
+  pnpm build:dashboard
+    reason: dashboard package or dashboard UI changed
+  diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md
+    reason: repo and installed agent-browser skill must stay synced
+  node scripts/dev/select-validation.js --base HEAD --json
+    reason: validation selector or CI scripts changed

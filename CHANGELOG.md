@@ -1,5 +1,28 @@
 # agent-browser
 
+## Unreleased
+
+### New Features
+
+- **Remote view route pools** - Added hardened Guacamole/RDP route-pool setup, route display inspection, viewer transfer, browser-switch, private-display, cleanup, and many-to-many validation flows for simultaneous remote browser viewing.
+- **Dashboard workspaces** - Added workspace navigation, browser and activity views, remote viewport state, launcher eligibility checks, and remote-control affordances for service-owned browser sessions.
+- **Browser capability and access-plan routing** - Added browser capability registry, preflight, CDP-free availability, access-plan browser summaries, and service request handoff helpers for choosing and explaining browser execution paths.
+
+### Improvements
+
+- **Install and remote-view doctors** - Added install doctor coverage, remote-view readiness checks, privilege-helper installation, and route-display access diagnostics for release-candidate validation.
+- **Service observability** - Expanded service contracts, generated clients, trace summaries, incident handoffs, job filters, profile allocation details, and retained-state pruning controls.
+- **Validation gates** - Added dashboard, service-client, service-contract, RDP/Guacamole, browser capability, and no-launch smoke scripts so release prep can select checks from the actual changed surfaces.
+
+### Bug Fixes
+
+- **Default runtime profile attach** - Fixed implicit default-profile commands so they attach to the live runtime profile instead of launching another Chrome against a locked profile directory.
+- **Remote-view route binding** - Hardened route display binding and many-to-many smoke behavior when route-pool JSON lacks display names.
+
+### Documentation
+
+- **Operator checkpoint guidance** - Updated README, CLI help, docs pages, skill guidance, roadmap, runbook, plans, and validation notes for the new service, dashboard, install, and remote-view checkpoint surfaces.
+
 ## 0.26.1
 
 <!-- release:start -->

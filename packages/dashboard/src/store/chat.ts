@@ -4,30 +4,18 @@ import { atom } from "jotai";
 import { useEffect } from "react";
 import { useAtomCallback } from "jotai/utils";
 import { useCallback } from "react";
-
-const DAEMON_URL = process.env.NEXT_PUBLIC_DAEMON_URL || "";
-
-function daemonBase(): string {
-  if (typeof window === "undefined" || !DAEMON_URL) return "";
-  try {
-    const daemon = new URL(DAEMON_URL);
-    if (window.location.host === daemon.host) return "";
-    return DAEMON_URL;
-  } catch {
-    return "";
-  }
-}
+import { CHAT_API_URL, CHAT_STATUS_API_URL, MODELS_API_URL } from "@/lib/dashboard-api";
 
 function getChatStatusUrl(): string {
-  return `${daemonBase()}/api/chat/status`;
+  return CHAT_STATUS_API_URL;
 }
 
 export function getChatApiUrl(): string {
-  return `${daemonBase()}/api/chat`;
+  return CHAT_API_URL;
 }
 
 export function getModelsApiUrl(): string {
-  return `${daemonBase()}/api/models`;
+  return MODELS_API_URL;
 }
 
 export interface ModelInfo {

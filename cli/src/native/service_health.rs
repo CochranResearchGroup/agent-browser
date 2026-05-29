@@ -1,16 +1,16 @@
 //! Health and target probes for persisted service-mode browser records.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use super::browser::BrowserShutdownOutcome;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
 use super::service_model::{
     BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserSession,
-    BrowserTab, LeaseState, ServiceEvent, ServiceEventKind, ServiceIncident,
+    BrowserTab, DisplayAllocation, LeaseState, ServiceEvent, ServiceEventKind, ServiceIncident,
     ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
@@ -336,6 +336,7 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
     let before = state.clone();
     refresh_persisted_browser_health(state).await;
     reconcile_live_browser_targets(state).await;
+    let remote_view_repair = reconcile_remote_view_state(state);
 
     let changed_browsers = state
         .browsers
@@ -376,6 +377,13 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
                 "changedBrowsers": summary.changed_browsers,
                 "tabCount": state.tabs.len(),
                 "changedTabs": changed_tab_count(state, &before),
+                "remoteView": {
+                    "orphanedDisplayAllocations": remote_view_repair.orphaned_display_allocations,
+                    "orphanedRoutes": remote_view_repair.orphaned_routes,
+                    "releasedViewerLeases": remote_view_repair.released_viewer_leases,
+                    "expiredViewerLeases": remote_view_repair.expired_viewer_leases,
+                    "clearedControllerLeases": remote_view_repair.cleared_controller_leases,
+                },
             })),
             ..new_service_event()
         },
@@ -433,32 +441,25 @@ pub fn persist_service_browser_record_in_repository(
                     .as_ref()
                     .and_then(|browser| browser.profile_id.clone())
             });
-        let view_streams = metadata
-            .as_ref()
-            .map(|metadata| metadata.view_streams.clone())
-            .filter(|streams| !streams.is_empty())
-            .or_else(|| {
+        let (view_streams, display_isolation, display_name) = match metadata.as_ref() {
+            Some(metadata) => (
+                metadata.view_streams.clone(),
+                metadata.display_isolation.clone(),
+                metadata.display_name.clone(),
+            ),
+            None => (
                 previous
                     .as_ref()
                     .map(|browser| browser.view_streams.clone())
-            })
-            .unwrap_or_default();
-        let display_isolation = metadata
-            .as_ref()
-            .and_then(|metadata| metadata.display_isolation.clone())
-            .or_else(|| {
+                    .unwrap_or_default(),
                 previous
                     .as_ref()
-                    .and_then(|browser| browser.display_isolation.clone())
-            });
-        let display_name = metadata
-            .as_ref()
-            .and_then(|metadata| metadata.display_name.clone())
-            .or_else(|| {
+                    .and_then(|browser| browser.display_isolation.clone()),
                 previous
                     .as_ref()
-                    .and_then(|browser| browser.display_name.clone())
-            });
+                    .and_then(|browser| browser.display_name.clone()),
+            ),
+        };
         let mut browser = BrowserProcess {
             id: id.clone(),
             profile_id: profile_id.clone(),
@@ -466,6 +467,9 @@ pub fn persist_service_browser_record_in_repository(
             health,
             display_isolation,
             display_name,
+            display_allocation_id: previous
+                .as_ref()
+                .and_then(|browser| browser.display_allocation_id.clone()),
             pid,
             cdp_endpoint,
             view_streams,
@@ -473,6 +477,12 @@ pub fn persist_service_browser_record_in_repository(
             last_error,
             last_health_observation: None,
         };
+        upsert_browser_display_allocation(
+            service_state,
+            session_id,
+            &mut browser,
+            metadata.as_ref(),
+        );
         let observation_details = browser_health_observation_details(&browser, None);
         apply_browser_health_observation(&mut browser, Some(&observation_details));
         let metadata_changed = if let Some(metadata) = metadata.as_ref() {
@@ -507,6 +517,86 @@ pub fn persist_service_browser_record_in_repository(
         service_state.browsers.insert(id, browser);
         Ok(())
     })
+}
+
+fn upsert_browser_display_allocation(
+    service_state: &mut ServiceState,
+    session_id: &str,
+    browser: &mut BrowserProcess,
+    metadata: Option<&ServiceLaunchMetadata>,
+) {
+    if browser.host != BrowserHost::RemoteHeaded {
+        browser.display_allocation_id = None;
+        return;
+    }
+    let Some(display_isolation) = browser.display_isolation.clone() else {
+        return;
+    };
+    let allocation_id = browser.display_allocation_id.clone().unwrap_or_else(|| {
+        display_allocation_id_for_browser(
+            session_id,
+            &display_isolation,
+            browser.display_name.as_deref(),
+        )
+    });
+    let now = current_timestamp();
+    let allocation = service_state
+        .display_allocations
+        .entry(allocation_id.clone())
+        .or_insert_with(|| DisplayAllocation {
+            id: allocation_id.clone(),
+            display_isolation: display_isolation.clone(),
+            created_at: Some(now.clone()),
+            ..DisplayAllocation::default()
+        });
+    allocation.display_name = browser.display_name.clone();
+    allocation.display_isolation = display_isolation;
+    allocation.owner_browser_id = Some(browser.id.clone());
+    allocation.owner_session_id = Some(session_id.to_string());
+    allocation.profile_id = browser.profile_id.clone();
+    allocation.browser_build = metadata
+        .and_then(|metadata| metadata.browser_capability_launch.as_ref())
+        .and_then(|launch| launch.get("browserBuild"))
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    allocation.host = Some(browser.host);
+    allocation.state = match browser.health {
+        BrowserHealth::Ready => "ready",
+        BrowserHealth::ProcessExited => "orphaned",
+        _ => "allocating",
+    }
+    .to_string();
+    allocation.pid_hints = browser
+        .pid
+        .map(|pid| serde_json::json!({ "browserPid": pid }));
+    allocation.updated_at = Some(now);
+    browser.display_allocation_id = Some(allocation_id.clone());
+    for stream in &mut browser.view_streams {
+        if stream.display_allocation_id.is_none() {
+            stream.display_allocation_id = Some(allocation_id.clone());
+        }
+    }
+}
+
+fn display_allocation_id_for_browser(
+    session_id: &str,
+    display_isolation: &str,
+    display_name: Option<&str>,
+) -> String {
+    let scope = match display_isolation {
+        "private_virtual_display" => format!("session:{}", session_id),
+        "shared_display" | "ambient_display" => display_name.unwrap_or(session_id).to_string(),
+        _ => session_id.to_string(),
+    };
+    format!(
+        "display:{}:{}",
+        display_isolation,
+        scope
+            .chars()
+            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+            .collect::<String>()
+            .trim_matches('-')
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -647,6 +737,7 @@ pub(crate) fn stale_browser_process_record(
         health,
         display_isolation: previous.and_then(|browser| browser.display_isolation.clone()),
         display_name: previous.and_then(|browser| browser.display_name.clone()),
+        display_allocation_id: previous.and_then(|browser| browser.display_allocation_id.clone()),
         pid,
         cdp_endpoint,
         view_streams: previous
@@ -685,6 +776,78 @@ pub(crate) fn close_health_from_outcome(
     (BrowserHealth::NotStarted, None)
 }
 
+fn release_browser_display_allocation_after_close(
+    service_state: &mut ServiceState,
+    browser: &BrowserProcess,
+    session_id: &str,
+    outcome: Option<&BrowserShutdownOutcome>,
+) {
+    let Some(display_allocation_id) = browser.display_allocation_id.as_ref() else {
+        return;
+    };
+    let (state, failure_class) = match outcome {
+        Some(outcome) if outcome.os_degraded_possible() => {
+            ("degraded", "browser_shutdown_force_kill_failed")
+        }
+        Some(outcome) if outcome.browser_degraded() => ("degraded", "browser_shutdown_degraded"),
+        _ => ("released", "operator_requested_close"),
+    };
+    let now = current_timestamp();
+    let route_ids = {
+        let Some(allocation) = service_state
+            .display_allocations
+            .get_mut(display_allocation_id)
+        else {
+            return;
+        };
+        if allocation.owner_browser_id.as_deref() != Some(browser.id.as_str())
+            || allocation.owner_session_id.as_deref() != Some(session_id)
+        {
+            return;
+        }
+
+        let route_ids = allocation.route_ids.clone();
+        allocation.state = state.to_string();
+        allocation.updated_at = Some(now.clone());
+        allocation.readiness = Some(serde_json::json!({
+            "state": state,
+            "reason": "operator_requested_close",
+            "failureClass": failure_class,
+            "updatedAt": now,
+        }));
+        if state == "released" {
+            allocation.route_ids.clear();
+        }
+        route_ids
+    };
+    if state == "released" {
+        for route_id in route_ids {
+            if let Some(route) = service_state.remote_view_routes.get_mut(&route_id) {
+                if route.display_allocation_id.as_deref() == Some(display_allocation_id.as_str())
+                    && route.browser_id.as_deref() == Some(browser.id.as_str())
+                {
+                    route.state = "released".to_string();
+                    route.last_provider_event =
+                        Some("route_released_after_browser_close".to_string());
+                    route.controller_lease_id = None;
+                    route.viewer_lease_ids.clear();
+                    route.readiness = Some(serde_json::json!({
+                        "state": "released",
+                        "reason": "browser_closed",
+                        "updatedAt": now,
+                    }));
+                }
+            }
+            for entry in service_state.route_pool.values_mut() {
+                if entry.current_route_allocation_id.as_deref() == Some(route_id.as_str()) {
+                    entry.state = "available".to_string();
+                    entry.current_route_allocation_id = None;
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn persist_closed_browser_health_in_repository(
     repository: &impl ServiceStateRepository,
     session_id: &str,
@@ -700,9 +863,25 @@ pub(crate) fn persist_closed_browser_health_in_repository(
         let (health, last_error) = close_health_from_outcome(outcome);
         let mut browser = BrowserProcess {
             id: id.clone(),
+            profile_id: previous
+                .as_ref()
+                .and_then(|browser| browser.profile_id.clone()),
             host,
             health,
+            display_isolation: previous
+                .as_ref()
+                .and_then(|browser| browser.display_isolation.clone()),
+            display_name: previous
+                .as_ref()
+                .and_then(|browser| browser.display_name.clone()),
+            display_allocation_id: previous
+                .as_ref()
+                .and_then(|browser| browser.display_allocation_id.clone()),
             last_error,
+            view_streams: previous
+                .as_ref()
+                .map(|browser| browser.view_streams.clone())
+                .unwrap_or_default(),
             active_session_ids: vec![session_id.to_string()],
             ..BrowserProcess::default()
         };
@@ -741,6 +920,12 @@ pub(crate) fn persist_closed_browser_health_in_repository(
             previous.as_ref(),
             &browser,
             shutdown_details,
+        );
+        release_browser_display_allocation_after_close(
+            service_state,
+            &browser,
+            session_id,
+            outcome,
         );
         if let Some(session) = service_state.sessions.get_mut(session_id) {
             session.lease = LeaseState::Released;
@@ -944,6 +1129,30 @@ pub fn merge_reconciled_service_state(
         target_session.tab_ids = reconciled_session.tab_ids.clone();
     }
 
+    for (id, reconciled_allocation) in &reconciled.display_allocations {
+        target
+            .display_allocations
+            .insert(id.clone(), reconciled_allocation.clone());
+    }
+
+    for (id, reconciled_route) in &reconciled.remote_view_routes {
+        target
+            .remote_view_routes
+            .insert(id.clone(), reconciled_route.clone());
+    }
+
+    for (id, reconciled_lease) in &reconciled.viewer_leases {
+        target
+            .viewer_leases
+            .insert(id.clone(), reconciled_lease.clone());
+    }
+
+    for (id, reconciled_pool_entry) in &reconciled.route_pool {
+        target
+            .route_pool
+            .insert(id.clone(), reconciled_pool_entry.clone());
+    }
+
     let before_event_ids = before
         .events
         .iter()
@@ -1060,6 +1269,224 @@ async fn reconcile_live_browser_targets(state: &mut ServiceState) {
         };
         reconcile_browser_targets(state, &browser_id, &browser, targets);
     }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct RemoteViewReconcileRepair {
+    orphaned_display_allocations: usize,
+    orphaned_routes: usize,
+    released_viewer_leases: usize,
+    expired_viewer_leases: usize,
+    cleared_controller_leases: usize,
+}
+
+fn reconcile_remote_view_state(state: &mut ServiceState) -> RemoteViewReconcileRepair {
+    let now = current_timestamp();
+    let browser_health = state
+        .browsers
+        .iter()
+        .map(|(id, browser)| (id.clone(), browser.health))
+        .collect::<BTreeMap<_, _>>();
+    let mut repair = RemoteViewReconcileRepair::default();
+
+    for allocation in state.display_allocations.values_mut() {
+        if matches!(allocation.state.as_str(), "released" | "failed") {
+            continue;
+        }
+        let Some(owner_browser_id) = allocation.owner_browser_id.as_deref() else {
+            continue;
+        };
+        if browser_health.get(owner_browser_id) == Some(&BrowserHealth::Ready) {
+            continue;
+        }
+        allocation.state = "orphaned".to_string();
+        allocation.updated_at = Some(now.clone());
+        allocation.last_health_check_at = Some(now.clone());
+        allocation.readiness = Some(json!({
+            "state": "orphaned",
+            "component": "browser_process",
+            "reason": "owner_browser_not_ready",
+            "browserId": owner_browser_id,
+            "browserHealth": browser_health
+                .get(owner_browser_id)
+                .map(|health| service_browser_health_name(*health))
+                .unwrap_or("missing"),
+            "updatedAt": now,
+        }));
+        repair.orphaned_display_allocations += 1;
+    }
+
+    let display_states = state
+        .display_allocations
+        .iter()
+        .map(|(id, allocation)| (id.clone(), allocation.state.clone()))
+        .collect::<BTreeMap<_, _>>();
+
+    for route in state.remote_view_routes.values_mut() {
+        if matches!(route.state.as_str(), "released" | "failed") {
+            continue;
+        }
+        let display_problem = route
+            .display_allocation_id
+            .as_ref()
+            .and_then(|id| {
+                display_states
+                    .get(id)
+                    .map(|state| (id.clone(), state.clone()))
+            })
+            .and_then(|(id, state)| {
+                if matches!(state.as_str(), "ready" | "allocating") {
+                    None
+                } else {
+                    Some(("display_allocation_unavailable", id, state))
+                }
+            })
+            .or_else(|| {
+                route
+                    .display_allocation_id
+                    .as_ref()
+                    .filter(|id| !display_states.contains_key(*id))
+                    .map(|id| {
+                        (
+                            "display_allocation_missing",
+                            id.clone(),
+                            "missing".to_string(),
+                        )
+                    })
+            });
+        let browser_problem = route
+            .browser_id
+            .as_ref()
+            .and_then(|id| browser_health.get(id).map(|health| (id.clone(), *health)))
+            .and_then(|(id, health)| {
+                if health == BrowserHealth::Ready {
+                    None
+                } else {
+                    Some((
+                        "browser_not_ready",
+                        id,
+                        service_browser_health_name(health).to_string(),
+                    ))
+                }
+            })
+            .or_else(|| {
+                route
+                    .browser_id
+                    .as_ref()
+                    .filter(|id| !browser_health.contains_key(*id))
+                    .map(|id| ("browser_missing", id.clone(), "missing".to_string()))
+            });
+        let Some((reason, entity_id, entity_state)) = display_problem.or(browser_problem) else {
+            continue;
+        };
+        route.state = "orphaned".to_string();
+        route.last_provider_event = Some(reason.to_string());
+        route.readiness = Some(json!({
+            "state": "orphaned",
+            "component": if reason.starts_with("display") { "display_allocation" } else { "browser_process" },
+            "reason": reason,
+            "entityId": entity_id,
+            "entityState": entity_state,
+            "updatedAt": now,
+        }));
+        repair.orphaned_routes += 1;
+    }
+
+    let route_states = state
+        .remote_view_routes
+        .iter()
+        .map(|(id, route)| (id.clone(), route.state.clone()))
+        .collect::<BTreeMap<_, _>>();
+
+    for lease in state.viewer_leases.values_mut() {
+        if !viewer_lease_is_reconcile_active(lease) {
+            continue;
+        }
+        let route_unavailable = lease
+            .route_id
+            .as_ref()
+            .map(|id| {
+                !matches!(
+                    route_states.get(id).map(String::as_str),
+                    Some("ready" | "reconnecting" | "allocating")
+                )
+            })
+            .unwrap_or(true);
+        if viewer_lease_is_expired(lease, &now) {
+            lease.state = "expired".to_string();
+            lease.last_viewer_event = Some("expired".to_string());
+            lease.updated_at = Some(now.clone());
+            lease.last_heartbeat_at = Some(now.clone());
+            repair.expired_viewer_leases += 1;
+        } else if route_unavailable {
+            lease.state = "disconnected".to_string();
+            lease.last_viewer_event = Some("route_unavailable".to_string());
+            lease.updated_at = Some(now.clone());
+            lease.last_heartbeat_at = Some(now.clone());
+            repair.released_viewer_leases += 1;
+        }
+    }
+
+    let active_viewer_leases = state
+        .viewer_leases
+        .iter()
+        .filter(|(_id, lease)| viewer_lease_is_reconcile_active(lease))
+        .map(|(id, _lease)| id.clone())
+        .collect::<BTreeSet<_>>();
+    for route in state.remote_view_routes.values_mut() {
+        let before_controller = route.controller_lease_id.clone();
+        route
+            .viewer_lease_ids
+            .retain(|id| active_viewer_leases.contains(id));
+        if route
+            .controller_lease_id
+            .as_ref()
+            .is_some_and(|id| !active_viewer_leases.contains(id))
+        {
+            route.controller_lease_id = None;
+        }
+        if before_controller.is_some() && route.controller_lease_id.is_none() {
+            repair.cleared_controller_leases += 1;
+        }
+    }
+
+    for browser in state.browsers.values_mut() {
+        for stream in &mut browser.view_streams {
+            stream
+                .viewer_lease_ids
+                .retain(|id| active_viewer_leases.contains(id));
+            if stream
+                .controller_lease_id
+                .as_ref()
+                .is_some_and(|id| !active_viewer_leases.contains(id))
+            {
+                stream.controller_lease_id = None;
+            }
+            if let Some(route_id) = stream.route_id.as_ref() {
+                if let Some(route) = state.remote_view_routes.get(route_id) {
+                    stream.remote_readiness = route.readiness.clone();
+                }
+            }
+        }
+    }
+
+    repair
+}
+
+fn viewer_lease_is_reconcile_active(lease: &super::service_model::ViewerLease) -> bool {
+    !matches!(
+        lease.state.as_str(),
+        "disconnected" | "expired" | "failed" | "released"
+    )
+}
+
+fn viewer_lease_is_expired(lease: &super::service_model::ViewerLease, now: &str) -> bool {
+    lease
+        .expires_at
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some_and(|expires_at| expires_at <= now)
 }
 
 fn reconcile_browser_targets(
@@ -1732,7 +2159,10 @@ fn pid_is_running(pid: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::service_model::{JobState, ServiceJob, ServiceProvider, SitePolicy};
+    use crate::native::service_model::{
+        ControlInputProvider, DisplayAllocation, JobState, RemoteViewRoute, RoutePoolEntry,
+        ServiceJob, ServiceProvider, SitePolicy, ViewStream, ViewStreamProvider, ViewerLease,
+    };
     use crate::native::service_store::{
         mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
     };
@@ -1977,6 +2407,163 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reconcile_orphans_remote_view_state_for_unavailable_browser() {
+        let mut state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::ProcessExited,
+                    display_allocation_id: Some("display-1".to_string()),
+                    view_streams: vec![ViewStream {
+                        id: "remote-headed-view".to_string(),
+                        route_id: Some("route-1".to_string()),
+                        display_allocation_id: Some("display-1".to_string()),
+                        viewer_lease_ids: vec!["lease-1".to_string()],
+                        controller_lease_id: Some("lease-1".to_string()),
+                        ..ViewStream::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            display_allocations: BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    state: "ready".to_string(),
+                    route_ids: vec!["route-1".to_string()],
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    display_allocation_id: Some("display-1".to_string()),
+                    browser_id: Some("browser-1".to_string()),
+                    state: "ready".to_string(),
+                    viewer_lease_ids: vec!["lease-1".to_string()],
+                    controller_lease_id: Some("lease-1".to_string()),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            viewer_leases: BTreeMap::from([(
+                "lease-1".to_string(),
+                ViewerLease {
+                    id: "lease-1".to_string(),
+                    route_id: Some("route-1".to_string()),
+                    browser_id: Some("browser-1".to_string()),
+                    state: "observing".to_string(),
+                    ..ViewerLease::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(summary.browser_count, 1);
+        assert_eq!(state.display_allocations["display-1"].state, "orphaned");
+        assert_eq!(state.remote_view_routes["route-1"].state, "orphaned");
+        assert_eq!(state.viewer_leases["lease-1"].state, "disconnected");
+        assert!(state.remote_view_routes["route-1"]
+            .viewer_lease_ids
+            .is_empty());
+        assert!(state.remote_view_routes["route-1"]
+            .controller_lease_id
+            .is_none());
+        assert!(state.browsers["browser-1"].view_streams[0]
+            .viewer_lease_ids
+            .is_empty());
+        assert!(state.browsers["browser-1"].view_streams[0]
+            .controller_lease_id
+            .is_none());
+        let remote_view = &state.events.last().unwrap().details.as_ref().unwrap()["remoteView"];
+        assert_eq!(remote_view["orphanedDisplayAllocations"], 1);
+        assert_eq!(remote_view["orphanedRoutes"], 1);
+        assert_eq!(remote_view["releasedViewerLeases"], 1);
+        assert_eq!(remote_view["clearedControllerLeases"], 1);
+    }
+
+    #[tokio::test]
+    async fn reconcile_expires_remote_viewer_leases_without_releasing_healthy_route() {
+        let mut state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::Ready,
+                    display_allocation_id: Some("display-1".to_string()),
+                    ..BrowserProcess::default()
+                },
+            )]),
+            display_allocations: BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    state: "ready".to_string(),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    display_allocation_id: Some("display-1".to_string()),
+                    browser_id: Some("browser-1".to_string()),
+                    state: "ready".to_string(),
+                    viewer_lease_ids: vec!["expired-lease".to_string(), "active-lease".to_string()],
+                    controller_lease_id: Some("expired-lease".to_string()),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            viewer_leases: BTreeMap::from([
+                (
+                    "expired-lease".to_string(),
+                    ViewerLease {
+                        id: "expired-lease".to_string(),
+                        route_id: Some("route-1".to_string()),
+                        browser_id: Some("browser-1".to_string()),
+                        state: "controlling".to_string(),
+                        expires_at: Some("2000-01-01T00:00:00Z".to_string()),
+                        ..ViewerLease::default()
+                    },
+                ),
+                (
+                    "active-lease".to_string(),
+                    ViewerLease {
+                        id: "active-lease".to_string(),
+                        route_id: Some("route-1".to_string()),
+                        browser_id: Some("browser-1".to_string()),
+                        state: "observing".to_string(),
+                        ..ViewerLease::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        reconcile_service_state(&mut state).await;
+
+        assert_eq!(state.display_allocations["display-1"].state, "ready");
+        assert_eq!(state.remote_view_routes["route-1"].state, "ready");
+        assert_eq!(state.viewer_leases["expired-lease"].state, "expired");
+        assert_eq!(state.viewer_leases["active-lease"].state, "observing");
+        assert_eq!(
+            state.remote_view_routes["route-1"].viewer_lease_ids,
+            vec!["active-lease".to_string()]
+        );
+        assert!(state.remote_view_routes["route-1"]
+            .controller_lease_id
+            .is_none());
+        let remote_view = &state.events.last().unwrap().details.as_ref().unwrap()["remoteView"];
+        assert_eq!(remote_view["expiredViewerLeases"], 1);
+        assert_eq!(remote_view["clearedControllerLeases"], 1);
+    }
+
+    #[tokio::test]
     async fn persisted_reconcile_preserves_overlapping_state_mutations() {
         let home = temp_home("service-reconcile-overlap");
         fs::create_dir_all(&home).unwrap();
@@ -2082,6 +2669,258 @@ mod tests {
             persisted.sessions["session-1"].tab_ids,
             vec!["target:page-1".to_string()]
         );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn remote_headed_browser_record_upserts_private_display_allocation() {
+        let home = temp_home("service-health-display-allocation");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+
+        persist_service_browser_record_in_repository(
+            &repository,
+            "persist-session",
+            BrowserHost::RemoteHeaded,
+            BrowserHealth::Ready,
+            Some(1234),
+            Some("http://127.0.0.1:9222".to_string()),
+            None,
+            Some(ServiceLaunchMetadata {
+                profile_id: Some("work".to_string()),
+                browser_capability_launch: Some(serde_json::json!({
+                    "browserBuild": "stealthcdp_chromium"
+                })),
+                view_streams: vec![ViewStream {
+                    id: "remote-headed-view".to_string(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                    url: Some("/guacamole/#/client/browser-1".to_string()),
+                    display_allocation_id: None,
+                    ..ViewStream::default()
+                }],
+                display_isolation: Some("private_virtual_display".to_string()),
+                display_name: Some(":91".to_string()),
+                ..ServiceLaunchMetadata::default()
+            }),
+        )
+        .unwrap();
+
+        let state = store.load().unwrap();
+        let browser = &state.browsers["session:persist-session"];
+        let allocation_id = browser.display_allocation_id.as_ref().unwrap();
+        assert_eq!(
+            allocation_id,
+            "display:private_virtual_display:session-persist-session"
+        );
+        assert_eq!(
+            browser.view_streams[0].display_allocation_id.as_deref(),
+            Some(allocation_id.as_str())
+        );
+
+        let allocation = &state.display_allocations[allocation_id];
+        assert_eq!(allocation.display_name.as_deref(), Some(":91"));
+        assert_eq!(allocation.display_isolation, "private_virtual_display");
+        assert_eq!(
+            allocation.owner_browser_id.as_deref(),
+            Some("session:persist-session")
+        );
+        assert_eq!(
+            allocation.owner_session_id.as_deref(),
+            Some("persist-session")
+        );
+        assert_eq!(allocation.profile_id.as_deref(), Some("work"));
+        assert_eq!(
+            allocation.browser_build.as_deref(),
+            Some("stealthcdp_chromium")
+        );
+        assert_eq!(allocation.host, Some(BrowserHost::RemoteHeaded));
+        assert_eq!(allocation.state, "ready");
+        assert_eq!(
+            allocation.pid_hints.as_ref().unwrap()["browserPid"],
+            serde_json::json!(1234)
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn private_display_allocation_ids_are_scoped_per_session() {
+        let home = temp_home("service-health-display-allocation-distinct");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+
+        for session_id in ["browser-a", "browser-b"] {
+            persist_service_browser_record_in_repository(
+                &repository,
+                session_id,
+                BrowserHost::RemoteHeaded,
+                BrowserHealth::Ready,
+                Some(1234),
+                Some("http://127.0.0.1:9222".to_string()),
+                None,
+                Some(ServiceLaunchMetadata {
+                    profile_id: Some(format!("work-{session_id}")),
+                    view_streams: vec![ViewStream {
+                        id: format!("view-{session_id}"),
+                        provider: ViewStreamProvider::RdpGateway,
+                        display_allocation_id: None,
+                        ..ViewStream::default()
+                    }],
+                    display_isolation: Some("private_virtual_display".to_string()),
+                    display_name: Some(":91".to_string()),
+                    ..ServiceLaunchMetadata::default()
+                }),
+            )
+            .unwrap();
+        }
+
+        let state = store.load().unwrap();
+        let browser_a = &state.browsers["session:browser-a"];
+        let browser_b = &state.browsers["session:browser-b"];
+        assert_ne!(
+            browser_a.display_allocation_id,
+            browser_b.display_allocation_id
+        );
+        assert_eq!(
+            browser_a.display_allocation_id.as_deref(),
+            Some("display:private_virtual_display:session-browser-a")
+        );
+        assert_eq!(
+            browser_b.display_allocation_id.as_deref(),
+            Some("display:private_virtual_display:session-browser-b")
+        );
+        assert_eq!(state.display_allocations.len(), 2);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn close_releases_only_owned_display_allocation() {
+        let home = temp_home("service-health-close-display-release");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let browser_a = "session:browser-a".to_string();
+        let browser_b = "session:browser-b".to_string();
+        let allocation_a = "display:private_virtual_display:session-browser-a".to_string();
+        let allocation_b = "display:private_virtual_display:session-browser-b".to_string();
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([
+                    (
+                        browser_a.clone(),
+                        BrowserProcess {
+                            id: browser_a.clone(),
+                            host: BrowserHost::RemoteHeaded,
+                            health: BrowserHealth::Ready,
+                            display_isolation: Some("private_virtual_display".to_string()),
+                            display_name: Some(":91".to_string()),
+                            display_allocation_id: Some(allocation_a.clone()),
+                            active_session_ids: vec!["browser-a".to_string()],
+                            ..BrowserProcess::default()
+                        },
+                    ),
+                    (
+                        browser_b.clone(),
+                        BrowserProcess {
+                            id: browser_b.clone(),
+                            host: BrowserHost::RemoteHeaded,
+                            health: BrowserHealth::Ready,
+                            display_isolation: Some("private_virtual_display".to_string()),
+                            display_name: Some(":92".to_string()),
+                            display_allocation_id: Some(allocation_b.clone()),
+                            active_session_ids: vec!["browser-b".to_string()],
+                            ..BrowserProcess::default()
+                        },
+                    ),
+                ]),
+                display_allocations: BTreeMap::from([
+                    (
+                        allocation_a.clone(),
+                        DisplayAllocation {
+                            id: allocation_a.clone(),
+                            display_name: Some(":91".to_string()),
+                            display_isolation: "private_virtual_display".to_string(),
+                            owner_browser_id: Some(browser_a.clone()),
+                            owner_session_id: Some("browser-a".to_string()),
+                            state: "ready".to_string(),
+                            route_ids: vec!["guacamole:4".to_string()],
+                            ..DisplayAllocation::default()
+                        },
+                    ),
+                    (
+                        allocation_b.clone(),
+                        DisplayAllocation {
+                            id: allocation_b.clone(),
+                            display_name: Some(":92".to_string()),
+                            display_isolation: "private_virtual_display".to_string(),
+                            owner_browser_id: Some(browser_b.clone()),
+                            owner_session_id: Some("browser-b".to_string()),
+                            state: "ready".to_string(),
+                            ..DisplayAllocation::default()
+                        },
+                    ),
+                ]),
+                remote_view_routes: BTreeMap::from([(
+                    "guacamole:4".to_string(),
+                    RemoteViewRoute {
+                        id: "guacamole:4".to_string(),
+                        provider: ViewStreamProvider::RdpGateway,
+                        display_allocation_id: Some(allocation_a.clone()),
+                        browser_id: Some(browser_a.clone()),
+                        session_id: Some("browser-a".to_string()),
+                        state: "ready".to_string(),
+                        viewer_lease_ids: vec!["viewer:guacamole:4:a".to_string()],
+                        controller_lease_id: Some("viewer:guacamole:4:a".to_string()),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                route_pool: BTreeMap::from([(
+                    "pool-a".to_string(),
+                    RoutePoolEntry {
+                        id: "pool-a".to_string(),
+                        provider: ViewStreamProvider::RdpGateway,
+                        route_id: "guacamole:4".to_string(),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some("guacamole:4".to_string()),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        persist_closed_browser_health_in_repository(
+            &repository,
+            "browser-a",
+            Some(&BrowserShutdownOutcome {
+                polite_close_attempted: true,
+                polite_close_succeeded: true,
+                ..BrowserShutdownOutcome::default()
+            }),
+        )
+        .unwrap();
+
+        let state = store.load().unwrap();
+        let closed_browser = &state.browsers[&browser_a];
+        assert_eq!(closed_browser.health, BrowserHealth::NotStarted);
+        assert_eq!(
+            closed_browser.display_allocation_id.as_deref(),
+            Some(allocation_a.as_str())
+        );
+        let released = &state.display_allocations[&allocation_a];
+        assert_eq!(released.state, "released");
+        assert_eq!(
+            released.readiness.as_ref().unwrap()["reason"],
+            "operator_requested_close"
+        );
+        assert!(released.route_ids.is_empty());
+        assert_eq!(state.remote_view_routes["guacamole:4"].state, "released");
+        assert_eq!(state.route_pool["pool-a"].state, "available");
+        assert_eq!(state.route_pool["pool-a"].current_route_allocation_id, None);
+        assert_eq!(state.display_allocations[&allocation_b].state, "ready");
+        assert_eq!(state.browsers[&browser_b].health, BrowserHealth::Ready);
 
         let _ = fs::remove_dir_all(&home);
     }

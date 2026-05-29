@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -24,6 +25,7 @@ const context = createSmokeContext({
   prefix: 'ab-dashboard-remote-control-ui-',
   sessionPrefix: 'dashboard-remote-control',
 });
+context.env.AGENT_BROWSER_DASHBOARD_AUTH_FILE = join(context.agentHome, 'dashboard-auth.json');
 
 const { session, tempHome } = context;
 const uiSession = `${session}-ui`;
@@ -74,6 +76,68 @@ async function evalInDashboard(script, timeoutMs = 60000) {
   return parsed.data?.result;
 }
 
+function parseEnvText(text) {
+  const values = {};
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const index = trimmed.indexOf('=');
+    if (index <= 0) continue;
+    const key = trimmed.slice(0, index).trim();
+    let value = trimmed.slice(index + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    values[key] = value.replace(/\\"/g, '"');
+  }
+  return values;
+}
+
+async function waitForDashboardCredentials(timeoutMs = 60000) {
+  const path = join(context.agentHome, 'dashboard-auth.env');
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (existsSync(path)) {
+      const values = parseEnvText(readFileSync(path, 'utf8'));
+      const username =
+        values.AGENT_BROWSER_DASHBOARD_CODEX_USERNAME ||
+        values.AGENT_BROWSER_DASHBOARD_ADMIN_USERNAME;
+      const password =
+        values.AGENT_BROWSER_DASHBOARD_CODEX_PASSWORD ||
+        values.AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD;
+      if (username && password) return { username, password };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`Dashboard bootstrap credential file was not ready at ${path}`);
+}
+
+async function loginDashboard(credentials) {
+  const result = await evalInDashboard(`
+(async () => {
+  const response = await fetch("/api/dashboard-auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({
+      username: ${JSON.stringify(credentials.username)},
+      password: ${JSON.stringify(credentials.password)},
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.authenticated !== true) {
+    return { ok: false, status: response.status, payload };
+  }
+  location.reload();
+  return { ok: true, status: response.status, username: payload.user?.username || null };
+})()
+`, 30000);
+  assert(result?.ok === true, `dashboard login failed: ${JSON.stringify(result)}`);
+}
+
 async function waitForDashboardState(predicate, label, timeoutMs = 45000) {
   const started = Date.now();
   let lastState = null;
@@ -90,11 +154,14 @@ function dashboardStateScript(targetBrowserId, targetServiceTabId) {
 (() => {
   const text = document.body?.innerText || "";
   const buttons = Array.from(document.querySelectorAll("button"));
-  const serviceButton = buttons.find((button) => button.textContent?.trim() === "Service");
+  const controls = Array.from(document.querySelectorAll("button, a"));
+  const serviceButton = controls.find((control) => control.textContent?.trim() === "Service");
   const rowButton = buttons.find((button) => button.getAttribute("aria-label") === "Inspect browser ${targetBrowserId}");
   const workspaceButtons = Array.from(document.querySelectorAll(".service-workspace-tabs button"));
   const sessionsWorkspaceButton = workspaceButtons.find((button) => button.textContent?.includes("Sessions"));
-  const sessionsFilterInput = document.querySelector('input[placeholder="Filter sessions, tabs, profiles, URLs"]');
+  const tabsWorkspaceButton = workspaceButtons.find((button) => button.textContent?.includes("Tabs"));
+  const sessionsFilterInput = document.querySelector('input[placeholder="Filter sessions, profiles, services"], input[placeholder="Filter sessions, tabs, profiles, URLs"]');
+  const tabsFilterInput = document.querySelector('input[placeholder="Filter tabs, browsers, URLs"]');
   const targetTabButton = ${JSON.stringify(targetServiceTabId)}
     ? buttons.find((button) => button.getAttribute("aria-label") === "Inspect tab ${targetServiceTabId}")
     : null;
@@ -115,6 +182,8 @@ function dashboardStateScript(targetBrowserId, targetServiceTabId) {
     targetBrowserRowText: rowButton?.textContent || "",
     hasSessionsWorkspaceButton: Boolean(sessionsWorkspaceButton),
     hasSessionsFilterInput: Boolean(sessionsFilterInput),
+    hasTabsWorkspaceButton: Boolean(tabsWorkspaceButton),
+    hasTabsFilterInput: Boolean(tabsFilterInput),
     hasTargetTabRow: Boolean(targetTabButton),
     targetTabRowText: targetTabRow?.textContent || "",
     hasTargetTabControlButton: Boolean(targetTabControlButton),
@@ -132,6 +201,7 @@ function dashboardStateScript(targetBrowserId, targetServiceTabId) {
     dialogFrameSrc: frame?.getAttribute("src") || null,
     hasRemoteViewText: text.includes("Remote view"),
     hasRemoteControlText: text.includes("Remote control"),
+    textSample: text.replace(/\\s+/g, " ").slice(0, 1200),
   };
 })()
 `;
@@ -154,7 +224,7 @@ async function waitForServiceTabRecord(timeoutMs = 30000) {
 async function clickDashboardServiceTab() {
   const result = await evalInDashboard(`
 (() => {
-  const button = Array.from(document.querySelectorAll("button")).find((item) => item.textContent?.trim() === "Service");
+  const button = Array.from(document.querySelectorAll("button, a")).find((item) => item.textContent?.trim() === "Service");
   if (!button) return { clicked: false };
   button.click();
   return { clicked: true };
@@ -195,10 +265,28 @@ async function clickSessionsWorkspaceTab() {
   assert(result?.clicked === true, `Sessions workspace tab was not clickable: ${JSON.stringify(result)}`);
 }
 
+async function clickTabsWorkspaceTab() {
+  const result = await evalInDashboard(`
+(() => {
+  const button = document.querySelector('.service-workspace-tabs button[value="tabs"]')
+    || Array.from(document.querySelectorAll(".service-workspace-tabs button"))
+      .find((item) => item.textContent?.includes("Tabs"));
+  if (!button) return { clicked: false };
+  button.scrollIntoView({ block: "center", inline: "nearest" });
+  button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
+  button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  button.click();
+  return { clicked: true };
+})()
+`);
+  assert(result?.clicked === true, `Tabs workspace tab was not clickable: ${JSON.stringify(result)}`);
+}
+
 async function filterSessionsWorkspace(query) {
   const result = await evalInDashboard(`
 (() => {
-  const input = document.querySelector('input[placeholder="Filter sessions, tabs, profiles, URLs"]');
+  const input = document.querySelector('input[placeholder="Filter sessions, profiles, services"], input[placeholder="Filter sessions, tabs, profiles, URLs"]');
   if (!input) return { changed: false, reason: "missing" };
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   input.focus();
@@ -209,6 +297,22 @@ async function filterSessionsWorkspace(query) {
 })()
 `);
   assert(result?.changed === true, `Sessions workspace filter was not editable: ${JSON.stringify(result)}`);
+}
+
+async function filterTabsWorkspace(query) {
+  const result = await evalInDashboard(`
+(() => {
+  const input = document.querySelector('input[placeholder="Filter tabs, browsers, URLs"]');
+  if (!input) return { changed: false, reason: "missing" };
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  input.focus();
+  setter?.call(input, ${JSON.stringify(query)});
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: ${JSON.stringify(query)} }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return { changed: true, value: input.value };
+})()
+`);
+  assert(result?.changed === true, `Tabs workspace filter was not editable: ${JSON.stringify(result)}`);
 }
 
 async function clickTargetTabControl() {
@@ -316,6 +420,8 @@ try {
   const opened = parseJsonOutput(openResult.stdout, 'dashboard open');
   assert(opened.success === true, `dashboard open failed: ${openResult.stdout}${openResult.stderr}`);
   await runCli(context, ['--json', '--session', uiSession, 'set', 'viewport', '1440', '900']);
+  const dashboardCredentials = await waitForDashboardCredentials();
+  await loginDashboard(dashboardCredentials);
 
   await waitForDashboardState((state) => state?.hasServiceButton, 'dashboard Service navigation');
   await clickDashboardServiceTab();
@@ -343,6 +449,10 @@ try {
   await clickSessionsWorkspaceTab();
   await waitForDashboardState((state) => state?.hasSessionsFilterInput, 'Sessions workspace filter');
   await filterSessionsWorkspace(targetTabId);
+  await waitForDashboardState((state) => state?.hasTabsWorkspaceButton, 'Tabs workspace navigation');
+  await clickTabsWorkspaceTab();
+  await waitForDashboardState((state) => state?.hasTabsFilterInput, 'Tabs workspace filter');
+  await filterTabsWorkspace(targetTabId);
   await waitForDashboardState(
     (state) =>
       state?.hasTargetTabRow &&

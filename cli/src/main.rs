@@ -8,6 +8,7 @@ mod install;
 mod mcp;
 mod native;
 mod output;
+mod remote_view_doctor;
 mod runtime_profile;
 #[cfg(test)]
 mod test_utils;
@@ -201,6 +202,88 @@ fn parse_viewport_size(value: &str) -> Result<(u32, u32), String> {
     }
 
     Ok((width, height))
+}
+
+fn non_empty_env_var(name: &str) -> Option<String> {
+    env::var(name).ok().filter(|value| !value.trim().is_empty())
+}
+
+fn launch_cmd_string(cmd: &serde_json::Value, field: &str) -> Option<String> {
+    cmd.get(field)
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn launch_cmd_requests_remote_headed(cmd: &serde_json::Value) -> bool {
+    launch_cmd_string(cmd, "browserHost").as_deref() == Some("remote_headed")
+        || launch_cmd_string(cmd, "viewStreamProvider").as_deref() == Some("rdp_gateway")
+}
+
+fn set_launch_cmd_string_if_absent(
+    cmd: &mut serde_json::Value,
+    field: &str,
+    value: Option<String>,
+) {
+    let Some(value) = value else {
+        return;
+    };
+    if launch_cmd_string(cmd, field).is_some() {
+        return;
+    }
+    cmd[field] = json!(value);
+}
+
+fn apply_remote_headed_launch_env_hints(launch_cmd: &mut serde_json::Value) {
+    if !launch_cmd_requests_remote_headed(launch_cmd) {
+        return;
+    }
+
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "remoteHeadedDisplay",
+        non_empty_env_var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY"),
+    );
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "remoteViewUrl",
+        non_empty_env_var("AGENT_BROWSER_REMOTE_VIEW_URL"),
+    );
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "frameUrl",
+        non_empty_env_var("AGENT_BROWSER_REMOTE_VIEW_FRAME_URL"),
+    );
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "externalUrl",
+        non_empty_env_var("AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL"),
+    );
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "routeId",
+        non_empty_env_var("AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID"),
+    );
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "connectionId",
+        non_empty_env_var("AGENT_BROWSER_GUACAMOLE_CONNECTION_ID"),
+    );
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "connectionName",
+        non_empty_env_var("AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME"),
+    );
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "viewStreamProvider",
+        non_empty_env_var("AGENT_BROWSER_REMOTE_VIEW_PROVIDER"),
+    );
+    set_launch_cmd_string_if_absent(
+        launch_cmd,
+        "controlInputProvider",
+        non_empty_env_var("AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER"),
+    );
 }
 
 fn print_json_error_with_type(message: impl AsRef<str>, error_type: &str) {
@@ -476,14 +559,55 @@ fn validate_browser_family(value: &str) -> Result<(), String> {
     }
 }
 
+fn runtime_profile_name_for_launch(flags: &Flags) -> Option<String> {
+    runtime_profile_name_for_launch_parts(
+        flags.runtime_profile.as_deref(),
+        flags.profile.as_deref(),
+        flags.cli_profile,
+        flags.cli_runtime_profile,
+        flags.default_runtime_profile.as_deref(),
+    )
+}
+
+fn runtime_profile_name_for_launch_parts(
+    runtime_profile: Option<&str>,
+    profile: Option<&str>,
+    cli_profile: bool,
+    cli_runtime_profile: bool,
+    default_runtime_profile: Option<&str>,
+) -> Option<String> {
+    if cli_profile && !cli_runtime_profile && profile.is_some_and(runtime_profile::looks_like_path)
+    {
+        return None;
+    }
+
+    if let Some(runtime_profile) = runtime_profile {
+        return Some(runtime_profile.to_string());
+    }
+
+    if let Some(profile) = profile {
+        if runtime_profile::looks_like_path(profile) {
+            return None;
+        }
+        return Some(profile.to_string());
+    }
+
+    Some(
+        default_runtime_profile
+            .map(str::to_string)
+            .unwrap_or_else(runtime_profile::default_runtime_profile_name),
+    )
+}
+
 fn live_runtime_status_for_flags(flags: &Flags) -> Option<RuntimeStatus> {
-    let runtime_name = flags.runtime_profile.as_ref()?;
+    let runtime_name = runtime_profile_name_for_launch(flags)?;
     let configured_user_data_dir = flags
         .configured_runtime_profiles
-        .get(runtime_name)
+        .get(&runtime_name)
         .and_then(|path| path.as_deref())
         .map(std::path::Path::new);
-    let status = runtime_status_with_user_data_dir(runtime_name, configured_user_data_dir).ok()?;
+    let status =
+        runtime_status_with_user_data_dir(runtime_name.as_str(), configured_user_data_dir).ok()?;
     (status.browser_alive && status.devtools_port.is_some() && status.devtools_reachable)
         .then_some(status)
 }
@@ -1422,7 +1546,10 @@ fn main() {
             return;
         }
         let with_deps = args.iter().any(|a| a == "--with-deps" || a == "-d");
-        run_install(with_deps);
+        let with_remote_view_privileges = args
+            .iter()
+            .any(|a| a == "--with-remote-view-privileges" || a == "--remote-view-privileges");
+        run_install(with_deps, with_remote_view_privileges);
         return;
     }
 
@@ -1477,6 +1604,10 @@ fn main() {
                 windows_browser_doctor::run_windows_browser_doctor(&clean, flags.json);
                 return;
             }
+            Some("remote-view") => {
+                remote_view_doctor::run_remote_view_doctor(&clean, flags.json);
+                return;
+            }
             Some(unknown) => {
                 if flags.json {
                     print_json_error(format!("Unknown doctor subcommand: {unknown}"));
@@ -1491,10 +1622,12 @@ fn main() {
             }
             None => {
                 if flags.json {
-                    print_json_error("Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>]");
+                    print_json_error(
+                        "Usage: agent-browser doctor <windows-browser|remote-view> [options]",
+                    );
                 } else {
                     eprintln!(
-                        "Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>]"
+                        "Usage: agent-browser doctor <windows-browser|remote-view> [options]"
                     );
                 }
                 exit(1);
@@ -1719,6 +1852,10 @@ fn main() {
         .as_ref()
         .and_then(|status| status.devtools_port)
         .map(|port| port.to_string());
+    let daemon_runtime_profile = live_runtime_status
+        .as_ref()
+        .map(|status| status.runtime_profile.as_str())
+        .or(flags.runtime_profile.as_deref());
     let daemon_opts = DaemonOptions {
         headed: flags.headed,
         debug: flags.debug,
@@ -1728,7 +1865,7 @@ fn main() {
         extensions: &flags.extensions,
         args: flags.args.as_deref(),
         user_agent: flags.user_agent.as_deref(),
-        runtime_profile: flags.runtime_profile.as_deref(),
+        runtime_profile: daemon_runtime_profile,
         proxy: proxy_server.as_deref(),
         proxy_bypass: flags.proxy_bypass.as_deref(),
         proxy_username: proxy_username.as_deref(),
@@ -1830,6 +1967,14 @@ fn main() {
             flags.cli_allow_file_access.then_some("--allow-file-access"),
             flags.cli_download_path.then_some("--download-path"),
             flags.cli_headed.then_some("--headed"),
+            flags.cli_browser_host.then_some("--browser-host"),
+            flags
+                .cli_view_stream_provider
+                .then_some("--view-stream-provider"),
+            flags
+                .cli_control_input_provider
+                .then_some("--control-input-provider"),
+            flags.cli_display_isolation.then_some("--display-isolation"),
         ]
         .into_iter()
         .flatten()
@@ -2082,9 +2227,7 @@ fn main() {
             exit(1);
         });
 
-    // Launch headed browser or configure browser options (without CDP or provider)
-    if !command_skips_browser_launch_for_prestart(&cmd)
-        && (flags.headed
+    let launch_config_requested = flags.headed
         || flags.cli_headed  // User explicitly set --headed (even if false)
         || flags.executable_path.is_some()
         || flags.runtime_profile.is_some()
@@ -2097,7 +2240,35 @@ fn main() {
         || flags.color_scheme.is_some()
         || flags.download_path.is_some()
         || flags.engine.is_some()
-        || !flags.extensions.is_empty())
+        || flags.browser_host.is_some()
+        || flags.view_stream_provider.is_some()
+        || flags.control_input_provider.is_some()
+        || flags.display_isolation.is_some()
+        || !flags.extensions.is_empty()
+        || live_runtime_status.is_some();
+    let explicit_cli_launch_config_requested = flags.cli_headed
+        || flags.cli_executable_path
+        || flags.cli_runtime_profile
+        || flags.cli_profile
+        || flags.cli_state
+        || flags.cli_proxy
+        || flags.cli_args
+        || flags.cli_user_agent
+        || flags.cli_allow_file_access
+        || flags.cli_download_path
+        || flags.cli_browser_host
+        || flags.cli_view_stream_provider
+        || flags.cli_control_input_provider
+        || flags.cli_display_isolation
+        || flags.cli_extensions;
+    let should_send_prestart_launch = launch_config_requested
+        && (!daemon_result.already_running
+            || explicit_cli_launch_config_requested
+            || live_runtime_status.is_some());
+
+    // Launch headed browser or configure browser options (without CDP or provider).
+    if !command_skips_browser_launch_for_prestart(&cmd)
+        && should_send_prestart_launch
         && flags.cdp.is_none()
         && flags.provider.is_none()
         && !flags.auto_connect
@@ -2107,6 +2278,9 @@ fn main() {
             "action": "launch",
             "headless": !flags.headed
         });
+        if flags.cli_headed {
+            launch_cmd["headlessExplicit"] = json!(true);
+        }
 
         let cmd_obj = launch_cmd
             .as_object_mut()
@@ -2135,7 +2309,11 @@ fn main() {
                 cmd_obj.insert("profile".to_string(), json!(profile_path));
             }
         }
-        if let Some(ref runtime_profile) = flags.runtime_profile {
+        let launch_runtime_profile = live_runtime_status
+            .as_ref()
+            .map(|status| status.runtime_profile.as_str())
+            .or(flags.runtime_profile.as_deref());
+        if let Some(runtime_profile) = launch_runtime_profile {
             cmd_obj.insert("runtimeProfile".to_string(), json!(runtime_profile));
             if let Some(browser_family) = flags
                 .configured_runtime_profile_browser_families
@@ -2210,12 +2388,30 @@ fn main() {
             launch_cmd["engine"] = json!(engine);
         }
 
+        if let Some(ref browser_host) = flags.browser_host {
+            launch_cmd["browserHost"] = json!(browser_host);
+        }
+
+        if let Some(ref view_stream_provider) = flags.view_stream_provider {
+            launch_cmd["viewStreamProvider"] = json!(view_stream_provider);
+        }
+
+        if let Some(ref control_input_provider) = flags.control_input_provider {
+            launch_cmd["controlInputProvider"] = json!(control_input_provider);
+        }
+
+        if let Some(ref display_isolation) = flags.display_isolation {
+            launch_cmd["displayIsolation"] = json!(display_isolation);
+        }
+
         if let Some((width, height)) = default_viewport {
             launch_cmd["viewport"] = json!({
                 "width": width,
                 "height": height,
             });
         }
+
+        apply_remote_headed_launch_env_hints(&mut launch_cmd);
 
         match send_command(launch_cmd, &flags.session) {
             Ok(resp) if !resp.success => {
@@ -2531,6 +2727,7 @@ fn command_skips_browser_launch_for_prestart(cmd: &serde_json::Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::EnvGuard;
 
     #[test]
     fn test_parse_proxy_simple() {
@@ -2623,6 +2820,92 @@ mod tests {
     }
 
     #[test]
+    fn test_apply_remote_headed_launch_env_hints_carries_view_contract() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
+            "AGENT_BROWSER_REMOTE_VIEW_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID",
+            "AGENT_BROWSER_GUACAMOLE_CONNECTION_ID",
+            "AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME",
+            "AGENT_BROWSER_REMOTE_VIEW_PROVIDER",
+            "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
+        ]);
+        guard.set("AGENT_BROWSER_REMOTE_HEADED_DISPLAY", ":10");
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_URL", "/guacamole/#/client/test");
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
+            "/guacamole/#/client/test-frame",
+        );
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
+            "/guacamole/#/client/test-external",
+        );
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID", "route-test");
+        guard.set("AGENT_BROWSER_GUACAMOLE_CONNECTION_ID", "test");
+        guard.set("AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME", "Test Browser");
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_PROVIDER", "rdp_gateway");
+        guard.set(
+            "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
+            "manual_attached_desktop",
+        );
+        let mut cmd = json!({
+            "action": "launch",
+            "browserHost": "remote_headed"
+        });
+
+        apply_remote_headed_launch_env_hints(&mut cmd);
+
+        assert_eq!(cmd["remoteHeadedDisplay"], ":10");
+        assert_eq!(cmd["remoteViewUrl"], "/guacamole/#/client/test");
+        assert_eq!(cmd["frameUrl"], "/guacamole/#/client/test-frame");
+        assert_eq!(cmd["externalUrl"], "/guacamole/#/client/test-external");
+        assert_eq!(cmd["routeId"], "route-test");
+        assert_eq!(cmd["connectionId"], "test");
+        assert_eq!(cmd["connectionName"], "Test Browser");
+        assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
+        assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
+    }
+
+    #[test]
+    fn test_apply_remote_headed_launch_env_hints_preserves_explicit_values() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
+            "AGENT_BROWSER_REMOTE_VIEW_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID",
+            "AGENT_BROWSER_GUACAMOLE_CONNECTION_ID",
+            "AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME",
+            "AGENT_BROWSER_REMOTE_VIEW_PROVIDER",
+            "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
+        ]);
+        guard.set("AGENT_BROWSER_REMOTE_HEADED_DISPLAY", ":10");
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_URL", "/guacamole/#/client/env");
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_PROVIDER", "rdp_gateway");
+        guard.set(
+            "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
+            "manual_attached_desktop",
+        );
+        let mut cmd = json!({
+            "action": "launch",
+            "browserHost": "remote_headed",
+            "remoteHeadedDisplay": ":95",
+            "remoteViewUrl": "/guacamole/#/client/explicit",
+            "viewStreamProvider": "external_url",
+            "controlInputProvider": "cdp_input"
+        });
+
+        apply_remote_headed_launch_env_hints(&mut cmd);
+
+        assert_eq!(cmd["remoteHeadedDisplay"], ":95");
+        assert_eq!(cmd["remoteViewUrl"], "/guacamole/#/client/explicit");
+        assert_eq!(cmd["viewStreamProvider"], "external_url");
+        assert_eq!(cmd["controlInputProvider"], "cdp_input");
+    }
+
+    #[test]
     fn test_daemon_profile_for_launch_omits_profile_during_live_runtime_attach() {
         let status = RuntimeStatus {
             runtime_profile: "canva-stealthcdp-chromium".to_string(),
@@ -2645,6 +2928,52 @@ mod tests {
         assert_eq!(
             daemon_profile_for_launch(Some("/tmp/profile"), Some(&status)),
             None
+        );
+    }
+
+    #[test]
+    fn test_runtime_profile_name_for_launch_uses_default_when_implicit() {
+        assert_eq!(
+            runtime_profile_name_for_launch_parts(None, None, false, false, None).as_deref(),
+            Some("default")
+        );
+        assert_eq!(
+            runtime_profile_name_for_launch_parts(None, None, false, false, Some("work"))
+                .as_deref(),
+            Some("work")
+        );
+    }
+
+    #[test]
+    fn test_runtime_profile_name_for_launch_respects_explicit_profile_path() {
+        assert_eq!(
+            runtime_profile_name_for_launch_parts(
+                Some("default"),
+                Some("/tmp/throwaway-profile"),
+                true,
+                false,
+                Some("default"),
+            ),
+            None
+        );
+        assert_eq!(
+            runtime_profile_name_for_launch_parts(
+                Some("work"),
+                Some("/tmp/work-profile"),
+                true,
+                true,
+                Some("default"),
+            )
+            .as_deref(),
+            Some("work")
+        );
+    }
+
+    #[test]
+    fn test_runtime_profile_name_for_launch_treats_profile_alias_as_runtime_profile() {
+        assert_eq!(
+            runtime_profile_name_for_launch_parts(None, Some("work"), true, false, None).as_deref(),
+            Some("work")
         );
     }
 }

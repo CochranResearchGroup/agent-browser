@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-viewer-leases-response.v1.schema.json",
+  "title": "agent-browser service viewer leases response",
+  "description": "Stable API shape for compact service viewer lease collection responses.",
+  "type": "object",
+  "required": [
+    "viewerLeases",
+    "count"
+  ],
+  "properties": {
+    "viewerLeases": {
+      "type": "array",
+      "items": {
+        "$ref": "service-viewer-lease-record.v1.schema.json"
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

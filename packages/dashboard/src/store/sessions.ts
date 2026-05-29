@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAtomCallback } from "jotai/utils";
 import type { SessionInfo } from "@/types";
 import { type ExecResult, execCommand, killSession, sessionArgs } from "@/lib/exec";
+import { sessionTabsApiUrl } from "@/lib/dashboard-api";
 import { tabCacheAtom, engineCacheAtom } from "@/store/tabs";
 import { streamTabsAtom, streamEngineAtom } from "@/store/stream";
 
@@ -253,10 +254,9 @@ export function useSessionsSync(pollInterval = 5000) {
 
             // Poll tabs for all sessions
             for (const s of data) {
+              if (s.port <= 0) continue;
               try {
-                const tabsResp = await fetch(
-                  `http://localhost:${s.port}/api/tabs`,
-                ).catch(() => null);
+                const tabsResp = await fetch(sessionTabsApiUrl(s.port)).catch(() => null);
                 if (tabsResp?.ok) {
                   const tabs = await tabsResp.json();
                   if (tabs.length > 0) {

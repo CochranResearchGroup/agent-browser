@@ -219,7 +219,7 @@ pub const SERVICE_CHALLENGE_STATE_VALUES: [&str; 6] = [
     "failed",
     "denied",
 ];
-pub const SERVICE_EVENT_KIND_VALUES: [&str; 11] = [
+pub const SERVICE_EVENT_KIND_VALUES: [&str; 18] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
@@ -228,12 +228,19 @@ pub const SERVICE_EVENT_KIND_VALUES: [&str; 11] = [
     "tab_lifecycle_changed",
     "profile_lease_wait_started",
     "profile_lease_wait_ended",
+    "viewer_takeover_requested",
+    "viewer_connected",
+    "viewer_disconnected",
+    "controller_requested",
+    "controller_granted",
+    "controller_denied",
+    "route_released",
     "reconciliation_error",
     "incident_acknowledged",
     "incident_resolved",
 ];
 pub const SERVICE_TRACE_ACTIVITY_SOURCE_VALUES: [&str; 3] = ["event", "job", "metadata"];
-pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 14] = [
+pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 21] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
@@ -242,6 +249,13 @@ pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 14] = [
     "tab_lifecycle_changed",
     "profile_lease_wait_started",
     "profile_lease_wait_ended",
+    "viewer_takeover_requested",
+    "viewer_connected",
+    "viewer_disconnected",
+    "controller_requested",
+    "controller_granted",
+    "controller_denied",
+    "route_released",
     "reconciliation_error",
     "incident_acknowledged",
     "incident_resolved",
@@ -512,6 +526,9 @@ pub fn assert_service_browser_record_contract(value: &serde_json::Value) {
             "profileId",
             "host",
             "health",
+            "displayIsolation",
+            "displayName",
+            "displayAllocationId",
             "pid",
             "cdpEndpoint",
             "viewStreams",
@@ -521,6 +538,9 @@ pub fn assert_service_browser_record_contract(value: &serde_json::Value) {
         ],
         &[
             "profile_id",
+            "display_isolation",
+            "display_name",
+            "display_allocation_id",
             "cdp_endpoint",
             "view_streams",
             "active_session_ids",
@@ -531,7 +551,193 @@ pub fn assert_service_browser_record_contract(value: &serde_json::Value) {
     assert!(SERVICE_BROWSER_HOST_VALUES.contains(&value["host"].as_str().unwrap()));
     assert!(SERVICE_BROWSER_HEALTH_VALUES.contains(&value["health"].as_str().unwrap()));
     assert!(value["viewStreams"].is_array());
+    for stream in value["viewStreams"].as_array().unwrap() {
+        assert_service_view_stream_record_contract(stream);
+    }
     assert!(value["activeSessionIds"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_view_stream_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "view stream",
+        value,
+        &["id", "provider", "controlInput", "url", "readOnly"],
+        &["control_input", "read_only"],
+    );
+    assert!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.contains(&value["provider"].as_str().unwrap()));
+    if let Some(control_input) = value["controlInput"].as_str() {
+        assert!(SERVICE_CONTROL_INPUT_PROVIDER_VALUES.contains(&control_input));
+    }
+    assert!(value["readOnly"].is_boolean());
+    if value.get("viewerLeaseIds").is_some() {
+        assert!(value["viewerLeaseIds"].is_array());
+    }
+}
+
+#[cfg(test)]
+pub fn assert_service_display_allocation_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "display allocation",
+        value,
+        &[
+            "id",
+            "displayName",
+            "displayIsolation",
+            "ownerBrowserId",
+            "ownerSessionId",
+            "profileId",
+            "browserBuild",
+            "host",
+            "state",
+            "pidHints",
+            "routeIds",
+            "createdAt",
+            "updatedAt",
+            "lastHealthCheckAt",
+            "readiness",
+        ],
+        &[
+            "display_name",
+            "display_isolation",
+            "owner_browser_id",
+            "owner_session_id",
+            "profile_id",
+            "browser_build",
+            "pid_hints",
+            "route_ids",
+            "created_at",
+            "updated_at",
+            "last_health_check_at",
+        ],
+    );
+    if let Some(host) = value["host"].as_str() {
+        assert!(SERVICE_BROWSER_HOST_VALUES.contains(&host));
+    }
+    assert!(value["routeIds"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_remote_view_route_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "remote view route",
+        value,
+        &[
+            "id",
+            "provider",
+            "displayAllocationId",
+            "browserId",
+            "sessionId",
+            "routeSource",
+            "connectionId",
+            "connectionName",
+            "routeTemplate",
+            "frameUrl",
+            "externalUrl",
+            "readOnly",
+            "controlInput",
+            "providerMode",
+            "state",
+            "viewerLeaseIds",
+            "controllerLeaseId",
+            "lastProviderEvent",
+            "readiness",
+        ],
+        &[
+            "display_allocation_id",
+            "browser_id",
+            "session_id",
+            "route_source",
+            "connection_id",
+            "connection_name",
+            "route_template",
+            "frame_url",
+            "external_url",
+            "read_only",
+            "control_input",
+            "provider_mode",
+            "viewer_lease_ids",
+            "controller_lease_id",
+            "last_provider_event",
+        ],
+    );
+    assert!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.contains(&value["provider"].as_str().unwrap()));
+    if let Some(control_input) = value["controlInput"].as_str() {
+        assert!(SERVICE_CONTROL_INPUT_PROVIDER_VALUES.contains(&control_input));
+    }
+    assert!(value["readOnly"].is_boolean());
+    assert!(value["viewerLeaseIds"].is_array());
+}
+
+#[cfg(test)]
+pub fn assert_service_route_pool_entry_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "route pool entry",
+        value,
+        &[
+            "id",
+            "provider",
+            "routeId",
+            "connectionId",
+            "connectionName",
+            "frameUrl",
+            "externalUrl",
+            "target",
+            "providerMode",
+            "state",
+            "currentRouteAllocationId",
+            "readiness",
+        ],
+        &[
+            "route_id",
+            "connection_id",
+            "connection_name",
+            "frame_url",
+            "external_url",
+            "provider_mode",
+            "current_route_allocation_id",
+        ],
+    );
+    assert!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.contains(&value["provider"].as_str().unwrap()));
+    assert!(value["target"].is_object());
+}
+
+#[cfg(test)]
+pub fn assert_service_viewer_lease_record_contract(value: &serde_json::Value) {
+    assert_record_fields(
+        "viewer lease",
+        value,
+        &[
+            "id",
+            "routeId",
+            "browserId",
+            "viewerId",
+            "viewerName",
+            "viewerRole",
+            "openMode",
+            "state",
+            "lastViewerEvent",
+            "expiresAt",
+            "createdAt",
+            "updatedAt",
+            "lastHeartbeatAt",
+            "serviceEventId",
+        ],
+        &[
+            "route_id",
+            "browser_id",
+            "viewer_id",
+            "viewer_name",
+            "viewer_role",
+            "open_mode",
+            "last_viewer_event",
+            "expires_at",
+            "created_at",
+            "updated_at",
+            "last_heartbeat_at",
+            "service_event_id",
+        ],
+    );
 }
 
 #[cfg(test)]
@@ -1952,6 +2158,10 @@ pub struct ServiceState {
     pub reconciliation: Option<ServiceReconciliationSnapshot>,
     pub events: Vec<ServiceEvent>,
     pub incidents: Vec<ServiceIncident>,
+    pub display_allocations: BTreeMap<String, DisplayAllocation>,
+    pub remote_view_routes: BTreeMap<String, RemoteViewRoute>,
+    pub route_pool: BTreeMap<String, RoutePoolEntry>,
+    pub viewer_leases: BTreeMap<String, ViewerLease>,
     pub profiles: BTreeMap<String, BrowserProfile>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     pub sessions: BTreeMap<String, BrowserSession>,
@@ -2030,6 +2240,12 @@ impl ServiceState {
     pub fn overlay_configured_entities(&mut self, configured: ServiceState) {
         let mut configured = configured;
         configured.mark_config_entity_sources();
+        self.display_allocations
+            .extend(configured.display_allocations);
+        self.remote_view_routes
+            .extend(configured.remote_view_routes);
+        self.route_pool.extend(configured.route_pool);
+        self.viewer_leases.extend(configured.viewer_leases);
         for (id, profile) in configured.profiles {
             self.profiles.insert(id.clone(), profile);
             self.entity_sources
@@ -3111,6 +3327,13 @@ pub enum ServiceEventKind {
     TabLifecycleChanged,
     ProfileLeaseWaitStarted,
     ProfileLeaseWaitEnded,
+    ViewerTakeoverRequested,
+    ViewerConnected,
+    ViewerDisconnected,
+    ControllerRequested,
+    ControllerGranted,
+    ControllerDenied,
+    RouteReleased,
     ReconciliationError,
     IncidentAcknowledged,
     IncidentResolved,
@@ -3212,6 +3435,10 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
         }
 
         incident.job_ids.push(job.id.clone());
+    }
+
+    for incident in derive_remote_view_incidents(state) {
+        grouped.insert(incident.id.clone(), incident);
     }
 
     let event_timestamps: BTreeMap<&str, &str> = state
@@ -3341,6 +3568,11 @@ fn classify_incident_escalation(
             ServiceIncidentEscalation::MonitorAttention,
             "Inspect the failed monitor target and last result; fix the target, refresh login state, pause the monitor, or reset reviewed failures before rerunning.",
         ),
+        _ if incident.latest_kind.starts_with("remote_view_") => (
+            ServiceIncidentSeverity::Error,
+            ServiceIncidentEscalation::ServiceTriage,
+            "Inspect remote-view route readiness, display allocation state, provider auth, and route-pool availability before reopening the workspace view.",
+        ),
         _ if incident.state == ServiceIncidentState::Service => (
             ServiceIncidentSeverity::Error,
             ServiceIncidentEscalation::ServiceTriage,
@@ -3377,7 +3609,14 @@ fn service_event_is_incident(event: &ServiceEvent) -> bool {
         | ServiceEventKind::BrowserRecoveryStarted
         | ServiceEventKind::TabLifecycleChanged
         | ServiceEventKind::ProfileLeaseWaitStarted
-        | ServiceEventKind::ProfileLeaseWaitEnded => false,
+        | ServiceEventKind::ProfileLeaseWaitEnded
+        | ServiceEventKind::ViewerTakeoverRequested
+        | ServiceEventKind::ViewerConnected
+        | ServiceEventKind::ViewerDisconnected
+        | ServiceEventKind::ControllerRequested
+        | ServiceEventKind::ControllerGranted
+        | ServiceEventKind::ControllerDenied
+        | ServiceEventKind::RouteReleased => false,
     }
 }
 
@@ -3506,6 +3745,270 @@ fn service_job_incident_timestamp(job: &ServiceJob) -> &str {
         .unwrap_or("")
 }
 
+fn derive_remote_view_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
+    let mut incidents = Vec::new();
+
+    for route in state.remote_view_routes.values() {
+        let Some((kind, message)) = remote_view_route_incident(route, state) else {
+            continue;
+        };
+        incidents.push(ServiceIncident {
+            id: format!("remote-view-route:{}", route.id),
+            browser_id: route.browser_id.clone(),
+            label: format!("Remote route {}", route.id),
+            state: ServiceIncidentState::Service,
+            latest_timestamp: remote_view_route_timestamp(route, state),
+            latest_message: message,
+            latest_kind: kind.to_string(),
+            current_health: route
+                .browser_id
+                .as_ref()
+                .and_then(|browser_id| state.browsers.get(browser_id))
+                .map(|browser| browser.health),
+            ..ServiceIncident::default()
+        });
+    }
+
+    for entry in state.route_pool.values() {
+        let Some((kind, message)) = remote_view_route_pool_entry_incident(entry) else {
+            continue;
+        };
+        incidents.push(ServiceIncident {
+            id: format!("remote-view-route-pool:{}", entry.id),
+            label: format!("Remote route pool {}", entry.id),
+            state: ServiceIncidentState::Service,
+            latest_message: message,
+            latest_kind: kind.to_string(),
+            ..ServiceIncident::default()
+        });
+    }
+
+    for allocation in state.display_allocations.values().filter(|allocation| {
+        allocation.display_isolation == "private_virtual_display" && allocation.state == "ready"
+    }) {
+        let has_ready_route = state.remote_view_routes.values().any(|route| {
+            route.display_allocation_id.as_deref() == Some(allocation.id.as_str())
+                && matches!(
+                    route.state.as_str(),
+                    "ready" | "allocating" | "reconnecting"
+                )
+        });
+        if has_ready_route || state.route_pool.is_empty() {
+            continue;
+        }
+        let has_available_pool_entry = state.route_pool.values().any(|entry| {
+            entry.state == "available" && route_pool_entry_targets_allocation(entry, allocation)
+        });
+        if has_available_pool_entry {
+            continue;
+        }
+        incidents.push(ServiceIncident {
+            id: format!("remote-view-route-pool-exhausted:{}", allocation.id),
+            browser_id: allocation.owner_browser_id.clone(),
+            label: format!("Remote route pool exhausted for {}", allocation.id),
+            state: ServiceIncidentState::Service,
+            latest_timestamp: allocation
+                .updated_at
+                .as_deref()
+                .or(allocation.last_health_check_at.as_deref())
+                .unwrap_or("")
+                .to_string(),
+            latest_message: format!(
+                "No available remote-view route-pool entry for display allocation '{}'",
+                allocation.id
+            ),
+            latest_kind: "remote_view_route_pool_exhausted".to_string(),
+            current_health: allocation
+                .owner_browser_id
+                .as_ref()
+                .and_then(|browser_id| state.browsers.get(browser_id))
+                .map(|browser| browser.health),
+            ..ServiceIncident::default()
+        });
+    }
+
+    incidents
+}
+
+fn remote_view_route_incident(
+    route: &RemoteViewRoute,
+    state: &ServiceState,
+) -> Option<(&'static str, String)> {
+    if let Some(display_allocation_id) = route.display_allocation_id.as_ref() {
+        if !state
+            .display_allocations
+            .contains_key(display_allocation_id)
+        {
+            return Some((
+                "remote_view_display_missing",
+                format!(
+                    "Remote route '{}' references missing display allocation '{}'",
+                    route.id, display_allocation_id
+                ),
+            ));
+        }
+    }
+    if matches!(
+        route.state.as_str(),
+        "ready" | "allocating" | "reconnecting"
+    ) {
+        return None;
+    }
+    let readiness_text = route
+        .readiness
+        .as_ref()
+        .map(remote_view_readiness_text)
+        .unwrap_or_default();
+    let kind = remote_view_failure_kind(&readiness_text).unwrap_or("remote_view_route_unreachable");
+    Some((
+        kind,
+        format!(
+            "Remote route '{}' is {}{}",
+            route.id,
+            route.state,
+            if readiness_text.is_empty() {
+                String::new()
+            } else {
+                format!(": {readiness_text}")
+            }
+        ),
+    ))
+}
+
+fn remote_view_route_pool_entry_incident(entry: &RoutePoolEntry) -> Option<(&'static str, String)> {
+    if matches!(
+        entry.state.as_str(),
+        "available" | "checked_out" | "unknown"
+    ) {
+        return None;
+    }
+    let readiness_text = entry
+        .readiness
+        .as_ref()
+        .map(remote_view_readiness_text)
+        .unwrap_or_default();
+    let kind = remote_view_failure_kind(&readiness_text).unwrap_or("remote_view_route_unreachable");
+    Some((
+        kind,
+        format!(
+            "Remote route-pool entry '{}' is {}{}",
+            entry.id,
+            entry.state,
+            if readiness_text.is_empty() {
+                String::new()
+            } else {
+                format!(": {readiness_text}")
+            }
+        ),
+    ))
+}
+
+fn remote_view_failure_kind(readiness_text: &str) -> Option<&'static str> {
+    let text = readiness_text.to_ascii_lowercase();
+    if text.contains("provider_auth") || text.contains("auth") || text.contains("login") {
+        Some("remote_view_provider_auth_failed")
+    } else if text.contains("iframe") || text.contains("frame") || text.contains("x-frame") {
+        Some("remote_view_iframe_blocked")
+    } else if text.contains("display_allocation_missing") || text.contains("display missing") {
+        Some("remote_view_display_missing")
+    } else if text.contains("unreachable")
+        || text.contains("timeout")
+        || text.contains("failed")
+        || text.contains("closed")
+    {
+        Some("remote_view_route_unreachable")
+    } else {
+        None
+    }
+}
+
+fn remote_view_readiness_text(value: &Value) -> String {
+    match value {
+        Value::String(value) => value.clone(),
+        Value::Array(items) => items
+            .iter()
+            .map(remote_view_readiness_text)
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>()
+            .join(" "),
+        Value::Object(record) => {
+            let mut parts = Vec::new();
+            for key in [
+                "state",
+                "status",
+                "readiness",
+                "lastProviderEvent",
+                "component",
+                "reason",
+                "failureClass",
+                "evidence",
+                "message",
+                "recovery",
+            ] {
+                if let Some(value) = record.get(key).and_then(Value::as_str) {
+                    if !value.trim().is_empty() {
+                        parts.push(value.to_string());
+                    }
+                }
+            }
+            for key in ["components", "checks", "results"] {
+                if let Some(value) = record.get(key) {
+                    let text = remote_view_readiness_text(value);
+                    if !text.is_empty() {
+                        parts.push(text);
+                    }
+                }
+            }
+            parts.join(" ")
+        }
+        _ => String::new(),
+    }
+}
+
+fn route_pool_entry_targets_allocation(
+    entry: &RoutePoolEntry,
+    allocation: &DisplayAllocation,
+) -> bool {
+    if let Some(target_allocation_id) = route_pool_target_string(entry, "displayAllocationId") {
+        return target_allocation_id == allocation.id;
+    }
+    if let Some(target_browser_id) = route_pool_target_string(entry, "browserId") {
+        return allocation.owner_browser_id.as_deref() == Some(target_browser_id.as_str());
+    }
+    if let Some(target_session_id) = route_pool_target_string(entry, "sessionId") {
+        return allocation.owner_session_id.as_deref() == Some(target_session_id.as_str());
+    }
+    if let Some(target_display_name) = route_pool_target_string(entry, "displayName") {
+        return allocation.display_name.as_deref() == Some(target_display_name.as_str());
+    }
+    true
+}
+
+fn route_pool_target_string(entry: &RoutePoolEntry, key: &str) -> Option<String> {
+    entry
+        .target
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn remote_view_route_timestamp(route: &RemoteViewRoute, state: &ServiceState) -> String {
+    route
+        .display_allocation_id
+        .as_ref()
+        .and_then(|id| state.display_allocations.get(id))
+        .and_then(|allocation| {
+            allocation
+                .updated_at
+                .as_deref()
+                .or(allocation.last_health_check_at.as_deref())
+        })
+        .unwrap_or("")
+        .to_string()
+}
+
 fn service_job_browser_id(job: &ServiceJob, state: &ServiceState) -> Option<String> {
     match &job.target {
         JobTarget::Browser(browser_id) => Some(browser_id.clone()),
@@ -3527,6 +4030,13 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ProfileLeaseWaitStarted => "profile_lease_wait_started",
         ServiceEventKind::ProfileLeaseWaitEnded => "profile_lease_wait_ended",
+        ServiceEventKind::ViewerTakeoverRequested => "viewer_takeover_requested",
+        ServiceEventKind::ViewerConnected => "viewer_connected",
+        ServiceEventKind::ViewerDisconnected => "viewer_disconnected",
+        ServiceEventKind::ControllerRequested => "controller_requested",
+        ServiceEventKind::ControllerGranted => "controller_granted",
+        ServiceEventKind::ControllerDenied => "controller_denied",
+        ServiceEventKind::RouteReleased => "route_released",
         ServiceEventKind::ReconciliationError => "reconciliation_error",
         ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
         ServiceEventKind::IncidentResolved => "incident_resolved",
@@ -3767,6 +4277,7 @@ pub struct BrowserProcess {
     pub health: BrowserHealth,
     pub display_isolation: Option<String>,
     pub display_name: Option<String>,
+    pub display_allocation_id: Option<String>,
     pub pid: Option<u32>,
     pub cdp_endpoint: Option<String>,
     pub view_streams: Vec<ViewStream>,
@@ -3784,12 +4295,185 @@ impl Default for BrowserProcess {
             health: BrowserHealth::NotStarted,
             display_isolation: None,
             display_name: None,
+            display_allocation_id: None,
             pid: None,
             cdp_endpoint: None,
             view_streams: Vec::new(),
             active_session_ids: Vec::new(),
             last_error: None,
             last_health_observation: None,
+        }
+    }
+}
+
+/// Service-owned remote display allocation for a browser workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DisplayAllocation {
+    pub id: String,
+    pub display_name: Option<String>,
+    pub display_isolation: String,
+    pub owner_browser_id: Option<String>,
+    pub owner_session_id: Option<String>,
+    pub profile_id: Option<String>,
+    pub browser_build: Option<String>,
+    pub host: Option<BrowserHost>,
+    pub state: String,
+    pub pid_hints: Option<Value>,
+    pub route_ids: Vec<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub last_health_check_at: Option<String>,
+    pub readiness: Option<Value>,
+}
+
+impl Default for DisplayAllocation {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            display_name: None,
+            display_isolation: "private_virtual_display".to_string(),
+            owner_browser_id: None,
+            owner_session_id: None,
+            profile_id: None,
+            browser_build: None,
+            host: Some(BrowserHost::RemoteHeaded),
+            state: "allocating".to_string(),
+            pid_hints: None,
+            route_ids: Vec::new(),
+            created_at: None,
+            updated_at: None,
+            last_health_check_at: None,
+            readiness: None,
+        }
+    }
+}
+
+/// Service-owned provider route for a remote display.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct RemoteViewRoute {
+    pub id: String,
+    pub provider: ViewStreamProvider,
+    pub display_allocation_id: Option<String>,
+    pub browser_id: Option<String>,
+    pub session_id: Option<String>,
+    pub route_source: String,
+    pub connection_id: Option<String>,
+    pub connection_name: Option<String>,
+    pub route_template: Option<String>,
+    pub frame_url: Option<String>,
+    pub external_url: Option<String>,
+    pub read_only: bool,
+    pub control_input: Option<ControlInputProvider>,
+    pub provider_mode: String,
+    pub state: String,
+    pub viewer_lease_ids: Vec<String>,
+    pub controller_lease_id: Option<String>,
+    pub last_provider_event: Option<String>,
+    pub readiness: Option<Value>,
+}
+
+impl Default for RemoteViewRoute {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            provider: ViewStreamProvider::RdpGateway,
+            display_allocation_id: None,
+            browser_id: None,
+            session_id: None,
+            route_source: "unknown".to_string(),
+            connection_id: None,
+            connection_name: None,
+            route_template: None,
+            frame_url: None,
+            external_url: None,
+            read_only: false,
+            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+            provider_mode: "unknown".to_string(),
+            state: "allocating".to_string(),
+            viewer_lease_ids: Vec::new(),
+            controller_lease_id: None,
+            last_provider_event: None,
+            readiness: None,
+        }
+    }
+}
+
+/// Configured provider route pool entry for remote-view allocation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct RoutePoolEntry {
+    pub id: String,
+    pub provider: ViewStreamProvider,
+    pub route_id: String,
+    pub connection_id: Option<String>,
+    pub connection_name: Option<String>,
+    pub frame_url: Option<String>,
+    pub external_url: Option<String>,
+    pub target: Value,
+    pub provider_mode: String,
+    pub state: String,
+    pub current_route_allocation_id: Option<String>,
+    pub readiness: Option<Value>,
+}
+
+impl Default for RoutePoolEntry {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            provider: ViewStreamProvider::RdpGateway,
+            route_id: String::new(),
+            connection_id: None,
+            connection_name: None,
+            frame_url: None,
+            external_url: None,
+            target: Value::Object(Default::default()),
+            provider_mode: "unknown".to_string(),
+            state: "unknown".to_string(),
+            current_route_allocation_id: None,
+            readiness: None,
+        }
+    }
+}
+
+/// Observer or controller lease for a remote-view route.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ViewerLease {
+    pub id: String,
+    pub route_id: Option<String>,
+    pub browser_id: Option<String>,
+    pub viewer_id: Option<String>,
+    pub viewer_name: Option<String>,
+    pub viewer_role: String,
+    pub open_mode: String,
+    pub state: String,
+    pub last_viewer_event: Option<String>,
+    pub expires_at: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub last_heartbeat_at: Option<String>,
+    pub service_event_id: Option<String>,
+}
+
+impl Default for ViewerLease {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            route_id: None,
+            browser_id: None,
+            viewer_id: None,
+            viewer_name: None,
+            viewer_role: "observer".to_string(),
+            open_mode: "embedded".to_string(),
+            state: "requested".to_string(),
+            last_viewer_event: None,
+            expires_at: None,
+            created_at: None,
+            updated_at: None,
+            last_heartbeat_at: None,
+            service_event_id: None,
         }
     }
 }
@@ -3976,6 +4660,22 @@ pub struct ServiceJob {
     pub lifecycle_only: bool,
     /// Remote-headed display allocation requested by the caller or access plan.
     pub display_isolation: Option<String>,
+    /// Display allocation id requested by the caller, when distinct from the
+    /// resolved allocation that eventually backs the browser workspace.
+    pub requested_display_allocation_id: Option<String>,
+    /// Display allocation id resolved by launch, focus, route allocation, or
+    /// viewer takeover handling.
+    pub display_allocation_id: Option<String>,
+    /// Remote-view route id requested by the caller.
+    pub requested_remote_view_route_id: Option<String>,
+    /// Remote-view route id resolved by the service or provider.
+    pub remote_view_route_id: Option<String>,
+    /// Static route-pool entry used to resolve the remote-view route.
+    pub route_pool_entry_id: Option<String>,
+    /// Viewer lease id requested or created by a view operation.
+    pub viewer_lease_id: Option<String>,
+    /// Controller lease id requested or granted by a view operation.
+    pub controller_lease_id: Option<String>,
     pub target: JobTarget,
     pub owner: ServiceActor,
     pub state: JobState,
@@ -4005,6 +4705,13 @@ impl Default for ServiceJob {
             control_plane_mode: JobControlPlaneMode::Cdp,
             lifecycle_only: false,
             display_isolation: None,
+            requested_display_allocation_id: None,
+            display_allocation_id: None,
+            requested_remote_view_route_id: None,
+            remote_view_route_id: None,
+            route_pool_entry_id: None,
+            viewer_lease_id: None,
+            controller_lease_id: None,
             target: JobTarget::Service,
             owner: ServiceActor::System,
             state: JobState::Queued,
@@ -4240,8 +4947,43 @@ pub struct ViewStream {
     pub provider: ViewStreamProvider,
     /// Input transport expected to control this view stream, when known.
     pub control_input: Option<ControlInputProvider>,
+    /// Backward-compatible primary stream URL for older clients.
     pub url: Option<String>,
+    /// Dashboard-embeddable stream URL chosen by the service.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_url: Option<String>,
+    /// Direct stream URL for external windows or popout viewers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_url: Option<String>,
+    /// Service-owned route id for providers that multiplex viewer routes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
+    /// Service-owned display allocation id backing this route.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_allocation_id: Option<String>,
+    /// Guacamole connection id or route token, when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connection_id: Option<String>,
+    /// Human-readable Guacamole connection name, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connection_name: Option<String>,
+    /// Source that selected the route metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_source: Option<String>,
+    /// Provider concurrency mode for observers and controllers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_mode: Option<String>,
+    /// Viewer lease ids associated with this route.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub viewer_lease_ids: Vec<String>,
+    /// Current controller lease id for this route.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub controller_lease_id: Option<String>,
     pub read_only: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub readiness: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_readiness: Option<Value>,
 }
 
 impl Default for ViewStream {
@@ -4251,7 +4993,19 @@ impl Default for ViewStream {
             provider: ViewStreamProvider::CdpScreencast,
             control_input: Some(ControlInputProvider::CdpInput),
             url: None,
+            frame_url: None,
+            external_url: None,
+            route_id: None,
+            display_allocation_id: None,
+            connection_id: None,
+            connection_name: None,
+            route_source: None,
+            provider_mode: None,
+            viewer_lease_ids: Vec::new(),
+            controller_lease_id: None,
             read_only: true,
+            readiness: None,
+            remote_readiness: None,
         }
     }
 }
@@ -4601,6 +5355,20 @@ mod tests {
             ])
         );
         for field in [
+            "requestedDisplayAllocationId",
+            "displayAllocationId",
+            "requestedRemoteViewRouteId",
+            "remoteViewRouteId",
+            "routePoolEntryId",
+            "viewerLeaseId",
+            "controllerLeaseId",
+        ] {
+            assert_eq!(
+                schema["properties"][field]["type"],
+                json!(["string", "null"])
+            );
+        }
+        for field in [
             "id",
             "action",
             "serviceName",
@@ -4622,6 +5390,13 @@ mod tests {
             id: "job-1".to_string(),
             action: "navigate".to_string(),
             display_isolation: Some("private_virtual_display".to_string()),
+            requested_display_allocation_id: Some("display-requested".to_string()),
+            display_allocation_id: Some("display-1".to_string()),
+            requested_remote_view_route_id: Some("route-requested".to_string()),
+            remote_view_route_id: Some("route-1".to_string()),
+            route_pool_entry_id: Some("pool-1".to_string()),
+            viewer_lease_id: Some("viewer-1".to_string()),
+            controller_lease_id: Some("controller-1".to_string()),
             naming_warnings: service_job_naming_warning_values(),
             has_naming_warning: true,
             ..ServiceJob::default()
@@ -4630,6 +5405,13 @@ mod tests {
 
         assert_service_job_naming_warning_contract(&value);
         assert_eq!(value["displayIsolation"], "private_virtual_display");
+        assert_eq!(value["requestedDisplayAllocationId"], "display-requested");
+        assert_eq!(value["displayAllocationId"], "display-1");
+        assert_eq!(value["requestedRemoteViewRouteId"], "route-requested");
+        assert_eq!(value["remoteViewRouteId"], "route-1");
+        assert_eq!(value["routePoolEntryId"], "pool-1");
+        assert_eq!(value["viewerLeaseId"], "viewer-1");
+        assert_eq!(value["controllerLeaseId"], "controller-1");
     }
 
     #[test]
@@ -4801,6 +5583,18 @@ mod tests {
             "../../../docs/dev/contracts/service-challenge-record.v1.schema.json"
         ))
         .unwrap();
+        let display_allocation_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-display-allocation-record.v1.schema.json"
+        ))
+        .unwrap();
+        let remote_view_route_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-remote-view-route-record.v1.schema.json"
+        ))
+        .unwrap();
+        let route_pool_schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-route-pool-entry-record.v1.schema.json"
+        ))
+        .unwrap();
 
         assert_eq!(
             profile_schema["properties"]["defaultBrowserHost"]["oneOf"][0]["enum"],
@@ -4821,6 +5615,27 @@ mod tests {
         assert_eq!(
             browser_schema["properties"]["health"]["enum"],
             json!(SERVICE_BROWSER_HEALTH_VALUES.to_vec())
+        );
+        assert_eq!(
+            browser_schema["properties"]["viewStreams"]["items"]["properties"]["provider"]["enum"],
+            json!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.to_vec())
+        );
+        assert_eq!(
+            browser_schema["properties"]["viewStreams"]["items"]["properties"]["controlInput"]
+                ["oneOf"][0]["enum"],
+            json!(SERVICE_CONTROL_INPUT_PROVIDER_VALUES.to_vec())
+        );
+        assert_eq!(
+            display_allocation_schema["properties"]["host"]["type"],
+            json!(["string", "null"])
+        );
+        assert_eq!(
+            remote_view_route_schema["properties"]["provider"]["enum"],
+            json!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.to_vec())
+        );
+        assert_eq!(
+            route_pool_schema["properties"]["provider"]["enum"],
+            json!(SERVICE_VIEW_STREAM_PROVIDER_VALUES.to_vec())
         );
         assert_eq!(
             session_schema["properties"]["lease"]["enum"],
@@ -5534,6 +6349,9 @@ mod tests {
             "id": "session:retry-session",
             "profileId": "work",
             "host": "local_headless",
+            "displayIsolation": null,
+            "displayName": null,
+            "displayAllocationId": null,
             "pid": null,
             "cdpEndpoint": null,
             "viewStreams": [],
@@ -5693,6 +6511,9 @@ mod tests {
                     "profileId": "work",
                     "host": "attached_existing",
                     "health": "process_exited",
+                    "displayIsolation": null,
+                    "displayName": null,
+                    "displayAllocationId": null,
                     "pid": null,
                     "cdpEndpoint": null,
                     "viewStreams": [],
@@ -5772,6 +6593,38 @@ mod tests {
                 .unwrap(),
                 "browsers",
                 "browsers response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-display-allocations-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "displayAllocations",
+                "display allocations response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-remote-view-routes-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "remoteViewRoutes",
+                "remote view routes response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-route-pool-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "routePool",
+                "route pool response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-viewer-leases-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "viewerLeases",
+                "viewer leases response",
             ),
             (
                 serde_json::from_str::<serde_json::Value>(include_str!(
@@ -6446,6 +7299,138 @@ mod tests {
             state.incidents[1].current_health,
             Some(BrowserHealth::Ready)
         );
+    }
+
+    #[test]
+    fn refresh_derived_views_groups_remote_view_route_failures() {
+        let mut state = ServiceState {
+            display_allocations: BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    state: "orphaned".to_string(),
+                    updated_at: Some("2026-05-28T00:00:00Z".to_string()),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([
+                (
+                    "route-display-missing".to_string(),
+                    RemoteViewRoute {
+                        id: "route-display-missing".to_string(),
+                        display_allocation_id: Some("display-missing".to_string()),
+                        state: "orphaned".to_string(),
+                        readiness: Some(json!({
+                            "reason": "display_allocation_missing",
+                            "state": "orphaned"
+                        })),
+                        ..RemoteViewRoute::default()
+                    },
+                ),
+                (
+                    "route-auth".to_string(),
+                    RemoteViewRoute {
+                        id: "route-auth".to_string(),
+                        display_allocation_id: Some("display-1".to_string()),
+                        state: "degraded".to_string(),
+                        readiness: Some(json!({
+                            "component": "provider_auth",
+                            "status": "failed",
+                            "evidence": "Guacamole login rejected the dashboard session"
+                        })),
+                        ..RemoteViewRoute::default()
+                    },
+                ),
+                (
+                    "route-frame".to_string(),
+                    RemoteViewRoute {
+                        id: "route-frame".to_string(),
+                        display_allocation_id: Some("display-1".to_string()),
+                        state: "degraded".to_string(),
+                        readiness: Some(json!({
+                            "component": "iframe",
+                            "status": "blocked",
+                            "evidence": "x-frame-options denied"
+                        })),
+                        ..RemoteViewRoute::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_derived_views();
+
+        let kinds = state
+            .incidents
+            .iter()
+            .map(|incident| incident.latest_kind.as_str())
+            .collect::<BTreeSet<_>>();
+        assert!(kinds.contains("remote_view_display_missing"));
+        assert!(kinds.contains("remote_view_provider_auth_failed"));
+        assert!(kinds.contains("remote_view_iframe_blocked"));
+        for incident in &state.incidents {
+            assert_eq!(incident.state, ServiceIncidentState::Service);
+            assert_eq!(incident.severity, ServiceIncidentSeverity::Error);
+            assert_eq!(
+                incident.escalation,
+                ServiceIncidentEscalation::ServiceTriage
+            );
+            assert!(incident
+                .recommended_action
+                .contains("remote-view route readiness"));
+        }
+    }
+
+    #[test]
+    fn refresh_derived_views_groups_route_pool_exhaustion_and_unreachable_entries() {
+        let mut state = ServiceState {
+            display_allocations: BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    display_isolation: "private_virtual_display".to_string(),
+                    display_name: Some(":91".to_string()),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    state: "ready".to_string(),
+                    updated_at: Some("2026-05-28T00:01:00Z".to_string()),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([(
+                "pool-busy".to_string(),
+                RoutePoolEntry {
+                    id: "pool-busy".to_string(),
+                    route_id: "route-busy".to_string(),
+                    target: json!({ "displayName": ":91" }),
+                    state: "degraded".to_string(),
+                    readiness: Some(json!({
+                        "component": "rdp_backend",
+                        "status": "failed",
+                        "evidence": "target unreachable"
+                    })),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_derived_views();
+
+        let route_pool = state
+            .incidents
+            .iter()
+            .find(|incident| incident.id == "remote-view-route-pool:pool-busy")
+            .unwrap();
+        assert_eq!(route_pool.latest_kind, "remote_view_route_unreachable");
+        let exhausted = state
+            .incidents
+            .iter()
+            .find(|incident| incident.id == "remote-view-route-pool-exhausted:display-1")
+            .unwrap();
+        assert_eq!(exhausted.latest_kind, "remote_view_route_pool_exhausted");
+        assert_eq!(exhausted.browser_id.as_deref(), Some("browser-1"));
     }
 
     #[test]

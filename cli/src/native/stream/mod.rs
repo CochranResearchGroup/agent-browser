@@ -1,6 +1,7 @@
 mod cdp_loop;
 pub(crate) mod chat;
 mod dashboard;
+mod dashboard_auth;
 mod discovery;
 mod http;
 mod websocket;

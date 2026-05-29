@@ -27,8 +27,22 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestHttpOptions} ServiceCdpFreeLaunchRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestOptions} ServiceCdpFreeLaunchRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceControllerLeaseTakeoverHttpOptions} ServiceControllerLeaseTakeoverHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceControllerLeaseTakeoverOptions} ServiceControllerLeaseTakeoverOptions
+ * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteCheckoutHttpOptions} ServiceRemoteViewRouteCheckoutHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteCheckoutOptions} ServiceRemoteViewRouteCheckoutOptions
+ * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteReleaseHttpOptions} ServiceRemoteViewRouteReleaseHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteReleaseOptions} ServiceRemoteViewRouteReleaseOptions
+ * @typedef {import('./service-request.generated.js').ServiceRoutePoolRepairHttpOptions} ServiceRoutePoolRepairHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceRoutePoolRepairOptions} ServiceRoutePoolRepairOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestHttpOptions} ServiceTabRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestOptions} ServiceTabRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceViewerLeaseHeartbeatHttpOptions} ServiceViewerLeaseHeartbeatHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceViewerLeaseHeartbeatOptions} ServiceViewerLeaseHeartbeatOptions
+ * @typedef {import('./service-request.generated.js').ServiceViewerLeaseReleaseHttpOptions} ServiceViewerLeaseReleaseHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceViewerLeaseReleaseOptions} ServiceViewerLeaseReleaseOptions
+ * @typedef {import('./service-request.generated.js').ServiceViewerLeaseRequestHttpOptions} ServiceViewerLeaseRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceViewerLeaseRequestOptions} ServiceViewerLeaseRequestOptions
  */
 
 export {
@@ -218,6 +232,135 @@ export function createServiceCdpFreeLaunchRequest(input) {
 }
 
 /**
+ * @param {ServiceRemoteViewRouteCheckoutOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceRemoteViewRouteCheckoutRequest(input) {
+  assertPlainObject(input, 'remote-view route checkout request');
+  const { params, ...request } = input;
+  const checkoutParams = mergeParams(params, request, [
+    'displayAllocationId',
+    'routeId',
+    'remoteViewRouteId',
+    'routePoolEntryId',
+    'browserId',
+    'sessionName',
+    'streamId',
+    'provider',
+    'providerMode',
+    'frameUrl',
+    'externalUrl',
+    'connectionId',
+    'connectionName',
+  ]);
+  return createServiceRequest({
+    ...request,
+    action: 'service_remote_view_route_checkout',
+    params: checkoutParams,
+  });
+}
+
+/**
+ * @param {ServiceRemoteViewRouteReleaseOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceRemoteViewRouteReleaseRequest(input) {
+  assertPlainObject(input, 'remote-view route release request');
+  const { params, ...request } = input;
+  return createServiceRequest({
+    ...request,
+    action: 'service_remote_view_route_release',
+    params: mergeParams(params, request, ['routeId']),
+  });
+}
+
+/**
+ * @param {ServiceRoutePoolRepairOptions} [input]
+ * @returns {ServiceRequest}
+ */
+export function createServiceRoutePoolRepairRequest(input = {}) {
+  assertPlainObject(input, 'route-pool repair request');
+  const { params, ...request } = input;
+  return createServiceRequest({
+    ...request,
+    action: 'service_route_pool_repair',
+    params: mergeParams(params, request, ['apply', 'staleCheckouts', 'serviceState']),
+  });
+}
+
+/**
+ * @param {ServiceViewerLeaseRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceViewerLeaseRequest(input) {
+  assertPlainObject(input, 'viewer lease request');
+  const { params, ...request } = input;
+  return createServiceRequest({
+    ...request,
+    action: 'service_viewer_lease_request',
+    params: mergeParams(params, request, [
+      'routeId',
+      'viewerId',
+      'viewerName',
+      'viewerRole',
+      'openMode',
+      'browserId',
+      'expiresAt',
+    ]),
+  });
+}
+
+/**
+ * @param {ServiceViewerLeaseHeartbeatOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceViewerLeaseHeartbeatRequest(input) {
+  assertPlainObject(input, 'viewer lease heartbeat request');
+  const { params, ...request } = input;
+  return createServiceRequest({
+    ...request,
+    action: 'service_viewer_lease_heartbeat',
+    params: mergeParams(params, request, ['viewerLeaseId', 'expiresAt']),
+  });
+}
+
+/**
+ * @param {ServiceViewerLeaseReleaseOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceViewerLeaseReleaseRequest(input) {
+  assertPlainObject(input, 'viewer lease release request');
+  const { params, ...request } = input;
+  return createServiceRequest({
+    ...request,
+    action: 'service_viewer_lease_release',
+    params: mergeParams(params, request, ['viewerLeaseId']),
+  });
+}
+
+/**
+ * @param {ServiceControllerLeaseTakeoverOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceControllerLeaseTakeoverRequest(input) {
+  assertPlainObject(input, 'controller lease takeover request');
+  const { params, ...request } = input;
+  return createServiceRequest({
+    ...request,
+    action: 'service_controller_lease_takeover',
+    params: mergeParams(params, request, [
+      'routeId',
+      'viewerLeaseId',
+      'viewerId',
+      'viewerName',
+      'openMode',
+      'browserId',
+      'expiresAt',
+    ]),
+  });
+}
+
+/**
  * @param {ServiceRequestHttpOptions} options
  * @returns {Promise<ServiceRequestResponse>}
  */
@@ -266,6 +409,90 @@ export async function requestServiceCdpFreeLaunch({ baseUrl, fetch = globalThis.
     fetch,
     signal,
     request: createServiceCdpFreeLaunchRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceRemoteViewRouteCheckoutHttpOptions} options
+ */
+export async function requestServiceRemoteViewRouteCheckout({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceRemoteViewRouteCheckoutRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceRemoteViewRouteReleaseHttpOptions} options
+ */
+export async function requestServiceRemoteViewRouteRelease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceRemoteViewRouteReleaseRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceRoutePoolRepairHttpOptions} options
+ */
+export async function requestServiceRoutePoolRepair({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceRoutePoolRepairRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceViewerLeaseRequestHttpOptions} options
+ */
+export async function requestServiceViewerLease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceViewerLeaseRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceViewerLeaseHeartbeatHttpOptions} options
+ */
+export async function heartbeatServiceViewerLease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceViewerLeaseHeartbeatRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceViewerLeaseReleaseHttpOptions} options
+ */
+export async function releaseServiceViewerLease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceViewerLeaseReleaseRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceControllerLeaseTakeoverHttpOptions} options
+ */
+export async function takeoverServiceControllerLease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceControllerLeaseTakeoverRequest(request),
   });
 }
 
@@ -473,6 +700,26 @@ function serviceRequestActionArray(value) {
   return stringArray(value)
     .filter((action) => actionSet.has(/** @type {ServiceRequestAction} */ (action)))
     .map((action) => /** @type {ServiceRequestAction} */ (action));
+}
+
+/**
+ * @param {Record<string, unknown> | undefined} params
+ * @param {Record<string, unknown>} request
+ * @param {string[]} keys
+ * @returns {Record<string, unknown>}
+ */
+function mergeParams(params, request, keys) {
+  if (params !== undefined) {
+    assertPlainObject(params, 'service request params');
+  }
+  const merged = { ...(params ?? {}) };
+  for (const key of keys) {
+    if (Object.hasOwn(request, key) && request[key] !== undefined) {
+      merged[key] = request[key];
+      delete request[key];
+    }
+  }
+  return merged;
 }
 
 /**

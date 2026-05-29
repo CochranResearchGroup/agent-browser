@@ -22,6 +22,13 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceIncidentsResponse} ServiceIncidentsResponse
  * @typedef {import('./service-observability.generated.js').ServiceJobsResponse} ServiceJobsResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowsersResponse} ServiceBrowsersResponse
+ * @typedef {import('./service-observability.generated.js').ServiceDisplayAllocationRecord} ServiceDisplayAllocationRecord
+ * @typedef {import('./service-observability.generated.js').ServiceDisplayAllocationsResponse} ServiceDisplayAllocationsResponse
+ * @typedef {import('./service-observability.generated.js').ServiceRemoteViewRouteRecord} ServiceRemoteViewRouteRecord
+ * @typedef {import('./service-observability.generated.js').ServiceRemoteViewRoutesResponse} ServiceRemoteViewRoutesResponse
+ * @typedef {import('./service-observability.generated.js').ServiceRoutePoolResponse} ServiceRoutePoolResponse
+ * @typedef {import('./service-observability.generated.js').ServiceViewerLeaseRecord} ServiceViewerLeaseRecord
+ * @typedef {import('./service-observability.generated.js').ServiceViewerLeasesResponse} ServiceViewerLeasesResponse
  * @typedef {import('./service-observability.generated.js').ServiceChallengesResponse} ServiceChallengesResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorDeleteResponse} ServiceMonitorDeleteResponse
@@ -539,7 +546,16 @@ export function lookupServiceProfile(options) {
  * @param {ServiceAccessPlanOptions} options
  * @returns {Promise<ServiceAccessPlanResponse>}
  */
-export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, challengeId, ...options }) {
+export async function getServiceAccessPlan({
+  readinessProfileId,
+  sitePolicyId,
+  challengeId,
+  browserHost,
+  viewStreamProvider,
+  controlInputProvider,
+  displayIsolation,
+  ...options
+}) {
   return serviceGet(
     {
       ...options,
@@ -553,6 +569,10 @@ export async function getServiceAccessPlan({ readinessProfileId, sitePolicyId, c
         targetServiceId: options.targetServiceId,
         accountId: options.accountId,
         browserBuild: options.browserBuild,
+        browserHost,
+        viewStreamProvider,
+        controlInputProvider,
+        displayIsolation,
         url: options.url,
         loginIds: options.loginIds?.join(','),
         siteIds: options.siteIds?.join(','),
@@ -736,6 +756,65 @@ function summarizeAccessPlanCdpFreeAvailability(accessPlan) {
  */
 export function getServiceBrowsers(options) {
   return serviceGet(options, '/api/service/browsers');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceDisplayAllocationsResponse>}
+ */
+export function getServiceDisplayAllocations(options) {
+  return serviceGet(options, '/api/service/display-allocations');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceRemoteViewRoutesResponse>}
+ */
+export function getServiceRemoteViewRoutes(options) {
+  return serviceGet(options, '/api/service/remote-view-routes');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceRoutePoolResponse>}
+ */
+export function getServiceRoutePool(options) {
+  return serviceGet(options, '/api/service/route-pool');
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceViewerLeasesResponse>}
+ */
+export function getServiceViewerLeases(options) {
+  return serviceGet(options, '/api/service/viewer-leases');
+}
+
+/**
+ * @param {ServiceDisplayAllocationRecord[] | ServiceDisplayAllocationsResponse | null | undefined} records
+ * @param {string} id
+ * @returns {ServiceDisplayAllocationRecord | null}
+ */
+export function findServiceDisplayAllocation(records, id) {
+  return findServiceCollectionRecord(records, 'displayAllocations', id);
+}
+
+/**
+ * @param {ServiceRemoteViewRouteRecord[] | ServiceRemoteViewRoutesResponse | null | undefined} records
+ * @param {string} id
+ * @returns {ServiceRemoteViewRouteRecord | null}
+ */
+export function findServiceRemoteViewRoute(records, id) {
+  return findServiceCollectionRecord(records, 'remoteViewRoutes', id);
+}
+
+/**
+ * @param {ServiceViewerLeaseRecord[] | ServiceViewerLeasesResponse | null | undefined} records
+ * @param {string} id
+ * @returns {ServiceViewerLeaseRecord | null}
+ */
+export function findServiceViewerLease(records, id) {
+  return findServiceCollectionRecord(records, 'viewerLeases', id);
 }
 
 /**
@@ -2175,6 +2254,22 @@ async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, query }, 
   }
 
   return payload.data;
+}
+
+/**
+ * @template {{ id?: unknown }} TRecord
+ * @param {TRecord[] | Record<string, unknown> | null | undefined} records
+ * @param {string} collectionKey
+ * @param {string} id
+ * @returns {TRecord | null}
+ */
+function findServiceCollectionRecord(records, collectionKey, id) {
+  const collection = Array.isArray(records)
+    ? records
+    : Array.isArray(records?.[collectionKey])
+      ? records[collectionKey]
+      : [];
+  return collection.find((record) => record?.id === id) ?? null;
 }
 
 /**

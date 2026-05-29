@@ -47,6 +47,13 @@ traceable. Target hints such as `siteId`, `loginId`, and `targetServiceId`
 drive profile selection for the requested site or login scope. `profileLeasePolicy`
 can be `reject` or `wait`; `wait` uses `profileLeaseWaitTimeoutMs` to bound how
 long the service request waits for another exclusive profile lease to release.
+Remote-view callers can submit `action: "view_takeover"` with
+`params.browserId`, `params.sessionName`, `params.streamId`, `params.provider`,
+and `params.openMode` to queue an RDP or Guacamole takeover or reconnect
+request while preserving the service-owned browser process and session.
+Successful requests return typed takeover metadata and retain a
+`viewer_takeover_requested` service event for later dashboard, HTTP, MCP, and
+service trace inspection.
 
 `service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
 wrapper for invoking `service_request` with the same intent object.
@@ -68,7 +75,16 @@ plus
 `GET /api/service/browser-capability/preflight`, MCP
 `service_browser_capability_preflight`, and
 `getServiceBrowserCapabilityPreflight()`.
-Readiness, lookup, and access-plan metadata also names the
+Remote-view allocation metadata advertises
+`serviceDisplayAllocationsResponse`,
+`serviceRemoteViewRoutesResponse`, `serviceRoutePoolResponse`, and
+`serviceViewerLeasesResponse` for the matching HTTP and MCP read resources.
+Software clients can read those collections with
+`getServiceDisplayAllocations()`, `getServiceRemoteViewRoutes()`,
+`getServiceRoutePool()`, and `getServiceViewerLeases()`, then resolve retained
+ids with `findServiceDisplayAllocation()`, `findServiceRemoteViewRoute()`, and
+`findServiceViewerLease()` without parsing provider URLs. Readiness, lookup,
+and access-plan metadata also names the
 `@agent-browser/client/service-observability` helpers that consume those
 routes. Software clients should prefer `lookupServiceProfile()` when they want
 agent-browser to select by `serviceName` plus `loginId`, `siteId`,
@@ -120,6 +136,44 @@ access-plan resource for agent-facing profile selection because it combines the
 selected profile, readiness, policy, providers, retained challenges, monitor
 findings, and the service-owned decision before the caller requests a tab.
 
+## Remote View Allocation Contracts v1
+
+P03 introduces no-launch contracts for many-to-many remote viewing. These
+schemas define the service-owned state that lets clients distinguish one shared
+Guacamole route from distinct per-browser routes without parsing provider URLs.
+
+`service-display-allocation-record.v1.schema.json` describes the display owned
+by a remote browser workspace. It records the display name, isolation policy,
+owner browser/session/profile, lifecycle state, process hints, related route
+ids, and component readiness.
+
+`service-remote-view-route-record.v1.schema.json` describes a concrete
+provider route such as a Guacamole RDP route. It records the provider, route
+source, display allocation id, browser/session ids, connection id/name, frame
+and external URLs, provider concurrency mode, viewer leases, controller lease,
+and route readiness.
+
+`service-route-pool-entry-record.v1.schema.json` describes configured route
+pool entries. The first P03 implementation path uses a static Guacamole route
+pool backed by distinct RDP targets before adding generated Guacamole
+connections.
+
+`service-viewer-lease-record.v1.schema.json` describes observer and controller
+leases for embedded, external, fullscreen, and tiled remote-view sessions.
+
+The matching compact collection envelopes are:
+
+- `service-display-allocations-response.v1.schema.json`
+- `service-remote-view-routes-response.v1.schema.json`
+- `service-route-pool-response.v1.schema.json`
+- `service-viewer-leases-response.v1.schema.json`
+
+`service-browser-record.v1.schema.json` remains backward compatible but now
+allows browser records and `viewStreams[]` to carry `displayAllocationId`,
+`providerMode`, `viewerLeaseIds`, and `controllerLeaseId`. Clients should
+prefer `routeId` plus `displayAllocationId` over raw URL comparison when
+checking whether two browser workspaces are independently viewable.
+
 ## Browser Capability Registry Draft
 
 `service-browser-capability-registry.v1.schema.json` describes the advisory
@@ -166,7 +220,7 @@ to run the recipe returned by `getServiceAccessPlan()` directly.
     </tr>
     <tr>
       <td><code>GET /api/service/access-plan</code></td>
-      <td><code>service_access_plan</code> or <code>agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}</code></td>
+      <td><code>service_access_plan</code> or <code>agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}</code></td>
       <td>Preferred no-launch selector and recommendation payload</td>
     </tr>
     <tr>
@@ -217,16 +271,25 @@ to run the recipe returned by `getServiceAccessPlan()` directly.
 schemas. Run `pnpm generate:service-client` after changing the schemas and
 `pnpm test:service-client-contract` to verify the generated client surface is
 current. Run `pnpm test:service-client-types` to type-check the runtime helper
-against those declarations.
+against those declarations. Remote-view route mutation helpers include
+`requestServiceRemoteViewRouteCheckout()`,
+`requestServiceRemoteViewRouteRelease()`, `requestServiceViewerLease()`,
+`heartbeatServiceViewerLease()`, `releaseServiceViewerLease()`, and
+`takeoverServiceControllerLease()` for route checkout, route release, viewer
+request, viewer heartbeat, viewer release, and controller lease takeover
+through `POST /api/service/request`.
 
 `packages/client/src/service-observability.generated.d.ts` and
 `packages/client/src/service-observability.generated.js` are generated from the
-service browser capability registry, job, event, incident, incident activity, and trace schemas. The
+service browser capability registry, remote-view allocation, job, event,
+incident, incident activity, and trace schemas. The
 `@agent-browser/client/service-observability` helper reads those HTTP endpoints
 and returns the generated response types, including `getServiceContracts` for
 the runtime compatibility metadata endpoint,
-`getServiceBrowserCapabilityRegistry` for the advisory browser registry, and
-`getServiceMonitors` for the retained monitor collection.
+`getServiceBrowserCapabilityRegistry` for the advisory browser registry,
+`getServiceDisplayAllocations` and `getServiceRemoteViewRoutes` for
+remote-view allocation state, and `getServiceMonitors` for the retained monitor
+collection.
 
 ## Draft Browser Capability Registry v1
 
@@ -378,6 +441,16 @@ The schema is guarded by Rust tests for the model, HTTP, MCP, and service trace
 surfaces. Keep new contractual event fields in this schema before relying on
 them from external clients.
 
+Remote-view takeover requests are retained as
+`viewer_takeover_requested` events with route and viewer details in
+`details`, including `streamId`, `provider`, `openMode`, `viewerLeaseId`,
+`lastViewerEvent`, and `takeoverStatus`.
+
+Remote-view lease mutations also retain `viewer_connected`,
+`viewer_disconnected`, `controller_requested`, `controller_granted`,
+`controller_denied`, and `route_released` events so clients can audit observer
+and controller ownership without parsing Guacamole URLs.
+
 `service-events-response.v1.schema.json` describes the response envelope
 returned by:
 
@@ -528,7 +601,7 @@ handoff endpoint.
 
 `service-access-plan-response.v1.schema.json` describes the response envelope
 returned by HTTP `GET /api/service/access-plan`, MCP `service_access_plan`, and
-MCP `agent-browser://access-plan{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}`.
+MCP `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}`.
 It is a read-only, no-launch planning surface. The response includes the same
 profile selector metadata and readiness summary as profile lookup, then adds the
 selected site policy, enabled providers, retained challenges, optional

@@ -335,3 +335,108 @@ Implement Slice 1 only: shared inspector primitives plus Browser inspector
 conversion. That creates the reusable shape, addresses the most visible
 operator pain, and limits risk before touching profile, tab, session, job, and
 incident-specific behavior.
+
+## Completion Record
+
+Status: implemented on 2026-05-23.
+
+Completed scope:
+
+- Added the shared inspector primitives in
+  `packages/dashboard/src/components/service-panel.tsx`: `InspectorHero`,
+  `InspectorActionBar`, `InspectorSection`, `InspectorFactRows`, and
+  `InspectorEvidenceDisclosure`.
+- Converted the selected browser, profile, tab, session, job, and incident
+  right-pane detail views to a selected-record structure with a hero summary,
+  primary action row, semantic sections, related-record jumps, and Evidence
+  disclosure for raw records, long IDs, endpoints, and JSON payloads.
+- Kept dashboard actions wired through `ServiceInspectorActions` instead of
+  embedding mutable action state into selected-record data.
+- Added related-record navigation handlers for browser, profile, session, tab,
+  and job IDs already present in service-owned records.
+- Preserved selected-browser and selected-tab remote-control behavior through
+  the queued `view_focus` path before opening the embedded stream.
+- Moved job cancellation, incident acknowledge/resolve, and incident trace
+  actions into the shared selected-record action surface.
+- Updated dashboard CSS so the inspector reads as a dense operations sidebar
+  rather than one panel per field.
+- Updated README, docs site pages, the repo skill, and the installed
+  `agent-browser` skill copy to describe the selected-record inspector model.
+
+Rendered QA notes:
+
+- The Browser plugin was not available in this session, and local Playwright was
+  not installed. Rendered QA used the local `dev-browser` tool against
+  `http://127.0.0.1:3100`.
+- Initial rendered QA found a React maximum-update-depth overlay when switching
+  into the Service view. The loop was caused by the right-pane action publisher
+  depending on an unmemoized `recentJobs` array. `recentJobs` is now memoized.
+- Desktop Service view QA proved the page loads without framework overlay after
+  the fix and that selecting a profile allocation opens the right-pane
+  inspector with one hero, four semantic sections, and one Evidence disclosure.
+- Evidence disclosure QA opened the selected profile Evidence section and
+  verified the raw allocation JSON is available behind the disclosure.
+- Mobile QA at 390 by 844 verified the Service view loads without framework
+  overlay and the profile allocation detail dialog renders the same selected
+  record structure with a hero and Evidence disclosure.
+- Follow-up QA after visual review used the repo-owned `agent-browser` CLI
+  against the local dashboard, selected a real profile allocation, and captured
+  desktop and mobile screenshots. That pass confirmed the original styling was
+  too close to the old detail list, so the selected-record hero, status chip,
+  section groups, and Evidence disclosure were restyled to read as a distinct
+  inspector surface.
+- The rendered environment still logged the existing disconnected stream
+  warning for `ws://localhost:9223/` and one 404 resource request during desktop
+  smoke. They did not produce a framework overlay and were not introduced by the
+  inspector action loop.
+
+Validation evidence:
+
+- `graphiti-runtime doctor` passed before implementation.
+- `pnpm validation:select -- --base HEAD` selected the dashboard, docs, and
+  skill-sync gates for this slice.
+- `pnpm test:dashboard-view-streams` passed.
+- `pnpm test:dashboard-browser-row-actions-render` passed.
+- `pnpm test:dashboard-browser-table` passed.
+- `pnpm test:dashboard-profile-allocation` passed.
+- `pnpm test:dashboard-inspector-actions` passed.
+- `pnpm test:dashboard-incident-summary` passed.
+- `pnpm build:dashboard` passed.
+- `pnpm --dir docs build` passed.
+- `agent-browser` desktop screenshot:
+  `/tmp/agent-browser-service-inspector-qa/profile-inspector-after.png`.
+- `agent-browser` mobile screenshot:
+  `/tmp/agent-browser-service-inspector-qa/profile-inspector-mobile-dialog-after.png`.
+- `git diff --check` passed.
+- `diff -q skills/agent-browser/SKILL.md
+  /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md` passed.
+- `node scripts/dev/select-validation.js --base HEAD --json` passed and
+  returned the same recommended gate list.
+
+## Route and Density Follow-up
+
+Status: implemented on 2026-05-23.
+
+Follow-up scope:
+
+- Added direct dashboard routes for `/service`, `/browsers`, and `/activity`.
+- Preserved the active Service workspace through `/service?workspace=<name>`.
+- Defaulted the Service workspace to `browsers` so browser records appear first.
+- Removed the Service panel hero and helper copy that consumed first-viewport
+  space before the managed browser records.
+- Compacted the status strip, retained-state alert, workspace tabs, workspace
+  header, profile routing strip, and record content padding.
+
+Rendered QA:
+
+- Used the repo-owned `agent-browser` CLI by attaching to the existing default
+  runtime profile with `--runtime-profile default`.
+- Desktop `/service` rendered with the Browsers workspace selected, 50 browser
+  rows in the DOM, and the first table row visible in the first viewport.
+- `/service?workspace=jobs` retained the Jobs workspace after reload.
+- `/browsers` retained the Browsers section after reload.
+- Mobile `/service` rendered the managed browser row card inside the first
+  viewport.
+- Screenshots:
+  `/tmp/agent-browser-dashboard-route-qa/service-desktop-after-compact.png` and
+  `/tmp/agent-browser-dashboard-route-qa/service-mobile-after-compact.png`.

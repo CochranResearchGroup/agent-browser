@@ -32,6 +32,7 @@ use crate::native::service_monitors::{
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
+use super::dashboard_auth;
 use super::discovery::discover_sessions;
 
 const SERVICE_REQUEST_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
@@ -82,6 +83,8 @@ pub(super) async fn handle_http_request(
     let method = first_line.split_whitespace().next().unwrap_or("GET");
     let raw_path = first_line.split_whitespace().nth(1).unwrap_or("/");
     let (path, query) = split_path_query(raw_path);
+    let headers = dashboard_auth::parse_headers(&request);
+    let secure_cookie = dashboard_auth::request_is_secure(&headers);
     let origin = parse_origin(peeked);
 
     if method == "OPTIONS" {
@@ -89,6 +92,18 @@ pub(super) async fn handle_http_request(
             "HTTP/1.1 204 No Content\r\n{CORS_HEADERS}Access-Control-Max-Age: 86400\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         );
         let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/dashboard-auth/status" {
+        let response = dashboard_auth::auth_status_response(&headers, secure_cookie);
+        let _ = stream.write_all(&response.into_http_bytes()).await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/dashboard-auth/verify" {
+        let response = dashboard_auth::verify_forward_auth_response(&headers, secure_cookie);
+        let _ = stream.write_all(&response.into_http_bytes()).await;
         return;
     }
 
@@ -110,6 +125,18 @@ pub(super) async fn handle_http_request(
             return;
         }
         let body_str = full_body.as_deref().unwrap_or("");
+
+        if path == "/api/dashboard-auth/login" {
+            let response = dashboard_auth::login_response(&headers, body_str, secure_cookie);
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
+
+        if path == "/api/dashboard-auth/logout" {
+            let response = dashboard_auth::logout_response(secure_cookie);
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
 
         if path == "/api/sessions" {
             let result = spawn_session(body_str).await;
@@ -178,7 +205,8 @@ pub(super) async fn handle_http_request(
                     return;
                 }
             };
-            let result = relay_service_command(session_name, cmd).await;
+            let relay_session_name = service_request_relay_session(session_name, body_str, &cmd);
+            let result = relay_service_command(&relay_session_name, cmd).await;
             write_json_result(&mut stream, result, "502 Bad Gateway").await;
             return;
         }
@@ -1322,6 +1350,8 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "profileLeaseWaitTimeoutMs",
         "requiresCdpFree",
         "cdpAttachmentAllowed",
+        "browserBuild",
+        "displayIsolation",
         "serviceName",
         "agentName",
         "taskName",
@@ -1344,6 +1374,77 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         }
     }
     Ok(command)
+}
+
+fn service_request_relay_session(default_session: &str, body: &str, command: &Value) -> String {
+    if !matches!(
+        command.get("action").and_then(Value::as_str),
+        Some("view_focus" | "view_takeover")
+    ) {
+        return default_session.to_string();
+    }
+
+    let request = if body.trim().is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_str::<Value>(body).unwrap_or(Value::Null)
+    };
+
+    for value in [
+        request.pointer("/params/sessionName"),
+        request.pointer("/params/daemonSession"),
+        request.pointer("/params/targetSession"),
+        request.pointer("/params/targetSessionName"),
+        request.pointer("/params/sessionId"),
+        request.pointer("/sessionName"),
+        request.pointer("/daemonSession"),
+        request.pointer("/targetSession"),
+        request.pointer("/targetSessionName"),
+        request.pointer("/sessionId"),
+        command.get("sessionName"),
+        command.get("daemonSession"),
+        command.get("targetSession"),
+        command.get("targetSessionName"),
+        command.get("sessionId"),
+    ] {
+        if let Some(session_name) = service_request_relay_session_candidate(value) {
+            return session_name;
+        }
+    }
+
+    for value in [
+        request.pointer("/params/browserId"),
+        request.pointer("/browserId"),
+        command.get("browserId"),
+    ] {
+        if let Some(session_name) = service_request_relay_session_candidate(value) {
+            return session_name;
+        }
+    }
+
+    default_session.to_string()
+}
+
+fn service_request_relay_session_candidate(value: Option<&Value>) -> Option<String> {
+    normalize_service_request_session_name(value?.as_str()?)
+}
+
+fn normalize_service_request_session_name(value: &str) -> Option<String> {
+    let mut trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(rest) = trimmed.strip_prefix("browser:") {
+        trimmed = rest.trim();
+    }
+    if let Some(rest) = trimmed.strip_prefix("session:") {
+        trimmed = rest.trim();
+    }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn reject_blocked_manual_service_request(
@@ -1488,6 +1589,50 @@ fn service_collection_contents(path: &str, query: Option<&str>) -> Option<Value>
             Some(json!({
                 "browsers": browsers,
                 "count": browsers.len(),
+            }))
+        }
+        "/api/service/display-allocations" => {
+            let display_allocations = service_state
+                .display_allocations
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            Some(json!({
+                "displayAllocations": display_allocations,
+                "count": display_allocations.len(),
+            }))
+        }
+        "/api/service/remote-view-routes" => {
+            let remote_view_routes = service_state
+                .remote_view_routes
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            Some(json!({
+                "remoteViewRoutes": remote_view_routes,
+                "count": remote_view_routes.len(),
+            }))
+        }
+        "/api/service/route-pool" => {
+            let route_pool = service_state
+                .route_pool
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            Some(json!({
+                "routePool": route_pool,
+                "count": route_pool.len(),
+            }))
+        }
+        "/api/service/viewer-leases" => {
+            let viewer_leases = service_state
+                .viewer_leases
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            Some(json!({
+                "viewerLeases": viewer_leases,
+                "count": viewer_leases.len(),
             }))
         }
         "/api/service/tabs" => {
@@ -2401,6 +2546,7 @@ fn service_events_command(query: Option<&str>) -> Result<Value, String> {
                 | "tab_lifecycle_changed"
                 | "profile_lease_wait_started"
                 | "profile_lease_wait_ended"
+                | "viewer_takeover_requested"
                 | "reconciliation_error"
                 | "incident_acknowledged"
                 | "incident_resolved" => {
@@ -3091,6 +3237,13 @@ mod tests {
     }
 
     #[test]
+    fn service_events_command_accepts_viewer_takeover_kind() {
+        let cmd = service_events_command(Some("kind=viewer_takeover_requested")).unwrap();
+
+        assert_eq!(cmd["kind"], "viewer_takeover_requested");
+    }
+
+    #[test]
     fn service_events_command_accepts_browser_launch_kind() {
         let cmd = service_events_command(Some("kind=browser_launch_recorded")).unwrap();
 
@@ -3409,6 +3562,13 @@ mod tests {
         let profiles = service_collection_contents("/api/service/profiles", None).unwrap();
         let sessions = service_collection_contents("/api/service/sessions", None).unwrap();
         let browsers = service_collection_contents("/api/service/browsers", None).unwrap();
+        let display_allocations =
+            service_collection_contents("/api/service/display-allocations", None).unwrap();
+        let remote_view_routes =
+            service_collection_contents("/api/service/remote-view-routes", None).unwrap();
+        let route_pool = service_collection_contents("/api/service/route-pool", None).unwrap();
+        let viewer_leases =
+            service_collection_contents("/api/service/viewer-leases", None).unwrap();
         let tabs = service_collection_contents("/api/service/tabs", None).unwrap();
         let monitors = service_collection_contents("/api/service/monitors", None).unwrap();
         let site_policies =
@@ -3423,6 +3583,10 @@ mod tests {
         assert!(profiles["profileAllocations"].is_array());
         assert!(sessions["sessions"].is_array());
         assert!(browsers["browsers"].is_array());
+        assert!(display_allocations["displayAllocations"].is_array());
+        assert!(remote_view_routes["remoteViewRoutes"].is_array());
+        assert!(route_pool["routePool"].is_array());
+        assert!(viewer_leases["viewerLeases"].is_array());
         assert!(tabs["tabs"].is_array());
         assert!(monitors["monitors"].is_array());
         assert!(site_policies["sitePolicies"].is_array());
@@ -3671,7 +3835,7 @@ mod tests {
     #[test]
     fn service_request_command_maps_request_object() {
         let command = service_request_command(
-            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"jobTimeoutMs":1000,"profileLeasePolicy":"wait","profileLeaseWaitTimeoutMs":2500}"##,
+            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"browserBuild":"stealthcdp_chromium","displayIsolation":"private_virtual_display","runtimeProfile":"acs-profile","profile":"/tmp/acs-profile","jobTimeoutMs":1000,"profileLeasePolicy":"wait","profileLeaseWaitTimeoutMs":2500}"##,
         )
         .unwrap();
 
@@ -3685,9 +3849,60 @@ mod tests {
         assert_eq!(command["taskName"], "probeACSwebsite");
         assert_eq!(command["siteId"], "acs");
         assert_eq!(command["loginIds"][0], "orcid");
+        assert_eq!(command["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(command["displayIsolation"], "private_virtual_display");
+        assert_eq!(command["runtimeProfile"], "acs-profile");
+        assert_eq!(command["profile"], "/tmp/acs-profile");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["profileLeasePolicy"], "wait");
         assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
+    }
+
+    #[test]
+    fn service_request_relay_session_routes_view_focus_to_requested_daemon_session() {
+        let body = r##"{"action":"view_focus","params":{"sessionName":"odollo-carrier-ups","targetId":"target-1"},"serviceName":"agent-browser-dashboard"}"##;
+        let command = service_request_command(body).unwrap();
+
+        assert_eq!(
+            service_request_relay_session("AgentBrowserDashboard", body, &command),
+            "odollo-carrier-ups"
+        );
+    }
+
+    #[test]
+    fn service_request_relay_session_routes_view_focus_from_browser_id() {
+        let body = r##"{"action":"view_focus","params":{"browserId":"session:odollo-carrier-ups","targetId":"target-1"},"serviceName":"agent-browser-dashboard"}"##;
+        let command = service_request_command(body).unwrap();
+
+        assert_eq!(
+            service_request_relay_session("AgentBrowserDashboard", body, &command),
+            "odollo-carrier-ups"
+        );
+    }
+
+    #[test]
+    fn service_request_relay_session_routes_view_takeover_to_requested_daemon_session() {
+        let body = r##"{"action":"view_takeover","params":{"sessionName":"odollo-carrier-ups","streamId":"rdp-guac","provider":"rdp_gateway","openMode":"iframe"},"serviceName":"agent-browser-dashboard"}"##;
+        let command = service_request_command(body).unwrap();
+
+        assert_eq!(
+            service_request_relay_session("AgentBrowserDashboard", body, &command),
+            "odollo-carrier-ups"
+        );
+        assert_eq!(command["streamId"], "rdp-guac");
+        assert_eq!(command["provider"], "rdp_gateway");
+        assert_eq!(command["openMode"], "iframe");
+    }
+
+    #[test]
+    fn service_request_relay_session_keeps_non_focus_requests_on_service_daemon() {
+        let body = r##"{"action":"navigate","params":{"url":"https://example.com","sessionName":"odollo-carrier-ups"},"serviceName":"agent-browser-dashboard"}"##;
+        let command = service_request_command(body).unwrap();
+
+        assert_eq!(
+            service_request_relay_session("AgentBrowserDashboard", body, &command),
+            "AgentBrowserDashboard"
+        );
     }
 
     #[test]
@@ -4496,31 +4711,42 @@ mod tests {
 }
 
 pub(super) fn serve_embedded_file(url_path: &str) -> (&'static str, &'static str, Vec<u8>) {
-    let clean = url_path.trim_start_matches('/');
+    let clean = url_path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(url_path)
+        .trim_start_matches('/')
+        .trim_end_matches('/');
     let key = if clean.is_empty() {
         "index.html"
     } else {
         clean
     };
 
-    let file = DashboardAssets::get(key).or_else(|| DashboardAssets::get("index.html"));
+    let extensionless_route = key
+        .rsplit('/')
+        .next()
+        .map(|segment| !segment.contains('.'))
+        .unwrap_or(true);
+    let html_route_key = extensionless_route.then(|| format!("{key}.html"));
+    let asset = DashboardAssets::get(key)
+        .map(|content| (key, content))
+        .or_else(|| {
+            html_route_key
+                .as_deref()
+                .and_then(DashboardAssets::get)
+                .map(|content| (html_route_key.as_deref().unwrap_or("index.html"), content))
+        })
+        .or_else(|| {
+            extensionless_route
+                .then(|| DashboardAssets::get("index.html").map(|content| ("index.html", content)))
+                .flatten()
+        });
 
-    match file {
-        Some(content) => {
-            let ext = key.rsplit('.').next().unwrap_or("");
-            let ct = match ext {
-                "html" => "text/html; charset=utf-8",
-                "js" => "application/javascript; charset=utf-8",
-                "css" => "text/css; charset=utf-8",
-                "json" => "application/json; charset=utf-8",
-                "svg" => "image/svg+xml",
-                "png" => "image/png",
-                "ico" => "image/x-icon",
-                "woff2" => "font/woff2",
-                "woff" => "font/woff",
-                "txt" => "text/plain; charset=utf-8",
-                _ => "application/octet-stream",
-            };
+    match asset {
+        Some((asset_key, content)) => {
+            let ext = asset_key.rsplit('.').next().unwrap_or("");
+            let ct = content_type_for_dashboard_asset(ext);
             ("200 OK", ct, content.data.to_vec())
         }
         None => (
@@ -4528,5 +4754,67 @@ pub(super) fn serve_embedded_file(url_path: &str) -> (&'static str, &'static str
             "text/html; charset=utf-8",
             b"<html><body><p>404 Not Found</p></body></html>".to_vec(),
         ),
+    }
+}
+
+fn content_type_for_dashboard_asset(ext: &str) -> &'static str {
+    match ext {
+        "html" => "text/html; charset=utf-8",
+        "js" => "application/javascript; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "json" => "application/json; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "ico" => "image/x-icon",
+        "woff2" => "font/woff2",
+        "woff" => "font/woff",
+        "txt" => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
+#[cfg(test)]
+mod dashboard_asset_tests {
+    use super::serve_embedded_file;
+
+    #[test]
+    fn extensionless_dashboard_route_serves_exported_html_page() {
+        let (status, content_type, body) = serve_embedded_file("/service");
+        let body = String::from_utf8(body).expect("dashboard HTML should be UTF-8");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(content_type, "text/html; charset=utf-8");
+        assert!(body.contains("Superuser access required"));
+        assert!(body.contains(r#"initialSection\":\"service"#));
+    }
+
+    #[test]
+    fn extensionless_dashboard_route_strips_query_before_asset_lookup() {
+        let (status, content_type, body) = serve_embedded_file("/service?workspace=jobs");
+        let body = String::from_utf8(body).expect("dashboard HTML should be UTF-8");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(content_type, "text/html; charset=utf-8");
+        assert!(body.contains("Superuser access required"));
+        assert!(body.contains(r#"initialSection\":\"service"#));
+    }
+
+    #[test]
+    fn missing_static_asset_returns_not_found_instead_of_index_html() {
+        let (status, content_type, body) = serve_embedded_file("/_next/static/chunks/missing.js");
+        let body = String::from_utf8(body).expect("not found HTML should be UTF-8");
+
+        assert_eq!(status, "404 Not Found");
+        assert_eq!(content_type, "text/html; charset=utf-8");
+        assert!(body.contains("404 Not Found"));
+    }
+
+    #[test]
+    fn static_asset_content_type_comes_from_served_asset_key() {
+        let (status, content_type, body) = serve_embedded_file("/favicon.ico?favicon=1");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(content_type, "image/x-icon");
+        assert!(!body.is_empty());
     }
 }

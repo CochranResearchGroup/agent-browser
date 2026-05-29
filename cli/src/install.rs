@@ -765,7 +765,12 @@ pub fn run_install_stealthcdp_chromium(force: bool) {
     }
 }
 
-pub fn run_install(with_deps: bool) {
+const REMOTE_VIEW_PRIVILEGE_INSTALLER: &str =
+    include_str!("../../scripts/install-agent-browser-privileges.sh");
+const REMOTE_VIEW_PRIVILEGED_HELPER: &str =
+    include_str!("../../scripts/libexec/agent-browser-privileged-helper");
+
+pub fn run_install(with_deps: bool, with_remote_view_privileges: bool) {
     if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
         eprintln!(
             "{} Chrome for Testing does not provide Linux ARM64 builds.",
@@ -791,6 +796,16 @@ pub fn run_install(with_deps: bool) {
             println!("  agent-browser install --with-deps");
             println!();
         }
+
+        if with_remote_view_privileges {
+            install_remote_view_privileges();
+        }
+    } else if with_remote_view_privileges {
+        eprintln!(
+            "{} --with-remote-view-privileges is only supported on Linux.",
+            color::error_indicator()
+        );
+        exit(1);
     }
 
     println!("{}", color::cyan("Installing Chrome..."));
@@ -1415,6 +1430,78 @@ fn install_linux_deps() {
         let status = Command::new("sh").arg("-c").arg(&install_cmd).status();
 
         report_install_status(status);
+    }
+}
+
+fn install_remote_view_privileges() {
+    println!(
+        "{}",
+        color::cyan("Installing remote-view privilege helper...")
+    );
+
+    if !which_exists("bash") {
+        eprintln!(
+            "{} bash is required to install remote-view privileges.",
+            color::error_indicator()
+        );
+        exit(1);
+    }
+
+    let temp_root =
+        std::env::temp_dir().join(format!("agent-browser-privileges-{}", std::process::id()));
+    if temp_root.exists() {
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    let script_dir = temp_root.join("scripts");
+    let helper_dir = script_dir.join("libexec");
+    let installer_path = script_dir.join("install-agent-browser-privileges.sh");
+    let helper_path = helper_dir.join("agent-browser-privileged-helper");
+
+    if let Err(err) = fs::create_dir_all(&helper_dir)
+        .and_then(|()| fs::write(&installer_path, REMOTE_VIEW_PRIVILEGE_INSTALLER))
+        .and_then(|()| fs::write(&helper_path, REMOTE_VIEW_PRIVILEGED_HELPER))
+    {
+        eprintln!(
+            "{} Failed to prepare remote-view privilege installer: {}",
+            color::error_indicator(),
+            err
+        );
+        let _ = fs::remove_dir_all(&temp_root);
+        exit(1);
+    }
+
+    let status = Command::new("bash")
+        .arg(&installer_path)
+        .arg("--apply")
+        .env("AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE", &helper_path)
+        .status();
+
+    let _ = fs::remove_dir_all(&temp_root);
+
+    match status {
+        Ok(s) if s.success() => {
+            println!(
+                "{} Remote-view privilege helper installed",
+                color::success_indicator()
+            );
+        }
+        Ok(s) => {
+            eprintln!(
+                "{} Remote-view privilege helper install failed with status {}",
+                color::error_indicator(),
+                s
+            );
+            exit(s.code().unwrap_or(1));
+        }
+        Err(err) => {
+            eprintln!(
+                "{} Could not run remote-view privilege installer: {}",
+                color::error_indicator(),
+                err
+            );
+            exit(1);
+        }
     }
 }
 

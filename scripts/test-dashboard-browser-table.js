@@ -315,8 +315,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const focusBrowserViewStream = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*browserPrimaryViewStream\(browser\)[\s\S]*action: "view_focus"[\s\S]*taskName: "focus-browser-row-view"[\s\S]*params: \{ index: tabIndex, maximize: true \}[\s\S]*openViewStream\(stream, browser, primaryTab, focusMessage\)/,
-  'Browser row Focus must queue the existing service-owned view_focus action before opening the stream',
+  /function preferredRemoteControlTab\(tabs\?: ServiceTab\[\] \| null\)[\s\S]*remoteControlTabScore[\s\S]*const focusBrowserViewStream = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*browserPrimaryViewStream\(browser\)[\s\S]*preferredRemoteControlTab\(browserTabs\)[\s\S]*const sessionName = daemonSessionNameForBrowser\(browser\)[\s\S]*action: "view_focus"[\s\S]*taskName: "focus-browser-row-view"[\s\S]*params: targetId[\s\S]*targetId[\s\S]*index: tabIndex[\s\S]*maximize: true[\s\S]*sessionName[\s\S]*: \{ index: tabIndex, maximize: true[\s\S]*sessionName[\s\S]*openViewStream\(stream, browser, primaryTab, focusMessage\)/,
+  'Browser row Focus must queue view_focus for a live non-blank target before opening the stream',
 );
 
 assert.match(
@@ -399,8 +399,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function RemoteViewReadinessStrip\(\{ browser, stream \}: \{ browser: ServiceBrowser; stream\?: ServiceViewStream \| null \}\)[\s\S]*canOpenViewStream\(stream\)[\s\S]*canOpenControlViewStream\(stream\)[\s\S]*aria-label="Remote view readiness"[\s\S]*Remote view[\s\S]*Remote control[\s\S]*Display[\s\S]*Gateway URL/,
-  'Browser detail inspector must show remote view, control, and display readiness from service metadata',
+  /function RemoteViewReadinessStrip\(\{ browser, stream \}: \{ browser: ServiceBrowser; stream\?: ServiceViewStream \| null \}\)[\s\S]*canOpenViewStream\(stream\)[\s\S]*canOpenControlViewStream\(stream\)[\s\S]*aria-label="Remote view readiness"[\s\S]*Remote view[\s\S]*Remote control[\s\S]*Display[\s\S]*Route[\s\S]*Lease[\s\S]*Readiness[\s\S]*Gateway URL/,
+  'Browser detail inspector must show remote view, control, display, route, lease, and readiness metadata',
 );
 
 assert.match(
@@ -411,7 +411,7 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-remote-view-readiness[\s\S]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)[\s\S]*\.service-remote-view-readiness p[\s\S]*grid-column: 1 \/ -1/,
+  /\.service-remote-view-readiness[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(6\.5rem, 1fr\)\)[\s\S]*\.service-remote-view-readiness p[\s\S]*grid-column: 1 \/ -1/,
   'Remote view readiness strip must use compact multi-column styling with a full-width context line',
 );
 
@@ -531,19 +531,19 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<ServiceStatusLight[\s\S]*label="Control health"[\s\S]*onClick=\{\(\) => setWorkspaceTab\("browsers"\)\}/,
+  /<ServiceStatusLight[\s\S]*label="Control health"[\s\S]*onClick=\{\(\) => selectWorkspaceTab\("browsers"\)\}/,
   'Service status strip must avoid a conflicting Browser label and drill control health into browser records',
 );
 
 assert.match(
   servicePanel,
-  /<ServiceStatusLight[\s\S]*label="Jobs"[\s\S]*onClick=\{\(\) => setWorkspaceTab\("jobs"\)\}/,
+  /<ServiceStatusLight[\s\S]*label="Jobs"[\s\S]*onClick=\{\(\) => selectWorkspaceTab\("jobs"\)\}/,
   'Service Jobs status light must drill into the Jobs workspace',
 );
 
 assert.match(
   servicePanel,
-  /<ServiceStatusLight[\s\S]*label="Records"[\s\S]*value=\{`\$\{entityCounts\.browsers\} browsers`\}[\s\S]*detail=\{`Retained service-state counts: \$\{managedRecordDetail\}`\}[\s\S]*icon=\{GitBranch\}[\s\S]*onClick=\{\(\) => setWorkspaceTab\("browsers"\)\}/,
+  /<ServiceStatusLight[\s\S]*label="Records"[\s\S]*value=\{`\$\{entityCounts\.browsers\} browsers`\}[\s\S]*detail=\{`Retained service-state counts: \$\{managedRecordDetail\}`\}[\s\S]*icon=\{GitBranch\}[\s\S]*onClick=\{\(\) => selectWorkspaceTab\("browsers"\)\}/,
   'Service dashboard must expose retained record counts as a compact Records status light that drills into browser records',
 );
 
@@ -555,8 +555,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const \[workspaceTab, setWorkspaceTab\] = useState<ServiceWorkspaceTab>\("profiles"\);[\s\S]*label: "Profiles"[\s\S]*label: "Browsers"[\s\S]*detail: `\$\{browserRecords\.filter\(isLiveBrowserRecord\)\.length\} live`/,
-  'Service workspace must default to Profiles and expose Browsers as a sibling tab instead of a preamble',
+  /const \[workspaceTab, setWorkspaceTab\] = useState<ServiceWorkspaceTab>\(\(\) => \{[\s\S]*return "browsers";[\s\S]*serviceWorkspaceFromSearch\(window\.location\.search\)[\s\S]*label: "Profiles"[\s\S]*label: "Browsers"[\s\S]*detail: `\$\{browserRecords\.filter\(isLiveBrowserRecord\)\.length\} live`/,
+  'Service workspace must default to URL-addressable Browsers records and expose Profiles as a sibling tab',
 );
 
 assert.match(
@@ -609,7 +609,7 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-status-strip[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(6\.6rem, 1fr\)\)/,
+  /\.service-status-strip[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(5\.8rem, 1fr\)\)/,
   'Service status strip must stay dense enough to include retained record status without another summary row',
 );
 
@@ -681,7 +681,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /TabsContent value="browsers"[\s\S]*Browser rows should identify the browser build, runtime profile, owning service, agent, task, sessions, streams, and available controls[\s\S]*<BrowserTable[\s\S]*browsers=\{browserRecords\}[\s\S]*sessions=\{sessionRecords\}[\s\S]*onSelect=\{inspectBrowser\}[\s\S]*selectedBrowserId=\{selectedBrowserId\}/,
+  /TabsContent value="browsers"[\s\S]*<BrowserTable[\s\S]*browsers=\{browserRecords\}[\s\S]*sessions=\{sessionRecords\}[\s\S]*onSelect=\{inspectBrowser\}[\s\S]*selectedBrowserId=\{selectedBrowserId\}/,
   'Service browser table must live in the Browsers sub-tab and receive service sessions plus selected browser state',
 );
 
@@ -705,7 +705,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<EventDetailItem label="Executable" value=\{browserExecutableDetail\(browser\)\}/,
+  /\{ label: "Executable", value: browserExecutableDetail\(browser\), mono: true \}/,
   'Browser inspector must show the executable detail rather than only host and health',
 );
 
@@ -759,8 +759,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<p className="service-workspace-title">Service records<\/p>[\s\S]*Profiles are first because browser routing and identity policy determine which sessions should exist/,
-  'Service workspace copy must explain why Profiles lead the service plane',
+  /<p className="service-workspace-title">Service records<\/p>[\s\S]*TabsList className="service-workspace-tabs"/,
+  'Service workspace must keep the record header compact before the tab list',
+);
+
+assert.doesNotMatch(
+  servicePanel,
+  /Direct links preserve this workspace/,
+  'Service workspace must not spend first-viewport space on route-preservation helper copy',
 );
 
 assert.doesNotMatch(
@@ -777,8 +783,8 @@ assert.match(
 
 assert.match(
   dashboardCss,
-  /\.service-status-strip \{[\s\S]*display: grid[\s\S]*padding-bottom: 0\.1rem[\s\S]*\.service-workspace-card \{[\s\S]*grid-row: 3[\s\S]*\.service-workspace-header \{[\s\S]*padding: 0\.58rem 0\.65rem 0\.55rem/,
-  'Service status indicators and record tabs must have separated grid rows and enough header padding to avoid visual overlap',
+  /\.service-status-strip \{[\s\S]*display: grid[\s\S]*grid-template-columns: repeat\(auto-fit, minmax\(5\.8rem, 1fr\)\)[\s\S]*\.service-workspace-card \{[\s\S]*grid-row: 3[\s\S]*\.service-workspace-header \{[\s\S]*padding: 0\.38rem 0\.5rem 0\.34rem/,
+  'Service status indicators and record tabs must keep separated grid rows with compact header padding',
 );
 
 assert.doesNotMatch(

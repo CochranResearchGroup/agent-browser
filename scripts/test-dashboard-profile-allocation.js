@@ -181,7 +181,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /Profile dots show readiness: green means no recorded auth or seeding attention; yellow means at least one target identity needs seeding, verification, or login follow-up[\s\S]*service-profile-routing-strip" aria-label="Profile identity and routing summary"[\s\S]*runtime profiles[\s\S]*target identities[\s\S]*login identities[\s\S]*authenticated targets[\s\S]*profiles with browsers[\s\S]*pinned builds[\s\S]*readiness attention/,
+  /service-profile-routing-strip" aria-label="Profile identity and routing summary"[\s\S]*runtime profiles[\s\S]*target identities[\s\S]*login identities[\s\S]*authenticated targets[\s\S]*profiles with browsers[\s\S]*pinned builds[\s\S]*readiness attention/,
   'Profiles workspace must render the identity and routing summary labels',
 );
 
@@ -211,8 +211,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<EventDetailItem label="Browser build" value=\{allocation\.browserBuild\} \/>[\s\S]*<EventDetailItem label="Primary target" value=\{profileAllocationPrimaryTarget\(allocation\)\} \/>[\s\S]*<EventDetailItem label="Primary login" value=\{profileAllocationPrimaryLogin\(allocation\)\} \/>[\s\S]*<ProfileAllocationTokenSection title="Account identities" values=\{allocation\.accountIds\} \/>[\s\S]*<ProfileBrowserSummarySection rows=\{allocation\.browserSummaries\} \/>/,
-  'Profile allocation detail must include browser-build, identity, account, and browser-summary routing evidence',
+  /<InspectorHero[\s\S]*kicker="Profile"[\s\S]*profileAllocationPrimaryTarget\(allocation\)[\s\S]*profileAllocationPrimaryLogin\(allocation\)[\s\S]*<InspectorSection title="Identity And Routing">[\s\S]*label: "Primary target", value: profileAllocationPrimaryTarget\(allocation\)[\s\S]*label: "Primary login", value: profileAllocationPrimaryLogin\(allocation\)[\s\S]*label: "Browser build", value: allocation\.browserBuild \?\? "service default"[\s\S]*<ProfileAllocationTokenSection title="Account identities" values=\{allocation\.accountIds\} \/>[\s\S]*<InspectorSection title="Related Records">[\s\S]*<ProfileBrowserSummarySection rows=\{allocation\.browserSummaries\} \/>[\s\S]*<InspectorEvidenceDisclosure[\s\S]*Raw allocation/,
+  'Profile allocation detail must include browser-build, identity, account, browser-summary, and raw allocation evidence',
 );
 
 assert.match(

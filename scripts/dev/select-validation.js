@@ -114,7 +114,11 @@ function selectRecommendations(files, base) {
   }
 
   if (files.some((file) => file.startsWith('packages/dashboard/') || file.startsWith('docs/src/components/dashboard/'))) {
-    if (files.some((file) => file.includes('view-stream') || file === 'packages/dashboard/src/components/service-panel.tsx')) {
+    if (files.some((file) =>
+      file.includes('view-stream') ||
+      file === 'packages/dashboard/src/components/workspace-remote-viewport.tsx' ||
+      file === 'packages/dashboard/src/components/service-panel.tsx'
+    )) {
       add('pnpm test:dashboard-view-streams', 'dashboard view stream provider handling changed');
     }
     if (files.some(isDashboardBrowserRowActionSurface)) {
@@ -125,6 +129,27 @@ function selectRecommendations(files, base) {
     }
     if (files.some((file) => file === 'packages/dashboard/src/components/service-panel.tsx' || file === 'packages/dashboard/src/app/globals.css')) {
       add('pnpm test:dashboard-browser-table', 'dashboard browser table filtering or visibility changed');
+    }
+    if (files.some((file) => file === 'packages/dashboard/src/lib/service-workspaces.ts' || file === 'scripts/test-dashboard-workspace-nodes.js')) {
+      add('pnpm test:dashboard-workspace-nodes', 'dashboard workspace navigator model changed');
+    }
+    if (files.some((file) =>
+      file === 'packages/dashboard/src/lib/launcher-eligibility.ts' ||
+      file === 'packages/dashboard/src/components/workspace-navigator.tsx' ||
+      file === 'scripts/test-dashboard-launcher-eligibility.js'
+    )) {
+      add('pnpm test:dashboard-launcher-eligibility', 'dashboard launcher eligibility preview changed');
+    }
+    if (files.some((file) =>
+      file === 'packages/dashboard/src/components/workspace-navigator.tsx' ||
+      file === 'packages/dashboard/src/lib/service-workspaces.ts' ||
+      file === 'packages/dashboard/src/lib/workspace-url-selection.ts' ||
+      file === 'packages/dashboard/src/components/workspace-remote-viewport.tsx' ||
+      file === 'packages/dashboard/src/app/page.tsx' ||
+      file === 'packages/dashboard/src/app/globals.css' ||
+      file === 'scripts/test-dashboard-workspace-navigator.js'
+    )) {
+      add('pnpm test:dashboard-workspace-navigator', 'dashboard workspace navigator UI changed');
     }
     if (files.some((file) => file === 'packages/dashboard/src/components/service-panel.tsx' || file === 'packages/dashboard/src/app/page.tsx')) {
       add('pnpm test:dashboard-inspector-actions', 'dashboard service inspector action wiring changed');

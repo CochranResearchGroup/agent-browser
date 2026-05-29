@@ -452,6 +452,24 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     if opts.no_auto_dialog {
         cmd.env("AGENT_BROWSER_NO_AUTO_DIALOG", "1");
     }
+
+    for key in [
+        "AGENT_BROWSER_REMOTE_VIEW_PROVIDER",
+        "AGENT_BROWSER_REMOTE_VIEW_URL",
+        "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
+        "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
+        "AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID",
+        "AGENT_BROWSER_GUACAMOLE_CONNECTION_ID",
+        "AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME",
+        "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
+        "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
+    ] {
+        if let Ok(value) = env::var(key) {
+            if !value.is_empty() {
+                cmd.env(key, value);
+            }
+        }
+    }
 }
 
 /// Check if the running daemon's version matches this CLI binary.
@@ -1009,6 +1027,35 @@ mod tests {
 
     #[test]
     fn test_apply_daemon_env_forwards_keychain_settings() {
+        let remote_env_guard = EnvGuard::new(&[
+            "AGENT_BROWSER_REMOTE_VIEW_PROVIDER",
+            "AGENT_BROWSER_REMOTE_VIEW_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
+            "AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID",
+            "AGENT_BROWSER_GUACAMOLE_CONNECTION_ID",
+            "AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME",
+            "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
+            "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
+        ]);
+        remote_env_guard.set("AGENT_BROWSER_REMOTE_VIEW_PROVIDER", "rdp_gateway");
+        remote_env_guard.set("AGENT_BROWSER_REMOTE_VIEW_URL", "/guacamole/#/client/test");
+        remote_env_guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
+            "/guacamole/#/client/test-frame",
+        );
+        remote_env_guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
+            "/guacamole/#/client/test-external",
+        );
+        remote_env_guard.set("AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID", "route-test");
+        remote_env_guard.set("AGENT_BROWSER_GUACAMOLE_CONNECTION_ID", "test");
+        remote_env_guard.set("AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME", "Test Browser");
+        remote_env_guard.set(
+            "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
+            "manual_attached_desktop",
+        );
+        remote_env_guard.set("AGENT_BROWSER_REMOTE_HEADED_DISPLAY", ":10");
         let mut cmd = Command::new("env");
         let opts = DaemonOptions {
             headed: false,
@@ -1107,6 +1154,36 @@ mod tests {
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS_SOURCE"
                 && v.as_deref() == Some("cli")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_REMOTE_VIEW_PROVIDER" && v.as_deref() == Some("rdp_gateway")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_REMOTE_VIEW_URL" && v.as_deref() == Some("/guacamole/#/client/test")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL"
+                && v.as_deref() == Some("/guacamole/#/client/test-frame")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL"
+                && v.as_deref() == Some("/guacamole/#/client/test-external")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID" && v.as_deref() == Some("route-test")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_GUACAMOLE_CONNECTION_ID" && v.as_deref() == Some("test")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME" && v.as_deref() == Some("Test Browser")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER"
+                && v.as_deref() == Some("manual_attached_desktop")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_REMOTE_HEADED_DISPLAY" && v.as_deref() == Some(":10")
         }));
     }
 

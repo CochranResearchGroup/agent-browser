@@ -99,6 +99,34 @@
       ],
       "description": "Remote-headed display allocation policy requested by the caller or copied access plan."
     },
+    "requestedDisplayAllocationId": {
+      "type": ["string", "null"],
+      "description": "Display allocation id requested by the caller before service resolution."
+    },
+    "displayAllocationId": {
+      "type": ["string", "null"],
+      "description": "Display allocation id resolved by launch, focus, route allocation, or viewer takeover handling."
+    },
+    "requestedRemoteViewRouteId": {
+      "type": ["string", "null"],
+      "description": "Remote-view route id requested by the caller before service resolution."
+    },
+    "remoteViewRouteId": {
+      "type": ["string", "null"],
+      "description": "Remote-view route id resolved by the service or provider."
+    },
+    "routePoolEntryId": {
+      "type": ["string", "null"],
+      "description": "Static route-pool entry used to resolve the remote-view route, when known."
+    },
+    "viewerLeaseId": {
+      "type": ["string", "null"],
+      "description": "Viewer lease id requested or created by a view operation."
+    },
+    "controllerLeaseId": {
+      "type": ["string", "null"],
+      "description": "Controller lease id requested or granted by a view operation."
+    },
     "target": {
       "oneOf": [
         {

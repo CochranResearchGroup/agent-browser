@@ -1275,6 +1275,10 @@ pub struct Flags {
     pub confirm_actions: Option<String>,
     pub confirm_interactive: bool,
     pub engine: Option<String>,
+    pub browser_host: Option<String>,
+    pub view_stream_provider: Option<String>,
+    pub control_input_provider: Option<String>,
+    pub display_isolation: Option<String>,
     pub screenshot_dir: Option<String>,
     pub screenshot_quality: Option<u32>,
     pub screenshot_format: Option<String>,
@@ -1302,6 +1306,10 @@ pub struct Flags {
     pub cli_headed: bool,
     pub cli_leave_open: bool,
     pub cli_runtime_profile: bool,
+    pub cli_browser_host: bool,
+    pub cli_view_stream_provider: bool,
+    pub cli_control_input_provider: bool,
+    pub cli_display_isolation: bool,
 }
 
 /// Build the no-launch browser executable readiness view used by service status.
@@ -1645,6 +1653,10 @@ pub fn parse_flags(args: &[String]) -> Flags {
         confirm_interactive: env_var_is_truthy("AGENT_BROWSER_CONFIRM_INTERACTIVE")
             || config.confirm_interactive.unwrap_or(false),
         engine: env::var("AGENT_BROWSER_ENGINE").ok().or(config.engine),
+        browser_host: None,
+        view_stream_provider: None,
+        control_input_provider: None,
+        display_isolation: None,
         screenshot_dir: env::var("AGENT_BROWSER_SCREENSHOT_DIR")
             .ok()
             .or(config.screenshot_dir),
@@ -1684,6 +1696,10 @@ pub fn parse_flags(args: &[String]) -> Flags {
         cli_headed: false,
         cli_leave_open: false,
         cli_runtime_profile: false,
+        cli_browser_host: false,
+        cli_view_stream_provider: false,
+        cli_control_input_provider: false,
+        cli_display_isolation: false,
     };
 
     let mut i = 0;
@@ -2018,6 +2034,88 @@ pub fn parse_flags(args: &[String]) -> Flags {
                     i += 1;
                 }
             }
+            "--browser-host" => {
+                if let Some(s) = args.get(i + 1) {
+                    if matches!(
+                        s.as_str(),
+                        "local_headless"
+                            | "local_headed"
+                            | "docker_headed"
+                            | "remote_headed"
+                            | "cloud_provider"
+                            | "attached_existing"
+                    ) {
+                        flags.browser_host = Some(s.clone());
+                        flags.cli_browser_host = true;
+                    } else {
+                        eprintln!(
+                            "{} --browser-host must be local_headless, local_headed, docker_headed, remote_headed, cloud_provider, or attached_existing; got {}",
+                            color::warning_indicator(),
+                            s
+                        );
+                    }
+                    i += 1;
+                }
+            }
+            "--view-stream-provider" => {
+                if let Some(s) = args.get(i + 1) {
+                    if matches!(
+                        s.as_str(),
+                        "cdp_screencast"
+                            | "chrome_tab_webrtc"
+                            | "virtual_display_webrtc"
+                            | "novnc"
+                            | "rdp_gateway"
+                            | "external_url"
+                    ) {
+                        flags.view_stream_provider = Some(s.clone());
+                        flags.cli_view_stream_provider = true;
+                    } else {
+                        eprintln!(
+                            "{} --view-stream-provider must be cdp_screencast, chrome_tab_webrtc, virtual_display_webrtc, novnc, rdp_gateway, or external_url; got {}",
+                            color::warning_indicator(),
+                            s
+                        );
+                    }
+                    i += 1;
+                }
+            }
+            "--control-input-provider" => {
+                if let Some(s) = args.get(i + 1) {
+                    if matches!(
+                        s.as_str(),
+                        "cdp_input" | "webrtc_input" | "vnc_input" | "manual_attached_desktop"
+                    ) {
+                        flags.control_input_provider = Some(s.clone());
+                        flags.cli_control_input_provider = true;
+                    } else {
+                        eprintln!(
+                            "{} --control-input-provider must be cdp_input, webrtc_input, vnc_input, or manual_attached_desktop; got {}",
+                            color::warning_indicator(),
+                            s
+                        );
+                    }
+                    i += 1;
+                }
+            }
+            "--display-isolation" => {
+                if let Some(s) = args.get(i + 1) {
+                    if matches!(
+                        s.as_str(),
+                        "private_virtual_display" | "shared_display" | "ambient_display"
+                    ) {
+                        flags.display_isolation = Some(s.clone());
+                        flags.cli_display_isolation = true;
+                    } else {
+                        eprintln!(
+                            "{} --display-isolation must be private_virtual_display, shared_display, or ambient_display; got {}",
+                            color::warning_indicator(),
+                            s
+                        );
+                    }
+                    i += 1;
+                }
+            }
             "--screenshot-dir" => {
                 if let Some(s) = args.get(i + 1) {
                     flags.screenshot_dir = Some(s.clone());
@@ -2132,6 +2230,10 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
         "--confirm-actions",
         "--config",
         "--engine",
+        "--browser-host",
+        "--view-stream-provider",
+        "--control-input-provider",
+        "--display-isolation",
         "--screenshot-dir",
         "--screenshot-quality",
         "--screenshot-format",
@@ -3880,6 +3982,28 @@ mod tests {
     fn test_headed_bare_defaults_true() {
         let flags = parse_flags(&args("--headed open example.com"));
         assert!(flags.headed);
+    }
+
+    #[test]
+    fn test_remote_view_launch_flags() {
+        let input = args(
+            "--browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation shared_display open example.com",
+        );
+        let flags = parse_flags(&input);
+        let clean = clean_args(&input);
+
+        assert_eq!(flags.browser_host.as_deref(), Some("remote_headed"));
+        assert_eq!(flags.view_stream_provider.as_deref(), Some("rdp_gateway"));
+        assert_eq!(
+            flags.control_input_provider.as_deref(),
+            Some("manual_attached_desktop")
+        );
+        assert_eq!(flags.display_isolation.as_deref(), Some("shared_display"));
+        assert!(flags.cli_browser_host);
+        assert!(flags.cli_view_stream_provider);
+        assert!(flags.cli_control_input_provider);
+        assert!(flags.cli_display_isolation);
+        assert_eq!(clean, args("open example.com"));
     }
 
     #[test]

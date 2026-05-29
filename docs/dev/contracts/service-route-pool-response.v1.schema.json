@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-route-pool-response.v1.schema.json",
+  "title": "agent-browser service route pool response",
+  "description": "Stable API shape for configured remote-view route pool responses.",
+  "type": "object",
+  "required": [
+    "routePool",
+    "count"
+  ],
+  "properties": {
+    "routePool": {
+      "type": "array",
+      "items": {
+        "$ref": "service-route-pool-entry-record.v1.schema.json"
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

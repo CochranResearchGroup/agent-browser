@@ -1,0 +1,1535 @@
+import type { SessionInfo, TabInfo } from "@/types";
+
+export type WorkspaceNodeState =
+  | "active"
+  | "busy"
+  | "needs-attention"
+  | "blocked"
+  | "retained"
+  | "view-only"
+  | "controllable";
+
+export type WorkspaceNodeGroup = "active" | "needs-attention" | "retained";
+
+export type WorkspaceNodeSource =
+  | "service-browser"
+  | "service-session"
+  | "daemon-session"
+  | "profile";
+
+export type WorkspaceNodeActionId =
+  | "focus"
+  | "view"
+  | "control"
+  | "launch"
+  | "seed"
+  | "resume"
+  | "close"
+  | "kill"
+  | "add-tab"
+  | "repair"
+  | "copy-link"
+  | "external-open";
+
+export type WorkspaceNodeAction = {
+  id: WorkspaceNodeActionId;
+  label: string;
+  enabled: boolean;
+  reason?: string | null;
+};
+
+export type WorkspaceNodeOwnership = {
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+};
+
+export type WorkspaceNodePrimaryTab = {
+  id: string;
+  targetId?: string | null;
+  title?: string | null;
+  url?: string | null;
+  lifecycle?: string | null;
+  active?: boolean;
+};
+
+export type WorkspaceNodeViewStream = {
+  provider?: string | null;
+  url?: string | null;
+  routeId?: string | null;
+  displayAllocationId?: string | null;
+  connectionId?: string | null;
+  connectionName?: string | null;
+  routeSource?: string | null;
+  providerMode?: string | null;
+  viewerLeaseIds?: string[];
+  controllerLeaseId?: string | null;
+  embeddable: boolean;
+  controllable: boolean;
+  readOnly: boolean;
+  controlInput?: string | null;
+  routeSummary: string;
+};
+
+export type WorkspaceOwnershipDiagnosticKind =
+  | "duplicate-cdp-endpoint"
+  | "duplicate-display"
+  | "duplicate-guacamole-route"
+  | "duplicate-target"
+  | "stale-retained-target";
+
+export type WorkspaceOwnershipDiagnostic = {
+  kind: WorkspaceOwnershipDiagnosticKind;
+  severity: "info" | "warning";
+  message: string;
+  relatedIds: string[];
+};
+
+export type WorkspaceNodeTakeover = {
+  active: boolean;
+  sessionId: string;
+  ownerLabel: string;
+  startedAt?: string | null;
+  lastObservedAt?: string | null;
+  expiresAt?: string | null;
+  cleanup?: string | null;
+  profileLeaseDisposition?: string | null;
+  conflictSessionIds: string[];
+  waitingJobIds: string[];
+  queueImpact: string;
+  resumeSupported: boolean;
+  resumeReason: string;
+};
+
+export type WorkspaceNode = {
+  id: string;
+  source: WorkspaceNodeSource;
+  group: WorkspaceNodeGroup;
+  state: WorkspaceNodeState;
+  label: string;
+  secondaryLabel: string;
+  sortLabel: string;
+  health?: string | null;
+  attentionReason?: string | null;
+  retained: boolean;
+  live: boolean;
+  browserId?: string | null;
+  serviceSessionId?: string | null;
+  daemonSession?: string | null;
+  port?: number | null;
+  profileId?: string | null;
+  browserBuild?: string | null;
+  host?: string | null;
+  ownership: WorkspaceNodeOwnership;
+  primaryTab?: WorkspaceNodePrimaryTab | null;
+  viewStream?: WorkspaceNodeViewStream | null;
+  takeover?: WorkspaceNodeTakeover | null;
+  diagnostics: WorkspaceOwnershipDiagnostic[];
+  counts: {
+    tabs: number;
+    serviceSessions: number;
+    jobs: number;
+    incidents: number;
+  };
+  relatedIds: {
+    browserIds: string[];
+    serviceSessionIds: string[];
+    daemonSessionNames: string[];
+    tabIds: string[];
+    profileIds: string[];
+    jobIds: string[];
+    incidentIds: string[];
+  };
+  actions: WorkspaceNodeAction[];
+};
+
+export type WorkspaceServiceBrowser = {
+  id: string;
+  profileId?: string | null;
+  host?: string | null;
+  health?: string | null;
+  browserBuild?: string | null;
+  displayName?: string | null;
+  pid?: number | null;
+  cdpEndpoint?: string | null;
+  viewStreams?: WorkspaceServiceViewStream[];
+  activeSessionIds?: string[];
+  lastError?: string | null;
+};
+
+export type WorkspaceServiceViewStream = {
+  id?: string | null;
+  provider?: string | null;
+  url?: string | null;
+  frameUrl?: string | null;
+  externalUrl?: string | null;
+  routeId?: string | null;
+  displayAllocationId?: string | null;
+  connectionId?: string | null;
+  connectionName?: string | null;
+  routeSource?: string | null;
+  providerMode?: string | null;
+  viewerLeaseIds?: string[];
+  controllerLeaseId?: string | null;
+  readiness?: unknown;
+  remoteReadiness?: unknown;
+  readOnly?: boolean | null;
+  controlInput?: string | null;
+};
+
+export type WorkspaceServiceSession = {
+  id: string;
+  owner?: unknown;
+  profileId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  browserIds?: string[];
+  tabIds?: string[];
+  lease?: string | null;
+  cleanup?: string | null;
+  profileLeaseDisposition?: string | null;
+  profileLeaseConflictSessionIds?: string[];
+  createdAt?: string | null;
+  lastLeaseObservedAt?: string | null;
+  expiresAt?: string | null;
+};
+
+export type WorkspaceServiceTab = {
+  id: string;
+  browserId?: string | null;
+  targetId?: string | null;
+  sessionId?: string | null;
+  lifecycle?: string | null;
+  url?: string | null;
+  title?: string | null;
+  ownerSessionId?: string | null;
+};
+
+export type WorkspaceServiceProfileAllocation = {
+  profileId: string;
+  profileName?: string | null;
+  browserBuild?: string | null;
+  serviceNames?: string[];
+  agentNames?: string[];
+  taskNames?: string[];
+  browserIds?: string[];
+  tabIds?: string[];
+  holderSessionIds?: string[];
+  exclusiveHolderSessionIds?: string[];
+  waitingJobIds?: string[];
+  conflictSessionIds?: string[];
+  leaseState?: string | null;
+  recommendedAction?: string | null;
+  targetReadiness?: WorkspaceProfileTargetReadiness[];
+  browserSummaries?: Array<{
+    browserId?: string | null;
+    health?: string | null;
+    activeSessionIds?: string[];
+  }>;
+};
+
+export type WorkspaceProfileTargetReadiness = {
+  targetServiceId?: string | null;
+  loginId?: string | null;
+  state?: string | null;
+  manualSeedingRequired?: boolean | null;
+  recommendedAction?: string | null;
+  evidence?: string | null;
+};
+
+export type WorkspaceServiceJob = {
+  id: string;
+  action?: string | null;
+  state?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  target?: unknown;
+  request?: unknown;
+  response?: unknown;
+  result?: unknown;
+  error?: string | null;
+};
+
+export type WorkspaceServiceIncident = {
+  id: string;
+  browserId?: string | null;
+  label?: string | null;
+  severity?: string | null;
+  escalation?: string | null;
+  recommendedAction?: string | null;
+  latestMessage?: string | null;
+  currentHealth?: string | null;
+  acknowledgedAt?: string | null;
+  resolvedAt?: string | null;
+  jobIds?: string[];
+};
+
+export type WorkspaceNodeInput = {
+  daemonSessions?: SessionInfo[];
+  daemonTabsByPort?: Record<number, TabInfo[]>;
+  daemonEngineByPort?: Record<number, string>;
+  serviceBrowsers?: WorkspaceServiceBrowser[];
+  serviceSessions?: WorkspaceServiceSession[];
+  serviceTabs?: WorkspaceServiceTab[];
+  profileAllocations?: WorkspaceServiceProfileAllocation[];
+  jobs?: WorkspaceServiceJob[];
+  incidents?: WorkspaceServiceIncident[];
+};
+
+const TERMINAL_BROWSER_HEALTH = new Set([
+  "closed",
+  "faulted",
+  "not_started",
+  "process_exited",
+]);
+
+const ATTENTION_BROWSER_HEALTH = new Set([
+  "degraded",
+  "disconnected",
+  "error",
+  "faulted",
+  "unreachable",
+]);
+
+const ACTIVE_JOB_STATES = new Set([
+  "queued",
+  "running",
+  "waiting",
+  "pending",
+  "cancelling",
+]);
+
+const MANUAL_SEEDING_STATES = new Set([
+  "needs_manual_seeding",
+  "manual_seeding_required",
+  "stale",
+  "missing",
+]);
+
+const PROFILE_CONFLICT_STATES = new Set([
+  "blocked",
+  "conflict",
+  "exclusive_conflict",
+  "lease_conflict",
+]);
+
+const INTERNAL_DASHBOARD_SERVICE_NAMES = new Set([
+  "agentbrowserdashboard",
+]);
+
+export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[] {
+  const daemonSessions = input.daemonSessions ?? [];
+  const daemonTabsByPort = input.daemonTabsByPort ?? {};
+  const daemonEngineByPort = input.daemonEngineByPort ?? {};
+  const serviceBrowsers = input.serviceBrowsers ?? [];
+  const serviceSessions = input.serviceSessions ?? [];
+  const serviceTabs = input.serviceTabs ?? [];
+  const profileAllocations = input.profileAllocations ?? [];
+  const jobs = input.jobs ?? [];
+  const incidents = input.incidents ?? [];
+  const ownershipDiagnostics = deriveWorkspaceOwnershipDiagnostics({
+    serviceBrowsers,
+    serviceSessions,
+    serviceTabs,
+  });
+  const diagnosticsByRelatedId = groupDiagnosticsByRelatedId(ownershipDiagnostics);
+
+  const serviceSessionsByBrowserId = groupByLinkedId(
+    serviceSessions,
+    (session) => session.browserIds ?? [],
+  );
+  const serviceTabsByBrowserId = groupByLinkedId(
+    serviceTabs,
+    (tab) => (tab.browserId ? [tab.browserId] : []),
+  );
+  const serviceTabsBySessionId = groupByLinkedId(
+    serviceTabs,
+    (tab) => uniqueStrings([tab.sessionId, tab.ownerSessionId]),
+  );
+  const serviceSessionById = new Map(serviceSessions.map((session) => [session.id, session]));
+  const serviceBrowserByActiveSessionId = new Map<string, WorkspaceServiceBrowser>();
+  for (const browser of serviceBrowsers) {
+    for (const sessionId of browser.activeSessionIds ?? []) {
+      serviceBrowserByActiveSessionId.set(sessionId, browser);
+    }
+  }
+  const profileAllocationById = new Map(
+    profileAllocations.map((allocation) => [allocation.profileId, allocation]),
+  );
+  const browserIdsWithNodes = new Set<string>();
+  const serviceSessionIdsWithNodes = new Set<string>();
+  const daemonNamesWithNodes = new Set<string>();
+  const profileIdsWithNodes = new Set<string>();
+  const nodes: WorkspaceNode[] = [];
+
+  for (const browser of serviceBrowsers) {
+    const linkedSessions = uniqueById([
+      ...(browser.activeSessionIds ?? [])
+        .map((sessionId) => serviceSessionById.get(sessionId))
+        .filter(isDefined),
+      ...(serviceSessionsByBrowserId.get(browser.id) ?? []),
+    ]);
+    const tabs = serviceTabsByBrowserId.get(browser.id) ?? [];
+    const allocation = browser.profileId
+      ? profileAllocationById.get(browser.profileId)
+      : undefined;
+    const relatedJobs = jobs.filter((job) => jobMatches({
+      job,
+      browser,
+      sessions: linkedSessions,
+      allocation,
+      tabs,
+    }));
+    const relatedIncidents = incidents.filter((incident) =>
+      incident.browserId === browser.id || (incident.jobIds ?? []).some((jobId) => relatedJobs.some((job) => job.id === jobId)),
+    );
+    const diagnostics = diagnosticsForRelatedIds(diagnosticsByRelatedId, [
+      relatedId("browser", browser.id),
+      ...linkedSessions.map((session) => relatedId("session", session.id)),
+      ...tabs.map((tab) => relatedId("tab", tab.id)),
+    ]);
+    const node = createBrowserWorkspaceNode({
+      browser,
+      sessions: linkedSessions,
+      tabs,
+      allocation,
+      jobs: relatedJobs,
+      incidents: relatedIncidents,
+      diagnostics,
+    });
+    nodes.push(node);
+    browserIdsWithNodes.add(browser.id);
+    if (browser.profileId) profileIdsWithNodes.add(browser.profileId);
+    for (const session of linkedSessions) serviceSessionIdsWithNodes.add(session.id);
+  }
+
+  for (const session of serviceSessions) {
+    if (serviceSessionIdsWithNodes.has(session.id)) continue;
+    const tabs = serviceTabsBySessionId.get(session.id) ?? [];
+    const allocation = session.profileId
+      ? profileAllocationById.get(session.profileId)
+      : undefined;
+    const relatedJobs = jobs.filter((job) => jobMatches({ job, sessions: [session], allocation, tabs }));
+    const relatedIncidents = incidents.filter((incident) =>
+      (incident.jobIds ?? []).some((jobId) => relatedJobs.some((job) => job.id === jobId)),
+    );
+    const diagnostics = diagnosticsForRelatedIds(diagnosticsByRelatedId, [
+      relatedId("session", session.id),
+      ...tabs.map((tab) => relatedId("tab", tab.id)),
+    ]);
+    nodes.push(createServiceSessionWorkspaceNode({
+      session,
+      tabs,
+      allocation,
+      jobs: relatedJobs,
+      incidents: relatedIncidents,
+      diagnostics,
+    }));
+    serviceSessionIdsWithNodes.add(session.id);
+    if (session.profileId) profileIdsWithNodes.add(session.profileId);
+  }
+
+  for (const session of daemonSessions) {
+    const serviceBrowser = serviceBrowserByActiveSessionId.get(session.session);
+    if (serviceBrowser && browserIdsWithNodes.has(serviceBrowser.id)) {
+      daemonNamesWithNodes.add(session.session);
+      continue;
+    }
+    const serviceSession = serviceSessionById.get(session.session);
+    if (serviceSession && serviceSessionIdsWithNodes.has(serviceSession.id)) {
+      daemonNamesWithNodes.add(session.session);
+      continue;
+    }
+    const tabs = daemonTabsByPort[session.port] ?? [];
+    nodes.push(createDaemonWorkspaceNode({
+      session,
+      tabs,
+      engine: session.engine ?? daemonEngineByPort[session.port],
+    }));
+    daemonNamesWithNodes.add(session.session);
+  }
+
+  for (const allocation of profileAllocations) {
+    if (profileIdsWithNodes.has(allocation.profileId)) continue;
+    const relatedJobs = jobs.filter((job) => jobMatches({ job, allocation }));
+    const relatedIncidents = incidents.filter((incident) =>
+      (incident.jobIds ?? []).some((jobId) => relatedJobs.some((job) => job.id === jobId)),
+    );
+    nodes.push(createProfileWorkspaceNode({ allocation, jobs: relatedJobs, incidents: relatedIncidents }));
+    profileIdsWithNodes.add(allocation.profileId);
+  }
+
+  return nodes.sort(compareWorkspaceNodes);
+}
+
+export function deriveWorkspaceOwnershipDiagnostics(input: Pick<WorkspaceNodeInput, "serviceBrowsers" | "serviceSessions" | "serviceTabs">): WorkspaceOwnershipDiagnostic[] {
+  const serviceBrowsers = input.serviceBrowsers ?? [];
+  const serviceSessions = input.serviceSessions ?? [];
+  const serviceTabs = input.serviceTabs ?? [];
+  const sessionByBrowserId = groupByLinkedId(serviceSessions, (session) => session.browserIds ?? []);
+  const tabsByBrowserId = groupByLinkedId(serviceTabs, (tab) => (tab.browserId ? [tab.browserId] : []));
+  const diagnostics: WorkspaceOwnershipDiagnostic[] = [];
+
+  addDuplicateBrowserDiagnostics({
+    diagnostics,
+    browsers: serviceBrowsers,
+    kind: "duplicate-cdp-endpoint",
+    valueFor: (browser) => browser.cdpEndpoint,
+    messageFor: (value, browsers) =>
+      `Duplicate CDP endpoint ${value} is claimed by ${browsers.map((browser) => browser.id).join(", ")}.`,
+  });
+
+  addDuplicateBrowserDiagnostics({
+    diagnostics,
+    browsers: serviceBrowsers.filter((browser) => browser.host === "remote_headed" || browser.viewStreams?.some((stream) => stream.provider === "rdp_gateway")),
+    kind: "duplicate-display",
+    valueFor: (browser) => browser.displayName,
+    messageFor: (value, browsers) =>
+      `Remote display ${value} is claimed by ${browsers.map((browser) => browser.id).join(", ")}; keep shared-display contention explicit or allocate private displays.`,
+  });
+
+  addDuplicateBrowserDiagnostics({
+    diagnostics,
+    browsers: serviceBrowsers.filter((browser) => browser.viewStreams?.some((stream) => stream.provider === "rdp_gateway")),
+    kind: "duplicate-guacamole-route",
+    valueFor: (browser) => {
+      const stream = browser.viewStreams?.find((candidate) => candidate.provider === "rdp_gateway");
+      return stream?.routeId || stream?.connectionId || stream?.frameUrl || stream?.externalUrl || stream?.url;
+    },
+    messageFor: (value, browsers) =>
+      `Guacamole route ${value} is shared by ${browsers.map((browser) => browser.id).join(", ")}; viewer ownership and takeover state must be service-visible.`,
+  });
+
+  const targetGroups = new Map<string, WorkspaceServiceTab[]>();
+  for (const tab of serviceTabs) {
+    const targetId = tab.targetId?.trim();
+    if (!targetId || !isLiveServiceWorkspaceTab(tab)) continue;
+    const group = targetGroups.get(targetId);
+    if (group) {
+      group.push(tab);
+    } else {
+      targetGroups.set(targetId, [tab]);
+    }
+  }
+  for (const [targetId, tabs] of targetGroups) {
+    const browserIds = uniqueStrings(tabs.map((tab) => tab.browserId));
+    if (tabs.length < 2 || browserIds.length < 2) continue;
+    diagnostics.push({
+      kind: "duplicate-target",
+      severity: "warning",
+      message: `CDP target ${targetId} is claimed by multiple browser records: ${browserIds.join(", ")}.`,
+      relatedIds: uniqueStrings([
+        ...tabs.map((tab) => relatedId("tab", tab.id)),
+        ...browserIds.map((browserId) => relatedId("browser", browserId)),
+        ...tabs.flatMap((tab) => uniqueStrings([tab.sessionId, tab.ownerSessionId]).map((sessionId) => relatedId("session", sessionId))),
+      ]),
+    });
+  }
+
+  for (const browser of serviceBrowsers) {
+    if (!isLiveBrowser(browser)) continue;
+    const tabs = tabsByBrowserId.get(browser.id) ?? [];
+    const liveTabs = tabs.filter((tab) => isLiveServiceWorkspaceTab(tab) && !isBlankServiceWorkspaceTab(tab));
+    const staleTabs = tabs.filter((tab) => !isLiveServiceWorkspaceTab(tab) || isBlankServiceWorkspaceTab(tab));
+    if (staleTabs.length === 0) continue;
+    const sessions = sessionByBrowserId.get(browser.id) ?? [];
+    diagnostics.push({
+      kind: "stale-retained-target",
+      severity: "info",
+      message: liveTabs.length > 0
+        ? `Retained target identity is stale for ${browser.id}; focus should fall back to a current live tab before marking the stream dead.`
+        : `Browser ${browser.id} is live but retained target identity is stale or missing; distinguish target recovery from browser failure.`,
+      relatedIds: uniqueStrings([
+        relatedId("browser", browser.id),
+        ...staleTabs.map((tab) => relatedId("tab", tab.id)),
+        ...sessions.map((session) => relatedId("session", session.id)),
+      ]),
+    });
+  }
+
+  return diagnostics;
+}
+
+function createBrowserWorkspaceNode({
+  browser,
+  sessions,
+  tabs,
+  allocation,
+  jobs,
+  incidents,
+  diagnostics,
+}: {
+  browser: WorkspaceServiceBrowser;
+  sessions: WorkspaceServiceSession[];
+  tabs: WorkspaceServiceTab[];
+  allocation?: WorkspaceServiceProfileAllocation;
+  jobs: WorkspaceServiceJob[];
+  incidents: WorkspaceServiceIncident[];
+  diagnostics: WorkspaceOwnershipDiagnostic[];
+}): WorkspaceNode {
+  const ownership = firstOwnership(sessions, allocation);
+  const primaryTab = primaryServiceTab(tabs);
+  const viewStream = primaryViewStream(browser.viewStreams);
+  const takeover = takeoverForSessions(sessions, allocation, jobs);
+  const attentionReason = browserAttentionReason(browser, allocation, incidents);
+  const busy = jobs.some(isActiveJob);
+  const live = isLiveBrowser(browser);
+  const blockedReason = takeover?.queueImpact ?? (live && viewStream?.controllable ? null : profileBlockedReason(allocation));
+  const state = workspaceState({
+    busy,
+    blockedReason,
+    attentionReason,
+    live,
+    viewStream,
+  });
+  const label = browserWorkspaceLabel({
+    browser,
+    sessions,
+    ownership,
+    primaryTab,
+    profileName: allocation?.profileName,
+    displayName: browser.displayName,
+    fallback: browser.id,
+  });
+  const secondaryLabel = compactLabels([
+    workspaceSessionLabel(sessions[0]?.id ?? browser.activeSessionIds?.[0]),
+    browser.host,
+    browser.browserBuild,
+    allocation?.profileId ?? browser.profileId,
+    viewStream?.routeSummary,
+    primaryTab?.title || primaryTab?.url,
+    takeover ? `takeover by ${takeover.ownerLabel}` : null,
+    diagnostics[0]?.message,
+    live ? "live" : "retained",
+  ]).join(" / ");
+
+  return {
+    id: `browser:${browser.id}`,
+    source: "service-browser",
+    group: groupForState(state),
+    state,
+    label,
+    secondaryLabel,
+    sortLabel: `${label} ${browser.id}`.toLowerCase(),
+    health: browser.health ?? null,
+    attentionReason: blockedReason ?? attentionReason,
+    retained: !live,
+    live,
+    browserId: browser.id,
+    serviceSessionId: sessions[0]?.id ?? null,
+    profileId: browser.profileId ?? allocation?.profileId ?? null,
+    browserBuild: browser.browserBuild ?? allocation?.browserBuild ?? null,
+    host: browser.host ?? null,
+    ownership,
+    primaryTab,
+    viewStream,
+    takeover,
+    diagnostics,
+    counts: {
+      tabs: tabs.length,
+      serviceSessions: sessions.length,
+      jobs: jobs.length,
+      incidents: incidents.length,
+    },
+    relatedIds: {
+      browserIds: [browser.id],
+      serviceSessionIds: uniqueStrings(sessions.map((session) => session.id)),
+      daemonSessionNames: [],
+      tabIds: uniqueStrings(tabs.map((tab) => tab.id)),
+      profileIds: uniqueStrings([browser.profileId, allocation?.profileId]),
+      jobIds: uniqueStrings(jobs.map((job) => job.id)),
+      incidentIds: uniqueStrings(incidents.map((incident) => incident.id)),
+    },
+    actions: browserActions(browser, live, viewStream, blockedReason ?? attentionReason, takeover),
+  };
+}
+
+function createServiceSessionWorkspaceNode({
+  session,
+  tabs,
+  allocation,
+  jobs,
+  incidents,
+  diagnostics,
+}: {
+  session: WorkspaceServiceSession;
+  tabs: WorkspaceServiceTab[];
+  allocation?: WorkspaceServiceProfileAllocation;
+  jobs: WorkspaceServiceJob[];
+  incidents: WorkspaceServiceIncident[];
+  diagnostics: WorkspaceOwnershipDiagnostic[];
+}): WorkspaceNode {
+  const ownership = ownershipFromSession(session, allocation);
+  const primaryTab = primaryServiceTab(tabs);
+  const takeover = takeoverForSession(session, allocation, jobs);
+  const attentionReason = profileAttentionReason(allocation) ?? unresolvedIncidentReason(incidents);
+  const blockedReason = takeover?.queueImpact ?? profileBlockedReason(allocation);
+  const busy = jobs.some(isActiveJob);
+  const live = (session.browserIds?.length ?? 0) > 0 || (session.tabIds?.length ?? 0) > 0;
+  const state = workspaceState({ busy, blockedReason, attentionReason, live });
+  const label = workspaceLabel({
+    ownership,
+    profileName: allocation?.profileName,
+    fallback: session.id,
+  });
+
+  return {
+    id: `service-session:${session.id}`,
+    source: "service-session",
+    group: groupForState(state),
+    state,
+    label,
+    secondaryLabel: compactLabels([
+      allocation?.profileId ?? session.profileId,
+      session.lease,
+      takeover ? `takeover by ${takeover.ownerLabel}` : null,
+      diagnostics[0]?.message,
+      primaryTab?.title || primaryTab?.url,
+      live ? "live session" : "retained session",
+    ]).join(" / "),
+    sortLabel: `${label} ${session.id}`.toLowerCase(),
+    attentionReason: blockedReason ?? attentionReason,
+    retained: !live,
+    live,
+    serviceSessionId: session.id,
+    profileId: session.profileId ?? allocation?.profileId ?? null,
+    browserBuild: allocation?.browserBuild ?? null,
+    ownership,
+    primaryTab,
+    viewStream: null,
+    takeover,
+    diagnostics,
+    counts: {
+      tabs: tabs.length,
+      serviceSessions: 1,
+      jobs: jobs.length,
+      incidents: incidents.length,
+    },
+    relatedIds: {
+      browserIds: uniqueStrings(session.browserIds ?? []),
+      serviceSessionIds: [session.id],
+      daemonSessionNames: [],
+      tabIds: uniqueStrings([...(session.tabIds ?? []), ...tabs.map((tab) => tab.id)]),
+      profileIds: uniqueStrings([session.profileId, allocation?.profileId]),
+      jobIds: uniqueStrings(jobs.map((job) => job.id)),
+      incidentIds: uniqueStrings(incidents.map((incident) => incident.id)),
+    },
+    actions: serviceSessionActions(live, blockedReason ?? attentionReason, takeover),
+  };
+}
+
+function createDaemonWorkspaceNode({
+  session,
+  tabs,
+  engine,
+}: {
+  session: SessionInfo;
+  tabs: TabInfo[];
+  engine?: string | null;
+}): WorkspaceNode {
+  const activeTab = tabs.find((tab) => tab.active) ?? tabs[0];
+  const live = !session.pending && !session.closing && session.port > 0;
+  const attentionReason = session.closing ? "Session is closing." : null;
+  const state: WorkspaceNodeState = session.pending ? "busy" : attentionReason ? "needs-attention" : live ? "active" : "retained";
+  const label = activeTab?.title || session.session;
+
+  return {
+    id: `daemon-session:${session.session}`,
+    source: "daemon-session",
+    group: groupForState(state),
+    state,
+    label,
+    secondaryLabel: compactLabels([
+      session.session,
+      session.provider ?? session.engine ?? engine,
+      activeTab?.url,
+    ]).join(" / "),
+    sortLabel: `${label} ${session.session}`.toLowerCase(),
+    health: session.pending ? "pending" : session.closing ? "closing" : "live",
+    attentionReason,
+    retained: !live,
+    live,
+    daemonSession: session.session,
+    port: session.port,
+    ownership: {},
+    primaryTab: activeTab
+      ? {
+          id: String(activeTab.index),
+          title: activeTab.title,
+          url: activeTab.url,
+          active: activeTab.active,
+        }
+      : null,
+    viewStream: null,
+    takeover: null,
+    diagnostics: [],
+    counts: {
+      tabs: tabs.length,
+      serviceSessions: 0,
+      jobs: 0,
+      incidents: 0,
+    },
+    relatedIds: {
+      browserIds: [],
+      serviceSessionIds: [],
+      daemonSessionNames: [session.session],
+      tabIds: tabs.map((tab) => String(tab.index)),
+      profileIds: [],
+      jobIds: [],
+      incidentIds: [],
+    },
+    actions: daemonActions(session, live),
+  };
+}
+
+function createProfileWorkspaceNode({
+  allocation,
+  jobs,
+  incidents,
+}: {
+  allocation: WorkspaceServiceProfileAllocation;
+  jobs: WorkspaceServiceJob[];
+  incidents: WorkspaceServiceIncident[];
+}): WorkspaceNode {
+  const ownership = ownershipFromAllocation(allocation);
+  const blockedReason = profileBlockedReason(allocation);
+  const attentionReason = profileAttentionReason(allocation) ?? unresolvedIncidentReason(incidents);
+  const busy = jobs.some(isActiveJob);
+  const state = workspaceState({
+    busy,
+    blockedReason,
+    attentionReason,
+    live: false,
+  });
+  const label = allocation.profileName || allocation.profileId;
+
+  return {
+    id: `profile:${allocation.profileId}`,
+    source: "profile",
+    group: groupForState(state),
+    state,
+    label,
+    secondaryLabel: compactLabels([
+      allocation.browserBuild,
+      ownership.serviceName,
+      allocation.leaseState,
+      profileReadinessSummary(allocation),
+    ]).join(" / "),
+    sortLabel: `${label} ${allocation.profileId}`.toLowerCase(),
+    attentionReason: blockedReason ?? attentionReason,
+    retained: true,
+    live: false,
+    profileId: allocation.profileId,
+    browserBuild: allocation.browserBuild ?? null,
+    ownership,
+    primaryTab: null,
+    viewStream: null,
+    takeover: null,
+    diagnostics: [],
+    counts: {
+      tabs: allocation.tabIds?.length ?? 0,
+      serviceSessions: allocation.holderSessionIds?.length ?? 0,
+      jobs: jobs.length,
+      incidents: incidents.length,
+    },
+    relatedIds: {
+      browserIds: uniqueStrings([
+        ...(allocation.browserIds ?? []),
+        ...(allocation.browserSummaries ?? []).map((summary) => summary.browserId),
+      ]),
+      serviceSessionIds: uniqueStrings(allocation.holderSessionIds ?? []),
+      daemonSessionNames: [],
+      tabIds: uniqueStrings(allocation.tabIds ?? []),
+      profileIds: [allocation.profileId],
+      jobIds: uniqueStrings(jobs.map((job) => job.id)),
+      incidentIds: uniqueStrings(incidents.map((incident) => incident.id)),
+    },
+    actions: profileActions(allocation, blockedReason ?? attentionReason),
+  };
+}
+
+function workspaceState({
+  busy,
+  blockedReason,
+  attentionReason,
+  live,
+  viewStream,
+}: {
+  busy: boolean;
+  blockedReason?: string | null;
+  attentionReason?: string | null;
+  live: boolean;
+  viewStream?: WorkspaceNodeViewStream | null;
+}): WorkspaceNodeState {
+  if (live && viewStream?.controllable) return "controllable";
+  if (live && viewStream?.embeddable) return "view-only";
+  if (blockedReason) return "blocked";
+  if (attentionReason) return "needs-attention";
+  if (busy) return "busy";
+  return live ? "active" : "retained";
+}
+
+function groupForState(state: WorkspaceNodeState): WorkspaceNodeGroup {
+  if (state === "blocked" || state === "needs-attention") return "needs-attention";
+  if (state === "retained") return "retained";
+  return "active";
+}
+
+function isLiveBrowser(browser: WorkspaceServiceBrowser): boolean {
+  const health = normalize(browser.health);
+  if (TERMINAL_BROWSER_HEALTH.has(health)) return false;
+  return Boolean(browser.pid || browser.cdpEndpoint || (browser.activeSessionIds?.length ?? 0) > 0 || health === "ready" || health === "healthy");
+}
+
+function browserAttentionReason(
+  browser: WorkspaceServiceBrowser,
+  allocation?: WorkspaceServiceProfileAllocation,
+  incidents: WorkspaceServiceIncident[] = [],
+): string | null {
+  const incidentReason = unresolvedIncidentReason(incidents);
+  if (incidentReason) return incidentReason;
+  const health = normalize(browser.health);
+  if (ATTENTION_BROWSER_HEALTH.has(health)) {
+    return browser.lastError || `Browser health is ${browser.health}.`;
+  }
+  return profileAttentionReason(allocation);
+}
+
+function profileAttentionReason(allocation?: WorkspaceServiceProfileAllocation): string | null {
+  if (!allocation) return null;
+  for (const readiness of allocation.targetReadiness ?? []) {
+    const state = normalize(readiness.state);
+    if (readiness.manualSeedingRequired || MANUAL_SEEDING_STATES.has(state)) {
+      return humanRecommendedAction(readiness.recommendedAction) || "Profile needs manual seeding before automation can proceed.";
+    }
+  }
+  return null;
+}
+
+function profileBlockedReason(allocation?: WorkspaceServiceProfileAllocation): string | null {
+  if (!allocation) return null;
+  const leaseState = normalize(allocation.leaseState);
+  if (
+    PROFILE_CONFLICT_STATES.has(leaseState) ||
+    (allocation.conflictSessionIds?.length ?? 0) > 0 ||
+    (allocation.exclusiveHolderSessionIds?.length ?? 0) > 1
+  ) {
+    return humanRecommendedAction(allocation.recommendedAction) || "Profile has an exclusive lease conflict.";
+  }
+  return null;
+}
+
+function unresolvedIncidentReason(incidents: WorkspaceServiceIncident[]): string | null {
+  const incident = incidents.find((item) => !item.resolvedAt);
+  if (!incident) return null;
+  return humanRecommendedAction(incident.recommendedAction) || incident.latestMessage || incident.label || "Service incident needs attention.";
+}
+
+function humanRecommendedAction(action?: string | null): string | null {
+  const value = action?.trim();
+  if (!value) return null;
+  const actionLabels: Record<string, string> = {
+    reuse_holder_or_release_profile: "Use the existing browser, or release the profile when this task is done.",
+    release_holder_or_redirect_waiting_jobs: "Release the profile holder, or route waiting jobs to a different browser.",
+    reuse_holder_or_release_holder: "Use the existing browser, or release the current holder.",
+    reuse_holder_or_create_new_profile: "Use the existing browser, or launch with a different profile.",
+  };
+  if (actionLabels[value]) return actionLabels[value];
+  if (/^[a-z0-9_]+$/.test(value) && value.includes("_")) {
+    return value.split("_").filter(Boolean).join(" ");
+  }
+  return value;
+}
+
+function firstOwnership(
+  sessions: WorkspaceServiceSession[],
+  allocation?: WorkspaceServiceProfileAllocation,
+): WorkspaceNodeOwnership {
+  const session = sessions.find((item) => item.serviceName || item.agentName || item.taskName);
+  return {
+    serviceName: session?.serviceName ?? allocation?.serviceNames?.[0] ?? null,
+    agentName: session?.agentName ?? allocation?.agentNames?.[0] ?? null,
+    taskName: session?.taskName ?? allocation?.taskNames?.[0] ?? null,
+  };
+}
+
+function ownershipFromSession(
+  session: WorkspaceServiceSession,
+  allocation?: WorkspaceServiceProfileAllocation,
+): WorkspaceNodeOwnership {
+  return {
+    serviceName: session.serviceName ?? allocation?.serviceNames?.[0] ?? null,
+    agentName: session.agentName ?? allocation?.agentNames?.[0] ?? null,
+    taskName: session.taskName ?? allocation?.taskNames?.[0] ?? null,
+  };
+}
+
+function ownershipFromAllocation(allocation: WorkspaceServiceProfileAllocation): WorkspaceNodeOwnership {
+  return {
+    serviceName: allocation.serviceNames?.[0] ?? null,
+    agentName: allocation.agentNames?.[0] ?? null,
+    taskName: allocation.taskNames?.[0] ?? null,
+  };
+}
+
+function workspaceLabel({
+  ownership,
+  profileName,
+  displayName,
+  fallback,
+}: {
+  ownership: WorkspaceNodeOwnership;
+  profileName?: string | null;
+  displayName?: string | null;
+  fallback: string;
+}): string {
+  return compactLabels([
+    ownership.serviceName,
+    ownership.taskName,
+    ownership.agentName,
+    displayName,
+    profileName,
+    fallback,
+  ])[0] ?? fallback;
+}
+
+function browserWorkspaceLabel({
+  browser,
+  sessions,
+  ownership,
+  primaryTab,
+  profileName,
+  displayName,
+  fallback,
+}: {
+  browser: WorkspaceServiceBrowser;
+  sessions: WorkspaceServiceSession[];
+  ownership: WorkspaceNodeOwnership;
+  primaryTab?: WorkspaceNodePrimaryTab | null;
+  profileName?: string | null;
+  displayName?: string | null;
+  fallback: string;
+}): string {
+  const sessionId = sessions[0]?.id ?? browser.activeSessionIds?.[0] ?? sessionNameFromBrowserId(browser.id);
+  const shippingLabel = shippingWorkspaceLabel(primaryTab, sessionId);
+  if (shippingLabel) return shippingLabel;
+
+  const serviceName = humanOwnershipLabel(ownership.serviceName);
+  const taskName = serviceName ? ownership.taskName : null;
+  const agentName = serviceName ? ownership.agentName : null;
+  return compactLabels([
+    serviceName,
+    taskName,
+    agentName,
+    meaningfulPrimaryTabLabel(primaryTab),
+    workspaceSessionLabel(sessionId),
+    displayName,
+    profileName,
+    fallback,
+  ])[0] ?? fallback;
+}
+
+function meaningfulPrimaryTabLabel(tab?: WorkspaceNodePrimaryTab | null): string | null {
+  const url = (tab?.url ?? "").trim().toLowerCase();
+  const title = (tab?.title ?? "").trim();
+  const normalizedTitle = title.toLowerCase();
+  const blankUrl = !url || url === "about:blank" || url === "chrome://newtab/";
+  const blankTitle = !normalizedTitle || normalizedTitle === "about:blank" || normalizedTitle === "new tab";
+  if (!blankTitle) return title;
+  if (!blankUrl) return tab?.url ?? null;
+  return null;
+}
+
+function humanOwnershipLabel(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (INTERNAL_DASHBOARD_SERVICE_NAMES.has(normalizeIdentifier(trimmed))) return null;
+  return trimmed;
+}
+
+function normalizeIdentifier(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function sessionNameFromBrowserId(browserId?: string | null): string | null {
+  if (!browserId) return null;
+  return browserId.startsWith("session:") ? browserId.slice("session:".length) : null;
+}
+
+function workspaceSessionLabel(sessionId?: string | null): string | null {
+  const id = sessionId?.trim();
+  if (!id) return null;
+  const normalized = id.toLowerCase();
+  if (normalized.startsWith("odollo-carrier-ups") || normalized.startsWith("odollo-ups")) {
+    return "Odollo UPS";
+  }
+  if (normalized.startsWith("odollo-usps")) return "Odollo USPS";
+  return id;
+}
+
+function shippingWorkspaceLabel(tab: WorkspaceNodePrimaryTab | null | undefined, sessionId?: string | null): string | null {
+  const url = tab?.url?.trim();
+  const title = tab?.title?.trim();
+  const carrier = shippingCarrierFromUrl(url) ?? shippingCarrierFromTitle(title);
+  const sessionLabel = workspaceSessionLabel(sessionId);
+  if (!carrier && sessionLabel?.startsWith("Odollo ")) return sessionLabel;
+  if (!carrier) return null;
+  const trackingNumber = trackingNumberFromUrl(url);
+  const prefix = sessionLabel?.startsWith("Odollo ") ? sessionLabel : `${carrier} Tracking`;
+  return trackingNumber ? `${prefix}: ${trackingNumber}` : prefix;
+}
+
+function shippingCarrierFromTitle(title?: string | null): string | null {
+  const normalized = title?.toLowerCase() ?? "";
+  if (normalized.includes("ups")) return "UPS";
+  if (normalized.includes("usps")) return "USPS";
+  if (normalized.includes("fedex")) return "FedEx";
+  return null;
+}
+
+function shippingCarrierFromUrl(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (hostname.includes("ups.com")) return "UPS";
+    if (hostname.includes("usps.com")) return "USPS";
+    if (hostname.includes("fedex.com")) return "FedEx";
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function trackingNumberFromUrl(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    for (const key of ["tracknum", "trackingNumber", "trackingnumber", "trackNums"]) {
+      const value = parsed.searchParams.get(key)?.trim();
+      if (value) return value.split(/[,\s]+/)[0] ?? value;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function isLiveServiceWorkspaceTab(tab: WorkspaceServiceTab): boolean {
+  const lifecycle = normalize(tab.lifecycle);
+  return lifecycle === "active" || lifecycle === "ready" || lifecycle === "loading";
+}
+
+function isBlankServiceWorkspaceTab(tab: WorkspaceServiceTab): boolean {
+  const url = (tab.url ?? "").trim().toLowerCase();
+  const title = (tab.title ?? "").trim().toLowerCase();
+  const blankUrl = !url || url === "about:blank" || url === "chrome://newtab/";
+  const blankTitle = !title || title === "about:blank" || title === "new tab";
+  return blankUrl && blankTitle;
+}
+
+function serviceWorkspaceTabScore(tab: WorkspaceServiceTab): number {
+  if (!isLiveServiceWorkspaceTab(tab)) return -1000;
+  const lifecycle = normalize(tab.lifecycle);
+  let score = lifecycle === "active" ? 400 : lifecycle === "loading" ? 320 : 300;
+  if (!isBlankServiceWorkspaceTab(tab)) score += 200;
+  if (tab.targetId) score += 25;
+  return score;
+}
+
+function primaryServiceTab(tabs: WorkspaceServiceTab[]): WorkspaceNodePrimaryTab | null {
+  const tab = [...tabs].sort((left, right) => serviceWorkspaceTabScore(right) - serviceWorkspaceTabScore(left))[0];
+  if (!tab) return null;
+  return {
+    id: tab.id,
+    targetId: tab.targetId ?? null,
+    title: tab.title ?? null,
+    url: tab.url ?? null,
+    lifecycle: tab.lifecycle ?? null,
+    active: normalize(tab.lifecycle) === "active",
+  };
+}
+
+function primaryViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceNodeViewStream | null {
+  const stream = selectPrimaryWorkspaceViewStream(streams);
+  if (!stream) return null;
+  const streamUrl = stream.frameUrl || stream.url || stream.externalUrl || null;
+  const embeddable = Boolean(streamUrl) && normalize(stream.provider) !== "cdp_screencast";
+  const readOnly = stream.readOnly === true || !stream.controlInput;
+  return {
+    provider: stream.provider ?? null,
+    url: streamUrl,
+    routeId: stream.routeId ?? null,
+    displayAllocationId: stream.displayAllocationId ?? null,
+    connectionId: stream.connectionId ?? null,
+    connectionName: stream.connectionName ?? null,
+    routeSource: stream.routeSource ?? null,
+    providerMode: stream.providerMode ?? null,
+    viewerLeaseIds: stream.viewerLeaseIds ?? [],
+    controllerLeaseId: stream.controllerLeaseId ?? null,
+    embeddable,
+    controllable: embeddable && !readOnly,
+    readOnly,
+    controlInput: stream.controlInput ?? null,
+    routeSummary: viewStreamRouteSummary(stream),
+  };
+}
+
+function selectPrimaryWorkspaceViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceServiceViewStream | null {
+  if (!streams?.length) return null;
+  return [...streams].sort((left, right) => workspaceViewStreamScore(right) - workspaceViewStreamScore(left))[0] ?? null;
+}
+
+function workspaceViewStreamScore(stream: WorkspaceServiceViewStream): number {
+  const provider = normalize(stream.provider);
+  const routeSource = normalize(stream.routeSource);
+  const providerMode = normalize(stream.providerMode);
+  const displayAllocationId = normalize(stream.displayAllocationId);
+  const streamUrl = stream.frameUrl || stream.url || stream.externalUrl;
+  let score = 0;
+  if (streamUrl) score += 50;
+  if (provider && provider !== "cdp_screencast") score += 40;
+  if (provider === "rdp_gateway") score += 20;
+  if (stream.controlInput && stream.readOnly !== true) score += 15;
+  if (stream.routeId || stream.connectionId || stream.connectionName) score += 20;
+  if (displayAllocationId) score += 10;
+  if (displayAllocationId && !displayAllocationId.includes("shared")) score += 35;
+  if (routeSource === "pool" || routeSource === "generated" || routeSource === "discovered") score += 40;
+  if (providerMode === "simultaneous_view") score += 20;
+  if (providerMode === "single_controller") score += 10;
+  if (readinessState(stream.remoteReadiness ?? stream.readiness) === "ready") score += 10;
+  return score;
+}
+
+function viewStreamRouteSummary(stream: WorkspaceServiceViewStream): string {
+  const viewerCount = stream.viewerLeaseIds?.length ?? 0;
+  const leaseLabel = stream.controllerLeaseId
+    ? `${viewerCount} viewer${viewerCount === 1 ? "" : "s"}, controller leased`
+    : `${viewerCount} viewer${viewerCount === 1 ? "" : "s"}`;
+  return compactLabels([
+    stream.routeId || stream.connectionName || stream.connectionId || stream.displayAllocationId || "unrouted",
+    stream.displayAllocationId ? `display ${stream.displayAllocationId}` : null,
+    stream.providerMode?.replaceAll("_", " ") ?? null,
+    leaseLabel,
+    viewStreamReadinessLabel(stream),
+  ]).join(" / ");
+}
+
+function viewStreamReadinessLabel(stream: WorkspaceServiceViewStream): string {
+  const readiness = stream.remoteReadiness ?? stream.readiness;
+  const state = readinessState(readiness);
+  if (state) return state.replaceAll("_", " ");
+  return "readiness unknown";
+}
+
+function readinessState(readiness: unknown): string | null {
+  if (!readiness) return null;
+  if (typeof readiness === "string") return readiness.trim() || null;
+  if (typeof readiness !== "object") return null;
+  if (Array.isArray(readiness)) {
+    for (const item of readiness) {
+      const state = readinessState(item);
+      if (state && state !== "ready") return state;
+    }
+    return null;
+  }
+  const record = readiness as Record<string, unknown>;
+  for (const key of ["state", "status", "readiness", "lastProviderEvent"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  const components = record.components ?? record.checks ?? record.results;
+  if (Array.isArray(components)) return readinessState(components);
+  return null;
+}
+
+function actorLabel(value: unknown): string {
+  if (!value) return "unknown operator";
+  if (typeof value === "string") return value;
+  if (typeof value !== "object") return String(value);
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return "unknown operator";
+  const [kind, detail] = entries[0];
+  return detail ? `${kind}: ${String(detail)}` : kind;
+}
+
+function takeoverForSessions(
+  sessions: WorkspaceServiceSession[],
+  allocation: WorkspaceServiceProfileAllocation | undefined,
+  jobs: WorkspaceServiceJob[],
+): WorkspaceNodeTakeover | null {
+  const session = sessions.find((candidate) => normalize(candidate.lease) === "human_takeover");
+  return session ? takeoverForSession(session, allocation, jobs) : null;
+}
+
+function takeoverForSession(
+  session: WorkspaceServiceSession,
+  allocation: WorkspaceServiceProfileAllocation | undefined,
+  jobs: WorkspaceServiceJob[],
+): WorkspaceNodeTakeover | null {
+  if (normalize(session.lease) !== "human_takeover") return null;
+  const conflictSessionIds = uniqueStrings([
+    ...(session.profileLeaseConflictSessionIds ?? []),
+    ...(allocation?.conflictSessionIds ?? []),
+  ]);
+  const waitingJobIds = uniqueStrings([
+    ...(allocation?.waitingJobIds ?? []),
+    ...jobs
+      .filter((job) => normalize(job.state) === "waiting_profile_lease")
+      .map((job) => job.id),
+  ]);
+  const queueImpact = waitingJobIds.length > 0
+    ? `Human takeover holds the profile lease; ${waitingJobIds.length} waiting job${waitingJobIds.length === 1 ? "" : "s"} cannot continue.`
+    : conflictSessionIds.length > 0
+      ? `Human takeover holds the profile lease; ${conflictSessionIds.length} session conflict${conflictSessionIds.length === 1 ? "" : "s"} need review.`
+      : "Human takeover holds the profile lease; automation should resume only after service-owned release.";
+  return {
+    active: true,
+    sessionId: session.id,
+    ownerLabel: actorLabel(session.owner),
+    startedAt: session.createdAt ?? session.lastLeaseObservedAt ?? null,
+    lastObservedAt: session.lastLeaseObservedAt ?? null,
+    expiresAt: session.expiresAt ?? null,
+    cleanup: session.cleanup ?? null,
+    profileLeaseDisposition: session.profileLeaseDisposition ?? null,
+    conflictSessionIds,
+    waitingJobIds,
+    queueImpact,
+    resumeSupported: false,
+    resumeReason: "Service contracts expose human_takeover lease state but do not yet expose a service-owned resume action.",
+  };
+}
+
+function browserActions(
+  browser: WorkspaceServiceBrowser,
+  live: boolean,
+  viewStream: WorkspaceNodeViewStream | null,
+  attentionReason?: string | null,
+  takeover?: WorkspaceNodeTakeover | null,
+): WorkspaceNodeAction[] {
+  const canViewStream = live && Boolean(viewStream?.embeddable);
+  const canControlStream = live && Boolean(viewStream?.controllable);
+  const actions: WorkspaceNodeAction[] = [
+    ...(takeover ? [{ id: "resume" as const, label: "Resume", enabled: takeover.resumeSupported, reason: takeover.resumeReason }] : []),
+    { id: "focus", label: "Focus", enabled: live, reason: live ? null : "Browser is retained, not live." },
+    { id: "view", label: "View", enabled: canViewStream, reason: canViewStream ? null : live ? "No embeddable service-owned view stream." : "Browser is retained, not live." },
+    { id: "control", label: "Control", enabled: canControlStream, reason: canControlStream ? null : live ? "No controllable service-owned view stream." : "Browser is retained, not live." },
+    { id: "repair", label: "Repair", enabled: Boolean(attentionReason), reason: attentionReason ? null : "No service-owned repair reason is present." },
+    { id: "close", label: "Close", enabled: live, reason: live ? null : "Browser is already retained." },
+    { id: "external-open", label: "Open externally", enabled: canViewStream, reason: canViewStream ? null : live ? "No external stream URL is recorded." : "Browser is retained, not live." },
+  ];
+  return actions.filter((action) => action.id !== "external-open" || browser.viewStreams?.length);
+}
+
+function serviceSessionActions(
+  live: boolean,
+  reason?: string | null,
+  takeover?: WorkspaceNodeTakeover | null,
+): WorkspaceNodeAction[] {
+  if (takeover) {
+    return [
+      { id: "resume", label: "Resume", enabled: takeover.resumeSupported, reason: takeover.resumeReason },
+      { id: "focus", label: "Focus", enabled: live, reason: live ? null : "No live browser is attached to this retained session." },
+    ];
+  }
+  return [
+    { id: "focus", label: "Focus", enabled: live, reason: live ? null : "No live browser is attached to this retained session." },
+    { id: "resume", label: "Resume", enabled: Boolean(reason), reason: reason ? null : "No paused or blocked service-owned resume state is present." },
+  ];
+}
+
+function daemonActions(session: SessionInfo, live: boolean): WorkspaceNodeAction[] {
+  const enabled = live && !session.closing;
+  return [
+    { id: "focus", label: "Focus", enabled, reason: enabled ? null : "Session is not focusable yet." },
+    { id: "add-tab", label: "Add tab", enabled, reason: enabled ? null : "Session is not ready for tab creation." },
+    { id: "close", label: "Close", enabled, reason: enabled ? null : "Session is not ready to close cleanly." },
+    { id: "kill", label: "Kill", enabled: live, reason: live ? null : "No live process is known." },
+  ];
+}
+
+function profileActions(
+  allocation: WorkspaceServiceProfileAllocation,
+  reason?: string | null,
+): WorkspaceNodeAction[] {
+  const needsSeeding = Boolean(profileAttentionReason(allocation));
+  const blocked = Boolean(profileBlockedReason(allocation));
+  return [
+    { id: "launch", label: "Launch", enabled: !needsSeeding && !blocked, reason: needsSeeding || blocked ? reason : null },
+    { id: "seed", label: "Seed", enabled: needsSeeding, reason: needsSeeding ? null : "Profile readiness does not require manual seeding." },
+  ];
+}
+
+function jobMatches({
+  job,
+  browser,
+  sessions = [],
+  allocation,
+  tabs = [],
+}: {
+  job: WorkspaceServiceJob;
+  browser?: WorkspaceServiceBrowser;
+  sessions?: WorkspaceServiceSession[];
+  allocation?: WorkspaceServiceProfileAllocation;
+  tabs?: WorkspaceServiceTab[];
+}): boolean {
+  if (browser?.id && objectContains(job, browser.id)) return true;
+  if (allocation?.profileId && objectContains(job, allocation.profileId)) return true;
+  if (sessions.some((session) => objectContains(job, session.id))) return true;
+  if (tabs.some((tab) => objectContains(job, tab.id))) return true;
+  if (allocation?.serviceNames?.some((serviceName) => serviceName === job.serviceName)) return true;
+  if (allocation?.agentNames?.some((agentName) => agentName === job.agentName)) return true;
+  if (allocation?.taskNames?.some((taskName) => taskName === job.taskName)) return true;
+  return sessions.some((session) =>
+    (session.serviceName && session.serviceName === job.serviceName) ||
+    (session.agentName && session.agentName === job.agentName) ||
+    (session.taskName && session.taskName === job.taskName),
+  );
+}
+
+function addDuplicateBrowserDiagnostics({
+  diagnostics,
+  browsers,
+  kind,
+  valueFor,
+  messageFor,
+}: {
+  diagnostics: WorkspaceOwnershipDiagnostic[];
+  browsers: WorkspaceServiceBrowser[];
+  kind: WorkspaceOwnershipDiagnosticKind;
+  valueFor: (browser: WorkspaceServiceBrowser) => string | null | undefined;
+  messageFor: (value: string, browsers: WorkspaceServiceBrowser[]) => string;
+}): void {
+  const groups = new Map<string, WorkspaceServiceBrowser[]>();
+  for (const browser of browsers) {
+    const value = valueFor(browser)?.trim();
+    if (!value) continue;
+    const group = groups.get(value);
+    if (group) {
+      group.push(browser);
+    } else {
+      groups.set(value, [browser]);
+    }
+  }
+  for (const [value, group] of groups) {
+    if (group.length < 2) continue;
+    diagnostics.push({
+      kind,
+      severity: "warning",
+      message: messageFor(value, group),
+      relatedIds: group.map((browser) => relatedId("browser", browser.id)),
+    });
+  }
+}
+
+function groupDiagnosticsByRelatedId(diagnostics: WorkspaceOwnershipDiagnostic[]): Map<string, WorkspaceOwnershipDiagnostic[]> {
+  const groups = new Map<string, WorkspaceOwnershipDiagnostic[]>();
+  for (const diagnostic of diagnostics) {
+    for (const id of diagnostic.relatedIds) {
+      const bucket = groups.get(id);
+      if (bucket) {
+        bucket.push(diagnostic);
+      } else {
+        groups.set(id, [diagnostic]);
+      }
+    }
+  }
+  return groups;
+}
+
+function diagnosticsForRelatedIds(
+  diagnosticsByRelatedId: Map<string, WorkspaceOwnershipDiagnostic[]>,
+  ids: string[],
+): WorkspaceOwnershipDiagnostic[] {
+  const seen = new Set<WorkspaceOwnershipDiagnostic>();
+  const result: WorkspaceOwnershipDiagnostic[] = [];
+  for (const id of ids) {
+    for (const diagnostic of diagnosticsByRelatedId.get(id) ?? []) {
+      if (seen.has(diagnostic)) continue;
+      seen.add(diagnostic);
+      result.push(diagnostic);
+    }
+  }
+  return result;
+}
+
+function relatedId(kind: "browser" | "session" | "tab", id: string): string {
+  return `${kind}:${id}`;
+}
+
+function objectContains(value: unknown, needle: string): boolean {
+  if (!needle) return false;
+  if (typeof value === "string") return value === needle || value.includes(needle);
+  if (typeof value === "number" || typeof value === "boolean" || value == null) return false;
+  if (Array.isArray(value)) return value.some((item) => objectContains(item, needle));
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some((item) => objectContains(item, needle));
+  }
+  return false;
+}
+
+function isActiveJob(job: WorkspaceServiceJob): boolean {
+  return ACTIVE_JOB_STATES.has(normalize(job.state));
+}
+
+function profileReadinessSummary(allocation: WorkspaceServiceProfileAllocation): string | null {
+  const readiness = allocation.targetReadiness?.[0];
+  if (!readiness) return null;
+  return compactLabels([readiness.targetServiceId, readiness.loginId, readiness.state])[0] ?? null;
+}
+
+function compareWorkspaceNodes(left: WorkspaceNode, right: WorkspaceNode): number {
+  const groupOrder: Record<WorkspaceNodeGroup, number> = {
+    "needs-attention": 0,
+    active: 1,
+    retained: 2,
+  };
+  const groupDelta = groupOrder[left.group] - groupOrder[right.group];
+  if (groupDelta !== 0) return groupDelta;
+  return left.sortLabel.localeCompare(right.sortLabel);
+}
+
+function groupByLinkedId<T>(items: T[], links: (item: T) => string[]): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const item of items) {
+    for (const id of links(item)) {
+      const bucket = grouped.get(id);
+      if (bucket) {
+        bucket.push(item);
+      } else {
+        grouped.set(id, [item]);
+      }
+    }
+  }
+  return grouped;
+}
+
+function uniqueById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    result.push(item);
+  }
+  return result;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value?.trim())))];
+}
+
+function compactLabels(values: Array<string | number | null | undefined>): string[] {
+  return values
+    .map((value) => (value == null ? "" : String(value).trim()))
+    .filter(Boolean);
+}
+
+function normalize(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value != null;
+}

@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: agent-browser-privileged-helper <command> [options]
+
+Commands:
+  check
+  ensure-rdp-route-user --user <user>
+  restart-xrdp
+  grant-display-access --operator-user <user> --route-user <user> --display <display>
+
+This helper is intended to be installed root-owned under
+/usr/local/libexec/agent-browser and called through a narrow sudoers rule.
+EOF
+}
+
+require_root() {
+  if [[ "$(id -u)" != "0" ]]; then
+    echo "agent-browser-privileged-helper must run as root" >&2
+    exit 2
+  fi
+}
+
+require_route_user() {
+  local user_name="$1"
+  if [[ ! "$user_name" =~ ^agent-browser-rdp(-[a-z0-9][a-z0-9-]{0,30})?$ ]]; then
+    echo "route user must be agent-browser-rdp or agent-browser-rdp-<suffix>" >&2
+    exit 2
+  fi
+}
+
+require_operator_user() {
+  local user_name="$1"
+  if [[ "$user_name" == "root" || ! "$user_name" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+    echo "operator user must be a non-root local username" >&2
+    exit 2
+  fi
+  if ! getent passwd "$user_name" >/dev/null; then
+    echo "operator user does not exist: $user_name" >&2
+    exit 2
+  fi
+}
+
+require_display_name() {
+  local display_name="$1"
+  if [[ ! "$display_name" =~ ^:[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "display must look like :10 or :10.0" >&2
+    exit 2
+  fi
+}
+
+arg_value() {
+  local name="$1"
+  local value="${2:-}"
+  if [[ -z "$value" ]]; then
+    echo "$name requires a value" >&2
+    exit 2
+  fi
+  printf '%s' "$value"
+}
+
+write_xsession() {
+  local user_name="$1"
+  local home_dir="/home/$user_name"
+
+  install -d -m 700 -o "$user_name" -g "$user_name" "$home_dir/.config/openbox"
+  cat >"$home_dir/.xsession" <<'EOF'
+#!/bin/sh
+xsetroot -solid '#20252b' 2>/dev/null || true
+xterm -geometry 100x28+40+40 -title 'agent-browser route-pool RDP session' &
+exec openbox-session
+EOF
+  chmod 700 "$home_dir/.xsession"
+  chown "$user_name:$user_name" "$home_dir/.xsession"
+}
+
+ensure_rdp_route_user() {
+  require_root
+  local user_name=""
+  local password=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --user)
+        user_name="$(arg_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      *)
+        echo "Unknown ensure-rdp-route-user argument: $1" >&2
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ -z "$user_name" ]]; then
+    echo "ensure-rdp-route-user requires --user" >&2
+    exit 2
+  fi
+  require_route_user "$user_name"
+
+  IFS= read -r password || true
+  if [[ -z "$password" ]]; then
+    echo "ensure-rdp-route-user requires a password on stdin" >&2
+    exit 2
+  fi
+
+  if ! getent passwd "$user_name" >/dev/null; then
+    useradd --create-home --shell /bin/bash --comment "agent-browser route-pool RDP session" "$user_name"
+  fi
+
+  printf '%s:%s\n' "$user_name" "$password" | chpasswd
+  usermod -aG ssl-cert "$user_name" >/dev/null 2>&1 || true
+  usermod -aG ssl-cert xrdp >/dev/null 2>&1 || true
+  write_xsession "$user_name"
+  echo "ensured RDP route user $user_name"
+}
+
+restart_xrdp() {
+  require_root
+  systemctl restart xrdp-sesman xrdp
+  echo "restarted xrdp-sesman and xrdp"
+}
+
+grant_display_access() {
+  require_root
+  local operator_user=""
+  local route_user=""
+  local display_name=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --operator-user)
+        operator_user="$(arg_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      --route-user)
+        route_user="$(arg_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      --display)
+        display_name="$(arg_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      *)
+        echo "Unknown grant-display-access argument: $1" >&2
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ -z "$operator_user" || -z "$route_user" || -z "$display_name" ]]; then
+    echo "grant-display-access requires --operator-user, --route-user, and --display" >&2
+    exit 2
+  fi
+  require_operator_user "$operator_user"
+  require_route_user "$route_user"
+  require_display_name "$display_name"
+  if ! getent passwd "$route_user" >/dev/null; then
+    echo "route user does not exist: $route_user" >&2
+    exit 2
+  fi
+
+  local xauthority="/home/$route_user/.Xauthority"
+  runuser -u "$route_user" -- env DISPLAY="$display_name" XAUTHORITY="$xauthority" \
+    xhost "+SI:localuser:$operator_user"
+  echo "granted $operator_user local X access on $display_name for $route_user"
+}
+
+case "${1:-}" in
+  check)
+    require_root
+    echo "agent-browser privileged helper ready"
+    ;;
+  ensure-rdp-route-user)
+    shift
+    ensure_rdp_route_user "$@"
+    ;;
+  restart-xrdp)
+    shift
+    restart_xrdp "$@"
+    ;;
+  grant-display-access)
+    shift
+    grant_display_access "$@"
+    ;;
+  -h|--help|help|"")
+    usage
+    ;;
+  *)
+    echo "Unknown command: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

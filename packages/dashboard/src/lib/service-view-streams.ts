@@ -3,7 +3,19 @@ export type ServiceViewStream = {
   provider?: string;
   controlInput?: string | null;
   url?: string | null;
+  frameUrl?: string | null;
+  externalUrl?: string | null;
+  routeId?: string | null;
+  displayAllocationId?: string | null;
+  connectionId?: string | null;
+  connectionName?: string | null;
+  routeSource?: string | null;
+  providerMode?: string | null;
+  viewerLeaseIds?: string[];
+  controllerLeaseId?: string | null;
   readOnly?: boolean;
+  readiness?: unknown;
+  remoteReadiness?: unknown;
 };
 
 const EMBEDDABLE_VIEW_STREAM_PROVIDERS = new Set([
@@ -23,7 +35,19 @@ export function controlInputLabel(stream: ServiceViewStream): string {
 }
 
 export function canEmbedViewStream(stream: ServiceViewStream): boolean {
-  return Boolean(stream.url && EMBEDDABLE_VIEW_STREAM_PROVIDERS.has(stream.provider ?? ""));
+  return Boolean(viewStreamFrameUrl(stream) && EMBEDDABLE_VIEW_STREAM_PROVIDERS.has(stream.provider ?? ""));
+}
+
+export function viewStreamUrl(stream?: ServiceViewStream | null): string | null {
+  return stream?.url || stream?.frameUrl || stream?.externalUrl || null;
+}
+
+export function viewStreamFrameUrl(stream?: ServiceViewStream | null): string | null {
+  return stream?.frameUrl || stream?.url || null;
+}
+
+export function viewStreamExternalUrl(stream?: ServiceViewStream | null): string | null {
+  return stream?.externalUrl || stream?.frameUrl || stream?.url || null;
 }
 
 export function canControlViewStream(stream: ServiceViewStream): boolean {
@@ -58,4 +82,57 @@ export function viewStreamCapabilityLabel(stream: ServiceViewStream): string {
   const view = viewStreamLabel(stream);
   const control = controlInputLabel(stream);
   return `${view} / ${control}`;
+}
+
+export function viewStreamRouteLabel(stream?: ServiceViewStream | null): string {
+  if (!stream) return "no route";
+  return stream.routeId || stream.connectionName || stream.connectionId || stream.displayAllocationId || "unrouted";
+}
+
+export function viewStreamLeaseLabel(stream?: ServiceViewStream | null): string {
+  if (!stream) return "no viewers";
+  const viewerCount = stream.viewerLeaseIds?.length ?? 0;
+  const viewerLabel = `${viewerCount} viewer${viewerCount === 1 ? "" : "s"}`;
+  return stream.controllerLeaseId ? `${viewerLabel}, controller leased` : viewerLabel;
+}
+
+export function viewStreamReadinessLabel(stream?: ServiceViewStream | null): string {
+  if (!stream) return "readiness unknown";
+  const readiness = stream.remoteReadiness ?? stream.readiness;
+  const state = readinessState(readiness);
+  if (state) return state.replaceAll("_", " ");
+  if (canOpenViewStream(stream)) return "ready";
+  return "readiness unknown";
+}
+
+export function viewStreamRouteSummary(stream?: ServiceViewStream | null): string {
+  if (!stream) return "no route";
+  return [
+    viewStreamRouteLabel(stream),
+    stream.displayAllocationId ? `display ${stream.displayAllocationId}` : null,
+    stream.providerMode?.replaceAll("_", " ") ?? null,
+    viewStreamLeaseLabel(stream),
+    viewStreamReadinessLabel(stream),
+  ].filter(Boolean).join(" / ");
+}
+
+function readinessState(readiness: unknown): string | null {
+  if (!readiness) return null;
+  if (typeof readiness === "string") return readiness.trim() || null;
+  if (typeof readiness !== "object") return null;
+  if (Array.isArray(readiness)) {
+    const failed = readiness.find((item) => readinessState(item) && readinessState(item) !== "ready");
+    return failed ? readinessState(failed) : null;
+  }
+  const record = readiness as Record<string, unknown>;
+  for (const key of ["state", "status", "readiness", "lastProviderEvent"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  const components = record.components ?? record.checks ?? record.results;
+  if (Array.isArray(components)) {
+    const failed = components.find((item) => readinessState(item) && readinessState(item) !== "ready");
+    return failed ? readinessState(failed) : null;
+  }
+  return null;
 }

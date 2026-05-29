@@ -101,6 +101,12 @@ VALUES
 {values}
 ON CONFLICT (connection_id, parameter_name) DO UPDATE
 SET parameter_value = EXCLUDED.parameter_value;
+
+INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
+SELECT entity_id, {connection_id}, 'READ'::guacamole_object_permission_type
+FROM guacamole_entity
+WHERE type = 'USER'
+ON CONFLICT DO NOTHING;
 """.strip())
 PY
 )"

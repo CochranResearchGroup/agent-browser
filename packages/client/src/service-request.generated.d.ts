@@ -11,6 +11,14 @@ export type ServiceRequestAction =
   | "tab_switch"
   | "tab_close"
   | "view_focus"
+  | "view_takeover"
+  | "service_remote_view_route_checkout"
+  | "service_remote_view_route_release"
+  | "service_route_pool_repair"
+  | "service_viewer_lease_request"
+  | "service_viewer_lease_heartbeat"
+  | "service_viewer_lease_release"
+  | "service_controller_lease_takeover"
   | "tab_list"
   | "url"
   | "title"
@@ -177,6 +185,68 @@ export interface ServiceViewFocusData {
   windowId?: number;
   maximizeError?: string;
   tabSwitch?: ServiceTabSwitchData;
+}
+
+export interface ServiceViewTakeoverData {
+  takeoverRequested: boolean;
+  reconnectRequested: boolean;
+  browserProcessPreserved: boolean;
+  browserId: string;
+  sessionName: string;
+  streamId?: string | null;
+  provider?: string | null;
+  openMode?: string;
+  reason?: string;
+  targetId?: string | null;
+  index?: number | null;
+  requestedAt?: string;
+}
+
+export interface ServiceRemoteViewRouteMutationData {
+  status: string;
+  routeId?: string;
+  remoteViewRouteId?: string;
+  displayAllocationId?: string;
+  routePoolEntryId?: string | null;
+  browserId?: string;
+  sessionName?: string;
+  frameUrl?: string | null;
+  externalUrl?: string | null;
+  providerMode?: string;
+  remoteViewRoute?: Record<string, unknown> | null;
+  routePoolEntry?: Record<string, unknown> | null;
+  releasedViewerLeaseIds?: string[];
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceRoutePoolRepairData {
+  repaired: boolean;
+  dryRun: boolean;
+  observedAt?: string;
+  policy?: Record<string, unknown>;
+  before?: Record<string, number>;
+  after?: Record<string, number>;
+  candidates?: Record<string, string[]>;
+  candidateReasons?: Record<string, Record<string, unknown>>;
+  candidateCounts: Record<string, number>;
+  skipped?: Record<string, string[]>;
+  skippedCounts?: Record<string, number>;
+  repairedCounts: Record<string, number>;
+  recommendedNextStep?: string;
+}
+
+export interface ServiceViewerLeaseMutationData {
+  status: string;
+  routeId?: string | null;
+  remoteViewRouteId?: string;
+  viewerLeaseId?: string;
+  controllerLeaseId?: string | null;
+  previousControllerLeaseId?: string | null;
+  viewerLease?: Record<string, unknown> | null;
+  remoteViewRoute?: Record<string, unknown> | null;
+  updatedAt?: string;
+  [key: string]: unknown;
 }
 
 export interface ServiceTabRecord {
@@ -528,6 +598,14 @@ export interface ServiceRequestActionDataMap {
   tab_switch: ServiceTabSwitchData;
   tab_close: ServiceTabCloseData;
   view_focus: ServiceViewFocusData;
+  view_takeover: ServiceViewTakeoverData;
+  service_remote_view_route_checkout: ServiceRemoteViewRouteMutationData;
+  service_remote_view_route_release: ServiceRemoteViewRouteMutationData;
+  service_route_pool_repair: ServiceRoutePoolRepairData;
+  service_viewer_lease_request: ServiceViewerLeaseMutationData;
+  service_viewer_lease_heartbeat: ServiceViewerLeaseMutationData;
+  service_viewer_lease_release: ServiceViewerLeaseMutationData;
+  service_controller_lease_takeover: ServiceViewerLeaseMutationData;
   tab_list: ServiceTabListData;
   url: ServiceUrlData;
   title: ServiceTitleData;
@@ -669,6 +747,103 @@ export interface ServiceCdpFreeLaunchRequestHttpOptions extends ServiceCdpFreeLa
   signal?: AbortSignal;
 }
 
+export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceRequest, "action" | "params"> {
+  displayAllocationId: string;
+  routeId?: string;
+  remoteViewRouteId?: string;
+  routePoolEntryId?: string;
+  browserId?: string;
+  sessionName?: string;
+  streamId?: string;
+  provider?: string;
+  providerMode?: string;
+  frameUrl?: string;
+  externalUrl?: string;
+  connectionId?: string;
+  connectionName?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceRemoteViewRouteReleaseOptions extends Omit<ServiceRequest, "action" | "params"> {
+  routeId: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceRoutePoolRepairOptions extends Omit<ServiceRequest, "action" | "params"> {
+  apply?: boolean;
+  staleCheckouts?: boolean;
+  serviceState?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceViewerLeaseRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  routeId: string;
+  viewerId?: string;
+  viewerName?: string;
+  viewerRole?: "observer" | "controller" | "pending_controller" | "none" | string;
+  openMode?: "embedded" | "external" | "fullscreen" | "tile" | string;
+  browserId?: string;
+  expiresAt?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceViewerLeaseReleaseOptions extends Omit<ServiceRequest, "action" | "params"> {
+  viewerLeaseId: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceViewerLeaseHeartbeatOptions extends Omit<ServiceRequest, "action" | "params"> {
+  viewerLeaseId: string;
+  expiresAt?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceControllerLeaseTakeoverOptions extends ServiceViewerLeaseRequestOptions {
+  viewerLeaseId?: string;
+}
+
+export interface ServiceRemoteViewRouteCheckoutHttpOptions extends ServiceRemoteViewRouteCheckoutOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceRemoteViewRouteReleaseHttpOptions extends ServiceRemoteViewRouteReleaseOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceRoutePoolRepairHttpOptions extends ServiceRoutePoolRepairOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceViewerLeaseRequestHttpOptions extends ServiceViewerLeaseRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceViewerLeaseReleaseHttpOptions extends ServiceViewerLeaseReleaseOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceViewerLeaseHeartbeatHttpOptions extends ServiceViewerLeaseHeartbeatOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceControllerLeaseTakeoverHttpOptions extends ServiceControllerLeaseTakeoverOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export declare const SERVICE_REQUEST_ACTIONS: readonly ServiceRequestAction[];
 export declare const SERVICE_REQUEST_REQUIRED_FIELDS: readonly string[];
 export declare const SERVICE_REQUEST_STRING_FIELDS: readonly string[];
@@ -691,10 +866,52 @@ export declare function createServiceTabRequestFromAccessPlan(
 export declare function createServiceCdpFreeLaunchRequest(
   input: ServiceCdpFreeLaunchRequestOptions,
 ): ServiceRequestForAction<"cdp_free_launch">;
+export declare function createServiceRemoteViewRouteCheckoutRequest(
+  input: ServiceRemoteViewRouteCheckoutOptions,
+): ServiceRequestForAction<"service_remote_view_route_checkout">;
+export declare function createServiceRemoteViewRouteReleaseRequest(
+  input: ServiceRemoteViewRouteReleaseOptions,
+): ServiceRequestForAction<"service_remote_view_route_release">;
+export declare function createServiceRoutePoolRepairRequest(
+  input?: ServiceRoutePoolRepairOptions,
+): ServiceRequestForAction<"service_route_pool_repair">;
+export declare function createServiceViewerLeaseRequest(
+  input: ServiceViewerLeaseRequestOptions,
+): ServiceRequestForAction<"service_viewer_lease_request">;
+export declare function createServiceViewerLeaseHeartbeatRequest(
+  input: ServiceViewerLeaseHeartbeatOptions,
+): ServiceRequestForAction<"service_viewer_lease_heartbeat">;
+export declare function createServiceViewerLeaseReleaseRequest(
+  input: ServiceViewerLeaseReleaseOptions,
+): ServiceRequestForAction<"service_viewer_lease_release">;
+export declare function createServiceControllerLeaseTakeoverRequest(
+  input: ServiceControllerLeaseTakeoverOptions,
+): ServiceRequestForAction<"service_controller_lease_takeover">;
 export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<ServiceRequestResponse<ServiceTabNewData>>;
 export declare function requestServiceCdpFreeLaunch(
   options: ServiceCdpFreeLaunchRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceCdpFreeLaunchData>>;
+export declare function requestServiceRemoteViewRouteCheckout(
+  options: ServiceRemoteViewRouteCheckoutHttpOptions,
+): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
+export declare function requestServiceRemoteViewRouteRelease(
+  options: ServiceRemoteViewRouteReleaseHttpOptions,
+): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
+export declare function requestServiceRoutePoolRepair(
+  options: ServiceRoutePoolRepairHttpOptions,
+): Promise<ServiceRequestResponse<ServiceRoutePoolRepairData>>;
+export declare function requestServiceViewerLease(
+  options: ServiceViewerLeaseRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;
+export declare function heartbeatServiceViewerLease(
+  options: ServiceViewerLeaseHeartbeatHttpOptions,
+): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;
+export declare function releaseServiceViewerLease(
+  options: ServiceViewerLeaseReleaseHttpOptions,
+): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;
+export declare function takeoverServiceControllerLease(
+  options: ServiceControllerLeaseTakeoverHttpOptions,
+): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;
 export declare function summarizeServiceCdpFreeLaunchAvailability(
   data: ServiceCdpFreeLaunchData,
 ): ServiceCdpFreeLaunchAvailability;

@@ -67,6 +67,10 @@
     "displayName": {
       "type": ["string", "null"]
     },
+    "displayAllocationId": {
+      "description": "Service-owned display allocation id when the browser is bound to an explicit remote display allocation.",
+      "type": ["string", "null"]
+    },
     "pid": {
       "type": ["integer", "null"],
       "minimum": 0
@@ -120,8 +124,95 @@
               "null"
             ]
           },
+          "frameUrl": {
+            "description": "Dashboard-embeddable stream URL selected by the service.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "externalUrl": {
+            "description": "Direct stream URL for external windows or popout viewers.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "routeId": {
+            "description": "Service-owned route identifier for providers that multiplex viewers.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "displayAllocationId": {
+            "description": "Service-owned display allocation id used by this stream route.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connectionId": {
+            "description": "Provider connection id or route token, such as a Guacamole client id.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connectionName": {
+            "description": "Human-readable provider connection name, when known.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "routeSource": {
+            "description": "Source that selected the route metadata.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "providerMode": {
+            "description": "Provider viewer concurrency mode for this route.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "simultaneous_view",
+              "single_viewer",
+              "single_controller",
+              "unknown",
+              "unavailable",
+              null
+            ]
+          },
+          "viewerLeaseIds": {
+            "description": "Active or retained viewer leases associated with this route.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "controllerLeaseId": {
+            "description": "Current controller lease for this stream route, when known.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "readOnly": {
             "type": "boolean"
+          },
+          "readiness": {
+            "description": "Optional compact provider readiness payload for this stream.",
+            "type": ["object", "array", "null"]
+          },
+          "remoteReadiness": {
+            "description": "Optional remote-provider readiness payload for this stream.",
+            "type": ["object", "array", "null"]
           }
         },
         "additionalProperties": true

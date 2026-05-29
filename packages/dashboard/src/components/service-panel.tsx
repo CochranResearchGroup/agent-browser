@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { activePortAtom, activeSessionNameAtom } from "@/store/sessions";
 import { cn } from "@/lib/utils";
+import { SERVICE_API_BASE } from "@/lib/dashboard-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,12 +109,23 @@ import {
   viewStreamControlTitle,
   viewStreamLabel,
   viewStreamOpenTitle,
+  viewStreamReadinessLabel,
+  viewStreamRouteLabel,
+  viewStreamRouteSummary,
+  viewStreamLeaseLabel,
   type ServiceViewStream,
 } from "@/lib/service-view-streams";
 import {
   browserRowCloseTitle,
   browserRowRepairTitle,
 } from "@/lib/service-browser-row-actions";
+import {
+  DASHBOARD_WORKSPACE_SELECTION_EVENT,
+  dashboardWorkspaceSelectionHasValue,
+  readDashboardWorkspaceUrlSelection,
+  updateDashboardWorkspaceUrlSelection,
+  type DashboardWorkspaceUrlSelection,
+} from "@/lib/workspace-url-selection";
 
 type ControlPlaneSnapshot = {
   worker_state?: string;
@@ -187,7 +199,11 @@ export type ServiceSession = {
   taskName?: string | null;
   browserIds?: string[];
   tabIds?: string[];
+  cleanup?: string | null;
+  profileLeaseDisposition?: string | null;
+  profileLeaseConflictSessionIds?: string[];
   createdAt?: string | null;
+  lastLeaseObservedAt?: string | null;
   expiresAt?: string | null;
 };
 
@@ -331,6 +347,12 @@ export type ServiceInspectorSelection =
 export type ServiceInspectorActions = {
   actingIncidentId?: string | null;
   onControlBrowser?: (browser: ServiceBrowser) => void;
+  onControlTab?: (tab: ServiceTab) => void;
+  onSelectBrowserId?: (browserId: string) => void;
+  onSelectProfileId?: (profileId: string) => void;
+  onSelectSessionId?: (sessionId: string) => void;
+  onSelectTabId?: (tabId: string) => void;
+  onSelectJobId?: (jobId: string) => void;
   onAcknowledgeIncident?: (incident: IncidentRecord, note: string) => void;
   onResolveIncident?: (incident: IncidentRecord, note: string) => void;
   onShowIncidentTrace?: (incident: IncidentRecord) => void;
@@ -497,6 +519,7 @@ type IncidentHandlingFilter = "all" | "unacknowledged" | "acknowledged" | "resol
 type ServiceJobDisplayFilter = "all" | "private_virtual_display" | "shared_display" | "ambient_display" | "unrecorded";
 type ServiceJobSortKey = "submittedAt" | "state" | "action" | "displayIsolation" | "serviceName" | "taskName";
 type ServiceWorkspaceTab = "profiles" | "browsers" | "incidents" | "sessions" | "tabs" | "jobs" | "events";
+const SERVICE_WORKSPACE_TABS: ServiceWorkspaceTab[] = ["browsers", "profiles", "incidents", "sessions", "tabs", "jobs", "events"];
 type TraceFilters = {
   serviceName: string;
   agentName: string;
@@ -547,6 +570,36 @@ const SERVICE_JOB_STATE_FILTER_OPTIONS = [
   { value: "timed_out", label: "Timed out" },
 ];
 
+function serviceWorkspaceFromSearch(search: string): ServiceWorkspaceTab {
+  const params = new URLSearchParams(search);
+  const view = params.get("view");
+  const value = view?.startsWith("service:") ? view.slice("service:".length) : null;
+  if (SERVICE_WORKSPACE_TABS.includes(value as ServiceWorkspaceTab)) return value as ServiceWorkspaceTab;
+  const legacyWorkspace = params.get("workspace");
+  return SERVICE_WORKSPACE_TABS.includes(legacyWorkspace as ServiceWorkspaceTab)
+    ? legacyWorkspace as ServiceWorkspaceTab
+    : "browsers";
+}
+
+function pushServiceWorkspaceUrl(workspace: ServiceWorkspaceTab): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (!url.pathname.endsWith("/service")) url.pathname = "/service";
+  url.searchParams.set("view", `service:${workspace}`);
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (nextUrl !== currentUrl) {
+    window.history.pushState({ dashboardSection: "service", serviceView: workspace }, "", nextUrl);
+    const dispatchSelectionChange = () => {
+      window.dispatchEvent(
+        new CustomEvent(DASHBOARD_WORKSPACE_SELECTION_EVENT, { detail: readDashboardWorkspaceUrlSelection() }),
+      );
+    };
+    dispatchSelectionChange();
+    window.setTimeout(dispatchSelectionChange, 0);
+  }
+}
+
 const SERVICE_JOB_SORT_LABELS: Record<ServiceJobSortKey, string> = {
   submittedAt: "Time",
   state: "State",
@@ -563,18 +616,8 @@ const INCIDENT_HANDLING_OPTIONS: Array<{ value: IncidentHandlingFilter; label: s
   { value: "resolved", label: "Resolved" },
 ];
 
-function serviceBase(port: number): string {
-  if (typeof window === "undefined") return "/api/service";
-  const { hostname, port: locationPort } = window.location;
-  const isLoopback = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-
-  // Production dashboard and ingress routes expose the service API on the same
-  // origin. Only fall back to the selected session port for local Next.js dev.
-  if (isLoopback && locationPort && locationPort !== "4848" && port > 0 && locationPort !== String(port)) {
-    return `http://localhost:${port}/api/service`;
-  }
-
-  return "/api/service";
+function serviceBase(_port: number): string {
+  return SERVICE_API_BASE;
 }
 
 function formatRelativeTime(value?: string | null): string {
@@ -821,9 +864,35 @@ function isActiveServiceSession(session: ServiceSession): boolean {
   return (session.browserIds?.length ?? 0) > 0 || (session.tabIds?.length ?? 0) > 0;
 }
 
+function isHumanTakeoverSession(session: ServiceSession): boolean {
+  return (session.lease ?? "").toLowerCase() === "human_takeover";
+}
+
 function isActiveServiceTab(tab: ServiceTab): boolean {
   const lifecycle = (tab.lifecycle ?? "").toLowerCase();
   return lifecycle === "ready" || lifecycle === "loading" || lifecycle === "active";
+}
+
+function isBlankServiceTab(tab: ServiceTab): boolean {
+  const url = (tab.url ?? "").trim().toLowerCase();
+  const title = (tab.title ?? "").trim().toLowerCase();
+  const blankUrl = !url || url === "about:blank" || url === "chrome://newtab/";
+  const blankTitle = !title || title === "about:blank" || title === "new tab";
+  return blankUrl && blankTitle;
+}
+
+function remoteControlTabScore(tab: ServiceTab): number {
+  if (!isActiveServiceTab(tab)) return -1000;
+  const lifecycle = (tab.lifecycle ?? "").toLowerCase();
+  let score = lifecycle === "active" ? 400 : lifecycle === "loading" ? 320 : 300;
+  if (!isBlankServiceTab(tab)) score += 200;
+  if (tab.targetId) score += 25;
+  return score;
+}
+
+function preferredRemoteControlTab(tabs?: ServiceTab[] | null): ServiceTab | null {
+  if (!tabs?.length) return null;
+  return [...tabs].sort((left, right) => remoteControlTabScore(right) - remoteControlTabScore(left))[0] ?? null;
 }
 
 function profileAllocationTone(value?: string): "good" | "warn" | "bad" | "neutral" {
@@ -2206,6 +2275,161 @@ function EventDetailItem({ label, value }: { label: string; value?: string | nul
   );
 }
 
+type InspectorTone = "good" | "warn" | "bad" | "neutral";
+
+type InspectorFactRow = {
+  label: string;
+  value?: ReactNode;
+  mono?: boolean;
+  title?: string;
+};
+
+type InspectorEvidenceItem = {
+  label: string;
+  value?: ReactNode;
+  code?: boolean;
+};
+
+// Shared selected-record primitives keep operational summaries separate from raw evidence.
+function hasInspectorValue(value: ReactNode): boolean {
+  if (value === null || value === undefined || value === false) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(hasInspectorValue);
+  return true;
+}
+
+function InspectorHero({
+  kicker,
+  title,
+  state,
+  tone = "neutral",
+  description,
+  ownership,
+  chips = [],
+}: {
+  kicker: string;
+  title: string;
+  state?: string | null;
+  tone?: InspectorTone;
+  description: string;
+  ownership?: string | null;
+  chips?: Array<string | null | undefined>;
+}) {
+  const visibleChips = chips.filter((chip): chip is string => Boolean(chip?.trim()));
+  return (
+    <div className="service-inspector-hero">
+      <div className="min-w-0">
+        <div className="service-inspector-hero-kicker-row">
+          <p className="service-inspector-kicker">{kicker}</p>
+          {state && (
+            <span className={cn("service-inspector-state-chip", `service-inspector-state-${tone}`)}>
+              {state}
+            </span>
+          )}
+        </div>
+        <h2>{title}</h2>
+        <p>{description}</p>
+        {ownership && <span className="service-inspector-ownership">{ownership}</span>}
+      </div>
+      {visibleChips.length > 0 && (
+        <div className="service-inspector-hero-chips">
+          {visibleChips.map((chip) => (
+            <Badge key={chip} variant="outline" className="max-w-full truncate">
+              {chip}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InspectorActionBar({ children }: { children: ReactNode }) {
+  if (!hasInspectorValue(children)) return null;
+  return <div className="service-inspector-action-bar">{children}</div>;
+}
+
+function InspectorSection({
+  title,
+  detail,
+  children,
+}: {
+  title: string;
+  detail?: string | null;
+  children: ReactNode;
+}) {
+  if (!hasInspectorValue(children)) return null;
+  return (
+    <section className="service-inspector-section">
+      <div className="service-inspector-section-header">
+        <p>{title}</p>
+        {detail && <span>{detail}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function InspectorFactRows({ rows }: { rows: InspectorFactRow[] }) {
+  const visibleRows = rows.filter((row) => hasInspectorValue(row.value));
+  if (visibleRows.length === 0) return null;
+  return (
+    <div className="service-inspector-fact-rows">
+      {visibleRows.map((row) => (
+        <div key={row.label} className="service-inspector-fact-row" title={row.title}>
+          <span>{row.label}</span>
+          <strong className={row.mono ? "service-inspector-mono" : undefined}>{row.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InspectorTokenList({ values }: { values?: string[] }) {
+  const items = values?.filter((value) => value.trim().length > 0) ?? [];
+  if (items.length === 0) return null;
+  return (
+    <div className="service-token-list">
+      {items.map((value) => (
+        <Badge key={value} variant="outline" className="max-w-full truncate">
+          {value}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+function InspectorEvidenceDisclosure({
+  title = "Evidence",
+  items,
+}: {
+  title?: string;
+  items: InspectorEvidenceItem[];
+}) {
+  const visibleItems = items.filter((item) => hasInspectorValue(item.value));
+  if (visibleItems.length === 0) return null;
+  return (
+    <details className="service-inspector-evidence">
+      <summary>
+        <span>{title}</span>
+        <Badge variant="outline">{visibleItems.length} items</Badge>
+      </summary>
+      <div className="service-inspector-evidence-body">
+        {visibleItems.map((item) => (
+          <div key={item.label} className="service-inspector-evidence-item">
+            <p>{item.label}</p>
+            {item.code || typeof item.value === "string" ? (
+              <pre className="service-event-details-json">{item.value}</pre>
+            ) : (
+              <div>{item.value}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function ViewStreamCard({
   stream,
   onInspect,
@@ -2233,6 +2457,14 @@ function ViewStreamCard({
         <Badge variant={controllable ? "default" : "secondary"} className="h-5 px-1.5 text-[9px]">
           {controlInputLabel(stream)}
         </Badge>
+        <Badge variant={viewStreamReadinessLabel(stream) === "ready" ? "secondary" : "outline"} className="h-5 max-w-44 truncate px-1.5 text-[9px]">
+          {viewStreamReadinessLabel(stream)}
+        </Badge>
+        {(stream.routeId || stream.displayAllocationId || stream.connectionId) && (
+          <Badge variant="outline" className="h-5 max-w-52 truncate px-1.5 text-[9px]">
+            {viewStreamRouteLabel(stream)}
+          </Badge>
+        )}
         {embeddable && onInspect && (
           <Button size="sm" variant="default" className="ml-auto h-7 gap-1.5 px-2 text-[10px]" onClick={() => onInspect(stream)}>
             <Eye className="size-3" />
@@ -2260,12 +2492,43 @@ function ViewStreamCard({
           <pre className="service-event-details-json">{formatDetails(stream)}</pre>
         </div>
       )}
+      <div className="service-view-stream-route-strip" aria-label="View stream route metadata">
+        <span>
+          <strong>Route</strong>
+          {viewStreamRouteLabel(stream)}
+        </span>
+        <span>
+          <strong>Display</strong>
+          {stream.displayAllocationId || "unallocated"}
+        </span>
+        <span>
+          <strong>Mode</strong>
+          {stream.providerMode?.replaceAll("_", " ") || "unknown"}
+        </span>
+        <span>
+          <strong>Leases</strong>
+          {viewStreamLeaseLabel(stream)}
+        </span>
+      </div>
     </div>
   );
 }
 
 function browserPrimaryViewStream(browser?: ServiceBrowser | null): ServiceViewStream | null {
   return browser?.viewStreams?.find(canEmbedViewStream) ?? browser?.viewStreams?.[0] ?? null;
+}
+
+function stripSessionBrowserPrefix(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return trimmed.startsWith("session:") ? trimmed.slice("session:".length) : trimmed;
+}
+
+function daemonSessionNameForBrowser(browser?: ServiceBrowser | null): string | null {
+  if (!browser) return null;
+  const activeSession = browser.activeSessionIds?.find((sessionId) => sessionId.trim());
+  if (activeSession) return activeSession;
+  return stripSessionBrowserPrefix(browser.id);
 }
 
 function browserViewStreamCapability(browser?: ServiceBrowser | null): string {
@@ -2309,6 +2572,103 @@ function displayIsolationTitle(browser: ServiceBrowser): string {
     : "Display isolation applies to remote-headed browser hosts.";
 }
 
+function browserLifecycleLabel(browser: ServiceBrowser): string {
+  if (isLiveBrowserRecord(browser)) return "live";
+  if (isInertRetainedBrowserRecord(browser)) return "retained";
+  return browser.health ?? "unknown";
+}
+
+function browserDescription(browser: ServiceBrowser): string {
+  const executableSource = browserExecutableSource(browser);
+  const kind = browserExecutableKind(executableSource);
+  const platform = browser.platform ?? browserExecutablePlatformLabel(browserExecutablePlatform(executableSource));
+  const stream = browserPrimaryViewStream(browser);
+  const streamLabel = stream ? viewStreamCapabilityLabel(stream) : "no view stream";
+  return `${browserExecutableLabel(kind)} on ${platform}; ${streamLabel}.`;
+}
+
+function browserOwnershipLine(browser: ServiceBrowser): string {
+  const profile = browser.profileId ? `profile ${browser.profileId}` : "no profile link";
+  const sessions = browser.activeSessionIds?.length ? `${browser.activeSessionIds.length} active sessions` : "no active sessions";
+  return `${profile}; ${sessions}.`;
+}
+
+function urlOriginLabel(value?: string | null): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function sessionStateLabel(session: ServiceSession): string {
+  if (isHumanTakeoverSession(session)) return "human takeover";
+  return isActiveServiceSession(session) ? "active" : "retained";
+}
+
+function tabStateTone(tab: ServiceTab): InspectorTone {
+  if (tab.lifecycle === "crashed") return "bad";
+  if (isActiveServiceTab(tab)) return "good";
+  return "neutral";
+}
+
+function serviceJobTone(job: ServiceJob): InspectorTone {
+  if (job.state === "succeeded") return "good";
+  if (["failed", "timed_out", "cancelled"].includes(job.state ?? "")) return "bad";
+  if (isActiveServiceJob(job)) return "warn";
+  return "neutral";
+}
+
+function serviceJobElapsed(job: ServiceJob): string | null {
+  const start = job.startedAt ?? job.submittedAt;
+  const end = job.completedAt;
+  if (!start || !end) return null;
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return null;
+  return formatDurationMs(endMs - startMs);
+}
+
+function findStringField(value: unknown, keys: string[], depth = 0): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value) || depth > 3) return null;
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const field = record[key];
+    if (typeof field === "string" && field.trim()) return field;
+    if (typeof field === "number") return String(field);
+  }
+  for (const childKey of ["target", "params", "request", "response", "result", "details"]) {
+    const nested = findStringField(record[childKey], keys, depth + 1);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function serviceJobTargetIds(job: ServiceJob): {
+  browserId: string | null;
+  profileId: string | null;
+  sessionId: string | null;
+  tabId: string | null;
+  url: string | null;
+} {
+  const sources = [job.target, job.request, job.response, job.result];
+  const pick = (keys: string[]) => {
+    for (const source of sources) {
+      const value = findStringField(source, keys);
+      if (value) return value;
+    }
+    return null;
+  };
+  return {
+    browserId: pick(["browserId", "requestedBrowserId"]),
+    profileId: pick(["profileId", "profile"]),
+    sessionId: pick(["sessionId"]),
+    tabId: pick(["tabId"]),
+    url: pick(["url", "targetUrl"]),
+  };
+}
+
 function RemoteViewReadinessStrip({ browser, stream }: { browser: ServiceBrowser; stream?: ServiceViewStream | null }) {
   const viewReady = canOpenViewStream(stream);
   const controlReady = canOpenControlViewStream(stream);
@@ -2336,9 +2696,21 @@ function RemoteViewReadinessStrip({ browser, stream }: { browser: ServiceBrowser
           {displayIsolationLabel(browser.displayIsolation)}
         </strong>
       </div>
+      <div>
+        <span>Route</span>
+        <strong>{stream ? viewStreamRouteLabel(stream) : "none"}</strong>
+      </div>
+      <div>
+        <span>Lease</span>
+        <strong>{stream ? viewStreamLeaseLabel(stream) : "none"}</strong>
+      </div>
+      <div>
+        <span>Readiness</span>
+        <strong>{stream ? viewStreamReadinessLabel(stream) : "unknown"}</strong>
+      </div>
       <p>
         {stream?.url
-          ? `Gateway URL: ${stream.url}${browser.displayName ? ` / Display: ${browser.displayName}` : ""}`
+          ? `Gateway URL: ${stream.url}${browser.displayName ? ` / Display: ${browser.displayName}` : ""} / ${viewStreamRouteSummary(stream)}`
           : stream
             ? viewStreamOpenTitle(stream)
             : "No service-owned view stream has been recorded for this browser."}
@@ -3738,10 +4110,51 @@ function ViewStreamInspectDialog({
 }) {
   const stream = selection?.stream;
   const embeddable = stream ? canEmbedViewStream(stream) : false;
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const onFullscreenChangeRef = useRef(onFullscreenChange);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onFullscreenChange = () => {
+      onFullscreenChangeRef.current(document.fullscreenElement === dialogRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    onFullscreenChangeRef.current = onFullscreenChange;
+  }, [onFullscreenChange]);
+
+  const toggleDialogFullscreen = useCallback(async () => {
+    if (typeof document === "undefined") {
+      onFullscreenChange(!fullscreen);
+      return;
+    }
+
+    const root = dialogRef.current;
+    const isCurrentFullscreen = document.fullscreenElement === root;
+    try {
+      if (isCurrentFullscreen) {
+        await document.exitFullscreen();
+        return;
+      }
+      if (root?.requestFullscreen) {
+        await root.requestFullscreen();
+        return;
+      }
+    } catch {
+      // Keep the CSS fullscreen fallback available if the browser rejects native fullscreen.
+    }
+    onFullscreenChange(!fullscreen);
+  }, [fullscreen, onFullscreenChange]);
 
   return (
     <Dialog open={!!selection} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("service-view-stream-dialog", fullscreen && "service-view-stream-dialog-fullscreen")}>
+      <DialogContent
+        ref={dialogRef}
+        className={cn("service-view-stream-dialog", fullscreen && "service-view-stream-dialog-fullscreen")}
+      >
         {selection && stream && (
           <>
             <DialogHeader>
@@ -3768,7 +4181,7 @@ function ViewStreamInspectDialog({
                   size="sm"
                   variant="outline"
                   className="h-8 gap-1.5 px-2 text-[10px]"
-                  onClick={() => onFullscreenChange(!fullscreen)}
+                  onClick={() => void toggleDialogFullscreen()}
                 >
                   {fullscreen ? <Minimize2 className="size-3" /> : <Maximize2 className="size-3" />}
                   {fullscreen ? "Window" : "Fullscreen"}
@@ -3793,6 +4206,8 @@ function ViewStreamInspectDialog({
                   src={stream.url ?? undefined}
                   className="service-view-stream-frame"
                   sandbox="allow-same-origin allow-scripts allow-forms allow-pointer-lock allow-popups"
+                  allow="clipboard-read; clipboard-write; fullscreen; pointer-lock"
+                  allowFullScreen
                 />
               ) : (
                 <pre className="service-event-details-json">{formatDetails(stream)}</pre>
@@ -3847,10 +4262,14 @@ function BrowserDetailContent({
   browser,
   onInspectViewStream,
   onControlBrowser,
+  onSelectProfileId,
+  onSelectSessionId,
 }: {
   browser: ServiceBrowser;
   onInspectViewStream?: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
   onControlBrowser?: (browser: ServiceBrowser) => void;
+  onSelectProfileId?: (profileId: string) => void;
+  onSelectSessionId?: (sessionId: string) => void;
 }) {
   const viewStreamCount = browser.viewStreams?.length ?? 0;
   const primaryViewStream = browserPrimaryViewStream(browser);
@@ -3858,77 +4277,117 @@ function BrowserDetailContent({
   const executableSource = browserExecutableSource(browser);
   const executableKind = browserExecutableKind(executableSource);
   const executablePlatform = browserExecutablePlatform(executableSource);
+  const activeSessionIds = browser.activeSessionIds?.filter((sessionId) => sessionId.trim()) ?? [];
+  const raw = formatDetails(browser);
   return (
     <div className="service-event-dialog-body">
+      <InspectorHero
+        kicker="Browser"
+        title={browser.id || "Browser process"}
+        state={formatHealthLabel(browser.health)}
+        tone={healthTone(browser.health)}
+        description={browserDescription(browser)}
+        ownership={browserOwnershipLine(browser)}
+        chips={[
+          browserExecutableLabel(executableKind),
+          browserExecutablePlatformLabel(executablePlatform),
+          browserLifecycleLabel(browser),
+          browser.displayIsolation ? displayIsolationLabel(browser.displayIsolation) : null,
+        ]}
+      />
       {browser.lastError && (
         <div className="service-browser-error">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>{browser.lastError}</span>
         </div>
       )}
-      <div className="service-browser-detail-summary">
-        <BrowserExecutableBadge
-          browserBuild={browser.browserBuild}
-          executableId={browser.executableId}
-          executablePath={browser.executablePath}
-          host={browser.host}
-          platform={browser.platform}
-        />
-        <div className="min-w-0">
-          <p>{browserExecutableLabel(executableKind)} on {browserExecutablePlatformLabel(executablePlatform)}</p>
-          <span>{browserExecutableDetail(browser)}</span>
-        </div>
-      </div>
-      <div className="service-event-detail-grid">
-        <EventDetailItem label="Browser ID" value={browser.id} />
-        <EventDetailItem label="Executable" value={browserExecutableDetail(browser)} />
-        <EventDetailItem label="Browser build" value={browser.browserBuild} />
-        <EventDetailItem label="Platform" value={browser.platform ?? browserExecutablePlatformLabel(executablePlatform)} />
-        <EventDetailItem label="Profile" value={browser.profileId} />
-        <EventDetailItem label="Host" value={browser.host} />
-        <EventDetailItem label="Health" value={browser.health} />
-        <EventDetailItem label="Display isolation" value={displayIsolationLabel(browser.displayIsolation)} />
-        <EventDetailItem label="Display" value={browser.displayName} />
-        <EventDetailItem label="PID" value={browser.pid ? String(browser.pid) : null} />
-        <EventDetailItem label="CDP endpoint" value={browser.cdpEndpoint} />
-        <EventDetailItem label="Active sessions" value={String(browser.activeSessionIds?.length ?? 0)} />
-        <EventDetailItem label="View streams" value={String(viewStreamCount)} />
-        <EventDetailItem label="Primary view" value={primaryViewStream ? viewStreamLabel(primaryViewStream) : null} />
-        <EventDetailItem label="Primary input" value={primaryViewStream ? controlInputLabel(primaryViewStream) : null} />
-      </div>
-      <RemoteViewReadinessStrip browser={browser} stream={primaryViewStream} />
-      {onControlBrowser && (
-        <Button
-          type="button"
-          size="sm"
-          className="w-fit gap-1.5 rounded-full"
-          disabled={!controlAvailable}
-          title={viewStreamControlTitle(primaryViewStream)}
-          onClick={() => onControlBrowser(browser)}
-        >
-          <Eye className="size-3.5" />
-          Open remote control
-        </Button>
+      {(onControlBrowser || (browser.profileId && onSelectProfileId) || (activeSessionIds.length > 0 && onSelectSessionId)) && (
+        <InspectorActionBar>
+          {onControlBrowser && (
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5 rounded-full"
+              disabled={!controlAvailable}
+              title={viewStreamControlTitle(primaryViewStream)}
+              onClick={() => onControlBrowser(browser)}
+            >
+              <Eye className="size-3.5" />
+              Open remote control
+            </Button>
+          )}
+          {browser.profileId && onSelectProfileId && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 rounded-full"
+              onClick={() => onSelectProfileId(browser.profileId!)}
+            >
+              <ShieldCheck className="size-3.5" />
+              Show profile
+            </Button>
+          )}
+          {activeSessionIds[0] && onSelectSessionId && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 rounded-full"
+              onClick={() => onSelectSessionId(activeSessionIds[0])}
+            >
+              <GitBranch className="size-3.5" />
+              Show session
+            </Button>
+          )}
+        </InspectorActionBar>
       )}
-      {!!browser.activeSessionIds?.length && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Attached sessions
-          </p>
-          <div className="service-token-list">
-            {browser.activeSessionIds.map((sessionId) => (
-              <Badge key={sessionId} variant="outline" className="max-w-full truncate">
-                {sessionId}
-              </Badge>
-            ))}
+      <InspectorSection title="Runtime">
+        <div className="service-browser-detail-summary">
+          <BrowserExecutableBadge
+            browserBuild={browser.browserBuild}
+            executableId={browser.executableId}
+            executablePath={browser.executablePath}
+            host={browser.host}
+            platform={browser.platform}
+          />
+          <div className="min-w-0">
+            <p>{browserExecutableLabel(executableKind)} on {browserExecutablePlatformLabel(executablePlatform)}</p>
+            <span>{browserExecutableDetail(browser)}</span>
           </div>
         </div>
+        <InspectorFactRows
+          rows={[
+            { label: "Executable", value: browserExecutableDetail(browser), mono: true },
+            { label: "Browser build", value: browser.browserBuild, mono: true },
+            { label: "Host", value: browser.host, mono: true },
+            { label: "Platform", value: browser.platform ?? browserExecutablePlatformLabel(executablePlatform) },
+            { label: "PID", value: browser.pid ? String(browser.pid) : null, mono: true },
+            { label: "Profile", value: browser.profileId, mono: true },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorSection title="Control">
+        <InspectorFactRows
+          rows={[
+            { label: "Health", value: formatHealthLabel(browser.health) },
+            { label: "Lifecycle", value: browserLifecycleLabel(browser) },
+            { label: "CDP endpoint", value: browser.cdpEndpoint ? "recorded" : "not recorded" },
+            { label: "Primary view", value: primaryViewStream ? viewStreamLabel(primaryViewStream) : "none" },
+            { label: "Primary input", value: primaryViewStream ? controlInputLabel(primaryViewStream) : "none" },
+            { label: "View streams", value: String(viewStreamCount) },
+            { label: "Display", value: browser.displayName ?? displayIsolationLabel(browser.displayIsolation) },
+          ]}
+        />
+        <RemoteViewReadinessStrip browser={browser} stream={primaryViewStream} />
+      </InspectorSection>
+      {activeSessionIds.length > 0 && (
+        <InspectorSection title="Ownership" detail={`${activeSessionIds.length} active session${activeSessionIds.length === 1 ? "" : "s"}`}>
+          <InspectorTokenList values={activeSessionIds} />
+        </InspectorSection>
       )}
       {!!browser.viewStreams?.length && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            View streams
-          </p>
+        <InspectorSection title="View Streams">
           <div className="grid gap-3">
             {browser.viewStreams.map((stream, index) => (
               <ViewStreamCard
@@ -3938,8 +4397,17 @@ function BrowserDetailContent({
               />
             ))}
           </div>
-        </div>
+        </InspectorSection>
       )}
+      <InspectorEvidenceDisclosure
+        items={[
+          { label: "Browser ID", value: browser.id, code: true },
+          { label: "CDP endpoint", value: browser.cdpEndpoint, code: true },
+          { label: "View stream records", value: formatDetails(browser.viewStreams), code: true },
+          { label: "Active session IDs", value: formatDetails(activeSessionIds), code: true },
+          { label: "Raw browser record", value: raw, code: true },
+        ]}
+      />
     </div>
   );
 }
@@ -3964,23 +4432,27 @@ export function ServiceDetailInspector({
       </div>
     );
   }
-  const header = serviceInspectorHeader(selection);
 
   return (
     <ScrollArea className="h-full">
       <div className="service-inspector">
-        <div className="service-inspector-header">
-          <div className="min-w-0">
-            <p className="service-inspector-kicker">{header.kicker}</p>
-            <h2>{header.title}</h2>
-            <span>{header.description}</span>
-          </div>
-          <span className={cn("service-browser-health-dot", `service-browser-health-${header.tone}`)} />
-        </div>
         {selection.kind === "browser" && (
-          <BrowserDetailContent browser={selection.browser} onControlBrowser={actions.onControlBrowser} />
+          <BrowserDetailContent
+            browser={selection.browser}
+            onControlBrowser={actions.onControlBrowser}
+            onSelectProfileId={actions.onSelectProfileId}
+            onSelectSessionId={actions.onSelectSessionId}
+          />
         )}
-        {selection.kind === "profile" && <ProfileAllocationDetailContent allocation={selection.allocation} />}
+        {selection.kind === "profile" && (
+          <ProfileAllocationDetailContent
+            allocation={selection.allocation}
+            onSelectBrowserId={actions.onSelectBrowserId}
+            onSelectSessionId={actions.onSelectSessionId}
+            onSelectTabId={actions.onSelectTabId}
+            onSelectJobId={actions.onSelectJobId}
+          />
+        )}
         {selection.kind === "incident" && (
           <IncidentDetailContent
             incident={selection.incident}
@@ -3988,75 +4460,40 @@ export function ServiceDetailInspector({
             onAcknowledge={actions.onAcknowledgeIncident}
             onResolve={actions.onResolveIncident}
             onShowTrace={actions.onShowIncidentTrace}
+            onSelectBrowserId={actions.onSelectBrowserId}
+            onSelectJobId={actions.onSelectJobId}
           />
         )}
-        {selection.kind === "session" && <SessionDetailContent session={selection.session} />}
-        {selection.kind === "tab" && (
-          <TabDetailContent tab={selection.tab} viewStreamAvailable={selection.viewStreamAvailable} />
+        {selection.kind === "session" && (
+          <SessionDetailContent
+            session={selection.session}
+            onSelectBrowserId={actions.onSelectBrowserId}
+            onSelectProfileId={actions.onSelectProfileId}
+            onSelectTabId={actions.onSelectTabId}
+          />
         )}
-        {selection.kind === "job" && <JobDetailContent job={selection.job} onCancel={actions.onCancelJob} />}
+        {selection.kind === "tab" && (
+          <TabDetailContent
+            tab={selection.tab}
+            viewStreamAvailable={selection.viewStreamAvailable}
+            onInspect={actions.onControlTab}
+            onSelectBrowserId={actions.onSelectBrowserId}
+            onSelectSessionId={actions.onSelectSessionId}
+          />
+        )}
+        {selection.kind === "job" && (
+          <JobDetailContent
+            job={selection.job}
+            onCancel={actions.onCancelJob}
+            onSelectBrowserId={actions.onSelectBrowserId}
+            onSelectProfileId={actions.onSelectProfileId}
+            onSelectSessionId={actions.onSelectSessionId}
+            onSelectTabId={actions.onSelectTabId}
+          />
+        )}
       </div>
     </ScrollArea>
   );
-}
-
-function serviceInspectorHeader(selection: ServiceInspectorSelection): {
-  kicker: string;
-  title: string;
-  description: string;
-  tone: ReturnType<typeof healthTone>;
-} {
-  if (selection.kind === "browser") {
-    return {
-      kicker: "Browser inspector",
-      title: selection.browser.id || "Browser process",
-      description: `${selection.browser.host ?? "unknown host"} / ${selection.browser.health ?? "unknown health"}`,
-      tone: healthTone(selection.browser.health),
-    };
-  }
-  if (selection.kind === "session") {
-    return {
-      kicker: "Session inspector",
-      title: selection.session.id || "Service session",
-      description: `${selection.session.lease ?? "shared"} / ${formatActor(selection.session.owner)}`,
-      tone: "good",
-    };
-  }
-  if (selection.kind === "profile") {
-    return {
-      kicker: "Profile inspector",
-      title: selection.allocation.profileName || selection.allocation.profileId || "Profile allocation",
-      description: `${selection.allocation.leaseState ?? "unknown"} / ${selection.allocation.recommendedAction ?? "inspect"}`,
-      tone: profileAllocationTone(selection.allocation.leaseState),
-    };
-  }
-  if (selection.kind === "incident") {
-    const priority = incidentPriorityView(selection.incident);
-    return {
-      kicker: "Incident inspector",
-      title: selection.incident.label,
-      description: `${priority.severityLabel} / ${priority.escalationLabel} / ${incidentHandlingLabel(selection.incident)}`,
-      tone: healthTone(selection.incident.currentHealth ?? undefined),
-    };
-  }
-  if (selection.kind === "tab") {
-    return {
-      kicker: "Tab inspector",
-      title: selection.tab.title || selection.tab.id || "Browser tab",
-      description: `${selection.tab.lifecycle ?? "unknown"} / ${selection.tab.browserId ?? "unknown browser"}`,
-      tone: selection.tab.lifecycle === "crashed" ? "bad" : selection.tab.lifecycle === "ready" ? "good" : "neutral",
-    };
-  }
-  return {
-    kicker: "Job inspector",
-    title: selection.job.action ?? "Service job",
-    description: `${selection.job.state ?? "unknown"} / ${formatRelativeTime(selection.job.submittedAt)}`,
-    tone: selection.job.state === "succeeded"
-      ? "good"
-      : selection.job.state === "failed" || selection.job.state === "timed_out" || selection.job.state === "cancelled"
-        ? "bad"
-        : "neutral",
-  };
 }
 
 function JobDetailDialog({
@@ -4092,17 +4529,36 @@ function JobDetailDialog({
 function JobDetailContent({
   job,
   onCancel,
+  onSelectBrowserId,
+  onSelectProfileId,
+  onSelectSessionId,
+  onSelectTabId,
 }: {
   job: ServiceJob;
   onCancel?: (job: ServiceJob) => void;
+  onSelectBrowserId?: (browserId: string) => void;
+  onSelectProfileId?: (profileId: string) => void;
+  onSelectSessionId?: (sessionId: string) => void;
+  onSelectTabId?: (tabId: string) => void;
 }) {
   const request = formatDetails(job.request);
   const response = formatDetails(job.response ?? job.result);
   const target = formatDetails(job.target);
   const canCancel = job.state === "queued" || job.state === "running";
   const namingWarning = serviceJobNamingWarningLabel(job.namingWarnings);
+  const targetIds = serviceJobTargetIds(job);
+  const raw = formatDetails(job);
   return (
     <div className="service-event-dialog-body">
+      <InspectorHero
+        kicker="Job"
+        title={job.action ?? "Service job"}
+        state={job.state ?? "unknown"}
+        tone={serviceJobTone(job)}
+        description={`${job.priority ?? "normal"} priority request from ${job.serviceName ?? "unknown service"}.`}
+        ownership={`service ${job.serviceName ?? "unknown"}; agent ${job.agentName ?? "unknown"}; task ${job.taskName ?? "unknown"}.`}
+        chips={[job.displayIsolation ? displayIsolationLabel(job.displayIsolation) : null, job.timeoutMs ? `${job.timeoutMs} ms timeout` : null]}
+      />
       {job.error && (
         <div className="service-browser-error">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -4115,52 +4571,90 @@ function JobDetailContent({
           <span>{namingWarning} name metadata. Add serviceName, agentName, and taskName for traceable jobs.</span>
         </div>
       )}
-      <div className="service-event-detail-grid">
-        <EventDetailItem label="Job ID" value={job.id} />
-        <EventDetailItem label="Action" value={job.action} />
-        <EventDetailItem label="State" value={job.state} />
-        <EventDetailItem label="Priority" value={job.priority} />
-        <EventDetailItem label="Display allocation" value={job.displayIsolation ? displayIsolationLabel(job.displayIsolation) : null} />
-        <EventDetailItem label="Owner" value={job.owner ? formatActor(job.owner) : null} />
-        <EventDetailItem label="Timeout" value={job.timeoutMs ? `${job.timeoutMs} ms` : null} />
-        <EventDetailItem label="Submitted" value={job.submittedAt ? formatAbsoluteTime(job.submittedAt) : null} />
-        <EventDetailItem label="Started" value={job.startedAt ? formatAbsoluteTime(job.startedAt) : null} />
-        <EventDetailItem label="Completed" value={job.completedAt ? formatAbsoluteTime(job.completedAt) : null} />
-      </div>
-      {target && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Target
-          </p>
-          <pre className="service-event-details-json">{target}</pre>
-        </div>
+      {(onCancel || targetIds.browserId || targetIds.profileId || targetIds.sessionId || targetIds.tabId) && (
+        <InspectorActionBar>
+          {onCancel && (
+            <Button
+              type="button"
+              variant={canCancel ? "destructive" : "outline"}
+              className="rounded-full"
+              disabled={!canCancel}
+              title={canCancel ? "Request cancellation for this queued or running job." : "Only queued or running jobs can be cancelled."}
+              onClick={() => onCancel(job)}
+            >
+              {job.state === "running" ? "Cancel running job" : "Cancel queued job"}
+            </Button>
+          )}
+          {targetIds.browserId && onSelectBrowserId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectBrowserId(targetIds.browserId!)}>
+              <RadioTower className="size-3.5" />
+              Show browser
+            </Button>
+          )}
+          {targetIds.profileId && onSelectProfileId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectProfileId(targetIds.profileId!)}>
+              <ShieldCheck className="size-3.5" />
+              Show profile
+            </Button>
+          )}
+          {targetIds.sessionId && onSelectSessionId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectSessionId(targetIds.sessionId!)}>
+              <GitBranch className="size-3.5" />
+              Show session
+            </Button>
+          )}
+          {targetIds.tabId && onSelectTabId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectTabId(targetIds.tabId!)}>
+              <ExternalLink className="size-3.5" />
+              Show tab
+            </Button>
+          )}
+        </InspectorActionBar>
       )}
-      {request && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Request
-          </p>
-          <pre className="service-event-details-json">{request}</pre>
-        </div>
-      )}
-      {response && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Response
-          </p>
-          <pre className="service-event-details-json">{response}</pre>
-        </div>
-      )}
-      {canCancel && onCancel && (
-        <Button
-          type="button"
-          variant="destructive"
-          className="rounded-full"
-          onClick={() => onCancel(job)}
-        >
-          {job.state === "running" ? "Cancel running job" : "Cancel queued job"}
-        </Button>
-      )}
+      <InspectorSection title="Request">
+        <InspectorFactRows
+          rows={[
+            { label: "Action", value: job.action },
+            { label: "Priority", value: job.priority },
+            { label: "Owner", value: job.owner ? formatActor(job.owner) : null },
+            { label: "Display allocation", value: job.displayIsolation ? displayIsolationLabel(job.displayIsolation) : null },
+            { label: "Browser", value: targetIds.browserId, mono: true },
+            { label: "Profile", value: targetIds.profileId, mono: true },
+            { label: "Session", value: targetIds.sessionId, mono: true },
+            { label: "Tab", value: targetIds.tabId, mono: true },
+            { label: "URL", value: targetIds.url, mono: true },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorSection title="Timing">
+        <InspectorFactRows
+          rows={[
+            { label: "Submitted", value: job.submittedAt ? formatAbsoluteTime(job.submittedAt) : null },
+            { label: "Started", value: job.startedAt ? formatAbsoluteTime(job.startedAt) : null },
+            { label: "Completed", value: job.completedAt ? formatAbsoluteTime(job.completedAt) : null },
+            { label: "Elapsed", value: serviceJobElapsed(job) },
+            { label: "Timeout", value: job.timeoutMs ? `${job.timeoutMs} ms` : null },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorSection title="Outcome">
+        <InspectorFactRows
+          rows={[
+            { label: "State", value: job.state },
+            { label: "Error", value: job.error },
+            { label: "Naming warning", value: namingWarning },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorEvidenceDisclosure
+        items={[
+          { label: "Job ID", value: job.id, code: true },
+          { label: "Target JSON", value: target, code: true },
+          { label: "Request JSON", value: request, code: true },
+          { label: "Response JSON", value: response, code: true },
+          { label: "Raw job record", value: raw, code: true },
+        ]}
+      />
     </div>
   );
 }
@@ -4596,14 +5090,43 @@ function ProfileAllocationDetailContent({
   allocation,
   loading = false,
   error = "",
+  onSelectBrowserId,
+  onSelectSessionId,
+  onSelectTabId,
+  onSelectJobId,
 }: {
   allocation: ServiceProfileAllocation;
   loading?: boolean;
   error?: string;
+  onSelectBrowserId?: (browserId: string) => void;
+  onSelectSessionId?: (sessionId: string) => void;
+  onSelectTabId?: (tabId: string) => void;
+  onSelectJobId?: (jobId: string) => void;
 }) {
   const raw = formatDetails(allocation);
+  const holderCount = allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0;
+  const waitingCount = allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0;
+  const readinessAttention = profileReadinessNeedsAttention(allocation.targetReadiness);
+  const primaryBrowserId = allocation.browserSummaries?.find((browser) => browser.browserId?.trim())?.browserId ?? allocation.browserIds?.find((value) => value.trim());
+  const primarySessionId = allocation.holderSessionIds?.find((value) => value.trim()) ?? allocation.exclusiveHolderSessionIds?.find((value) => value.trim());
+  const primaryWaitingJobId = allocation.waitingJobIds?.find((value) => value.trim());
+  const primaryTabId = allocation.tabIds?.find((value) => value.trim());
   return (
     <div className="service-event-dialog-body">
+      <InspectorHero
+        kicker="Profile"
+        title={allocation.profileName || allocation.profileId || "Profile allocation"}
+        state={allocation.leaseState ?? "unknown"}
+        tone={profileAllocationTone(allocation.leaseState)}
+        description={`${profileAllocationPrimaryTarget(allocation)} with ${profileAllocationPrimaryLogin(allocation)}; ${profileAllocationPrimaryBrowser(allocation)}.`}
+        ownership={`service ${formatStringList(allocation.serviceNames)}; agent ${formatStringList(allocation.agentNames)}; task ${formatStringList(allocation.taskNames)}.`}
+        chips={[
+          allocation.browserBuild ?? "service default browser",
+          allocation.allocation,
+          allocation.keyring,
+          readinessAttention ? "readiness attention" : null,
+        ]}
+      />
       {loading && (
         <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-foreground/[0.03] px-3 py-2 text-xs text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" />
@@ -4616,45 +5139,83 @@ function ProfileAllocationDetailContent({
           <span>{error}</span>
         </div>
       )}
-      <div className="service-event-detail-grid">
-        <EventDetailItem label="Profile ID" value={allocation.profileId} />
-        <EventDetailItem label="Profile name" value={allocation.profileName} />
-        <EventDetailItem label="Lease state" value={allocation.leaseState} />
-        <EventDetailItem label="Recommended action" value={allocation.recommendedAction} />
-        <EventDetailItem label="Allocation" value={allocation.allocation} />
-        <EventDetailItem label="Keyring" value={allocation.keyring} />
-        <EventDetailItem label="Browser build" value={allocation.browserBuild} />
-        <EventDetailItem label="Primary target" value={profileAllocationPrimaryTarget(allocation)} />
-        <EventDetailItem label="Primary login" value={profileAllocationPrimaryLogin(allocation)} />
-        <EventDetailItem label="Primary browser" value={profileAllocationPrimaryBrowser(allocation)} />
-        <EventDetailItem label="Holder count" value={String(allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0)} />
-        <EventDetailItem label="Waiting job count" value={String(allocation.waitingJobCount ?? allocation.waitingJobIds?.length ?? 0)} />
-        <EventDetailItem label="Browser count" value={String(allocation.browserIds?.length ?? 0)} />
-        <EventDetailItem label="Tab count" value={String(allocation.tabIds?.length ?? 0)} />
-      </div>
-      <ProfileAllocationTokenSection title="Holder sessions" values={allocation.holderSessionIds} />
-      <ProfileAllocationTokenSection title="Exclusive holders" values={allocation.exclusiveHolderSessionIds} />
-      <ProfileAllocationTokenSection title="Waiting jobs" values={allocation.waitingJobIds} />
-      <ProfileAllocationTokenSection title="Conflicts" values={allocation.conflictSessionIds} />
-      <ProfileAllocationTokenSection title="Services" values={allocation.serviceNames} />
-      <ProfileAllocationTokenSection title="Agents" values={allocation.agentNames} />
-      <ProfileAllocationTokenSection title="Tasks" values={allocation.taskNames} />
-      <ProfileAllocationTokenSection title="Account identities" values={allocation.accountIds} />
-      <ProfileAllocationTokenSection title="Target services" values={allocation.targetServiceIds} />
-      <ProfileAllocationTokenSection title="Authenticated services" values={allocation.authenticatedServiceIds} />
-      <ProfileReadinessSection rows={allocation.targetReadiness} />
-      <ProfileAllocationTokenSection title="Shared services" values={allocation.sharedServiceIds} />
-      <ProfileBrowserSummarySection rows={allocation.browserSummaries} />
-      <ProfileAllocationTokenSection title="Browsers" values={allocation.browserIds} />
-      <ProfileAllocationTokenSection title="Tabs" values={allocation.tabIds} />
-      {raw && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Raw allocation
-          </p>
-          <pre className="service-event-details-json">{raw}</pre>
-        </div>
+      {(primaryBrowserId || primarySessionId || primaryWaitingJobId || primaryTabId) && (
+        <InspectorActionBar>
+          {primaryBrowserId && onSelectBrowserId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectBrowserId(primaryBrowserId)}>
+              <RadioTower className="size-3.5" />
+              Show browser
+            </Button>
+          )}
+          {primarySessionId && onSelectSessionId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectSessionId(primarySessionId)}>
+              <GitBranch className="size-3.5" />
+              Show lease
+            </Button>
+          )}
+          {primaryWaitingJobId && onSelectJobId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectJobId(primaryWaitingJobId)}>
+              <ServerCog className="size-3.5" />
+              Show waiting job
+            </Button>
+          )}
+          {primaryTabId && onSelectTabId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectTabId(primaryTabId)}>
+              <ExternalLink className="size-3.5" />
+              Show tab
+            </Button>
+          )}
+        </InspectorActionBar>
       )}
+      <InspectorSection title="Identity And Routing">
+        <InspectorFactRows
+          rows={[
+            { label: "Primary target", value: profileAllocationPrimaryTarget(allocation) },
+            { label: "Primary login", value: profileAllocationPrimaryLogin(allocation) },
+            { label: "Browser build", value: allocation.browserBuild ?? "service default" },
+            { label: "Allocation", value: allocation.allocation },
+            { label: "Keyring", value: allocation.keyring },
+            { label: "Recommended action", value: allocation.recommendedAction },
+          ]}
+        />
+        <ProfileAllocationTokenSection title="Target services" values={allocation.targetServiceIds} />
+        <ProfileAllocationTokenSection title="Account identities" values={allocation.accountIds} />
+        <ProfileAllocationTokenSection title="Authenticated services" values={allocation.authenticatedServiceIds} />
+        <ProfileAllocationTokenSection title="Shared services" values={allocation.sharedServiceIds} />
+      </InspectorSection>
+      <ProfileReadinessSection rows={allocation.targetReadiness} />
+      <InspectorSection title="Leases And Conflicts">
+        <InspectorFactRows
+          rows={[
+            { label: "Lease state", value: allocation.leaseState },
+            { label: "Holder count", value: String(holderCount) },
+            { label: "Waiting jobs", value: String(waitingCount) },
+            { label: "Conflicts", value: String(allocation.conflictSessionIds?.length ?? 0) },
+          ]}
+        />
+        <ProfileAllocationTokenSection title="Holder sessions" values={allocation.holderSessionIds} />
+        <ProfileAllocationTokenSection title="Exclusive holders" values={allocation.exclusiveHolderSessionIds} />
+        <ProfileAllocationTokenSection title="Waiting jobs" values={allocation.waitingJobIds} />
+        <ProfileAllocationTokenSection title="Conflicts" values={allocation.conflictSessionIds} />
+      </InspectorSection>
+      <InspectorSection title="Ownership">
+        <ProfileAllocationTokenSection title="Services" values={allocation.serviceNames} />
+        <ProfileAllocationTokenSection title="Agents" values={allocation.agentNames} />
+        <ProfileAllocationTokenSection title="Tasks" values={allocation.taskNames} />
+      </InspectorSection>
+      <InspectorSection title="Related Records">
+        <ProfileBrowserSummarySection rows={allocation.browserSummaries} />
+        <ProfileAllocationTokenSection title="Browsers" values={allocation.browserIds} />
+        <ProfileAllocationTokenSection title="Tabs" values={allocation.tabIds} />
+      </InspectorSection>
+      <InspectorEvidenceDisclosure
+        items={[
+          { label: "Profile ID", value: allocation.profileId, code: true },
+          { label: "Target readiness JSON", value: formatDetails(allocation.targetReadiness), code: true },
+          { label: "Browser summaries JSON", value: formatDetails(allocation.browserSummaries), code: true },
+          { label: "Raw allocation", value: raw, code: true },
+        ]}
+      />
     </div>
   );
 }
@@ -4743,6 +5304,7 @@ function ServiceSessionRow({
   session: ServiceSession;
   onSelect: (session: ServiceSession) => void;
 }) {
+  const tone = isHumanTakeoverSession(session) ? "warn" : isActiveServiceSession(session) ? "good" : "neutral";
   return (
     <button
       type="button"
@@ -4750,7 +5312,7 @@ function ServiceSessionRow({
       onClick={() => onSelect(session)}
       aria-label={`Inspect session ${session.id}`}
     >
-      <span className="service-browser-health-dot service-browser-health-good" />
+      <span className={cn("service-browser-health-dot", `service-browser-health-${tone}`)} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-xs font-bold text-foreground">{session.id || "unnamed session"}</span>
@@ -4843,46 +5405,119 @@ function SessionDetailDialog({
   );
 }
 
-function SessionDetailContent({ session }: { session: ServiceSession }) {
+function SessionDetailContent({
+  session,
+  onSelectBrowserId,
+  onSelectProfileId,
+  onSelectTabId,
+}: {
+  session: ServiceSession;
+  onSelectBrowserId?: (browserId: string) => void;
+  onSelectProfileId?: (profileId: string) => void;
+  onSelectTabId?: (tabId: string) => void;
+}) {
+  const browserIds = session.browserIds?.filter((browserId) => browserId.trim()) ?? [];
+  const tabIds = session.tabIds?.filter((tabId) => tabId.trim()) ?? [];
+  const primaryBrowserId = browserIds[0];
+  const primaryTabId = tabIds[0];
+  const takeover = isHumanTakeoverSession(session);
+  const conflictSessionIds = session.profileLeaseConflictSessionIds?.filter((sessionId) => sessionId.trim()) ?? [];
+  const takeoverQueueImpact = conflictSessionIds.length > 0
+    ? `Human takeover is blocking ${conflictSessionIds.length} conflicting session${conflictSessionIds.length === 1 ? "" : "s"}.`
+    : "Human takeover holds the profile lease until a service-owned resume action releases it.";
+  const raw = formatDetails(session);
   return (
     <div className="service-event-dialog-body">
-      <div className="service-event-detail-grid">
-        <EventDetailItem label="Session ID" value={session.id} />
-        <EventDetailItem label="Owner" value={formatActor(session.owner)} />
-        <EventDetailItem label="Lease" value={session.lease} />
-        <EventDetailItem label="Created" value={session.createdAt ? formatAbsoluteTime(session.createdAt) : null} />
-        <EventDetailItem label="Expires" value={session.expiresAt ? formatAbsoluteTime(session.expiresAt) : null} />
-        <EventDetailItem label="Browsers" value={String(session.browserIds?.length ?? 0)} />
-        <EventDetailItem label="Tabs" value={String(session.tabIds?.length ?? 0)} />
-      </div>
-      {!!session.browserIds?.length && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Browser IDs
-          </p>
-          <div className="service-token-list">
-            {session.browserIds.map((browserId) => (
-              <Badge key={browserId} variant="outline" className="max-w-full truncate">
-                {browserId}
-              </Badge>
-            ))}
-          </div>
-        </div>
+      <InspectorHero
+        kicker="Session"
+        title={session.id || "Service session"}
+        state={sessionStateLabel(session)}
+        tone={takeover ? "warn" : isActiveServiceSession(session) ? "good" : "neutral"}
+        description={takeover
+          ? `Human takeover held by ${formatActor(session.owner)}.`
+          : `${session.lease ?? "shared"} lease held by ${formatActor(session.owner)}.`}
+        ownership={`service ${session.serviceName ?? "unknown"}; agent ${session.agentName ?? "unknown"}; task ${session.taskName ?? "unknown"}.`}
+        chips={[session.profileId, session.cleanup, `${browserIds.length} browsers`, `${tabIds.length} tabs`]}
+      />
+      {(primaryBrowserId || session.profileId || primaryTabId) && (
+        <InspectorActionBar>
+          {primaryBrowserId && onSelectBrowserId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectBrowserId(primaryBrowserId)}>
+              <RadioTower className="size-3.5" />
+              Show browser
+            </Button>
+          )}
+          {session.profileId && onSelectProfileId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectProfileId(session.profileId!)}>
+              <ShieldCheck className="size-3.5" />
+              Show profile
+            </Button>
+          )}
+          {primaryTabId && onSelectTabId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectTabId(primaryTabId)}>
+              <ExternalLink className="size-3.5" />
+              Show tab
+            </Button>
+          )}
+        </InspectorActionBar>
       )}
-      {!!session.tabIds?.length && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Tab IDs
-          </p>
-          <div className="service-token-list">
-            {session.tabIds.map((tabId) => (
-              <Badge key={tabId} variant="outline" className="max-w-full truncate">
-                {tabId}
-              </Badge>
-            ))}
-          </div>
-        </div>
+      {takeover && (
+        <InspectorSection title="Operator Takeover">
+          <InspectorFactRows
+            rows={[
+              { label: "Owner", value: formatActor(session.owner) },
+              { label: "Queue impact", value: takeoverQueueImpact },
+              { label: "Resume", value: "No service-owned resume action is exposed yet." },
+              { label: "Selected browser", value: primaryBrowserId, mono: true },
+              { label: "Selected tab", value: primaryTabId, mono: true },
+              { label: "Started", value: session.createdAt ? formatAbsoluteTime(session.createdAt) : null },
+              { label: "Last observed", value: session.lastLeaseObservedAt ? formatAbsoluteTime(session.lastLeaseObservedAt) : null },
+            ]}
+          />
+          <ProfileAllocationTokenSection title="Conflict sessions" values={conflictSessionIds} />
+        </InspectorSection>
       )}
+      <InspectorSection title="Lease">
+        <InspectorFactRows
+          rows={[
+            { label: "State", value: sessionStateLabel(session) },
+            { label: "Owner", value: formatActor(session.owner) },
+            { label: "Lease", value: session.lease },
+            { label: "Cleanup", value: session.cleanup },
+            { label: "Profile lease", value: session.profileLeaseDisposition },
+            { label: "Conflicts", value: String(conflictSessionIds.length) },
+            { label: "Created", value: session.createdAt ? formatAbsoluteTime(session.createdAt) : null },
+            { label: "Last observed", value: session.lastLeaseObservedAt ? formatAbsoluteTime(session.lastLeaseObservedAt) : null },
+            { label: "Expires", value: session.expiresAt ? formatAbsoluteTime(session.expiresAt) : null },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorSection title="Bindings">
+        <InspectorFactRows
+          rows={[
+            { label: "Profile", value: session.profileId, mono: true },
+            { label: "Browsers", value: String(browserIds.length) },
+            { label: "Tabs", value: String(tabIds.length) },
+          ]}
+        />
+        <ProfileAllocationTokenSection title="Browser IDs" values={browserIds} />
+        <ProfileAllocationTokenSection title="Tab IDs" values={tabIds} />
+      </InspectorSection>
+      <InspectorSection title="Ownership">
+        <InspectorFactRows
+          rows={[
+            { label: "Service", value: session.serviceName },
+            { label: "Agent", value: session.agentName },
+            { label: "Task", value: session.taskName },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorEvidenceDisclosure
+        items={[
+          { label: "Session ID", value: session.id, code: true },
+          { label: "Raw session record", value: raw, code: true },
+        ]}
+      />
     </div>
   );
 }
@@ -4923,31 +5558,94 @@ function TabDetailContent({
   tab,
   viewStreamAvailable,
   onInspect,
+  onSelectBrowserId,
+  onSelectSessionId,
 }: {
   tab: ServiceTab;
   viewStreamAvailable?: boolean;
   onInspect?: (tab: ServiceTab) => void;
+  onSelectBrowserId?: (browserId: string) => void;
+  onSelectSessionId?: (sessionId: string) => void;
 }) {
+  const origin = urlOriginLabel(tab.url);
+  const ownerSessionId = tab.ownerSessionId ?? tab.sessionId;
+  const raw = formatDetails(tab);
   return (
     <div className="service-event-dialog-body">
-      {tab.url && <p className="service-event-dialog-message">{tab.url}</p>}
-      <div className="service-event-detail-grid">
-        <EventDetailItem label="Tab ID" value={tab.id} />
-        <EventDetailItem label="Browser ID" value={tab.browserId} />
-        <EventDetailItem label="Target ID" value={tab.targetId} />
-        <EventDetailItem label="Session ID" value={tab.sessionId} />
-        <EventDetailItem label="Owner session" value={tab.ownerSessionId} />
-        <EventDetailItem label="Lifecycle" value={tab.lifecycle} />
-        <EventDetailItem label="Snapshot" value={tab.latestSnapshotId} />
-        <EventDetailItem label="Screenshot" value={tab.latestScreenshotId} />
-        <EventDetailItem label="Challenge" value={tab.challengeId} />
-      </div>
-      {viewStreamAvailable && onInspect && (
-        <Button className="w-fit gap-1.5" size="sm" onClick={() => onInspect(tab)}>
-          <Eye className="size-3.5" />
-          Open remote control
-        </Button>
+      <InspectorHero
+        kicker="Tab"
+        title={tab.title || origin || tab.id || "Browser tab"}
+        state={tab.lifecycle ?? "unknown"}
+        tone={tabStateTone(tab)}
+        description={tab.url ?? tab.targetId ?? "No URL or target evidence recorded for this tab."}
+        ownership={`browser ${tab.browserId ?? "unknown"}; session ${ownerSessionId ?? "unknown"}.`}
+        chips={[origin, tab.challengeId ? "challenge" : null, viewStreamAvailable ? "view stream" : null]}
+      />
+      {(onInspect || (tab.browserId && onSelectBrowserId) || (ownerSessionId && onSelectSessionId)) && (
+        <InspectorActionBar>
+          {onInspect && (
+            <Button
+              className="gap-1.5 rounded-full"
+              size="sm"
+              disabled={!viewStreamAvailable}
+              title={viewStreamAvailable ? "Focus this tab and open the browser view stream." : "No controllable browser view stream is available for this tab."}
+              onClick={() => onInspect(tab)}
+            >
+              <Eye className="size-3.5" />
+              Focus tab
+            </Button>
+          )}
+          {tab.browserId && onSelectBrowserId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectBrowserId(tab.browserId!)}>
+              <RadioTower className="size-3.5" />
+              Show browser
+            </Button>
+          )}
+          {ownerSessionId && onSelectSessionId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectSessionId(ownerSessionId)}>
+              <GitBranch className="size-3.5" />
+              Show session
+            </Button>
+          )}
+        </InspectorActionBar>
       )}
+      <InspectorSection title="Page">
+        <InspectorFactRows
+          rows={[
+            { label: "Title", value: tab.title },
+            { label: "URL", value: tab.url, mono: true },
+            { label: "Origin", value: origin, mono: true },
+            { label: "Target ID", value: tab.targetId, mono: true },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorSection title="Control">
+        <InspectorFactRows
+          rows={[
+            { label: "Lifecycle", value: tab.lifecycle },
+            { label: "Focus availability", value: viewStreamAvailable ? "available" : "unavailable" },
+            { label: "Snapshot", value: tab.latestSnapshotId, mono: true },
+            { label: "Screenshot", value: tab.latestScreenshotId, mono: true },
+            { label: "Challenge", value: tab.challengeId, mono: true },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorSection title="Ownership">
+        <InspectorFactRows
+          rows={[
+            { label: "Browser", value: tab.browserId, mono: true },
+            { label: "Session", value: tab.sessionId, mono: true },
+            { label: "Owner session", value: tab.ownerSessionId, mono: true },
+          ]}
+        />
+      </InspectorSection>
+      <InspectorEvidenceDisclosure
+        items={[
+          { label: "Tab ID", value: tab.id, code: true },
+          { label: "Target ID", value: tab.targetId, code: true },
+          { label: "Raw tab record", value: raw, code: true },
+        ]}
+      />
     </div>
   );
 }
@@ -5283,12 +5981,16 @@ function IncidentDetailContent({
   onAcknowledge,
   onResolve,
   onShowTrace,
+  onSelectBrowserId,
+  onSelectJobId,
 }: {
   incident: IncidentRecord;
   acting?: boolean;
   onAcknowledge?: (incident: IncidentRecord, note: string) => void;
   onResolve?: (incident: IncidentRecord, note: string) => void;
   onShowTrace?: (incident: IncidentRecord) => void;
+  onSelectBrowserId?: (browserId: string) => void;
+  onSelectJobId?: (jobId: string) => void;
 }) {
   const [actionNote, setActionNote] = useState("");
   const timeline = deriveIncidentTimeline(incident);
@@ -5297,6 +5999,11 @@ function IncidentDetailContent({
   const handlingState = incidentHandlingState(incident);
   const priority = incidentPriorityView(incident);
   const actionsAvailable = Boolean(onAcknowledge || onResolve);
+  const contextEvent = incident.serviceEvents.find((event) => event.serviceName || event.agentName || event.taskName);
+  const primaryJobId = incident.jobEvents
+    .map((event) => findStringField(event.details, ["jobId"]) ?? (event.id.startsWith("job-incident-") ? event.id.slice("job-incident-".length) : null))
+    .find((value): value is string => Boolean(value));
+  const raw = formatDetails(incident);
 
   useEffect(() => {
     setActionNote("");
@@ -5304,39 +6011,94 @@ function IncidentDetailContent({
 
   return (
     <div className="service-event-dialog-body">
-      <p className="service-event-dialog-message">{incident.latestMessage}</p>
-      <div className="service-incident-priority-row">
-        <div className={cn("service-incident-priority-card", `service-incident-priority-${priority.severityTone}`)}>
-          <span>Severity</span>
-          <strong>{priority.severityLabel}</strong>
-        </div>
-        <div className="service-incident-priority-card service-incident-priority-escalation">
-          <span>Escalation</span>
-          <strong>{priority.escalationLabel}</strong>
-        </div>
-      </div>
-      {priority.recommendedAction && (
-        <div className={cn("service-incident-recommended-action", `service-incident-priority-${priority.severityTone}`)}>
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-          <div>
-            <span>Recommended action</span>
-            <p>{priority.recommendedAction}</p>
+      <InspectorHero
+        kicker="Incident"
+        title={incident.label}
+        state={incidentHandlingLabel(incident)}
+        tone={priority.severityTone === "critical" || priority.severityTone === "error" ? "bad" : priority.severityTone === "warning" ? "warn" : "neutral"}
+        description={incident.latestMessage || "No incident message recorded."}
+        ownership={`browser ${incident.browserId ?? "unknown"}; latest ${formatRelativeTime(incident.latestTimestamp)}.`}
+        chips={[priority.severityLabel, priority.escalationLabel, formatEventKind(incident.latestKind)]}
+      />
+      {(actionsAvailable || onShowTrace || (incident.browserId && onSelectBrowserId) || (primaryJobId && onSelectJobId)) && (
+        <InspectorActionBar>
+          {onShowTrace && (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => onShowTrace(incident)}
+            >
+              <History className="size-3.5" />
+              Show related trace
+            </Button>
+          )}
+          {incident.browserId && onSelectBrowserId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectBrowserId(incident.browserId!)}>
+              <RadioTower className="size-3.5" />
+              Show browser
+            </Button>
+          )}
+          {primaryJobId && onSelectJobId && (
+            <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => onSelectJobId(primaryJobId)}>
+              <ServerCog className="size-3.5" />
+              Show job
+            </Button>
+          )}
+          {handlingState === "unacknowledged" && onAcknowledge && (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              disabled={acting}
+              onClick={() => onAcknowledge(incident, actionNote)}
+            >
+              {acting ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+              Mark acknowledged
+            </Button>
+          )}
+          {handlingState !== "resolved" && onResolve && (
+            <Button
+              type="button"
+              className="rounded-full"
+              disabled={acting}
+              onClick={() => onResolve(incident, actionNote)}
+            >
+              {acting ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+              Mark resolved
+            </Button>
+          )}
+        </InspectorActionBar>
+      )}
+      <InspectorSection title="Recommendation">
+        <div className="service-incident-priority-row">
+          <div className={cn("service-incident-priority-card", `service-incident-priority-${priority.severityTone}`)}>
+            <span>Severity</span>
+            <strong>{priority.severityLabel}</strong>
+          </div>
+          <div className="service-incident-priority-card service-incident-priority-escalation">
+            <span>Escalation</span>
+            <strong>{priority.escalationLabel}</strong>
           </div>
         </div>
-      )}
-      <div className="service-event-detail-grid">
-        <EventDetailItem label="Browser" value={incident.browserId} />
-        <EventDetailItem label="Severity" value={priority.severityLabel} />
-        <EventDetailItem label="Escalation" value={priority.escalationLabel} />
-        <EventDetailItem label="Latest kind" value={formatEventKind(incident.latestKind)} />
-        <EventDetailItem label="Current health" value={incident.currentHealth} />
-        <EventDetailItem label="Handling state" value={incidentHandlingLabel(incident)} />
-        <EventDetailItem label="Incident count" value={String(incidentCount)} />
-        <EventDetailItem label="Acknowledged by" value={incident.acknowledgedBy} />
-        <EventDetailItem label="Acknowledged" value={incident.acknowledgedAt ? formatAbsoluteTime(incident.acknowledgedAt) : null} />
-        <EventDetailItem label="Resolved by" value={incident.resolvedBy} />
-        <EventDetailItem label="Resolved" value={incident.resolvedAt ? formatAbsoluteTime(incident.resolvedAt) : null} />
-      </div>
+        {priority.recommendedAction && (
+          <div className={cn("service-incident-recommended-action", `service-incident-priority-${priority.severityTone}`)}>
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            <div>
+              <span>Recommended action</span>
+              <p>{priority.recommendedAction}</p>
+            </div>
+          </div>
+        )}
+        <InspectorFactRows
+          rows={[
+            { label: "Latest kind", value: formatEventKind(incident.latestKind) },
+            { label: "Current health", value: formatHealthLabel(incident.currentHealth) },
+            { label: "Handling state", value: incidentHandlingLabel(incident) },
+            { label: "Incident entries", value: String(incidentCount) },
+          ]}
+        />
+      </InspectorSection>
       {(incident.acknowledgementNote || incident.resolutionNote) && (
         <div className="service-incident-notes">
           {incident.acknowledgementNote && (
@@ -5363,53 +6125,26 @@ function IncidentDetailContent({
             value={actionNote}
             onChange={(event) => setActionNote(event.target.value)}
             placeholder="Optional context for the acknowledgement or resolution"
-            rows={3}
-          />
-        </div>
+          rows={3}
+        />
+      </div>
       )}
-      {(actionsAvailable || onShowTrace) && (
-        <div className="service-incident-actions">
-          {onShowTrace && (
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => onShowTrace(incident)}
-            >
-              <History className="size-3.5" />
-              Show related trace
-            </Button>
-          )}
-          {handlingState === "unacknowledged" && onAcknowledge && (
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              disabled={acting}
-              onClick={() => onAcknowledge(incident, actionNote)}
-            >
-              {acting ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
-              Mark acknowledged
-            </Button>
-          )}
-          {handlingState !== "resolved" && onResolve && (
-            <Button
-              type="button"
-              className="rounded-full"
-              disabled={acting}
-              onClick={() => onResolve(incident, actionNote)}
-            >
-              {acting ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
-              Mark resolved
-            </Button>
-          )}
-        </div>
-      )}
+      <InspectorSection title="Ownership">
+        <InspectorFactRows
+          rows={[
+            { label: "Browser", value: incident.browserId, mono: true },
+            { label: "Service", value: contextEvent?.serviceName },
+            { label: "Agent", value: contextEvent?.agentName },
+            { label: "Task", value: contextEvent?.taskName },
+            { label: "Acknowledged by", value: incident.acknowledgedBy },
+            { label: "Acknowledged", value: incident.acknowledgedAt ? formatAbsoluteTime(incident.acknowledgedAt) : null },
+            { label: "Resolved by", value: incident.resolvedBy },
+            { label: "Resolved", value: incident.resolvedAt ? formatAbsoluteTime(incident.resolvedAt) : null },
+          ]}
+        />
+      </InspectorSection>
       {timeline.length > 0 && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Incident history
-          </p>
+        <InspectorSection title="Timeline">
           <div className="service-incident-history">
             {timeline.map((item) => (
               <div key={item.id} className="service-incident-history-item">
@@ -5437,13 +6172,10 @@ function IncidentDetailContent({
               </div>
             ))}
           </div>
-        </div>
+        </InspectorSection>
       )}
       {incident.transitionEvents.length > 0 && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Health transitions
-          </p>
+        <InspectorSection title="Health Transitions">
           <div className="space-y-1">
             {incident.transitionEvents.map((event) => (
               <div key={event.id} className="service-incident-entry">
@@ -5460,13 +6192,10 @@ function IncidentDetailContent({
               </div>
             ))}
           </div>
-        </div>
+        </InspectorSection>
       )}
       {serviceOnlyEvents.length > 0 && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Related service events
-          </p>
+        <InspectorSection title="Related Service Events">
           <div className="space-y-1">
             {serviceOnlyEvents.map((event) => (
               <div key={event.id} className="service-incident-entry">
@@ -5483,13 +6212,10 @@ function IncidentDetailContent({
               </div>
             ))}
           </div>
-        </div>
+        </InspectorSection>
       )}
       {incident.jobEvents.length > 0 && (
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
-            Related jobs
-          </p>
+        <InspectorSection title="Related Jobs">
           <div className="space-y-1">
             {incident.jobEvents.map((event) => (
               <div key={event.id} className="service-incident-entry">
@@ -5506,8 +6232,17 @@ function IncidentDetailContent({
               </div>
             ))}
           </div>
-        </div>
+        </InspectorSection>
       )}
+      <InspectorEvidenceDisclosure
+        items={[
+          { label: "Incident ID", value: incident.id, code: true },
+          { label: "Service events JSON", value: formatDetails(incident.serviceEvents), code: true },
+          { label: "Transition events JSON", value: formatDetails(incident.transitionEvents), code: true },
+          { label: "Job events JSON", value: formatDetails(incident.jobEvents), code: true },
+          { label: "Raw incident record", value: raw, code: true },
+        ]}
+      />
     </div>
   );
 }
@@ -5554,7 +6289,13 @@ export function ServicePanel({
   const [profileReadinessFilter, setProfileReadinessFilter] = useState<ProfileReadinessFilter>("all");
   const [incidentQuery, setIncidentQuery] = useState("");
   const [incidentLimit, setIncidentLimit] = useState<ServiceRecordLimit>(24);
-  const [workspaceTab, setWorkspaceTab] = useState<ServiceWorkspaceTab>("profiles");
+  const [workspaceTab, setWorkspaceTab] = useState<ServiceWorkspaceTab>(() => {
+    if (typeof window === "undefined") return "browsers";
+    return serviceWorkspaceFromSearch(window.location.search);
+  });
+  const [workspaceUrlSelection, setWorkspaceUrlSelection] = useState<DashboardWorkspaceUrlSelection>(() =>
+    readDashboardWorkspaceUrlSelection(),
+  );
   const [incidentOnly, setIncidentOnly] = useState(false);
   const [incidentHandlingFilter, setIncidentHandlingFilter] = useState<IncidentHandlingFilter>("all");
   const [jobQuery, setJobQuery] = useState("");
@@ -5592,8 +6333,42 @@ export function ServicePanel({
   const [retainedPruneResult, setRetainedPruneResult] = useState<ServiceRetentionPruneData | null>(null);
   const profileAllocationLookupId = useRef(0);
   const profileAllocationRowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const appliedWorkspaceSelectionKeyRef = useRef("");
 
   const canFetch = typeof window !== "undefined";
+  const syncWorkspaceSelection = useCallback((
+    selection: Partial<DashboardWorkspaceUrlSelection>,
+    mode: "push" | "replace" = "push",
+  ) => {
+    updateDashboardWorkspaceUrlSelection({
+      workspaceId: null,
+      browserId: null,
+      sessionId: null,
+      tabId: null,
+      profileId: null,
+      jobId: null,
+      ...selection,
+    }, mode);
+  }, []);
+  const selectWorkspaceTab = useCallback((tab: ServiceWorkspaceTab) => {
+    setWorkspaceTab(tab);
+    pushServiceWorkspaceUrl(tab);
+  }, []);
+
+  useEffect(() => {
+    const onWorkspaceSelectionChange = () => setWorkspaceUrlSelection(readDashboardWorkspaceUrlSelection());
+    const onPopState = () => {
+      setWorkspaceTab(serviceWorkspaceFromSearch(window.location.search));
+      onWorkspaceSelectionChange();
+    };
+    window.addEventListener("popstate", onPopState);
+    window.addEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelectionChange);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelectionChange);
+    };
+  }, []);
+
   const activeFilterCount =
     (eventKind === "all" ? 0 : 1) +
     (eventWindow === "all" ? 0 : 1) +
@@ -5729,7 +6504,10 @@ export function ServicePanel({
     };
   }, [activePort, canFetch, selectedIncident?.id]);
 
-  const inspectJob = useCallback(async (job: ServiceJob) => {
+  const inspectJob = useCallback(async (job: ServiceJob, options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {}) => {
+    if (options.syncWorkspace !== false && job.id) {
+      syncWorkspaceSelection({ jobId: job.id }, options.historyMode);
+    }
     if (!canFetch || !job.id) {
       if (onInspectSelection) {
         onInspectSelection({ kind: "job", job });
@@ -5757,12 +6535,18 @@ export function ServicePanel({
       }
       setError(err instanceof Error ? err.message : "Service job lookup unavailable");
     }
-  }, [activePort, canFetch, onInspectSelection]);
+  }, [activePort, canFetch, onInspectSelection, syncWorkspaceSelection]);
 
-  const inspectProfileAllocation = useCallback(async (allocation: ServiceProfileAllocation) => {
+  const inspectProfileAllocation = useCallback(async (
+    allocation: ServiceProfileAllocation,
+    options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {},
+  ) => {
     const lookupId = profileAllocationLookupId.current + 1;
     profileAllocationLookupId.current = lookupId;
     setSelectedProfileAllocationId(allocation.profileId || null);
+    if (options.syncWorkspace !== false && allocation.profileId) {
+      syncWorkspaceSelection({ profileId: allocation.profileId }, options.historyMode);
+    }
     if (onInspectSelection) {
       onInspectSelection({ kind: "profile", allocation });
     } else {
@@ -5798,7 +6582,7 @@ export function ServicePanel({
         setSelectedProfileAllocationLoading(false);
       }
     }
-  }, [activePort, canFetch, onInspectSelection]);
+  }, [activePort, canFetch, onInspectSelection, syncWorkspaceSelection]);
 
   const editRuntimeProfileConfig = useCallback((profile: ServiceProfileRecord) => {
     setProfileConfigError("");
@@ -5968,11 +6752,14 @@ export function ServicePanel({
     () => Object.values(serviceState?.jobs ?? {}),
     [serviceState?.jobs],
   );
-  const recentJobs = jobs?.jobs ?? retainedServiceJobs.slice(-8);
+  const recentJobs = useMemo(
+    () => jobs?.jobs ?? retainedServiceJobs.slice(-8),
+    [jobs?.jobs, retainedServiceJobs],
+  );
   const showJobsForDisplayAllocation = useCallback((displayIsolation: string | null, jobIds: string[] = []) => {
     const displayFilter = serviceJobDisplayFilterForTraceAllocation(displayIsolation);
     const label = displayIsolationLabel(displayIsolation);
-    setWorkspaceTab("jobs");
+    selectWorkspaceTab("jobs");
     setJobDisplayFilter(displayFilter);
     setJobStateFilter("all");
     setJobSortKey("displayIsolation");
@@ -5992,9 +6779,9 @@ export function ServicePanel({
     }
 
     setJobFilterNotice(`Showing ${label} jobs from the trace display allocation summary.`);
-  }, [recentJobs]);
+  }, [recentJobs, selectWorkspaceTab]);
   const showTraceJob = useCallback((jobId: string) => {
-    setWorkspaceTab("jobs");
+    selectWorkspaceTab("jobs");
     setJobQuery(jobId);
     setJobStateFilter("all");
     setJobDisplayFilter("all");
@@ -6008,7 +6795,7 @@ export function ServicePanel({
         ? `Showing trace job ${jobId} from the retained Jobs window.`
         : `Trace job ${jobId} is outside the retained Jobs window; it may appear after the 100-row refresh completes.`,
     );
-  }, [recentJobs]);
+  }, [recentJobs, selectWorkspaceTab]);
   const filteredJobs = useMemo(() => {
     const query = jobQuery.trim().toLowerCase();
     const rows = recentJobs.filter((job) => {
@@ -6090,7 +6877,7 @@ export function ServicePanel({
     [retainedServiceJobs, serviceState?.events, serviceState?.incidents],
   );
   const showTraceIncident = useCallback((incidentId: string) => {
-    setWorkspaceTab("incidents");
+    selectWorkspaceTab("incidents");
     setIncidentQuery(incidentId);
     setIncidentHandlingFilter("all");
     setIncidentLimit((current) => (current < 100 ? 100 : current));
@@ -6104,13 +6891,13 @@ export function ServicePanel({
         ? `Showing trace incident ${incidentId} from the retained Incidents window.`
         : `Trace incident ${incidentId} is outside the retained Incidents window; it may appear after the 100-row refresh completes.`,
     );
-  }, [incidentRecords, inspectIncident]);
+  }, [incidentRecords, inspectIncident, selectWorkspaceTab]);
   const showIncidentTrace = useCallback((incident: IncidentRecord) => {
     const filters = incidentTraceFilters(incident);
-    setWorkspaceTab("events");
+    selectWorkspaceTab("events");
     setTraceFilters(filters);
     void loadTraceForFilters(filters);
-  }, [loadTraceForFilters]);
+  }, [loadTraceForFilters, selectWorkspaceTab]);
   const incidentQueryText = incidentQuery.trim().toLowerCase();
   const filteredIncidentRecords = useMemo(() => {
     const handlingFiltered = incidentHandlingFilter === "all"
@@ -6388,8 +7175,18 @@ export function ServicePanel({
     },
     [],
   );
-  const inspectBrowser = useCallback((browser: ServiceBrowser) => {
+  const inspectBrowser = useCallback((
+    browser: ServiceBrowser,
+    options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {},
+  ) => {
     setSelectedBrowserId(browser.id || null);
+    if (options.syncWorkspace !== false && browser.id) {
+      syncWorkspaceSelection({
+        browserId: browser.id,
+        profileId: browser.profileId ?? null,
+        sessionId: browser.activeSessionIds?.[0] ?? null,
+      }, options.historyMode);
+    }
     if (onInspectSelection) {
       onInspectSelection({ kind: "browser", browser });
       return;
@@ -6399,22 +7196,161 @@ export function ServicePanel({
       return;
     }
     setSelectedBrowser(browser);
-  }, [onBrowserInspect, onInspectSelection]);
-  const inspectSession = useCallback((session: ServiceSession) => {
+  }, [onBrowserInspect, onInspectSelection, syncWorkspaceSelection]);
+  const inspectSession = useCallback((
+    session: ServiceSession,
+    options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {},
+  ) => {
+    if (options.syncWorkspace !== false && session.id) {
+      syncWorkspaceSelection({
+        sessionId: session.id,
+      }, options.historyMode);
+    }
     if (onInspectSelection) {
       onInspectSelection({ kind: "session", session });
       return;
     }
     setSelectedSession(session);
-  }, [onInspectSelection]);
-  const inspectTab = useCallback((tab: ServiceTab) => {
+  }, [onInspectSelection, syncWorkspaceSelection]);
+  const inspectTab = useCallback((
+    tab: ServiceTab,
+    options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {},
+  ) => {
     const viewStreamAvailable = tab.browserId ? canOpenViewStream(browserPrimaryViewStream(browserById.get(tab.browserId))) : false;
+    if (options.syncWorkspace !== false && tab.id) {
+      syncWorkspaceSelection({
+        tabId: tab.id,
+      }, options.historyMode);
+    }
     if (onInspectSelection) {
       onInspectSelection({ kind: "tab", tab, viewStreamAvailable });
       return;
     }
     setSelectedTab(tab);
-  }, [browserById, onInspectSelection]);
+  }, [browserById, onInspectSelection, syncWorkspaceSelection]);
+  const sessionById = useMemo(
+    () => new Map(sessionRecords.map((session) => [session.id, session])),
+    [sessionRecords],
+  );
+  const tabById = useMemo(
+    () => new Map(tabRecords.map((tab) => [tab.id, tab])),
+    [tabRecords],
+  );
+  const jobById = useMemo(
+    () => new Map(recentJobs.map((job) => [job.id, job])),
+    [recentJobs],
+  );
+  const selectBrowserById = useCallback((browserId: string) => {
+    setSelectedBrowserId(browserId);
+    const browser = browserById.get(browserId);
+    if (browser) inspectBrowser(browser);
+    selectWorkspaceTab("browsers");
+  }, [browserById, inspectBrowser, selectWorkspaceTab]);
+  const selectProfileById = useCallback((profileId: string) => {
+    setProfileAllocationQuery(profileId);
+    setSelectedProfileAllocationId(profileId);
+    const allocation = profileAllocationById.get(profileId);
+    if (allocation) void inspectProfileAllocation(allocation);
+    selectWorkspaceTab("profiles");
+  }, [inspectProfileAllocation, profileAllocationById, selectWorkspaceTab]);
+  const selectSessionById = useCallback((sessionId: string) => {
+    setSessionTabQuery(sessionId);
+    const session = sessionById.get(sessionId);
+    if (session) inspectSession(session);
+    selectWorkspaceTab("sessions");
+  }, [inspectSession, selectWorkspaceTab, sessionById]);
+  const selectTabById = useCallback((tabId: string) => {
+    setSessionTabQuery(tabId);
+    const tab = tabById.get(tabId);
+    if (tab) inspectTab(tab);
+    selectWorkspaceTab("tabs");
+  }, [inspectTab, selectWorkspaceTab, tabById]);
+  const selectJobById = useCallback((jobId: string) => {
+    setJobQuery(jobId);
+    setJobLimit((current) => (current < 100 ? 100 : current));
+    const job = jobById.get(jobId);
+    if (job) void inspectJob(job);
+    selectWorkspaceTab("jobs");
+  }, [inspectJob, jobById, selectWorkspaceTab]);
+  useEffect(() => {
+    if (!dashboardWorkspaceSelectionHasValue(workspaceUrlSelection)) return;
+    const selectionKey = [
+      workspaceUrlSelection.browserId ?? "",
+      workspaceUrlSelection.profileId ?? "",
+      workspaceUrlSelection.sessionId ?? "",
+      workspaceUrlSelection.tabId ?? "",
+      workspaceUrlSelection.jobId ?? "",
+    ].join("|");
+    if (selectionKey === appliedWorkspaceSelectionKeyRef.current) return;
+
+    if (workspaceUrlSelection.browserId) {
+      const browser = browserById.get(workspaceUrlSelection.browserId);
+      if (browser) {
+        appliedWorkspaceSelectionKeyRef.current = selectionKey;
+        setWorkspaceTab("browsers");
+        setSelectedBrowserId(browser.id || null);
+        inspectBrowser(browser, { historyMode: "replace", syncWorkspace: false });
+        return;
+      }
+    }
+
+    if (workspaceUrlSelection.profileId) {
+      const allocation = profileAllocationById.get(workspaceUrlSelection.profileId);
+      if (allocation) {
+        appliedWorkspaceSelectionKeyRef.current = selectionKey;
+        setWorkspaceTab("profiles");
+        setProfileAllocationQuery(workspaceUrlSelection.profileId);
+        setSelectedProfileAllocationId(workspaceUrlSelection.profileId);
+        void inspectProfileAllocation(allocation, { historyMode: "replace", syncWorkspace: false });
+        return;
+      }
+    }
+
+    if (workspaceUrlSelection.sessionId) {
+      const session = sessionById.get(workspaceUrlSelection.sessionId);
+      if (session) {
+        appliedWorkspaceSelectionKeyRef.current = selectionKey;
+        setWorkspaceTab("sessions");
+        setSessionTabQuery(workspaceUrlSelection.sessionId);
+        inspectSession(session, { historyMode: "replace", syncWorkspace: false });
+        return;
+      }
+    }
+
+    if (workspaceUrlSelection.tabId) {
+      const tab = tabById.get(workspaceUrlSelection.tabId);
+      if (tab) {
+        appliedWorkspaceSelectionKeyRef.current = selectionKey;
+        setWorkspaceTab("tabs");
+        setSessionTabQuery(workspaceUrlSelection.tabId);
+        inspectTab(tab, { historyMode: "replace", syncWorkspace: false });
+        return;
+      }
+    }
+
+    if (workspaceUrlSelection.jobId) {
+      const job = jobById.get(workspaceUrlSelection.jobId);
+      if (job) {
+        appliedWorkspaceSelectionKeyRef.current = selectionKey;
+        setWorkspaceTab("jobs");
+        setJobQuery(workspaceUrlSelection.jobId);
+        setJobLimit((current) => (current < 100 ? 100 : current));
+        void inspectJob(job, { historyMode: "replace", syncWorkspace: false });
+      }
+    }
+  }, [
+    browserById,
+    inspectBrowser,
+    inspectJob,
+    inspectProfileAllocation,
+    inspectSession,
+    inspectTab,
+    jobById,
+    profileAllocationById,
+    sessionById,
+    tabById,
+    workspaceUrlSelection,
+  ]);
   const openBrowserViewStream = useCallback((browser: ServiceBrowser) => {
     const stream = browserPrimaryViewStream(browser);
     if (!stream) {
@@ -6440,9 +7376,11 @@ export function ServicePanel({
 
     let focusMessage: string | null = null;
     const browserTabs = browser.id ? browserTabsById.get(browser.id) : null;
-    const primaryTab = browserTabs?.find((tab) => isActiveServiceTab(tab)) ?? browserTabs?.[0] ?? null;
+    const primaryTab = preferredRemoteControlTab(browserTabs);
     const tabIndex = primaryTab?.id ? tabIndexById.get(primaryTab.id) : undefined;
-    if (canFetch && tabIndex !== undefined) {
+    const targetId = primaryTab?.targetId?.trim();
+    const sessionName = daemonSessionNameForBrowser(browser);
+    if (canFetch && (targetId || tabIndex !== undefined)) {
       try {
         const resp = await fetch(`${serviceBase(activePort)}/request`, {
           method: "POST",
@@ -6452,7 +7390,9 @@ export function ServicePanel({
             serviceName: "agent-browser-dashboard",
             agentName: operatorIdentity.trim() || activeSession || "operator",
             taskName: "focus-browser-row-view",
-            params: { index: tabIndex, maximize: true },
+            params: targetId
+              ? { targetId, ...(tabIndex !== undefined ? { index: tabIndex } : {}), maximize: true, ...(sessionName ? { sessionName } : {}) }
+              : { index: tabIndex, maximize: true, ...(sessionName ? { sessionName } : {}) },
             jobTimeoutMs: 5000,
           }),
         });
@@ -6471,26 +7411,6 @@ export function ServicePanel({
 
     openViewStream(stream, browser, primaryTab, focusMessage);
   }, [activePort, activeSession, browserTabsById, canFetch, openViewStream, operatorIdentity, tabIndexById]);
-
-  useEffect(() => {
-    if (!onInspectorActionsChange) return;
-    onInspectorActionsChange({
-      actingIncidentId,
-      onControlBrowser: focusBrowserViewStream,
-      onAcknowledgeIncident: acknowledgeInspectorIncident,
-      onResolveIncident: resolveInspectorIncident,
-      onShowIncidentTrace: showIncidentTrace,
-      onCancelJob: cancelInspectorJob,
-    });
-  }, [
-    acknowledgeInspectorIncident,
-    actingIncidentId,
-    cancelInspectorJob,
-    focusBrowserViewStream,
-    onInspectorActionsChange,
-    resolveInspectorIncident,
-    showIncidentTrace,
-  ]);
 
   const closeServiceBrowser = useCallback(async (browser: ServiceBrowser) => {
     if (!canFetch || !browser.id) return;
@@ -6581,14 +7501,14 @@ export function ServicePanel({
       setRetainedPruneResult(result);
       if (apply) {
         await fetchService(false);
-        setWorkspaceTab("browsers");
+        selectWorkspaceTab("browsers");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Retained-state prune request failed");
     } finally {
       setRetainedPruneAction(null);
     }
-  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity, serviceState]);
+  }, [activePort, activeSession, canFetch, fetchService, operatorIdentity, selectWorkspaceTab, serviceState]);
   const inspectTabViewStream = useCallback(async (tab: ServiceTab) => {
     const browser = tab.browserId ? browserById.get(tab.browserId) : null;
     const stream = browserPrimaryViewStream(browser);
@@ -6603,7 +7523,9 @@ export function ServicePanel({
 
     let focusMessage: string | null = null;
     const tabIndex = tabIndexById.get(tab.id);
-    if (canFetch && tabIndex !== undefined) {
+    const targetId = tab.targetId?.trim();
+    const sessionName = daemonSessionNameForBrowser(browser);
+    if (canFetch && (targetId || tabIndex !== undefined)) {
       try {
         const resp = await fetch(`${serviceBase(activePort)}/request`, {
           method: "POST",
@@ -6613,7 +7535,9 @@ export function ServicePanel({
             serviceName: "agent-browser-dashboard",
             agentName: operatorIdentity.trim() || activeSession || "operator",
             taskName: "inspect-hidden-rdp-tab",
-            params: { index: tabIndex, maximize: true },
+            params: targetId
+              ? { targetId, ...(tabIndex !== undefined ? { index: tabIndex } : {}), maximize: true, ...(sessionName ? { sessionName } : {}) }
+              : { index: tabIndex, maximize: true, ...(sessionName ? { sessionName } : {}) },
             jobTimeoutMs: 5000,
           }),
         });
@@ -6632,6 +7556,39 @@ export function ServicePanel({
 
     openViewStream(stream, browser, tab, focusMessage);
   }, [activePort, activeSession, browserById, canFetch, openViewStream, operatorIdentity, tabIndexById]);
+
+  useEffect(() => {
+    if (!onInspectorActionsChange) return;
+    onInspectorActionsChange({
+      actingIncidentId,
+      onControlBrowser: focusBrowserViewStream,
+      onControlTab: inspectTabViewStream,
+      onSelectBrowserId: selectBrowserById,
+      onSelectProfileId: selectProfileById,
+      onSelectSessionId: selectSessionById,
+      onSelectTabId: selectTabById,
+      onSelectJobId: selectJobById,
+      onAcknowledgeIncident: acknowledgeInspectorIncident,
+      onResolveIncident: resolveInspectorIncident,
+      onShowIncidentTrace: showIncidentTrace,
+      onCancelJob: cancelInspectorJob,
+    });
+  }, [
+    acknowledgeInspectorIncident,
+    actingIncidentId,
+    cancelInspectorJob,
+    focusBrowserViewStream,
+    inspectTabViewStream,
+    onInspectorActionsChange,
+    resolveInspectorIncident,
+    selectBrowserById,
+    selectJobById,
+    selectProfileById,
+    selectSessionById,
+    selectTabById,
+    showIncidentTrace,
+  ]);
+
   const toggleJobSort = useCallback((nextSortKey: ServiceJobSortKey) => {
     if (nextSortKey === jobSortKey) {
       setJobSortDirection((current) => current === "asc" ? "desc" : "asc");
@@ -6871,7 +7828,7 @@ export function ServicePanel({
               detail={`${entityCounts.browsers} tracked browser records`}
               icon={RadioTower}
               tone={healthTone(control?.browser_health ?? serviceState?.controlPlane?.browserHealth)}
-              onClick={() => setWorkspaceTab("browsers")}
+              onClick={() => selectWorkspaceTab("browsers")}
             />
             <ServiceStatusLight
               label="Reconciled"
@@ -6886,7 +7843,7 @@ export function ServicePanel({
               detail={`${events?.count ?? recentEvents.length} shown in this view`}
               icon={History}
               tone="neutral"
-              onClick={() => setWorkspaceTab("events")}
+              onClick={() => selectWorkspaceTab("events")}
             />
             <ServiceStatusLight
               label="Jobs"
@@ -6894,7 +7851,7 @@ export function ServicePanel({
               detail={`${jobs?.count ?? recentJobs.length} recent control jobs`}
               icon={ServerCog}
               tone="neutral"
-              onClick={() => setWorkspaceTab("jobs")}
+              onClick={() => selectWorkspaceTab("jobs")}
             />
             <ServiceStatusLight
               label="Records"
@@ -6902,7 +7859,7 @@ export function ServicePanel({
               detail={`Retained service-state counts: ${managedRecordDetail}`}
               icon={GitBranch}
               tone={retainedStateCleanupNeeded ? "warn" : "neutral"}
-              onClick={() => setWorkspaceTab("browsers")}
+              onClick={() => selectWorkspaceTab("browsers")}
             />
           </div>
 
@@ -6915,7 +7872,7 @@ export function ServicePanel({
                     <p className="font-black">Reconciliation failed</p>
                     <p className="mt-1 leading-5">{reconciliation.lastError}</p>
                   </div>
-                  <Button size="sm" variant="outline" className="service-state-alert-action" onClick={() => setWorkspaceTab("events")}>
+                  <Button size="sm" variant="outline" className="service-state-alert-action" onClick={() => selectWorkspaceTab("events")}>
                     Review events
                   </Button>
                 </div>
@@ -6924,20 +7881,17 @@ export function ServicePanel({
                 <div className="service-state-alert service-retained-state-hint">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="font-black text-foreground">Retained state is large.</p>
-                    <p className="mt-1 leading-5">
-                      These are retained records, not necessarily live browsers or real profile directories. Run a dry-run first, review the candidate count, then apply the conservative prune when it looks safe.
-                    </p>
+                    <p className="font-black text-foreground">Retained state is large</p>
                     <p className="mt-1 leading-5">{retainedPruneSummary(retainedPruneResult)}</p>
                     {retainedPruneResult?.recommendedNextStep && (
                       <p className="mt-1 leading-5">{retainedPruneResult.recommendedNextStep}</p>
                     )}
                   </div>
                   <div className="service-state-alert-actions">
-                    <Button size="sm" variant="outline" onClick={() => setWorkspaceTab("browsers")}>
+                    <Button size="sm" variant="outline" onClick={() => selectWorkspaceTab("browsers")}>
                       Review browsers
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setWorkspaceTab("jobs")}>
+                    <Button size="sm" variant="outline" onClick={() => selectWorkspaceTab("jobs")}>
                       Review jobs
                     </Button>
                     <Button
@@ -6984,15 +7938,12 @@ export function ServicePanel({
 
           <Tabs
             value={workspaceTab}
-            onValueChange={(value) => setWorkspaceTab(value as ServiceWorkspaceTab)}
+            onValueChange={(value) => selectWorkspaceTab(value as ServiceWorkspaceTab)}
             className="service-workspace-card"
           >
             <div className="service-workspace-header">
               <div className="min-w-0">
                 <p className="service-workspace-title">Service records</p>
-                <p className="service-workspace-detail">
-                  Profiles are first because browser routing and identity policy determine which sessions should exist.
-                </p>
               </div>
               <TabsList className="service-workspace-tabs" variant="line">
                 {workspaceTabs.map((tab) => (
@@ -7020,9 +7971,6 @@ export function ServicePanel({
                   {browserRecords.filter(isLiveBrowserRecord).length} live / {browserRecords.filter(isInertRetainedBrowserRecord).length} inert retained; {browserRecords.length} browser records
                 </span>
               </div>
-              <p className="service-workspace-inline-note">
-                Browser rows should identify the browser build, runtime profile, owning service, agent, task, sessions, streams, and available controls. Missing cells mean the service record did not provide that evidence yet.
-              </p>
               <div className="service-browser-table-region">
                 {browserRecords.length === 0 ? (
                   <p className="rounded-2xl bg-foreground/[0.04] px-3 py-6 text-center text-xs text-muted-foreground">
@@ -7052,9 +8000,6 @@ export function ServicePanel({
                 <ShieldCheck className="size-3.5 text-muted-foreground" />
                 <span>{filteredProfileRecords.length} of {profileRecords.length} runtime profile configs; {filteredProfileAllocations.length} allocation rows</span>
               </div>
-              <p className="service-workspace-inline-note">
-                Profile dots show readiness: green means no recorded auth or seeding attention; yellow means at least one target identity needs seeding, verification, or login follow-up. Large profile counts are retained service records and should trigger a profile-creation policy review before pruning.
-              </p>
               <div className="service-profile-routing-strip" aria-label="Profile identity and routing summary">
                 <span>
                   <strong>{profileRoutingSummary.profiles}</strong>

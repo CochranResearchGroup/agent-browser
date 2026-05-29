@@ -1,4 +1,5 @@
 use serde_json::{json, Value};
+use std::env;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -6,10 +7,18 @@ use tokio::net::TcpListener;
 use crate::connection::get_socket_dir;
 
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
+use super::dashboard_auth;
 use super::discovery::discover_sessions;
 use super::http::{serve_embedded_file, CORS_HEADERS};
 
+const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
+
 pub async fn run_dashboard_server(port: u16) {
+    if let Err(err) = dashboard_auth::ensure_dashboard_auth_config() {
+        eprintln!("Failed to initialize dashboard auth: {}", err);
+        return;
+    }
+
     let addr = format!("127.0.0.1:{}", port);
     let listener = match TcpListener::bind(&addr).await {
         Ok(l) => l,
@@ -39,7 +48,10 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
     let header_str = std::str::from_utf8(&buf[..n]).unwrap_or("");
     let first_line = header_str.lines().next().unwrap_or("").to_string();
     let method = first_line.split_whitespace().next().unwrap_or("GET");
-    let path = first_line.split_whitespace().nth(1).unwrap_or("/");
+    let raw_path = first_line.split_whitespace().nth(1).unwrap_or("/");
+    let (path, query) = split_path_query(raw_path);
+    let headers = dashboard_auth::parse_headers(header_str);
+    let secure_cookie = dashboard_auth::request_is_secure(&headers);
     let origin = header_str.lines().find_map(|line| {
         if line.len() > 8 && line[..8].eq_ignore_ascii_case("origin: ") {
             Some(line[8..].trim().to_string())
@@ -54,6 +66,46 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         );
         let _ = stream.write_all(response.as_bytes()).await;
         return;
+    }
+
+    if method == "GET" && path == "/api/dashboard-auth/status" {
+        let response = dashboard_auth::auth_status_response(&headers, secure_cookie);
+        let _ = stream.write_all(&response.into_http_bytes()).await;
+        return;
+    }
+
+    if method == "POST" && path == "/api/dashboard-auth/login" {
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        let response = dashboard_auth::login_response(&headers, &body_str, secure_cookie);
+        let _ = stream.write_all(&response.into_http_bytes()).await;
+        return;
+    }
+
+    if method == "POST" && path == "/api/dashboard-auth/logout" {
+        let response = dashboard_auth::logout_response(secure_cookie);
+        let _ = stream.write_all(&response.into_http_bytes()).await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/dashboard-auth/verify" {
+        let response = dashboard_auth::verify_forward_auth_response(&headers, secure_cookie);
+        let _ = stream.write_all(&response.into_http_bytes()).await;
+        return;
+    }
+
+    if path.starts_with("/api/") {
+        match dashboard_auth::authenticate_headers(&headers) {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                let response = dashboard_auth::unauthorized_api_response(secure_cookie);
+                let _ = stream.write_all(&response.into_http_bytes()).await;
+                return;
+            }
+            Err(err) => {
+                write_json_error(&mut stream, "500 Internal Server Error", &err).await;
+                return;
+            }
+        }
     }
 
     if method == "POST" && path == "/api/chat" {
@@ -73,7 +125,12 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         } else {
             String::new()
         };
-        handle_service_api_request(&mut stream, method, path, &body_str).await;
+        handle_service_api_request(&mut stream, method, raw_path, &body_str).await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/session-tabs" {
+        handle_session_tabs_api_request(&mut stream, query).await;
         return;
     }
 
@@ -137,9 +194,34 @@ async fn handle_service_api_request(
     path: &str,
     body: &str,
 ) {
+    if method == "POST" {
+        if let Some((session_name, command_body)) = service_request_focus_command_body(path, body) {
+            if let Some(port) = session_port_for_name(&session_name) {
+                match proxy_local_http_api_request(port, "POST", "/api/command", &command_body)
+                    .await
+                {
+                    Ok(response) => {
+                        let _ = stream.write_all(&response).await;
+                        return;
+                    }
+                    Err(err) => {
+                        write_json_error(
+                            stream,
+                            "502 Bad Gateway",
+                            &format!("View focus proxy failed: {}", err),
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     if let Some(port) = dashboard_service_backend_port() {
-        match proxy_service_api_request(port, method, path, body).await {
+        match proxy_local_http_api_request(port, method, path, body).await {
             Ok(response) => {
+                let response = repair_dashboard_service_status_response(path, response);
                 let _ = stream.write_all(&response).await;
                 return;
             }
@@ -174,17 +256,228 @@ async fn handle_service_api_request(
 
 fn dashboard_service_backend_port() -> Option<u16> {
     let sessions: Value = serde_json::from_str(&discover_sessions()).ok()?;
-    let sessions = sessions.as_array()?;
+    dashboard_service_backend_port_from_sessions(sessions.as_array()?)
+}
+
+fn session_port_for_name(session_name: &str) -> Option<u16> {
+    let sessions: Value = serde_json::from_str(&discover_sessions()).ok()?;
+    session_port_from_sessions(sessions.as_array()?, session_name)
+}
+
+fn dashboard_service_backend_port_from_sessions(sessions: &[Value]) -> Option<u16> {
     sessions
         .iter()
-        .find(|session| session.get("session").and_then(Value::as_str) == Some("default"))
+        .find(|session| {
+            session.get("session").and_then(Value::as_str)
+                == Some(DASHBOARD_SERVICE_BACKEND_SESSION)
+        })
+        .or_else(|| {
+            sessions
+                .iter()
+                .find(|session| session.get("session").and_then(Value::as_str) == Some("default"))
+        })
         .or_else(|| sessions.first())
         .and_then(|session| session.get("port"))
         .and_then(Value::as_u64)
         .and_then(|port| u16::try_from(port).ok())
 }
 
-async fn proxy_service_api_request(
+fn session_port_from_sessions(sessions: &[Value], session_name: &str) -> Option<u16> {
+    sessions
+        .iter()
+        .find(|session| session.get("session").and_then(Value::as_str) == Some(session_name))
+        .and_then(|session| session.get("port"))
+        .and_then(Value::as_u64)
+        .and_then(|port| u16::try_from(port).ok())
+}
+
+fn service_request_target_session_name(path: &str, body: &str) -> Option<String> {
+    let (path, _) = split_path_query(path);
+    if path != "/api/service/request" {
+        return None;
+    }
+    let request: Value = serde_json::from_str(body).ok()?;
+    if request.get("action").and_then(Value::as_str) != Some("view_focus") {
+        return None;
+    }
+    for value in [
+        request.pointer("/params/sessionName"),
+        request.pointer("/params/daemonSession"),
+        request.pointer("/params/targetSession"),
+        request.pointer("/params/targetSessionName"),
+        request.pointer("/params/sessionId"),
+        request.pointer("/sessionName"),
+        request.pointer("/daemonSession"),
+        request.pointer("/targetSession"),
+        request.pointer("/targetSessionName"),
+        request.pointer("/sessionId"),
+        request.pointer("/params/browserId"),
+        request.pointer("/browserId"),
+    ] {
+        if let Some(session_name) = service_request_session_candidate(value) {
+            return Some(session_name);
+        }
+    }
+    None
+}
+
+fn service_request_focus_command_body(path: &str, body: &str) -> Option<(String, String)> {
+    let session_name = service_request_target_session_name(path, body)?;
+    let request: Value = serde_json::from_str(body).ok()?;
+    let mut command = json!({
+        "id": request
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("dashboard-view-focus-{}", uuid::Uuid::new_v4())),
+        "action": "view_focus",
+    });
+    if let Some(params) = request.get("params").and_then(Value::as_object) {
+        for (key, value) in params {
+            if matches!(
+                key.as_str(),
+                "targetId" | "target_id" | "index" | "maximize"
+            ) {
+                command[key] = value.clone();
+            }
+        }
+    }
+    serde_json::to_string(&command)
+        .ok()
+        .map(|body| (session_name, body))
+}
+
+fn service_request_session_candidate(value: Option<&Value>) -> Option<String> {
+    normalize_service_request_session_name(value?.as_str()?)
+}
+
+fn normalize_service_request_session_name(value: &str) -> Option<String> {
+    let mut trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(rest) = trimmed.strip_prefix("browser:") {
+        trimmed = rest.trim();
+    }
+    if let Some(rest) = trimmed.strip_prefix("session:") {
+        trimmed = rest.trim();
+    }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn repair_dashboard_service_status_response(path: &str, response: Vec<u8>) -> Vec<u8> {
+    let (path, _) = split_path_query(path);
+    if path != "/api/service/status" {
+        return response;
+    }
+
+    let Some(header_end) = find_http_header_end(&response) else {
+        return response;
+    };
+    let headers = &response[..header_end];
+    let body = &response[header_end + 4..];
+    let Ok(mut value) = serde_json::from_slice::<Value>(body) else {
+        return response;
+    };
+    if !repair_dashboard_service_status_value(&mut value) {
+        return response;
+    }
+    let Ok(body) = serde_json::to_vec(&value) else {
+        return response;
+    };
+    rebuild_http_response(headers, &body).unwrap_or(response)
+}
+
+fn repair_dashboard_service_status_value(value: &mut Value) -> bool {
+    let Some(browsers) = value
+        .pointer_mut("/data/service_state/browsers")
+        .and_then(Value::as_object_mut)
+    else {
+        return false;
+    };
+    let mut changed = false;
+    for browser in browsers.values_mut() {
+        if browser.get("host").and_then(Value::as_str) != Some("remote_headed") {
+            continue;
+        }
+        let Some(streams) = browser.get_mut("viewStreams").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for stream in streams {
+            if stream.get("provider").and_then(Value::as_str) != Some("rdp_gateway") {
+                continue;
+            }
+            let root_url = stream.get("url").and_then(Value::as_str);
+            let Some(url) = dashboard_guacamole_client_url(root_url) else {
+                continue;
+            };
+            if stream.get("frameUrl").and_then(Value::as_str).is_none() {
+                stream["frameUrl"] = Value::String(url.clone());
+                changed = true;
+            }
+            if stream.get("externalUrl").and_then(Value::as_str).is_none() {
+                stream["externalUrl"] = Value::String(url);
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+fn dashboard_guacamole_client_url(root_url: Option<&str>) -> Option<String> {
+    if let Ok(configured_url) = env::var("AGENT_BROWSER_REMOTE_VIEW_URL") {
+        let configured_url = configured_url.trim();
+        if !configured_url.is_empty() && configured_url.contains("#/client/") {
+            return Some(configured_url.to_string());
+        }
+    }
+    let root_url = root_url.map(str::trim).filter(|url| !url.is_empty())?;
+    if root_url.contains("#/client/") {
+        return Some(root_url.to_string());
+    }
+    None
+}
+
+fn find_http_header_end(response: &[u8]) -> Option<usize> {
+    response.windows(4).position(|window| window == b"\r\n\r\n")
+}
+
+fn rebuild_http_response(headers: &[u8], body: &[u8]) -> Option<Vec<u8>> {
+    let header_text = std::str::from_utf8(headers).ok()?;
+    let mut lines = header_text.lines();
+    let status_line = lines.next().unwrap_or("HTTP/1.1 200 OK");
+    let mut rebuilt = String::new();
+    rebuilt.push_str(status_line);
+    rebuilt.push_str("\r\n");
+    let mut has_content_type = false;
+    for line in lines {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let lower = line.to_ascii_lowercase();
+        if lower.starts_with("content-length:") {
+            continue;
+        }
+        if lower.starts_with("content-type:") {
+            has_content_type = true;
+        }
+        rebuilt.push_str(line);
+        rebuilt.push_str("\r\n");
+    }
+    if !has_content_type {
+        rebuilt.push_str("Content-Type: application/json; charset=utf-8\r\n");
+    }
+    rebuilt.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
+    let mut response = rebuilt.into_bytes();
+    response.extend_from_slice(body);
+    Some(response)
+}
+
+async fn proxy_local_http_api_request(
     port: u16,
     method: &str,
     path: &str,
@@ -207,6 +500,27 @@ async fn proxy_service_api_request(
         .await
         .map_err(|err| err.to_string())?;
     Ok(response)
+}
+
+async fn handle_session_tabs_api_request(stream: &mut tokio::net::TcpStream, query: Option<&str>) {
+    let Some(port) = query_value(query, "port").and_then(|value| value.parse::<u16>().ok()) else {
+        write_json_error(stream, "400 Bad Request", "Missing or invalid session port").await;
+        return;
+    };
+
+    match proxy_local_http_api_request(port, "GET", "/api/tabs", "").await {
+        Ok(response) => {
+            let _ = stream.write_all(&response).await;
+        }
+        Err(err) => {
+            write_json_error(
+                stream,
+                "502 Bad Gateway",
+                &format!("Session tabs proxy failed: {}", err),
+            )
+            .await;
+        }
+    }
 }
 
 async fn service_api_cli_fallback(method: &str, path: &str) -> Option<String> {
@@ -529,5 +843,215 @@ pub(super) async fn spawn_session(body: &str) -> Result<String, String> {
         ))
     } else {
         Err(format!("Session process exited with {}", status))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::EnvGuard;
+    use serde_json::json;
+
+    #[test]
+    fn dashboard_service_backend_prefers_dedicated_session() {
+        let sessions = vec![
+            json!({ "session": "default", "port": 1111 }),
+            json!({ "session": DASHBOARD_SERVICE_BACKEND_SESSION, "port": 2222 }),
+            json!({ "session": "other", "port": 3333 }),
+        ];
+
+        assert_eq!(
+            dashboard_service_backend_port_from_sessions(&sessions),
+            Some(2222)
+        );
+    }
+
+    #[test]
+    fn dashboard_service_backend_falls_back_to_default_then_first() {
+        let default_sessions = vec![
+            json!({ "session": "other", "port": 1111 }),
+            json!({ "session": "default", "port": 2222 }),
+        ];
+        assert_eq!(
+            dashboard_service_backend_port_from_sessions(&default_sessions),
+            Some(2222)
+        );
+
+        let first_sessions = vec![json!({ "session": "other", "port": 3333 })];
+        assert_eq!(
+            dashboard_service_backend_port_from_sessions(&first_sessions),
+            Some(3333)
+        );
+    }
+
+    #[test]
+    fn dashboard_service_request_target_session_reads_view_focus_session_name() {
+        let body = r##"{"action":"view_focus","params":{"sessionName":"odollo-carrier-ups","maximize":true}}"##;
+
+        assert_eq!(
+            service_request_target_session_name("/api/service/request", body),
+            Some("odollo-carrier-ups".to_string())
+        );
+    }
+
+    #[test]
+    fn dashboard_service_request_target_session_reads_view_focus_browser_id() {
+        let body = r##"{"action":"view_focus","params":{"browserId":"browser:session:odollo-carrier-ups","maximize":true}}"##;
+
+        assert_eq!(
+            service_request_target_session_name("/api/service/request?source=workspace", body),
+            Some("odollo-carrier-ups".to_string())
+        );
+    }
+
+    #[test]
+    fn dashboard_service_request_target_session_ignores_non_focus_actions() {
+        let body = r##"{"action":"navigate","params":{"sessionName":"odollo-carrier-ups","url":"https://example.com"}}"##;
+
+        assert_eq!(
+            service_request_target_session_name("/api/service/request", body),
+            None
+        );
+    }
+
+    #[test]
+    fn dashboard_service_request_target_session_finds_session_port() {
+        let sessions = vec![
+            json!({ "session": "default", "port": 1111 }),
+            json!({ "session": "odollo-carrier-ups", "port": 2222 }),
+        ];
+
+        assert_eq!(
+            session_port_from_sessions(&sessions, "odollo-carrier-ups"),
+            Some(2222)
+        );
+    }
+
+    #[test]
+    fn dashboard_service_request_focus_command_body_strips_service_identity() {
+        let body = r##"{"id":"focus-1","action":"view_focus","serviceName":"agent-browser-dashboard","agentName":"operator","taskName":"workspace-viewport-control","params":{"sessionName":"odollo-carrier-ups","targetId":"target-1","index":2,"maximize":true}}"##;
+        let (session_name, command_body) =
+            service_request_focus_command_body("/api/service/request", body).unwrap();
+        let command: Value = serde_json::from_str(&command_body).unwrap();
+
+        assert_eq!(session_name, "odollo-carrier-ups");
+        assert_eq!(command["id"], "focus-1");
+        assert_eq!(command["action"], "view_focus");
+        assert_eq!(command["targetId"], "target-1");
+        assert_eq!(command["index"], 2);
+        assert_eq!(command["maximize"], true);
+        assert!(command.get("serviceName").is_none());
+        assert!(command.get("sessionName").is_none());
+    }
+
+    #[test]
+    fn dashboard_service_status_response_adds_configured_guacamole_route_urls() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_URL"]);
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_URL",
+            "/guacamole/#/client/MQBjAHBvc3RncmVzcWw=",
+        );
+        let body = json!({
+            "success": true,
+            "data": {
+                "service_state": {
+                    "browsers": {
+                        "session:odollo-carrier-ups": {
+                            "id": "session:odollo-carrier-ups",
+                            "host": "remote_headed",
+                            "viewStreams": [{
+                                "id": "remote-headed-view",
+                                "provider": "rdp_gateway",
+                                "url": "https://agent-browser.example/guacamole/",
+                                "readOnly": false
+                            }]
+                        }
+                    }
+                }
+            }
+        })
+        .to_string();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .into_bytes();
+
+        let repaired = repair_dashboard_service_status_response("/api/service/status", response);
+        let repaired_text = String::from_utf8(repaired).unwrap();
+        let repaired_body = repaired_text.split("\r\n\r\n").nth(1).unwrap();
+        let repaired_json: Value = serde_json::from_str(repaired_body).unwrap();
+
+        assert_eq!(
+            repaired_json["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
+                ["viewStreams"][0]["frameUrl"],
+            "/guacamole/#/client/MQBjAHBvc3RncmVzcWw="
+        );
+        assert!(repaired_text.contains(&format!("Content-Length: {}", repaired_body.len())));
+    }
+
+    #[test]
+    fn dashboard_service_status_response_leaves_guacamole_root_without_route() {
+        let _guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_URL"]);
+        let body = json!({
+            "success": true,
+            "data": {
+                "service_state": {
+                    "browsers": {
+                        "session:odollo-carrier-ups": {
+                            "id": "session:odollo-carrier-ups",
+                            "host": "remote_headed",
+                            "viewStreams": [{
+                                "id": "remote-headed-view",
+                                "provider": "rdp_gateway",
+                                "url": "https://agent-browser.example/guacamole/",
+                                "readOnly": false
+                            }]
+                        }
+                    }
+                }
+            }
+        })
+        .to_string();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .into_bytes();
+
+        let repaired = repair_dashboard_service_status_response("/api/service/status", response);
+        let repaired_text = String::from_utf8(repaired).unwrap();
+        let repaired_body = repaired_text.split("\r\n\r\n").nth(1).unwrap();
+        let repaired_json: Value = serde_json::from_str(repaired_body).unwrap();
+
+        assert_eq!(
+            repaired_json["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
+                ["viewStreams"][0]["url"],
+            "https://agent-browser.example/guacamole/"
+        );
+        assert!(
+            repaired_json["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
+                ["viewStreams"][0]["frameUrl"]
+                .is_null()
+        );
+        assert!(repaired_text.contains(&format!("Content-Length: {}", repaired_body.len())));
+    }
+
+    #[test]
+    fn dashboard_route_matching_ignores_query_string() {
+        assert_eq!(
+            split_path_query("/api/session-tabs?port=9223"),
+            ("/api/session-tabs", Some("port=9223"))
+        );
+    }
+
+    #[test]
+    fn dashboard_session_tabs_query_decodes_port() {
+        assert_eq!(
+            query_value(Some("port=9223&ignored=true"), "port"),
+            Some("9223".to_string())
+        );
     }
 }

@@ -11,7 +11,9 @@ use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
-    SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
+    SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
+    SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE, SERVICE_REQUEST_ACTIONS,
+    SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
 };
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
@@ -37,7 +39,7 @@ const CHALLENGES_RESOURCE: &str = "agent-browser://challenges";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
-const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild}";
+const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}";
 const PROFILE_LOOKUP_RESOURCE: &str = "agent-browser://profiles/lookup";
 const PROFILE_LOOKUP_TEMPLATE: &str = "agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}";
 const PROFILE_ALLOCATION_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/allocation";
@@ -186,6 +188,30 @@ fn service_mcp_resources() -> Vec<Value> {
             "description": "Service-owned browser process records sorted by browser id"
         }),
         json!({
+            "uri": SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE,
+            "name": "Service display allocations",
+            "mimeType": "application/json",
+            "description": "Service-owned remote display allocation records sorted by allocation id"
+        }),
+        json!({
+            "uri": SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
+            "name": "Service remote view routes",
+            "mimeType": "application/json",
+            "description": "Service-owned remote viewing routes sorted by route id"
+        }),
+        json!({
+            "uri": SERVICE_ROUTE_POOL_MCP_RESOURCE,
+            "name": "Service route pool",
+            "mimeType": "application/json",
+            "description": "Configured remote-view provider route pool entries sorted by pool entry id"
+        }),
+        json!({
+            "uri": SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+            "name": "Service viewer leases",
+            "mimeType": "application/json",
+            "description": "Service-owned observer and controller leases for remote-view routes sorted by lease id"
+        }),
+        json!({
             "uri": TABS_RESOURCE,
             "name": "Service tabs",
             "mimeType": "application/json",
@@ -327,6 +353,42 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             json!({
                 "browsers": browsers,
                 "count": browsers.len(),
+            })
+        }
+        SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE => {
+            let display_allocations = state
+                .display_allocations
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            json!({
+                "displayAllocations": display_allocations,
+                "count": display_allocations.len(),
+            })
+        }
+        SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE => {
+            let remote_view_routes = state
+                .remote_view_routes
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            json!({
+                "remoteViewRoutes": remote_view_routes,
+                "count": remote_view_routes.len(),
+            })
+        }
+        SERVICE_ROUTE_POOL_MCP_RESOURCE => {
+            let route_pool = state.route_pool.values().cloned().collect::<Vec<_>>();
+            json!({
+                "routePool": route_pool,
+                "count": route_pool.len(),
+            })
+        }
+        SERVICE_VIEWER_LEASES_MCP_RESOURCE => {
+            let viewer_leases = state.viewer_leases.values().cloned().collect::<Vec<_>>();
+            json!({
+                "viewerLeases": viewer_leases,
+                "count": viewer_leases.len(),
             })
         }
         TABS_RESOURCE => {
@@ -702,6 +764,26 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
                         "description": "Optional browser-build preference for profile selection and launch posture."
+                    },
+                    "browserHost": {
+                        "type": "string",
+                        "enum": ["local_headless", "local_headed", "docker_headed", "remote_headed", "cloud_provider", "attached_existing"],
+                        "description": "Optional browser-host posture hint for the planned service request."
+                    },
+                    "viewStreamProvider": {
+                        "type": "string",
+                        "enum": ["cdp_screencast", "chrome_tab_webrtc", "virtual_display_webrtc", "novnc", "rdp_gateway", "external_url"],
+                        "description": "Optional view stream provider hint for the planned service request."
+                    },
+                    "controlInputProvider": {
+                        "type": "string",
+                        "enum": ["cdp_input", "webrtc_input", "vnc_input", "manual_attached_desktop"],
+                        "description": "Optional control input provider hint for the planned service request."
+                    },
+                    "displayIsolation": {
+                        "type": "string",
+                        "enum": ["private_virtual_display", "shared_display", "ambient_display"],
+                        "description": "Optional display allocation hint for remote-headed planned requests."
                     }
                 },
                 "required": []
@@ -8605,6 +8687,60 @@ fn access_plan_params_from_arguments(
     )? {
         params.push(("browserBuild".to_string(), browser_build.to_string()));
     }
+    if let Some(browser_host) = optional_enum_string_argument(
+        arguments,
+        "browserHost",
+        &[
+            "local_headless",
+            "local_headed",
+            "docker_headed",
+            "remote_headed",
+            "cloud_provider",
+            "attached_existing",
+        ],
+    )? {
+        params.push(("browserHost".to_string(), browser_host.to_string()));
+    }
+    if let Some(provider) = optional_enum_string_argument(
+        arguments,
+        "viewStreamProvider",
+        &[
+            "cdp_screencast",
+            "chrome_tab_webrtc",
+            "virtual_display_webrtc",
+            "novnc",
+            "rdp_gateway",
+            "external_url",
+        ],
+    )? {
+        params.push(("viewStreamProvider".to_string(), provider.to_string()));
+    }
+    if let Some(provider) = optional_enum_string_argument(
+        arguments,
+        "controlInputProvider",
+        &[
+            "cdp_input",
+            "webrtc_input",
+            "vnc_input",
+            "manual_attached_desktop",
+        ],
+    )? {
+        params.push(("controlInputProvider".to_string(), provider.to_string()));
+    }
+    if let Some(display_isolation) = optional_enum_string_argument(
+        arguments,
+        "displayIsolation",
+        &[
+            "private_virtual_display",
+            "shared_display",
+            "ambient_display",
+        ],
+    )? {
+        params.push((
+            "displayIsolation".to_string(),
+            display_isolation.to_string(),
+        ));
+    }
     for name in [
         "targetServiceIds",
         "targetServices",
@@ -9547,6 +9683,12 @@ mod tests {
             .expect("service_access_plan schema should be listed");
         assert!(service_access_plan["inputSchema"]["properties"]["loginId"].is_object());
         assert!(service_access_plan["inputSchema"]["properties"]["browserBuild"].is_object());
+        assert!(service_access_plan["inputSchema"]["properties"]["browserHost"].is_object());
+        assert!(service_access_plan["inputSchema"]["properties"]["viewStreamProvider"].is_object());
+        assert!(
+            service_access_plan["inputSchema"]["properties"]["controlInputProvider"].is_object()
+        );
+        assert!(service_access_plan["inputSchema"]["properties"]["displayIsolation"].is_object());
         let service_job_cancel = tools
             .iter()
             .find(|tool| tool["name"] == "service_job_cancel")
@@ -13085,7 +13227,7 @@ mod tests {
         };
 
         let response = handle_jsonrpc_line_with_config(
-            r#"{"jsonrpc":"2.0","id":"access-plan","method":"tools/call","params":{"name":"service_access_plan","arguments":{"serviceName":"CanvaCLI","agentName":"codex","taskName":"openCanvaWorkspace","loginId":"canva","browserBuild":"stealthcdp_chromium"}}}"#,
+            r#"{"jsonrpc":"2.0","id":"access-plan","method":"tools/call","params":{"name":"service_access_plan","arguments":{"serviceName":"CanvaCLI","agentName":"codex","taskName":"openCanvaWorkspace","loginId":"canva","browserBuild":"stealthcdp_chromium","browserHost":"remote_headed","viewStreamProvider":"rdp_gateway","controlInputProvider":"manual_attached_desktop","displayIsolation":"private_virtual_display"}}}"#,
             "default",
             &state,
         )
@@ -13099,7 +13241,24 @@ mod tests {
             payload["data"]["query"]["browserBuild"],
             "stealthcdp_chromium"
         );
+        assert_eq!(payload["data"]["query"]["browserHost"], "remote_headed");
+        assert_eq!(
+            payload["data"]["query"]["viewStreamProvider"],
+            "rdp_gateway"
+        );
+        assert_eq!(
+            payload["data"]["query"]["controlInputProvider"],
+            "manual_attached_desktop"
+        );
+        assert_eq!(
+            payload["data"]["query"]["displayIsolation"],
+            "private_virtual_display"
+        );
         assert_eq!(payload["data"]["selectedProfile"]["id"], "canva");
+        assert_eq!(
+            payload["data"]["decision"]["launchPosture"]["source"],
+            "request"
+        );
         assert_eq!(
             payload["data"]["decision"]["recommendedAction"],
             "use_selected_profile"
@@ -13425,6 +13584,97 @@ mod tests {
         assert_eq!(resource["contents"]["browsers"][0]["id"], "browser-a");
         assert_eq!(resource["contents"]["browsers"][1]["id"], "browser-b");
         assert_service_browser_record_contract(&resource["contents"]["browsers"][1]);
+    }
+
+    #[test]
+    fn read_remote_view_resources_return_records_sorted_by_id() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            assert_service_display_allocation_record_contract,
+            assert_service_remote_view_route_record_contract,
+            assert_service_route_pool_entry_record_contract,
+            assert_service_viewer_lease_record_contract, DisplayAllocation, RemoteViewRoute,
+            RoutePoolEntry, ViewerLease,
+        };
+
+        let state = ServiceState {
+            display_allocations: BTreeMap::from([
+                (
+                    "display-b".to_string(),
+                    DisplayAllocation {
+                        id: "display-b".to_string(),
+                        display_name: Some(":12".to_string()),
+                        route_ids: vec!["route-b".to_string()],
+                        ..DisplayAllocation::default()
+                    },
+                ),
+                (
+                    "display-a".to_string(),
+                    DisplayAllocation {
+                        id: "display-a".to_string(),
+                        display_name: Some(":11".to_string()),
+                        route_ids: vec!["route-a".to_string()],
+                        ..DisplayAllocation::default()
+                    },
+                ),
+            ]),
+            remote_view_routes: BTreeMap::from([(
+                "route-a".to_string(),
+                RemoteViewRoute {
+                    id: "route-a".to_string(),
+                    display_allocation_id: Some("display-a".to_string()),
+                    viewer_lease_ids: vec!["lease-a".to_string()],
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([(
+                "pool-a".to_string(),
+                RoutePoolEntry {
+                    id: "pool-a".to_string(),
+                    route_id: "route-a".to_string(),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            viewer_leases: BTreeMap::from([(
+                "lease-a".to_string(),
+                ViewerLease {
+                    id: "lease-a".to_string(),
+                    route_id: Some("route-a".to_string()),
+                    ..ViewerLease::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let displays =
+            read_service_mcp_resource_from_state(SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, &state)
+                .unwrap();
+        let routes =
+            read_service_mcp_resource_from_state(SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE, &state)
+                .unwrap();
+        let pool =
+            read_service_mcp_resource_from_state(SERVICE_ROUTE_POOL_MCP_RESOURCE, &state).unwrap();
+        let leases =
+            read_service_mcp_resource_from_state(SERVICE_VIEWER_LEASES_MCP_RESOURCE, &state)
+                .unwrap();
+
+        assert_eq!(displays["contents"]["count"], 2);
+        assert_eq!(
+            displays["contents"]["displayAllocations"][0]["id"],
+            "display-a"
+        );
+        assert_service_display_allocation_record_contract(
+            &displays["contents"]["displayAllocations"][0],
+        );
+        assert_eq!(routes["contents"]["count"], 1);
+        assert_service_remote_view_route_record_contract(
+            &routes["contents"]["remoteViewRoutes"][0],
+        );
+        assert_eq!(pool["contents"]["count"], 1);
+        assert_service_route_pool_entry_record_contract(&pool["contents"]["routePool"][0]);
+        assert_eq!(leases["contents"]["count"], 1);
+        assert_service_viewer_lease_record_contract(&leases["contents"]["viewerLeases"][0]);
     }
 
     #[test]
