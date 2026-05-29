@@ -2,7 +2,7 @@
 
 Date: 2026-05-29
 Lane: P07
-Status: IN PROGRESS
+Status: RELEASED
 
 ## Scope
 
@@ -81,3 +81,25 @@ Additional validation after this fix:
 All completed cleanly. The local machine does not have `cargo-zigbuild`, so
 the release workflow retry remains the authoritative Linux cross-target
 validation.
+
+## Release Result
+
+- Successful dry run:
+  `https://github.com/CochranResearchGroup/agent-browser/actions/runs/26648621169`
+- Successful real release run:
+  `https://github.com/CochranResearchGroup/agent-browser/actions/runs/26649196974`
+- Release URL:
+  `https://github.com/CochranResearchGroup/agent-browser/releases/tag/v0.27.0`
+- Release commit:
+  `17a284f8624e6108473970e2ec2b380debf9f7ac`
+
+The published release is not a draft, is not a prerelease, and contains all
+seven expected platform assets:
+
+- `agent-browser-darwin-arm64`
+- `agent-browser-darwin-x64`
+- `agent-browser-linux-arm64`
+- `agent-browser-linux-musl-arm64`
+- `agent-browser-linux-musl-x64`
+- `agent-browser-linux-x64`
+- `agent-browser-win32-x64.exe`

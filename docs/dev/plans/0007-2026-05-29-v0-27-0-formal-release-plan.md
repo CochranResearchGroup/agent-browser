@@ -1,16 +1,14 @@
 # v0.27.0 Formal Release Plan
 
 Date: 2026-05-29
-State: OPEN
+State: CLOSED
 Lane: P07
-Outcome: IN PROGRESS
+Outcome: RELEASED
 
-Current state: release metadata and local validation are complete, and the
-release pull request has merged. Release workflow dry runs exposed two
-cross-target blockers: a Linux cfg leak in the private remote-headed display
-fallback, followed by a static X11 link in the browser-focus helper. The fixes
-are in progress, and P07 still needs a successful release workflow dry run,
-real release workflow run, and GitHub release asset verification.
+Current state: `v0.27.0` is released. Release metadata landed on `main`, the
+release workflow dry run passed, the real release workflow passed, the
+`v0.27.0` GitHub release is public, and all seven expected platform assets are
+present.
 
 P05 kept `0.27.0` as an installed-runtime checkpoint because
 the Guacamole/RDP many-to-many operation milestone still needed
@@ -113,7 +111,7 @@ Result: complete. PR #5 merged into `main` as
 
 ### Slice D | GitHub Release
 
-Status: IN PROGRESS.
+Status: COMPLETE.
 
 Tasks:
 
@@ -126,8 +124,13 @@ Exit criteria:
 - `v0.27.0` exists as the public GitHub release.
 - Release assets match the workflow's expected platform matrix.
 
-Result: in progress. The first dry run failed with a cross-target Rust compile
+Result: complete. The first dry run failed with a cross-target Rust compile
 error in `cli/src/native/cdp/chrome.rs`; the second dry run proved the cfg fix
 on Windows and macOS, then failed Linux zigbuild linking because
-`cli/src/native/browser.rs` linked directly against `libX11`. See
-`docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`.
+`cli/src/native/browser.rs` linked directly against `libX11`. After the
+dynamic X11 loading fix, dry run
+`https://github.com/CochranResearchGroup/agent-browser/actions/runs/26648621169`
+passed against `17a284f8624e6108473970e2ec2b380debf9f7ac`. The real release
+workflow
+`https://github.com/CochranResearchGroup/agent-browser/actions/runs/26649196974`
+also passed against the same commit and published `v0.27.0`.

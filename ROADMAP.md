@@ -376,26 +376,28 @@ release lane when the maintainer wants to prepare and publish a release.
 
 ## P07 | v0.27.0 Formal Release
 
-State: OPEN
-Current state: P07 release metadata is on `main`. The first release workflow
-dry runs found cross-target release blockers in private remote-headed display
-cfg handling and static Linux X11 linking; fixes are in progress before
-retrying the dry run.
+State: CLOSED
+Current state: `v0.27.0` is released. The public GitHub release exists with
+all seven expected platform assets.
 
 ### Current State
 
 - Plan
   `docs/dev/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md`
-  is open.
+  is closed.
 - P06 closed the operational milestone that kept P05 from publishing a public
   release.
 - This lane moves the validated `0.27.0` checkpoint into release metadata,
   validation, PR merge, and GitHub release publication.
 - Release-preparation validation passed and is recorded in
   `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`.
-- The first release workflow dry run failed on cross-target Rust compile
-  errors, and the second dry run failed on Linux X11 linking; the fix note is
+- Early release workflow dry runs failed on cross-target Rust compile errors
+  and Linux X11 linking; the fix note is
   `docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`.
+- The successful dry run and real release workflow both ran against
+  `17a284f8624e6108473970e2ec2b380debf9f7ac`.
+- GitHub release:
+  `https://github.com/CochranResearchGroup/agent-browser/releases/tag/v0.27.0`
 
 ### Evidence
 
@@ -407,6 +409,5 @@ retrying the dry run.
 
 ### Next Recommendation
 
-Complete P07 by landing the cross-target fix, retrying the release workflow
-dry run, running the real release workflow, and verifying GitHub release
-assets.
+Keep P07 closed unless the published assets or release tag need correction.
+Start a new lane for any post-release patch or next-version work.

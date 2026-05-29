@@ -394,3 +394,40 @@ Result:
 - No static X11 link remains in `cli/src`.
 - The local machine does not have `cargo-zigbuild`, so the release workflow
   dry run must be retried after this fix lands on `main`.
+
+## 2026-05-29 Turn 11 | P07 v0.27.0 Release Publication
+
+Scope: publish and verify the formal `v0.27.0` GitHub release.
+
+Actions:
+
+- Reran the manual `Release` workflow with `dry_run=true`.
+- Ran the manual `Release` workflow with `dry_run=false` after the dry run
+  passed.
+- Verified the public GitHub release and asset list.
+- Closed P07 in the roadmap and plan surfaces.
+
+Validation run:
+
+- `gh run view 26648621169 --json conclusion,url,headSha`
+- `gh run view 26649196974 --json conclusion,url,headSha`
+- `gh release view v0.27.0 --json tagName,name,url,isDraft,isPrerelease,assets,targetCommitish`
+- `git fetch --tags origin`
+- `git rev-list -n1 v0.27.0`
+- `git rev-parse origin/main`
+
+Result:
+
+- Dry run succeeded:
+  `https://github.com/CochranResearchGroup/agent-browser/actions/runs/26648621169`
+- Real release run succeeded:
+  `https://github.com/CochranResearchGroup/agent-browser/actions/runs/26649196974`
+- Release URL:
+  `https://github.com/CochranResearchGroup/agent-browser/releases/tag/v0.27.0`
+- Release commit and `origin/main` both resolve to
+  `17a284f8624e6108473970e2ec2b380debf9f7ac`.
+- The release is not a draft, is not a prerelease, and has seven assets:
+  `agent-browser-darwin-arm64`, `agent-browser-darwin-x64`,
+  `agent-browser-linux-arm64`, `agent-browser-linux-musl-arm64`,
+  `agent-browser-linux-musl-x64`, `agent-browser-linux-x64`, and
+  `agent-browser-win32-x64.exe`.
