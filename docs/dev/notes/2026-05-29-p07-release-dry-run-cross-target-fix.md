@@ -48,3 +48,36 @@ advanced past the previous missing-symbol errors, then stopped because the
 local workstation does not have `x86_64-w64-mingw32-gcc` for the `ring` build
 script. The release workflow retry remains the authoritative cross-platform
 validation.
+
+## Second Dry Run
+
+- Workflow: `Release`
+- Run: `https://github.com/CochranResearchGroup/agent-browser/actions/runs/26647678335`
+- Ref: `main`
+- Input: `dry_run=true`
+- Result: failed
+
+The cfg leak fix worked for non-Linux targets: Windows x64, macOS x64, and
+macOS ARM64 passed. Linux targets failed later during zigbuild linking because
+`cli/src/native/browser.rs` linked directly against `libX11`.
+
+## Linux Link Fix
+
+The X11 browser-focus helper now loads `libX11` dynamically with `dlopen` and
+resolves the required symbols with `dlsym`. This keeps the runtime focus
+behavior available on Linux hosts that have libX11 installed, while removing
+the release-time `-lX11` linker requirement for Linux, musl, and ARM release
+targets.
+
+Additional validation after this fix:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml browser -- --test-threads=1`
+- `git diff --check`
+- `cargo build --release --manifest-path cli/Cargo.toml`
+- `rg -n "#\\[link\\(name = \\\"X11\\\"\\)|-lX11" cli/src`
+
+All completed cleanly. The local machine does not have `cargo-zigbuild`, so
+the release workflow retry remains the authoritative Linux cross-target
+validation.

@@ -378,8 +378,9 @@ release lane when the maintainer wants to prepare and publish a release.
 
 State: OPEN
 Current state: P07 release metadata is on `main`. The first release workflow
-dry run found a cross-target Rust cfg leak in the private remote-headed
-display fallback; the fix is in progress before retrying the dry run.
+dry runs found cross-target release blockers in private remote-headed display
+cfg handling and static Linux X11 linking; fixes are in progress before
+retrying the dry run.
 
 ### Current State
 
@@ -393,7 +394,7 @@ display fallback; the fix is in progress before retrying the dry run.
 - Release-preparation validation passed and is recorded in
   `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`.
 - The first release workflow dry run failed on cross-target Rust compile
-  errors; the fix note is
+  errors, and the second dry run failed on Linux X11 linking; the fix note is
   `docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`.
 
 ### Evidence

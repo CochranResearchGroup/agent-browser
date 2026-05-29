@@ -1906,113 +1906,187 @@ mod x11_focus {
     const REVERT_TO_PARENT: c_int = 2;
     const CURRENT_TIME: c_ulong = 0;
 
-    #[link(name = "X11")]
-    extern "C" {
-        fn XOpenDisplay(display_name: *const c_char) -> *mut Display;
-        fn XCloseDisplay(display: *mut Display) -> c_int;
-        fn XDefaultRootWindow(display: *mut Display) -> Window;
-        fn XInternAtom(
-            display: *mut Display,
-            atom_name: *const c_char,
-            only_if_exists: c_int,
-        ) -> Atom;
-        fn XGetWindowProperty(
-            display: *mut Display,
-            w: Window,
-            property: Atom,
-            long_offset: c_long,
-            long_length: c_long,
-            delete: c_int,
-            req_type: Atom,
-            actual_type_return: *mut Atom,
-            actual_format_return: *mut c_int,
-            nitems_return: *mut c_ulong,
-            bytes_after_return: *mut c_ulong,
-            prop_return: *mut *mut c_uchar,
-        ) -> c_int;
-        fn XQueryTree(
-            display: *mut Display,
-            w: Window,
-            root_return: *mut Window,
-            parent_return: *mut Window,
-            children_return: *mut *mut Window,
-            nchildren_return: *mut c_uint,
-        ) -> c_int;
-        fn XFree(data: *mut c_void) -> c_int;
-        fn XMapRaised(display: *mut Display, w: Window) -> c_int;
-        fn XRaiseWindow(display: *mut Display, w: Window) -> c_int;
-        fn XSetInputFocus(
-            display: *mut Display,
-            focus: Window,
-            revert_to: c_int,
-            time: c_ulong,
-        ) -> c_int;
-        fn XChangeProperty(
-            display: *mut Display,
-            w: Window,
-            property: Atom,
-            type_: Atom,
-            format: c_int,
-            mode: c_int,
-            data: *const c_uchar,
-            nelements: c_int,
-        ) -> c_int;
-        fn XFlush(display: *mut Display) -> c_int;
+    type XOpenDisplayFn = unsafe extern "C" fn(*const c_char) -> *mut Display;
+    type XCloseDisplayFn = unsafe extern "C" fn(*mut Display) -> c_int;
+    type XDefaultRootWindowFn = unsafe extern "C" fn(*mut Display) -> Window;
+    type XInternAtomFn = unsafe extern "C" fn(*mut Display, *const c_char, c_int) -> Atom;
+    type XGetWindowPropertyFn = unsafe extern "C" fn(
+        *mut Display,
+        Window,
+        Atom,
+        c_long,
+        c_long,
+        c_int,
+        Atom,
+        *mut Atom,
+        *mut c_int,
+        *mut c_ulong,
+        *mut c_ulong,
+        *mut *mut c_uchar,
+    ) -> c_int;
+    type XQueryTreeFn = unsafe extern "C" fn(
+        *mut Display,
+        Window,
+        *mut Window,
+        *mut Window,
+        *mut *mut Window,
+        *mut c_uint,
+    ) -> c_int;
+    type XFreeFn = unsafe extern "C" fn(*mut c_void) -> c_int;
+    type XMapRaisedFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
+    type XRaiseWindowFn = unsafe extern "C" fn(*mut Display, Window) -> c_int;
+    type XSetInputFocusFn = unsafe extern "C" fn(*mut Display, Window, c_int, c_ulong) -> c_int;
+    type XChangePropertyFn = unsafe extern "C" fn(
+        *mut Display,
+        Window,
+        Atom,
+        Atom,
+        c_int,
+        c_int,
+        *const c_uchar,
+        c_int,
+    ) -> c_int;
+    type XFlushFn = unsafe extern "C" fn(*mut Display) -> c_int;
+
+    struct X11 {
+        handle: *mut c_void,
+        open_display: XOpenDisplayFn,
+        close_display: XCloseDisplayFn,
+        default_root_window: XDefaultRootWindowFn,
+        intern_atom: XInternAtomFn,
+        get_window_property: XGetWindowPropertyFn,
+        query_tree: XQueryTreeFn,
+        free: XFreeFn,
+        map_raised: XMapRaisedFn,
+        raise_window: XRaiseWindowFn,
+        set_input_focus: XSetInputFocusFn,
+        change_property: XChangePropertyFn,
+        flush: XFlushFn,
+    }
+
+    impl X11 {
+        fn load() -> Result<Self, String> {
+            let mut last_error = None;
+            for name in ["libX11.so.6", "libX11.so"] {
+                let library_name = CString::new(name).expect("static library name");
+                let handle = unsafe {
+                    libc::dlopen(library_name.as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL)
+                };
+                if handle.is_null() {
+                    last_error = Some(dl_error());
+                    continue;
+                }
+
+                return unsafe {
+                    Ok(Self {
+                        handle,
+                        open_display: symbol(handle, "XOpenDisplay")?,
+                        close_display: symbol(handle, "XCloseDisplay")?,
+                        default_root_window: symbol(handle, "XDefaultRootWindow")?,
+                        intern_atom: symbol(handle, "XInternAtom")?,
+                        get_window_property: symbol(handle, "XGetWindowProperty")?,
+                        query_tree: symbol(handle, "XQueryTree")?,
+                        free: symbol(handle, "XFree")?,
+                        map_raised: symbol(handle, "XMapRaised")?,
+                        raise_window: symbol(handle, "XRaiseWindow")?,
+                        set_input_focus: symbol(handle, "XSetInputFocus")?,
+                        change_property: symbol(handle, "XChangeProperty")?,
+                        flush: symbol(handle, "XFlush")?,
+                    })
+                };
+            }
+
+            Err(format!(
+                "X11 focus support requires libX11 at runtime{}",
+                last_error
+                    .map(|error| format!(": {}", error))
+                    .unwrap_or_default()
+            ))
+        }
+    }
+
+    impl Drop for X11 {
+        fn drop(&mut self) {
+            unsafe {
+                libc::dlclose(self.handle);
+            }
+        }
+    }
+
+    unsafe fn symbol<T: Copy>(handle: *mut c_void, name: &str) -> Result<T, String> {
+        let symbol_name = CString::new(name).expect("static symbol name");
+        let ptr = libc::dlsym(handle, symbol_name.as_ptr());
+        if ptr.is_null() {
+            return Err(format!("libX11 symbol {} is unavailable", name));
+        }
+        Ok(std::mem::transmute_copy(&ptr))
+    }
+
+    fn dl_error() -> String {
+        let error = unsafe { libc::dlerror() };
+        if error.is_null() {
+            return "unknown dlopen error".to_string();
+        }
+        unsafe { std::ffi::CStr::from_ptr(error) }
+            .to_string_lossy()
+            .to_string()
     }
 
     pub(super) fn focus_window_for_pid(pid: u32, display_name: &str) -> Result<Value, String> {
         let display_c = CString::new(display_name)
             .map_err(|_| "X11 display contains an interior NUL byte".to_string())?;
+        let x11 = X11::load()?;
 
         unsafe {
-            let display = XOpenDisplay(display_c.as_ptr());
+            let display = (x11.open_display)(display_c.as_ptr());
             if display.is_null() {
                 return Err(format!("Failed to open X11 display {}", display_name));
             }
 
-            let outcome = focus_window_for_pid_on_display(display, pid, display_name);
-            XCloseDisplay(display);
+            let outcome = focus_window_for_pid_on_display(&x11, display, pid, display_name);
+            (x11.close_display)(display);
             outcome
         }
     }
 
     unsafe fn focus_window_for_pid_on_display(
+        x11: &X11,
         display: *mut Display,
         pid: u32,
         display_name: &str,
     ) -> Result<Value, String> {
-        let root = XDefaultRootWindow(display);
-        let pid_atom = intern_atom(display, "_NET_WM_PID")?;
-        let stacking_atom = intern_atom(display, "_NET_CLIENT_LIST_STACKING")?;
-        let client_list_atom = intern_atom(display, "_NET_CLIENT_LIST")?;
-        let active_atom = intern_atom(display, "_NET_ACTIVE_WINDOW")?;
+        let root = (x11.default_root_window)(display);
+        let pid_atom = intern_atom(x11, display, "_NET_WM_PID")?;
+        let stacking_atom = intern_atom(x11, display, "_NET_CLIENT_LIST_STACKING")?;
+        let client_list_atom = intern_atom(x11, display, "_NET_CLIENT_LIST")?;
+        let active_atom = intern_atom(x11, display, "_NET_ACTIVE_WINDOW")?;
 
-        let mut candidates = window_list_property(display, root, stacking_atom)
-            .or_else(|| window_list_property(display, root, client_list_atom))
+        let mut candidates = window_list_property(x11, display, root, stacking_atom)
+            .or_else(|| window_list_property(x11, display, root, client_list_atom))
             .unwrap_or_default();
         if candidates.is_empty() {
-            candidates = collect_window_tree(display, root);
+            candidates = collect_window_tree(x11, display, root);
         }
 
         let Some(target_window) = candidates
             .iter()
             .rev()
             .copied()
-            .find(|window| window_pid(display, *window, pid_atom) == Some(pid))
+            .find(|window| window_pid(x11, display, *window, pid_atom) == Some(pid))
         else {
             return Err(format!("No X11 window found for browser PID {}", pid));
         };
 
-        let parent_window = direct_parent_window(display, target_window)
+        let parent_window = direct_parent_window(x11, display, target_window)
             .filter(|window| *window != 0 && *window != root)
             .unwrap_or(target_window);
 
-        XMapRaised(display, parent_window);
-        XRaiseWindow(display, parent_window);
-        XMapRaised(display, target_window);
-        XRaiseWindow(display, target_window);
-        XSetInputFocus(display, target_window, REVERT_TO_PARENT, CURRENT_TIME);
-        XChangeProperty(
+        (x11.map_raised)(display, parent_window);
+        (x11.raise_window)(display, parent_window);
+        (x11.map_raised)(display, target_window);
+        (x11.raise_window)(display, target_window);
+        (x11.set_input_focus)(display, target_window, REVERT_TO_PARENT, CURRENT_TIME);
+        (x11.change_property)(
             display,
             root,
             active_atom,
@@ -2022,7 +2096,7 @@ mod x11_focus {
             &target_window as *const Window as *const c_uchar,
             1,
         );
-        XFlush(display);
+        (x11.flush)(display);
 
         Ok(json!({
             "attempted": true,
@@ -2034,9 +2108,9 @@ mod x11_focus {
         }))
     }
 
-    unsafe fn intern_atom(display: *mut Display, name: &str) -> Result<Atom, String> {
+    unsafe fn intern_atom(x11: &X11, display: *mut Display, name: &str) -> Result<Atom, String> {
         let c_name = CString::new(name).map_err(|_| format!("Invalid X11 atom name {}", name))?;
-        let atom = XInternAtom(display, c_name.as_ptr(), FALSE);
+        let atom = (x11.intern_atom)(display, c_name.as_ptr(), FALSE);
         if atom == 0 {
             Err(format!("X11 atom {} is unavailable", name))
         } else {
@@ -2045,6 +2119,7 @@ mod x11_focus {
     }
 
     unsafe fn window_list_property(
+        x11: &X11,
         display: *mut Display,
         window: Window,
         property: Atom,
@@ -2054,7 +2129,7 @@ mod x11_focus {
         let mut nitems: c_ulong = 0;
         let mut bytes_after: c_ulong = 0;
         let mut prop: *mut c_uchar = ptr::null_mut();
-        let status = XGetWindowProperty(
+        let status = (x11.get_window_property)(
             display,
             window,
             property,
@@ -2070,24 +2145,29 @@ mod x11_focus {
         );
         if status != 0 || prop.is_null() || actual_format != 32 || nitems == 0 {
             if !prop.is_null() {
-                XFree(prop as *mut c_void);
+                (x11.free)(prop as *mut c_void);
             }
             return None;
         }
 
         let values = std::slice::from_raw_parts(prop as *const c_ulong, nitems as usize);
         let windows = values.to_vec();
-        XFree(prop as *mut c_void);
+        (x11.free)(prop as *mut c_void);
         Some(windows)
     }
 
-    unsafe fn window_pid(display: *mut Display, window: Window, pid_atom: Atom) -> Option<u32> {
+    unsafe fn window_pid(
+        x11: &X11,
+        display: *mut Display,
+        window: Window,
+        pid_atom: Atom,
+    ) -> Option<u32> {
         let mut actual_type: Atom = 0;
         let mut actual_format: c_int = 0;
         let mut nitems: c_ulong = 0;
         let mut bytes_after: c_ulong = 0;
         let mut prop: *mut c_uchar = ptr::null_mut();
-        let status = XGetWindowProperty(
+        let status = (x11.get_window_property)(
             display,
             window,
             pid_atom,
@@ -2103,22 +2183,26 @@ mod x11_focus {
         );
         if status != 0 || prop.is_null() || actual_format != 32 || nitems == 0 {
             if !prop.is_null() {
-                XFree(prop as *mut c_void);
+                (x11.free)(prop as *mut c_void);
             }
             return None;
         }
 
         let value = *(prop as *const c_ulong) as u32;
-        XFree(prop as *mut c_void);
+        (x11.free)(prop as *mut c_void);
         Some(value)
     }
 
-    unsafe fn direct_parent_window(display: *mut Display, window: Window) -> Option<Window> {
+    unsafe fn direct_parent_window(
+        x11: &X11,
+        display: *mut Display,
+        window: Window,
+    ) -> Option<Window> {
         let mut root: Window = 0;
         let mut parent: Window = 0;
         let mut children: *mut Window = ptr::null_mut();
         let mut nchildren: c_uint = 0;
-        let ok = XQueryTree(
+        let ok = (x11.query_tree)(
             display,
             window,
             &mut root,
@@ -2127,18 +2211,19 @@ mod x11_focus {
             &mut nchildren,
         );
         if !children.is_null() {
-            XFree(children as *mut c_void);
+            (x11.free)(children as *mut c_void);
         }
         (ok != 0).then_some(parent)
     }
 
-    unsafe fn collect_window_tree(display: *mut Display, root: Window) -> Vec<Window> {
+    unsafe fn collect_window_tree(x11: &X11, display: *mut Display, root: Window) -> Vec<Window> {
         let mut windows = Vec::new();
-        collect_window_tree_into(display, root, &mut windows);
+        collect_window_tree_into(x11, display, root, &mut windows);
         windows
     }
 
     unsafe fn collect_window_tree_into(
+        x11: &X11,
         display: *mut Display,
         window: Window,
         windows: &mut Vec<Window>,
@@ -2147,7 +2232,7 @@ mod x11_focus {
         let mut parent_return: Window = 0;
         let mut children: *mut Window = ptr::null_mut();
         let mut nchildren: c_uint = 0;
-        let ok = XQueryTree(
+        let ok = (x11.query_tree)(
             display,
             window,
             &mut root_return,
@@ -2162,9 +2247,9 @@ mod x11_focus {
         let child_slice = std::slice::from_raw_parts(children, nchildren as usize);
         for child in child_slice {
             windows.push(*child);
-            collect_window_tree_into(display, *child, windows);
+            collect_window_tree_into(x11, display, *child, windows);
         }
-        XFree(children as *mut c_void);
+        (x11.free)(children as *mut c_void);
     }
 }
 

@@ -6,10 +6,11 @@ Lane: P07
 Outcome: IN PROGRESS
 
 Current state: release metadata and local validation are complete, and the
-release pull request has merged. The first release workflow dry run exposed a
-cross-target Linux cfg leak in the private remote-headed display fallback. The
-source fix is in progress, and P07 still needs a successful release workflow
-dry run, real release workflow run, and GitHub release asset verification.
+release pull request has merged. Release workflow dry runs exposed two
+cross-target blockers: a Linux cfg leak in the private remote-headed display
+fallback, followed by a static X11 link in the browser-focus helper. The fixes
+are in progress, and P07 still needs a successful release workflow dry run,
+real release workflow run, and GitHub release asset verification.
 
 P05 kept `0.27.0` as an installed-runtime checkpoint because
 the Guacamole/RDP many-to-many operation milestone still needed
@@ -126,5 +127,7 @@ Exit criteria:
 - Release assets match the workflow's expected platform matrix.
 
 Result: in progress. The first dry run failed with a cross-target Rust compile
-error in `cli/src/native/cdp/chrome.rs`; see
+error in `cli/src/native/cdp/chrome.rs`; the second dry run proved the cfg fix
+on Windows and macOS, then failed Linux zigbuild linking because
+`cli/src/native/browser.rs` linked directly against `libX11`. See
 `docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`.

@@ -365,3 +365,32 @@ Result:
   symbols, then stopped because this workstation lacks
   `x86_64-w64-mingw32-gcc` for the `ring` build script.
 - The release workflow dry run must be retried after this fix lands on `main`.
+
+## 2026-05-29 Turn 10 | P07 Linux Release Link Fix
+
+Scope: respond to the second manual `Release` workflow dry-run failure.
+
+Actions:
+
+- Reran the `Release` workflow with `dry_run=true` on `main`.
+- Confirmed Windows x64, macOS x64, and macOS ARM64 passed after the cfg fix.
+- Diagnosed Linux target failures as release-time `-lX11` linking from the
+  browser-focus helper.
+- Changed the Linux X11 focus helper to load `libX11` dynamically with
+  `dlopen` and `dlsym` at runtime instead of statically linking X11.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml browser -- --test-threads=1`
+- `git diff --check`
+- `cargo build --release --manifest-path cli/Cargo.toml`
+- `rg -n "#\\[link\\(name = \\\"X11\\\"\\)|-lX11" cli/src`
+
+Result:
+
+- Local validation passed.
+- No static X11 link remains in `cli/src`.
+- The local machine does not have `cargo-zigbuild`, so the release workflow
+  dry run must be retried after this fix lands on `main`.
