@@ -1,9 +1,9 @@
 # CDP Tab Streaming For Non-Remote Browsers Plan
 
 Date: 2026-05-30
-State: OPEN
+State: CLOSED
 Lane: P08
-Outcome: IN PROGRESS
+Outcome: COMPLETE
 
 Current state: `v0.27.0` ships robust Guacamole/RDP remote-view support for
 remote-headed browsers and already contains a runtime WebSocket stream server
@@ -94,7 +94,7 @@ tools are available during implementation.
 
 ### Slice A | Contract And Ownership Audit
 
-Status: OPEN.
+Status: COMPLETE.
 
 Goal: define the exact non-remote CDP stream contract before changing code.
 
@@ -118,9 +118,16 @@ Exit criteria:
 - Existing docs and tests that already mention streaming are listed as touched
   or intentionally out of scope.
 
+Evidence:
+
+- `docs/dev/notes/2026-05-30-p08-cdp-tab-streaming-contract-audit.md`
+  records the per-daemon-session stream ownership model, the
+  `cdp_screencast` `ViewStream` readiness contract, and the touched or
+  deferred docs and test surfaces.
+
 ### Slice B | Service-State View Stream Records
 
-Status: PENDING.
+Status: COMPLETE.
 
 Goal: make eligible non-remote browsers advertise durable CDP screencast view
 streams.
@@ -141,9 +148,23 @@ Exit criteria:
   browsers.
 - Unavailable browsers expose useful readiness rather than openable dead URLs.
 
+Evidence:
+
+- Launch-derived service browser persistence now derives a `cdp_screencast`
+  stream for `local_headless`, `local_headed`, and `attached_existing`
+  browsers when launch metadata is present, with unavailable readiness for
+  missing stream server, missing CDP endpoint, or non-ready browser health.
+  Remote-headed view stream generation remains unchanged.
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+  passed and covers ready local CDP streams, unavailable streams without a
+  stream server, and unchanged remote-headed behavior.
+- `cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1`
+  passed and covers stale browser health invalidating the CDP stream URL and
+  control input instead of leaving an openable dead stream.
+
 ### Slice C | Stream Server Routing And Tab Focus
 
-Status: PENDING.
+Status: COMPLETE.
 
 Goal: bind service view-stream records to the existing runtime stream server
 and the selected tab target.
@@ -164,9 +185,24 @@ Exit criteria:
   stream and receive frames for that tab.
 - Switching tabs does not leak stale frames as the current stream.
 
+Evidence:
+
+- The post-command stream sync now includes `view_focus`, so service-queued
+  tab focus updates the active CDP page session id and notifies the stream
+  loop to restart against the selected target.
+- `StreamServer::set_cdp_session_id` clears cached `last_frame` only when the
+  CDP session target changes, preventing stale replay when the stream moves
+  between tabs while preserving the cache for same-target refreshes.
+- `cargo test --manifest-path cli/Cargo.toml set_cdp_session_id -- --nocapture`
+  passed for target-change cache clearing and same-target cache preservation.
+- `pnpm test:service-cdp-tab-streaming-live` passed by launching a service
+  local headless browser, opening a CDP stream WebSocket, receiving a frame,
+  focusing page B through `view_focus`, then refocusing page A and verifying
+  distinct frames after each tab switch.
+
 ### Slice D | Dashboard Integration
 
-Status: PENDING.
+Status: COMPLETE.
 
 Goal: make the Service dashboard open and control CDP screencast streams for
 non-remote browsers.
@@ -187,9 +223,21 @@ Exit criteria:
 - Browser rows and tab details can open an eligible non-remote CDP stream.
 - Disabled buttons explain why streaming is unavailable.
 
+Evidence:
+
+- Dashboard view-stream helpers now treat `cdp_screencast` as embeddable when
+  the service provides a loopback URL and keep `cdp_input` streams
+  controllable. Unavailable CDP streams surface `readiness.reason` in open
+  titles instead of a generic missing-URL explanation.
+- Existing browser-row and tab-detail control paths already queue
+  `view_focus` before opening a controllable view stream. With
+  `cdp_screencast` now embeddable and controllable, those paths apply to
+  local CDP streams as well as remote-view streams.
+- `pnpm test:dashboard-view-streams` and `pnpm build:dashboard` passed.
+
 ### Slice E | CLI, HTTP, MCP, Client, And Docs Alignment
 
-Status: PENDING.
+Status: COMPLETE.
 
 Goal: keep every user-facing and software-facing surface aligned with the new
 CDP stream contract.
@@ -208,9 +256,20 @@ Exit criteria:
 - Agents and software clients can discover the supported CDP stream workflow
   without relying on internal source knowledge.
 
+Evidence:
+
+- Updated CLI stream help, README, `skills/agent-browser/SKILL.md`, and
+  `docs/src/app/streaming/page.mdx` for the initial service-owned
+  `cdp_screencast` stream contract. No schema change was needed because the
+  implementation uses existing `ViewStream` URL, input, and readiness fields.
+- The installed `agent-browser` skill matches the repo skill copy:
+  `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+  passed.
+- `pnpm --dir docs build` passed.
+
 ### Slice F | Validation Gates
 
-Status: PENDING.
+Status: COMPLETE.
 
 Goal: prove the feature without depending on remote desktop infrastructure.
 
@@ -229,6 +288,27 @@ Exit criteria:
 - The local live smoke proves end-to-end CDP tab streaming for non-remote
   browsers.
 - Validation selector recommends the right checks for future stream changes.
+
+Evidence:
+
+- Added focused Rust tests for CDP stream record derivation and stale record
+  invalidation, plus dashboard view-stream helper coverage for embeddable CDP
+  streams and unavailable readiness copy.
+- Added `scripts/smoke-service-cdp-tab-streaming-live.js` and
+  `pnpm test:service-cdp-tab-streaming-live` for local end-to-end validation.
+- Updated `scripts/dev/select-validation.js` so future CDP tab streaming
+  surface changes recommend the live smoke and focused Rust stream tests.
+- Selector-recommended validation has passed:
+  `cargo fmt --manifest-path cli/Cargo.toml -- --check`,
+  `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`,
+  `cargo test --manifest-path cli/Cargo.toml set_cdp_session_id -- --nocapture`,
+  `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`,
+  `cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1`,
+  `pnpm test:service-cdp-tab-streaming-live`,
+  `pnpm test:dashboard-view-streams`, `pnpm --dir docs build`,
+  `pnpm build:dashboard`, `git diff --check`,
+  `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`,
+  and `node scripts/dev/select-validation.js --base HEAD --json`.
 
 ## Initial Validation Plan
 

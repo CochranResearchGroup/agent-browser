@@ -19,6 +19,7 @@ export type ServiceViewStream = {
 };
 
 const EMBEDDABLE_VIEW_STREAM_PROVIDERS = new Set([
+  "cdp_screencast",
   "external_url",
   "novnc",
   "rdp_gateway",
@@ -65,7 +66,12 @@ export function canOpenControlViewStream(stream?: ServiceViewStream | null): boo
 export function viewStreamOpenTitle(stream?: ServiceViewStream | null): string {
   if (!stream) return "No service-owned view stream is registered for this browser.";
   if (!canEmbedViewStream(stream)) {
-    if (!stream.url) return "This stream has no embeddable URL yet.";
+    const reason = readinessReason(stream.remoteReadiness ?? stream.readiness);
+    if (!stream.url) {
+      return reason
+        ? `${viewStreamLabel(stream)} is unavailable: ${reason}.`
+        : "This stream has no embeddable URL yet.";
+    }
     return "This stream provider is not embeddable in the dashboard.";
   }
   return `Open ${viewStreamLabel(stream)} in the dashboard.`;
@@ -135,4 +141,11 @@ function readinessState(readiness: unknown): string | null {
     return failed ? readinessState(failed) : null;
   }
   return null;
+}
+
+function readinessReason(readiness: unknown): string | null {
+  if (!readiness || typeof readiness !== "object" || Array.isArray(readiness)) return null;
+  const record = readiness as Record<string, unknown>;
+  const reason = record.reason ?? record.message ?? record.lastProviderEvent;
+  return typeof reason === "string" && reason.trim() ? reason.trim().replaceAll("_", " ") : null;
 }

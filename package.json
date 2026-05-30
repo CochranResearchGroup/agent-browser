@@ -66,6 +66,7 @@
     "test:service-request-lease-reject-no-launch": "node scripts/smoke-service-request-lease-reject.js",
     "test:service-browser-row-remedies-no-launch": "node scripts/smoke-service-browser-row-remedies-no-launch.js",
     "test:service-browser-row-close-live": "node scripts/smoke-service-browser-row-close-live.js",
+    "test:service-cdp-tab-streaming-live": "node scripts/smoke-service-cdp-tab-streaming-live.js",
     "test:service-remote-view-control-live": "node --no-warnings --experimental-strip-types scripts/smoke-service-remote-view-control-live.js",
     "test:service-dashboard-remote-control-ui-live": "node scripts/smoke-service-dashboard-remote-control-ui-live.js",
     "test:service-request-live": "node scripts/smoke-service-request.js",

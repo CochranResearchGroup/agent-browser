@@ -314,7 +314,28 @@ assert.equal(
     provider: 'cdp_screencast',
     url: 'http://127.0.0.1:8080/cdp/session',
   }),
-  false,
+  true,
+);
+const cdpScreencastStream = {
+  provider: 'cdp_screencast',
+  controlInput: 'cdp_input',
+  url: 'http://127.0.0.1:44841/',
+  frameUrl: 'http://127.0.0.1:44841/',
+  readiness: { state: 'ready', reason: 'stream_server_ready' },
+  readOnly: false,
+};
+assert.equal(canEmbedViewStream(cdpScreencastStream), true);
+assert.equal(canOpenControlViewStream(cdpScreencastStream), true);
+assert.equal(viewStreamOpenTitle(cdpScreencastStream), 'Open cdp screencast in the dashboard.');
+assert.equal(viewStreamControlTitle(cdpScreencastStream), 'Focus the browser and open cdp input control.');
+assert.equal(
+  viewStreamOpenTitle({
+    provider: 'cdp_screencast',
+    url: null,
+    readiness: { state: 'unavailable', reason: 'missing_stream_server' },
+    readOnly: true,
+  }),
+  'cdp screencast is unavailable: missing stream server.',
 );
 assert.equal(
   canControlViewStream({

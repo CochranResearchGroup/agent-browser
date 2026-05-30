@@ -4943,6 +4943,9 @@ Notes:
   - 'stream enable' creates the WebSocket server.
   - WebSocket clients trigger frame streaming automatically.
   - 'screencast_start' and 'screencast_stop' still control explicit CDP screencasts.
+  - Service-owned local and attached CDP browsers can advertise cdp_screencast
+    viewStreams backed by the session stream server, with readiness reasons
+    when CDP or the stream server is unavailable.
   - Streaming is always enabled. Set AGENT_BROWSER_STREAM_PORT to bind to a
     specific port instead of the default OS-assigned port.
   - Service requests with params.browserHost=remote_headed launch headed Chrome

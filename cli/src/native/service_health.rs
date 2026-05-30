@@ -11,12 +11,36 @@ use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunch
 use super::service_model::{
     BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserSession,
     BrowserTab, DisplayAllocation, LeaseState, ServiceEvent, ServiceEventKind, ServiceIncident,
-    ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
+    ServiceReconciliationSnapshot, ServiceState, TabLifecycle, ViewStreamProvider,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
 const MAX_SERVICE_EVENTS: usize = 100;
+
+fn mark_cdp_screencast_streams_unavailable(
+    browser: &mut BrowserProcess,
+    reason: &str,
+    health: BrowserHealth,
+) {
+    for stream in &mut browser.view_streams {
+        if stream.provider != ViewStreamProvider::CdpScreencast {
+            continue;
+        }
+        stream.control_input = None;
+        stream.url = None;
+        stream.frame_url = None;
+        stream.external_url = None;
+        stream.read_only = true;
+        stream.readiness = Some(json!({
+            "state": "unavailable",
+            "reason": reason,
+            "browserId": browser.id,
+            "health": health,
+        }));
+        stream.remote_readiness = None;
+    }
+}
 
 /// Structured reason for browser recovery, preserved in event details for clients.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -728,7 +752,7 @@ pub(crate) fn stale_browser_process_record(
     health: BrowserHealth,
     last_error: String,
 ) -> BrowserProcess {
-    BrowserProcess {
+    let mut browser = BrowserProcess {
         id: id.to_string(),
         profile_id: previous.and_then(|browser| browser.profile_id.clone()),
         host: previous
@@ -746,7 +770,9 @@ pub(crate) fn stale_browser_process_record(
         active_session_ids: vec![session_id.to_string()],
         last_error: Some(last_error),
         last_health_observation: None,
-    }
+    };
+    mark_cdp_screencast_streams_unavailable(&mut browser, "browser_not_ready", health);
+    browser
 }
 
 pub(crate) fn close_health_from_outcome(
@@ -885,6 +911,7 @@ pub(crate) fn persist_closed_browser_health_in_repository(
             active_session_ids: vec![session_id.to_string()],
             ..BrowserProcess::default()
         };
+        mark_cdp_screencast_streams_unavailable(&mut browser, "operator_requested_close", health);
         let shutdown_details = outcome.map(|outcome| {
             let failure_class = if outcome.os_degraded_possible() {
                 "browser_shutdown_force_kill_failed"

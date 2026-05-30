@@ -80,6 +80,13 @@ function selectRecommendations(files, base) {
     add('cargo clippy --manifest-path cli/Cargo.toml -- -D warnings', 'Rust Quality CI gate');
   }
 
+  if (files.some(isCdpTabStreamingSurface)) {
+    add(
+      'pnpm test:service-cdp-tab-streaming-live',
+      'CDP tab streaming route, stream, or dashboard surface changed',
+    );
+  }
+
   const focusedRustTests = focusedRustTestCommands(files);
   if (focusedRustTests.length > 0) {
     for (const { command, reason } of focusedRustTests) {
@@ -246,6 +253,18 @@ function isDashboardBrowserRowActionSurface(file) {
   );
 }
 
+function isCdpTabStreamingSurface(file) {
+  return (
+    file === 'cli/src/native/stream/mod.rs' ||
+    file === 'cli/src/native/stream/cdp_loop.rs' ||
+    file === 'cli/src/native/stream/websocket.rs' ||
+    file === 'cli/src/native/actions.rs' ||
+    file === 'packages/dashboard/src/lib/service-view-streams.ts' ||
+    file === 'packages/dashboard/src/components/service-panel.tsx' ||
+    file === 'scripts/smoke-service-cdp-tab-streaming-live.js'
+  );
+}
+
 function focusedRustTestCommands(files) {
   const checks = [];
   const add = (command, reason) => {
@@ -272,6 +291,20 @@ function focusedRustTestCommands(files) {
     add(
       'cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1',
       'browser health, recovery, or launch event model changed',
+    );
+  }
+
+  if (files.includes('cli/src/native/stream/mod.rs') || files.includes('cli/src/native/stream/cdp_loop.rs')) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml set_cdp_session_id -- --nocapture',
+      'stream server target switching or frame cache behavior changed',
+    );
+  }
+
+  if (files.includes('cli/src/native/actions.rs')) {
+    add(
+      'cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture',
+      'service-owned CDP stream derivation changed',
     );
   }
 

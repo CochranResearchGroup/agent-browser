@@ -1691,6 +1691,11 @@ stream is merely viewable or operator controllable and whether display state is
 isolated before opening it. Dashboard browser rows enable **View** only for
 embeddable streams and **Control** only when the service also reports an input
 provider, with disabled-state explanations sourced from the stream metadata.
+For local headless, local headed, and attached CDP browsers, the service can
+publish a `cdp_screencast` stream backed by the session stream server. The
+stream uses `controlInput="cdp_input"` when ready and reports unavailable
+readiness when the browser is non-ready, CDP is missing, or no stream server is
+bound.
 Launcher and workspace viewport readiness copy distinguish browser health,
 dashboard auth, provider or ingress failure, iframe embedding limits, viewer
 ownership, and stale focus or takeover job evidence before showing a blank
@@ -1906,6 +1911,12 @@ agent-browser stream disable              # Stop streaming for the session
 ```
 
 The WebSocket server streams the browser viewport and accepts input events.
+Service-owned non-remote browsers with a reachable CDP endpoint advertise a
+`cdp_screencast` entry in `viewStreams`. The dashboard can embed that loopback
+stream from browser rows or tab details, and it queues `view_focus` before
+opening a tab-specific stream. When CDP, browser health, or the stream server
+is unavailable, the same record reports `readiness.state="unavailable"` with a
+compact reason instead of exposing a dead open button.
 
 ### Service Status
 

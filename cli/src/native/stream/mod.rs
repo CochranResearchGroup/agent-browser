@@ -99,6 +99,10 @@ impl StreamServer {
     /// Update the active CDP page session ID used for screencast commands.
     pub async fn set_cdp_session_id(&self, session_id: Option<String>) {
         let mut guard = self.cdp_session_id.write().await;
+        if *guard != session_id {
+            let mut last_frame = self.last_frame.write().await;
+            *last_frame = None;
+        }
         *guard = session_id;
     }
 
@@ -457,6 +461,52 @@ pub fn is_allowed_origin(origin: Option<&str>) -> bool {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn set_cdp_session_id_clears_cached_frame_on_target_change() {
+        let (server, _) = StreamServer::start_without_client(0, "stream-test".to_string(), false)
+            .await
+            .expect("stream server should bind");
+
+        server
+            .set_cdp_session_id(Some("session-a".to_string()))
+            .await;
+        server.broadcast_frame(r#"{"type":"frame","data":"old"}"#);
+        assert!(
+            server.last_frame.read().await.is_some(),
+            "test setup should cache a frame"
+        );
+
+        server
+            .set_cdp_session_id(Some("session-b".to_string()))
+            .await;
+        assert!(
+            server.last_frame.read().await.is_none(),
+            "target changes must not replay a stale frame to new stream viewers"
+        );
+
+        server.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn set_cdp_session_id_preserves_cached_frame_for_same_target() {
+        let (server, _) = StreamServer::start_without_client(0, "stream-test".to_string(), false)
+            .await
+            .expect("stream server should bind");
+
+        server
+            .set_cdp_session_id(Some("session-a".to_string()))
+            .await;
+        server.broadcast_frame(r#"{"type":"frame","data":"current"}"#);
+        server
+            .set_cdp_session_id(Some("session-a".to_string()))
+            .await;
+        assert!(
+            server.last_frame.read().await.is_some(),
+            "same-target refreshes should keep the last frame cache"
+        );
+
+        server.shutdown().await;
+    }
     #[test]
     fn test_allowed_origin_none() {
         assert!(is_allowed_origin(None));

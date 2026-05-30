@@ -1652,6 +1652,121 @@ fn persist_service_browser_record(
     }
 }
 
+fn cdp_stream_supported_host(host: ServiceBrowserHost) -> bool {
+    matches!(
+        host,
+        ServiceBrowserHost::LocalHeadless
+            | ServiceBrowserHost::LocalHeaded
+            | ServiceBrowserHost::AttachedExisting
+    )
+}
+
+fn cdp_screencast_url(port: u16) -> String {
+    format!("http://127.0.0.1:{}/", port)
+}
+
+fn cdp_screencast_readiness(
+    state: &str,
+    reason: &str,
+    session_id: &str,
+    port: Option<u16>,
+    cdp_endpoint: Option<&str>,
+) -> Value {
+    let mut readiness = json!({
+        "state": state,
+        "reason": reason,
+        "sessionName": session_id,
+        "browserId": service_browser_id(session_id),
+    });
+    if let Some(port) = port {
+        readiness["streamPort"] = json!(port);
+    }
+    if let Some(endpoint) = cdp_endpoint {
+        readiness["cdpEndpoint"] = json!(endpoint);
+    }
+    readiness
+}
+
+fn cdp_screencast_view_stream(
+    session_id: &str,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+    cdp_endpoint: Option<&str>,
+    stream_port: Option<u16>,
+) -> Option<ViewStream> {
+    if !cdp_stream_supported_host(host) {
+        return None;
+    }
+
+    let (ready, reason) = if health != ServiceBrowserHealth::Ready {
+        (false, "browser_not_ready")
+    } else if cdp_endpoint
+        .map(str::trim)
+        .is_none_or(|endpoint| endpoint.is_empty())
+    {
+        (false, "missing_cdp_endpoint")
+    } else if stream_port.is_none() {
+        (false, "missing_stream_server")
+    } else {
+        (true, "stream_server_ready")
+    };
+
+    let url = if ready {
+        stream_port.map(cdp_screencast_url)
+    } else {
+        None
+    };
+    Some(ViewStream {
+        id: "cdp-screencast".to_string(),
+        provider: ViewStreamProvider::CdpScreencast,
+        control_input: ready.then_some(ControlInputProvider::CdpInput),
+        url: url.clone(),
+        frame_url: url.clone(),
+        external_url: url,
+        route_id: None,
+        display_allocation_id: None,
+        connection_id: None,
+        connection_name: None,
+        route_source: Some("daemon_stream_server".to_string()),
+        provider_mode: Some("simultaneous_view".to_string()),
+        viewer_lease_ids: Vec::new(),
+        controller_lease_id: None,
+        read_only: !ready,
+        readiness: Some(cdp_screencast_readiness(
+            if ready { "ready" } else { "unavailable" },
+            reason,
+            session_id,
+            stream_port,
+            cdp_endpoint,
+        )),
+        remote_readiness: None,
+    })
+}
+
+fn upsert_cdp_screencast_view_stream(
+    metadata: &mut ServiceLaunchMetadata,
+    session_id: &str,
+    host: ServiceBrowserHost,
+    health: ServiceBrowserHealth,
+    cdp_endpoint: Option<&str>,
+    stream_port: Option<u16>,
+) {
+    let Some(cdp_stream) =
+        cdp_screencast_view_stream(session_id, host, health, cdp_endpoint, stream_port)
+    else {
+        return;
+    };
+    if let Some(existing) = metadata
+        .view_streams
+        .iter_mut()
+        .find(|stream| stream.provider == ViewStreamProvider::CdpScreencast)
+    {
+        *existing = cdp_stream;
+    } else {
+        metadata.view_streams.push(cdp_stream);
+    }
+}
+
 fn persist_current_browser_health(
     state: &DaemonState,
     host: ServiceBrowserHost,
@@ -1678,6 +1793,14 @@ fn persist_current_browser_health(
                 .as_ref()
                 .and_then(|mgr| mgr.browser_display_name().map(str::to_string));
         }
+        upsert_cdp_screencast_view_stream(
+            &mut metadata,
+            &state.session_id,
+            host,
+            health,
+            cdp_endpoint.as_deref(),
+            state.stream_server.as_ref().map(|server| server.port()),
+        );
         metadata
     });
     persist_service_browser_record(
@@ -3744,7 +3867,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             // so screencasting always targets the correct page.
             if matches!(
                 action,
-                "tab_new" | "tab_switch" | "tab_close" | "open" | "navigate"
+                "tab_new" | "tab_switch" | "tab_close" | "open" | "navigate" | "view_focus"
             ) {
                 let session_id = mgr.active_session_id().ok().map(|s| s.to_string());
                 server.set_cdp_session_id(session_id).await;
@@ -15649,6 +15772,62 @@ mod tests {
     }
 
     #[test]
+    fn test_cdp_screencast_view_stream_ready_for_non_remote_cdp_browser() {
+        let stream = cdp_screencast_view_stream(
+            "stream-session",
+            ServiceBrowserHost::LocalHeadless,
+            ServiceBrowserHealth::Ready,
+            Some("http://127.0.0.1:9222"),
+            Some(44841),
+        )
+        .expect("local CDP browser should advertise a CDP stream");
+
+        assert_eq!(stream.id, "cdp-screencast");
+        assert_eq!(stream.provider, ViewStreamProvider::CdpScreencast);
+        assert_eq!(stream.control_input, Some(ControlInputProvider::CdpInput));
+        assert_eq!(stream.url.as_deref(), Some("http://127.0.0.1:44841/"));
+        assert_eq!(stream.frame_url.as_deref(), Some("http://127.0.0.1:44841/"));
+        assert!(!stream.read_only);
+        assert_eq!(
+            stream.readiness.as_ref().unwrap()["reason"],
+            "stream_server_ready"
+        );
+    }
+
+    #[test]
+    fn test_cdp_screencast_view_stream_reports_unavailable_without_stream_server() {
+        let stream = cdp_screencast_view_stream(
+            "stream-session",
+            ServiceBrowserHost::AttachedExisting,
+            ServiceBrowserHealth::Ready,
+            Some("http://127.0.0.1:9222"),
+            None,
+        )
+        .expect("attached CDP browser should retain unavailable stream readiness");
+
+        assert!(stream.url.is_none());
+        assert!(stream.frame_url.is_none());
+        assert_eq!(stream.control_input, None);
+        assert!(stream.read_only);
+        assert_eq!(
+            stream.readiness.as_ref().unwrap()["reason"],
+            "missing_stream_server"
+        );
+    }
+
+    #[test]
+    fn test_cdp_screencast_view_stream_leaves_remote_headed_contract_unchanged() {
+        assert!(cdp_screencast_view_stream(
+            "remote-session",
+            ServiceBrowserHost::RemoteHeaded,
+            ServiceBrowserHealth::Ready,
+            Some("http://127.0.0.1:9222"),
+            Some(44841),
+        )
+        .is_none());
+    }
+
+    #[test]
     fn test_profile_lease_policy_rejects_invalid_value() {
         let err = profile_lease_policy_from_command(&json!({
             "profileLeasePolicy": "maybe"
@@ -17895,6 +18074,16 @@ mod tests {
             health: ServiceBrowserHealth::Ready,
             pid: Some(1234),
             cdp_endpoint: Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
+            view_streams: vec![ViewStream {
+                id: "cdp-screencast".to_string(),
+                provider: ViewStreamProvider::CdpScreencast,
+                control_input: Some(ControlInputProvider::CdpInput),
+                url: Some("http://127.0.0.1:44841/".to_string()),
+                frame_url: Some("http://127.0.0.1:44841/".to_string()),
+                external_url: Some("http://127.0.0.1:44841/".to_string()),
+                read_only: false,
+                ..ViewStream::default()
+            }],
             active_session_ids: vec!["mcp-live".to_string()],
             ..BrowserProcess::default()
         };
@@ -17922,6 +18111,14 @@ mod tests {
         assert_eq!(
             stale.last_error.as_deref(),
             Some("Active browser PID 1234 exited before command dispatch")
+        );
+        assert_eq!(stale.view_streams.len(), 1);
+        assert_eq!(stale.view_streams[0].control_input, None);
+        assert_eq!(stale.view_streams[0].url, None);
+        assert!(stale.view_streams[0].read_only);
+        assert_eq!(
+            stale.view_streams[0].readiness.as_ref().unwrap()["reason"],
+            "browser_not_ready"
         );
     }
 

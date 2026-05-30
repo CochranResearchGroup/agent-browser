@@ -25,6 +25,12 @@ agent-browser stream disable           # Stop streaming for the session
 
 `stream status` returns the enabled state, active port, browser connection state, and whether screencasting is active. `stream disable` tears the server down and removes the session's `.stream` metadata file.
 
+## Service-owned CDP streams
+
+Service browser records can expose the same stream server through a `cdp_screencast` `viewStreams` entry for local headless, local headed, and attached CDP browsers. When ready, the stream includes `controlInput="cdp_input"` plus loopback `url`, `frameUrl`, and `externalUrl` values that the dashboard can embed from browser rows or tab details.
+
+When the browser is not ready, no CDP endpoint is recorded, or no stream server is bound, the record remains present but reports unavailable readiness and omits openable URLs. This lets dashboard and software clients show the reason instead of offering a broken stream button.
+
 ## Runtime status response
 
 `agent-browser stream status --json` returns data like:
@@ -213,6 +219,8 @@ Use `browser_dialog`, `browser_upload`, `browser_download`, `browser_wait_for_do
 ## Relationship to screencast commands
 
 `stream enable` creates the WebSocket server and keeps it available for the session. WebSocket clients then trigger live frame delivery automatically.
+
+For service-owned CDP tab streams, the dashboard queues `view_focus` before opening the embedded stream so the daemon's active CDP page session follows the selected browser tab.
 
 The lower-level `screencast_start` and `screencast_stop` commands still control explicit CDP screencasts directly. Use them when you want a screencast without the WebSocket runtime server.
 
