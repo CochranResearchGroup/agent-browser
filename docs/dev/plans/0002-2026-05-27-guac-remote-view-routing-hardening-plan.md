@@ -1,9 +1,9 @@
 # Guacamole Remote View Routing Hardening Plan
 
 Date: 2026-05-27
-State: VALIDATED
+State: CLOSED
 Lane: P02
-Outcome: CLOSED
+Outcome: VALIDATED
 Current state: route authority audit is recorded. Service stream records now
 carry route metadata, dashboard Guacamole hash repair has been removed,
 external open waits for takeover acceptance, and `view_takeover` persists a

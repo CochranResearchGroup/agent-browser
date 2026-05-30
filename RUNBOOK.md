@@ -48,7 +48,7 @@ Result:
 
 - Both checks passed for the P02 planning turn.
 
-## 2026-05-27 Turn 3 | P02 Route Authority And Takeover Events
+## Turn 3 | 2026-05-27
 
 Scope: implement the first Guacamole route hardening slices.
 
@@ -110,7 +110,7 @@ Result:
 - Browser-switch artifacts:
   `/tmp/agent-browser-rdp-guac-browser-switch-2026-05-27T19-41-29-855Z`
 
-## 2026-05-29 Turn 4 | P05 Runtime Checkpoint And P06 Plan
+## Turn 4 | 2026-05-29
 
 Scope: refactor the P05 handoff after maintainer clarification that the
 Guacamole/RDP campaign is not ready for a formal release.
@@ -154,7 +154,7 @@ Result:
   privileged helper, and simultaneous viewing readiness with
   `requiresInteractiveSudo=false`.
 
-## 2026-05-29 Turn 5 | P06 Doctor And Live-Gate Productization
+## Turn 5 | 2026-05-29
 
 Scope: execute and refactor the first P06 slice after auditing the installed
 checkpoint against the productization issues from P05.
@@ -202,7 +202,7 @@ Result:
 - P06 remains open for clean-machine first-install sudo proof and the
   install-doctor service-readiness ownership decision.
 
-## 2026-05-29 Turn 6 | P06 Install Doctor Service Probe And Idempotence
+## Turn 6 | 2026-05-29
 
 Scope: continue P06 by resolving the remaining install-doctor service
 ownership decision and strengthening the already-provisioned privilege
@@ -245,7 +245,7 @@ Result:
 - P06 remains open for clean-host or equivalent reset-fixture proof that first
   install uses one clear sudo authorization boundary.
 
-## 2026-05-29 Turn 7 | P06 Closeout
+## Turn 7 | 2026-05-29
 
 Scope: finish P06 by proving the first-install sudo boundary with an equivalent
 clean reset fixture, validating route-pool restart durability, and running the
@@ -303,7 +303,7 @@ Result:
   `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T14-40-34-292Z`.
 - P06 is closed. Formal release work remains a separate lane.
 
-## 2026-05-29 Turn 8 | P07 v0.27.0 Formal Release Prep
+## Turn 8 | 2026-05-29
 
 Scope: open the formal release lane now that P06 closed the Guacamole/RDP
 productization blocker.
@@ -336,7 +336,7 @@ Result:
 - P07 remains open for release PR merge, release workflow dry run, real
   release workflow run, and GitHub release asset verification.
 
-## 2026-05-29 Turn 9 | P07 Release Dry Run Cross-Target Fix
+## Turn 9 | 2026-05-29
 
 Scope: respond to the first manual `Release` workflow dry-run failure.
 
@@ -366,7 +366,7 @@ Result:
   `x86_64-w64-mingw32-gcc` for the `ring` build script.
 - The release workflow dry run must be retried after this fix lands on `main`.
 
-## 2026-05-29 Turn 10 | P07 Linux Release Link Fix
+## Turn 10 | 2026-05-29
 
 Scope: respond to the second manual `Release` workflow dry-run failure.
 
@@ -395,7 +395,7 @@ Result:
 - The local machine does not have `cargo-zigbuild`, so the release workflow
   dry run must be retried after this fix lands on `main`.
 
-## 2026-05-29 Turn 11 | P07 v0.27.0 Release Publication
+## Turn 11 | 2026-05-29
 
 Scope: publish and verify the formal `v0.27.0` GitHub release.
 
@@ -431,3 +431,30 @@ Result:
   `agent-browser-linux-arm64`, `agent-browser-linux-musl-arm64`,
   `agent-browser-linux-musl-x64`, `agent-browser-linux-x64`, and
   `agent-browser-win32-x64.exe`.
+
+## Turn 12 | 2026-05-29
+
+Scope: repair stale planning-audit residue after the `v0.27.0` release.
+
+Actions:
+
+- Normalized historical runbook headings to the deterministic
+  `## Turn N | YYYY-MM-DD` format.
+- Changed P02 plan state from `VALIDATED` to deterministic `CLOSED` while
+  preserving `Outcome: VALIDATED`.
+- Changed P03 plan state from `COMPLETE` to deterministic `CLOSED` while
+  preserving `Outcome: COMPLETE`.
+- Wired the existing P03 and P04 plan filenames into this runbook:
+  `docs/dev/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md` and
+  `docs/dev/plans/0004-2026-05-29-release-candidate-install-validation-plan.md`.
+
+Validation run:
+
+- `python /home/ecochran76/workspace.local/agent-policies/repo-policy-selector/scripts/audit_planning_contract.py --repo-root /home/ecochran76/workspace.local/agent-browser --json`
+- `git diff --check`
+
+Result:
+
+- Both checks passed. The planning audit now reports `ok: true`, no problems,
+  no open roadmap lanes, deterministic state for every plan, and runbook plus
+  roadmap wiring for every plan.
