@@ -411,3 +411,38 @@ all seven expected platform assets.
 
 Keep P07 closed unless the published assets or release tag need correction.
 Start a new lane for any post-release patch or next-version work.
+
+## P08 | CDP Tab Streaming For Non-Remote Browsers
+
+State: OPEN
+Current state: P08 is the next feature-planning lane after the `v0.27.0`
+release. Existing runtime streaming already uses CDP screencast, but
+service-owned non-remote browsers do not yet advertise dashboard-openable,
+tab-focused `cdp_screencast` view streams.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0008-2026-05-30-cdp-tab-streaming-for-non-remote-browsers-plan.md`
+  is open.
+- P03 through P07 hardened remote-headed Guacamole/RDP viewing and release
+  delivery. P08 intentionally targets local or attached CDP-controllable
+  browsers that do not need a remote desktop route.
+- Existing source has `StreamServer`, CDP `Page.startScreencast`,
+  `ViewStreamProvider::CdpScreencast`, and dashboard view-stream rendering.
+  The missing work is service-state ownership, readiness, tab focus, and
+  dashboard-openable URLs for non-remote browsers.
+
+### Evidence
+
+- `docs/dev/plans/0008-2026-05-30-cdp-tab-streaming-for-non-remote-browsers-plan.md`
+- `cli/src/native/stream/mod.rs`
+- `cli/src/native/stream/cdp_loop.rs`
+- `cli/src/native/stream/websocket.rs`
+- `cli/src/native/service_model.rs`
+- `packages/dashboard/src/components/service-panel.tsx`
+
+### Next Recommendation
+
+Start P08 Slice A with a contract and ownership audit before editing runtime
+streaming code.

@@ -458,3 +458,32 @@ Result:
 - Both checks passed. The planning audit now reports `ok: true`, no problems,
   no open roadmap lanes, deterministic state for every plan, and runbook plus
   roadmap wiring for every plan.
+
+## Turn 13 | 2026-05-30
+
+Scope: open the CDP tab streaming lane for non-remote browsers.
+
+Actions:
+
+- Ran Graphiti discovery against `agent_browser_main` for prior CDP streaming
+  context.
+- Inspected the existing CDP stream server, stream WebSocket, service
+  view-stream model, action-derived view streams, dashboard view-stream
+  rendering, roadmap, and runbook surfaces.
+- Added
+  `docs/dev/plans/0008-2026-05-30-cdp-tab-streaming-for-non-remote-browsers-plan.md`.
+- Added P08 to `ROADMAP.md`.
+
+Validation run:
+
+- `python /home/ecochran76/workspace.local/agent-policies/repo-policy-selector/scripts/audit_planning_contract.py --repo-root /home/ecochran76/workspace.local/agent-browser --json`
+- `git diff --check`
+- `pnpm validation:select -- --base HEAD`
+
+Result:
+
+- Planning audit passed with `ok: true`, no problems, and P08 wired through the
+  roadmap, runbook, and open plan file.
+- `git diff --check` passed.
+- `pnpm validation:select -- --base HEAD` selected only `git diff --check` for
+  the documentation-only planning slice.
