@@ -1792,6 +1792,10 @@ fn main() {
         return;
     }
 
+    if !command_skips_browser_launch_for_prestart(&cmd) {
+        cmd["serviceState"] = json!(flags.service_state.clone());
+    }
+
     if cmd
         .get("action")
         .and_then(|value| value.as_str())
@@ -2227,9 +2231,11 @@ fn main() {
             exit(1);
         });
 
+    let executable_launch_config_requested = flags.executable_path.is_some()
+        && flags.executable_path_source.as_deref() != Some("manifest");
     let launch_config_requested = flags.headed
         || flags.cli_headed  // User explicitly set --headed (even if false)
-        || flags.executable_path.is_some()
+        || executable_launch_config_requested
         || flags.runtime_profile.is_some()
         || flags.profile.is_some()
         || flags.state.is_some()
@@ -2276,7 +2282,8 @@ fn main() {
         let mut launch_cmd = json!({
             "id": gen_id(),
             "action": "launch",
-            "headless": !flags.headed
+            "headless": !flags.headed,
+            "serviceState": flags.service_state.clone()
         });
         if flags.cli_headed {
             launch_cmd["headlessExplicit"] = json!(true);
@@ -2289,6 +2296,9 @@ fn main() {
         // Add executable path if specified
         if let Some(ref exec_path) = flags.executable_path {
             cmd_obj.insert("executablePath".to_string(), json!(exec_path));
+            if let Some(ref source) = flags.executable_path_source {
+                cmd_obj.insert("executablePathSource".to_string(), json!(source));
+            }
         }
 
         if let Some(status) = live_runtime_status.as_ref() {
