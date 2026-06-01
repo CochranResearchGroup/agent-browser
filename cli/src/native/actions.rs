@@ -1,5 +1,5 @@
 use chrono::{DateTime, FixedOffset};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs;
@@ -71,8 +71,8 @@ use super::service_lifecycle::{
 use super::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, BrowserSession, ControlInputProvider, DisplayAllocation,
-    JobState as ServiceJobState, LeaseState, MonitorState, ProfileKeyringPolicy,
+    BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserSession, ControlInputProvider,
+    DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState, ProfileKeyringPolicy,
     ProfileLeaseDisposition, ProfileSelectionReason, RemoteViewRoute, RoutePoolEntry, ServiceEvent,
     ServiceEventKind, ServiceState, SessionCleanupPolicy, TabLifecycle, ViewStream,
     ViewStreamProvider, ViewerLease,
@@ -518,6 +518,180 @@ fn browser_build_from_command(cmd: &Value) -> Option<BrowserBuild> {
     cmd.get("params").and_then(browser_build_from_command)
 }
 
+fn launch_command_with_effective_service_defaults(
+    command: &Value,
+    options: &LaunchOptions,
+) -> Value {
+    let Ok(service_state) = browser_capability_service_state(command) else {
+        return command.clone();
+    };
+    let request = ServiceAccessPlanRequest {
+        service_name: optional_command_string(command, "serviceName"),
+        agent_name: optional_command_string(command, "agentName"),
+        task_name: optional_command_string(command, "taskName"),
+        target_service_ids: target_service_ids_from_command(command),
+        account_ids: account_ids_from_command(command),
+        target_url: target_url_from_command(command),
+        site_policy_id: optional_command_string(command, "sitePolicyId"),
+        challenge_id: optional_command_string(command, "challengeId"),
+        readiness_profile_id: optional_command_string(command, "readinessProfileId"),
+        browser_build: browser_build_from_command(command),
+        browser_build_explicit: command
+            .get("browserBuild")
+            .and_then(Value::as_str)
+            .is_some(),
+        browser_host: browser_host_from_command(command),
+        view_stream_provider: optional_command_string(command, "viewStreamProvider")
+            .or_else(|| optional_command_string(command, "viewStream"))
+            .or_else(|| {
+                command.get("params").and_then(|params| {
+                    optional_command_string(params, "viewStreamProvider")
+                        .or_else(|| optional_command_string(params, "viewStream"))
+                })
+            })
+            .and_then(|value| parse_view_stream_provider(&value)),
+        control_input_provider: optional_command_string(command, "controlInputProvider")
+            .or_else(|| optional_command_string(command, "controlInput"))
+            .or_else(|| {
+                command.get("params").and_then(|params| {
+                    optional_command_string(params, "controlInputProvider")
+                        .or_else(|| optional_command_string(params, "controlInput"))
+                })
+            })
+            .and_then(|value| parse_control_input_provider(&value)),
+        display_isolation: remote_headed_display_isolation_from_command(command),
+    };
+    let plan = service_access_plan_for_state(&service_state, request);
+    let Some(planned_request) = plan.pointer("/decision/serviceRequest/request") else {
+        return command.clone();
+    };
+    apply_planned_launch_defaults(command, &plan, planned_request, options)
+}
+
+fn apply_planned_launch_defaults(
+    command: &Value,
+    plan: &Value,
+    planned_request: &Value,
+    options: &LaunchOptions,
+) -> Value {
+    let mut object = command.as_object().cloned().unwrap_or_default();
+    insert_planned_string_if_missing(&mut object, command, planned_request, "browserBuild");
+    if options.runtime_profile.is_none() && command.get("runtimeProfile").is_none() {
+        insert_planned_string_if_missing(&mut object, command, planned_request, "runtimeProfile");
+    }
+    if options.profile.is_none() && command.get("profile").is_none() {
+        insert_planned_string_if_missing(&mut object, command, planned_request, "profile");
+    }
+    if command.get("profileLeasePolicy").is_none() {
+        insert_planned_string_if_missing(
+            &mut object,
+            command,
+            planned_request,
+            "profileLeasePolicy",
+        );
+    }
+    if command.get("cdpAttachmentAllowed").is_none() {
+        if let Some(value) = planned_request.get("cdpAttachmentAllowed") {
+            object.insert("cdpAttachmentAllowed".to_string(), value.clone());
+        }
+    }
+
+    let planned_params = planned_request.get("params").and_then(Value::as_object);
+    if let Some(planned_params) = planned_params {
+        let mut params = command
+            .get("params")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        let posture_source = plan
+            .pointer("/decision/launchPosture/source")
+            .and_then(Value::as_str);
+        if posture_source != Some("service_default") {
+            insert_planned_param_if_missing(
+                &mut object,
+                &mut params,
+                command,
+                planned_params,
+                "browserHost",
+            );
+        }
+        insert_planned_param_if_missing(
+            &mut object,
+            &mut params,
+            command,
+            planned_params,
+            "viewStreamProvider",
+        );
+        insert_planned_param_if_missing(
+            &mut object,
+            &mut params,
+            command,
+            planned_params,
+            "controlInputProvider",
+        );
+        insert_planned_param_if_missing(
+            &mut object,
+            &mut params,
+            command,
+            planned_params,
+            "displayIsolation",
+        );
+        if command.get("headlessExplicit").and_then(Value::as_bool) != Some(true)
+            && command
+                .get("params")
+                .and_then(|params| params.get("headlessExplicit"))
+                .and_then(Value::as_bool)
+                != Some(true)
+            && command.get("headless").is_none()
+            && !params.contains_key("headless")
+        {
+            if let Some(value) = planned_params.get("headless") {
+                object.insert("headless".to_string(), value.clone());
+            }
+        }
+        if !params.is_empty() {
+            object.insert("params".to_string(), Value::Object(params));
+        }
+    }
+
+    Value::Object(object)
+}
+
+fn insert_planned_string_if_missing(
+    object: &mut Map<String, Value>,
+    command: &Value,
+    planned_request: &Value,
+    key: &str,
+) {
+    if command.get(key).is_some() {
+        return;
+    }
+    if let Some(value) = planned_request.get(key).and_then(Value::as_str) {
+        object.insert(key.to_string(), json!(value));
+    }
+}
+
+fn insert_planned_param_if_missing(
+    object: &mut Map<String, Value>,
+    params: &mut Map<String, Value>,
+    command: &Value,
+    planned_params: &Map<String, Value>,
+    key: &str,
+) {
+    if command.get(key).is_some()
+        || command
+            .get("params")
+            .and_then(|params| params.get(key))
+            .is_some()
+    {
+        return;
+    }
+    if let Some(value) = planned_params.get(key) {
+        object.insert(key.to_string(), value.clone());
+        params.insert(key.to_string(), value.clone());
+    }
+}
+
 fn apply_service_profile_selection(
     options: &mut LaunchOptions,
     cmd: &Value,
@@ -694,7 +868,10 @@ fn browser_capability_service_state(cmd: &Value) -> Result<ServiceState, String>
 
 fn executable_path_is_operator_supplied(executable_path: Option<&str>, cmd: &Value) -> bool {
     if cmd.get("executablePath").is_some() {
-        return true;
+        return !matches!(
+            optional_command_string(cmd, "executablePathSource").as_deref(),
+            Some("manifest")
+        );
     }
     let Some(executable_path) = executable_path else {
         return false;
@@ -1336,6 +1513,7 @@ fn apply_launch_host_hints(options: &mut LaunchOptions, command: &Value) -> Serv
     }
     if host == ServiceBrowserHost::LocalHeadless {
         options.headless = true;
+        options.remote_headed = false;
     }
     if host == ServiceBrowserHost::RemoteHeaded {
         options.remote_headed = true;
@@ -1353,6 +1531,9 @@ fn apply_launch_host_hints(options: &mut LaunchOptions, command: &Value) -> Serv
             Some("private_virtual_display") | Some("ambient_display") => None,
             _ => remote_headed_display_from_command(command).or_else(|| options.display.clone()),
         };
+    } else {
+        options.remote_headed = false;
+        options.remote_headed_display_isolation = None;
     }
     host
 }
@@ -1767,6 +1948,58 @@ fn upsert_cdp_screencast_view_stream(
     }
 }
 
+fn service_browser_session_id(browser: &BrowserProcess) -> Option<String> {
+    browser
+        .active_session_ids
+        .iter()
+        .find(|session_id| !session_id.trim().is_empty())
+        .cloned()
+        .or_else(|| {
+            browser
+                .id
+                .strip_prefix("session:")
+                .filter(|session_id| !session_id.trim().is_empty())
+                .map(ToOwned::to_owned)
+        })
+}
+
+fn read_stream_port_for_session(session_id: &str) -> Option<u16> {
+    fs::read_to_string(stream_file_path(session_id))
+        .ok()
+        .and_then(|contents| contents.trim().parse::<u16>().ok())
+}
+
+fn upsert_browser_cdp_screencast_view_stream(browser: &mut BrowserProcess) {
+    let Some(session_id) = service_browser_session_id(browser) else {
+        return;
+    };
+    let stream_port = read_stream_port_for_session(&session_id);
+    let Some(cdp_stream) = cdp_screencast_view_stream(
+        &session_id,
+        browser.host,
+        browser.health,
+        browser.cdp_endpoint.as_deref(),
+        stream_port,
+    ) else {
+        return;
+    };
+    if let Some(existing) = browser
+        .view_streams
+        .iter_mut()
+        .find(|stream| stream.provider == ViewStreamProvider::CdpScreencast)
+    {
+        *existing = cdp_stream;
+    } else {
+        browser.view_streams.push(cdp_stream);
+    }
+}
+
+fn refresh_cdp_screencast_view_streams(service_state: &mut ServiceState) {
+    for browser in service_state.browsers.values_mut() {
+        upsert_browser_cdp_screencast_view_stream(browser);
+    }
+}
+
 fn persist_current_browser_health(
     state: &DaemonState,
     host: ServiceBrowserHost,
@@ -1935,13 +2168,21 @@ fn apply_auto_launch_command_hints(
     ServiceBrowserHost,
     Option<ProfileSelectionReason>,
     BrowserCapabilityLaunchResolution,
+    Value,
 ) {
-    apply_explicit_launch_identity_from_command(options, command);
+    let effective_command = launch_command_with_effective_service_defaults(command, options);
+    apply_explicit_launch_identity_from_command(options, &effective_command);
     apply_retained_remote_headed_launch_hints(options, retained_remote_headed);
-    let service_host = apply_launch_host_hints(options, command);
-    let selection_reason = apply_service_profile_selection(options, command);
-    let browser_capability_launch = apply_service_browser_capability_selection(options, command);
-    (service_host, selection_reason, browser_capability_launch)
+    let service_host = apply_launch_host_hints(options, &effective_command);
+    let selection_reason = apply_service_profile_selection(options, &effective_command);
+    let browser_capability_launch =
+        apply_service_browser_capability_selection(options, &effective_command);
+    (
+        service_host,
+        selection_reason,
+        browser_capability_launch,
+        effective_command,
+    )
 }
 
 fn service_profile_lease_conflict_session_ids(
@@ -3937,13 +4178,17 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
     }
     let engine = env::var("AGENT_BROWSER_ENGINE").ok();
     let retained_remote_headed = retained_remote_headed_launch_hint(&state.session_id, command);
-    let (service_host, selection_reason, browser_capability_launch) =
+    let (service_host, selection_reason, browser_capability_launch, effective_command) =
         apply_auto_launch_command_hints(&mut options, command, retained_remote_headed.as_ref());
-    let mut metadata =
-        ServiceLaunchMetadata::from_launch_options(&options, Some(command), selection_reason);
+    let mut metadata = ServiceLaunchMetadata::from_launch_options(
+        &options,
+        Some(&effective_command),
+        selection_reason,
+    );
     apply_retained_remote_headed_metadata(&mut metadata, retained_remote_headed.as_ref());
     metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
-    ensure_service_profile_lease_available(&metadata, &state.session_id, command).await?;
+    ensure_service_profile_lease_available(&metadata, &state.session_id, &effective_command)
+        .await?;
 
     // Store proxy credentials for Fetch.authRequired handling
     let has_proxy_auth = options.proxy_username.is_some();
@@ -4290,17 +4535,21 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
         remote_headed: false,
         remote_headed_display_isolation: None,
     };
+    let effective_cmd = launch_command_with_effective_service_defaults(cmd, &launch_options);
     let retained_remote_headed = retained_remote_headed_launch_hint(&state.session_id, cmd);
     apply_retained_remote_headed_launch_hints(&mut launch_options, retained_remote_headed.as_ref());
-    let service_host = apply_launch_host_hints(&mut launch_options, cmd);
-    let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
+    let service_host = apply_launch_host_hints(&mut launch_options, &effective_cmd);
+    let selection_reason = apply_service_profile_selection(&mut launch_options, &effective_cmd);
     let browser_capability_launch =
-        apply_service_browser_capability_selection(&mut launch_options, cmd);
-    let mut metadata =
-        ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
+        apply_service_browser_capability_selection(&mut launch_options, &effective_cmd);
+    let mut metadata = ServiceLaunchMetadata::from_launch_options(
+        &launch_options,
+        Some(&effective_cmd),
+        selection_reason,
+    );
     apply_retained_remote_headed_metadata(&mut metadata, retained_remote_headed.as_ref());
     metadata.browser_capability_launch = Some(browser_capability_launch.to_value());
-    ensure_service_profile_lease_available(&metadata, &state.session_id, cmd).await?;
+    ensure_service_profile_lease_available(&metadata, &state.session_id, &effective_cmd).await?;
 
     let new_hash = launch_hash(&launch_options);
 
@@ -9288,6 +9537,7 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         });
     }
     refresh_remote_view_stream_urls(&mut service_state);
+    refresh_cdp_screencast_view_streams(&mut service_state);
     service_state.refresh_profile_readiness();
 
     let profile_allocations = service_profile_allocations(&service_state);
@@ -9295,12 +9545,78 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         .get("launchConfig")
         .cloned()
         .unwrap_or_else(|| json!({}));
+    let mut service_state_json =
+        serde_json::to_value(&service_state).map_err(|err| err.to_string())?;
+    inject_browser_process_stats(&mut service_state_json);
 
     Ok(json!({
-        "service_state": service_state,
+        "service_state": service_state_json,
         "profileAllocations": profile_allocations,
         "launchConfig": launch_config,
     }))
+}
+
+fn inject_browser_process_stats(service_state: &mut Value) {
+    let Some(browsers) = service_state
+        .get_mut("browsers")
+        .and_then(|value| value.as_object_mut())
+    else {
+        return;
+    };
+    for browser in browsers.values_mut() {
+        let pid = browser
+            .get("pid")
+            .and_then(|value| value.as_u64())
+            .and_then(|value| u32::try_from(value).ok());
+        if let Some(pid) = pid.and_then(process_stats_for_pid) {
+            browser["processStats"] = pid;
+        }
+    }
+}
+
+fn process_stats_for_pid(pid: u32) -> Option<Value> {
+    #[cfg(target_os = "linux")]
+    {
+        linux_process_stats_for_pid(pid)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = pid;
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_process_stats_for_pid(pid: u32) -> Option<Value> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let stat_tail = stat.rsplit_once(") ")?.1;
+    let fields = stat_tail.split_whitespace().collect::<Vec<_>>();
+    let clock_ticks = 100.0_f64;
+    let utime = fields
+        .get(11)
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
+    let stime = fields
+        .get(12)
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
+    let rss_bytes = fs::read_to_string(format!("/proc/{pid}/status"))
+        .ok()
+        .and_then(|status| {
+            status.lines().find_map(|line| {
+                let value = line.strip_prefix("VmRSS:")?.split_whitespace().next()?;
+                value.parse::<u64>().ok().map(|kib| kib * 1024)
+            })
+        });
+    let mut stats = json!({
+        "pid": pid,
+        "running": pid_is_running(pid),
+        "cpuSeconds": ((utime + stime) as f64 / clock_ticks),
+    });
+    if let Some(bytes) = rss_bytes {
+        stats["rssBytes"] = json!(bytes);
+    }
+    Some(stats)
 }
 
 /// Return the no-launch service access plan from the current service state.
@@ -14933,10 +15249,13 @@ mod tests {
         });
         let mut options = LaunchOptions::default();
 
-        let (host, selection_reason, browser_capability_launch) =
+        let (host, selection_reason, browser_capability_launch, effective_command) =
             apply_auto_launch_command_hints(&mut options, &command, None);
-        let metadata =
-            ServiceLaunchMetadata::from_launch_options(&options, Some(&command), selection_reason);
+        let metadata = ServiceLaunchMetadata::from_launch_options(
+            &options,
+            Some(&effective_command),
+            selection_reason,
+        );
 
         assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
         assert!(!options.headless);
@@ -14970,6 +15289,148 @@ mod tests {
             Some("http://agent-browser.localhost/guacamole/")
         );
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_apply_auto_launch_command_hints_uses_effective_service_default() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);
+        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+        let home = unique_socket_dir("auto-launch-effective-default");
+        fs::create_dir_all(&home).expect("test home should be created");
+        let executable = home.join("chrome");
+        let user_data_dir = home.join("stealthcdp-default");
+        fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
+
+        let service_state = json!({
+            "defaultBrowserBuild": "stealthcdp_chromium",
+            "profiles": {
+                "stealthcdp-default": {
+                    "id": "stealthcdp-default",
+                    "name": "Stealth default",
+                    "userDataDir": user_data_dir.display().to_string(),
+                    "defaultBrowserHost": "remote_headed",
+                    "browserBuild": "stealthcdp_chromium",
+                    "persistent": true
+                }
+            },
+            "browserCapabilityRegistry": {
+                "browserHosts": [{
+                    "id": "linux-local",
+                    "hostKind": "local",
+                    "reachable": true,
+                    "lifecycleOwner": "agent_browser"
+                }],
+                "browserExecutables": [{
+                    "id": "stealth-current",
+                    "hostId": "linux-local",
+                    "buildLabel": "stealthcdp_chromium",
+                    "executablePath": executable.display().to_string()
+                }],
+                "browserCapabilities": [{
+                    "id": "stealth-capability",
+                    "hostId": "linux-local",
+                    "executableId": "stealth-current",
+                    "cdpSupported": true,
+                    "headedSupported": true,
+                    "headlessSupported": true
+                }],
+                "profileCompatibility": [{
+                    "id": "stealth-profile-compatible",
+                    "profileId": "stealthcdp-default",
+                    "hostId": "linux-local",
+                    "executableId": "stealth-current",
+                    "compatible": true
+                }],
+                "browserPreferenceBindings": [{
+                    "id": "global-stealth-default",
+                    "scope": "global",
+                    "preferredHostId": "linux-local",
+                    "preferredExecutableId": "stealth-current",
+                    "preferredCapabilityId": "stealth-capability",
+                    "browserBuild": "stealthcdp_chromium",
+                    "priority": 50
+                }],
+                "validationEvidence": [{
+                    "id": "stealth-launch-smoke",
+                    "hostId": "linux-local",
+                    "executableId": "stealth-current",
+                    "capabilityId": "stealth-capability",
+                    "kind": "launch",
+                    "state": "passed"
+                }]
+            }
+        });
+        let command = json!({
+            "action": "tab_new",
+            "url": "https://example.com/",
+            "serviceState": service_state
+        });
+        let mut options = LaunchOptions::default();
+
+        let (host, selection_reason, browser_capability_launch, effective_command) =
+            apply_auto_launch_command_hints(&mut options, &command, None);
+        let metadata = ServiceLaunchMetadata::from_launch_options(
+            &options,
+            Some(&effective_command),
+            selection_reason,
+        );
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert!(!options.headless);
+        assert!(options.remote_headed);
+        assert_eq!(
+            options.runtime_profile.as_deref(),
+            Some("stealthcdp-default")
+        );
+        assert_eq!(
+            options.profile.as_deref(),
+            Some(user_data_dir.to_str().expect("path should be utf-8"))
+        );
+        assert_eq!(
+            options.executable_path.as_deref(),
+            Some(executable.to_str().expect("path should be utf-8"))
+        );
+        assert!(browser_capability_launch.applied);
+        assert_eq!(effective_command["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(effective_command["browserHost"], "remote_headed");
+        assert_eq!(effective_command["viewStreamProvider"], "rdp_gateway");
+        assert_eq!(
+            effective_command["controlInputProvider"],
+            "manual_attached_desktop"
+        );
+        assert_eq!(
+            effective_command["displayIsolation"],
+            "private_virtual_display"
+        );
+        assert_eq!(metadata.profile_id.as_deref(), Some("stealthcdp-default"));
+        assert_eq!(metadata.view_streams.len(), 1);
+        assert_eq!(
+            metadata.view_streams[0].provider,
+            ViewStreamProvider::RdpGateway
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_manifest_executable_path_does_not_block_capability_selection() {
+        let command = json!({
+            "action": "launch",
+            "executablePath": "/opt/chromium-stealth/chrome",
+            "executablePathSource": "manifest"
+        });
+
+        assert!(!executable_path_is_operator_supplied(
+            Some("/opt/chromium-stealth/chrome"),
+            &command
+        ));
+        assert!(executable_path_is_operator_supplied(
+            Some("/opt/chromium-stealth/chrome"),
+            &json!({
+                "action": "launch",
+                "executablePath": "/opt/chromium-stealth/chrome",
+                "executablePathSource": "config"
+            })
+        ));
     }
 
     #[test]
@@ -15011,10 +15472,13 @@ mod tests {
             "headlessExplicit": true
         })));
 
-        let (host, selection_reason, _) =
+        let (host, selection_reason, _, effective_command) =
             apply_auto_launch_command_hints(&mut options, &command, Some(&retained));
-        let mut metadata =
-            ServiceLaunchMetadata::from_launch_options(&options, Some(&command), selection_reason);
+        let mut metadata = ServiceLaunchMetadata::from_launch_options(
+            &options,
+            Some(&effective_command),
+            selection_reason,
+        );
         apply_retained_remote_headed_metadata(&mut metadata, Some(&retained));
 
         assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
@@ -15034,6 +15498,48 @@ mod tests {
     }
 
     #[test]
+    fn test_explicit_local_headless_launch_surface_overrides_retained_remote_hint() {
+        let retained = RetainedRemoteHeadedLaunchHint {
+            view_streams: vec![ViewStream {
+                id: "remote-headed-view".to_string(),
+                provider: ViewStreamProvider::RdpGateway,
+                control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                url: None,
+                frame_url: None,
+                external_url: None,
+                route_id: None,
+                display_allocation_id: None,
+                connection_id: None,
+                connection_name: None,
+                route_source: None,
+                provider_mode: None,
+                viewer_lease_ids: Vec::new(),
+                controller_lease_id: None,
+                read_only: false,
+                readiness: None,
+                remote_readiness: None,
+            }],
+            display_isolation: Some("shared_display".to_string()),
+            display_name: Some(":10".to_string()),
+        };
+        let command = json!({
+            "action": "launch",
+            "browserHost": "local_headless",
+            "headless": true,
+            "headlessExplicit": true
+        });
+        let mut options = LaunchOptions::default();
+
+        let (host, _, _, _) =
+            apply_auto_launch_command_hints(&mut options, &command, Some(&retained));
+
+        assert_eq!(host, ServiceBrowserHost::LocalHeadless);
+        assert!(options.headless);
+        assert!(!options.remote_headed);
+        assert!(options.remote_headed_display_isolation.is_none());
+    }
+
+    #[test]
     fn test_private_remote_headed_metadata_waits_for_launched_display_name() {
         let guard = EnvGuard::new(&["DISPLAY"]);
         guard.set("DISPLAY", ":0");
@@ -15045,10 +15551,13 @@ mod tests {
         });
         let mut options = LaunchOptions::default();
 
-        let (host, selection_reason, _) =
+        let (host, selection_reason, _, effective_command) =
             apply_auto_launch_command_hints(&mut options, &command, None);
-        let metadata =
-            ServiceLaunchMetadata::from_launch_options(&options, Some(&command), selection_reason);
+        let metadata = ServiceLaunchMetadata::from_launch_options(
+            &options,
+            Some(&effective_command),
+            selection_reason,
+        );
 
         assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
         assert_eq!(
