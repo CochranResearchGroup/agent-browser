@@ -1,7 +1,7 @@
 # Superuser Codex Operator Agent Plan
 
 Date: 2026-06-01
-State: OPEN
+State: COMPLETE
 Lane: P12-J
 Parent Roadmap: `docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md`
 Depends On:
@@ -950,3 +950,73 @@ Validation:
 ```bash
 pnpm test:dashboard-superuser-operator-agent
 ```
+
+### 2026-06-01 | J6 UI Follow-Up Proof Complete
+
+Resolved the remaining hosted UI proof gap:
+
+- changed the UI follow-up smoke harness so its dashboard-driving browser uses
+  `--browser-host local_headless`
+- kept the operator-launched browser path service-mediated, so Operate still
+  follows the configured `stealthcdp_chromium` service/default posture
+- opened a concrete workspace-control URL before driving Chat, because the
+  dashboard overview route does not always mount the right-pane Chat tab
+- forced the right pane open for the isolated smoke profile before login reload
+- polled for the Chat/Operate editor before submitting the launch prompt
+- proved the visible hosted dashboard can submit Operate, apply
+  `Launch browser workspace`, receive `View launched browser`, apply that
+  follow-up, and change the dashboard URL selection to the returned target
+
+Validation:
+
+```bash
+node --check scripts/smoke-dashboard-operator-plan0022-live.js
+pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --require-ui-followup --json
+pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --require-live-operation --json
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+git diff --check
+node scripts/dev/select-validation.js --base HEAD --json
+```
+
+Observed hosted UI follow-up proof:
+
+- unauthenticated operator status: `401`
+- observer operator status: `403`
+- observer operator turn: `403`
+- admin operator status: `200`, role `superuser`
+- UI follow-up target URL: `http://127.0.0.1:37795/`
+- before route:
+  `https://agent-browser.ecochran.dyndns.org/?view=workspace%3Acontrol&workspace=browser%3Asession%3Adefault&browser=session%3Adefault&session=default&profile=default`
+- after route:
+  `https://agent-browser.ecochran.dyndns.org/?view=workspace%3Acontrol&workspace=browser%3Asession%3Adefault&browser=session%3Adefault&session=default&profile=default&tab=4077592C42DA975854C22C3D572DF9E8`
+- `hasWorkspaceView: true`
+- `hasBrowserSelection: true`
+
+Observed hosted live-operation proof:
+
+- browser operation completed through Operate service actions
+- operations: `wait`, `type`, `click`, `snapshot`
+- viewport selection derivable from the service result
+- auth gating remained intact in the same smoke run
+
+Completion audit:
+
+- Operate is superuser-only in backend routes and frontend UX: proved by
+  `pnpm test:dashboard-superuser-operator-agent` and hosted smoke auth results.
+- Inspect remains separate: proved by `pnpm test:dashboard-contextual-chat`.
+- Codex app-server has agent-browser-specific operator instructions: proved by
+  `pnpm test:dashboard-superuser-operator-agent` and the power-parity prompt
+  assertion.
+- Dashboard, browser, DOM, debug, and service tool groups are exposed only to
+  superusers: proved by the operator test and hosted status/turn smokes.
+- Mutations are scoped, audited, and service-contract backed: proved by the
+  live-operation smoke applying service actions and by confirmation/action
+  assertions in the operator test.
+- Destructive or broad actions require confirmation: proved by hosted
+  `storage_clear` and `cookies_clear` confirmation records.
+- Hosted runtime proves superuser operation and viewport switching: proved by
+  `--require-live-operation` and `--require-ui-followup`.
+- Hosted runtime proves non-superusers cannot access operator capabilities:
+  proved by unauthenticated `401` and observer `403` results without tool
+  leakage in both hosted smoke paths.

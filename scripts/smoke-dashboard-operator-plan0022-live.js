@@ -401,7 +401,8 @@ async function runUiFollowup(base, adminCredentials) {
   const profile = options.browserProfile || generatedProfile;
   try {
     const targetUrl = `http://127.0.0.1:${server.port}/`;
-    await openDashboardUrl(base.href, profile);
+    const dashboardUrl = dashboardWorkspaceSmokeUrl(base.href);
+    await openDashboardUrl(dashboardUrl, profile);
     await runAgent(['--json', '--session', options.uiSession, 'wait', '1500'], { timeoutMs: 30000 });
     await evalAgent(`
 (async () => {
@@ -411,16 +412,40 @@ async function runUiFollowup(base, adminCredentials) {
     credentials: 'same-origin',
     body: JSON.stringify(${JSON.stringify(adminCredentials)})
   });
-  location.reload();
-  return JSON.stringify({ loginSubmitted: true });
+  window.localStorage.setItem('agent-browser-dashboard-right-pane-collapsed', 'false');
+  location.href = ${JSON.stringify(dashboardUrl)};
+  return JSON.stringify({ loginSubmitted: true, dashboardUrl: location.href });
 })()
 `, profile);
     await runAgent(['--json', '--session', options.uiSession, 'wait', '2000'], { timeoutMs: 30000 });
+    await pollEval(profile, `
+(() => {
+  const clickByText = (text) => {
+    const element = Array.from(document.querySelectorAll('button,[role=tab]'))
+      .find((candidate) => candidate.textContent?.trim().includes(text));
+    if (!element) return false;
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    }
+    return true;
+  };
+  const chatted = clickByText('Chat');
+  const operated = clickByText('Operate');
+  const textarea = document.querySelector('textarea');
+  return JSON.stringify({
+    chatted,
+    operated,
+    hasTextarea: Boolean(textarea),
+    url: location.href,
+    text: document.body.innerText.slice(0, 800)
+  });
+})()
+`, (state) => state.hasTextarea && state.operated !== false, 'UI Chat Operate editor');
     const submitted = await evalJson(`
 (async () => {
   const clickByText = (text) => {
     const element = Array.from(document.querySelectorAll('button,[role=tab]'))
-      .find((candidate) => candidate.textContent?.trim() === text);
+      .find((candidate) => candidate.textContent?.trim().includes(text));
     if (!element) return false;
     for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
       element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
@@ -544,6 +569,16 @@ async function openDashboardUrl(url, profile) {
   }
 }
 
+function dashboardWorkspaceSmokeUrl(rawUrl) {
+  const url = new URL(rawUrl);
+  url.searchParams.set('view', 'workspace:control');
+  url.searchParams.set('workspace', 'browser:session:default');
+  url.searchParams.set('browser', 'session:default');
+  url.searchParams.set('session', 'default');
+  url.searchParams.set('profile', 'default');
+  return url.href;
+}
+
 async function pollEval(profile, script, predicate, label, attempts = 75) {
   let latest = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -578,7 +613,7 @@ async function evalAgent(script, profile) {
 }
 
 function baseAgentArgs(profile) {
-  const args = ['--json', '--session', options.uiSession];
+  const args = ['--json', '--session', options.uiSession, '--browser-host', 'local_headless'];
   if (profile) {
     args.push('--profile', profile);
   }
@@ -793,6 +828,8 @@ Options:
   --agent-browser-bin <path>  agent-browser binary used for UI follow-up smoke.
   --browser-profile <path>    Browser profile path used for UI follow-up smoke.
   --ui-session <name>         agent-browser session name used for UI follow-up smoke.
+                              The UI driver forces --browser-host local_headless; the browser
+                              launched by Operate still follows the service/default posture.
   --json                      Print structured JSON.
 `);
 }
